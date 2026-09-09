@@ -41,9 +41,17 @@ performs the insert.
 The repository already has that path, and already uses it twice:
 
 - `api/_lib/supabase-admin.js` builds a service-role client from
-  `SUPABASE_SERVICE_ROLE_KEY`. `api/account/delete.js` already depends on it, so
-  a deployment that runs account deletion already provisions this secret. **No
-  new secret is introduced.**
+  `SUPABASE_SERVICE_ROLE_KEY`, and `api/account/delete.js` already depends on
+  it. **This design therefore introduces no secret beyond one the deployment
+  already needs** for in-app account deletion.
+
+  Stated precisely, because an earlier draft overreached: that is a fact about
+  the code, not about the deployment. `getSupabaseAdmin()` returns null without
+  the variable and the endpoint answers 503, so account deletion is simply
+  unavailable where it is unset. **Whether it is actually set in production is
+  unverified here** — no Vercel environment was read, and nothing in this
+  repository can establish it.
+
 - `supabase/migrations/20260826_checkout_session_lock.sql` already establishes
   the house rule from `20260822_restrict_anon_rpc_surface.sql`: the claim
   function `xbar_claim_checkout_lock` is `SECURITY DEFINER` and executable by
@@ -237,6 +245,9 @@ Ordered; the first one gates everything after it.
 3. **The endpoint**, plus a framework-free helper in `api/_lib/` so the claim,
    `amr` and settle decisions are unit-testable without a live Supabase —
    matching `api/_lib/account-deletion.js`.
+   **Confirm first that `SUPABASE_SERVICE_ROLE_KEY` is set in the deployment**;
+   if it is not, this endpoint answers 503 exactly as account deletion does, and
+   the protection would be absent in production while present in the code.
 4. **A client change** routing the recovery password change through the endpoint
    (see Correction 2 — without it the table is decorative).
 5. **Tests**: two concurrent claims for one `(user_id, session_id)` where exactly

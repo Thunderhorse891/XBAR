@@ -3,6 +3,7 @@ import {
   blockWebfonts,
   recoveryLink,
   RECOVERY_KEY,
+  refreshStoredSession,
   SECOND,
   SECOND_USER_ID,
   sessionLink,
@@ -53,10 +54,10 @@ async function fillNewPassword(page: Page, value: string) {
  * test can prove the hang was real rather than passing because nothing was
  * ever requested.
  */
-async function holdWorkspaceApi(page: Page) {
+async function holdWorkspaceApi(page: Page, { holding = true } = {}) {
   const held: Route[] = [];
   const owners: string[] = [];
-  let releasing = false;
+  let releasing = !holding;
   await page.route(WORKSPACE_REST, async (route) => {
     owners.push(ownerOf(route.request().url()));
     if (releasing) {
@@ -73,6 +74,11 @@ async function holdWorkspaceApi(page: Page) {
     // shown to have reached this tab rather than assumed.
     get owners() {
       return owners;
+    },
+    // Start holding again, so a test can let a tab settle first and only then
+    // make the workspace API unreachable.
+    hold() {
+      releasing = false;
     },
     async release() {
       releasing = true;
@@ -99,6 +105,37 @@ function ownerOf(url: string) {
   return url.includes(SECOND_USER_ID) ? SECOND_USER_ID : USER_ID;
 }
 
+/*
+ * The remote read hydration makes, holdable, so a test can interrupt a
+ * hydration that is genuinely in flight rather than one that has already
+ * finished.
+ */
+async function holdSnapshotApi(page: Page) {
+  const held: Route[] = [];
+  const seen: string[] = [];
+  let releasing = false;
+  await page.route(SNAPSHOT_REST, async (route) => {
+    seen.push(route.request().url());
+    if (releasing) {
+      await route.fulfill({ status: 200, contentType: 'application/json', body: '[]' });
+      return;
+    }
+    held.push(route);
+  });
+  return {
+    get count() {
+      return seen.length;
+    },
+    async release() {
+      releasing = true;
+      const pending = held.splice(0, held.length);
+      for (const route of pending) {
+        await route.fulfill({ status: 200, contentType: 'application/json', body: '[]' }).catch(() => {});
+      }
+    },
+  };
+}
+
 const heldGrant = (page: Page) => page.evaluate((key) => window.sessionStorage.getItem(key) ?? '', RECOVERY_KEY);
 
 test('a validated recovery reaches the form while the workspace API hangs', async ({ page }) => {
@@ -108,8 +145,10 @@ test('a validated recovery reaches the form while the workspace API hangs', asyn
   await page.goto(recoveryLink());
   await expect(newPassword(page)).toBeVisible({ timeout: 30_000 });
 
-  // The hang is real: the store asked, and is still waiting.
-  expect(workspace.count).toBeGreaterThan(0);
+  // The hang is real: the store asked, and is still waiting. Polled because
+  // the form renders off the published session, which lands before the
+  // request it does not wait for.
+  await expect.poll(() => workspace.count, { timeout: 30_000 }).toBeGreaterThan(0);
 
   await fillNewPassword(page, 'a-brand-new-password');
   await submit(page).click();
@@ -236,6 +275,19 @@ test('an account switch while the workspace API hangs hydrates only the new acco
   // the second account's arrived while this tab was still bootstrapping.
   expect(relationalReads).toEqual([]);
 
+  /*
+   * And the form is gone ALREADY -- while the workspace API is still hanging.
+   *
+   * The switch can only be QUEUED here: the bootstrap has not finished, so the
+   * workspace replay waits. Queuing the identity with it left the store
+   * describing the first account, so the grant still matched, and the password
+   * form stayed live for a session this browser no longer held -- for as long
+   * as the hanging request took, which is forever. Publishing identity
+   * separately from its workspace is what retires it now.
+   */
+  await expect(refusal(page)).toBeVisible({ timeout: 30_000 });
+  await expect(newPassword(page)).toHaveCount(0);
+
   await workspace.release();
   await page.waitForTimeout(4000);
 
@@ -261,4 +313,124 @@ test('an account switch while the workspace API hangs hydrates only the new acco
   expect(relationalReads).toHaveLength(1);
   expect(relationalReads[0]).toContain(SECOND_WORKSPACE_ID);
   expect(relationalReads[0]).not.toContain(WORKSPACE_ID);
+});
+
+test('switching accounts in a hydrated tab locks its records until the new profile resolves', async ({
+  page,
+  context,
+}) => {
+  // Unheld to begin with: this tab must genuinely finish hydrating as the
+  // first account before the switch, or it is not the case being tested.
+  const workspace = await holdWorkspaceApi(page, { holding: false });
+  const relationalReads: string[] = [];
+  const promotions: string[] = [];
+  await page.route(HORSES_REST, async (route) => {
+    relationalReads.push(route.request().url());
+    await route.fulfill({ status: 200, contentType: 'application/json', body: '[]' });
+  });
+  // Reconciliation's own write. Nothing may push records anywhere while the
+  // account on screen and the workspace behind it disagree.
+  await page.route(SNAPSHOT_REST, async (route) => {
+    if (route.request().method() !== 'GET') promotions.push(route.request().method());
+    await route.fulfill({ status: 200, contentType: 'application/json', body: '[]' });
+  });
+  await stubGoTrueUser(page);
+
+  await page.goto(recoveryLink());
+  await expect(newPassword(page)).toBeVisible({ timeout: 30_000 });
+  await expect.poll(() => relationalReads.length, { timeout: 30_000 }).toBeGreaterThan(0);
+  expect(relationalReads[0]).toContain(WORKSPACE_ID);
+
+  // Settled as the first account. Now the workspace API goes away, and a
+  // second account signs in.
+  relationalReads.length = 0;
+  promotions.length = 0;
+  workspace.hold();
+
+  const second = await context.newPage();
+  await stubGoTrueUser(second, undefined, SECOND);
+  await second.route(WORKSPACE_REST, fulfilWorkspace);
+  await second.goto(sessionLink('signin', SECOND));
+  await expect(refusal(second)).toBeVisible({ timeout: 30_000 });
+
+  /*
+   * The identity changed, so this tab must stop treating the previous
+   * account's workspace as current. Publishing the new session while leaving
+   * `status: 'signed-in'` and the old workspace id in place produced a hybrid:
+   * the old account's records stayed interactive under the new identity, and a
+   * workspace-scoped write would have carried the old workspace id with the
+   * new access token.
+   */
+  await expect(refusal(page)).toBeVisible({ timeout: 30_000 });
+  await page.waitForTimeout(2000);
+  expect(relationalReads).toEqual([]);
+  expect(promotions).toEqual([]);
+
+  /*
+   * Exactly one request about the new account: the store's own profile fetch.
+   *
+   * A relational read cannot show this on its own -- hydration re-derives the
+   * workspace from a profile fetch of its own, and that fetch is held too, so
+   * a hydration that should never have started looks identical from the
+   * horses route. It is not identical here: leaving `status: 'signed-in'` and
+   * the old workspace id in place gives CloudBootstrap a NEW key
+   * (new account, previous workspace) and it begins reconciling, which asks
+   * again. One means nothing but the store has moved.
+   */
+  expect(workspace.owners.filter((owner) => owner === SECOND_USER_ID)).toHaveLength(1);
+
+  // And it resolves rather than staying locked: released, it hydrates once,
+  // for the account that is actually signed in.
+  await workspace.release();
+  await page.waitForTimeout(4000);
+  expect(relationalReads).toHaveLength(1);
+  expect(relationalReads[0]).toContain(SECOND_WORKSPACE_ID);
+});
+
+test('a token refresh during hydration does not restart or abandon it', async ({ page }) => {
+  const workspace = await holdWorkspaceApi(page, { holding: false });
+  const snapshot = await holdSnapshotApi(page);
+  await stubGoTrueUser(page);
+
+  await page.goto(recoveryLink());
+  await expect(newPassword(page)).toBeVisible({ timeout: 30_000 });
+
+  // Hydration is genuinely in flight: its remote read is outstanding.
+  await expect.poll(() => snapshot.count, { timeout: 30_000 }).toBe(1);
+
+  /*
+   * A real auth-js refresh for the SAME account, mid-hydration -- an ordinary
+   * event, since auth-js renews on visibility. It flips `workspaceReady` false
+   * and back, which tears the hydration effect down and returns the identical
+   * hydration key.
+   *
+   * Neither outcome that churn used to produce is acceptable. Tying the run to
+   * the effect's lifecycle killed it, and the returning key read as "already
+   * hydrated", so nothing restarted and the autosave lock was never released.
+   * Clearing the key on teardown instead restarted it, hydrating the same
+   * account and workspace twice. Owning the run rather than the effect does
+   * neither: the run in flight simply carries on.
+   */
+  const sessionId = await page.evaluate(() => {
+    const key = Object.keys(window.localStorage).find((k) => k.startsWith('sb-') && k.endsWith('-auth-token'));
+    const stored = JSON.parse(window.localStorage.getItem(key ?? '') ?? '{}') as { access_token?: string };
+    const payload = (stored.access_token ?? '').split('.')[1] ?? '';
+    return payload ? ((JSON.parse(atob(payload)) as { session_id?: string }).session_id ?? '') : '';
+  });
+  expect(sessionId).not.toBe('');
+  await refreshStoredSession(page, sessionId);
+
+  await snapshot.release();
+  await page.waitForTimeout(4000);
+
+  // One read, and no second one: not restarted, and the refresh really did
+  // happen underneath it.
+  expect(snapshot.count).toBe(1);
+  expect(workspace.owners.filter((owner) => owner === USER_ID).length).toBeGreaterThan(1);
+
+  // And the screen the refresh interrupted still works.
+  await fillNewPassword(page, 'a-brand-new-password');
+  await submit(page).click();
+  await expect(page.getByText('Password updated. You are signed in.').first()).toBeVisible({ timeout: 30_000 });
+  await workspace.release();
 });

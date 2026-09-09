@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { bootstrapEventDisposition, createLatestWriteGate } from '../src/lib/authBootstrap.js';
+import { bootstrapEventDisposition, createLatestWriteGate, identityPublication } from '../src/lib/authBootstrap.js';
 import { createRecoveryCallbackNavigationIntent, isRecoveryCallbackUrl } from '../src/lib/authCallbackArrival.js';
 
 /*
@@ -141,4 +141,32 @@ test('retiring in flight writes stops them committing, and starts nothing', () =
   // And no write was started, so the next one to begin is still the latest.
   const replay = gate.begin();
   assert.equal(replay(), true);
+});
+
+test('a re-sync of the same account does not put the app back into loading', () => {
+  // A token refresh publishes the same identity again. Treating that as a
+  // change would drop the app into a loading screen roughly hourly, and clear
+  // a workspace id that is still correct.
+  assert.deepEqual(identityPublication('user-a', 'user-a'), { workspaceReady: false });
+});
+
+test('an account change retires the previous account workspace with it', () => {
+  /*
+   * The regression this exists for: publishing the new session while leaving
+   * `status: 'signed-in'` and the old `workspaceId` in place left the previous
+   * account's records interactive under the new identity, and a
+   * workspace-scoped write would have carried the old workspace id with the
+   * new access token.
+   */
+  const patch = identityPublication('user-a', 'user-b');
+  assert.equal(patch.status, 'loading', 'the app must not stay signed-in through an account change');
+  assert.equal(patch.workspaceId, '', 'the previous workspace must not survive the account that owned it');
+  assert.equal(patch.workspaceRole, 'Owner', 'nor may its role');
+  assert.equal(patch.workspaceReady, false);
+});
+
+test('a first sign-in counts as a change, having nothing to keep', () => {
+  const patch = identityPublication('', 'user-b');
+  assert.equal(patch.status, 'loading');
+  assert.equal(patch.workspaceId, '');
 });

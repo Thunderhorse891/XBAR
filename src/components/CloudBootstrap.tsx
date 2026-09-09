@@ -1,4 +1,5 @@
 import { useEffect, useRef } from 'react';
+import { createLatestWriteGate } from '@/lib/authBootstrap';
 import { loadWorkspaceBackupFromCloud, saveWorkspaceBackupToCloud } from '@/lib/cloudWorkspace';
 import { decideCloudReconciliation, serializeWorkspaceBackup } from '@/lib/cloudSyncPolicy';
 import { promoteLocalVaultFiles } from '@/lib/workspacePromotion';
@@ -24,6 +25,23 @@ export function CloudBootstrap() {
   const exportWorkspaceBackup = useXbarStore((state) => state.exportWorkspaceBackup);
   const workspaceHydrated = useWorkspaceHydrated();
   const hydrationKeyRef = useRef('');
+  /*
+   * Which hydration run is allowed to write.
+   *
+   * `workspaceReady` is a dependency of the hydration effect, so every re-sync
+   * for the same account -- an ordinary token refresh does it -- tears the
+   * effect down and builds it again. Tying a run's validity to the effect's
+   * lifecycle therefore killed runs that nothing was actually wrong with, and
+   * the returning key was read as "already hydrated", so nothing restarted and
+   * the autosave lock the run had taken was never released: cloud autosave
+   * stopped, silently, until the rancher reloaded.
+   *
+   * Validity belongs to the run, not to the effect. A run keeps writing across
+   * those churns and is retired only when something genuinely replaces it -- a
+   * different account, a different workspace, a sign-out -- which is the same
+   * rule the store applies to its own session writes, so it is the same gate.
+   */
+  const hydrationGateRef = useRef(createLatestWriteGate());
   /*
    * Whether this page load has ever held a session.
    *
@@ -56,6 +74,8 @@ export function CloudBootstrap() {
 
     if (cloudStatus !== 'signed-in' || !session?.user.id) {
       hydrationKeyRef.current = '';
+      // Whatever was loading was loading for somebody else.
+      hydrationGateRef.current.retireInFlight();
       lastPersistedSignatureRef.current = serializeWorkspaceBackup(exportWorkspaceBackup());
 
       /*
@@ -115,7 +135,7 @@ export function CloudBootstrap() {
     if (hydrationKeyRef.current === hydrationKey) return;
     hydrationKeyRef.current = hydrationKey;
     setAutosaveReady(false, false);
-    let cancelled = false;
+    const owns = hydrationGateRef.current.begin();
 
     /*
      * A promotion that only half-moved the files must say so.
@@ -142,7 +162,7 @@ export function CloudBootstrap() {
         : `${failed.length} of this device's files could not be moved to the cloud workspace and cannot be opened yet. They are retried automatically the next time this ranch loads.`;
 
     const finish = (unlocked: boolean, state: 'idle' | 'error', message: string) => {
-      if (cancelled) return;
+      if (!owns()) return;
       lastPersistedSignatureRef.current = serializeWorkspaceBackup(exportWorkspaceBackup());
       setSyncState(state, message);
       // `unlocked` is false for `conflict-lock` and for a failed remote load.
@@ -154,7 +174,7 @@ export function CloudBootstrap() {
       const local = exportWorkspaceBackup();
       setSyncState('syncing', 'Reconciling this ranch with cloud records...');
       const remote = await loadWorkspaceBackupFromCloud();
-      if (cancelled) return;
+      if (!owns()) return;
       const decision = decideCloudReconciliation({
         local,
         ...(remote.ok ? { remote: remote.backup } : { remoteError: remote.message }),
@@ -173,7 +193,7 @@ export function CloudBootstrap() {
 
       if (decision === 'push-local') {
         const saved = await saveWorkspaceBackupToCloud(local);
-        if (cancelled) return;
+        if (!owns()) return;
         if (saved.ok && saved.updatedAt) setLastSyncAt(saved.updatedAt);
         if (saved.ok && saved.workspaceId && saved.workspaceId !== workspaceId) {
           setWorkspaceAccessProfile(saved.workspaceId, 'Admin');
@@ -195,7 +215,7 @@ export function CloudBootstrap() {
             local.workspace as Parameters<typeof promoteLocalVaultFiles>[0],
             vaultOwnerId(),
           );
-          if (cancelled) return;
+          if (!owns()) return;
           promotionFailed = promoted.failed;
         }
 
@@ -226,7 +246,7 @@ export function CloudBootstrap() {
           local.workspace as Parameters<typeof promoteLocalVaultFiles>[0],
           vaultOwnerId(),
         );
-        if (cancelled) return;
+        if (!owns()) return;
 
         finish(
           true,
@@ -253,9 +273,14 @@ export function CloudBootstrap() {
     };
 
     void hydrate();
-    return () => {
-      cancelled = true;
-    };
+    /*
+     * No cleanup that invalidates the run.
+     *
+     * React tears this effect down on every dependency change, including the
+     * transient `workspaceReady` flip that a same-account re-sync produces.
+     * Cancelling there is what stranded the run; the gate above retires a run
+     * when it is genuinely superseded instead.
+     */
   }, [
     cloudStatus,
     exportWorkspaceBackup,

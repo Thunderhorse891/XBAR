@@ -78,3 +78,37 @@ export function createLatestWriteGate(): LatestWriteGate {
     },
   };
 }
+
+/**
+ * What publishing a newly observed identity must change in the store.
+ *
+ * Who is signed in is published before their workspace is fetched, so the
+ * reset screen does not wait on a network round trip it has no use for. That
+ * is safe for a re-sync of the SAME account -- a token refresh, a replayed
+ * event -- where the workspace already on file still belongs to the session.
+ *
+ * It is not safe when the account CHANGES. Publishing the new session while
+ * leaving `status: 'signed-in'` and the previous account's workspace in place
+ * produces a hybrid the app has no honest reading of: the guard that holds the
+ * app only holds on 'loading', so the old account's records stay interactive
+ * under the new identity, and a workspace-scoped write carries the old
+ * workspace id with the new access token. If the profile request then hangs,
+ * that state persists for as long as the hang does.
+ *
+ * So an identity change retires the workspace with it and says the one true
+ * thing: who is here is known, what they can see is not yet.
+ *
+ * A previously signed-out browser has no previous id, which counts as a change
+ * -- there is nothing to keep.
+ */
+export type IdentityPublication = {
+  workspaceReady: false;
+  status?: 'loading';
+  workspaceId?: '';
+  workspaceRole?: 'Owner';
+};
+
+export function identityPublication(previousUserId: string, nextUserId: string): IdentityPublication {
+  if (previousUserId && previousUserId === nextUserId) return { workspaceReady: false };
+  return { workspaceReady: false, status: 'loading', workspaceId: '', workspaceRole: 'Owner' };
+}

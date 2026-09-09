@@ -8,7 +8,7 @@ import { isSupabaseConfigured } from '@/lib/platformConfig';
 import type { UserRole } from '@/types/xbar';
 import { authCallbackOrigin, isNativeApp } from '../lib/nativePlatform.js';
 import { describeAuthError } from '@/lib/authErrors';
-import { bootstrapEventDisposition, createLatestWriteGate } from '@/lib/authBootstrap';
+import { bootstrapEventDisposition, createLatestWriteGate, identityPublication } from '@/lib/authBootstrap';
 import { hasValidatedPasswordRecovery, reconcileStoredRecovery } from '@/lib/passwordRecovery';
 
 export { hasValidatedPasswordRecovery };
@@ -722,6 +722,49 @@ export const useCloudStore = create<CloudStore>((set, get) => ({
      */
     const syncGate = createLatestWriteGate();
 
+    /*
+     * WHO is signed in, published without waiting for their workspace.
+     *
+     * Two callers, and the second is the point: the bootstrap sync uses this
+     * before its profile round trip, and so does an event that arrives while
+     * the bootstrap is still running and can only be QUEUED. Queuing the whole
+     * event left the store describing an account that had already been
+     * replaced -- `hasValidatedPasswordRecovery` went on matching it, so the
+     * reset form stayed live for a session this browser no longer held.
+     *
+     * On an identity change the previous account's workspace state is retired
+     * with it. Publishing the new session while leaving `status: 'signed-in'`,
+     * the old `workspaceId` and the old role produced a HYBRID the app has no
+     * honest reading of: RequireCloudAuth only holds on 'loading', so the
+     * previous account's records stayed interactive under the new identity,
+     * and a workspace-scoped write would have carried the old workspace id
+     * with the new access token. Dropping back to 'loading' is the coherent
+     * transition -- it says the one true thing, that who is here is known and
+     * what they can see is not yet.
+     *
+     * The reset screen is unaffected by that: it settles on `authReady`, which
+     * is exactly why these are separate flags.
+     */
+    const publishAuthIdentity = (session: Session | null) => {
+      if (!session) {
+        set({
+          status: 'signed-out',
+          authReady: true,
+          workspaceReady: true,
+          session: null,
+          workspaceId: '',
+          workspaceRole: 'Owner',
+        });
+        return;
+      }
+
+      set({
+        session,
+        authReady: true,
+        ...identityPublication(get().session?.user.id ?? '', session.user.id),
+      });
+    };
+
     const syncSessionState = async (session: Session | null, initialized = false) => {
       const isStillLatest = syncGate.begin();
 
@@ -738,18 +781,7 @@ export const useCloudStore = create<CloudStore>((set, get) => ({
         return;
       }
 
-      /*
-       * Who is here, published before the workspace is fetched.
-       *
-       * `status` deliberately does NOT move yet: RequireCloudAuth still holds
-       * the app on 'loading', so nothing renders records against a workspace
-       * that has not resolved. What this releases is the narrow question the
-       * reset screen asks -- is there a session, and whose.
-       *
-       * `workspaceReady` goes false first, so a switch between accounts cannot
-       * leave the previous workspace looking resolved for the new one.
-       */
-      set({ session, authReady: true, workspaceReady: false });
+      publishAuthIdentity(session);
 
       const accessProfile = await loadWorkspaceAccessProfile(session);
       if (!isStillLatest()) {
@@ -936,6 +968,13 @@ export const useCloudStore = create<CloudStore>((set, get) => ({
          * account in the gap before the replay lands.
          */
         syncGate.retireInFlight();
+        /*
+         * The WORKSPACE replay waits for the bootstrap; who is signed in does
+         * not. Holding both back meant a queued sign-out or account switch was
+         * invisible to the store for as long as the previous account's
+         * workspace request took -- unbounded, if that request hangs.
+         */
+        publishAuthIdentity(session);
         return;
       }
       void syncSessionState(session);
