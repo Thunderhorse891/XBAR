@@ -11,6 +11,7 @@ export function CloudBootstrap() {
   const cloudStatus = useCloudStore((state) => state.status);
   const session = useCloudStore((state) => state.session);
   const workspaceId = useCloudStore((state) => state.workspaceId);
+  const workspaceReady = useCloudStore((state) => state.workspaceReady);
   const workspaceRole = useCloudStore((state) => state.workspaceRole);
   const autosaveReady = useCloudStore((state) => state.autosaveReady);
   const autosaveUnlocked = useCloudStore((state) => state.autosaveUnlocked);
@@ -85,6 +86,22 @@ export function CloudBootstrap() {
     }
 
     sawSessionRef.current = true;
+
+    /*
+     * `session` is now published before the workspace profile resolves, so a
+     * session alone is not enough to start hydrating: the key would form
+     * against an empty workspace id, and on an account switch it would pair
+     * the new user with the PREVIOUS account's workspace.
+     *
+     * Returning here rather than in the branch above is the whole point.
+     * That branch clears `hydrationKeyRef`, and this state is transient --
+     * every sync sets `workspaceReady` false and then true again -- so
+     * clearing on the way through made the same user and workspace hydrate
+     * once per sync instead of once. Two cycles were observed for an ordinary
+     * recovery load before this returned early instead. The key still changes
+     * on a genuine account or workspace switch, so those still re-run, once.
+     */
+    if (!workspaceReady) return;
 
     const hydrationKey = `${session.user.id}:${workspaceId || 'primary'}`;
     if (hydrationKeyRef.current === hydrationKey) return;
@@ -242,6 +259,7 @@ export function CloudBootstrap() {
     setWorkspaceAccessProfile,
     workspaceHydrated,
     workspaceId,
+    workspaceReady,
   ]);
 
   useEffect(() => {

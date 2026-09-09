@@ -23,7 +23,7 @@ export default function ResetPassword() {
   const confirmId = useId();
   const pushToast = useUiStore((state) => state.pushToast);
   const updatePassword = useCloudStore((state) => state.updatePassword);
-  const status = useCloudStore((state) => state.status);
+  const authReady = useCloudStore((state) => state.authReady);
   const recoveryPending = useCloudStore(hasValidatedPasswordRecovery);
 
   const [password, setPassword] = useState('');
@@ -34,10 +34,20 @@ export default function ResetPassword() {
   const [done, setDone] = useState(false);
 
   const supabaseReady = isSupabaseConfigured();
-  // The link itself carries the session, so it is still arriving on first
-  // paint. Treating "no session yet" as "link expired" would reject people
-  // holding a perfectly good link.
-  const settling = status === 'loading';
+  /*
+   * The link itself carries the session, so it is still arriving on first
+   * paint. Treating "no session yet" as "link expired" would reject people
+   * holding a perfectly good link.
+   *
+   * This waits on AUTH readiness, not on `status`. `status` stays 'loading'
+   * until the workspace profile resolves, and with relational sync on -- the
+   * production default -- that means PostgREST queries against `workspaces`
+   * this screen has no use for. While they were slow or failing, a validated
+   * recovery sat behind them, and a reload sat behind them again, though
+   * GoTrue was healthy enough to change the password. Setting a password is
+   * not a workspace operation and no longer waits like one.
+   */
+  const settling = !authReady;
   /*
    * A session is NOT proof that a valid reset link was followed.
    *

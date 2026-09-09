@@ -44,6 +44,33 @@ type CloudSyncState = 'idle' | 'syncing' | 'error';
 type CloudStore = {
   initialized: boolean;
   status: CloudStatus;
+  /*
+   * Whether WHO is signed in has settled for this page load -- a different
+   * question from whether their workspace has loaded.
+   *
+   * `status` answers both at once: it stays 'loading' until the workspace
+   * profile resolves, because that is when the app may render records. The
+   * reset screen does not need records; it needs to know whether a recovery
+   * link established a session. Reading `status` there made a validated
+   * recovery wait on unrelated PostgREST queries against `workspaces`, so with
+   * relational sync on (the production default) and that endpoint slow or
+   * down, someone holding a good link waited indefinitely -- and a reload
+   * repeated it -- while GoTrue was healthy enough to change the password.
+   *
+   * Published as soon as the auth event or the bootstrap says who is here.
+   * Never a permission: `status` still gates the app, and the recovery form
+   * still requires a session whose user matches the grant.
+   */
+  authReady: boolean;
+  /*
+   * Whether the workspace profile for the CURRENT session has resolved.
+   *
+   * `session` now lands before that profile, so anything acting on a workspace
+   * -- hydration, vault promotion -- waits for this rather than for a session
+   * to appear, or it starts against an empty workspace id and runs again when
+   * the real one arrives.
+   */
+  workspaceReady: boolean;
   session: Session | null;
   workspaceId: string;
   workspaceRole: UserRole;
@@ -660,6 +687,8 @@ function announceSpentRecovery(userId: string, grantToken = '') {
 
 export const useCloudStore = create<CloudStore>((set, get) => ({
   initialized: false,
+  authReady: false,
+  workspaceReady: false,
   passwordRecoveryFor: reconcileStoredRecoveryGrant(readStoredRecoveryUser(), readStoredRecoveryGrantToken()),
   status: isSupabaseConfigured() ? 'loading' : 'unavailable',
   session: null,
@@ -700,12 +729,27 @@ export const useCloudStore = create<CloudStore>((set, get) => ({
         set({
           ...(initialized ? { initialized: true } : {}),
           status: 'signed-out',
+          authReady: true,
+          workspaceReady: true,
           session: null,
           workspaceId: '',
           workspaceRole: 'Owner',
         });
         return;
       }
+
+      /*
+       * Who is here, published before the workspace is fetched.
+       *
+       * `status` deliberately does NOT move yet: RequireCloudAuth still holds
+       * the app on 'loading', so nothing renders records against a workspace
+       * that has not resolved. What this releases is the narrow question the
+       * reset screen asks -- is there a session, and whose.
+       *
+       * `workspaceReady` goes false first, so a switch between accounts cannot
+       * leave the previous workspace looking resolved for the new one.
+       */
+      set({ session, authReady: true, workspaceReady: false });
 
       const accessProfile = await loadWorkspaceAccessProfile(session);
       if (!isStillLatest()) {
@@ -722,6 +766,8 @@ export const useCloudStore = create<CloudStore>((set, get) => ({
       set({
         ...(initialized ? { initialized: true } : {}),
         status: 'signed-in',
+        authReady: true,
+        workspaceReady: true,
         session,
         workspaceId: accessProfile.workspaceId ?? '',
         workspaceRole: accessProfile.workspaceRole,
@@ -914,7 +960,15 @@ export const useCloudStore = create<CloudStore>((set, get) => ({
      */
     const { data, error } = await client.auth.getSession();
     if (error) {
-      set({ initialized: true, status: 'signed-out', session: null, workspaceId: '', workspaceRole: 'Owner' });
+      set({
+        initialized: true,
+        status: 'signed-out',
+        authReady: true,
+        workspaceReady: true,
+        session: null,
+        workspaceId: '',
+        workspaceRole: 'Owner',
+      });
     } else {
       await syncSessionState(data.session, true);
     }
