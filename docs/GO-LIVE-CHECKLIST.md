@@ -162,9 +162,10 @@ names the query or advisor it came from so it can be re-run and disagreed with.
   The migration leaves the constraint `NOT VALID` if older invalid rows exist;
   new inserts and updates are still checked and the patched RPCs deny those old
   links. The base schema defers validation. Reissue affected private links with
-  owner authorization before validating separately. Archiving alone does not
-  satisfy the token constraint, which also applies to archived rows; do not
-  delete listings or make them public merely to pass validation.
+  owner authorization, or archive those listings, before validating separately.
+  Archived listings are exempt from the token constraint and remain inaccessible
+  through both public RPCs. Do not delete listings or make them public merely
+  to pass validation.
 
 ### Not verified here — needs a person with a browser and the dashboards
 

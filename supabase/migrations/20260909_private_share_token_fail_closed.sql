@@ -301,7 +301,7 @@ begin
       validate constraint shared_listings_private_token_present;
     raise notice 'shared_listings_private_token_present: validated, no offending rows';
   else
-    raise warning 'shared_listings_private_token_present: left NOT VALID; % private listing(s) have an empty share_token and are refused by the resolver. Re-issue their private links with owner authorization, or archive them, then run: alter table public.shared_listings validate constraint shared_listings_private_token_present; Archiving alone does not satisfy this constraint.', offending;
+    raise warning 'shared_listings_private_token_present: left NOT VALID; % private listing(s) have an empty share_token and are refused by the resolver. Re-issue their private links with owner authorization, or archive them, then run: alter table public.shared_listings validate constraint shared_listings_private_token_present;', offending;
   end if;
 end
 $$;
