@@ -779,6 +779,12 @@ with check (
 
 alter table if exists public.shared_listings add column if not exists access_mode text not null default 'Private Token';
 alter table if exists public.shared_listings add column if not exists share_token text not null default '';
+-- A Private Token listing with an empty token would be resolvable by anyone
+-- who knows the share_path, because '' <> '' is false in the resolver's guard.
+alter table if exists public.shared_listings drop constraint if exists shared_listings_private_token_present;
+alter table if exists public.shared_listings add constraint shared_listings_private_token_present
+  check (coalesce(nullif(access_mode, ''), 'Private Token') = 'Public Link' or coalesce(share_token, '') <> '') not valid;
+alter table if exists public.shared_listings validate constraint shared_listings_private_token_present;
 alter table if exists public.shared_listings add column if not exists token_issued_at timestamptz not null default timezone('utc', now());
 alter table if exists public.shared_listings add column if not exists published_at timestamptz;
 
@@ -1173,7 +1179,11 @@ begin
     return null;
   end if;
 
-  if listing_row.access_mode <> 'Public Link' and coalesce(p_share_token, '') <> listing_row.share_token then
+  -- An empty stored token is not a token to match against: without the first
+  -- clause a Private Token listing that never got one resolves for a caller who
+  -- supplies nothing. See migrations/20260909_private_share_token_fail_closed.sql.
+  if listing_row.access_mode <> 'Public Link'
+     and (listing_row.share_token = '' or coalesce(p_share_token, '') <> listing_row.share_token) then
     return null;
   end if;
 
@@ -1295,7 +1305,11 @@ begin
     return;
   end if;
 
-  if listing_row.access_mode <> 'Public Link' and coalesce(p_share_token, '') <> listing_row.share_token then
+  -- An empty stored token is not a token to match against: without the first
+  -- clause a Private Token listing that never got one resolves for a caller who
+  -- supplies nothing. See migrations/20260909_private_share_token_fail_closed.sql.
+  if listing_row.access_mode <> 'Public Link'
+     and (listing_row.share_token = '' or coalesce(p_share_token, '') <> listing_row.share_token) then
     return;
   end if;
 

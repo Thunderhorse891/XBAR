@@ -109,53 +109,91 @@ Then run Lighthouse (or PageSpeed Insights) against `/` and `/pricing` —
 both are static HTML and should score high; regressions mean something broke
 in the generator.
 
-## 7. Auth launch gates — audited state, 9 Sep 2026
+## 7. Auth launch gates — observed state, 9 Sep 2026
 
-Read directly from the live `xbar-records` Supabase project
-(`uxvwfepyothlakhqazwv`). Nothing here was changed; this is what was found.
+Observations read from the live `xbar-records` Supabase project
+(`uxvwfepyothlakhqazwv`) on 9 Sep 2026 via the Supabase MCP, by one session
+that has not been independently repeated. Nothing was changed. Each item below
+names the query or advisor it came from so it can be re-run and disagreed with.
 
-### Verified against the real project
+### Observed, with the evidence
 
-- **RLS is on everywhere it matters.** All 25 public tables have row-level
-  security enabled with at least one policy. Supabase advisor lints 0026/0027
-  flag those same 25 as visible in the GraphQL schema to `anon` and to
-  `authenticated` — that is _schema discoverability_, not row access, and it
-  is not a data-exposure finding. Worth tightening for tidiness, not a gate.
-- **Two `SECURITY DEFINER` functions are callable by `anon`** (advisor 0028):
-  `xbar_resolve_public_listing` and `xbar_track_public_share_view`. Both are
-  how a buyer opens a shared sale packet without an account, so this reads as
-  intentional — confirm it is, and that neither can be made to return rows for
-  a packet the caller has no share token for.
-- **Leaked-password protection is DISABLED** (advisor `auth_leaked_password_protection`).
-  One toggle: Authentication → Policies → enable the HaveIBeenPwned check.
-  This is the cheapest gate on the list and it governs every password the
-  reset flow sets. Turn it on before launch.
-- **The end-to-end path has never completed here.** `auth.users` = 1 (confirmed),
-  `workspaces` = 0, `horses` = 0, `workspace_subscription_profiles` = 0. So
-  signup → workspace → horse → tier → checkout is not "untested by us"; it has
-  never run against this project at all. That is the launch gate.
+- **No retained workspace, horse or subscription records.**
 
-### Cannot be verified from a sandboxed session — a human with a browser needs to
+  ```sql
+  select (select count(*) from auth.users) as users,
+         (select count(*) from auth.users where email_confirmed_at is not null) as confirmed,
+         (select count(*) from public.workspaces) as workspaces,
+         (select count(*) from public.horses) as horses,
+         (select count(*) from public.workspace_subscription_profiles) as subs;
+  -- users 1, confirmed 1, workspaces 0, horses 0, subs 0
+  ```
 
-Egress to `xbar-horse-management-app.vercel.app` is denied by the agent
-network policy (403 on CONNECT), and the Supabase MCP surface exposes no
-auth-configuration or Vercel environment read. So these stay open:
+  This establishes that no such records are retained **now**. It does not
+  establish the flow has never run — rows can be deleted. Either way, there is
+  no stored evidence that signup → workspace → horse → tier → checkout has
+  succeeded, so it still needs to be demonstrated before launch.
+
+- **Leaked-password protection is disabled** — Supabase advisor
+  `auth_leaked_password_protection`, security set. Authentication → Policies
+  enables the HaveIBeenPwned check. It governs every password the reset flow
+  sets, and turning it on is a single toggle.
+
+- **RLS is enabled with at least one policy on all 25 public tables** (
+  `pg_class.relrowsecurity` joined to `pg_policies`). That rules out the
+  trivially-open case. It says **nothing about whether the policies are
+  correct** — no policy body was reviewed here, and "RLS on" is not a security
+  conclusion.
+
+- **Advisor lints 0026/0027** flag those same 25 tables as visible in the
+  GraphQL schema to `anon` and to `authenticated`. That is schema
+  discoverability; row access is still governed by the policies above. Not a
+  data-exposure finding on its own.
+
+- **Two `SECURITY DEFINER` functions are `anon`-executable** (advisor 0028):
+  `xbar_resolve_public_listing` and `xbar_track_public_share_view`. Deployed
+  `proacl` confirms both carry `anon` and PUBLIC grants while
+  `xbar_resolve_public_listing_legacy` carries neither — matching the intent of
+  `migrations/20260822_restrict_anon_rpc_surface.sql`. Both are the buyer share
+  flow and are meant to stay reachable. **A latent fail-open in them is fixed by
+  `migrations/20260909_private_share_token_fail_closed.sql`, which is written
+  and NOT YET APPLIED** — see the header of that file for the deployed
+  definitions, the column defaults and the absent constraint that produce it.
+
+### Not verified here — needs a person with a browser and the dashboards
+
+This session could not reach these; that is a limitation of this environment,
+not a claim that nobody can check them. Egress to
+`xbar-horse-management-app.vercel.app` is refused by the agent network policy
+(403 on CONNECT), and the tools available expose no auth-configuration or
+Vercel environment read.
 
 1. **Auth → URL Configuration → Site URL.** If it is still `localhost`,
    confirmation and recovery emails point at a machine the customer does not
-   have. Set it to `https://xbar-horse-management-app.vercel.app` and add both
-   that origin and the preview-deployment origins to Redirect URLs, or links
-   opened from a preview build are rejected.
-2. **Send yourself one real signup and one real recovery email.** Confirm they
-   arrive at all (the default Supabase SMTP is rate-limited and is not a launch
-   sender), that the link lands on `/app/reset-password`, and that setting a
-   password works end to end.
-3. **Enable a provider in Supabase before adding it to `VITE_AUTH_OAUTH_PROVIDERS`.**
-   The sign-in screen renders only what that variable lists; listing a provider
-   that Supabase has not enabled produces a button that fails on click.
+   have. Set it to the deployed origin and add the preview-deployment origins
+   to Redirect URLs, or links opened from a preview build are rejected.
+2. **Send one real signup and one real recovery email.** Confirm they arrive
+   (the default Supabase SMTP is rate-limited and is not a launch sender), that
+   the link lands on `/app/reset-password`, and that setting a password works.
+3. **Enable a provider in Supabase before listing it in
+   `VITE_AUTH_OAUTH_PROVIDERS`.** The sign-in screen renders what that variable
+   lists; a provider Supabase has not enabled becomes a button that fails.
 4. **Stripe:** `VITE_MANAGED_BILLING_ENABLED` stays `false` until the secret
-   key, webhook secret and all four price IDs are set — see the billing note in
-   section 0.
+   key, webhook secret and all four price IDs are set — see section 0.
 
-Everything under "Verified" is machine-checked and repeatable. Everything under
-"Cannot be verified" is genuinely unverified — not assumed working.
+### Recovery consumption — design requirements, not implemented
+
+Recorded so they are not mistaken for protections that exist:
+
+- Browser-side arbitration of a recovery password change is best effort. Web
+  Locks close it where they exist; safari13 is a build target and has none.
+- A server-side consumption row (`SECURITY DEFINER` RPC, RLS deny-all table,
+  unique on the attempt) closes browser-side races only. **It does not make the
+  recovery token single-use** — whoever holds it can call GoTrue's
+  `PUT /auth/v1/user` directly.
+- Nor does PKCE alone: the browser still exchanges the code and holds the
+  resulting token. Only an architecture where the session stays server-side
+  keeps a GoTrue-capable token out of the browser.
+- Requiring the `amr` claim to carry a `recovery` method is how a recovery
+  attempt would be told from an ordinary session. Documented by Supabase;
+  **not yet observed on a real recovery token** — item 2 above would settle it.

@@ -341,3 +341,73 @@ test('the internal re-grant names exact signatures', () => {
     'a proname-only re-grant hands every overload of the name to the role',
   );
 });
+
+/*
+ * The two functions `anon` may execute gate a non-public listing on the
+ * caller's token. Both compared `coalesce(p_share_token, '')` against a stored
+ * token that is itself `coalesce(sl.share_token, '')` — so for a Private Token
+ * row whose stored token is empty the comparison is '' <> '', which is false.
+ * The guard reads as though it rejects a missing token and only rejects a wrong
+ * one, and a caller knowing just the share_path got the horse, its documents
+ * and its ownership record.
+ *
+ * Not hypothetical from a schema standpoint: on the live project (read 9 Sep
+ * 2026) `access_mode` defaults to 'Private Token', `share_token` defaults to
+ * '', and the only constraints on the table were the primary key and the
+ * workspace foreign key. An insert that omitted the token produced exactly that
+ * row. `shared_listings` was empty, so this was latent rather than live.
+ *
+ * These are static assertions about intent, in the same spirit as the rest of
+ * this file: the executable check needs a PostgreSQL instance. What they pin is
+ * what can silently regress in a text file — the empty-token clause going away,
+ * or the constraint that makes the row impossible being dropped.
+ */
+const FAIL_CLOSED_MIGRATION = '20260909_private_share_token_fail_closed.sql';
+const schemaPath = path.join(repoRoot, 'supabase', 'production-schema.sql');
+
+test('an empty stored share token authorizes nothing', () => {
+  const sources = [
+    ['migration', readFileSync(path.join(migrationsDir, FAIL_CLOSED_MIGRATION), 'utf8')],
+    ['production schema', readFileSync(schemaPath, 'utf8')],
+  ];
+
+  for (const [label, sql] of sources) {
+    const code = withoutComments(sql, '--');
+    const guards = code.match(/access_mode <> 'Public Link'[\s\S]{0,220}?then/g) ?? [];
+    assert.equal(guards.length, 2, `${label} should gate both the resolver and the tracker`);
+    for (const guard of guards) {
+      assert.match(
+        guard,
+        /listing_row\.share_token = ''/,
+        `${label}: a listing whose stored token is empty must be refused, not matched by an empty caller token`,
+      );
+    }
+    /*
+     * Public Link is tokenless by design and must keep resolving without one,
+     * so the fix must stay inside the non-public branch.
+     */
+    assert.match(code, /access_mode <> 'Public Link'/, `${label} must still exempt Public Link listings`);
+  }
+});
+
+test('a private listing cannot be stored without a token', () => {
+  for (const [label, sql] of [
+    ['migration', readFileSync(path.join(migrationsDir, FAIL_CLOSED_MIGRATION), 'utf8')],
+    ['production schema', readFileSync(schemaPath, 'utf8')],
+  ]) {
+    const code = withoutComments(sql, '--');
+    assert.match(
+      code,
+      /add constraint shared_listings_private_token_present[\s\S]{0,240}coalesce\(share_token, ''\) <> ''/,
+      `${label}: the column defaults produce the vulnerable row, so the table has to refuse it`,
+    );
+    // NOT VALID then validated: it must not fail the migration on existing rows,
+    // and it must not be left unenforced for them either.
+    assert.match(code, /not valid;/, `${label}: adding it must not fail on pre-existing rows`);
+    assert.match(
+      code,
+      /validate constraint shared_listings_private_token_present/,
+      `${label}: leaving it NOT VALID would exempt every row that already exists`,
+    );
+  }
+});
