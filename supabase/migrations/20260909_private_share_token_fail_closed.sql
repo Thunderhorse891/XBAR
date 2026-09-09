@@ -243,6 +243,22 @@ end;
 $function$;
 
 -- And stop the row existing in the first place.
+--
+-- NOT VALID is doing real work here, not hedging: it constrains every INSERT
+-- and UPDATE from now on while leaving rows that already exist alone. Those
+-- are covered by the function change above, which refuses them.
+--
+-- Validation is then attempted, but only when nothing violates it. Running
+-- `validate constraint` unconditionally aborts the whole migration if even one
+-- private listing already has an empty token -- confirmed on PostgreSQL 16:
+--
+--     ERROR: check constraint "shared_listings_private_token_present"
+--            of relation "shared_listings" is violated by some row
+--
+-- The alternative would be inventing tokens for existing listings, which is
+-- silently editing customer data to make a migration pass. So the offending
+-- rows are named instead and left for a person to decide about; they are not
+-- resolvable by anyone without a new share link anyway.
 alter table public.shared_listings
   drop constraint if exists shared_listings_private_token_present;
 
@@ -253,8 +269,24 @@ alter table public.shared_listings
     or coalesce(share_token, '') <> ''
   ) not valid;
 
-alter table public.shared_listings
-  validate constraint shared_listings_private_token_present;
+do $$
+declare
+  offending bigint;
+begin
+  select count(*) into offending
+  from public.shared_listings
+  where coalesce(nullif(access_mode, ''), 'Private Token') <> 'Public Link'
+    and coalesce(share_token, '') = '';
+
+  if offending = 0 then
+    alter table public.shared_listings
+      validate constraint shared_listings_private_token_present;
+    raise notice 'shared_listings_private_token_present: validated, no offending rows';
+  else
+    raise warning 'shared_listings_private_token_present: left NOT VALID; % private listing(s) have an empty share_token and are refused by the resolver. Re-issue or archive them, then run: alter table public.shared_listings validate constraint shared_listings_private_token_present;', offending;
+  end if;
+end
+$$;
 
 commit;
 
