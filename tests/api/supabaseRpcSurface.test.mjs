@@ -418,3 +418,45 @@ test('new private listings require tokens without rolling back fixes on historic
     }
   }
 });
+
+/*
+ * Archived listings are exempt from the token CHECK, and that exemption is
+ * load-bearing rather than a loosening.
+ *
+ * Without it, `update ... set state = 'Archived'` on a broken listing is itself
+ * refused: NOT VALID stops the historical scan, not the re-check that happens
+ * when such a row is updated. The only way to retire a bad share would be to
+ * first issue it a working token -- making it more usable on the way to
+ * deleting it. Confirmed on PostgreSQL 16.13, both before and after.
+ *
+ * It costs nothing, because both functions select `where sl.state <>
+ * 'Archived'`: an archived listing is unresolvable whatever its token, which
+ * was also checked by executing the resolver against an archived tokenless row.
+ */
+test('a broken private listing can still be archived', () => {
+  for (const [label, sql] of [
+    ['migration', readFileSync(path.join(migrationsDir, FAIL_CLOSED_MIGRATION), 'utf8')],
+    ['production schema', readFileSync(schemaPath, 'utf8')],
+  ]) {
+    const code = withoutComments(sql, '--');
+    assert.match(
+      code,
+      /add constraint shared_listings_private_token_present[\s\S]{0,120}coalesce\(state, ''\) = 'Archived'/,
+      `${label}: without the exemption an operator cannot retire a listing without first re-issuing it`,
+    );
+  }
+  // And the resolver must keep filtering them, or the exemption would be one.
+  const schema = withoutComments(readFileSync(schemaPath, 'utf8'), '--');
+  assert.equal(
+    (schema.match(/sl\.state <> 'Archived'/g) ?? []).length,
+    2,
+    'both the resolver and the tracker must skip archived listings',
+  );
+  // The migration must not count archived rows as blocking validation either.
+  const migration = withoutComments(readFileSync(path.join(migrationsDir, FAIL_CLOSED_MIGRATION), 'utf8'), '--');
+  assert.match(
+    migration,
+    /select count\(\*\) into offending[\s\S]{0,200}coalesce\(state, ''\) <> 'Archived'/,
+    'an archived row is not an offending row, so it must not hold validation back',
+  );
+});

@@ -259,13 +259,30 @@ $function$;
 -- silently editing customer data to make a migration pass. So the offending
 -- rows are named instead and left for a person to decide about; they are not
 -- resolvable by anyone without a new share link anyway.
+--
+-- Archived rows are exempt, and that is the difference between an operator
+-- being able to clean up and not. Without the exemption, `update ... set state
+-- = 'Archived'` on a broken listing is itself refused -- NOT VALID stops the
+-- historical scan, it does not stop the row being re-checked when it is
+-- updated -- so the only way to retire a bad share would be to first issue it
+-- a working token, making it MORE usable on the way to deleting it. Confirmed
+-- on PostgreSQL 16.13:
+--
+--     archive without a token   -> BLOCKED by the constraint
+--     set a token first         -> accepted
+--
+-- Exempting them costs nothing, because both functions already select
+-- `where sl.state <> 'Archived'`: an archived listing is unresolvable whatever
+-- its token. Verified rather than assumed -- an archived, tokenless private
+-- listing returns null from the resolver.
 alter table public.shared_listings
   drop constraint if exists shared_listings_private_token_present;
 
 alter table public.shared_listings
   add constraint shared_listings_private_token_present
   check (
-    coalesce(nullif(access_mode, ''), 'Private Token') = 'Public Link'
+    coalesce(state, '') = 'Archived'
+    or coalesce(nullif(access_mode, ''), 'Private Token') = 'Public Link'
     or coalesce(share_token, '') <> ''
   ) not valid;
 
@@ -275,7 +292,8 @@ declare
 begin
   select count(*) into offending
   from public.shared_listings
-  where coalesce(nullif(access_mode, ''), 'Private Token') <> 'Public Link'
+  where coalesce(state, '') <> 'Archived'
+    and coalesce(nullif(access_mode, ''), 'Private Token') <> 'Public Link'
     and coalesce(share_token, '') = '';
 
   if offending = 0 then
@@ -283,7 +301,7 @@ begin
       validate constraint shared_listings_private_token_present;
     raise notice 'shared_listings_private_token_present: validated, no offending rows';
   else
-    raise warning 'shared_listings_private_token_present: left NOT VALID; % private listing(s) have an empty share_token and are refused by the resolver. Re-issue their private links with owner authorization, then run: alter table public.shared_listings validate constraint shared_listings_private_token_present; Archiving alone does not satisfy this constraint.', offending;
+    raise warning 'shared_listings_private_token_present: left NOT VALID; % private listing(s) have an empty share_token and are refused by the resolver. Re-issue their private links with owner authorization, or archive them, then run: alter table public.shared_listings validate constraint shared_listings_private_token_present; Archiving alone does not satisfy this constraint.', offending;
   end if;
 end
 $$;

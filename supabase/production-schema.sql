@@ -783,7 +783,7 @@ alter table if exists public.shared_listings add column if not exists share_toke
 -- who knows the share_path, because '' <> '' is false in the resolver's guard.
 alter table if exists public.shared_listings drop constraint if exists shared_listings_private_token_present;
 alter table if exists public.shared_listings add constraint shared_listings_private_token_present
-  check (coalesce(nullif(access_mode, ''), 'Private Token') = 'Public Link' or coalesce(share_token, '') <> '') not valid;
+  check (coalesce(state, '') = 'Archived' or coalesce(nullif(access_mode, ''), 'Private Token') = 'Public Link' or coalesce(share_token, '') <> '') not valid;
 -- Defer historical validation until invalid private links are repaired; see
 -- 20260909_private_share_token_fail_closed.sql. New writes are still checked.
 alter table if exists public.shared_listings add column if not exists token_issued_at timestamptz not null default timezone('utc', now());
