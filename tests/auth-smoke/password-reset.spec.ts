@@ -990,6 +990,89 @@ for (const withoutWebLocks of [false, true]) {
   });
 }
 
+test('a stale claim writer cannot send a second change', async ({ context }) => {
+  /*
+   * The adversarial schedule, staged deterministically instead of raced.
+   *
+   * Two tabs read the claim as absent; one is paused there while the other
+   * writes, survives its settle window and starts its request; the paused tab
+   * resumes, overwrites the live claim with its stale acquisition, passes its
+   * own settle check and sends a second password change. Clicking two buttons
+   * cannot reproduce that reliably, so the paused tab's effect is produced
+   * directly: clearing the claim key leaves exactly the state its stale write
+   * creates, with the first request still in flight and still renewing.
+   *
+   * The Web Lock is what refuses it. The lock is held across the whole
+   * critical section, so a tab resuming mid-protocol cannot acquire one no
+   * matter what the claim record says.
+   *
+   * Not closed on safari13, which has no Web Locks and which this build
+   * targets: the same staging there produces a second request, because a check
+   * then a write over localStorage cannot be made atomic. That residual is the
+   * server's to close and is named as open on the PR.
+   */
+  const link = recoveryLink();
+  const first = await context.newPage();
+  const second = await context.newPage();
+  const sent: string[] = [];
+
+  let releaseFirst: () => void = () => {};
+  const firstHeld = new Promise<void>((resolve) => {
+    releaseFirst = resolve;
+  });
+  let sawFirst: () => void = () => {};
+  const firstStarted = new Promise<void>((resolve) => {
+    sawFirst = resolve;
+  });
+
+  try {
+    for (const page of [first, second]) {
+      await page.route('**/auth/v1/user*', async (route) => {
+        if (route.request().method() !== 'PUT') {
+          await route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(userRecord()) });
+          return;
+        }
+        sent.push(route.request().postData() ?? '');
+        if (page === first) {
+          sawFirst();
+          await firstHeld;
+        }
+        await route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(userRecord()) });
+      });
+    }
+
+    await first.goto(link);
+    await expect(newPassword(first)).toBeVisible({ timeout: 30_000 });
+    await second.goto(link);
+    await expect(newPassword(second)).toBeVisible({ timeout: 30_000 });
+
+    await fillNewPassword(first, 'first-tab-password');
+    await fillNewPassword(second, 'second-tab-password');
+    await submit(first).click();
+    await firstStarted;
+
+    // The first tab's claim really is there before it is taken away, or this
+    // stages nothing.
+    expect(
+      await second.evaluate((key) => window.localStorage.getItem(key), recoveryUpdateClaimKeyFor(USER_ID)),
+    ).not.toBeNull();
+    // What the paused tab's stale write leaves behind.
+    await second.evaluate((key) => window.localStorage.removeItem(key), recoveryUpdateClaimKeyFor(USER_ID));
+
+    await submit(second).click();
+    await expect(second.getByText(/already being used|already been used/i).first()).toBeVisible({ timeout: 30_000 });
+
+    releaseFirst();
+    await expect(first.getByText('Password updated. You are signed in.').first()).toBeVisible({ timeout: 30_000 });
+
+    // One change, from the tab that held the lock.
+    expect(sent).toHaveLength(1);
+    expect(sent[0]).toContain('first-tab-password');
+  } finally {
+    releaseFirst();
+  }
+});
+
 test('a token refresh does not make a spent link look unused', async ({ context }) => {
   /*
    * The runtime half of "the grant identifier survives a refresh", which until
