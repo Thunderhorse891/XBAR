@@ -390,7 +390,7 @@ test('an empty stored share token authorizes nothing', () => {
   }
 });
 
-test('a private listing cannot be stored without a token', () => {
+test('new private listings require tokens without rolling back fixes on historical rows', () => {
   for (const [label, sql] of [
     ['migration', readFileSync(path.join(migrationsDir, FAIL_CLOSED_MIGRATION), 'utf8')],
     ['production schema', readFileSync(schemaPath, 'utf8')],
@@ -401,13 +401,20 @@ test('a private listing cannot be stored without a token', () => {
       /add constraint shared_listings_private_token_present[\s\S]{0,240}coalesce\(share_token, ''\) <> ''/,
       `${label}: the column defaults produce the vulnerable row, so the table has to refuse it`,
     );
-    // NOT VALID then validated: it must not fail the migration on existing rows,
-    // and it must not be left unenforced for them either.
+    // NOT VALID enforces new writes but skips the historical scan. Validation
+    // in this transaction would roll back the function fixes on one old row.
     assert.match(code, /not valid;/, `${label}: adding it must not fail on pre-existing rows`);
-    assert.match(
-      code,
-      /validate constraint shared_listings_private_token_present/,
-      `${label}: leaving it NOT VALID would exempt every row that already exists`,
-    );
+    if (label === 'migration') {
+      assert.match(
+        code,
+        /if offending = 0 then\s+alter table public\.shared_listings\s+validate constraint shared_listings_private_token_present/,
+      );
+    } else {
+      assert.doesNotMatch(
+        code,
+        /validate constraint shared_listings_private_token_present/,
+        `${label}: historical validation must wait for authorized cleanup`,
+      );
+    }
   }
 });

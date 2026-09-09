@@ -159,6 +159,12 @@ names the query or advisor it came from so it can be re-run and disagreed with.
   `migrations/20260909_private_share_token_fail_closed.sql`, which is written
   and NOT YET APPLIED** — see the header of that file for the deployed
   definitions, the column defaults and the absent constraint that produce it.
+  The migration leaves the constraint `NOT VALID` if older invalid rows exist;
+  new inserts and updates are still checked and the patched RPCs deny those old
+  links. The base schema defers validation. Reissue affected private links with
+  owner authorization before validating separately. Archiving alone does not
+  satisfy the token constraint, which also applies to archived rows; do not
+  delete listings or make them public merely to pass validation.
 
 ### Not verified here — needs a person with a browser and the dashboards
 

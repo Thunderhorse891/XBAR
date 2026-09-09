@@ -43,8 +43,8 @@
 --    without one.
 -- 2. A CHECK constraint stops the row being created at all, so the functions
 --    are not the only thing standing between a defaulted insert and a public
---    private listing. Added NOT VALID then validated, so it cannot fail the
---    migration on pre-existing rows.
+--    private listing. Added NOT VALID and validated only if no old row violates
+--    it, so existing invalid rows do not roll back the function fixes.
 --
 -- Defence in depth on purpose: either half alone closes today's hole, and the
 -- constraint is the half that survives someone rewriting the functions.
@@ -283,7 +283,7 @@ begin
       validate constraint shared_listings_private_token_present;
     raise notice 'shared_listings_private_token_present: validated, no offending rows';
   else
-    raise warning 'shared_listings_private_token_present: left NOT VALID; % private listing(s) have an empty share_token and are refused by the resolver. Re-issue or archive them, then run: alter table public.shared_listings validate constraint shared_listings_private_token_present;', offending;
+    raise warning 'shared_listings_private_token_present: left NOT VALID; % private listing(s) have an empty share_token and are refused by the resolver. Re-issue their private links with owner authorization, then run: alter table public.shared_listings validate constraint shared_listings_private_token_present; Archiving alone does not satisfy this constraint.', offending;
   end if;
 end
 $$;

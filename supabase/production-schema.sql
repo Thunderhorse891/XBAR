@@ -784,7 +784,8 @@ alter table if exists public.shared_listings add column if not exists share_toke
 alter table if exists public.shared_listings drop constraint if exists shared_listings_private_token_present;
 alter table if exists public.shared_listings add constraint shared_listings_private_token_present
   check (coalesce(nullif(access_mode, ''), 'Private Token') = 'Public Link' or coalesce(share_token, '') <> '') not valid;
-alter table if exists public.shared_listings validate constraint shared_listings_private_token_present;
+-- Defer historical validation until invalid private links are repaired; see
+-- 20260909_private_share_token_fail_closed.sql. New writes are still checked.
 alter table if exists public.shared_listings add column if not exists token_issued_at timestamptz not null default timezone('utc', now());
 alter table if exists public.shared_listings add column if not exists published_at timestamptz;
 
