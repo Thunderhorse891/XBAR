@@ -203,6 +203,17 @@ Recorded so they are not mistaken for protections that exist:
 - Nor does PKCE alone: the browser still exchanges the code and holds the
   resulting token. Only an architecture where the session stays server-side
   keeps a GoTrue-capable token out of the browser.
+- The recovery **link** is already single-use at GoTrue: the OTP is consumed at
+  `/verify`, so thoroughly that Supabase's own troubleshooting guide names
+  email-prefetching scanners consuming it before the customer. What is not
+  single-use is the **session token** minted from that one redemption.
 - Requiring the `amr` claim to carry a `recovery` method is how a recovery
-  attempt would be told from an ordinary session. Documented by Supabase;
-  **not yet observed on a real recovery token** — item 2 above would settle it.
+  attempt would be told from an ordinary session. Documented — Supabase's JWT
+  Claims Reference enumerates `"recovery"` among the `amr.method` values — but
+  **not yet observed on a real recovery token for this project**; item 2 above
+  would settle it. The installed `@supabase/auth-js` types do not enumerate
+  `recovery` and settle nothing either way.
+
+The full design, with the three corrections a review raised against it, is in
+[`docs/RECOVERY-CONSUMPTION-DESIGN.md`](RECOVERY-CONSUMPTION-DESIGN.md). It is a
+design only: no migration, no endpoint, no cloud or configuration change.

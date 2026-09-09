@@ -100,6 +100,14 @@ export function CloudBootstrap() {
      * once per sync instead of once. Two cycles were observed for an ordinary
      * recovery load before this returned early instead. The key still changes
      * on a genuine account or workspace switch, so those still re-run, once.
+     *
+     * What the suite pins is that PLACEMENT, not this gate's existence:
+     * deleting the line outright still passes, because hydration re-derives the
+     * workspace from its own profile fetch, so a key formed against an
+     * unresolved workspace changes only WHEN hydration re-runs, not what it
+     * reads. Kept anyway -- starting work against a workspace id that is known
+     * to be provisional is worth refusing on its own terms -- but recorded as
+     * unproven rather than left to look tested.
      */
     if (!workspaceReady) return;
 

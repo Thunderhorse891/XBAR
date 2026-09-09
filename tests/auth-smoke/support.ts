@@ -12,6 +12,20 @@ import { test, type Page, type Route } from '@playwright/test';
 export const USER_ID = '5d2b6f10-7c4a-4a1e-9a3f-000000000001';
 export const RECOVERY_EMAIL = 'owner@xbar.test';
 
+/*
+ * A second account, so a test can stage a switch rather than assume one.
+ *
+ * Everything below defaults to OWNER, which is what every existing case wants:
+ * one identity, named once. Only a test that needs two accounts to be
+ * distinguishable passes an identity, and then it has to say which.
+ */
+export const SECOND_USER_ID = '5d2b6f10-7c4a-4a1e-9a3f-000000000002';
+export const SECOND_EMAIL = 'second@xbar.test';
+
+export type Identity = { id: string; email: string };
+export const OWNER: Identity = { id: USER_ID, email: RECOVERY_EMAIL };
+export const SECOND: Identity = { id: SECOND_USER_ID, email: SECOND_EMAIL };
+
 // The tab-local marker the store writes alongside its in-memory flag. Read
 // directly so the assertions can tell "the screen is correct" apart from "the
 // grant never cleared, so of course it did not refuse" -- the success case is
@@ -47,15 +61,15 @@ export function base64url(value: object) {
  */
 let sessionSequence = 0;
 
-export function accessToken(sessionId = 'auth-smoke-session', nonce = '') {
+export function accessToken(sessionId = 'auth-smoke-session', nonce = '', identity: Identity = OWNER) {
   const now = Math.floor(Date.now() / 1000);
   return [
     base64url({ alg: 'HS256', typ: 'JWT' }),
     base64url({
-      sub: USER_ID,
+      sub: identity.id,
       aud: 'authenticated',
       role: 'authenticated',
-      email: RECOVERY_EMAIL,
+      email: identity.email,
       iat: now,
       exp: now + 3600,
       session_id: sessionId,
@@ -80,14 +94,14 @@ export function sessionIdOf(link: string) {
   return claims.session_id ?? '';
 }
 
-export function refreshedSession(sessionId = 'auth-smoke-session') {
+export function refreshedSession(sessionId = 'auth-smoke-session', identity: Identity = OWNER) {
   return {
-    access_token: accessToken(sessionId, `refreshed-${Date.now()}`),
+    access_token: accessToken(sessionId, `refreshed-${Date.now()}`, identity),
     token_type: 'bearer',
     expires_in: 3600,
     expires_at: Math.floor(Date.now() / 1000) + 3600,
     refresh_token: `auth-smoke-refresh-${Date.now()}`,
-    user: userRecord(),
+    user: userRecord(identity),
   };
 }
 
@@ -133,10 +147,10 @@ export async function readStoredAccessToken(page: Page) {
  * 'recovery' produces PASSWORD_RECOVERY; anything else is an ordinary sign-in,
  * which is the difference this screen has to act on.
  */
-export function sessionLink(type: 'recovery' | 'signin') {
+export function sessionLink(type: 'recovery' | 'signin', identity: Identity = OWNER) {
   const sessionId = `auth-smoke-${type}-${Date.now().toString(36)}-${(sessionSequence += 1).toString(36)}`;
   const fragment = new URLSearchParams({
-    access_token: accessToken(sessionId),
+    access_token: accessToken(sessionId, '', identity),
     refresh_token: `${sessionId}-refresh-token`,
     expires_in: '3600',
     token_type: 'bearer',
@@ -147,13 +161,13 @@ export function sessionLink(type: 'recovery' | 'signin') {
 
 export const recoveryLink = () => sessionLink('recovery');
 
-export function userRecord() {
+export function userRecord(identity: Identity = OWNER) {
   const stamp = new Date().toISOString();
   return {
-    id: USER_ID,
+    id: identity.id,
     aud: 'authenticated',
     role: 'authenticated',
-    email: RECOVERY_EMAIL,
+    email: identity.email,
     email_confirmed_at: stamp,
     phone: '',
     confirmed_at: stamp,
@@ -174,11 +188,15 @@ export function userRecord() {
  * itself -- the call that did not exist before this work, and the one whose
  * success clears the grant.
  */
-export async function stubGoTrueUser(page: Page, onUpdate?: (route: Route) => Promise<void>) {
+export async function stubGoTrueUser(
+  page: Page,
+  onUpdate?: (route: Route) => Promise<void>,
+  identity: Identity = OWNER,
+) {
   await page.route('**/auth/v1/user*', async (route) => {
     const method = route.request().method();
     if (method === 'GET') {
-      await route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(userRecord()) });
+      await route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(userRecord(identity)) });
       return;
     }
     if (method === 'PUT') {
@@ -186,7 +204,7 @@ export async function stubGoTrueUser(page: Page, onUpdate?: (route: Route) => Pr
         await onUpdate(route);
         return;
       }
-      await route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(userRecord()) });
+      await route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(userRecord(identity)) });
       return;
     }
     await route.fallback();

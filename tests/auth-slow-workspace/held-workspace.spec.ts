@@ -1,5 +1,14 @@
 import { expect, test, type Page, type Route } from '@playwright/test';
-import { blockWebfonts, recoveryLink, RECOVERY_KEY, stubGoTrueUser, USER_ID } from '../auth-smoke/support.js';
+import {
+  blockWebfonts,
+  recoveryLink,
+  RECOVERY_KEY,
+  SECOND,
+  SECOND_USER_ID,
+  sessionLink,
+  stubGoTrueUser,
+  USER_ID,
+} from '../auth-smoke/support.js';
 
 /*
  * Setting a password while the workspace API is unreachable.
@@ -24,7 +33,11 @@ blockWebfonts();
 
 const WORKSPACE_REST = /\/rest\/v1\/(workspaces|workspace_memberships|workspace_invitations)/;
 const SNAPSHOT_REST = /\/rest\/v1\/workspace_snapshots/;
+// The first relational table a hydration reads, and the one whose URL carries
+// the workspace it decided to read -- which is the whole question on a switch.
+const HORSES_REST = /\/rest\/v1\/horses/;
 const WORKSPACE_ID = '7f1d0c44-0000-4000-8000-0000000000aa';
+const SECOND_WORKSPACE_ID = '7f1d0c44-0000-4000-8000-0000000000bb';
 
 const refusal = (page: Page) => page.getByText(/This page needs a current password-reset link/);
 const newPassword = (page: Page) => page.getByLabel('New password', { exact: true });
@@ -42,8 +55,10 @@ async function fillNewPassword(page: Page, value: string) {
  */
 async function holdWorkspaceApi(page: Page) {
   const held: Route[] = [];
+  const owners: string[] = [];
   let releasing = false;
   await page.route(WORKSPACE_REST, async (route) => {
+    owners.push(ownerOf(route.request().url()));
     if (releasing) {
       await fulfilWorkspace(route);
       return;
@@ -53,6 +68,11 @@ async function holdWorkspaceApi(page: Page) {
   return {
     get count() {
       return held.length;
+    },
+    // Which account each held request was asking about, so a switch can be
+    // shown to have reached this tab rather than assumed.
+    get owners() {
+      return owners;
     },
     async release() {
       releasing = true;
@@ -65,9 +85,18 @@ async function holdWorkspaceApi(page: Page) {
 async function fulfilWorkspace(route: Route) {
   const url = route.request().url();
   // `workspaces` is read with maybeSingle(), which wants an object; the other
-  // two are list reads.
-  const body = url.includes('/workspaces?') ? JSON.stringify({ id: WORKSPACE_ID }) : '[]';
+  // two are list reads. Each account owns a DIFFERENT workspace, so a result
+  // applied to the wrong session is visible rather than indistinguishable.
+  const body = url.includes('/workspaces?')
+    ? JSON.stringify({ id: url.includes(SECOND_USER_ID) ? SECOND_WORKSPACE_ID : WORKSPACE_ID })
+    : '[]';
   await route.fulfill({ status: 200, contentType: 'application/json', body });
+}
+
+// `owner_user_id=eq.<uuid>` on the workspaces read; the membership reads carry
+// `user_id` instead. Either way the account is in the query string.
+function ownerOf(url: string) {
+  return url.includes(SECOND_USER_ID) ? SECOND_USER_ID : USER_ID;
 }
 
 const heldGrant = (page: Page) => page.evaluate((key) => window.sessionStorage.getItem(key) ?? '', RECOVERY_KEY);
@@ -175,4 +204,61 @@ test('a session ending while the workspace API hangs authorizes nothing', async 
   await expect(newPassword(page)).toHaveCount(0);
   expect(await heldGrant(page)).toBe('');
   await workspace.release();
+});
+
+test('an account switch while the workspace API hangs hydrates only the new account', async ({ page, context }) => {
+  const workspace = await holdWorkspaceApi(page);
+  const relationalReads: string[] = [];
+  await page.route(HORSES_REST, async (route) => {
+    relationalReads.push(route.request().url());
+    await route.fulfill({ status: 200, contentType: 'application/json', body: '[]' });
+  });
+  await stubGoTrueUser(page);
+
+  await page.goto(recoveryLink());
+  await expect(newPassword(page)).toBeVisible({ timeout: 30_000 });
+  expect(workspace.owners).toContain(USER_ID);
+  expect(relationalReads).toEqual([]);
+
+  /*
+   * A second tab signs a DIFFERENT account in while this tab's workspace fetch
+   * is still outstanding. auth-js carries that to this tab over its own
+   * cross-tab channel, so the switch is delivered the way a customer's is --
+   * not written into this tab's store by the test.
+   */
+  const second = await context.newPage();
+  await stubGoTrueUser(second, undefined, SECOND);
+  await second.route(WORKSPACE_REST, fulfilWorkspace);
+  await second.goto(sessionLink('signin', SECOND));
+  await expect(refusal(second)).toBeVisible({ timeout: 30_000 });
+
+  // Still nothing hydrated: the first account's profile has not resolved, and
+  // the second account's arrived while this tab was still bootstrapping.
+  expect(relationalReads).toEqual([]);
+
+  await workspace.release();
+  await page.waitForTimeout(4000);
+
+  /*
+   * The switch reached this tab -- it went on to ask about the second account.
+   * Asserted so a failure below reads as "hydrated wrongly" rather than "the
+   * broadcast never arrived", which would fail the same assertions.
+   */
+  expect(workspace.owners).toContain(SECOND_USER_ID);
+
+  /*
+   * The first account's profile resolved AFTER it was superseded, and must be
+   * dropped rather than committed.
+   *
+   * The COUNT is what carries this. Measured, not assumed: dropping
+   * `syncGate.retireInFlight()` from the queue path produces two hydrations
+   * here. It does not produce a read against the first account's workspace,
+   * because relational hydration re-derives the workspace from its own profile
+   * fetch rather than from the store -- so the two assertions below are true,
+   * and are not what would catch a stale commit. They pin the account the
+   * hydration ran for; the count pins that it ran once.
+   */
+  expect(relationalReads).toHaveLength(1);
+  expect(relationalReads[0]).toContain(SECOND_WORKSPACE_ID);
+  expect(relationalReads[0]).not.toContain(WORKSPACE_ID);
 });
