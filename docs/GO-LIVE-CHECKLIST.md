@@ -164,7 +164,9 @@ names the query or advisor it came from so it can be re-run and disagreed with.
   links. The base schema defers validation. Reissue affected private links with
   owner authorization, or archive those listings, before validating separately.
   Archived listings are exempt from the token constraint and remain inaccessible
-  through both public RPCs. Do not delete listings or make them public merely
+  through both public RPCs. Prefer archiving for any listing nobody intends to
+  share again: re-issuing hands a broken share a working token on the way to
+  retiring it, which is the one outcome this fix exists to prevent. Do not delete listings or make them public merely
   to pass validation.
 
 ### Not verified here — needs a person with a browser and the dashboards
