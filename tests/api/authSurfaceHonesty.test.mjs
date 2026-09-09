@@ -488,6 +488,78 @@ test('recovery completion is bound to the validated link', () => {
   );
 });
 
+test('a revoked recovery generation stays revoked', () => {
+  /*
+   * The per-account marker is one slot, so it only ever remembers the last
+   * thing that happened: after link A was spent and then link B was spent, it
+   * said "spent, B" -- which rejects B and says nothing about A. A tab still
+   * holding A came back to a marker that no longer revoked it.
+   *
+   * Revocations accumulate in their own permanent per-grant keys. The account
+   * marker keeps the one thing only it can say: a sign-out ends every grant for
+   * the account, and a newly validated link clears it.
+   */
+  assert.match(
+    store,
+    /function isRecoveryGrantSpent\(userId: string, grantToken: string\): boolean \{[\s\S]*?if \(isSpentRecoveryGrant\(userId, grantToken\)\) return true;/,
+    'an earlier grant must stay revoked after a later one is spent',
+  );
+  assert.match(
+    store,
+    /function completeRecoveryUpdateClaim\(claim: RecoveryUpdateClaim\) \{[\s\S]*?recordSpentRecoveryGrant\(claim\.userId, claim\.grantToken\);/,
+    'completion must write a permanent record for the grant it consumed',
+  );
+  /*
+   * And the identifier never falls back to something a refresh changes.
+   * supabaseClient.ts enables autoRefreshToken, so `iat`/`exp` drift
+   * mid-recovery; an identifier that drifts is worse than none, because the
+   * record of what was consumed stops matching and a spent link reads as
+   * unused. With no session_id the grant is handled account-wide instead.
+   */
+  assert.match(
+    store,
+    /const sessionId = typeof claims\.session_id === 'string' \? claims\.session_id : '';\s*if \(!sessionId\) return '';/,
+    'a grant identifier must not be derived from claims a token refresh changes',
+  );
+  assert.equal(
+    /stableRecoveryGrantId\(`\$\{subject\}:\$\{sessionId\}:/.test(store),
+    false,
+    'nothing but the session may enter the grant identifier',
+  );
+});
+
+test('recovery exclusion uses a real lock where the browser has one', () => {
+  /*
+   * The durable claim is best effort and cannot be otherwise: localStorage has
+   * no compare-and-set, so write-yield-re-read narrows the race without closing
+   * it -- a tab that pauses between reading and writing can still acquire an
+   * apparent second ownership. Web Locks close it, and exist everywhere this
+   * ships except safari13 (vite.config.ts), where the claim carries it.
+   */
+  const update = body(store, /updatePassword: async[\s\S]*?\n {2}\},/, 'updatePassword');
+  assert.match(
+    update,
+    /return withRecoveryUpdateExclusion\(\s*recoverySession\.user\.id,/,
+    'the update must run under a real lock wherever the browser has one',
+  );
+  assert.match(
+    store,
+    /locks\.request\(`\$\{RECOVERY_UPDATE_LOCK_PREFIX\}\$\{userId\}`, \{ ifAvailable: true \}/,
+    'a second tab must be told the link is in use, not queued behind a request it cannot see',
+  );
+  /*
+   * And the cross-tab release does not wait on another renderer's write to
+   * become visible here: requiring the durable record to confirm the
+   * announcement dropped the release about one run in four.
+   */
+  const initialize = body(store, /initialize: async[\s\S]*?\n {2}\},/, 'initialize');
+  assert.match(
+    initialize,
+    /if \(heldGrant && message\.grantToken === heldGrant\)/,
+    'a tab holding the consumed grant must release on the message alone',
+  );
+});
+
 test('every awaited call in updatePassword is inside a try', () => {
   /*
    * ResetPassword only clears its busy flag after this function settles, so any

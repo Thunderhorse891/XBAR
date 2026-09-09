@@ -1,6 +1,9 @@
 import { expect, test, type Page } from '@playwright/test';
 import {
   blockWebfonts,
+  readStoredAccessToken,
+  refreshStoredSession,
+  sessionIdOf,
   recoveryLink,
   RECOVERY_GRANT_KEY,
   RECOVERY_KEY,
@@ -899,6 +902,194 @@ for (const failure of ['network', 500, 502, 504] as const) {
     await expect(newPassword(page)).toHaveCount(0);
   });
 }
+
+for (const withoutWebLocks of [false, true]) {
+  test(`two tabs submitting at the same instant still send one change (Web Locks absent: ${withoutWebLocks})`, async ({
+    context,
+  }) => {
+    /*
+     * The half of the race the sequential case cannot reach.
+     *
+     * "two tabs cannot send the same recovery grant at the same time" stages
+     * the second submission AFTER the first has written its claim, so it is
+     * refused by a claim that is durably there. That never exercises both tabs
+     * reading before either writes.
+     *
+     * Run twice on purpose, because two different mechanisms carry it. Where
+     * `navigator.locks` exists the lock decides and the race cannot happen;
+     * safari13 is a build target and has none, and there only the durable claim
+     * -- write, yield, re-read ownership -- stands between two tabs and two
+     * password changes. It remains best effort on that browser: a tab that
+     * pauses between reading and writing can still acquire an apparent second
+     * ownership, which is named on the PR rather than papered over.
+     *
+     * Both submissions are driven to a terminal state before the count is
+     * asserted. Polling for "one request so far" would return the moment it
+     * first saw one and prove nothing about a second arriving later.
+     */
+    if (withoutWebLocks) {
+      await context.addInitScript(() => {
+        Object.defineProperty(navigator, 'locks', { get: () => undefined, configurable: true });
+      });
+    }
+
+    const link = recoveryLink();
+    const first = await context.newPage();
+    const second = await context.newPage();
+    const sent: string[] = [];
+
+    for (const page of [first, second]) {
+      // Counted across both pages: the question is how many changes reached
+      // GoTrue in total, so a request from either tab has to be visible here.
+      await page.route('**/auth/v1/user*', async (route) => {
+        if (route.request().method() === 'PUT') sent.push(route.request().postData() ?? '');
+        await route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(userRecord()) });
+      });
+    }
+
+    await first.goto(link);
+    await expect(newPassword(first)).toBeVisible({ timeout: 30_000 });
+    await second.goto(link);
+    await expect(newPassword(second)).toBeVisible({ timeout: 30_000 });
+
+    await fillNewPassword(first, 'first-tab-password');
+    await fillNewPassword(second, 'second-tab-password');
+
+    await Promise.all([submit(first).click(), submit(second).click()]);
+
+    /*
+     * Every tab has to reach a state it cannot leave: one succeeded, the other
+     * was told. Waiting for BOTH is what makes the count below final -- a tab
+     * still deciding could yet send something.
+     */
+    const settled = (page: Page) =>
+      expect
+        .poll(
+          async () => {
+            const done = await page.getByText('Password updated. You are signed in.').count();
+            if (done > 0) return 'done';
+            const refused = await page.getByText(/already being used|already been used/i).count();
+            return refused > 0 ? 'refused' : 'pending';
+          },
+          { timeout: 30_000 },
+        )
+        .not.toBe('pending');
+    await settled(first);
+    await settled(second);
+
+    const outcomes = await Promise.all(
+      [first, second].map(async (page) =>
+        (await page.getByText('Password updated. You are signed in.').count()) > 0 ? 'done' : 'refused',
+      ),
+    );
+    expect(outcomes.filter((outcome) => outcome === 'done')).toHaveLength(1);
+
+    // One grant, one change -- asserted only once neither tab can send again.
+    expect(sent).toHaveLength(1);
+    expect(sent[0]).toMatch(/first-tab-password|second-tab-password/);
+  });
+}
+
+test('a token refresh does not make a spent link look unused', async ({ context }) => {
+  /*
+   * The runtime half of "the grant identifier survives a refresh", which until
+   * now was only read off the source.
+   *
+   * supabaseClient.ts enables autoRefreshToken, a recovery session is good for
+   * an hour, and GoTrue rotates the refresh token alongside the access token --
+   * so anything derived from the credential drifts mid-recovery. The sequence
+   * below is ordinary: a tab is left on the reset screen and backgrounded, the
+   * customer finishes the reset elsewhere, the shared session renews while that
+   * tab is not running, and the tab comes back. If what was consumed is tied to
+   * the old credential it stops matching, and the tab returns to a working form
+   * on a link that has already changed the password.
+   */
+  const link = recoveryLink();
+  const stale = await context.newPage();
+  const finisher = await context.newPage();
+  const sent: string[] = [];
+
+  await stale.route('**/auth/v1/user*', async (route) => {
+    if (route.request().method() === 'PUT') sent.push(route.request().postData() ?? '');
+    await route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(userRecord()) });
+  });
+  await stubGoTrueUser(finisher);
+
+  await stale.goto(link);
+  await expect(newPassword(stale)).toBeVisible({ timeout: 30_000 });
+  expect(await heldGrant(stale)).toBe(USER_ID);
+  // Backgrounded and discarded, so it hears nothing that follows.
+  await stale.goto('about:blank');
+
+  await finisher.goto(link);
+  await expect(newPassword(finisher)).toBeVisible({ timeout: 30_000 });
+
+  /*
+   * The refresh happens BEFORE the reset is completed, which is the ordering
+   * that matters: the record of what was consumed is then written against the
+   * renewed credential while the backgrounded tab still holds the original.
+   * A real auth-js refresh -- same link, same session id, a different access
+   * token -- driven by auth-js itself rather than written by hand.
+   */
+  const before = await refreshStoredSession(finisher, sessionIdOf(link));
+  expect(before).not.toBe('');
+  await expect.poll(async () => readStoredAccessToken(finisher), { timeout: 30_000 }).not.toBe(before);
+
+  await fillNewPassword(finisher, 'a-brand-new-password');
+  await submit(finisher).click();
+  await expect(finisher.getByText('Password updated. You are signed in.').first()).toBeVisible({ timeout: 30_000 });
+
+  // The backgrounded tab comes back to a signed-in session and a used link.
+  await stale.goto('/app/reset-password');
+  await expect(refusal(stale)).toBeVisible({ timeout: 30_000 });
+  await expect(newPassword(stale)).toHaveCount(0);
+  expect(await heldGrant(stale)).toBe('');
+  expect(sent).toEqual([]);
+});
+
+test('an earlier grant stays revoked after a later one is spent', async ({ context }) => {
+  /*
+   * Revocations have to accumulate. The per-account marker is a single slot, so
+   * it only remembers the last thing that happened: after link A was spent and
+   * then link B was spent, the marker said "spent, B" -- which rejects B and
+   * says nothing about A. A tab still holding A, unloaded through both, came
+   * back to a marker that no longer revoked it and could change the password
+   * with no new link.
+   */
+  const linkA = recoveryLink();
+  const held = await context.newPage();
+  const worker = await context.newPage();
+  const sent: string[] = [];
+
+  await held.route('**/auth/v1/user*', async (route) => {
+    if (route.request().method() === 'PUT') sent.push(route.request().postData() ?? '');
+    await route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(userRecord()) });
+  });
+  await stubGoTrueUser(worker);
+
+  await held.goto(linkA);
+  await expect(newPassword(held)).toBeVisible({ timeout: 30_000 });
+  expect(await heldGrant(held)).toBe(USER_ID);
+  // Unloaded before either reset completes, so it hears neither.
+  await held.goto('about:blank');
+
+  // A is spent, then a newly issued B is validated and spent too.
+  for (const link of [linkA, recoveryLink()]) {
+    await worker.goto(link);
+    await expect(newPassword(worker)).toBeVisible({ timeout: 30_000 });
+    await fillNewPassword(worker, 'a-brand-new-password');
+    await submit(worker).click();
+    await expect(worker.getByText('Password updated. You are signed in.').first()).toBeVisible({ timeout: 30_000 });
+    await worker.goto('about:blank');
+  }
+
+  // The tab still holding A comes back. B's completion did not un-revoke A.
+  await held.goto('/app/reset-password');
+  await expect(refusal(held)).toBeVisible({ timeout: 30_000 });
+  await expect(newPassword(held)).toHaveCount(0);
+  expect(await heldGrant(held)).toBe('');
+  expect(sent).toEqual([]);
+});
 
 test('a recovery link does not drag every other tab to the reset screen', async ({ context }) => {
   /*

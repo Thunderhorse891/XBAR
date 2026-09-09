@@ -183,13 +183,28 @@ const RECOVERY_UPDATE_CLAIM_PREFIX = `${RECOVERY_SPENT_KEY}:updating:user:`;
 const RECOVERY_UPDATE_CLAIM_TTL_MS = 2 * 60 * 1000;
 const RECOVERY_UPDATE_CLAIM_RENEW_MS = 1000;
 const RECOVERY_UPDATE_CLAIM_SETTLE_MS = 50;
+const RECOVERY_UPDATE_LOCK_PREFIX = 'xbar-password-recovery-update:';
 
 type RecoveryUserState = 'spent' | 'active';
 
 type StoredRecoveryUserMarker = {
   state: RecoveryUserState;
   grantToken?: string;
+  /*
+   * Which derivation the grantToken came from.
+   *
+   * b84379e briefly wrote markers whose grantToken hashed the ACCESS TOKEN,
+   * which a refresh changes. Those ids can never match one derived the current
+   * way, so a 'spent' marker left over from that build would compare unequal
+   * and read as "not spent" -- a used link looking unused. They cannot be told
+   * apart by shape, so they are told apart by this version being absent, and an
+   * unversioned 'spent' is honoured for the whole account: strict, and cleared
+   * again the moment a new link is validated.
+   */
+  version?: number;
 };
+
+const RECOVERY_MARKER_VERSION = 2;
 
 type RecoveryUpdateClaim = {
   userId: string;
@@ -235,17 +250,32 @@ function decodeJwtClaims(accessToken = ''): Record<string, unknown> {
   }
 }
 
+/*
+ * Which reset link a grant came from -- or nothing, if the token cannot say.
+ *
+ * `session_id` is the only claim with the right lifetime: the access token
+ * rotates whenever auth-js refreshes (supabaseClient.ts enables
+ * autoRefreshToken) and GoTrue rotates the refresh token with it, so anything
+ * derived from the credential drifts mid-recovery. `session_id` survives that
+ * and changes when a new link is issued.
+ *
+ * The fallback is deliberately NOTHING rather than a fingerprint of `iat`/
+ * `exp`, which are exactly the claims a refresh changes: an identifier that
+ * drifts is worse than no identifier at all, because a record of what was
+ * consumed stops matching and a spent link starts reading as unused. With no
+ * id the grant is handled account-wide instead -- consumption revokes every
+ * grant for that account and a completion is never narrowed to a link nobody
+ * can name. That is stricter than the per-link path, never looser, which is
+ * the direction to fail in. Every GoTrue token issued by a recovery link
+ * carries `session_id`; this is the answer for tokens that somehow do not.
+ */
 function recoveryGrantToken(session: Session | null): string {
   if (!session) return '';
   const claims = decodeJwtClaims(session.access_token);
   const sessionId = typeof claims.session_id === 'string' ? claims.session_id : '';
-  const issuedAt = typeof claims.iat === 'number' ? claims.iat.toString(36) : '';
-  const expiresAt = typeof claims.exp === 'number' ? claims.exp.toString(36) : '';
+  if (!sessionId) return '';
   const subject = typeof claims.sub === 'string' ? claims.sub : session.user.id;
-  const seed = sessionId
-    ? `${subject}:${sessionId}`
-    : [subject, issuedAt, expiresAt, session.expires_at ? session.expires_at.toString(36) : ''].join(':');
-  return stableRecoveryGrantId(seed);
+  return stableRecoveryGrantId(`${subject}:${sessionId}`);
 }
 
 function normalizeRecoveryUsers(users: Iterable<unknown>): string[] {
@@ -278,9 +308,15 @@ function parseRecoveryUserMarker(raw: string | null): StoredRecoveryUserMarker |
   try {
     const parsed = JSON.parse(raw) as Partial<StoredRecoveryUserMarker>;
     if (parsed.state !== 'spent' && parsed.state !== 'active') return null;
+    const versioned = parsed.version === RECOVERY_MARKER_VERSION;
     return {
       state: parsed.state,
-      ...(typeof parsed.grantToken === 'string' && parsed.grantToken ? { grantToken: parsed.grantToken } : {}),
+      // An unversioned grantToken is from the access-token derivation and
+      // cannot be compared with today's; dropping it makes the marker apply to
+      // the whole account, which is the safe reading of "already spent".
+      ...(versioned && typeof parsed.grantToken === 'string' && parsed.grantToken
+        ? { grantToken: parsed.grantToken, version: parsed.version }
+        : {}),
     };
   } catch {
     return null;
@@ -300,10 +336,52 @@ function recoveryMarkerAppliesToGrant(marker: StoredRecoveryUserMarker, grantTok
   return !marker.grantToken || !grantToken || marker.grantToken === grantToken;
 }
 
+/*
+ * One key per consumed grant, kept forever, alongside the single per-account
+ * marker rather than instead of it.
+ *
+ * The per-account marker is one slot, so it only ever remembers the LAST thing
+ * that happened to the account -- and 'spent' bound to grant B does not reject
+ * grant A. A tab holding A, unloaded while B was validated and then spent, came
+ * back to a marker that no longer said anything about A and could change the
+ * password with no new link. Revocations have to accumulate, because a grant
+ * that is over never becomes valid again.
+ *
+ * The account marker keeps its own job: a sign-out ends EVERY grant for the
+ * account, which no per-grant record can express, and a newly validated link
+ * clears it.
+ */
+function recoverySpentGrantKey(userId: string, grantToken: string) {
+  return `${RECOVERY_SPENT_KEY}:grant:${userId}:${grantToken}`;
+}
+
+function recordSpentRecoveryGrant(userId: string, grantToken: string) {
+  if (!userId || !grantToken) return;
+  try {
+    if (typeof localStorage === 'undefined') return;
+    localStorage.setItem(recoverySpentGrantKey(userId, grantToken), 'spent');
+  } catch {
+    // Non-fatal; the account marker and the live release still apply.
+  }
+}
+
+function isSpentRecoveryGrant(userId: string, grantToken: string) {
+  if (!userId || !grantToken) return false;
+  try {
+    if (typeof localStorage === 'undefined') return false;
+    return localStorage.getItem(recoverySpentGrantKey(userId, grantToken)) === 'spent';
+  } catch {
+    return false;
+  }
+}
+
 function isRecoveryGrantSpent(userId: string, grantToken: string): boolean {
   if (!userId) return false;
   try {
     if (typeof localStorage === 'undefined') return false;
+    // Accumulated, so an earlier grant stays revoked after a later one is
+    // validated and spent. The single account marker below cannot hold that.
+    if (isSpentRecoveryGrant(userId, grantToken)) return true;
     const marker = readRecoveryUserMarker(userId);
     if (marker?.state === 'active') return !recoveryMarkerAppliesToGrant(marker, grantToken);
     if (marker?.state === 'spent') return recoveryMarkerAppliesToGrant(marker, grantToken);
@@ -342,7 +420,7 @@ function writeRecoveryUserState(userId: string, state: RecoveryUserState, grantT
      */
     localStorage.setItem(
       `${RECOVERY_SPENT_USER_PREFIX}${userId}`,
-      grantToken ? JSON.stringify({ state, grantToken }) : state,
+      grantToken ? JSON.stringify({ state, grantToken, version: RECOVERY_MARKER_VERSION }) : state,
     );
   } catch {
     // Non-fatal; the transient event still clears live tabs.
@@ -407,6 +485,17 @@ function clearRecoveryUpdateClaim(claim: RecoveryUpdateClaim) {
 }
 
 function completeRecoveryUpdateClaim(claim: RecoveryUpdateClaim) {
+  /*
+   * Both records, because they answer different questions. The per-grant one
+   * is permanent and specific -- THIS link is over, and stays over however many
+   * links follow it. The account marker keeps the fast path and the legacy
+   * shape working.
+   *
+   * A grant with no identifier is recorded account-wide instead, which is the
+   * conservative direction: an unidentifiable link ends every grant for that
+   * account rather than none. See recoveryGrantToken on when that happens.
+   */
+  recordSpentRecoveryGrant(claim.userId, claim.grantToken);
   recordSpentRecoveryUser(claim.userId, claim.grantToken);
   clearRecoveryUpdateClaim(claim);
 }
@@ -431,6 +520,38 @@ function startRecoveryUpdateClaimRenewal(claim: RecoveryUpdateClaim) {
     return () => clearInterval(interval);
   } catch {
     return () => {};
+  }
+}
+
+/*
+ * Real mutual exclusion, where the browser has it.
+ *
+ * The durable claim below is best effort and cannot be made otherwise:
+ * localStorage has no compare-and-set, so write-yield-re-read narrows the race
+ * without closing it -- a tab that pauses after reading "absent" and resumes
+ * after the other tab's settle window still acquires an apparent ownership of
+ * its own. Web Locks do close it, and every browser this ships to has them
+ * except safari13, which vite.config.ts still targets; there the claim remains
+ * the only thing standing, and remains best effort.
+ *
+ * This is OUR lock name and nothing from auth-js runs inside it, which is what
+ * makes it safe here: the deadlock that came before was auth-js's own
+ * `_acquireLock` re-entered by a nested public method, not Web Locks as such.
+ *
+ * `ifAvailable` rather than queueing, so a second tab is told the link is in
+ * use instead of sitting on "Saving..." behind a request it cannot see.
+ */
+async function withRecoveryUpdateExclusion<T>(userId: string, run: () => Promise<T>, busy: () => T): Promise<T> {
+  const locks = globalThis.navigator?.locks;
+  if (!locks) return run();
+  try {
+    return await locks.request(`${RECOVERY_UPDATE_LOCK_PREFIX}${userId}`, { ifAvailable: true }, async (lock) =>
+      lock ? run() : busy(),
+    );
+  } catch {
+    // A lock that cannot be taken must not stop someone resetting their
+    // password; the durable claim still applies inside `run`.
+    return run();
   }
 }
 
@@ -630,8 +751,28 @@ export const useCloudStore = create<CloudStore>((set, get) => ({
           if (message?.type !== 'recovery-spent' || !message.userId) return;
           // Only the account whose grant was spent.
           if (get().passwordRecoveryFor !== message.userId) return;
-          // A newly validated link can supersede a queued spent announcement.
-          if (!isRecoveryGrantSpent(message.userId, readStoredRecoveryGrantToken())) return;
+          const heldGrant = readStoredRecoveryGrantToken();
+          /*
+           * A message naming the very grant this tab holds settles it by
+           * itself, with no durable read.
+           *
+           * The write happens before the message is posted, but it is made in
+           * another renderer and this one is not guaranteed to see it the
+           * instant the message arrives -- so requiring the record to confirm
+           * dropped the release outright, roughly one run in four, and the
+           * other tab kept an enabled form on a spent link. A grant id cannot
+           * be superseded the way an account can: a newly validated link has a
+           * different one, which is the case the durable re-read was added for,
+           * and it is still handled below.
+           */
+          if (heldGrant && message.grantToken === heldGrant) {
+            set({ passwordRecoveryFor: '' });
+            storeRecoveryUser('');
+            return;
+          }
+          // Anything else -- no grant id, or one this tab is not holding -- is
+          // only a prompt to consult the durable record.
+          if (!isRecoveryGrantSpent(message.userId, heldGrant)) return;
           set({ passwordRecoveryFor: '' });
           storeRecoveryUser('');
         });
@@ -1113,86 +1254,103 @@ export const useCloudStore = create<CloudStore>((set, get) => ({
       password,
     });
 
-    const claim = await claimRecoveryUpdate(recoverySession.user.id, recoveryGrant);
-    if (!claim.ok) {
-      if (claim.reason === 'spent') {
-        set({ passwordRecoveryFor: '' });
-        storeRecoveryUser('');
-        return { ok: false, message: 'This reset link has already been used. Request a new reset link.' };
-      }
-      return {
-        ok: false,
-        message:
-          claim.reason === 'busy'
-            ? 'This reset link is already being used in another tab. Wait for that attempt to finish, then request another link if it did not work.'
-            : 'We could not safely reserve this reset link, so nothing was changed. Try again.',
-      };
-    }
+    const busy = (): CloudActionResult => ({
+      ok: false,
+      message:
+        'This reset link is already being used in another tab. Wait for that attempt to finish, then request another link if it did not work.',
+    });
 
-    let response: Response;
-    const stopRenewingClaim = startRecoveryUpdateClaimRenewal(claim.claim);
-    try {
-      try {
-        response = await fetch(request.url, { method: request.method, headers: request.headers, body: request.body });
-      } catch {
-        /*
-         * In flight when it failed, so whether the server applied it is genuinely
-         * unknown -- claiming either outcome would be a guess. The grant is
-         * spent conservatively: retrying this same link could race against a
-         * request that actually reached GoTrue.
-         */
-        const spentFor = recoverySession.user.id;
-        set({ passwordRecoveryFor: '' });
-        storeRecoveryUser('');
-        completeRecoveryUpdateClaim(claim.claim);
-        announceSpentRecovery(spentFor, claim.claim.grantToken);
-        return {
-          ok: false,
-          message: 'We could not confirm that change. Try the new password; if it does not work, request another link.',
-        };
-      }
+    return withRecoveryUpdateExclusion(
+      recoverySession.user.id,
+      async () => {
+        const claim = await claimRecoveryUpdate(recoverySession.user.id, recoveryGrant);
+        if (!claim.ok) {
+          if (claim.reason === 'spent') {
+            set({ passwordRecoveryFor: '' });
+            storeRecoveryUser('');
+            return { ok: false, message: 'This reset link has already been used. Request a new reset link.' };
+          }
+          return {
+            ok: false,
+            message:
+              claim.reason === 'busy'
+                ? 'This reset link is already being used in another tab. Wait for that attempt to finish, then request another link if it did not work.'
+                : 'We could not safely reserve this reset link, so nothing was changed. Try again.',
+          };
+        }
 
-      if (!response.ok) {
-        if (response.status >= 500) {
-          // A gateway/server failure can follow an applied update. Do not allow
-          // a retry to race a password change whose outcome is still unknown.
+        let response: Response;
+        const stopRenewingClaim = startRecoveryUpdateClaimRenewal(claim.claim);
+        try {
+          try {
+            response = await fetch(request.url, {
+              method: request.method,
+              headers: request.headers,
+              body: request.body,
+            });
+          } catch {
+            /*
+             * In flight when it failed, so whether the server applied it is genuinely
+             * unknown -- claiming either outcome would be a guess. The grant is
+             * spent conservatively: retrying this same link could race against a
+             * request that actually reached GoTrue.
+             */
+            const spentFor = recoverySession.user.id;
+            set({ passwordRecoveryFor: '' });
+            storeRecoveryUser('');
+            completeRecoveryUpdateClaim(claim.claim);
+            announceSpentRecovery(spentFor, claim.claim.grantToken);
+            return {
+              ok: false,
+              message:
+                'We could not confirm that change. Try the new password; if it does not work, request another link.',
+            };
+          }
+
+          if (!response.ok) {
+            if (response.status >= 500) {
+              // A gateway/server failure can follow an applied update. Do not allow
+              // a retry to race a password change whose outcome is still unknown.
+              const spentFor = recoverySession.user.id;
+              set({ passwordRecoveryFor: '' });
+              storeRecoveryUser('');
+              completeRecoveryUpdateClaim(claim.claim);
+              announceSpentRecovery(spentFor, claim.claim.grantToken);
+              return {
+                ok: false,
+                message:
+                  'We could not confirm that change. Try the new password; if it does not work, request another link.',
+              };
+            }
+            const payload: unknown = await response.json().catch(() => null);
+            const explained = readPasswordUpdateError(payload);
+            clearRecoveryUpdateClaim(claim.claim);
+            return {
+              ok: false,
+              // GoTrue's own words when it gave any: "New password should be
+              // different from the old password" IS the answer the customer needs.
+              message: explained
+                ? describeAuthError(explained)
+                : 'That change was refused and no reason was given. Try again, or request another link.',
+            };
+          }
+
+          // Only now is the recovery finished; clearing it earlier would release the
+          // screen while the password was still the old one.
           const spentFor = recoverySession.user.id;
           set({ passwordRecoveryFor: '' });
           storeRecoveryUser('');
           completeRecoveryUpdateClaim(claim.claim);
+          // auth-js is no longer in this path, so its USER_UPDATED broadcast will not
+          // release the grant in other tabs. This module makes that announcement.
           announceSpentRecovery(spentFor, claim.claim.grantToken);
-          return {
-            ok: false,
-            message:
-              'We could not confirm that change. Try the new password; if it does not work, request another link.',
-          };
+          return { ok: true, message: 'Password updated. You are signed in.' };
+        } finally {
+          stopRenewingClaim();
         }
-        const payload: unknown = await response.json().catch(() => null);
-        const explained = readPasswordUpdateError(payload);
-        clearRecoveryUpdateClaim(claim.claim);
-        return {
-          ok: false,
-          // GoTrue's own words when it gave any: "New password should be
-          // different from the old password" IS the answer the customer needs.
-          message: explained
-            ? describeAuthError(explained)
-            : 'That change was refused and no reason was given. Try again, or request another link.',
-        };
-      }
-
-      // Only now is the recovery finished; clearing it earlier would release the
-      // screen while the password was still the old one.
-      const spentFor = recoverySession.user.id;
-      set({ passwordRecoveryFor: '' });
-      storeRecoveryUser('');
-      completeRecoveryUpdateClaim(claim.claim);
-      // auth-js is no longer in this path, so its USER_UPDATED broadcast will not
-      // release the grant in other tabs. This module makes that announcement.
-      announceSpentRecovery(spentFor, claim.claim.grantToken);
-      return { ok: true, message: 'Password updated. You are signed in.' };
-    } finally {
-      stopRenewingClaim();
-    }
+      },
+      busy,
+    );
   },
   sendPasswordReset: async (email) => {
     const client = getSupabaseClient();

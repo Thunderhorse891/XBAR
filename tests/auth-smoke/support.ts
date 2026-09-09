@@ -47,7 +47,7 @@ export function base64url(value: object) {
  */
 let sessionSequence = 0;
 
-export function accessToken(sessionId = 'auth-smoke-session') {
+export function accessToken(sessionId = 'auth-smoke-session', nonce = '') {
   const now = Math.floor(Date.now() / 1000);
   return [
     base64url({ alg: 'HS256', typ: 'JWT' }),
@@ -59,10 +59,73 @@ export function accessToken(sessionId = 'auth-smoke-session') {
       iat: now,
       exp: now + 3600,
       session_id: sessionId,
+      // Only so two tokens for the SAME session differ textually, the way a
+      // real refresh makes them. Nothing reads it.
+      ...(nonce ? { jti: nonce } : {}),
     }),
     'auth-smoke-unsigned',
   ].join('.');
 }
+
+/*
+ * What GoTrue returns from /token?grant_type=refresh_token: a NEW access token
+ * for the SAME session. The session id is the thing that does not change --
+ * the credential rotates, the session it belongs to does not.
+ */
+export function sessionIdOf(link: string) {
+  const token = new URLSearchParams(link.split('#')[1] ?? '').get('access_token') ?? '';
+  const payload = token.split('.')[1] ?? '';
+  if (!payload) return '';
+  const claims = JSON.parse(Buffer.from(payload, 'base64url').toString()) as { session_id?: string };
+  return claims.session_id ?? '';
+}
+
+export function refreshedSession(sessionId = 'auth-smoke-session') {
+  return {
+    access_token: accessToken(sessionId, `refreshed-${Date.now()}`),
+    token_type: 'bearer',
+    expires_in: 3600,
+    expires_at: Math.floor(Date.now() / 1000) + 3600,
+    refresh_token: `auth-smoke-refresh-${Date.now()}`,
+    user: userRecord(),
+  };
+}
+
+/*
+ * Drive a real auth-js refresh: mark the stored session expired and tell the
+ * tab it became visible, which is when auth-js recovers and renews it.
+ */
+export async function refreshStoredSession(page: Page, sessionId: string) {
+  await page.route('**/auth/v1/token*', (route) =>
+    route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(refreshedSession(sessionId)) }),
+  );
+  const before = await readStoredAccessToken(page);
+  await page.evaluate(() => {
+    const key = Object.keys(window.localStorage).find((k) => k.startsWith('sb-') && k.endsWith('-auth-token'));
+    if (!key) throw new Error('Expected a stored session to refresh');
+    const stored = JSON.parse(window.localStorage.getItem(key) ?? '{}') as { expires_at?: number };
+    stored.expires_at = Math.floor(Date.now() / 1000) - 60;
+    window.localStorage.setItem(key, JSON.stringify(stored));
+    window.dispatchEvent(new Event('visibilitychange'));
+  });
+  return before;
+}
+
+export async function readStoredAccessToken(page: Page) {
+  return page.evaluate(() => {
+    const key = Object.keys(window.localStorage).find((k) => k.startsWith('sb-') && k.endsWith('-auth-token'));
+    return key
+      ? ((JSON.parse(window.localStorage.getItem(key) ?? '{}') as { access_token?: string }).access_token ?? '')
+      : '';
+  });
+}
+
+/*
+ * What Supabase puts in a recovery email: the implicit flow returns the session
+ * in the URL FRAGMENT, and `type` is what tells auth-js which event to emit.
+ * 'recovery' produces PASSWORD_RECOVERY; anything else is an ordinary sign-in,
+ * which is the difference this screen has to act on.
+ */
 
 /*
  * What Supabase puts in a recovery email: the implicit flow returns the session
