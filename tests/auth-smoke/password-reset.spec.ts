@@ -1910,18 +1910,40 @@ test('a spent grant ends the form even when the account marker names a newer lin
   expect(held).not.toBe('');
 
   /*
-   * What another tab's completion actually leaves behind: this grant spent
-   * under its own key, and the account marker still ACTIVE for a different,
-   * newer generation -- so nothing the old filter watched says "spent".
+   * Written from a SECOND page, so the first receives a real storage event.
+   * Synthesising one with `new StorageEvent(...)` would test the listener
+   * against an event this app never actually sees; a write in another tab of
+   * the same origin is the thing that really happens, and it is the only way
+   * this fallback is ever reached.
+   *
+   * What that other tab's completion leaves behind: this grant spent under its
+   * own key, and the account marker still ACTIVE for a different, newer
+   * generation -- so nothing the old filter watched says "spent".
+   */
+  /*
+   * The account marker is set from THIS page on purpose. A tab never receives
+   * its own storage events, so this establishes "a newer generation is active"
+   * without announcing anything -- and writing it from the other tab instead
+   * made this case vacuous, because the per-USER key was already in the filter
+   * and its event released the form no matter what the per-grant key did.
    */
   await page.evaluate(
-    ({ spentKey, userKey, grant, userId }) => {
-      const grantKey = `${spentKey}:grant:${userId}:${grant}`;
-      localStorage.setItem(grantKey, 'spent');
-      localStorage.setItem(userKey, JSON.stringify({ state: 'active', grantToken: 'a-newer-generation', version: 1 }));
-      window.dispatchEvent(new StorageEvent('storage', { key: grantKey, newValue: 'spent' }));
-    },
-    { spentKey: RECOVERY_SPENT_KEY, userKey: recoverySpentKeyFor(USER_ID), grant: held, userId: USER_ID },
+    ({ userKey }) =>
+      localStorage.setItem(userKey, JSON.stringify({ state: 'active', grantToken: 'a-newer-generation', version: 1 })),
+    { userKey: recoverySpentKeyFor(USER_ID) },
+  );
+
+  /*
+   * Now the completion itself, from a real second tab, writing ONLY the
+   * per-grant key -- which is exactly what `completeRecoveryUpdateClaim`
+   * leaves behind once a newer generation owns the account marker.
+   */
+  const other = await context.newPage();
+  await stubGoTrueUser(other);
+  await other.goto('/app/login');
+  await other.evaluate(
+    ({ spentKey, grant, userId }) => localStorage.setItem(`${spentKey}:grant:${userId}:${grant}`, 'spent'),
+    { spentKey: RECOVERY_SPENT_KEY, grant: held, userId: USER_ID },
   );
 
   await expect(refusal(page)).toBeVisible({ timeout: 30_000 });
