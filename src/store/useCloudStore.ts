@@ -1115,7 +1115,28 @@ export const useCloudStore = create<CloudStore>((set, get) => ({
        * live session matching its stale grant.
        */
       if (event === 'SIGNED_OUT') {
-        if (lastAuthUserId) recordSpentRecoveryUser(lastAuthUserId);
+        if (lastAuthUserId) {
+          /*
+           * The PER-GRANT key first, and this is the security half.
+           *
+           * The account marker holds one generation. Written from a tab with no
+           * recovery flag of its own it carries no grant id at all, so when a
+           * later link B is validated `supersedeRecoveryGeneration` finds
+           * nothing to displace and generation A is preserved NOWHERE. Spending
+           * B then leaves `spent:B`, which says nothing about A -- and a tab
+           * still holding A, reloaded against any ordinary session for the same
+           * account, reads it as unspent and can change the password with no
+           * current link.
+           *
+           * That is the same resurrection `supersedeRecoveryGeneration` exists
+           * to prevent; it just could not see this one, because the marker that
+           * displaced A never named A. So the ended generation is recorded
+           * under its own permanent key here, BEFORE anything can forget it.
+           * Accumulated keys can hold what the single marker cannot.
+           */
+          recordSpentRecoveryGrant(lastAuthUserId, endedRecoveryGrant);
+          recordSpentRecoveryUser(lastAuthUserId);
+        }
         lastAuthUserId = '';
       } else if (session) {
         lastAuthUserId = session.user.id;

@@ -1949,3 +1949,51 @@ test('a spent grant ends the form even when the account marker names a newer lin
   await expect(refusal(page)).toBeVisible({ timeout: 30_000 });
   await expect(newPassword(page)).toHaveCount(0);
 });
+
+test('a sign-out records the generation it ended, even with no recovery in this tab', async ({ page }) => {
+  /*
+   * The account marker holds ONE generation, and a tab with no recovery flag of
+   * its own writes it without a grant id. A later link then has nothing to
+   * displace, so the generation this sign-out ended is preserved nowhere --
+   * and once that later link is spent, the marker names only IT. A tab still
+   * holding the older grant reads it as unspent and can change the password
+   * with no current link, which is the resurrection the per-grant keys exist
+   * to stop.
+   *
+   * Driven through auth-js rather than simulated: an ordinary session, then a
+   * refresh the server refuses, which is how auth-js decides on its own that a
+   * session is over and emits SIGNED_OUT locally.
+   */
+  await stubGoTrueUser(page);
+  await page.goto(sessionLink('signin'));
+  await expect(refusal(page)).toBeVisible({ timeout: 30_000 });
+
+  // No per-grant record yet: nothing has ended.
+  const grantKeys = () =>
+    page.evaluate(
+      (prefix) => Object.keys(window.localStorage).filter((key) => key.startsWith(prefix)).length,
+      `${RECOVERY_SPENT_KEY}:grant:${USER_ID}:`,
+    );
+  expect(await grantKeys()).toBe(0);
+
+  await page.route('**/auth/v1/token*', (route) =>
+    route.fulfill({
+      status: 400,
+      contentType: 'application/json',
+      body: JSON.stringify({ error: 'invalid_grant', error_description: 'Invalid Refresh Token' }),
+    }),
+  );
+  await page.evaluate(() => {
+    const key = Object.keys(window.localStorage).find((k) => k.startsWith('sb-') && k.endsWith('-auth-token'));
+    if (!key) throw new Error('Expected a stored session');
+    const stored = JSON.parse(window.localStorage.getItem(key) ?? '{}') as { expires_at?: number };
+    stored.expires_at = Math.floor(Date.now() / 1000) - 60;
+    window.localStorage.setItem(key, JSON.stringify(stored));
+    window.dispatchEvent(new Event('visibilitychange'));
+    document.dispatchEvent(new Event('visibilitychange'));
+  });
+
+  // The generation that just ended is now recorded permanently, under its own
+  // key, where no later marker can overwrite it.
+  await expect.poll(grantKeys, { timeout: 30_000 }).toBeGreaterThan(0);
+});

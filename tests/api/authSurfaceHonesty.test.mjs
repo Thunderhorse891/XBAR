@@ -619,11 +619,20 @@ test('a recovery grant is released when its session ends', () => {
    * "a session ending in a tab that holds no grant still ends the recovery"
    * in tests/auth-smoke/password-reset.spec.ts; this only pins that both ids
    * are still what gets revoked.
+   *
+   * The PER-GRANT write is pinned alongside it, and it is the security half.
+   * The account marker holds one generation and this tab writes it with no
+   * grant id, so a later link has nothing to displace and the generation that
+   * just ended is preserved nowhere -- after that later link is spent, a tab
+   * still holding the older grant reads it as unspent and can change the
+   * password with no current link. Accumulated per-grant keys hold what the
+   * single marker cannot, so the ended generation is recorded before anything
+   * can forget it.
    */
   assert.match(
     initialize,
-    /if \(event === 'SIGNED_OUT'\) \{\s*if \(lastAuthUserId\) recordSpentRecoveryUser\(lastAuthUserId\);/,
-    'the account signed out here must be revoked whether or not this tab holds a grant',
+    /if \(event === 'SIGNED_OUT'\) \{[\s\S]*?if \(lastAuthUserId\) \{[\s\S]*?recordSpentRecoveryGrant\(lastAuthUserId, endedRecoveryGrant\);[\s\S]*?recordSpentRecoveryUser\(lastAuthUserId\);/,
+    'the account signed out here must be revoked whether or not this tab holds a grant, and its generation recorded permanently',
   );
   assert.match(
     initialize,
