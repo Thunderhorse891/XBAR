@@ -13,7 +13,12 @@ import { isSupabaseConfigured } from '@/lib/platformConfig';
 import type { UserRole } from '@/types/xbar';
 import { authCallbackOrigin, isNativeApp } from '../lib/nativePlatform.js';
 import { describeAuthError } from '@/lib/authErrors';
-import { bootstrapEventDisposition, createLatestWriteGate, identityPublication } from '@/lib/authBootstrap';
+import {
+  bootstrapEventDisposition,
+  createLatestWriteGate,
+  identityPublication,
+  liveSessionAgrees,
+} from '@/lib/authBootstrap';
 import { hasValidatedPasswordRecovery, reconcileStoredRecovery } from '@/lib/passwordRecovery';
 
 export { hasValidatedPasswordRecovery };
@@ -321,6 +326,15 @@ function authStorageReadable(): boolean {
 }
 
 /*
+ * The claim two access tokens share when one is a refresh of the other.
+ */
+function sessionGenerationOf(session: { access_token?: string } | null): string {
+  if (!session?.access_token) return '';
+  const claim = decodeJwtClaims(session.access_token).session_id;
+  return typeof claim === 'string' ? claim : '';
+}
+
+/*
  * Is this SIGNED_OUT about a session this tab has already replaced?
  *
  * Reads the persisted record directly rather than calling `getSession()`: this
@@ -346,7 +360,10 @@ function authStorageReadable(): boolean {
  * paths in this store already record their own spend without this event.
  */
 function signOutIsStale(session: Session | null): boolean {
-  if (!authStorageReadable()) return true;
+  // Not shared: `liveSessionAgrees` has already decided, against the client's
+  // own session, whether this event is about this tab. Answering from an
+  // absent store here would override it with a guess.
+  if (!authStorageReadable()) return false;
   if (!session?.access_token) return false;
   const key = authStorageKey();
   if (!key) return false;
@@ -1105,7 +1122,21 @@ export const useCloudStore = create<CloudStore>((set, get) => ({
     // Track auth events immediately, before asynchronous workspace hydration.
     // A tab opened after recovery still knows the account it later signs out.
     let lastAuthUserId = get().session?.user.id ?? '';
-    const { data: subscription } = client.auth.onAuthStateChange((event, session) => {
+    const { data: subscription } = client.auth.onAuthStateChange(async (event, session) => {
+      /*
+       * When the tabs do not share auth storage, an event is only this tab's
+       * if this tab's own client says so. Short-circuits before the await in
+       * the shared case, so that path stays exactly as synchronous as it was.
+       */
+      if (
+        !authStorageReadable() &&
+        !(await liveSessionAgrees(
+          async () => (await client.auth.getSession()).data.session,
+          session,
+          sessionGenerationOf,
+        ))
+      )
+        return;
       /*
        * A SIGNED_OUT that a newer sign-in has already overtaken.
        *

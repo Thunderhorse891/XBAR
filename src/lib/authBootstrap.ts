@@ -120,3 +120,57 @@ export function identityPublication(previousUserId: string, nextUserId: string):
   if (previousUserId && previousUserId === nextUserId) return { workspaceReady: false };
   return { workspaceReady: false, status: 'loading', workspaceId: '', workspaceRole: 'Owner' };
 }
+
+type AuthSessionLike = { access_token?: string } | null;
+
+/*
+ * Does this tab's OWN client agree with what an auth event says?
+ *
+ * Only asked when auth storage is not shared between tabs. auth-js picks its
+ * storage once: localStorage when usable, otherwise a store private to the
+ * tab. With a private store the tabs still share a BroadcastChannel but NOT a
+ * session, and the receiving tab's handler is
+ * `_notifyAllSubscribers(event, session, false)` -- it notifies, it does not
+ * save. So the payload describes the tab that SENT it, and the receiving tab's
+ * client is the only authority on the receiving tab.
+ *
+ * Believing the payload had two consequences that pull in opposite directions,
+ * which is why one rule replaced two guesses:
+ *
+ *   - a sign-in broadcast for account B replaced account A in the store while
+ *     every request from that tab still carried A's token -- B's name over A's
+ *     workspace, and writes aimed at the wrong account;
+ *   - and ignoring every sign-out to avoid that left the store signed in and
+ *     autosaving after auth-js had discarded the session itself, which it does
+ *     on a refresh it cannot complete.
+ *
+ * Asking the client answers both. A sign-out is this tab's only if the client
+ * really has no session; a session-bearing event is this tab's only if the
+ * client holds that same session. Sessions are compared by GENERATION rather
+ * than by credential, because auth-js rotates the access token underneath a
+ * session that has not changed.
+ *
+ * Reading the live session is safe to await from inside an auth callback:
+ * auth-js's `_acquireLock` is reentrant, queueing onto `pendingInLock` rather
+ * than deadlocking when the lock is already held.
+ */
+export async function liveSessionAgrees(
+  readLiveSession: () => Promise<AuthSessionLike>,
+  eventSession: AuthSessionLike,
+  generationOf: (session: AuthSessionLike) => string,
+): Promise<boolean> {
+  let live: AuthSessionLike = null;
+  try {
+    live = await readLiveSession();
+  } catch {
+    // No answer is not agreement: acting on an event this tab cannot confirm
+    // is what produced both defects above.
+    return false;
+  }
+  if (!eventSession) return !live;
+  if (!live) return false;
+  const liveGeneration = generationOf(live);
+  const eventGeneration = generationOf(eventSession);
+  if (liveGeneration && eventGeneration) return liveGeneration === eventGeneration;
+  return Boolean(live.access_token) && live.access_token === eventSession.access_token;
+}

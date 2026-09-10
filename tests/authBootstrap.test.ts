@@ -1,6 +1,11 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { bootstrapEventDisposition, createLatestWriteGate, identityPublication } from '../src/lib/authBootstrap.js';
+import {
+  bootstrapEventDisposition,
+  createLatestWriteGate,
+  identityPublication,
+  liveSessionAgrees,
+} from '../src/lib/authBootstrap.js';
 import { createRecoveryCallbackNavigationIntent, isRecoveryCallbackUrl } from '../src/lib/authCallbackArrival.js';
 
 /*
@@ -169,4 +174,56 @@ test('a first sign-in counts as a change, having nothing to keep', () => {
   const patch = identityPublication('', 'user-b');
   assert.equal(patch.status, 'loading');
   assert.equal(patch.workspaceId, '');
+});
+
+/*
+ * The rule that decides whether a broadcast auth event is about THIS tab, for
+ * the configuration where the tabs share a channel but not a session. Tested
+ * here rather than in a browser because that is where it is decidable: with
+ * site data blocked there is no way, from inside the page, to make auth-js
+ * discard its own in-memory session, so a browser case for the sign-out half
+ * would pass whether or not the rule were present.
+ */
+const generationOf = (session: { access_token?: string } | null) => (session?.access_token ?? '').split(':')[0] ?? '';
+const live = (value: { access_token?: string } | null) => async () => value;
+
+test("a sign-out is this tab's only when this tab really has no session", async () => {
+  assert.equal(await liveSessionAgrees(live(null), null, generationOf), true);
+});
+
+test("another tab's sign-out is refused while this tab still holds a session", async () => {
+  assert.equal(await liveSessionAgrees(live({ access_token: 'A:one' }), null, generationOf), false);
+});
+
+test("another account's sign-in never replaces the session this tab actually has", async () => {
+  /*
+   * The costly half. Applying the payload put account B's identity over account
+   * A's workspace while every request still carried A's token.
+   */
+  assert.equal(
+    await liveSessionAgrees(live({ access_token: 'A:one' }), { access_token: 'B:one' }, generationOf),
+    false,
+  );
+});
+
+test('a refreshed token for the same session still agrees', async () => {
+  // The generation is what survives a refresh; the credential is not.
+  assert.equal(await liveSessionAgrees(live({ access_token: 'A:two' }), { access_token: 'A:one' }, generationOf), true);
+});
+
+test('a sign-in is refused when this tab holds no session at all', async () => {
+  assert.equal(await liveSessionAgrees(live(null), { access_token: 'B:one' }, generationOf), false);
+});
+
+test('a session that cannot be read is not agreement', async () => {
+  const refuses = async () => {
+    throw new Error('storage unavailable');
+  };
+  assert.equal(await liveSessionAgrees(refuses, null, generationOf), false);
+});
+
+test('unnamed generations fall back to comparing the credential', async () => {
+  const unnamed = () => '';
+  assert.equal(await liveSessionAgrees(live({ access_token: 'x' }), { access_token: 'x' }, unnamed), true);
+  assert.equal(await liveSessionAgrees(live({ access_token: 'x' }), { access_token: 'y' }, unnamed), false);
 });
