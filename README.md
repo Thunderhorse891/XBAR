@@ -167,10 +167,16 @@ while saying **Billing not configured yet**. No checkout opens, no subscription
 record is created, and no identifier is invented — missing configuration is
 reported, never faked.
 
-### Pending Supabase migrations (not applied)
+### Supabase migration rollout and recorded deployment
 
-Six migrations in `supabase/migrations/` are written and reviewed but have
-**not** been run against any project. The order matters, and it is carried by
+On `xbar-records` (`uxvwfepyothlakhqazwv`), the Supabase migration ledger checked
+on September 10, 2026 records steps 1–5 below as applied on September 4. Step 6
+was applied on September 10 as `20260910173613_private_share_token_fail_closed`;
+both deployed token guards and the validated constraint were checked afterward.
+Do not rerun the billing data reconciliation merely because this checklist exists.
+Migration history establishes recorded execution, not a successful customer checkout.
+
+For another project, check its migration history first. The order matters, and it is carried by
 the version prefixes rather than by convention — Supabase takes the digits
 before the first underscore as the migration version, so each file needs its
 own:
@@ -213,7 +219,7 @@ own:
    created again. Order does not matter relative to the others; it shares
    nothing with them.
 
-Apply them **one at a time**, not with a single `supabase db push`. That command
+For migrations still missing from the target project, apply them **one at a time**, not with a single `supabase db push`. That command
 applies every pending migration in one go, which would run the data
 reconciliation before anyone had read its dry-run.
 

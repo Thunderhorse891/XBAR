@@ -1,7 +1,40 @@
 # Go-live checklist — actions outside this repository
 
-The repository is ready for these steps; none of them can be completed from
-code. Work top to bottom.
+Track the evidence below separately from repository tests. Passing tests alone
+does not establish production readiness.
+
+## Verified September 10, 2026
+
+- Independently ran the `e722979` candidate: 1,095 unit/API tests, 44
+  built-bundle auth tests, and eight relational-sync-enabled held-workspace
+  tests passed, with browser retries disabled. The browser suites intercept
+  Supabase requests; they do not prove real email delivery or cloud sync.
+- Applied the private-share migration to `xbar-records` (`uxvwfepyothlakhqazwv`),
+  ledger version `20260910173613`. Both live functions reject empty stored
+  private tokens; `shared_listings_private_token_present` is validated. No
+  listings were present before or after the migration.
+- Ran `supabase/checks/share-token-live-rollback.sql` against that live schema:
+  empty private-token inserts rejected by the named constraint; missing/wrong
+  tokens refused; valid private and public links resolved; archived links
+  refused; only permitted views tracked. All fixture rows rolled back, with
+  workspace/horse/listing/subscription counts confirmed back at zero. This
+  checks deployed SQL behavior, not a browser checkout or customer login.
+- Supabase's ledger already records the other five README rollout migrations
+  as applied on September 4. Their data effects were not independently replayed.
+- Production `/api/health` returned HTTP 200 and `billingReady: true`:
+  Supabase admin, Stripe secret/webhook/price IDs and both managed-billing flags
+  were present. This proves configuration presence, not credential validity,
+  payment completion, or webhook delivery. Email-provider and reminder-cron
+  flags were false; this email flag does not report Supabase Auth SMTP.
+- The production alias still serves `5c38394e496088e4f8a98c434f3b1c7913f3b881`
+  on `main`, not PR #212's `e722979` candidate. A green preview is not a
+  production release of the auth fixes.
+- Supabase's security advisor still reports leaked-password protection disabled.
+  Site URL, real confirmation/recovery email delivery, and the complete
+  signup → workspace → horse → checkout → webhook flow remain unverified.
+  Browser dashboard access failed in this verification environment.
+- The documented recovery concurrency residuals remain open; they have not
+  been accepted as launch risks or closed by these checks.
 
 ## 0. Preflight — see what's configured before and after each step
 
@@ -155,10 +188,10 @@ names the query or advisor it came from so it can be re-run and disagreed with.
   `proacl` confirms both carry `anon` and PUBLIC grants while
   `xbar_resolve_public_listing_legacy` carries neither — matching the intent of
   `migrations/20260822_restrict_anon_rpc_surface.sql`. Both are the buyer share
-  flow and are meant to stay reachable. **A latent fail-open in them is fixed by
-  `migrations/20260909_private_share_token_fail_closed.sql`, which is written
-  and NOT YET APPLIED** — see the header of that file for the deployed
-  definitions, the column defaults and the absent constraint that produce it.
+  flow and are meant to stay reachable. **The private-token fail-open was closed
+  on this project on September 10 by
+  `migrations/20260909_private_share_token_fail_closed.sql`** — see the current
+  verification above. The file retains the historical explanation of the flaw.
   The migration leaves the constraint `NOT VALID` if older invalid rows exist;
   new inserts and updates are still checked and the patched RPCs deny those old
   links. The base schema defers validation. Reissue affected private links with

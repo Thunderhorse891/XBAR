@@ -1,6 +1,8 @@
 -- Refuse a Private Token listing whose stored token is empty.
 --
--- NOT YET APPLIED. See "How to apply this" at the bottom.
+-- Applied to xbar-records (uxvwfepyothlakhqazwv) on 2026-09-10,
+-- ledger version 20260910173613. Both guards and validated CHECK verified.
+-- Other projects: see "How to apply this" at the bottom.
 --
 -- WHY
 -- ---
