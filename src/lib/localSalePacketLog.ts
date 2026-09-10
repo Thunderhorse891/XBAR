@@ -1,3 +1,4 @@
+import { readBrowserStorage, writeBrowserStorage } from '@/lib/browserStorage';
 export const localSalePacketLogKey = 'xbar-local-sale-packet-log';
 export const localSalePacketLogChangedEvent = 'xbar-local-sale-packet-log-changed';
 
@@ -24,8 +25,7 @@ function safeParseLog(value: string | null): LocalSalePacketLogEntry[] {
 }
 
 export function readLocalSalePacketLog(): LocalSalePacketLogEntry[] {
-  if (typeof window === 'undefined') return [];
-  return safeParseLog(window.localStorage.getItem(localSalePacketLogKey));
+  return safeParseLog(readBrowserStorage(localSalePacketLogKey));
 }
 
 export function countLocalSalePacketGenerations() {
@@ -36,7 +36,7 @@ export function appendLocalSalePacketLog(entry: LocalSalePacketLogEntry) {
   if (typeof window === 'undefined') return [];
   const current = readLocalSalePacketLog();
   const next = [{ ...entry, createdAt: new Date().toISOString() }, ...current].slice(0, 1000);
-  window.localStorage.setItem(localSalePacketLogKey, JSON.stringify(next));
+  writeBrowserStorage(localSalePacketLogKey, JSON.stringify(next));
   window.dispatchEvent(new CustomEvent(localSalePacketLogChangedEvent, { detail: next }));
   return next;
 }

@@ -1346,3 +1346,85 @@ test('a session ending in a tab that holds no grant still ends the recovery', as
   // The other account's revocation survived this one.
   expect(await recoverySpentState(recoveryTab, otherAccount)).toBe('spent');
 });
+
+/*
+ * Site data blocked outright: reading `localStorage` at all throws, which is
+ * what a browser configured to block storage actually does -- it does not hand
+ * back an empty store.
+ */
+async function blockSiteData(page: Page) {
+  await page.addInitScript(() => {
+    Object.defineProperty(window, 'localStorage', {
+      configurable: true,
+      get() {
+        throw new DOMException('Access to storage is not allowed from this context.', 'SecurityError');
+      },
+    });
+  });
+}
+
+test('a recovery still completes when site data is blocked', async ({ page }) => {
+  /*
+   * auth-js falls back to an in-memory adapter here and establishes a
+   * perfectly valid recovery session, so the link works and the form is
+   * reachable. The claim written before the password request did not fall
+   * back: it treated writable localStorage as a precondition and refused every
+   * submission as "could not safely reserve", even with a real Web Lock held.
+   * A protection causing exactly the lockout it exists to prevent.
+   */
+  await blockSiteData(page);
+  let updates = 0;
+  await stubGoTrueUser(page, async (route) => {
+    updates += 1;
+    await route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(userRecord()) });
+  });
+
+  await page.goto(recoveryLink());
+  await expect(newPassword(page)).toBeVisible({ timeout: 30_000 });
+  await fillNewPassword(page, 'a-brand-new-password');
+  await submit(page).click();
+
+  await expect(page.getByText('Password updated. You are signed in.').first()).toBeVisible({ timeout: 30_000 });
+  // The password really changed, rather than the screen saying so.
+  expect(updates).toBe(1);
+});
+
+test('a recovery completed with site data blocked still stops an open second tab', async ({ context }) => {
+  /*
+   * What the degraded path can and cannot do.
+   *
+   * CAN: the spent announcement is a BroadcastChannel message and uses no
+   * storage at all, so a tab that is OPEN still learns the grant is over.
+   * Each tab keeps its own in-memory session here, since auth-js cannot share
+   * one through blocked storage -- both establish theirs from the same link.
+   *
+   * CANNOT, and this is not covered because it is not true: nothing survives a
+   * reload. A tab reloaded after this has no record that the grant was spent.
+   * That limit is inherent to having no durable store, and is recorded in the
+   * source rather than tested away.
+   */
+  const first = await context.newPage();
+  const second = await context.newPage();
+  await blockSiteData(first);
+  await blockSiteData(second);
+  await stubGoTrueUser(first);
+  let secondUpdates = 0;
+  await stubGoTrueUser(second, async (route) => {
+    secondUpdates += 1;
+    await route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(userRecord()) });
+  });
+
+  const link = recoveryLink();
+  await first.goto(link);
+  await expect(newPassword(first)).toBeVisible({ timeout: 30_000 });
+  await second.goto(link);
+  await expect(newPassword(second)).toBeVisible({ timeout: 30_000 });
+
+  await fillNewPassword(second, 'second-tab-password');
+  await fillNewPassword(first, 'first-tab-password');
+  await submit(first).click();
+  await expect(first.getByText('Password updated. You are signed in.').first()).toBeVisible({ timeout: 30_000 });
+
+  await expect(refusal(second)).toBeVisible({ timeout: 30_000 });
+  expect(secondUpdates).toBe(0);
+});

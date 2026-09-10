@@ -256,7 +256,9 @@ test('an account switch while the workspace API hangs hydrates only the new acco
 
   await page.goto(recoveryLink());
   await expect(newPassword(page)).toBeVisible({ timeout: 30_000 });
-  expect(workspace.owners).toContain(USER_ID);
+  // Polled: the form renders off the published session, which lands before the
+  // profile request it deliberately does not wait for.
+  await expect.poll(() => workspace.owners, { timeout: 30_000 }).toContain(USER_ID);
   expect(relationalReads).toEqual([]);
 
   /*
@@ -362,6 +364,11 @@ test('switching accounts in a hydrated tab locks its records until the new profi
    * new access token.
    */
   await expect(refusal(page)).toBeVisible({ timeout: 30_000 });
+  // Wait for the store's own profile request before counting, then let time
+  // pass to see whether anything ELSE asks.
+  await expect
+    .poll(() => workspace.owners.filter((owner) => owner === SECOND_USER_ID).length, { timeout: 30_000 })
+    .toBeGreaterThan(0);
   await page.waitForTimeout(2000);
   expect(relationalReads).toEqual([]);
   expect(promotions).toEqual([]);

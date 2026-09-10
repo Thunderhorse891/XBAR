@@ -305,14 +305,84 @@ function recoveryGrantToken(session: Session | null): string {
   return stableRecoveryGrantId(`${subject}:${sessionId}`);
 }
 
+/*
+ * Where the recovery records live, and what happens when they cannot.
+ *
+ * localStorage is the right home for them: they must outlive a reload and be
+ * visible to every tab. It is not always available. Blocked site data, a full
+ * quota and some private modes make it absent, or make every access THROW
+ * rather than return null.
+ *
+ * auth-js falls back to an in-memory adapter in exactly that case and still
+ * establishes a perfectly valid recovery session -- so refusing here stopped a
+ * customer with blocked storage from resetting their password at all, even
+ * with a real Web Lock held. A protection causing the lockout it exists to
+ * prevent.
+ *
+ * So it degrades rather than refuses: the same records, kept for the life of
+ * the page. Stated plainly, because the difference matters --
+ *
+ *   what this still gives  one completion per grant in this tab, and, since
+ *                          the spent broadcast uses no storage at all, other
+ *                          OPEN tabs still hear it.
+ *   what it cannot give    nothing survives a reload. A reloaded tab has no
+ *                          record that the grant was spent, and without Web
+ *                          Locks there is no exclusion either. Best effort,
+ *                          which is better than a lockout and is not a
+ *                          guarantee.
+ *
+ * Writes go to memory FIRST and always, so a write localStorage rejects -- a
+ * full quota is the common one -- still counts for this page.
+ */
+const memoryRecoveryRecords = new Map<string, string>();
+
+function recoveryRecordGet(key: string): string | null {
+  try {
+    if (typeof localStorage !== 'undefined') {
+      const value = localStorage.getItem(key);
+      if (value !== null) return value;
+    }
+  } catch {
+    // Blocked site data throws on access rather than returning null.
+  }
+  return memoryRecoveryRecords.get(key) ?? null;
+}
+
+function recoveryRecordSet(key: string, value: string) {
+  memoryRecoveryRecords.set(key, value);
+  try {
+    if (typeof localStorage !== 'undefined') localStorage.setItem(key, value);
+  } catch {
+    // Memory already holds it.
+  }
+}
+
+function recoveryRecordRemove(key: string) {
+  memoryRecoveryRecords.delete(key);
+  try {
+    if (typeof localStorage !== 'undefined') localStorage.removeItem(key);
+  } catch {
+    // Memory no longer holds it either way.
+  }
+}
+
+function recoveryRecordKeys(): string[] {
+  const keys = new Set(memoryRecoveryRecords.keys());
+  try {
+    if (typeof localStorage !== 'undefined') for (const key of Object.keys(localStorage)) keys.add(key);
+  } catch {
+    // Memory-only, then.
+  }
+  return [...keys];
+}
+
 function normalizeRecoveryUsers(users: Iterable<unknown>): string[] {
   return [...new Set([...users].filter((user): user is string => typeof user === 'string' && user.length > 0))].sort();
 }
 
 function readLegacySpentRecoveryUsers(): string[] {
   try {
-    if (typeof localStorage === 'undefined') return [];
-    const raw = localStorage.getItem(RECOVERY_SPENT_KEY) ?? '';
+    const raw = recoveryRecordGet(RECOVERY_SPENT_KEY) ?? '';
     let legacyUsers = raw ? [raw] : [];
     if (raw) {
       try {
@@ -352,8 +422,8 @@ function parseRecoveryUserMarker(raw: string | null): StoredRecoveryUserMarker |
 
 function readRecoveryUserMarker(userId: string): StoredRecoveryUserMarker | null {
   try {
-    if (typeof localStorage === 'undefined' || !userId) return null;
-    return parseRecoveryUserMarker(localStorage.getItem(`${RECOVERY_SPENT_USER_PREFIX}${userId}`));
+    if (!userId) return null;
+    return parseRecoveryUserMarker(recoveryRecordGet(`${RECOVERY_SPENT_USER_PREFIX}${userId}`));
   } catch {
     return null;
   }
@@ -385,8 +455,7 @@ function recoverySpentGrantKey(userId: string, grantToken: string) {
 function recordSpentRecoveryGrant(userId: string, grantToken: string) {
   if (!userId || !grantToken) return;
   try {
-    if (typeof localStorage === 'undefined') return;
-    localStorage.setItem(recoverySpentGrantKey(userId, grantToken), 'spent');
+    recoveryRecordSet(recoverySpentGrantKey(userId, grantToken), 'spent');
   } catch {
     // Non-fatal; the account marker and the live release still apply.
   }
@@ -395,8 +464,7 @@ function recordSpentRecoveryGrant(userId: string, grantToken: string) {
 function isSpentRecoveryGrant(userId: string, grantToken: string) {
   if (!userId || !grantToken) return false;
   try {
-    if (typeof localStorage === 'undefined') return false;
-    return localStorage.getItem(recoverySpentGrantKey(userId, grantToken)) === 'spent';
+    return recoveryRecordGet(recoverySpentGrantKey(userId, grantToken)) === 'spent';
   } catch {
     return false;
   }
@@ -405,7 +473,6 @@ function isSpentRecoveryGrant(userId: string, grantToken: string) {
 function isRecoveryGrantSpent(userId: string, grantToken: string): boolean {
   if (!userId) return false;
   try {
-    if (typeof localStorage === 'undefined') return false;
     // Accumulated, so an earlier grant stays revoked after a later one is
     // validated and spent. The single account marker below cannot hold that.
     if (isSpentRecoveryGrant(userId, grantToken)) return true;
@@ -420,12 +487,11 @@ function isRecoveryGrantSpent(userId: string, grantToken: string): boolean {
 
 function readSpentRecoveryUsers(): string[] {
   try {
-    if (typeof localStorage === 'undefined') return [];
     const spent = new Set(readLegacySpentRecoveryUsers());
-    for (const key of Object.keys(localStorage)) {
+    for (const key of recoveryRecordKeys()) {
       if (!key.startsWith(RECOVERY_SPENT_USER_PREFIX)) continue;
       const userId = key.slice(RECOVERY_SPENT_USER_PREFIX.length);
-      const marker = parseRecoveryUserMarker(localStorage.getItem(key));
+      const marker = parseRecoveryUserMarker(recoveryRecordGet(key));
       if (marker?.state === 'spent') spent.add(userId);
       else if (marker?.state === 'active') spent.delete(userId);
     }
@@ -438,14 +504,13 @@ function readSpentRecoveryUsers(): string[] {
 function writeRecoveryUserState(userId: string, state: RecoveryUserState, grantToken = '') {
   if (!userId) return;
   try {
-    if (typeof localStorage === 'undefined') return;
     /*
      * One atomic write per account: concurrent writers for different accounts
      * cannot replace each other's revocations. When we know the specific link,
      * bind the marker to that link so an older completion cannot burn a newer
      * reset email for the same account.
      */
-    localStorage.setItem(
+    recoveryRecordSet(
       `${RECOVERY_SPENT_USER_PREFIX}${userId}`,
       grantToken ? JSON.stringify({ state, grantToken, version: RECOVERY_MARKER_VERSION }) : state,
     );
@@ -475,8 +540,7 @@ function newRecoveryUpdateClaimToken() {
 
 function readRecoveryUpdateClaim(userId: string): StoredRecoveryUpdateClaim | null {
   try {
-    if (typeof localStorage === 'undefined') return null;
-    const raw = localStorage.getItem(recoveryUpdateClaimKey(userId));
+    const raw = recoveryRecordGet(recoveryUpdateClaimKey(userId));
     if (!raw) return null;
     const parsed = JSON.parse(raw) as Partial<StoredRecoveryUpdateClaim>;
     if (typeof parsed.token !== 'string' || typeof parsed.expiresAt !== 'number') return null;
@@ -491,7 +555,7 @@ function readRecoveryUpdateClaim(userId: string): StoredRecoveryUpdateClaim | nu
 }
 
 function writeRecoveryUpdateClaim(claim: RecoveryUpdateClaim) {
-  localStorage.setItem(
+  recoveryRecordSet(
     recoveryUpdateClaimKey(claim.userId),
     JSON.stringify({
       token: claim.token,
@@ -503,9 +567,8 @@ function writeRecoveryUpdateClaim(claim: RecoveryUpdateClaim) {
 
 function clearRecoveryUpdateClaim(claim: RecoveryUpdateClaim) {
   try {
-    if (typeof localStorage === 'undefined') return;
     const current = readRecoveryUpdateClaim(claim.userId);
-    if (current?.token === claim.token) localStorage.removeItem(recoveryUpdateClaimKey(claim.userId));
+    if (current?.token === claim.token) recoveryRecordRemove(recoveryUpdateClaimKey(claim.userId));
   } catch {
     // Non-fatal; the short TTL retires stale claims.
   }
@@ -529,7 +592,6 @@ function completeRecoveryUpdateClaim(claim: RecoveryUpdateClaim) {
 
 function renewRecoveryUpdateClaim(claim: RecoveryUpdateClaim): boolean {
   try {
-    if (typeof localStorage === 'undefined') return false;
     const current = readRecoveryUpdateClaim(claim.userId);
     if (current?.token !== claim.token) return false;
     writeRecoveryUpdateClaim(claim);
@@ -589,7 +651,6 @@ function delay(ms: number) {
 async function claimRecoveryUpdate(userId: string, grantToken: string): Promise<RecoveryUpdateClaimResult> {
   if (!userId) return { ok: false, reason: 'unavailable' };
   try {
-    if (typeof localStorage === 'undefined') return { ok: false, reason: 'unavailable' };
     if (isRecoveryGrantSpent(userId, grantToken)) return { ok: false, reason: 'spent' };
 
     const existing = readRecoveryUpdateClaim(userId);
