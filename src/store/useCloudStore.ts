@@ -1135,6 +1135,29 @@ export const useCloudStore = create<CloudStore>((set, get) => ({
     /*
      * Reserved before the await, so an event arriving DURING it can retire
      * this snapshot rather than being overwritten by it.
+     *
+     * DEFENCE IN DEPTH, not a fix for an observable defect. Two independent
+     * investigations -- one here, one by the reviewer who raised the ordering
+     * problem -- reached the same conclusion against @supabase/auth-js 2.100.1:
+     *
+     *   `getSession()` awaits initialization and then RE-READS storage
+     *   (`_useSession` -> `__loadSession` -> `getItemAsync`). It holds no
+     *   in-memory snapshot, so it cannot return a session another tab has
+     *   already removed -- the value it returns has itself moved on, and
+     *   agrees with the event rather than contradicting it.
+     *
+     *   The one exception looks like the race and is not: an EXPIRED stored
+     *   session sends `__loadSession` into `_callRefreshToken`, which on
+     *   success `_saveSession`s the refreshed session back to storage. Both
+     *   the guarded and unguarded orderings then converge on that same
+     *   refreshed state.
+     *
+     * Six rendered stagings were built against this and none discriminated;
+     * that is recorded so the next person does not spend the same day on it.
+     * The reservation stays because the ORDERING is wrong without it -- a
+     * ticket that does not exist cannot be retired -- and because a future
+     * auth-js release or a custom storage adapter need not keep the property
+     * that currently makes it harmless.
      */
     const bootstrapIsLatest = syncGate.begin();
     const { data, error } = await client.auth.getSession();
