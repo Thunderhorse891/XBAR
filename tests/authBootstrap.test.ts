@@ -22,10 +22,10 @@ test('an event that contradicts the in-flight bootstrap is kept, not dropped', (
    * signed-in session and its workspace back -- with nothing left to correct
    * it, so the app kept showing a workspace the customer had signed out of.
    */
-  assert.equal(bootstrapEventDisposition({ bootstrapped: false, event: 'SIGNED_OUT' }), 'queue');
-  assert.equal(bootstrapEventDisposition({ bootstrapped: false, event: 'SIGNED_IN' }), 'queue');
-  assert.equal(bootstrapEventDisposition({ bootstrapped: false, event: 'USER_UPDATED' }), 'queue');
-  assert.equal(bootstrapEventDisposition({ bootstrapped: false, event: 'TOKEN_REFRESHED' }), 'queue');
+  assert.equal(bootstrapEventDisposition({ bootstrapped: false, event: 'SIGNED_OUT' }), 'supersede');
+  assert.equal(bootstrapEventDisposition({ bootstrapped: false, event: 'SIGNED_IN' }), 'supersede');
+  assert.equal(bootstrapEventDisposition({ bootstrapped: false, event: 'USER_UPDATED' }), 'supersede');
+  assert.equal(bootstrapEventDisposition({ bootstrapped: false, event: 'TOKEN_REFRESHED' }), 'supersede');
 });
 
 test('INITIAL_SESSION during bootstrap is ignored rather than queued', () => {

@@ -329,8 +329,12 @@ test('an auth event during bootstrap is kept rather than dropped', () => {
     false,
     'dropping every pre-bootstrap event is the defect this replaced',
   );
-  assert.match(initialize, /queuedDuringBootstrap/, 'a contradicting event has to be kept');
-  assert.match(initialize, /takeQueuedEvent\(\)/, 'and replayed once the first sync has finished');
+  assert.match(initialize, /disposition === 'supersede'/, 'a contradicting event has to take over');
+  assert.match(
+    initialize,
+    /syncGate\.retireInFlight\(\);[\s\S]{0,900}?void syncSessionState\(session, true\);/,
+    'and be synced at once, not held behind the request it replaced',
+  );
 });
 
 test('a stale session sync cannot commit over a newer one', () => {
@@ -384,7 +388,7 @@ test('queueing a newer event retires the bootstrap sync in flight', () => {
   const initialize = body(store, /initialize: async[\s\S]*?\n {2}\},/, 'initialize');
   assert.match(
     initialize,
-    /queuedDuringBootstrap = \{ session \};[\s\S]{0,80}syncGate\.retireInFlight\(\);/,
+    /disposition === 'supersede'[\s\S]{0,400}?syncGate\.retireInFlight\(\);/,
     'the in-flight bootstrap sync must be retired as the event is queued',
   );
 });

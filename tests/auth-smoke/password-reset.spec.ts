@@ -1490,3 +1490,45 @@ test('a link replaced while its tab was away is still dead when the tab comes ba
   expect(await heldGrant(older)).toBe('');
   expect(olderUpdates).toBe(0);
 });
+
+test('a full storage quota does not wedge a reset behind a stale claim', async ({ page }) => {
+  /*
+   * localStorage readable, its writes rejected -- a full quota, which is the
+   * common shape and not the same as blocked site data.
+   *
+   * The in-flight claim written before a password request could then never
+   * replace an expired one left behind by an earlier attempt: the new claim
+   * reached memory only, the settle re-read preferred the older PERSISTED
+   * value, and the link reported "already being used in another tab" on every
+   * attempt, forever. The overlay only outranks the durable store where the
+   * durable store is known to be behind, which is exactly here.
+   */
+  const claimKey = recoveryUpdateClaimKeyFor(USER_ID);
+  await page.addInitScript(
+    ({ key, stale }) => {
+      // Seeded while writes still work: the leftover of an attempt that died
+      // before it could clear its claim.
+      window.localStorage.setItem(key, stale);
+      const setItem = Storage.prototype.setItem;
+      Storage.prototype.setItem = function (...args: [string, string]) {
+        if (this === window.localStorage) throw new DOMException('QuotaExceededError', 'QuotaExceededError');
+        return setItem.apply(this, args);
+      };
+    },
+    { key: claimKey, stale: JSON.stringify({ token: 'a-dead-attempt', expiresAt: Date.now() - 1 }) },
+  );
+
+  let updates = 0;
+  await stubGoTrueUser(page, async (route) => {
+    updates += 1;
+    await route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(userRecord()) });
+  });
+
+  await page.goto(recoveryLink());
+  await expect(newPassword(page)).toBeVisible({ timeout: 30_000 });
+  await fillNewPassword(page, 'a-brand-new-password');
+  await submit(page).click();
+
+  await expect(page.getByText('Password updated. You are signed in.').first()).toBeVisible({ timeout: 30_000 });
+  expect(updates).toBe(1);
+});

@@ -14,6 +14,14 @@
  * so the app keeps showing a workspace the customer has signed out of until
  * they reload.
  *
+ * Nor may such an event merely be HELD until the bootstrap finishes, which is
+ * what this used to say. The bootstrap is waiting on a workspace request for
+ * an account that has already been replaced, and that request can hang: the
+ * new session's own profile would not even be REQUESTED until the obsolete one
+ * settled, so the app sat on its loading screen for as long as a request
+ * nobody needed took. It supersedes instead -- the bootstrap's in-flight write
+ * is retired and this event is applied at once.
+ *
  * INITIAL_SESSION is the exception, and not an arbitrary one: it reports the
  * same fact getSession() is about to report, so replaying it would reload the
  * workspace a second time on every single startup, which is exactly what the
@@ -26,12 +34,12 @@ export type BootstrapEventInput = {
 
 export type BootstrapEventDisposition =
   | 'apply' // Bootstrap is done; sync it now.
-  | 'queue' // Bootstrap is still running; replay this once it finishes.
+  | 'supersede' // Bootstrap is still running and this replaces it: retire its write and apply this now.
   | 'ignore'; // Says nothing the first sync is not already about to say.
 
 export function bootstrapEventDisposition(input: BootstrapEventInput): BootstrapEventDisposition {
   if (input.bootstrapped) return 'apply';
-  return input.event === 'INITIAL_SESSION' ? 'ignore' : 'queue';
+  return input.event === 'INITIAL_SESSION' ? 'ignore' : 'supersede';
 }
 
 /**

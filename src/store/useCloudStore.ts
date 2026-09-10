@@ -334,44 +334,71 @@ function recoveryGrantToken(session: Session | null): string {
  * Writes go to memory FIRST and always, so a write localStorage rejects -- a
  * full quota is the common one -- still counts for this page.
  */
-const memoryRecoveryRecords = new Map<string, string>();
+/*
+ * Present only for keys the durable store could NOT be updated with, and then
+ * memory is the sole truth for that key. `null` is a removal that did not
+ * persist.
+ *
+ * Shadowing every write instead was wrong in a way that mattered: with
+ * localStorage readable but its writes failing -- a full quota, which is the
+ * common shape -- a read preferred the older PERSISTED value over the newer
+ * one in memory. An expired update claim could then never be replaced. The new
+ * claim reached memory only, the settle re-read returned the stale token, and
+ * the link reported "already being used in another tab" on every attempt,
+ * forever.
+ */
+const memoryRecoveryRecords = new Map<string, string | null>();
 
 function recoveryRecordGet(key: string): string | null {
+  // The overlay outranks the durable store: it exists only where the durable
+  // store is known to be behind.
+  if (memoryRecoveryRecords.has(key)) return memoryRecoveryRecords.get(key) ?? null;
   try {
-    if (typeof localStorage !== 'undefined') {
-      const value = localStorage.getItem(key);
-      if (value !== null) return value;
-    }
+    if (typeof localStorage !== 'undefined') return localStorage.getItem(key);
   } catch {
     // Blocked site data throws on access rather than returning null.
   }
-  return memoryRecoveryRecords.get(key) ?? null;
+  return null;
 }
 
 function recoveryRecordSet(key: string, value: string) {
-  memoryRecoveryRecords.set(key, value);
   try {
-    if (typeof localStorage !== 'undefined') localStorage.setItem(key, value);
+    if (typeof localStorage !== 'undefined') {
+      localStorage.setItem(key, value);
+      // Durable and readable by every tab; the overlay would only go stale.
+      memoryRecoveryRecords.delete(key);
+      return;
+    }
   } catch {
-    // Memory already holds it.
+    // Falls through to the overlay.
   }
+  memoryRecoveryRecords.set(key, value);
 }
 
 function recoveryRecordRemove(key: string) {
-  memoryRecoveryRecords.delete(key);
   try {
-    if (typeof localStorage !== 'undefined') localStorage.removeItem(key);
+    if (typeof localStorage !== 'undefined') {
+      localStorage.removeItem(key);
+      memoryRecoveryRecords.delete(key);
+      return;
+    }
   } catch {
-    // Memory no longer holds it either way.
+    // Falls through to a tombstone, so the stale persisted value does not
+    // reappear as though the removal never happened.
   }
+  memoryRecoveryRecords.set(key, null);
 }
 
 function recoveryRecordKeys(): string[] {
-  const keys = new Set(memoryRecoveryRecords.keys());
+  const keys = new Set<string>();
   try {
     if (typeof localStorage !== 'undefined') for (const key of Object.keys(localStorage)) keys.add(key);
   } catch {
-    // Memory-only, then.
+    // Overlay-only, then.
+  }
+  for (const [key, value] of memoryRecoveryRecords) {
+    if (value === null) keys.delete(key);
+    else keys.add(key);
   }
   return [...keys];
 }
@@ -954,19 +981,6 @@ export const useCloudStore = create<CloudStore>((set, get) => ({
     // Track auth events immediately, before asynchronous workspace hydration.
     // A tab opened after recovery still knows the account it later signs out.
     let lastAuthUserId = get().session?.user.id ?? '';
-    /*
-     * An event that arrived before the first sync finished, kept rather than
-     * dropped. `null` means none; a queued entry may itself carry a null
-     * session, which is the sign-out case that made this necessary.
-     */
-    let queuedDuringBootstrap: { session: Session | null } | null = null;
-    // Read through a function: control-flow analysis only sees the initializer
-    // at the call site below and would otherwise narrow this to `null`.
-    const takeQueuedEvent = () => {
-      const queued = queuedDuringBootstrap;
-      queuedDuringBootstrap = null;
-      return queued;
-    };
     const { data: subscription } = client.auth.onAuthStateChange((event, session) => {
       const endedRecoveryGrant = event === 'SIGNED_OUT' ? recoveryGrantToken(get().session) : '';
       /*
@@ -1032,30 +1046,32 @@ export const useCloudStore = create<CloudStore>((set, get) => ({
       }
       /*
        * The explicit getSession() below owns the first sync, so an event that
-       * merely restates it is skipped -- but one that CONTRADICTS it is kept
-       * and replayed, or the in-flight bootstrap silently overwrites it with a
-       * session that has already ended. See lib/authBootstrap.ts.
+       * merely restates it is skipped -- but one that CONTRADICTS it takes
+       * over, or the in-flight bootstrap silently overwrites it with a session
+       * that has already ended. See lib/authBootstrap.ts.
        */
       const disposition = bootstrapEventDisposition({ bootstrapped, event });
       if (disposition === 'ignore') return;
-      if (disposition === 'queue') {
-        // Last one wins: it is the most recent thing Supabase has said.
-        queuedDuringBootstrap = { session };
+      if (disposition === 'supersede') {
         /*
-         * And the bootstrap sync still in flight is now writing about a session
-         * that has been superseded. Retiring it here rather than when the
-         * replay starts matters: otherwise it commits the obsolete session and
-         * workspace first, and reconciliation can begin against the wrong
-         * account in the gap before the replay lands.
+         * The bootstrap sync still in flight is writing about a session that
+         * has been superseded, so it is retired before anything else: without
+         * that it commits the obsolete session and workspace first, and
+         * reconciliation can begin against the wrong account.
          */
         syncGate.retireInFlight();
         /*
-         * The WORKSPACE replay waits for the bootstrap; who is signed in does
-         * not. Holding both back meant a queued sign-out or account switch was
-         * invisible to the store for as long as the previous account's
-         * workspace request took -- unbounded, if that request hangs.
+         * Then this one is started NOW rather than held until the bootstrap
+         * finishes. Holding it meant the new account's profile was not even
+         * requested until the OLD account's request settled -- and if that
+         * request hangs, it never does, so the app stayed gated on 'loading'
+         * indefinitely for a session that would have resolved immediately.
+         *
+         * It also carries the `initialized` latch, because the bootstrap's own
+         * sync may be the thing that is hanging: the app must be released by
+         * whichever sync actually resolves, not only by the first one started.
          */
-        publishAuthIdentity(session);
+        void syncSessionState(session, true);
         return;
       }
       void syncSessionState(session);
@@ -1093,13 +1109,6 @@ export const useCloudStore = create<CloudStore>((set, get) => ({
       await syncSessionState(data.session, true);
     }
     bootstrapped = true;
-
-    // Anything that happened while the above was in flight is newer than the
-    // above, so it lands last.
-    const queued = takeQueuedEvent();
-    if (queued) {
-      await syncSessionState(queued.session);
-    }
 
     /*
      * Reconcile the grant once startup and queued events have settled. A tab

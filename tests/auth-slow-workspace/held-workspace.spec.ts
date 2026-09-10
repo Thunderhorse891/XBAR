@@ -54,13 +54,17 @@ async function fillNewPassword(page: Page, value: string) {
  * test can prove the hang was real rather than passing because nothing was
  * ever requested.
  */
-async function holdWorkspaceApi(page: Page, { holding = true } = {}) {
+async function holdWorkspaceApi(page: Page, { holding = true, only = '' } = {}) {
   const held: Route[] = [];
   const owners: string[] = [];
   let releasing = !holding;
   await page.route(WORKSPACE_REST, async (route) => {
-    owners.push(ownerOf(route.request().url()));
-    if (releasing) {
+    const owner = ownerOf(route.request().url());
+    owners.push(owner);
+    // `only` holds ONE account's requests and answers everyone else's, so a
+    // session that arrives while an obsolete one hangs can be seen to resolve
+    // on its own rather than behind it.
+    if (releasing || (only && owner !== only)) {
       await fulfilWorkspace(route);
       return;
     }
@@ -439,5 +443,50 @@ test('a token refresh during hydration does not restart or abandon it', async ({
   await fillNewPassword(page, 'a-brand-new-password');
   await submit(page).click();
   await expect(page.getByText('Password updated. You are signed in.').first()).toBeVisible({ timeout: 30_000 });
+  await workspace.release();
+});
+
+test('a session arriving while an obsolete one hangs resolves without waiting for it', async ({ page, context }) => {
+  /*
+   * Only the FIRST account's workspace requests hang. The second account's are
+   * answered normally, so this measures whether the new session is allowed to
+   * proceed -- not whether the route happens to be open.
+   *
+   * An event arriving before the bootstrap finished used to be held until it
+   * did. The bootstrap is waiting on a workspace request for an account that
+   * has already been replaced, and that request can hang, so the new account's
+   * profile was not even REQUESTED until an obsolete one settled -- which is
+   * to say never. The identity was published, so the reset screen was right;
+   * the application stayed gated on 'loading' for a session that would have
+   * resolved at once.
+   */
+  const workspace = await holdWorkspaceApi(page, { only: USER_ID });
+  const relationalReads: string[] = [];
+  await page.route(HORSES_REST, async (route) => {
+    relationalReads.push(route.request().url());
+    await route.fulfill({ status: 200, contentType: 'application/json', body: '[]' });
+  });
+  await stubGoTrueUser(page);
+
+  await page.goto(recoveryLink());
+  await expect(newPassword(page)).toBeVisible({ timeout: 30_000 });
+  await expect.poll(() => workspace.owners, { timeout: 30_000 }).toContain(USER_ID);
+  expect(relationalReads).toEqual([]);
+
+  const second = await context.newPage();
+  await stubGoTrueUser(second, undefined, SECOND);
+  await second.route(WORKSPACE_REST, fulfilWorkspace);
+  await second.goto(sessionLink('signin', SECOND));
+  await expect(refusal(second)).toBeVisible({ timeout: 30_000 });
+
+  /*
+   * The second account resolves and the app hydrates for it WHILE the first
+   * account's request is still outstanding. Nothing is released first: that is
+   * the whole assertion.
+   */
+  await expect.poll(() => relationalReads.length, { timeout: 30_000 }).toBe(1);
+  expect(relationalReads[0]).toContain(SECOND_WORKSPACE_ID);
+  expect(workspace.count).toBeGreaterThan(0);
+
   await workspace.release();
 });
