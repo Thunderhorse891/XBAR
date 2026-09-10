@@ -1669,3 +1669,42 @@ test('signing in after a failed callback actually leaves the sign-in screen', as
   // suppressed rather than one that is slow.
   await expect.poll(() => new URL(page.url()).pathname, { timeout: 30_000 }).not.toBe('/app/login');
 });
+
+test('a refused retry after a failed callback does not carry the old account through', async ({ page }) => {
+  /*
+   * The hold must survive a REFUSED attempt.
+   *
+   * A rejected callback can arrive while an existing session is still valid --
+   * auth-js keeps one when a URL login fails -- so the screen is held with an
+   * explanation while somebody is, technically, still signed in. Releasing the
+   * hold on any outcome meant that typing another account's password WRONGLY
+   * released it, and the redirect then carried them into the OLD account's
+   * workspace: the new error hidden, and a refused attempt looking like a
+   * successful sign-in.
+   */
+  await stubGoTrueUser(page);
+
+  // A live session first, so the redirect has somewhere to carry them.
+  await page.goto(sessionLink('signin'));
+  await expect(refusal(page)).toBeVisible({ timeout: 30_000 });
+
+  await page.goto('/app/login#error=access_denied&error_description=Email+link+has+expired');
+  await expect(page.getByText('Email link has expired')).toBeVisible({ timeout: 30_000 });
+
+  // Another account, wrong password.
+  await page.route('**/auth/v1/token*', (route) =>
+    route.fulfill({
+      status: 400,
+      contentType: 'application/json',
+      body: JSON.stringify({ error: 'invalid_grant', error_description: 'Invalid login credentials' }),
+    }),
+  );
+  await page.getByLabel('Email').fill('someone-else@xbar.test');
+  await page.getByLabel('Password', { exact: true }).fill('the-wrong-password');
+  await page.getByRole('button', { name: /Sign In/i }).click();
+
+  // The refusal is shown, and they are still here to read it.
+  await expect(page.getByText(/Invalid login credentials/i).first()).toBeVisible({ timeout: 30_000 });
+  await page.waitForTimeout(2500);
+  expect(new URL(page.url()).pathname).toBe('/app/login');
+});

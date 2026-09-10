@@ -136,16 +136,25 @@ export default function Login() {
     pushToast({ title, message: result.message, tone });
     setFormMessage({ tone, text: result.message });
     /*
-     * A fresh attempt supersedes the callback that failed before it, so the
-     * hold on the screen ends here -- on success AND on failure, since either
-     * way the customer has moved on from the message that put it there.
+     * Only a SUCCESSFUL attempt ends the hold.
      *
-     * This is the funnel every auth outcome passes through, which is why it is
-     * the right place: clearing it only where the MODE changes left someone
-     * who simply signed in again stranded on the sign-in screen, watching a
-     * success message, with the redirect still suppressed.
+     * This is the funnel every auth outcome passes through, which is why the
+     * hold is released here rather than only where the mode changes -- that
+     * left someone who simply signed in again stranded on the sign-in screen,
+     * watching a success message with the redirect still suppressed.
+     *
+     * But releasing it on FAILURE too was worse, and is the reason for the
+     * `result.ok`. A rejected callback can arrive while an existing session is
+     * still valid -- auth-js keeps one when a URL login fails -- so a customer
+     * who then types another account's password WRONGLY would have released
+     * the hold, and the redirect would have carried them into the OLD
+     * account's workspace: their error hidden, and a refused attempt looking
+     * like a successful sign-in.
+     *
+     * A failed attempt changes nothing about who is signed in, so it must not
+     * change what the screen does about it.
      */
-    setCallbackFailed(false);
+    if (result.ok) setCallbackFailed(false);
   };
   const rememberEmailPreference = () => {
     if (remember) {
