@@ -23,7 +23,21 @@
  * exactly like the one it replaces.
  */
 
-const memoryStore = new Map<string, string>();
+/*
+ * Not a fallback store -- an OVERLAY, authoritative for any key it holds.
+ *
+ * The difference is the whole point, and getting it wrong once already cost a
+ * defect in the recovery records this mirrors. A write that localStorage
+ * refuses still has to be READABLE, or auth-js reports a sign-in that the next
+ * read cannot see: the fence then compares the new event against the stale
+ * persisted session, disagrees, and discards the sign-in -- leaving the UI on
+ * the previous identity, from a write that "failed" silently.
+ *
+ * So an entry here wins over localStorage, a successful durable write clears
+ * it, and a removal localStorage refuses leaves a `null` tombstone rather than
+ * letting the old value resurface.
+ */
+const memoryStore = new Map<string, string | null>();
 
 /*
  * auth-js's own probe, matched deliberately: a WRITE and a REMOVE, not a read.
@@ -64,7 +78,10 @@ export function resetAuthStorageMode() {
 }
 
 export function readAuthStorage(key: string): string | null {
-  if (!authStorageIsShared()) return memoryStore.get(key) ?? null;
+  // The overlay first, in both modes: it holds either the per-tab session or a
+  // durable write that failed, and both outrank whatever localStorage still has.
+  if (memoryStore.has(key)) return memoryStore.get(key) ?? null;
+  if (!authStorageIsShared()) return null;
   try {
     return localStorage.getItem(key);
   } catch {
@@ -87,20 +104,27 @@ export const authStorageAdapter = {
     }
     try {
       localStorage.setItem(key, value);
+      // Durable now, so the overlay must stop shadowing it.
+      memoryStore.delete(key);
     } catch {
       // The mode was resolved before the client was built, so a write failing
-      // now is a quota that filled since. Keep the value reachable rather than
-      // losing the session outright.
+      // now is a quota that filled since. Keep it readable rather than losing
+      // the session to a write nobody was told about.
       memoryStore.set(key, value);
     }
   },
   removeItem(key: string): void {
-    memoryStore.delete(key);
-    if (!authStorageIsShared()) return;
+    if (!authStorageIsShared()) {
+      memoryStore.delete(key);
+      return;
+    }
     try {
       localStorage.removeItem(key);
+      memoryStore.delete(key);
     } catch {
-      // Already gone from the readable copy above.
+      // A tombstone, not a delete: dropping the entry would let the value
+      // localStorage still holds come back as though it had never been removed.
+      memoryStore.set(key, null);
     }
   },
 };
