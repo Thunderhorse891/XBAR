@@ -1594,3 +1594,45 @@ test('a completion that lands after a newer link cannot erase that link from the
   await expect(refusal(tabB)).toBeVisible({ timeout: 30_000 });
   await expect(newPassword(tabB)).toHaveCount(0);
 });
+
+test('a rejected callback explains itself on the browser router too', async ({ page }) => {
+  /*
+   * The PRODUCTION router. Nothing is unreachable here -- `/app/login` renders
+   * fine -- which is why this was easy to miss: the customer got an ordinary
+   * sign-in form with no hint that their link had failed. auth-js leaves the
+   * fragment in place and emits nothing, so unless something moves the reason
+   * where a screen can read it, nothing ever says what happened.
+   */
+  await stubGoTrueUser(page);
+  await page.goto('/app/login#error=access_denied&error_code=otp_expired&error_description=Email+link+has+expired');
+
+  await expect(page.getByText('Email link has expired')).toBeVisible({ timeout: 30_000 });
+  // Still the sign-in screen, which is where they need to be.
+  await expect(page.getByLabel('Email')).toBeVisible();
+});
+
+test('a rejected callback is still readable when a session is already live', async ({ page }) => {
+  /*
+   * auth-js keeps an existing valid session when a URL login is REJECTED, so
+   * an expired link opened while this browser is already signed in arrives at
+   * a screen whose job is to redirect signed-in visitors away. It did exactly
+   * that, and the explanation was unmounted before it could be read -- a
+   * failed link that looked like a success.
+   */
+  const link = recoveryLink();
+  await stubGoTrueUser(page);
+  await page.goto(link);
+  await expect(newPassword(page)).toBeVisible({ timeout: 30_000 });
+
+  // Signed in on this device, then a second link that Supabase rejects.
+  await page.goto('/app/login#error=access_denied&error_description=Email+link+has+expired');
+  await expect(page.getByText('Email link has expired')).toBeVisible({ timeout: 30_000 });
+
+  /*
+   * And it STAYS. Polled rather than sampled: the defect is a redirect that
+   * fires a moment later, so an immediate assertion would pass over it.
+   */
+  await page.waitForTimeout(3000);
+  await expect(page.getByText('Email link has expired')).toBeVisible();
+  expect(new URL(page.url()).pathname).toBe('/app/login');
+});

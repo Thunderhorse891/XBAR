@@ -75,15 +75,33 @@ export default function Login() {
     // your email" left standing over a sign-in form reads as an instruction.
     setFormMessage(null);
     setConfirmationEmail('');
+    // They have read it and moved on; stop holding the screen.
+    setCallbackFailed(false);
     const next = new URLSearchParams();
     if (mode === 'signup') next.set('mode', 'signup');
     if (selectedPlan) next.set('plan', selectedPlan);
     setParams(next, { replace: true });
   };
 
+  /*
+   * A callback can fail while a session is still valid -- auth-js keeps the
+   * existing one when a URL login is rejected, so an expired link or a
+   * cancelled consent opened while another tab is signed in arrives here with
+   * `cloud.status === 'signed-in'`. The redirect below then navigated away
+   * before the explanation could be read, and the failure looked like a
+   * success.
+   *
+   * So a reported callback failure holds the screen. It is held in state
+   * rather than in the URL: the query parameter is cleared as soon as it is
+   * read, because leaving it there would re-announce the failure on every
+   * reload.
+   */
+  const [callbackFailed, setCallbackFailed] = useState(false);
+
   useEffect(() => {
+    if (callbackFailed) return;
     if (cloud.session && cloud.status === 'signed-in') navigate(redirectTarget, { replace: true });
-  }, [cloud.session, cloud.status, navigate, redirectTarget]);
+  }, [callbackFailed, cloud.session, cloud.status, navigate, redirectTarget]);
 
   /*
    * A callback that failed before it could produce a session.
@@ -96,6 +114,7 @@ export default function Login() {
   useEffect(() => {
     const authError = params.get('authError');
     if (!authError) return;
+    setCallbackFailed(true);
     setFormMessage({ tone: 'error', text: authError });
     const next = new URLSearchParams(params);
     next.delete('authError');

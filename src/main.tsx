@@ -6,7 +6,7 @@ import ErrorBoundary from './components/ErrorBoundary';
 import { InteractionBootstrap } from './components/InteractionBootstrap';
 import { registerGlobalErrorHandlers } from './lib/globalErrorHandlers';
 import { registerOfflineRuntime } from './lib/offlineRuntime';
-import { appBasePath, hashAuthFailureRoute, usesHashRouting } from './lib/routeCanon';
+import { appBasePath, browserAuthFailureSearch, hashAuthFailureRoute, usesHashRouting } from './lib/routeCanon';
 import './index.css';
 import './styles/motion.css';
 import './mobilePolish.css';
@@ -22,16 +22,30 @@ if (!usesHashRouting() && !window.location.pathname.startsWith(appBasePath)) {
 }
 
 /*
- * A rejected recovery link under the hash router comes back as `#error=...`,
- * which the router would read as a path and answer with the not-found screen.
- * Put the reset route there instead, BEFORE the router is created, so the
- * customer gets the expired-link guidance and a way back to sign-in.
- * `hashAuthFailureRoute` leaves a successful callback's fragment untouched.
+ * A rejected callback -- an expired link, a cancelled OAuth consent -- comes
+ * back as `#error=...`, which auth-js leaves in place while emitting nothing.
+ * Both routers need it moved somewhere a screen can read, for different
+ * reasons, and both are done BEFORE the router is created.
+ *
+ * Under the HASH router the fragment IS the route, so it is replaced outright
+ * or the customer meets the not-found screen. Under the BROWSER router nothing
+ * is unreachable -- but nothing reads the fragment either, so the customer got
+ * an ordinary sign-in form with no hint that anything had failed. There the
+ * PATH is left exactly where Supabase sent them and only the reason moves, so
+ * a failed recovery link still lands on the reset screen with its own
+ * expired-link guidance.
+ *
+ * Both helpers leave a SUCCESSFUL callback's fragment untouched.
  */
 if (usesHashRouting()) {
   const failureRoute = hashAuthFailureRoute(window.location.hash);
   if (failureRoute) {
     window.history.replaceState(null, '', `${window.location.pathname}${window.location.search}${failureRoute}`);
+  }
+} else {
+  const failureSearch = browserAuthFailureSearch(window.location.hash, window.location.search);
+  if (failureSearch) {
+    window.history.replaceState(null, '', `${window.location.pathname}${failureSearch}`);
   }
 }
 
