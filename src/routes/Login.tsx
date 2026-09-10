@@ -12,6 +12,7 @@ import './cleanEntryExperience.css';
 import { canPresentThirdPartySignIn, canPresentPurchaseFlow } from '@/lib/nativePlatform';
 import { presentableOAuthProviders } from '@/lib/authProviders';
 import { readBrowserStorage, removeBrowserStorage, writeBrowserStorage } from '@/lib/browserStorage';
+import { markCommandCenterEntry } from '@/lib/commandCenterEntry';
 
 type AuthMode = 'signin' | 'signup';
 type BusyState = 'password' | 'google' | 'facebook' | 'apple' | 'reset' | 'code' | 'verify' | 'resend' | '';
@@ -146,7 +147,7 @@ export default function Login() {
   };
 
   const markLocalWorkspaceIntent = () => {
-    writeBrowserStorage('xbar-command-center-entry', 'true');
+    markCommandCenterEntry();
     if (selectedPlan) writeBrowserStorage('xbar-local-plan-intent', selectedPlan);
     void trackRuntimeEvent(
       productEvent(productEventNames.localWorkspaceEntered, {

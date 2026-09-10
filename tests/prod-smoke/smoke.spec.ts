@@ -116,6 +116,37 @@ test('local workspace setup is reachable without cloud sign-in', async ({ page }
   assertClean(c);
 });
 
+test('local workspace setup survives a browser that refuses to store the entry marker', async ({ page }) => {
+  /*
+   * Entering a local workspace records a marker that the route guard reads
+   * back. Storage used to THROW when site data is blocked, which was at least
+   * loud; routing it through a reporting helper made the failure silent, and
+   * silent was worse. The marker was never stored, the guard read no marker,
+   * and the customer was sent straight back to the sign-in screen they had
+   * just left -- with a toast saying their workspace had opened. A loop,
+   * announced as a success.
+   *
+   * The marker is now held in memory as well, for as long as the page lives.
+   */
+  await page.addInitScript(() => {
+    Object.defineProperty(window, 'localStorage', {
+      configurable: true,
+      get() {
+        throw new DOMException('Access to storage is not allowed from this context.', 'SecurityError');
+      },
+    });
+  });
+
+  await page.goto('/login', { waitUntil: 'load' });
+  await page.getByRole('button', { name: 'Create workspace' }).click();
+
+  await expect(page).toHaveURL(/\/setup/, { timeout: 15_000 });
+  await expect(page.getByRole('heading', { name: 'Configure Workspace' })).toBeVisible({ timeout: 15_000 });
+  // And it stays: the guard must not bounce them back a moment later.
+  await page.waitForTimeout(2000);
+  await expect(page).toHaveURL(/\/setup/);
+});
+
 test('critical brand assets return 200 with non-empty body', async ({ request }) => {
   const assets = [
     '/brand/icon-512.png',
