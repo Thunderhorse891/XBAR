@@ -1708,3 +1708,42 @@ test('a refused retry after a failed callback does not carry the old account thr
   await page.waitForTimeout(2500);
   expect(new URL(page.url()).pathname).toBe('/app/login');
 });
+
+test('sending reset mail after a failed callback does not release the screen', async ({ page }) => {
+  /*
+   * A success that signs NOBODY in must not end the hold.
+   *
+   * Releasing on any `ok` result looked right until you count what actually
+   * passes through: sending reset mail, requesting a code and resending a
+   * confirmation all succeed without touching the session. So a customer
+   * parked here by a rejected link -- with an older session still live,
+   * because auth-js keeps one when a URL login fails -- who pressed "Forgot
+   * password?" was carried straight into the OLD account, and the
+   * "Check your inbox" they had just asked for went with the screen.
+   */
+  await stubGoTrueUser(page);
+
+  // A live session first, so the redirect has somewhere to carry them.
+  await page.goto(sessionLink('signin'));
+  await expect(refusal(page)).toBeVisible({ timeout: 30_000 });
+
+  await page.goto('/app/login#error=access_denied&error_description=Email+link+has+expired');
+  await expect(page.getByText('Email link has expired')).toBeVisible({ timeout: 30_000 });
+
+  // The reset request itself succeeds.
+  await page.route('**/auth/v1/recover*', (route) =>
+    route.fulfill({ status: 200, contentType: 'application/json', body: '{}' }),
+  );
+  await page.getByLabel('Email').fill(RECOVERY_EMAIL);
+  await page.getByRole('button', { name: /Forgot password\?/i }).click();
+
+  /*
+   * The answer is readable, and it STAYS readable. Polled rather than sampled:
+   * the defect is a redirect that fires a moment later.
+   */
+  await expect(page.getByText(/Check your inbox|password reset|If that address/i).first()).toBeVisible({
+    timeout: 30_000,
+  });
+  await page.waitForTimeout(2500);
+  expect(new URL(page.url()).pathname).toBe('/app/login');
+});

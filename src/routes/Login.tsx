@@ -131,30 +131,42 @@ export default function Login() {
    * through one function is what guarantees it -- there is no path that can
    * raise a toast and forget the panel, because the panel is not optional here.
    */
-  const report = (title: string, result: { ok: boolean; message: string }) => {
+  /*
+   * Whether an outcome can change who is signed in. `notice` covers everything
+   * that reports back to the same screen without a session -- mail sent, a
+   * code requested, a provider redirect started.
+   */
+  type ReportKind = 'session' | 'notice';
+  const report = (title: string, result: { ok: boolean; message: string }, kind: ReportKind) => {
     const tone = result.ok ? 'success' : 'error';
     pushToast({ title, message: result.message, tone });
     setFormMessage({ tone, text: result.message });
     /*
-     * Only a SUCCESSFUL attempt ends the hold.
+     * Only an attempt that actually PRODUCED A SESSION ends the hold.
      *
      * This is the funnel every auth outcome passes through, which is why the
      * hold is released here rather than only where the mode changes -- that
      * left someone who simply signed in again stranded on the sign-in screen,
      * watching a success message with the redirect still suppressed.
      *
-     * But releasing it on FAILURE too was worse, and is the reason for the
-     * `result.ok`. A rejected callback can arrive while an existing session is
-     * still valid -- auth-js keeps one when a URL login fails -- so a customer
-     * who then types another account's password WRONGLY would have released
-     * the hold, and the redirect would have carried them into the OLD
-     * account's workspace: their error hidden, and a refused attempt looking
-     * like a successful sign-in.
+     * Releasing it on FAILURE was worse: a rejected callback can arrive while
+     * an existing session is still valid -- auth-js keeps one when a URL login
+     * fails -- so a customer who then typed another account's password WRONGLY
+     * would have released the hold, and the redirect would have carried them
+     * into the OLD account's workspace.
      *
-     * A failed attempt changes nothing about who is signed in, so it must not
-     * change what the screen does about it.
+     * `result.ok` alone was not enough either, because most of what passes
+     * through here succeeds WITHOUT signing anybody in: sending reset mail,
+     * requesting a code, resending a confirmation. Each returns `ok`, none of
+     * them changes who is signed in, and releasing the hold on any of them
+     * dropped the customer into the old account with the very message they had
+     * just asked for -- "Check your inbox" -- unmounted on the way out.
+     *
+     * So `kind` is a required argument rather than something inferred from the
+     * result: the question "can this outcome change who is signed in?" has to
+     * be answered at every call site, including ones written later.
      */
-    if (result.ok) setCallbackFailed(false);
+    if (result.ok && kind === 'session') setCallbackFailed(false);
   };
   const rememberEmailPreference = () => {
     if (remember) {
@@ -208,7 +220,7 @@ export default function Login() {
     }
     if (authMode === 'signin') {
       const result = await cloud.signInWithPassword(email, password);
-      report(result.ok ? 'Welcome back' : 'We could not sign you in', result);
+      report(result.ok ? 'Welcome back' : 'We could not sign you in', result, 'session');
       setBusy('');
       return;
     }
@@ -231,6 +243,8 @@ export default function Login() {
           : 'Check your email'
         : 'We could not create that account',
       result,
+      // Only the signed-in outcome created a session; the others are an inbox.
+      result.outcome === 'signed-in' ? 'session' : 'notice',
     );
     if (result.ok && result.outcome !== 'signed-in') {
       setConfirmationEmail(email.trim());
@@ -245,7 +259,7 @@ export default function Login() {
   const resendConfirmation = async () => {
     setBusy('resend');
     const result = await cloud.resendSignUpConfirmation(confirmationEmail || email);
-    report(result.ok ? 'Confirmation email requested' : 'We could not send that again', result);
+    report(result.ok ? 'Confirmation email requested' : 'We could not send that again', result, 'notice');
     setBusy('');
   };
   const oauth = async (provider: 'google' | 'facebook' | 'apple') => {
@@ -256,7 +270,9 @@ export default function Login() {
         : provider === 'facebook'
           ? await cloud.signInWithFacebook()
           : await cloud.signInWithApple();
-    report(result.ok ? `Continue with ${provider}` : `${provider} sign-in unavailable`, result);
+    // Success here means the provider redirect STARTED; the session, if any,
+    // arrives in the document that comes back.
+    report(result.ok ? `Continue with ${provider}` : `${provider} sign-in unavailable`, result, 'notice');
     setBusy('');
   };
   /*
@@ -280,20 +296,20 @@ export default function Login() {
     setBusy('code');
     const result = await cloud.sendEmailCode(email);
     if (result.ok) setCodeSent(true);
-    report(result.ok ? 'Sign-in code sent' : 'Sign-in code unavailable', result);
+    report(result.ok ? 'Sign-in code sent' : 'Sign-in code unavailable', result, 'notice');
     setBusy('');
   };
   const submitEmailCode = async () => {
     setBusy('verify');
     const result = await cloud.verifyEmailCode(email, emailCode);
-    report(result.ok ? 'Welcome back' : 'That code did not work', result);
+    report(result.ok ? 'Welcome back' : 'That code did not work', result, 'session');
     if (result.ok) setEmailCode('');
     setBusy('');
   };
   const reset = async () => {
     setBusy('reset');
     const result = await cloud.sendPasswordReset(email);
-    report(result.ok ? 'Check your inbox' : 'Reset unavailable', result);
+    report(result.ok ? 'Check your inbox' : 'Reset unavailable', result, 'notice');
     setBusy('');
   };
   /*
