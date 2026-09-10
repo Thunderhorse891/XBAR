@@ -302,7 +302,26 @@ function decodeJwtClaims(accessToken = ''): Record<string, unknown> {
  * carries `session_id`; this is the answer for tokens that somehow do not.
  */
 /*
- * Does auth-js still hold the session this tab believes it has?
+ * Can this browser read localStorage at ALL?
+ *
+ * Distinct from "the key is missing", and the distinction decides a sign-out.
+ * auth-js chooses its storage once, at construction: localStorage when it is
+ * usable, otherwise a per-tab memory store. So an unreadable localStorage is
+ * not a failed lookup -- it says the tabs were never sharing a session in the
+ * first place.
+ */
+function authStorageReadable(): boolean {
+  try {
+    if (typeof localStorage === 'undefined') return false;
+    localStorage.getItem(authStorageKey() || 'xbar-storage-probe');
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+/*
+ * Is this SIGNED_OUT about a session this tab has already replaced?
  *
  * Reads the persisted record directly rather than calling `getSession()`: this
  * runs inside an `onAuthStateChange` callback, where an await would let the
@@ -310,8 +329,24 @@ function decodeJwtClaims(accessToken = ''): Record<string, unknown> {
  * shape has carried the session under `currentSession` and at the top level
  * across auth-js versions, so both are accepted; anything unparseable counts as
  * absent.
+ *
+ * Three cases, and the third is why a bare `false` on an unreadable store was
+ * wrong. With site storage blocked, auth-js keeps a session PER TAB in memory,
+ * and this codebase supports recovery in that configuration deliberately. Tabs
+ * that never shared a session cannot sign each other out -- so there, another
+ * tab's sign-out is never about this one, and reading the missing key as a
+ * match revoked a good grant every time.
+ *
+ * What that gives up is narrow and bounded: with storage blocked, a sign-out
+ * auth-js raises ON ITS OWN -- a refresh token it can no longer use -- also
+ * stops revoking the grant through this path. The tab keeps a dead session and
+ * a grant it cannot spend, because `updatePassword` re-checks the LIVE session
+ * before it sends anything. A refused submission is a far smaller harm than a
+ * link that was never used being permanently refused, and both local sign-out
+ * paths in this store already record their own spend without this event.
  */
-function persistedSessionMatches(session: Session | null): boolean {
+function signOutIsStale(session: Session | null): boolean {
+  if (!authStorageReadable()) return true;
   if (!session?.access_token) return false;
   const key = authStorageKey();
   if (!key) return false;
@@ -1073,7 +1108,7 @@ export const useCloudStore = create<CloudStore>((set, get) => ({
        * that may still be good is the safe direction, and reviving one that is
        * spent is not.
        */
-      if (event === 'SIGNED_OUT' && persistedSessionMatches(get().session)) return;
+      if (event === 'SIGNED_OUT' && signOutIsStale(get().session)) return;
       const endedRecoveryGrant = event === 'SIGNED_OUT' ? recoveryGrantToken(get().session) : '';
       /*
        * SIGNED_OUT arrives with a null session, so the account whose session

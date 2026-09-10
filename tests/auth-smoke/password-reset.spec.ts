@@ -1813,3 +1813,37 @@ test('a sign-out a newer recovery has already overtaken does not revoke it', asy
   await expect(newPassword(page)).toBeVisible();
   await expect(refusal(page)).toHaveCount(0);
 });
+
+test('a stale sign-out cannot revoke a recovery when site data is blocked', async ({ page }) => {
+  /*
+   * The fence must hold in the configuration where there is nothing to read.
+   *
+   * With site data blocked, auth-js keeps its session PER TAB in memory -- and
+   * this suite already proves recovery works that way. Tabs that never shared a
+   * session cannot sign each other out, so another tab's SIGNED_OUT is never
+   * about this one. Reading the unreachable key as "no stored session, so this
+   * sign-out is current" revoked a perfectly good grant every time, which put
+   * the original defect straight back for exactly the customers who cannot
+   * store anything.
+   */
+  await blockSiteData(page);
+  await stubGoTrueUser(page);
+  await page.goto(recoveryLink());
+  await expect(newPassword(page)).toBeVisible({ timeout: 30_000 });
+
+  /*
+   * The channel is keyed on the storage key, which is a plain string and needs
+   * no storage to compute -- which is the whole point: the broadcast still
+   * arrives when nothing can be read. This build points at
+   * `http://127.0.0.1:<port>`, and supabase-js takes the first hostname label,
+   * so the key is `sb-127-auth-token`. The previous case reads it out of
+   * localStorage instead, which is exactly what is unavailable here.
+   */
+  await page.evaluate(() => {
+    new BroadcastChannel('sb-127-auth-token').postMessage({ event: 'SIGNED_OUT', session: null });
+  });
+
+  await page.waitForTimeout(2500);
+  await expect(newPassword(page)).toBeVisible();
+  await expect(refusal(page)).toHaveCount(0);
+});
