@@ -135,6 +135,17 @@ export default function Login() {
     const tone = result.ok ? 'success' : 'error';
     pushToast({ title, message: result.message, tone });
     setFormMessage({ tone, text: result.message });
+    /*
+     * A fresh attempt supersedes the callback that failed before it, so the
+     * hold on the screen ends here -- on success AND on failure, since either
+     * way the customer has moved on from the message that put it there.
+     *
+     * This is the funnel every auth outcome passes through, which is why it is
+     * the right place: clearing it only where the MODE changes left someone
+     * who simply signed in again stranded on the sign-in screen, watching a
+     * success message, with the redirect still suppressed.
+     */
+    setCallbackFailed(false);
   };
   const rememberEmailPreference = () => {
     if (remember) {

@@ -1,17 +1,19 @@
 import { expect, test, type Page } from '@playwright/test';
 import {
-  blockWebfonts,
-  readStoredAccessToken,
-  refreshStoredSession,
-  sessionIdOf,
-  recoveryLink,
+  RECOVERY_EMAIL,
   RECOVERY_GRANT_KEY,
   RECOVERY_KEY,
+  USER_ID,
+  blockWebfonts,
+  readStoredAccessToken,
+  recoveryLink,
   recoverySpentKeyFor,
   recoveryUpdateClaimKeyFor,
+  refreshStoredSession,
+  refreshedSession,
+  sessionIdOf,
   sessionLink,
   stubGoTrueUser,
-  USER_ID,
   userRecord,
 } from './support.js';
 
@@ -1635,4 +1637,35 @@ test('a rejected callback is still readable when a session is already live', asy
   await page.waitForTimeout(3000);
   await expect(page.getByText('Email link has expired')).toBeVisible();
   expect(new URL(page.url()).pathname).toBe('/app/login');
+});
+
+test('signing in after a failed callback actually leaves the sign-in screen', async ({ page }) => {
+  /*
+   * The hold that keeps a callback failure readable must not outlive it.
+   *
+   * A cancelled consent or expired link parks the customer here with an
+   * explanation, and the redirect is suppressed so the message survives. It
+   * was only released when the MODE changed -- so someone who simply signed in
+   * again sat on the sign-in screen watching "signed in" with the redirect
+   * still held, until they reloaded.
+   */
+  await stubGoTrueUser(page);
+  await page.route('**/auth/v1/token*', (route) =>
+    route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify(refreshedSession('after-failed-callback')),
+    }),
+  );
+
+  await page.goto('/app/login#error=access_denied&error_description=Email+link+has+expired');
+  await expect(page.getByText('Email link has expired')).toBeVisible({ timeout: 30_000 });
+
+  await page.getByLabel('Email').fill(RECOVERY_EMAIL);
+  await page.getByLabel('Password', { exact: true }).fill('a-real-password');
+  await page.getByRole('button', { name: /Sign In/i }).click();
+
+  // Off the sign-in screen. Polled, because the defect is a redirect that is
+  // suppressed rather than one that is slow.
+  await expect.poll(() => new URL(page.url()).pathname, { timeout: 30_000 }).not.toBe('/app/login');
 });
