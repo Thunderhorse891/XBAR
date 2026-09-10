@@ -2,6 +2,14 @@
 --
 -- Applied to xbar-records (uxvwfepyothlakhqazwv) on 2026-09-10,
 -- ledger version 20260910173613. Both guards and validated CHECK verified.
+--
+-- The FILENAME carries that same version deliberately. Supabase takes the
+-- digits before the first underscore as the migration version, so a file named
+-- for a different day is a migration the live ledger has no entry for: history
+-- comparisons disagree, and a later CLI rollout offers this security migration
+-- as still pending. Re-applying it is harmless -- both functions are `create or
+-- replace` and the constraint is dropped if it exists first -- but "pending"
+-- against a project that already has it is a false reading of a security fix.
 -- Other projects: see "How to apply this" at the bottom.
 --
 -- WHY

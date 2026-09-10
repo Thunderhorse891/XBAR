@@ -362,7 +362,7 @@ test('the internal re-grant names exact signatures', () => {
  * what can silently regress in a text file — the empty-token clause going away,
  * or the constraint that makes the row impossible being dropped.
  */
-const FAIL_CLOSED_MIGRATION = '20260909_private_share_token_fail_closed.sql';
+const FAIL_CLOSED_MIGRATION = '20260910173613_private_share_token_fail_closed.sql';
 const schemaPath = path.join(repoRoot, 'supabase', 'production-schema.sql');
 
 test('an empty stored share token authorizes nothing', () => {

@@ -785,7 +785,7 @@ alter table if exists public.shared_listings drop constraint if exists shared_li
 alter table if exists public.shared_listings add constraint shared_listings_private_token_present
   check (coalesce(state, '') = 'Archived' or coalesce(nullif(access_mode, ''), 'Private Token') = 'Public Link' or coalesce(share_token, '') <> '') not valid;
 -- Defer historical validation until invalid private links are repaired; see
--- 20260909_private_share_token_fail_closed.sql. New writes are still checked.
+-- 20260910173613_private_share_token_fail_closed.sql. New writes are still checked.
 alter table if exists public.shared_listings add column if not exists token_issued_at timestamptz not null default timezone('utc', now());
 alter table if exists public.shared_listings add column if not exists published_at timestamptz;
 
@@ -1182,7 +1182,7 @@ begin
 
   -- An empty stored token is not a token to match against: without the first
   -- clause a Private Token listing that never got one resolves for a caller who
-  -- supplies nothing. See migrations/20260909_private_share_token_fail_closed.sql.
+  -- supplies nothing. See migrations/20260910173613_private_share_token_fail_closed.sql.
   if listing_row.access_mode <> 'Public Link'
      and (listing_row.share_token = '' or coalesce(p_share_token, '') <> listing_row.share_token) then
     return null;
@@ -1308,7 +1308,7 @@ begin
 
   -- An empty stored token is not a token to match against: without the first
   -- clause a Private Token listing that never got one resolves for a caller who
-  -- supplies nothing. See migrations/20260909_private_share_token_fail_closed.sql.
+  -- supplies nothing. See migrations/20260910173613_private_share_token_fail_closed.sql.
   if listing_row.access_mode <> 'Public Link'
      and (listing_row.share_token = '' or coalesce(p_share_token, '') <> listing_row.share_token) then
     return;

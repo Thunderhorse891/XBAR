@@ -217,7 +217,7 @@ own:
    so a re-subscription completed in the same second as a cancellation is not
    thrown away. Additive: one nullable column, one index, one
    function, no backfill.
-6. `20260909_private_share_token_fail_closed.sql` — **security**, and the only
+6. `20260910173613_private_share_token_fail_closed.sql` — **security**, and the only
    one here that closes an exposure rather than preventing a billing fault. A
    `Private Token` listing whose stored token is empty — which is what the
    column defaults produce — resolved for any caller who knew only the
@@ -281,7 +281,7 @@ psql "$DATABASE_URL" -f supabase/migrations/20260827_subscription_event_ordering
 # 6. private share token fail-closed — the security one. Additive: two function
 #    replacements and one CHECK added NOT VALID, so it cannot fail on rows that
 #    already exist.
-psql "$DATABASE_URL" -f supabase/migrations/20260909_private_share_token_fail_closed.sql
+psql "$DATABASE_URL" -f supabase/migrations/20260910173613_private_share_token_fail_closed.sql
 # 6a. The migration validates the constraint ONLY if no offending row exists,
 #     and otherwise raises a warning naming the count. Read that warning. New
 #     inserts and updates are checked either way, and the patched functions

@@ -195,7 +195,7 @@ names the query or advisor it came from so it can be re-run and disagreed with.
   `migrations/20260822_restrict_anon_rpc_surface.sql`. Both are the buyer share
   flow and are meant to stay reachable. **The private-token fail-open was closed
   on this project on September 10 by
-  `migrations/20260909_private_share_token_fail_closed.sql`** — see the current
+  `migrations/20260910173613_private_share_token_fail_closed.sql`** — see the current
   verification above. The file retains the historical explanation of the flaw.
   The migration leaves the constraint `NOT VALID` if older invalid rows exist;
   new inserts and updates are still checked and the patched RPCs deny those old
