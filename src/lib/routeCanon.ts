@@ -95,6 +95,35 @@ function deploymentBase(): string {
   return base.endsWith('/') ? base.slice(0, -1) : base;
 }
 
+/**
+ * Where a FAILED auth callback has to be sent under the HASH router.
+ *
+ * The success path is fine: the link loads the shell, auth-js consumes
+ * `#access_token=...`, and PASSWORD_RECOVERY carries the customer to the reset
+ * screen from inside the app.
+ *
+ * A rejected link -- expired, already used -- comes back as `#error=...`
+ * instead. auth-js stops before clearing that fragment and emits no
+ * PASSWORD_RECOVERY, so nothing navigates; and on a hash router the fragment
+ * IS the route, so `#error=access_denied` is read as a path, matches nothing,
+ * and the customer is shown the not-found screen. The one moment they need
+ * "this link has expired, request another" is the moment the app pretends the
+ * page does not exist.
+ *
+ * Returns the fragment to put in its place, or '' to leave the URL alone.
+ * Anything carrying `access_token` is left ALONE deliberately: rewriting it
+ * would take the token away from auth-js before it could read it, turning a
+ * working reset into a broken one.
+ */
+const AUTH_FAILURE_FRAGMENT = /(^|&)error(_code|_description)?=/;
+
+export function hashAuthFailureRoute(hash: string, resetPath: string = passwordResetPath): string {
+  const fragment = hash.startsWith('#') ? hash.slice(1) : hash;
+  // Already a route, empty, or a successful callback: nothing to do.
+  if (!fragment || fragment.startsWith('/') || fragment.includes('access_token=')) return '';
+  return AUTH_FAILURE_FRAGMENT.test(fragment) ? `#${resetPath}` : '';
+}
+
 export function authRedirectUrl(path: string, origin?: string, basePath: string = deploymentBase()): string {
   const base = origin ?? (typeof window !== 'undefined' ? window.location.origin : '');
   const route = path.startsWith('/') ? path : `/${path}`;

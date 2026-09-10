@@ -6,7 +6,7 @@ import ErrorBoundary from './components/ErrorBoundary';
 import { InteractionBootstrap } from './components/InteractionBootstrap';
 import { registerGlobalErrorHandlers } from './lib/globalErrorHandlers';
 import { registerOfflineRuntime } from './lib/offlineRuntime';
-import { appBasePath, usesHashRouting } from './lib/routeCanon';
+import { appBasePath, hashAuthFailureRoute, usesHashRouting } from './lib/routeCanon';
 import './index.css';
 import './styles/motion.css';
 import './mobilePolish.css';
@@ -19,6 +19,20 @@ import './mobilePolish.css';
 if (!usesHashRouting() && !window.location.pathname.startsWith(appBasePath)) {
   const { pathname, search, hash } = window.location;
   window.location.replace(`${appBasePath}${pathname === '/' ? '' : pathname}${search}${hash}`);
+}
+
+/*
+ * A rejected recovery link under the hash router comes back as `#error=...`,
+ * which the router would read as a path and answer with the not-found screen.
+ * Put the reset route there instead, BEFORE the router is created, so the
+ * customer gets the expired-link guidance and a way back to sign-in.
+ * `hashAuthFailureRoute` leaves a successful callback's fragment untouched.
+ */
+if (usesHashRouting()) {
+  const failureRoute = hashAuthFailureRoute(window.location.hash);
+  if (failureRoute) {
+    window.history.replaceState(null, '', `${window.location.pathname}${window.location.search}${failureRoute}`);
+  }
 }
 
 const rootElement = document.getElementById('root');

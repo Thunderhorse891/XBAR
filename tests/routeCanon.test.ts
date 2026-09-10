@@ -2,7 +2,12 @@ import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import path from 'node:path';
 import test from 'node:test';
-import { canonicalRoutes, legacyRouteRedirects } from '../src/lib/routeCanon.js';
+import {
+  canonicalRoutes,
+  hashAuthFailureRoute,
+  legacyRouteRedirects,
+  passwordResetPath,
+} from '../src/lib/routeCanon.js';
 
 const canonicalSet = new Set(Object.values(canonicalRoutes));
 const repoRoot = process.cwd();
@@ -96,4 +101,36 @@ test('active user-facing surfaces use plain product language', () => {
       `${filePath} should use Horses, Documents, Buyer follow-up, and Sale Packets language`,
     );
   }
+});
+
+test('a rejected auth callback under the hash router becomes a routable reset', () => {
+  /*
+   * auth-js leaves an `#error=...` fragment in place and emits no
+   * PASSWORD_RECOVERY, so nothing navigates -- and on a hash router that
+   * fragment is the route, so the customer met the not-found screen at exactly
+   * the moment they needed "this link has expired".
+   */
+  assert.equal(
+    hashAuthFailureRoute('#error=access_denied&error_code=otp_expired&error_description=Email+link+is+invalid'),
+    `#${passwordResetPath}`,
+  );
+  assert.equal(hashAuthFailureRoute('#error_code=otp_expired'), `#${passwordResetPath}`);
+});
+
+test('a successful auth callback keeps its fragment, so auth-js can read the token', () => {
+  // Rewriting this would take the token away before auth-js sees it, turning a
+  // working reset into a broken one.
+  assert.equal(hashAuthFailureRoute('#access_token=abc&type=recovery'), '');
+  // Even alongside an error param, a token present means auth-js still has
+  // work to do here.
+  assert.equal(hashAuthFailureRoute('#access_token=abc&error=whatever'), '');
+});
+
+test('ordinary hash routes and empty fragments are left alone', () => {
+  assert.equal(hashAuthFailureRoute('#/horses'), '');
+  assert.equal(hashAuthFailureRoute('#/reset-password'), '');
+  assert.equal(hashAuthFailureRoute(''), '');
+  assert.equal(hashAuthFailureRoute('#'), '');
+  // A route that merely mentions the word is not an auth failure.
+  assert.equal(hashAuthFailureRoute('#/errors'), '');
 });
