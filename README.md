@@ -176,6 +176,14 @@ both deployed token guards and the validated constraint were checked afterward.
 Do not rerun the billing data reconciliation merely because this checklist exists.
 Migration history establishes recorded execution, not a successful customer checkout.
 
+**Five migrations in `supabase/migrations/` still declare themselves NOT YET
+APPLIED in their own headers — steps 1–5 below.** That contradicts the ledger
+reading recorded above. The header is the only source that cannot drift from the
+file it describes, so the runbook counts headers, not prose: whoever confirmed
+the September 4 ledger should update those five the way step 6's was updated,
+and this count will follow them. Until then, treat 1–5 as unapplied for any
+project you have not checked yourself.
+
 For another project, check its migration history first. The order matters, and it is carried by
 the version prefixes rather than by convention — Supabase takes the digits
 before the first underscore as the migration version, so each file needs its
