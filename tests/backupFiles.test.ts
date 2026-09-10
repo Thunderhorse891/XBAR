@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import { readFile } from 'node:fs/promises';
+import { readdir, readFile } from 'node:fs/promises';
 import test from 'node:test';
 
 import {
@@ -2633,7 +2633,39 @@ test('the migration runbook lists every migration the code requires', async () =
   // The apply commands, not merely the prose list: a reader following the code
   // block is the case that goes wrong.
   assert.match(readme, /psql "\$DATABASE_URL" -f supabase\/migrations\/20260827_subscription_event_ordering\.sql/);
-  assert.match(readme, /Five migrations in `supabase\/migrations\/`/, 'the count must match the list');
+  /*
+   * The count and the list were BOTH stale: the runbook said five and
+   * enumerated five while six unapplied migrations existed, so an operator
+   * could follow it to the end and leave a security fix unapplied. Pinning the
+   * literal word is what let that happen, so it is derived now.
+   *
+   * A migration declares its own state in its header, which is the only source
+   * that cannot drift from the file it describes.
+   */
+  const migrationDir = 'supabase/migrations';
+  const pending: string[] = [];
+  for (const file of (await readdir(migrationDir)).filter((name) => name.endsWith('.sql')).sort()) {
+    const sql = await readFile(`${migrationDir}/${file}`, 'utf8');
+    if (/NOT (YET )?APPLIED/i.test(sql)) pending.push(file);
+  }
+  assert.ok(pending.length > 0, 'the pending set must be discoverable, or this guard proves nothing');
+
+  const counted = ['zero', 'one', 'Two', 'Three', 'Four', 'Five', 'Six', 'Seven', 'Eight', 'Nine', 'Ten'];
+  assert.match(
+    readme,
+    new RegExp(`${counted[pending.length]} migrations in \`supabase\\/migrations\\/\``),
+    `the runbook's count must match the ${pending.length} migrations that declare themselves unapplied`,
+  );
+  for (const file of pending) {
+    assert.ok(readme.includes(file), `the runbook must list ${file}, which declares itself unapplied`);
+    assert.match(
+      readme,
+      new RegExp(
+        `psql "\\$(?:STAGING_)?DATABASE_URL" \\\\?\\s*(?:[\\s\\S]{0,400}?)-f supabase/migrations/${file.replace(/\./g, '\\.')}`,
+      ),
+      `the runbook must give an apply command for ${file}, not only mention it`,
+    );
+  }
 
   /*
    * The migration that REVOKES is the one an operator can silently skip. The

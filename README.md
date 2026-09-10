@@ -169,7 +169,7 @@ reported, never faked.
 
 ### Pending Supabase migrations (not applied)
 
-Five migrations in `supabase/migrations/` are written and reviewed but have
+Six migrations in `supabase/migrations/` are written and reviewed but have
 **not** been run against any project. The order matters, and it is carried by
 the version prefixes rather than by convention — Supabase takes the digits
 before the first underscore as the migration version, so each file needs its
@@ -203,6 +203,15 @@ own:
    so a re-subscription completed in the same second as a cancellation is not
    thrown away. Additive: one nullable column, one index, one
    function, no backfill.
+6. `20260909_private_share_token_fail_closed.sql` — **security**, and the only
+   one here that closes an exposure rather than preventing a billing fault. A
+   `Private Token` listing whose stored token is empty — which is what the
+   column defaults produce — resolved for any caller who knew only the
+   `share_path`, handing over the horse payload, its documents and its
+   ownership record. Patches `xbar_resolve_public_listing_legacy` and
+   `xbar_track_public_share_view`, and adds a CHECK so no such row can be
+   created again. Order does not matter relative to the others; it shares
+   nothing with them.
 
 Apply them **one at a time**, not with a single `supabase db push`. That command
 applies every pending migration in one go, which would run the data
@@ -254,6 +263,28 @@ psql "$DATABASE_URL" -f supabase/migrations/20260826_checkout_session_lock.sql
 
 # 5. billing event ordering — additive, safe to apply directly
 psql "$DATABASE_URL" -f supabase/migrations/20260827_subscription_event_ordering.sql
+
+# 6. private share token fail-closed — the security one. Additive: two function
+#    replacements and one CHECK added NOT VALID, so it cannot fail on rows that
+#    already exist.
+psql "$DATABASE_URL" -f supabase/migrations/20260909_private_share_token_fail_closed.sql
+# 6a. The migration validates the constraint ONLY if no offending row exists,
+#     and otherwise raises a warning naming the count. Read that warning. New
+#     inserts and updates are checked either way, and the patched functions
+#     already deny the old links, so there is no rush — but the constraint is
+#     not fully enforced until it is validated.
+# 6b. Clean up any offending rows with the owner's authorization, then validate
+#     separately. Archiving is exempt from the CHECK and is the safer of the
+#     two paths: re-issuing hands a broken share a WORKING token on the way to
+#     retiring it, which is the one outcome this fix exists to prevent. Do not
+#     delete listings or make them public merely to pass validation.
+#       alter table public.shared_listings validate constraint <name>;
+# 6c. Prove it on a throwaway database rather than trusting the diff. Load the
+#     migrated function shape, then:
+#       psql "$THROWAWAY_URL" -f supabase/checks/share-token-fail-closed.sql
+#     Expect: no token refused, wrong token refused, correct token resolved,
+#     public link resolved. Anything else, including BOTH controls refusing,
+#     means the check did not exercise what it claims — see its header.
 ```
 
 **(4) and (5) are prerequisites for billing, not optimizations to schedule
