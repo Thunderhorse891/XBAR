@@ -13,6 +13,7 @@ export const appBasePath = '/app';
 
 /** Where a Supabase password-recovery link returns the customer. */
 export const passwordResetPath = '/reset-password';
+export const loginPath = '/login';
 
 export const canonicalRoutes = {
   horses: '/horses',
@@ -99,29 +100,39 @@ function deploymentBase(): string {
  * Where a FAILED auth callback has to be sent under the HASH router.
  *
  * The success path is fine: the link loads the shell, auth-js consumes
- * `#access_token=...`, and PASSWORD_RECOVERY carries the customer to the reset
- * screen from inside the app.
+ * `#access_token=...`, and the flow's own event carries the customer onwards.
  *
- * A rejected link -- expired, already used -- comes back as `#error=...`
- * instead. auth-js stops before clearing that fragment and emits no
- * PASSWORD_RECOVERY, so nothing navigates; and on a hash router the fragment
- * IS the route, so `#error=access_denied` is read as a path, matches nothing,
- * and the customer is shown the not-found screen. The one moment they need
- * "this link has expired, request another" is the moment the app pretends the
- * page does not exist.
+ * A rejected callback comes back as `#error=...` instead. auth-js stops before
+ * clearing that fragment and emits nothing, so nothing navigates; and on a
+ * hash router the fragment IS the route, so `#error=access_denied` is read as
+ * a path, matches nothing, and the customer is shown the not-found screen at
+ * the moment they most need to be told what went wrong.
+ *
+ * It goes to SIGN-IN, not to the reset screen. The fragment carries no flow
+ * marker -- a cancelled OAuth consent, an expired signup confirmation, a
+ * rejected magic link and a dead recovery link are indistinguishable in it --
+ * so sending them all to the reset screen answered three of the four with
+ * password-reset instructions that had nothing to do with what they were
+ * doing. Sign-in is the one destination that is right for all of them, and it
+ * is where the reset screen's own guidance sends people anyway. The reason
+ * travels in `authError` so the screen can say it rather than leaving the
+ * customer to guess.
  *
  * Returns the fragment to put in its place, or '' to leave the URL alone.
  * Anything carrying `access_token` is left ALONE deliberately: rewriting it
  * would take the token away from auth-js before it could read it, turning a
- * working reset into a broken one.
+ * working callback into a broken one.
  */
 const AUTH_FAILURE_FRAGMENT = /(^|&)error(_code|_description)?=/;
 
-export function hashAuthFailureRoute(hash: string, resetPath: string = passwordResetPath): string {
+export function hashAuthFailureRoute(hash: string, signInPath: string = loginPath): string {
   const fragment = hash.startsWith('#') ? hash.slice(1) : hash;
   // Already a route, empty, or a successful callback: nothing to do.
   if (!fragment || fragment.startsWith('/') || fragment.includes('access_token=')) return '';
-  return AUTH_FAILURE_FRAGMENT.test(fragment) ? `#${resetPath}` : '';
+  if (!AUTH_FAILURE_FRAGMENT.test(fragment)) return '';
+  const params = new URLSearchParams(fragment);
+  const reason = params.get('error_description') || params.get('error_code') || params.get('error') || '';
+  return reason ? `#${signInPath}?authError=${encodeURIComponent(reason)}` : `#${signInPath}`;
 }
 
 export function authRedirectUrl(path: string, origin?: string, basePath: string = deploymentBase()): string {

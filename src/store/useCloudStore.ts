@@ -633,7 +633,24 @@ function completeRecoveryUpdateClaim(claim: RecoveryUpdateClaim) {
    * account rather than none. See recoveryGrantToken on when that happens.
    */
   recordSpentRecoveryGrant(claim.userId, claim.grantToken);
-  recordSpentRecoveryUser(claim.userId, claim.grantToken);
+
+  /*
+   * The account marker moves only if it still names THIS claim.
+   *
+   * It holds one generation, and an update that finishes after a newer link
+   * has been validated would otherwise replace `active:B` with `spent:A`. The
+   * immediate harm is nil -- B's own grant id still differs, so B's form
+   * survives -- but B's displacement is then unrecorded anywhere: spending a
+   * later link C revokes only A and C, and an unloaded tab still holding B can
+   * restore its authorization against an ordinary same-account session.
+   *
+   * The permanent per-grant record above is unconditional, so A stays spent
+   * either way. This only decides what the single account slot says.
+   */
+  const marker = readRecoveryUserMarker(claim.userId);
+  if (!marker?.grantToken || marker.grantToken === claim.grantToken) {
+    recordSpentRecoveryUser(claim.userId, claim.grantToken);
+  }
   clearRecoveryUpdateClaim(claim);
 }
 

@@ -176,21 +176,48 @@ test('@auth an account with no password still has a way into the store build', a
  * nothing. They come with their own changes.
  */
 
-test('@auth a rejected recovery link explains itself instead of showing not-found', async ({ page }) => {
+test('@auth a rejected auth callback lands on sign-in with the reason, not not-found', async ({ page }) => {
   /*
    * This bundle is the only hash-routing build there is, which is why the case
    * lives here.
    *
-   * An expired or already-used link comes back as `#error=...`. auth-js stops
-   * before clearing that fragment and emits no PASSWORD_RECOVERY, so nothing
-   * navigates -- and on a hash router the fragment IS the route, so it matched
-   * nothing and the customer was shown "Page not found" at exactly the moment
-   * they needed to be told the link had expired and how to get another.
+   * An expired link, a cancelled OAuth consent and a rejected magic link all
+   * come back as `#error=...`. auth-js stops before clearing that fragment and
+   * emits nothing, so nothing navigates -- and on a hash router the fragment
+   * IS the route, so it matched nothing and the customer was shown "Page not
+   * found" at the moment they most needed to be told what went wrong.
+   *
+   * Sign-in rather than the reset screen: the fragment says nothing about
+   * which flow it belonged to, so answering all of them with password-reset
+   * instructions was wrong for three cases out of four.
    */
   await page.goto('/#error=access_denied&error_code=otp_expired&error_description=Email+link+has+expired');
 
-  await expect(page.getByText(/This page needs a current password-reset link/)).toBeVisible({ timeout: 30_000 });
+  await expect(page.getByText('Email link has expired')).toBeVisible({ timeout: 30_000 });
   await expect(page.getByText('Page not found')).toHaveCount(0);
-  // And a way onwards, not a dead end.
-  await expect(page.getByRole('button', { name: 'Back to sign in' })).toBeVisible();
+  // On the sign-in screen, with a way onwards rather than a dead end.
+  await expect(page.getByLabel('Email')).toBeVisible();
+});
+
+test('@auth the sign-in screen still renders when site data is blocked', async ({ page }) => {
+  /*
+   * `remember me` was read straight from localStorage in a `useState`
+   * initializer -- during RENDER. Reaching for it throws outright in a browser
+   * configured to block site data, so the error boundary replaced the first
+   * screen a customer ever sees. An earlier fix covered four such call sites
+   * and did not reach this one, because the case it was tested against was the
+   * reset screen.
+   */
+  await page.addInitScript(() => {
+    Object.defineProperty(window, 'localStorage', {
+      configurable: true,
+      get() {
+        throw new DOMException('Access to storage is not allowed from this context.', 'SecurityError');
+      },
+    });
+  });
+
+  await page.goto('/#/login');
+  await expect(page.getByLabel('Email')).toBeVisible({ timeout: 30_000 });
+  await expect(page.getByText('This screen hit a runtime problem')).toHaveCount(0);
 });

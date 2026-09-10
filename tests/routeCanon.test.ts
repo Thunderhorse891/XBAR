@@ -2,12 +2,7 @@ import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import path from 'node:path';
 import test from 'node:test';
-import {
-  canonicalRoutes,
-  hashAuthFailureRoute,
-  legacyRouteRedirects,
-  passwordResetPath,
-} from '../src/lib/routeCanon.js';
+import { canonicalRoutes, hashAuthFailureRoute, legacyRouteRedirects, loginPath } from '../src/lib/routeCanon.js';
 
 const canonicalSet = new Set(Object.values(canonicalRoutes));
 const repoRoot = process.cwd();
@@ -103,18 +98,25 @@ test('active user-facing surfaces use plain product language', () => {
   }
 });
 
-test('a rejected auth callback under the hash router becomes a routable reset', () => {
+test('a rejected auth callback under the hash router becomes a routable sign-in', () => {
   /*
-   * auth-js leaves an `#error=...` fragment in place and emits no
-   * PASSWORD_RECOVERY, so nothing navigates -- and on a hash router that
-   * fragment is the route, so the customer met the not-found screen at exactly
-   * the moment they needed "this link has expired".
+   * auth-js leaves an `#error=...` fragment in place and emits nothing, so
+   * nothing navigates -- and on a hash router that fragment is the route, so
+   * the customer met the not-found screen at exactly the moment they needed to
+   * be told what went wrong.
+   *
+   * Sign-in rather than the reset screen: the fragment carries no flow marker,
+   * so a cancelled OAuth consent and a dead recovery link look identical here,
+   * and answering the first three of four with password-reset instructions was
+   * worse than saying nothing.
    */
   assert.equal(
     hashAuthFailureRoute('#error=access_denied&error_code=otp_expired&error_description=Email+link+is+invalid'),
-    `#${passwordResetPath}`,
+    `#${loginPath}?authError=Email%20link%20is%20invalid`,
   );
-  assert.equal(hashAuthFailureRoute('#error_code=otp_expired'), `#${passwordResetPath}`);
+  // The reason travels, whichever key carries it.
+  assert.equal(hashAuthFailureRoute('#error_code=otp_expired'), `#${loginPath}?authError=otp_expired`);
+  assert.equal(hashAuthFailureRoute('#error=access_denied'), `#${loginPath}?authError=access_denied`);
 });
 
 test('a successful auth callback keeps its fragment, so auth-js can read the token', () => {

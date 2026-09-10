@@ -11,6 +11,7 @@ import { useXbarStore } from '@/store/useXbarStore';
 import './cleanEntryExperience.css';
 import { canPresentThirdPartySignIn, canPresentPurchaseFlow } from '@/lib/nativePlatform';
 import { presentableOAuthProviders } from '@/lib/authProviders';
+import { readBrowserStorage, removeBrowserStorage, writeBrowserStorage } from '@/lib/browserStorage';
 
 type AuthMode = 'signin' | 'signup';
 type BusyState = 'password' | 'google' | 'facebook' | 'apple' | 'reset' | 'code' | 'verify' | 'resend' | '';
@@ -25,9 +26,13 @@ export default function Login() {
   const pushToast = useUiStore((state) => state.pushToast);
   const cloud = useCloudStore();
   const setUpWorkspace = useXbarStore((state) => state.initializeWorkspace);
-  const [email, setEmail] = useState(() => localStorage.getItem('xbar-remembered-email') ?? '');
+  // Read through the reporting helpers: these run during RENDER, and reaching
+  // for localStorage throws outright in a browser with site data blocked -- so
+  // an unguarded read here replaced the sign-in screen, the first thing a
+  // customer sees, with the error boundary.
+  const [email, setEmail] = useState(() => readBrowserStorage('xbar-remembered-email') ?? '');
   const [password, setPassword] = useState('');
-  const [remember, setRemember] = useState(() => localStorage.getItem('xbar-remember-me') === 'true');
+  const [remember, setRemember] = useState(() => readBrowserStorage('xbar-remember-me') === 'true');
   const [showPassword, setShowPassword] = useState(false);
   const [busy, setBusy] = useState<BusyState>('');
   const [formMessage, setFormMessage] = useState<FormMessage | null>(null);
@@ -81,6 +86,23 @@ export default function Login() {
   }, [cloud.session, cloud.status, navigate, redirectTarget]);
 
   /*
+   * A callback that failed before it could produce a session.
+   *
+   * Under the hash router the fragment is the route, so `#error=...` reaches
+   * no screen at all without the rewrite in main.tsx; it arrives here as
+   * `authError` instead. It is cleared once read, or a reload would keep
+   * re-announcing a failure the customer has already dealt with.
+   */
+  useEffect(() => {
+    const authError = params.get('authError');
+    if (!authError) return;
+    setFormMessage({ tone: 'error', text: authError });
+    const next = new URLSearchParams(params);
+    next.delete('authError');
+    setParams(next, { replace: true });
+  }, [params, setParams]);
+
+  /*
    * Every auth outcome has to land in the form, not only in a toast.
    *
    * Toasts are transient and live in a corner: a customer who mistypes a
@@ -96,17 +118,17 @@ export default function Login() {
   };
   const rememberEmailPreference = () => {
     if (remember) {
-      localStorage.setItem('xbar-remember-me', 'true');
-      localStorage.setItem('xbar-remembered-email', email);
+      writeBrowserStorage('xbar-remember-me', 'true');
+      writeBrowserStorage('xbar-remembered-email', email);
     } else {
-      localStorage.removeItem('xbar-remember-me');
-      localStorage.removeItem('xbar-remembered-email');
+      removeBrowserStorage('xbar-remember-me');
+      removeBrowserStorage('xbar-remembered-email');
     }
   };
 
   const markLocalWorkspaceIntent = () => {
-    localStorage.setItem('xbar-command-center-entry', 'true');
-    if (selectedPlan) localStorage.setItem('xbar-local-plan-intent', selectedPlan);
+    writeBrowserStorage('xbar-command-center-entry', 'true');
+    if (selectedPlan) writeBrowserStorage('xbar-local-plan-intent', selectedPlan);
     void trackRuntimeEvent(
       productEvent(productEventNames.localWorkspaceEntered, {
         selectedPlan: selectedPlan || undefined,

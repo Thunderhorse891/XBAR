@@ -1532,3 +1532,65 @@ test('a full storage quota does not wedge a reset behind a stale claim', async (
   await expect(page.getByText('Password updated. You are signed in.').first()).toBeVisible({ timeout: 30_000 });
   expect(updates).toBe(1);
 });
+
+test('a completion that lands after a newer link cannot erase that link from the record', async ({ context }) => {
+  /*
+   * The account marker holds ONE generation, and an update that finishes after
+   * a newer link has been validated used to replace `active:B` with `spent:A`.
+   *
+   * Nothing breaks immediately -- B's grant id still differs from A's, so B's
+   * own form survives. What is lost is the RECORD that B is the current
+   * generation, so when a later link C displaces it, C revokes A (again) and
+   * never B. A tab still holding B then comes back to a live form.
+   *
+   * A's request has to be in flight BEFORE B is validated, because validating
+   * B revokes A -- so it is held open, which is also what a slow network does.
+   */
+  const tabA = await context.newPage();
+  const tabB = await context.newPage();
+  const tabC = await context.newPage();
+
+  let releaseA: (() => void) | undefined;
+  const aInFlight = new Promise<void>((resolve) => {
+    releaseA = resolve;
+  });
+  await stubGoTrueUser(tabA, async (route) => {
+    await aInFlight;
+    await route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(userRecord()) });
+  });
+  await stubGoTrueUser(tabB);
+  await stubGoTrueUser(tabC);
+
+  const linkA = recoveryLink();
+  const linkB = recoveryLink();
+  const linkC = recoveryLink();
+
+  await tabA.goto(linkA);
+  await expect(newPassword(tabA)).toBeVisible({ timeout: 30_000 });
+  await fillNewPassword(tabA, 'first-link-password');
+  // Sent, and held by GoTrue rather than answered.
+  await submit(tabA).click();
+
+  await tabB.goto(linkB);
+  await expect(newPassword(tabB)).toBeVisible({ timeout: 30_000 });
+
+  // Now A settles, late.
+  releaseA?.();
+  await expect(tabA.getByText('Password updated. You are signed in.').first()).toBeVisible({ timeout: 30_000 });
+
+  // B's holder goes elsewhere, so only the written record can speak for it.
+  await tabB.goto('/');
+
+  // A third link arrives and is completed. It must be able to find B and end
+  // it -- which it can only do if the marker still said B was current.
+  await tabC.goto(linkC);
+  await expect(newPassword(tabC)).toBeVisible({ timeout: 30_000 });
+  await fillNewPassword(tabC, 'third-link-password');
+  await submit(tabC).click();
+  await expect(tabC.getByText('Password updated. You are signed in.').first()).toBeVisible({ timeout: 30_000 });
+
+  // B comes back to a link that has been superseded twice over.
+  await tabB.goto('/app/reset-password');
+  await expect(refusal(tabB)).toBeVisible({ timeout: 30_000 });
+  await expect(newPassword(tabB)).toHaveCount(0);
+});
