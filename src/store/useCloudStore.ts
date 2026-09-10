@@ -890,8 +890,29 @@ export const useCloudStore = create<CloudStore>((set, get) => ({
       });
     };
 
-    const syncSessionState = async (session: Session | null, initialized = false) => {
-      const isStillLatest = syncGate.begin();
+    const syncSessionState = async (session: Session | null, initialized = false, reservedTicket?: () => boolean) => {
+      /*
+       * The bootstrap reserves its ticket BEFORE awaiting getSession and hands
+       * it in here; everything else takes one on the way in.
+       *
+       * Taking it here in every case was wrong for exactly one caller. The
+       * bootstrap's ticket was issued only once getSession had RESOLVED, so an
+       * event arriving during that await retired a ticket that did not exist
+       * yet, and the bootstrap then took a newer one and overwrote the newer
+       * event with the older snapshot -- a cross-tab sign-out during startup
+       * undone by the session that had already ended.
+       */
+      const isStillLatest = reservedTicket ?? syncGate.begin();
+
+      /*
+       * Superseded before this even began. Nothing here may write, including
+       * the identity publication below, which would otherwise announce an
+       * account that has already been replaced.
+       */
+      if (!isStillLatest()) {
+        if (initialized) set({ initialized: true });
+        return;
+      }
 
       if (!session) {
         set({
@@ -1111,19 +1132,30 @@ export const useCloudStore = create<CloudStore>((set, get) => ({
      * registered before anything is awaited: the answer to a missed
      * notification is to be listening earlier, not to believe the URL instead.
      */
+    /*
+     * Reserved before the await, so an event arriving DURING it can retire
+     * this snapshot rather than being overwritten by it.
+     */
+    const bootstrapIsLatest = syncGate.begin();
     const { data, error } = await client.auth.getSession();
     if (error) {
-      set({
-        initialized: true,
-        status: 'signed-out',
-        authReady: true,
-        workspaceReady: true,
-        session: null,
-        workspaceId: '',
-        workspaceRole: 'Owner',
-      });
+      // Even a failure must not speak for an account a newer event has
+      // already replaced; the latch still releases the app either way.
+      if (bootstrapIsLatest()) {
+        set({
+          initialized: true,
+          status: 'signed-out',
+          authReady: true,
+          workspaceReady: true,
+          session: null,
+          workspaceId: '',
+          workspaceRole: 'Owner',
+        });
+      } else {
+        set({ initialized: true });
+      }
     } else {
-      await syncSessionState(data.session, true);
+      await syncSessionState(data.session, true, bootstrapIsLatest);
     }
     bootstrapped = true;
 
