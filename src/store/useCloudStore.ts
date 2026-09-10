@@ -1,7 +1,8 @@
 import { create } from 'zustand';
 import type { Session } from '@supabase/supabase-js';
 import { loadWorkspaceAccessProfile } from '@/lib/cloudWorkspace';
-import { getSupabaseClient } from '@/lib/supabaseClient';
+import { authStorageKey, getSupabaseClient } from '@/lib/supabaseClient';
+import { readBrowserStorage } from '@/lib/browserStorage';
 import {
   buildPasswordUpdateRequest,
   readPasswordUpdateError,
@@ -300,6 +301,33 @@ function decodeJwtClaims(accessToken = ''): Record<string, unknown> {
  * the direction to fail in. Every GoTrue token issued by a recovery link
  * carries `session_id`; this is the answer for tokens that somehow do not.
  */
+/*
+ * Does auth-js still hold the session this tab believes it has?
+ *
+ * Reads the persisted record directly rather than calling `getSession()`: this
+ * runs inside an `onAuthStateChange` callback, where an await would let the
+ * writes that follow reorder against the very events being fenced. The stored
+ * shape has carried the session under `currentSession` and at the top level
+ * across auth-js versions, so both are accepted; anything unparseable counts as
+ * absent.
+ */
+function persistedSessionMatches(session: Session | null): boolean {
+  if (!session?.access_token) return false;
+  const key = authStorageKey();
+  if (!key) return false;
+  const raw = readBrowserStorage(key);
+  if (!raw) return false;
+  try {
+    const parsed: unknown = JSON.parse(raw);
+    if (!parsed || typeof parsed !== 'object') return false;
+    const record = parsed as { access_token?: unknown; currentSession?: { access_token?: unknown } };
+    const stored = record.currentSession?.access_token ?? record.access_token;
+    return typeof stored === 'string' && stored === session.access_token;
+  } catch {
+    return false;
+  }
+}
+
 function recoveryGrantToken(session: Session | null): string {
   if (!session) return '';
   const claims = decodeJwtClaims(session.access_token);
@@ -1022,6 +1050,30 @@ export const useCloudStore = create<CloudStore>((set, get) => ({
     // A tab opened after recovery still knows the account it later signs out.
     let lastAuthUserId = get().session?.user.id ?? '';
     const { data: subscription } = client.auth.onAuthStateChange((event, session) => {
+      /*
+       * A SIGNED_OUT that a newer sign-in has already overtaken.
+       *
+       * auth-js broadcasts SIGNED_OUT to every tab, and the receiving tab's
+       * handler is `_notifyAllSubscribers(event, session, false)` -- it does
+       * NOT remove that tab's session. So a sign-out in tab A, delivered after
+       * tab B has validated a NEW recovery link for the same account, arrived
+       * here describing a session B no longer has, and B revoked its own valid
+       * grant permanently: a link that was never used, reported as already
+       * used, with no way back except another email.
+       *
+       * The event carries no session -- that is why `lastAuthUserId` exists --
+       * so the discriminator is what auth-js has PERSISTED. `signOut()` awaits
+       * `_removeSession()` before it notifies, so in the tab that really signed
+       * out, and in any tab whose session that sign-out actually ended, the
+       * stored session is gone by the time this runs. A stored session still
+       * matching the one this tab holds therefore means this event is about an
+       * older one.
+       *
+       * An unreadable store reads as absent, which revokes: refusing a grant
+       * that may still be good is the safe direction, and reviving one that is
+       * spent is not.
+       */
+      if (event === 'SIGNED_OUT' && persistedSessionMatches(get().session)) return;
       const endedRecoveryGrant = event === 'SIGNED_OUT' ? recoveryGrantToken(get().session) : '';
       /*
        * SIGNED_OUT arrives with a null session, so the account whose session

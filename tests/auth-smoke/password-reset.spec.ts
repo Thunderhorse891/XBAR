@@ -1776,3 +1776,40 @@ test('switching modes after a failed callback does not carry the old account thr
   await page.waitForTimeout(2500);
   expect(new URL(page.url()).pathname).toBe('/app/login');
 });
+
+test('a sign-out a newer recovery has already overtaken does not revoke it', async ({ page }) => {
+  /*
+   * auth-js broadcasts SIGNED_OUT to every tab, and the RECEIVING tab's handler
+   * is `_notifyAllSubscribers(event, session, false)` -- it does not remove that
+   * tab's session. So a sign-out in another tab, delivered after this one has
+   * validated a NEW recovery link, arrived describing a session this tab no
+   * longer has, and this tab permanently recorded its own unused grant as
+   * spent: the customer's link reported as already used, with no way back
+   * except another email.
+   *
+   * The broadcast is posted directly on auth-js's own channel, which is keyed
+   * on the storage key -- that is the real delivery path, not a simulation of
+   * one, and it is what makes the event genuinely STALE: nothing has touched
+   * the stored session, exactly as when the sign-out happened before this
+   * recovery existed.
+   */
+  await stubGoTrueUser(page);
+  await page.goto(recoveryLink());
+  await expect(newPassword(page)).toBeVisible({ timeout: 30_000 });
+
+  const delivered = await page.evaluate(() => {
+    const key = Object.keys(window.localStorage).find((k) => k.startsWith('sb-') && k.endsWith('-auth-token'));
+    if (!key) return false;
+    new BroadcastChannel(key).postMessage({ event: 'SIGNED_OUT', session: null });
+    return true;
+  });
+  expect(delivered).toBe(true);
+
+  /*
+   * The form is still here and still usable. Polled rather than sampled: the
+   * revocation happened a moment after the broadcast landed.
+   */
+  await page.waitForTimeout(2500);
+  await expect(newPassword(page)).toBeVisible();
+  await expect(refusal(page)).toHaveCount(0);
+});
