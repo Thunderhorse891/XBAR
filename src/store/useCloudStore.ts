@@ -523,7 +523,27 @@ function recordSpentRecoveryUser(userId: string, grantToken = '') {
   writeRecoveryUserState(userId, 'spent', grantToken);
 }
 
-function clearSpentRecoveryUser(userId: string, grantToken = '') {
+/*
+ * A newly validated link ends the one it replaces.
+ *
+ * The account marker holds ONE generation, so writing `active:<new>` over
+ * `active:<old>` was the only record the old generation had. While the marker
+ * still said `active:<new>`, the old grant did read as revoked -- but the
+ * moment the new one was spent the marker became `spent:<new>`, which says
+ * nothing about the old grant, and it CAME BACK TO LIFE. A tab still holding
+ * it, reloaded against any ordinary session for the same account, could then
+ * change the password with no current link -- exactly what this gate exists to
+ * prevent.
+ *
+ * The accumulated per-grant keys were only ever written for a grant that was
+ * consumed. A grant that is displaced is just as over, so it is written here
+ * too, before the marker forgets it. Those keys accumulate; the marker cannot.
+ */
+function supersedeRecoveryGeneration(userId: string, grantToken = '') {
+  const displaced = readRecoveryUserMarker(userId);
+  if (displaced?.grantToken && displaced.grantToken !== grantToken) {
+    recordSpentRecoveryGrant(userId, displaced.grantToken);
+  }
   writeRecoveryUserState(userId, 'active', grantToken);
 }
 
@@ -972,9 +992,9 @@ export const useCloudStore = create<CloudStore>((set, get) => ({
         set({ passwordRecoveryFor: session.user.id });
         storeRecoveryUser(session.user.id, grantToken);
         // Supabase has just validated a NEW link, so an earlier completion no
-        // longer says anything about this account. Other account revocations
-        // must survive.
-        clearSpentRecoveryUser(session.user.id, grantToken);
+        // longer says anything about this account -- and the generation this
+        // one replaces is over. Other account revocations must survive.
+        supersedeRecoveryGeneration(session.user.id, grantToken);
       }
       if (event === 'SIGNED_OUT' || event === 'USER_UPDATED') {
         const recoveryFor = get().passwordRecoveryFor;

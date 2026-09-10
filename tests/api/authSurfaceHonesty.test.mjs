@@ -366,7 +366,7 @@ test('a durable grant has a durable revocation', () => {
   // every future one for that account. Other accounts' revocations survive.
   const initialize = body(store, /initialize: async[\s\S]*?\n {2}\},/, 'initialize');
   const recoveryEventIndex = initialize.indexOf("event === 'PASSWORD_RECOVERY'");
-  const clearCurrentAccountIndex = initialize.indexOf('clearSpentRecoveryUser(session.user.id');
+  const clearCurrentAccountIndex = initialize.indexOf('supersedeRecoveryGeneration(session.user.id');
   assert.ok(
     recoveryEventIndex >= 0 && clearCurrentAccountIndex > recoveryEventIndex,
     "a newly validated link must supersede that account's earlier completion without wiping the others",
@@ -473,8 +473,19 @@ test('recovery completion is bound to the validated link', () => {
   assert.match(store, /RECOVERY_GRANT_KEY/, 'the validated link needs a tab-local grant identity');
   assert.match(
     initialize,
-    /const grantToken = recoveryGrantToken\(session\);[\s\S]*?storeRecoveryUser\(session\.user\.id, grantToken\);[\s\S]*?clearSpentRecoveryUser\(session\.user\.id, grantToken\)/,
+    /const grantToken = recoveryGrantToken\(session\);[\s\S]*?storeRecoveryUser\(session\.user\.id, grantToken\);[\s\S]*?supersedeRecoveryGeneration\(session\.user\.id, grantToken\)/,
     'a fresh PASSWORD_RECOVERY event must mark that specific link active',
+  );
+  /*
+   * And the generation it replaces has to be written down before the marker
+   * forgets it. The marker holds one generation, so `active:B` over an unspent
+   * `active:A` was A's only record; once B was spent the marker said nothing
+   * about A and a tab still holding it could reuse it.
+   */
+  assert.match(
+    store,
+    /function supersedeRecoveryGeneration\([\s\S]*?readRecoveryUserMarker\(userId\)[\s\S]*?recordSpentRecoveryGrant\(userId, displaced\.grantToken\)[\s\S]*?writeRecoveryUserState\(userId, 'active', grantToken\)/,
+    'a replaced generation must be revoked before the marker is overwritten',
   );
   assert.match(
     store,

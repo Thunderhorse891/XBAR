@@ -1428,3 +1428,65 @@ test('a recovery completed with site data blocked still stops an open second tab
   await expect(refusal(second)).toBeVisible({ timeout: 30_000 });
   expect(secondUpdates).toBe(0);
 });
+
+test('a link replaced while its tab was away is still dead when the tab comes back', async ({ context }) => {
+  /*
+   * The generation the marker forgot.
+   *
+   * The per-account marker holds ONE generation. Validating link B over an
+   * unspent link A wrote `active:B`, and that was the end of A's record. The
+   * accumulated per-grant keys were written only for a grant that was
+   * CONSUMED, and A never was -- it was displaced.
+   *
+   * Getting this to bite took three attempts, and the two that failed are why
+   * the staging looks like this. A tab that is RUNNING is safe either way: at
+   * the moment `active:B` is written, A reads as revoked -- an account marker
+   * naming a different generation revokes every other one -- and the tab drops
+   * its grant, through the broadcast or the storage event. The hole opens only
+   * once B is SPENT, because `spent:B` says nothing at all about A. A tab that
+   * saw that transition is already safe; a tab that was away for it is not.
+   *
+   * So this tab leaves for a page that does not run the app -- the marketing
+   * site, same origin, so its sessionStorage grant survives -- and comes back
+   * afterwards. What decides it then is the written record, and
+   * `hasValidatedPasswordRecovery` compares only the account, so that record is
+   * the whole defence.
+   */
+  const older = await context.newPage();
+  const newer = await context.newPage();
+  await stubGoTrueUser(newer);
+  let olderUpdates = 0;
+  await stubGoTrueUser(older, async (route) => {
+    olderUpdates += 1;
+    await route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(userRecord()) });
+  });
+
+  const first = recoveryLink();
+  const second = recoveryLink();
+  expect(sessionIdOf(first)).not.toBe(sessionIdOf(second));
+
+  await older.goto(first);
+  await expect(newPassword(older)).toBeVisible({ timeout: 30_000 });
+  const olderGrant = await heldGrantToken(older);
+  expect(olderGrant).not.toBe('');
+
+  // Away, and listening to nothing.
+  await older.goto('/');
+  expect(await heldGrantToken(older)).toBe(olderGrant);
+
+  // A second reset email, requested because the first seemed not to arrive,
+  // and completed while the first tab was elsewhere.
+  await newer.goto(second);
+  await expect(newPassword(newer)).toBeVisible({ timeout: 30_000 });
+  await fillNewPassword(newer, 'newer-tab-password');
+  await submit(newer).click();
+  await expect(newer.getByText('Password updated. You are signed in.').first()).toBeVisible({ timeout: 30_000 });
+
+  // Back, still holding a link that was replaced. It must not open the form,
+  // and must not be able to change the password.
+  await older.goto('/app/reset-password');
+  await expect(refusal(older)).toBeVisible({ timeout: 30_000 });
+  await expect(newPassword(older)).toHaveCount(0);
+  expect(await heldGrant(older)).toBe('');
+  expect(olderUpdates).toBe(0);
+});
