@@ -2,7 +2,7 @@ import { create } from 'zustand';
 import type { Session } from '@supabase/supabase-js';
 import { loadWorkspaceAccessProfile } from '@/lib/cloudWorkspace';
 import { authStorageKey, getSupabaseClient } from '@/lib/supabaseClient';
-import { readBrowserStorage } from '@/lib/browserStorage';
+import { readAuthStorage } from '@/lib/authStorage';
 import {
   buildPasswordUpdateRequest,
   readPasswordUpdateError,
@@ -307,98 +307,12 @@ function decodeJwtClaims(accessToken = ''): Record<string, unknown> {
  * carries `session_id`; this is the answer for tokens that somehow do not.
  */
 /*
- * Can this browser read localStorage at ALL?
- *
- * Distinct from "the key is missing", and the distinction decides a sign-out.
- * auth-js chooses its storage once, at construction: localStorage when it is
- * usable, otherwise a per-tab memory store. So an unreadable localStorage is
- * not a failed lookup -- it says the tabs were never sharing a session in the
- * first place.
- */
-function authStorageReadable(): boolean {
-  try {
-    if (typeof localStorage === 'undefined') return false;
-    localStorage.getItem(authStorageKey() || 'xbar-storage-probe');
-    return true;
-  } catch {
-    return false;
-  }
-}
-
-/*
  * The claim two access tokens share when one is a refresh of the other.
  */
 function sessionGenerationOf(session: { access_token?: string } | null): string {
   if (!session?.access_token) return '';
   const claim = decodeJwtClaims(session.access_token).session_id;
   return typeof claim === 'string' ? claim : '';
-}
-
-/*
- * Is this SIGNED_OUT about a session this tab has already replaced?
- *
- * Reads the persisted record directly rather than calling `getSession()`: this
- * runs inside an `onAuthStateChange` callback, where an await would let the
- * writes that follow reorder against the very events being fenced. The stored
- * shape has carried the session under `currentSession` and at the top level
- * across auth-js versions, so both are accepted; anything unparseable counts as
- * absent.
- *
- * Three cases, and the third is why a bare `false` on an unreadable store was
- * wrong. With site storage blocked, auth-js keeps a session PER TAB in memory,
- * and this codebase supports recovery in that configuration deliberately. Tabs
- * that never shared a session cannot sign each other out -- so there, another
- * tab's sign-out is never about this one, and reading the missing key as a
- * match revoked a good grant every time.
- *
- * What that gives up is narrow and bounded: with storage blocked, a sign-out
- * auth-js raises ON ITS OWN -- a refresh token it can no longer use -- also
- * stops revoking the grant through this path. The tab keeps a dead session and
- * a grant it cannot spend, because `updatePassword` re-checks the LIVE session
- * before it sends anything. A refused submission is a far smaller harm than a
- * link that was never used being permanently refused, and both local sign-out
- * paths in this store already record their own spend without this event.
- */
-function signOutIsStale(session: Session | null): boolean {
-  // Not shared: `liveSessionAgrees` has already decided, against the client's
-  // own session, whether this event is about this tab. Answering from an
-  // absent store here would override it with a guess.
-  if (!authStorageReadable()) return false;
-  if (!session?.access_token) return false;
-  const key = authStorageKey();
-  if (!key) return false;
-  const raw = readBrowserStorage(key);
-  if (!raw) return false;
-  try {
-    const parsed: unknown = JSON.parse(raw);
-    if (!parsed || typeof parsed !== 'object') return false;
-    const record = parsed as { access_token?: unknown; currentSession?: { access_token?: unknown } };
-    const stored = record.currentSession?.access_token ?? record.access_token;
-    if (typeof stored !== 'string' || !stored) return false;
-    /*
-     * `session_id`, not the token. The reasoning is already written above
-     * `recoveryGrantToken` and this fence was built against the credential
-     * anyway: auth-js refreshes on its own, so between the moment it writes a
-     * rotated token to storage and the moment this tab processes the matching
-     * `TOKEN_REFRESHED`, the store and the store-on-disk hold two DIFFERENT
-     * tokens for the SAME session. Comparing credentials called that a
-     * mismatch, and a delayed sign-out arriving in that window revoked a valid
-     * grant -- the exact defect this function exists to prevent, reopened by a
-     * refresh.
-     *
-     * Token equality remains the answer when neither side names a session:
-     * anything that cannot identify itself is compared as the opaque string it
-     * is, rather than being treated as a match because two blanks agree.
-     */
-    const storedSession = decodeJwtClaims(stored).session_id;
-    const heldSession = decodeJwtClaims(session.access_token).session_id;
-    if (typeof storedSession === 'string' && storedSession && typeof heldSession === 'string' && heldSession) {
-      return storedSession === heldSession;
-    }
-    return stored === session.access_token;
-  } catch {
-    return false;
-  }
 }
 
 function recoveryGrantToken(session: Session | null): string {
@@ -1122,21 +1036,32 @@ export const useCloudStore = create<CloudStore>((set, get) => ({
     // Track auth events immediately, before asynchronous workspace hydration.
     // A tab opened after recovery still knows the account it later signs out.
     let lastAuthUserId = get().session?.user.id ?? '';
-    const { data: subscription } = client.auth.onAuthStateChange(async (event, session) => {
+    const { data: subscription } = client.auth.onAuthStateChange((event, session) => {
       /*
-       * When the tabs do not share auth storage, an event is only this tab's
-       * if this tab's own client says so. Short-circuits before the await in
-       * the shared case, so that path stays exactly as synchronous as it was.
+       * One question, asked of every event: does the session auth-js has
+       * actually STORED agree with what this event says?
+       *
+       * It replaces three separate guesses, and covers what each of them
+       * missed. auth-js saves before it notifies, so the stored record is the
+       * settled answer: a sign-out is this tab's only if nothing is stored, and
+       * a session-bearing event is this tab's only if the stored session is the
+       * same one. That holds in both storage modes, so there is no mode branch
+       * here any more --
+       *
+       *   - with a per-tab store, a broadcast describes the tab that SENT it,
+       *     and an event that disagrees is another tab's;
+       *   - with a shared store, an event that disagrees is one a newer sign-in
+       *     has already overtaken -- including a delayed SIGNED_IN, which used
+       *     to be applied and left this store on account A while every request
+       *     authenticated as account B.
+       *
+       * Read, never asked. `getSession()` from in here DEADLOCKS: auth-js
+       * pushes the operation holding its lock into the same `pendingInLock`
+       * queue that a nested `_acquireLock` awaits, so it waits on the operation
+       * that is waiting for this callback to return. `lib/authStorage.ts` exists
+       * so the record can be read synchronously instead, in either mode.
        */
-      if (
-        !authStorageReadable() &&
-        !(await liveSessionAgrees(
-          async () => (await client.auth.getSession()).data.session,
-          session,
-          sessionGenerationOf,
-        ))
-      )
-        return;
+      if (!liveSessionAgrees(readAuthStorage(authStorageKey()), session, sessionGenerationOf)) return;
       /*
        * A SIGNED_OUT that a newer sign-in has already overtaken.
        *
@@ -1160,7 +1085,6 @@ export const useCloudStore = create<CloudStore>((set, get) => ({
        * that may still be good is the safe direction, and reviving one that is
        * spent is not.
        */
-      if (event === 'SIGNED_OUT' && signOutIsStale(get().session)) return;
       const endedRecoveryGrant = event === 'SIGNED_OUT' ? recoveryGrantToken(get().session) : '';
       /*
        * SIGNED_OUT arrives with a null session, so the account whose session

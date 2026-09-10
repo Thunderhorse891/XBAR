@@ -1,5 +1,6 @@
 import { createClient, type SupabaseClient } from '@supabase/supabase-js';
 import { isSupabaseConfigured, supabaseConfig } from '@/lib/platformConfig';
+import { authStorageAdapter } from '@/lib/authStorage';
 
 let supabaseClient: SupabaseClient | null = null;
 
@@ -35,6 +36,9 @@ export function getSupabaseClient() {
       auth: {
         // Identical to the value auth-js would derive on its own; see above.
         storageKey: authStorageKey(),
+        // Supplied rather than chosen, so this app can read what auth-js keeps
+        // in EITHER mode. See `lib/authStorage.ts`.
+        storage: authStorageAdapter,
         persistSession: true,
         autoRefreshToken: true,
         detectSessionInUrl: true,
