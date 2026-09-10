@@ -3,6 +3,7 @@ import {
   accessToken,
   RECOVERY_EMAIL,
   RECOVERY_GRANT_KEY,
+  RECOVERY_SPENT_KEY,
   RECOVERY_KEY,
   USER_ID,
   blockWebfonts,
@@ -1883,4 +1884,46 @@ test('a delayed sign-out cannot revoke a recovery across a token refresh', async
   await page.waitForTimeout(2500);
   await expect(newPassword(page)).toBeVisible();
   await expect(refusal(page)).toHaveCount(0);
+});
+
+test('a spent grant ends the form even when the account marker names a newer link', async ({ context }) => {
+  /*
+   * The storage-event fallback has to listen for the PER-GRANT key.
+   *
+   * When a reset finishes after a newer link has become the account's active
+   * generation, completion deliberately leaves the account marker naming the
+   * NEWER grant and records the finished one only under its own key -- that
+   * asymmetry is what keeps a newer, unused link alive. The fallback listener
+   * watched only the account and global keys, so a tab still holding the spent
+   * grant saw a write to a key it was not listening for, and kept an enabled
+   * form on a link that had already been used.
+   */
+  await context.addInitScript(() => {
+    Object.defineProperty(globalThis, 'BroadcastChannel', { value: undefined, configurable: true });
+  });
+  const page = await context.newPage();
+  await stubGoTrueUser(page);
+  await page.goto(recoveryLink());
+  await expect(newPassword(page)).toBeVisible({ timeout: 30_000 });
+
+  const held = await page.evaluate((key) => sessionStorage.getItem(key) ?? '', RECOVERY_GRANT_KEY);
+  expect(held).not.toBe('');
+
+  /*
+   * What another tab's completion actually leaves behind: this grant spent
+   * under its own key, and the account marker still ACTIVE for a different,
+   * newer generation -- so nothing the old filter watched says "spent".
+   */
+  await page.evaluate(
+    ({ spentKey, userKey, grant, userId }) => {
+      const grantKey = `${spentKey}:grant:${userId}:${grant}`;
+      localStorage.setItem(grantKey, 'spent');
+      localStorage.setItem(userKey, JSON.stringify({ state: 'active', grantToken: 'a-newer-generation', version: 1 }));
+      window.dispatchEvent(new StorageEvent('storage', { key: grantKey, newValue: 'spent' }));
+    },
+    { spentKey: RECOVERY_SPENT_KEY, userKey: recoverySpentKeyFor(USER_ID), grant: held, userId: USER_ID },
+  );
+
+  await expect(refusal(page)).toBeVisible({ timeout: 30_000 });
+  await expect(newPassword(page)).toHaveCount(0);
 });

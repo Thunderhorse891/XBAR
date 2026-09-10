@@ -1024,9 +1024,28 @@ export const useCloudStore = create<CloudStore>((set, get) => ({
     const onRecoveryStorage = (event: StorageEvent) => {
       const recoveryFor = get().passwordRecoveryFor;
       if (!recoveryFor) return;
-      if (event.key !== RECOVERY_SPENT_KEY && event.key !== `${RECOVERY_SPENT_USER_PREFIX}${recoveryFor}`) return;
+      const heldGrant = readStoredRecoveryGrantToken();
+      /*
+       * The PER-GRANT key belongs here too, and leaving it out stranded exactly
+       * the case the per-grant keys were added for. When a reset finishes after
+       * a newer link has become the account's active generation,
+       * `completeRecoveryUpdateClaim` deliberately leaves the account marker
+       * naming the newer grant and records the completion only under the spent
+       * one's own key -- so a tab still holding that spent grant saw a write to
+       * a key it was not listening for, and kept an enabled form on a link that
+       * was already used until the customer submitted it or reloaded.
+       *
+       * Read from the same `heldGrant` the durable check below uses, so the
+       * filter and the answer cannot end up describing different grants.
+       */
+      if (
+        event.key !== RECOVERY_SPENT_KEY &&
+        event.key !== `${RECOVERY_SPENT_USER_PREFIX}${recoveryFor}` &&
+        !(heldGrant && event.key === recoverySpentGrantKey(recoveryFor, heldGrant))
+      )
+        return;
       // Read current durable state: a delayed event may predate a new link.
-      if (!isRecoveryGrantSpent(recoveryFor, readStoredRecoveryGrantToken())) return;
+      if (!isRecoveryGrantSpent(recoveryFor, heldGrant)) return;
       set({ passwordRecoveryFor: '' });
       storeRecoveryUser('');
     };
