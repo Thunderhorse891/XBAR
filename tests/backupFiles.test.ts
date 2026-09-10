@@ -2651,18 +2651,21 @@ test('the migration runbook lists every migration the code requires', async () =
   assert.ok(pending.length > 0, 'the pending set must be discoverable, or this guard proves nothing');
 
   const counted = ['zero', 'one', 'Two', 'Three', 'Four', 'Five', 'Six', 'Seven', 'Eight', 'Nine', 'Ten'];
-  assert.match(
-    readme,
-    new RegExp(`${counted[pending.length]} migrations in \`supabase\\/migrations\\/\``),
+  assert.ok(
+    readme.includes(`${counted[pending.length]} migrations in \`supabase/migrations/\``),
     `the runbook's count must match the ${pending.length} migrations that declare themselves unapplied`,
   );
   for (const file of pending) {
     assert.ok(readme.includes(file), `the runbook must list ${file}, which declares itself unapplied`);
-    assert.match(
-      readme,
-      new RegExp(
-        `psql "\\$(?:STAGING_)?DATABASE_URL" \\\\?\\s*(?:[\\s\\S]{0,400}?)-f supabase/migrations/${file.replace(/\./g, '\\.')}`,
-      ),
+    /*
+     * Plain substring, not a pattern built from the filename. Escaping a value
+     * into a regex is a trap even here -- the first version escaped `.` and
+     * nothing else, which CodeQL correctly called incomplete -- and `-f
+     * supabase/migrations/<file>` only ever appears in a psql invocation, so it
+     * already distinguishes an APPLY COMMAND from a prose mention without one.
+     */
+    assert.ok(
+      readme.includes(`-f supabase/migrations/${file}`),
       `the runbook must give an apply command for ${file}, not only mention it`,
     );
   }
