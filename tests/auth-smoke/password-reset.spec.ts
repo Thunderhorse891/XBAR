@@ -1,5 +1,6 @@
 import { expect, test, type Page } from '@playwright/test';
 import {
+  accessToken,
   RECOVERY_EMAIL,
   RECOVERY_GRANT_KEY,
   RECOVERY_KEY,
@@ -1842,6 +1843,42 @@ test('a stale sign-out cannot revoke a recovery when site data is blocked', asyn
   await page.evaluate(() => {
     new BroadcastChannel('sb-127-auth-token').postMessage({ event: 'SIGNED_OUT', session: null });
   });
+
+  await page.waitForTimeout(2500);
+  await expect(newPassword(page)).toBeVisible();
+  await expect(refusal(page)).toHaveCount(0);
+});
+
+test('a delayed sign-out cannot revoke a recovery across a token refresh', async ({ page }) => {
+  /*
+   * The window between auth-js rotating a token and this tab hearing about it.
+   *
+   * `autoRefreshToken` is on, so auth-js renews on its own and writes the new
+   * token to storage before this tab processes the matching `TOKEN_REFRESHED`.
+   * For that moment the store and the store-on-disk hold two DIFFERENT tokens
+   * for the SAME session. Comparing credentials read that as a mismatch, so a
+   * sign-out delayed into this window revoked a valid grant -- the very defect
+   * the fence exists to prevent, reopened by a refresh.
+   *
+   * `session_id` is the claim with the right lifetime, which this file already
+   * says above `recoveryGrantToken`.
+   */
+  await stubGoTrueUser(page);
+  const link = recoveryLink();
+  const sessionId = sessionIdOf(link);
+  await page.goto(link);
+  await expect(newPassword(page)).toBeVisible({ timeout: 30_000 });
+
+  // Storage moves on; the store is deliberately NOT told, which is the window.
+  const rotated = accessToken(sessionId, 'rotated-in-place');
+  await page.evaluate((token) => {
+    const key = Object.keys(window.localStorage).find((k) => k.startsWith('sb-') && k.endsWith('-auth-token'));
+    if (!key) throw new Error('Expected a stored session');
+    const stored = JSON.parse(window.localStorage.getItem(key) ?? '{}') as Record<string, unknown>;
+    stored.access_token = token;
+    window.localStorage.setItem(key, JSON.stringify(stored));
+    new BroadcastChannel(key).postMessage({ event: 'SIGNED_OUT', session: null });
+  }, rotated);
 
   await page.waitForTimeout(2500);
   await expect(newPassword(page)).toBeVisible();

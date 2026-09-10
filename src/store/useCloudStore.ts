@@ -357,7 +357,28 @@ function signOutIsStale(session: Session | null): boolean {
     if (!parsed || typeof parsed !== 'object') return false;
     const record = parsed as { access_token?: unknown; currentSession?: { access_token?: unknown } };
     const stored = record.currentSession?.access_token ?? record.access_token;
-    return typeof stored === 'string' && stored === session.access_token;
+    if (typeof stored !== 'string' || !stored) return false;
+    /*
+     * `session_id`, not the token. The reasoning is already written above
+     * `recoveryGrantToken` and this fence was built against the credential
+     * anyway: auth-js refreshes on its own, so between the moment it writes a
+     * rotated token to storage and the moment this tab processes the matching
+     * `TOKEN_REFRESHED`, the store and the store-on-disk hold two DIFFERENT
+     * tokens for the SAME session. Comparing credentials called that a
+     * mismatch, and a delayed sign-out arriving in that window revoked a valid
+     * grant -- the exact defect this function exists to prevent, reopened by a
+     * refresh.
+     *
+     * Token equality remains the answer when neither side names a session:
+     * anything that cannot identify itself is compared as the opaque string it
+     * is, rather than being treated as a match because two blanks agree.
+     */
+    const storedSession = decodeJwtClaims(stored).session_id;
+    const heldSession = decodeJwtClaims(session.access_token).session_id;
+    if (typeof storedSession === 'string' && storedSession && typeof heldSession === 'string' && heldSession) {
+      return storedSession === heldSession;
+    }
+    return stored === session.access_token;
   } catch {
     return false;
   }
