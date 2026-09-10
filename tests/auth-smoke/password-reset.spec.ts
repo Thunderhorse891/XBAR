@@ -1747,3 +1747,32 @@ test('sending reset mail after a failed callback does not release the screen', a
   await page.waitForTimeout(2500);
   expect(new URL(page.url()).pathname).toBe('/app/login');
 });
+
+test('switching modes after a failed callback does not carry the old account through', async ({ page }) => {
+  /*
+   * Changing modes is not a decision to resume the existing session.
+   *
+   * The hold predates the funnel: it was originally released in `setMode`,
+   * on the reasoning that somebody who had switched modes had read the
+   * message and moved on. Clearing the MESSAGE there is right. Clearing the
+   * REDIRECT SUPPRESSION is not -- with an older session still live, pressing
+   * "Create account" released the hold, and because `redirectTarget` is
+   * `/setup` in signup mode the customer was carried into the OLD account's
+   * setup instead of being shown a signup form.
+   */
+  await stubGoTrueUser(page);
+
+  // A live session first, so the redirect has somewhere to carry them.
+  await page.goto(sessionLink('signin'));
+  await expect(refusal(page)).toBeVisible({ timeout: 30_000 });
+
+  await page.goto('/app/login#error=access_denied&error_description=Email+link+has+expired');
+  await expect(page.getByText('Email link has expired')).toBeVisible({ timeout: 30_000 });
+
+  await page.getByRole('button', { name: /^Create account$/i }).click();
+
+  // Still on the sign-in screen, now offering signup. Polled, because the
+  // defect is a redirect that fires a moment after the mode change.
+  await page.waitForTimeout(2500);
+  expect(new URL(page.url()).pathname).toBe('/app/login');
+});

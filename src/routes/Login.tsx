@@ -76,8 +76,19 @@ export default function Login() {
     // your email" left standing over a sign-in form reads as an instruction.
     setFormMessage(null);
     setConfirmationEmail('');
-    // They have read it and moved on; stop holding the screen.
-    setCallbackFailed(false);
+    /*
+     * The MESSAGE goes; the hold does not.
+     *
+     * This is where the hold used to be released, on the reasoning that
+     * somebody who had switched modes had read the explanation and moved on.
+     * That conflates two things. Clearing the message is right. Clearing the
+     * redirect suppression meant that a customer parked here by a rejected
+     * link -- with an older session still live -- who pressed "Create account"
+     * was carried into the OLD account instead: measured landing on
+     * `/app/billing`, since the redirect still resolved against the previous
+     * mode. Changing modes is a decision to become somebody else, not a
+     * decision to resume the session that is already open.
+     */
     const next = new URLSearchParams();
     if (mode === 'signup') next.set('mode', 'signup');
     if (selectedPlan) next.set('plan', selectedPlan);
