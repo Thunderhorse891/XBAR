@@ -1,6 +1,63 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { buildPasswordUpdateRequest, readPasswordUpdateError } from '../src/lib/passwordUpdateRequest.js';
+import {
+  buildPasswordUpdateRequest,
+  readPasswordUpdateError,
+  runPasswordUpdateWithLockFallback,
+} from '../src/lib/passwordUpdateRequest.js';
+
+test('a failure after starting the password operation is never retried', async () => {
+  let requests = 0;
+  const failure = new Error('post-update processing failed');
+  await assert.rejects(
+    runPasswordUpdateWithLockFallback(
+      async () => {
+        requests++;
+        throw failure;
+      },
+      (work) => work(),
+    ),
+    (error) => error === failure,
+  );
+  assert.equal(requests, 1);
+});
+
+test('a lock failure after a successful operation cannot repeat it', async () => {
+  let requests = 0;
+  await assert.rejects(
+    runPasswordUpdateWithLockFallback(
+      async () => ++requests,
+      async (work) => {
+        await work();
+        throw new Error('lock completion failed');
+      },
+    ),
+    /lock completion failed/,
+  );
+  assert.equal(requests, 1);
+});
+
+test('failure to acquire a lock still executes the existing fallback once', async () => {
+  let requests = 0;
+  const result = await runPasswordUpdateWithLockFallback(
+    async () => ++requests,
+    async () => {
+      throw new Error('locking unavailable');
+    },
+  );
+  assert.equal(result, 1);
+  assert.equal(requests, 1);
+});
+
+test('a busy lock does not start the password operation', async () => {
+  let requests = 0;
+  const result = await runPasswordUpdateWithLockFallback(
+    async () => ++requests,
+    async () => -1,
+  );
+  assert.equal(result, -1);
+  assert.equal(requests, 0);
+});
 
 /*
  * The invariant that makes the cross-tab race harmless: the password change is

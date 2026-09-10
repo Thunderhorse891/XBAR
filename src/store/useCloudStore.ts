@@ -2,7 +2,11 @@ import { create } from 'zustand';
 import type { Session } from '@supabase/supabase-js';
 import { loadWorkspaceAccessProfile } from '@/lib/cloudWorkspace';
 import { getSupabaseClient } from '@/lib/supabaseClient';
-import { buildPasswordUpdateRequest, readPasswordUpdateError } from '@/lib/passwordUpdateRequest';
+import {
+  buildPasswordUpdateRequest,
+  readPasswordUpdateError,
+  runPasswordUpdateWithLockFallback,
+} from '@/lib/passwordUpdateRequest';
 import { supabaseConfig } from '@/lib/platformConfig';
 import { isSupabaseConfigured } from '@/lib/platformConfig';
 import type { UserRole } from '@/types/xbar';
@@ -697,15 +701,13 @@ function startRecoveryUpdateClaimRenewal(claim: RecoveryUpdateClaim) {
 async function withRecoveryUpdateExclusion<T>(userId: string, run: () => Promise<T>, busy: () => T): Promise<T> {
   const locks = globalThis.navigator?.locks;
   if (!locks) return run();
-  try {
-    return await locks.request(`${RECOVERY_UPDATE_LOCK_PREFIX}${userId}`, { ifAvailable: true }, async (lock) =>
-      lock ? run() : busy(),
-    );
-  } catch {
-    // A lock that cannot be taken must not stop someone resetting their
-    // password; the durable claim still applies inside `run`.
-    return run();
-  }
+  return runPasswordUpdateWithLockFallback(
+    run,
+    async (work) =>
+      await locks.request(`${RECOVERY_UPDATE_LOCK_PREFIX}${userId}`, { ifAvailable: true }, async (lock) =>
+        lock ? work() : busy(),
+      ),
+  );
 }
 
 function delay(ms: number) {

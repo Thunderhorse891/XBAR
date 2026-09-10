@@ -33,6 +33,11 @@ does not establish production readiness.
   Site URL, real confirmation/recovery email delivery, and the complete
   signup → workspace → horse → checkout → webhook flow remain unverified.
   Browser dashboard access failed in this verification environment.
+- Recovery-email attempt: the Auth API accepted one request (HTTP 200) and
+  recorded `recovery_sent_at`, but the recipient reported no email received.
+  Delivery and link completion remain unverified; acceptance is not delivery.
+  Available Auth audit-log rows did not explain the missing message. Inspect
+  Auth mail logs/SMTP configuration before repeating requests.
 - The documented recovery concurrency residuals remain open; they have not
   been accepted as launch risks or closed by these checks.
 
