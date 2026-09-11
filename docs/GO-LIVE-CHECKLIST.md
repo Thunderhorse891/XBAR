@@ -120,15 +120,41 @@ set before release.
   ever read the `authError` parameter: signed in the customer saw nothing at
   all, and signed out the auth guard's redirect dropped the query before the
   one screen that would have read it.
-- **Open, not diagnosed:** `tests/auth-slow-workspace/held-workspace.spec.ts:449`
-  ("a session arriving while an obsolete one hangs resolves without waiting for
-  it") fails at a low rate with zero relational reads after 30 seconds --
-  meaning the second account was never hydrated at all. It reproduces on
-  unmodified code (1 failure in 40 runs), so it is pre-existing and not caused
-  by the changes above. It is recorded here rather than dismissed as flakiness
-  because the failing shape is a real one: a cross-tab session takeover that
-  sometimes never hydrates the account that took over. Nothing here establishes
-  that it is only a test artifact.
+- **Open release gate, now diagnosed: a cross-tab sign-in is sometimes ignored,
+  and the cause is this PR's own auth gate.** What looked like a flaky test
+  (`held-workspace.spec.ts:449`, zero relational reads after 30s) was chased
+  rather than re-run. Reproduced twice in 120 instrumented runs (~1.7%), with
+  the same trace both times, captured by listening on auth-js's own broadcast
+  channel in the receiving tab:
+
+  ```
+  STORE     sub=0001                                    <- this tab stores its own session
+  BROADCAST event=PASSWORD_RECOVERY eventSub=0001 storedSub=0001
+  BROADCAST event=SIGNED_IN         eventSub=0002 storedSub=0001   <- still 0001
+  ```
+
+  The second tab had already signed in as account 0002 and written that session
+  to the SHARED localStorage before broadcasting. Yet at the instant the
+  broadcast was handled, this tab's own read of localStorage still returned
+  0001: localStorage is not synchronously coherent across renderer processes,
+  so a BroadcastChannel message can outrun the write it describes.
+
+  `useCloudStore`'s listener opens with
+  `if (!liveSessionAgrees(readAuthStorage(authStorageKey()), session, ...)) return;`
+  — it asks whether the STORED session agrees with the event. Against a stale
+  read that answers "no" for a perfectly good, newer event, and the sign-in is
+  dropped: the tab never switches accounts, never hydrates, and stays on the
+  previous account until it is reloaded. This is a false NEGATIVE in a gate
+  written to reject stale events, and it is the direction that costs a
+  customer something.
+
+  Not fixed here, deliberately. The gate compares session identity, which
+  cannot distinguish "older" from "merely different", and the correct repair —
+  ordering the two sessions rather than matching them, or re-reading once
+  before dropping — is a change to the most security-sensitive check in this
+  work. It should be designed and mutation-tested on its own rather than
+  appended to a long session. The evidence above is enough to start from.
+
 - Not claimed: none of this was exercised against a live GoTrue or a live
   Supabase project. The browser suites intercept Auth and PostgREST, so what is
   established is the client's behaviour, not the server's.
