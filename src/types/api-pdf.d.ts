@@ -25,6 +25,7 @@ declare module '*/api/_lib/pdf.js' {
     footer?: string;
     letterhead?: string;
     continuationHeaders?: boolean;
+    branding?: { logo: Uint8Array; mark: Uint8Array; watermark: Uint8Array };
     reference?: string;
   }): Promise<Uint8Array>;
 

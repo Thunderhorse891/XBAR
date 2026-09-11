@@ -10,7 +10,7 @@ import { saveBlobAsFile, saveTextAsFile, type FileSaveResult } from './fileDownl
  * PDF laid out like the rest of the product's documents.
  *
  * Both render entirely in the browser from data already in the store. There is
- * no upload, no server call, and nothing to configure: a workspace with no
+ * no upload of report data and no paid service to configure: a workspace with no
  * Supabase and no Stripe exports exactly the same file as one with both. That
  * is deliberate — an export that needed credentials would be one more thing to
  * fail, on the screen whose whole job is to be handed to someone else.

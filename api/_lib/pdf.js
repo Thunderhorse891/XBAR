@@ -322,13 +322,28 @@ export async function createSectionedPdf(input) {
   const font = await pdf.embedFont(StandardFonts.Helvetica);
   const bold = await pdf.embedFont(StandardFonts.HelveticaBold);
   const maxWidth = PAGE_WIDTH - MARGIN * 2;
+  const brandLogo = input.branding ? await pdf.embedPng(input.branding.logo) : null;
+  const brandMark = input.branding ? await pdf.embedPng(input.branding.mark) : null;
+  const brandWatermark = input.branding ? await pdf.embedPng(input.branding.watermark) : null;
+  const decoratePage = (target) => {
+    if (!brandWatermark) return;
+    const size = brandWatermark.scaleToFit(440, 280);
+    target.drawImage(brandWatermark, {
+      x: (PAGE_WIDTH - size.width) / 2,
+      y: (PAGE_HEIGHT - size.height) / 2,
+      ...size,
+      opacity: 0.065,
+    });
+  };
 
   let page = pdf.addPage([PAGE_WIDTH, PAGE_HEIGHT]);
+  decoratePage(page);
   let y = PAGE_HEIGHT - MARGIN;
   let activeSection = '';
 
   const newPage = () => {
     page = pdf.addPage([PAGE_WIDTH, PAGE_HEIGHT]);
+    decoratePage(page);
     // Room reserved at the foot of every page for the footer rule and text.
     y = PAGE_HEIGHT - MARGIN;
     if (input.continuationHeaders) {
@@ -370,6 +385,13 @@ export async function createSectionedPdf(input) {
     });
     y -= 8;
   };
+
+  if (brandLogo) {
+    const size = brandLogo.scaleToFit(120, 55);
+    page.drawImage(brandLogo, { x: MARGIN, y: y - size.height, ...size });
+    page.drawText('XBAR™', { x: MARGIN + size.width + 14, y: y - 20, size: 13, font: bold, color: ACCENT });
+    y -= size.height + 8;
+  }
 
   // Letterhead: whose document this is, before what it is.
   //
@@ -490,6 +512,9 @@ export async function createSectionedPdf(input) {
   // "Page 2" alone does not tell anyone whether they have the whole document.
   const pages = pdf.getPages();
   pages.forEach((footerPage, index) => {
+    if (brandMark) {
+      footerPage.drawImage(brandMark, { x: MARGIN, y: MARGIN - 25, width: 16, height: 16 });
+    }
     footerPage.drawLine({
       start: { x: MARGIN, y: MARGIN - 6 },
       end: { x: PAGE_WIDTH - MARGIN, y: MARGIN - 6 },
@@ -517,9 +542,10 @@ export async function createSectionedPdf(input) {
       // only the page margin beneath it, so a second line would print outside
       // the document's own frame. The page stamp is the part that must stay
       // legible — a reader needs to know whether they have the whole document.
-      const available = PAGE_WIDTH - 2 * MARGIN - stampWidth - FOOTER_GAP;
+      const brandInset = brandMark ? 23 : 0;
+      const available = PAGE_WIDTH - 2 * MARGIN - stampWidth - FOOTER_GAP - brandInset;
       footerPage.drawText(truncateToWidth(footer, font, 8, available), {
-        x: MARGIN,
+        x: MARGIN + brandInset,
         y: MARGIN - 20,
         size: 8,
         font,
