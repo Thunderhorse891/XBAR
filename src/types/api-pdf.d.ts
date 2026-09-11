@@ -14,6 +14,7 @@
  * the app real types over it.
  */
 declare module '*/api/_lib/pdf.js' {
+  export function toDrawableText(value: unknown): string;
   export interface PdfSection {
     heading: string;
     lines: string[];
