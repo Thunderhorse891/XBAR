@@ -17,14 +17,18 @@ import {
  * nothing at all.
  */
 
-function environment(options: { reloaded?: boolean } = {}) {
-  const calls = { reloads: 0, marked: 0, cleared: 0 };
+function environment(options: { reloaded?: boolean; markerRetainable?: boolean; settled?: boolean } = {}) {
+  const calls = { reloads: 0, marked: 0, cleared: 0, waits: 0 };
   let reloaded = options.reloaded ?? false;
+  const retainable = options.markerRetainable ?? true;
+  let settled = options.settled ?? true;
   const env: StaleChunkEnvironment = {
     hasReloaded: () => reloaded,
     markReloaded: () => {
-      reloaded = true;
       calls.marked += 1;
+      if (!retainable) return false;
+      reloaded = true;
+      return true;
     },
     clearReloaded: () => {
       reloaded = false;
@@ -33,9 +37,22 @@ function environment(options: { reloaded?: boolean } = {}) {
     reload: () => {
       calls.reloads += 1;
     },
+    authCallbackSettled: () => settled,
+    wait: async () => {
+      calls.waits += 1;
+    },
   };
-  return { env, calls };
+  return { env, calls, settle: () => (settled = true) };
 }
+
+const rule = (over: Partial<Parameters<typeof decideStaleChunkReload>[0]> = {}) =>
+  decideStaleChunkReload({
+    error: chromium(),
+    alreadyReloaded: false,
+    markerRetainable: true,
+    authCallbackSettled: true,
+    ...over,
+  });
 
 const chromium = () => new TypeError('Failed to fetch dynamically imported module: https://x/assets/a.js');
 const firefox = () => new TypeError('error loading dynamically imported module');
@@ -60,7 +77,7 @@ test('an ordinary module error is not a stale chunk', () => {
 });
 
 test('a stale chunk reloads once', () => {
-  assert.equal(decideStaleChunkReload({ error: chromium(), alreadyReloaded: false }), 'reload');
+  assert.equal(rule(), 'reload');
 });
 
 test('a stale chunk in an already-reloaded document is not reloaded again', () => {
@@ -70,7 +87,7 @@ test('a stale chunk in an already-reloaded document is not reloaded again', () =
    * is failing -- and reloading again would spin without ever rendering an
    * error the customer could act on.
    */
-  assert.equal(decideStaleChunkReload({ error: chromium(), alreadyReloaded: true }), 'rethrow');
+  assert.equal(rule({ alreadyReloaded: true }), 'rethrow');
 });
 
 test('a route that loads clears the marker so a later deploy can recover too', async () => {
@@ -110,4 +127,74 @@ test('a second stale failure surfaces instead of reloading again', async () => {
   const load = withStaleChunkRecovery(() => Promise.reject(error), env);
   await assert.rejects(load(), (thrown: unknown) => thrown === error);
   assert.equal(calls.reloads, 0);
+});
+
+/*
+ * Both of the rules below were missing from the first version of this module,
+ * and both were found in review. They are the two ways a recovery reload can do
+ * more harm than the staleness it cures.
+ */
+
+test('a marker that cannot be retained refuses the reload rather than looping', () => {
+  /*
+   * Where sessionStorage throws -- a private window, blocked site data -- the
+   * write fails silently and the read always says "not yet reloaded". The first
+   * version reloaded anyway, so a chunk that was genuinely missing reloaded
+   * every fresh document forever. Its comment claimed losing the marker "only
+   * costs one extra reload"; that was wrong, and an unbounded reload loop is
+   * worse than the blank route it was trying to fix.
+   */
+  assert.equal(rule({ markerRetainable: false }), 'rethrow');
+});
+
+test('an unsettled auth callback holds the reload back rather than burning the link', () => {
+  /*
+   * The reset route is itself lazy, so its chunk can fail while auth-js is
+   * still consuming an implicit-flow fragment. A reload landing between the
+   * fragment being cleared and the session being saved leaves the token in
+   * neither place and burns a one-time link.
+   *
+   * The first version argued this "cannot be premature by construction, because
+   * the route has already failed". That only considered the UI: a failed route
+   * is not evidence that nothing else is in flight.
+   */
+  assert.equal(rule({ authCallbackSettled: false }), 'wait');
+});
+
+test('an already-reloaded document rethrows even while the callback is unsettled', () => {
+  // The loop guard outranks waiting: waiting on a document that has already
+  // had its one reload can only delay the error, never avoid it.
+  assert.equal(rule({ alreadyReloaded: true, authCallbackSettled: false }), 'rethrow');
+});
+
+test('a chunk failure waits for the callback and then reloads', async () => {
+  const { env, calls, settle } = environment({ settled: false });
+  const load = withStaleChunkRecovery(() => Promise.reject(chromium()), env, 5, 1);
+  const pending = load();
+  const settled = await Promise.race([pending.then(() => 'settled'), Promise.resolve('still-pending')]);
+  assert.equal(settled, 'still-pending');
+  assert.ok(calls.waits >= 1, 'it must wait rather than reload while the credential is in flight');
+  assert.equal(calls.reloads, 0);
+  settle();
+  await new Promise((resolve) => setTimeout(resolve, 5));
+  assert.equal(calls.reloads, 1, 'once the session is persisted the reload is safe');
+});
+
+test('a callback that never settles surfaces the error instead of reloading', async () => {
+  // The conservative end: after the budget, showing the error beats a reload
+  // that could still destroy the credential.
+  const { env, calls } = environment({ settled: false });
+  const error = chromium();
+  const load = withStaleChunkRecovery(() => Promise.reject(error), env, 3, 1);
+  await assert.rejects(load(), (thrown: unknown) => thrown === error);
+  assert.equal(calls.reloads, 0);
+  assert.equal(calls.waits, 3);
+});
+
+test('a blocked marker surfaces the error through the wrapper too', async () => {
+  const { env, calls } = environment({ markerRetainable: false });
+  const error = chromium();
+  const load = withStaleChunkRecovery(() => Promise.reject(error), env, 3, 1);
+  await assert.rejects(load(), (thrown: unknown) => thrown === error);
+  assert.equal(calls.reloads, 0, 'a reload that cannot be counted must not happen');
 });

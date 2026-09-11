@@ -1,3 +1,5 @@
+import { urlCarriesAuthCallback } from './offlineRuntime.js';
+
 /*
  * Recovering a route whose code no longer exists on the server.
  *
@@ -10,16 +12,29 @@
  * dynamic import then fails and the route renders nothing.
  *
  * The service worker's `controllerchange` reload is the usual cure, and
- * `offlineRuntime.ts` deliberately withholds it from a document that arrived on
- * an auth callback -- a reload there can land between auth-js clearing the URL
- * fragment and the session being saved, destroying a one-time link. That
- * protection is right and stays; the consequence Codex identified is that such
- * a document opts out of staleness recovery for the rest of its life.
+ * `offlineRuntime.ts` withholds it from a document that arrived on an auth
+ * callback, because a reload there can land between auth-js clearing the URL
+ * fragment and the session being saved, destroying a one-time link.
  *
- * So recovery moves to where the damage actually shows up. Reloading because a
- * chunk 404'd cannot be premature by construction: the route has already failed,
- * so there is nothing left to interrupt -- unlike a speculative reload, which on
- * the reset screen would throw away a password the customer was typing.
+ * TWO CONDITIONS GATE THE RELOAD HERE, and an earlier version of this file had
+ * neither. Both were found in review and both were right:
+ *
+ *   1. The loop marker must be RETAINABLE. Where sessionStorage throws -- a
+ *      private window, blocked site data -- the write silently failed and the
+ *      read always said "not yet reloaded", so a chunk that was genuinely
+ *      missing reloaded every fresh document forever. The earlier comment
+ *      claimed losing the marker "only costs one extra reload"; that was simply
+ *      wrong, and an unbounded reload loop is worse than the staleness this
+ *      exists to cure. The marker is now written and READ BACK, and a marker
+ *      that cannot be retained refuses the reload outright.
+ *
+ *   2. The callback must have SETTLED. The earlier version argued that a reload
+ *      here "cannot be premature by construction, because the route has already
+ *      failed". That reasoning only considered the UI: the reset route is itself
+ *      lazy, so its chunk can fail while auth-js is still consuming an
+ *      implicit-flow fragment, and a reload in that window leaves the token in
+ *      neither the URL nor storage and burns the link. A failed route is not
+ *      evidence that nothing else is in flight.
  */
 
 /* Every engine words this differently; all of them mean the module never arrived. */
@@ -36,28 +51,40 @@ export function isChunkLoadFailure(error: unknown): boolean {
   return CHUNK_FAILURE_PATTERNS.some((pattern) => pattern.test(text));
 }
 
+export type StaleChunkDecision = 'reload' | 'rethrow' | 'wait';
+
 /**
- * Whether to reload, kept pure so the rule can be tested without a browser.
+ * Whether to reload, kept pure so every rule can be tested without a browser.
  *
- * One reload per attempt, and no more. If the fresh document ALSO cannot load
- * the chunk the cause is not staleness -- the asset is genuinely missing, or the
- * network is failing -- and reloading again would spin the customer in a loop
- * that never renders an error. The second failure is rethrown so the error
- * boundary can say something true instead.
+ * Order is the meaning. A non-chunk error is never ours. A document that has
+ * already reloaded does not reload again -- if the fresh one still cannot fetch
+ * the chunk, staleness was not the cause and looping would never show the
+ * customer an error they could act on. A marker that cannot be retained is the
+ * same risk with no way to count, so it refuses rather than gambles. Only then
+ * does an unsettled callback hold the reload back, and that one is 'wait'
+ * rather than 'rethrow' because it resolves on its own in a moment.
  */
-export function decideStaleChunkReload(input: { error: unknown; alreadyReloaded: boolean }): 'reload' | 'rethrow' {
+export function decideStaleChunkReload(input: {
+  error: unknown;
+  alreadyReloaded: boolean;
+  markerRetainable: boolean;
+  authCallbackSettled: boolean;
+}): StaleChunkDecision {
   if (!isChunkLoadFailure(input.error)) return 'rethrow';
-  return input.alreadyReloaded ? 'rethrow' : 'reload';
+  if (input.alreadyReloaded) return 'rethrow';
+  if (!input.markerRetainable) return 'rethrow';
+  if (!input.authCallbackSettled) return 'wait';
+  return 'reload';
 }
 
 const RELOAD_MARKER = 'xbar-stale-chunk-reload';
 
-/*
- * sessionStorage, because the marker has to survive the very reload it
- * describes and must not outlive the tab. Blocked site data throws on access
- * rather than returning null, and losing the marker only costs one extra
- * reload, so every path here swallows.
- */
+/* How long a chunk failure will wait for an auth callback to finish persisting
+ * before giving the customer the error instead. Generous: the callback is one
+ * network round trip and a synchronous write. */
+export const AUTH_SETTLE_ATTEMPTS = 20;
+export const AUTH_SETTLE_INTERVAL_MS = 250;
+
 function hasReloaded(): boolean {
   try {
     return typeof sessionStorage !== 'undefined' && sessionStorage.getItem(RELOAD_MARKER) === 'yes';
@@ -66,11 +93,18 @@ function hasReloaded(): boolean {
   }
 }
 
-function markReloaded() {
+/*
+ * Writes the marker and CONFIRMS it, because a silent failure here is what
+ * turns one reload into an endless sequence of them. Blocked site data throws
+ * on access; a full quota accepts the call and stores nothing.
+ */
+function markReloaded(): boolean {
   try {
-    sessionStorage?.setItem(RELOAD_MARKER, 'yes');
+    if (typeof sessionStorage === 'undefined') return false;
+    sessionStorage.setItem(RELOAD_MARKER, 'yes');
+    return sessionStorage.getItem(RELOAD_MARKER) === 'yes';
   } catch {
-    // Non-fatal: without the marker a second failure reloads once more.
+    return false;
   }
 }
 
@@ -78,15 +112,49 @@ function clearReloaded() {
   try {
     sessionStorage?.removeItem(RELOAD_MARKER);
   } catch {
-    // Non-fatal.
+    // Non-fatal: at worst this tab forgoes a later recovery.
   }
+}
+
+/*
+ * Whether a credential this document arrived with is safely on disk.
+ *
+ * Read once, at module evaluation: App.tsx imports this, and ES imports run
+ * before main.tsx's own module body, so the URL still carries the original
+ * fragment here -- before auth-js consumes it and before main.tsx rewrites a
+ * rejected callback. That is exactly the instant the question is asked about.
+ */
+export const beganOnAuthCallback = typeof window !== 'undefined' && urlCarriesAuthCallback(window.location.href);
+
+/*
+ * Whether the credential is on disk yet, supplied from outside.
+ *
+ * Injected rather than imported so this module does not depend on the Supabase
+ * client, which would pull the whole client chain into anything that loads a
+ * route. `main.tsx` installs the real probe.
+ *
+ * The default REFUSES to call a callback settled, so a document that arrived on
+ * one recovers only once something has actually vouched for the session. If the
+ * probe is never installed, such a document simply keeps the behaviour it had
+ * before any of this existed: no reload, and the error surfaces.
+ */
+let settledProbe: () => boolean = () => !beganOnAuthCallback;
+
+export function setAuthCallbackSettledProbe(probe: () => boolean) {
+  settledProbe = probe;
+}
+
+function authCallbackSettled(): boolean {
+  return !beganOnAuthCallback || settledProbe();
 }
 
 export type StaleChunkEnvironment = {
   hasReloaded: () => boolean;
-  markReloaded: () => void;
+  markReloaded: () => boolean;
   clearReloaded: () => void;
   reload: () => void;
+  authCallbackSettled: () => boolean;
+  wait: (ms: number) => Promise<void>;
 };
 
 const browserEnvironment: StaleChunkEnvironment = {
@@ -94,6 +162,8 @@ const browserEnvironment: StaleChunkEnvironment = {
   markReloaded,
   clearReloaded,
   reload: () => window.location.reload(),
+  authCallbackSettled,
+  wait: (ms) => new Promise((resolve) => setTimeout(resolve, ms)),
 };
 
 /**
@@ -106,6 +176,8 @@ const browserEnvironment: StaleChunkEnvironment = {
 export function withStaleChunkRecovery<T>(
   factory: () => Promise<T>,
   environment: StaleChunkEnvironment = browserEnvironment,
+  attempts: number = AUTH_SETTLE_ATTEMPTS,
+  intervalMs: number = AUTH_SETTLE_INTERVAL_MS,
 ): () => Promise<T> {
   return () =>
     factory().then(
@@ -113,18 +185,32 @@ export function withStaleChunkRecovery<T>(
         environment.clearReloaded();
         return loaded;
       },
-      (error: unknown) => {
-        if (decideStaleChunkReload({ error, alreadyReloaded: environment.hasReloaded() }) === 'rethrow') {
-          throw error;
+      async (error: unknown) => {
+        for (let remaining = attempts; remaining > 0; remaining -= 1) {
+          const decision = decideStaleChunkReload({
+            error,
+            alreadyReloaded: environment.hasReloaded(),
+            markerRetainable: true,
+            authCallbackSettled: environment.authCallbackSettled(),
+          });
+          if (decision === 'rethrow') throw error;
+          if (decision === 'reload') {
+            // Retainability is proven by writing, not predicted, so the marker
+            // is committed before the decision to reload is final.
+            if (!environment.markReloaded()) throw error;
+            environment.reload();
+            /*
+             * Never settles on purpose. The document is being replaced, and
+             * resolving or rejecting here would render a flash of the error
+             * screen over a page that is already on its way out.
+             */
+            return new Promise<T>(() => {});
+          }
+          await environment.wait(intervalMs);
         }
-        environment.markReloaded();
-        environment.reload();
-        /*
-         * Never settles on purpose. The document is being replaced, and
-         * resolving or rejecting here would render a flash of the error screen
-         * over a page that is already on its way out.
-         */
-        return new Promise<T>(() => {});
+        // The callback never finished persisting. Showing the error is the
+        // conservative end: a reload now could still burn the link.
+        throw error;
       },
     );
 }

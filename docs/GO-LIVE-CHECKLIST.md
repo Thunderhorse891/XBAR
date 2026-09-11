@@ -342,9 +342,31 @@ response.status !== 200) return response`). The cache fallback lives in the
   the cause. A genuine route bug is never swallowed: only the four engine
   wordings for a missing module qualify.
 
-  Four rules, each mutation-checked: the loop guard, the non-Chromium wordings,
-  clearing the marker on success, and refusing to treat an ordinary error as a
-  stale chunk.
+  **That first version shipped with two defects of its own, both found in
+  review and both real.** They are recorded here rather than quietly folded in,
+  because one of them contradicts a claim made confidently above.
+
+  - _An unbounded reload loop where `sessionStorage` is blocked._ The write
+    failed silently and the read always said "not yet reloaded", so a genuinely
+    missing asset reloaded every fresh document forever. The code's own comment
+    claimed losing the marker "only costs one extra reload" -- simply wrong. The
+    marker is now written and READ BACK, and one that cannot be retained refuses
+    the reload outright.
+  - _The credential window, reopened by a different door._ The reasoning given
+    was that a reload here "cannot be premature by construction, because the
+    route has already failed". That considered only the UI. The reset route is
+    itself lazy, so its chunk can fail while auth-js is still consuming an
+    implicit-flow fragment, and a reload in that window leaves the token in
+    neither the URL nor storage and burns the link -- precisely the harm the
+    `offlineRuntime` latch exists to prevent. A failed route is not evidence
+    that nothing else is in flight. The reload now waits for the credential to
+    be on disk, and after a bounded wait shows the error rather than gambling.
+
+  Five rules, each mutation-checked: the loop guard, the non-Chromium wordings,
+  clearing the marker on success, refusing to treat an ordinary error as a stale
+  chunk, marker retainability, and the callback-settled wait -- including that
+  the loop guard outranks the wait, since waiting on a document that has already
+  had its one reload can only delay the error.
 
 - Not claimed: none of this was exercised against a live GoTrue or a live
   Supabase project. The browser suites intercept Auth and PostgREST, so what is
