@@ -250,6 +250,33 @@ set before release.
   must show the refusal with no form. With the comparison removed the unit case
   and the browser case fail and the other 20 and 54 stay green.
 
+- **The reload guard did not recognise a REJECTED callback, because it matched
+  the URL Supabase sends rather than the one that exists by then. Now fixed**
+  (raised by Codex against `2f59fbe`, and correct). `main.tsx` rewrites
+  `#error=...` into a readable `authError` at module scope and calls
+  `registerOfflineRuntime()` afterwards, so the fragment the recogniser looked
+  for was already gone. Measured on the four shapes:
+
+  ```
+  true   as Supabase sends it (browser)     /app/login#error=access_denied&error_code=otp_expired
+  false  after main.tsx rewrite (browser)   /app/login?authError=otp_expired
+  true   as Supabase sends it (hash)        /app/#error=access_denied&error_code=otp_expired
+  false  after main.tsx rewrite (hash)      /app/#/login?authError=otp_expired
+  ```
+
+  Only the two the app never sees at registration matched. So on a returning
+  visit where an updated worker takes over, `beganOnAuthCallback` was false, and
+  the reload landed after the screen had read the reason and cleared it from the
+  URL -- returning an ordinary sign-in form with no account of why the link
+  failed and nothing left to rebuild one from. Nothing is burned here; a
+  rejected callback holds no credential. What is lost is the explanation, which
+  is the whole point of the notice added earlier in this PR.
+
+  `urlCarriesAuthCallback` now also recognises `authError` in the query and, for
+  the hash router, in the query string inside the fragment. Both halves are
+  load-bearing: removing either fails both the recogniser case and a full-path
+  case that stages an earlier controller, a takeover, and asserts no reload.
+
 - Not claimed: none of this was exercised against a live GoTrue or a live
   Supabase project. The browser suites intercept Auth and PostgREST, so what is
   established is the client's behaviour, not the server's.

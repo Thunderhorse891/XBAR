@@ -22,6 +22,29 @@ const AUTH_CALLBACK_FRAGMENT_PARAMS = [
   'error_description',
 ];
 
+/*
+ * And the shape a REJECTED callback has by the time this runs.
+ *
+ * The parameters above are what Supabase sends, which is not what is in the URL
+ * when `registerOfflineRuntime()` is called: `main.tsx` rewrites `#error=...`
+ * into a readable `authError` FIRST, at module scope, and registers the worker
+ * afterwards. So the fragment this looked for had already been replaced --
+ * `/app/login?authError=otp_expired` under the browser router,
+ * `/app/#/login?authError=otp_expired` under the hash one -- and both read as
+ * "not a callback". Measured on the four shapes: the two Supabase sends match,
+ * the two that actually exist at registration did not.
+ *
+ * A rejected callback holds no credential to destroy, so the reason to keep the
+ * reload away from it is a different one -- the failure reason is the only
+ * record of what went wrong, and it is consumed and removed from the URL as
+ * soon as the screen shows it. A worker takeover reload landing after that
+ * returns an ordinary sign-in form with no explanation at all, and nothing is
+ * left anywhere to reconstruct one from.
+ */
+function carriesAuthFailureReason(params: URLSearchParams): boolean {
+  return params.has('authError');
+}
+
 export function urlCarriesAuthCallback(href: string): boolean {
   let url: URL;
   try {
@@ -31,8 +54,17 @@ export function urlCarriesAuthCallback(href: string): boolean {
     // refusing every refresh on it would be a worse answer than allowing one.
     return false;
   }
-  const fragment = new URLSearchParams(url.hash.replace(/^#/, ''));
+  const hash = url.hash.replace(/^#/, '');
+  const fragment = new URLSearchParams(hash);
   if (AUTH_CALLBACK_FRAGMENT_PARAMS.some((name) => fragment.has(name))) return true;
+  if (carriesAuthFailureReason(url.searchParams)) return true;
+  /*
+   * Under the hash router the fragment IS the route, so the rewritten reason
+   * lives in a query string of its own INSIDE the hash (`#/login?authError=...`)
+   * and the parse above sees one oddly named parameter rather than a query.
+   */
+  const hashQuery = hash.indexOf('?');
+  if (hashQuery >= 0 && carriesAuthFailureReason(new URLSearchParams(hash.slice(hashQuery + 1)))) return true;
   return url.searchParams.has('code');
 }
 

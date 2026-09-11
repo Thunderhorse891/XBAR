@@ -107,6 +107,34 @@ test('clearing the callback URL does not authorize a reload before session persi
   }
 });
 
+test('an update does not reload a page still carrying an unread failure reason', async () => {
+  /*
+   * The full path, not just the recogniser: an earlier worker controls this
+   * page, a new one takes over, and the URL is the one that actually exists at
+   * registration -- `main.tsx` has already rewritten `#error=...` into
+   * `?authError=...` by then.
+   *
+   * Nothing is at risk of being burned here; a rejected callback holds no
+   * credential. What is at risk is the explanation. The screen reads the reason
+   * and removes it from the URL, so a reload landing after that returns an
+   * ordinary sign-in form with no account of why the link did not work, and
+   * nothing left anywhere to rebuild one from.
+   */
+  for (const href of [
+    'https://xbar.test/app/login?authError=otp_expired',
+    'https://xbar.test/app/#/login?authError=otp_expired',
+  ]) {
+    const browser = installBrowser({ controller: true, href });
+    try {
+      await registerOfflineRuntime();
+      browser.claim();
+      assert.deepEqual(browser.reloads, [], `a takeover reload must not erase the only record of the failure: ${href}`);
+    } finally {
+      uninstallBrowser();
+    }
+  }
+});
+
 test('repeated claims reload at most once', async () => {
   const browser = installBrowser({ controller: true });
   try {
@@ -128,4 +156,27 @@ test('an auth callback is recognised in both flows and nowhere else', () => {
   assert.equal(urlCarriesAuthCallback('https://xbar.test/app/reset-password#'), false);
   assert.equal(urlCarriesAuthCallback('https://xbar.test/app/horses/abc#notes'), false);
   assert.equal(urlCarriesAuthCallback('https://xbar.test/app/settings'), false);
+});
+
+test('a rejected callback is recognised in the shape it actually has at registration', () => {
+  /*
+   * The three above are what SUPABASE sends, which is not what is in the URL
+   * when the worker is registered. `main.tsx` rewrites `#error=...` into a
+   * readable `authError` at module scope and calls `registerOfflineRuntime()`
+   * afterwards, so by then the fragment those match is already gone -- and a
+   * worker takeover reload lands after the screen has consumed and removed the
+   * reason, leaving an ordinary sign-in form with nothing to explain it.
+   */
+  // Browser router: the path stays where Supabase sent them, the reason moves
+  // into the query.
+  assert.equal(urlCarriesAuthCallback('https://xbar.test/app/login?authError=otp_expired'), true);
+  assert.equal(urlCarriesAuthCallback('https://xbar.test/app/reset-password?authError=access_denied'), true);
+  // Hash router: the fragment is the route, so the reason is in a query string
+  // of its own INSIDE the hash.
+  assert.equal(urlCarriesAuthCallback('https://xbar.test/app/#/login?authError=otp_expired'), true);
+  // Still nothing to protect on an ordinary page that merely has a query or a
+  // hash route of its own.
+  assert.equal(urlCarriesAuthCallback('https://xbar.test/app/horses?sort=name'), false);
+  assert.equal(urlCarriesAuthCallback('https://xbar.test/app/#/login'), false);
+  assert.equal(urlCarriesAuthCallback('https://xbar.test/app/#/horses?sort=name'), false);
 });
