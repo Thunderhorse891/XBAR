@@ -530,7 +530,6 @@ async function replaceWorkspaceRows(params: {
 
 async function syncWorkspaceMembershipRows(params: {
   workspaceId: string;
-  session: Session;
   members: WorkspaceMemberRecord[];
   updatedAt: string;
 }) {
@@ -539,7 +538,7 @@ async function syncWorkspaceMembershipRows(params: {
     throw new Error('Supabase is not configured for this build.');
   }
 
-  const { workspaceId, session, members, updatedAt } = params;
+  const { workspaceId, members, updatedAt } = params;
   const normalizedMembers = members.filter((member) => Boolean(member.email));
   const nextEmails = new Set(normalizedMembers.map((member) => normalizeWorkspaceEmail(member.email)));
 
@@ -576,7 +575,10 @@ async function syncWorkspaceMembershipRows(params: {
     const normalizedEmail = normalizeWorkspaceEmail(member.email);
     return {
       workspace_id: workspaceId,
-      user_id: normalizedEmail === normalizeWorkspaceEmail(session.user.email) ? session.user.id : null,
+      // Account binding belongs to owner bootstrap / invitation acceptance.
+      // Omitting this column preserves the binding on conflict, including an
+      // invite accepted while this save was in flight. Sending null detached
+      // every member other than the account doing the save.
       email: normalizedEmail,
       display_name: normalizedEmail.split('@')[0] ?? normalizedEmail,
       role: member.role,
@@ -641,7 +643,6 @@ async function saveWorkspaceBackupToRelationalCloud(
 
     await syncWorkspaceMembershipRows({
       workspaceId,
-      session,
       members: workspace.workspaceMembers ?? [],
       updatedAt,
     });

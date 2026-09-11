@@ -14,8 +14,11 @@ does not establish production readiness.
   consumes the pending invite atomically and applies its assigned role;
   wrong-recipient, unconfirmed, revoked and replay cases refuse. All synthetic
   users and records rolled back (one original auth user, zero workspace rows).
-  Nine relational browser cases passed without retries, including the new
-  client RPC path. Deploy the matching client before testing invitations;
+  Ten relational browser cases passed without retries, including the new
+  client RPC path and preservation of member account bindings during saves.
+  The latter test reproduced the old client's `user_id: null` write before
+  the fix; saves now omit that column and the live SQL conflict update preserves
+  the binding. Deploy the matching client before testing invitations;
   the old client no longer has permission to accept via direct table writes.
 - Follow-up share fix applied at `20260911003739` UTC (September 10 Chicago):
   `20260911003739_share_release_selected_row.sql`. Reproduced a released sibling

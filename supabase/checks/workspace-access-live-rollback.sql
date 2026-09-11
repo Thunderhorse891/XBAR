@@ -87,6 +87,12 @@ begin
 
   perform set_config('request.jwt.claim.sub', owner_id::text, true);
   set local role authenticated;
+  -- Match the membership columns sent by a workspace save: omit user_id
+  -- from both INSERT and conflict UPDATE so accepted account bindings survive.
+  insert into public.workspace_memberships (workspace_id, email, role, status)
+  values (workspace, member_email, 'Owner', 'active')
+  on conflict (workspace_id, email) do update set role = excluded.role, status = excluded.status;
+  if (select user_id from public.workspace_memberships where workspace_id = workspace and email = member_email) is distinct from member_id then raise exception 'Workspace save detached member account'; end if;
   delete from public.workspace_memberships where workspace_id = workspace and user_id = member_id;
   get diagnostics affected = row_count;
   if affected <> 1 then raise exception 'Owner cannot remove member'; end if;
