@@ -7,7 +7,7 @@ import { saveBlobAsFile, saveTextAsFile, type FileSaveResult } from './fileDownl
  * A report a rancher cannot hand to their banker, their accountant, or a
  * partner is a dashboard, not a report — so this produces two artifacts from
  * the same model: a CSV for anyone who wants to do their own arithmetic, and a
- * PDF laid out like the rest of the product's documents.
+ * PDF organized as an executive dashboard and financial registers.
  *
  * Both render entirely in the browser from data already in the store. There is
  * no upload of report data and no paid service to configure: a workspace with no
@@ -83,6 +83,7 @@ export function ranchReportToCsv(report: RanchReport): string {
   lines.push(csvRow(['Of that, recorded spend', report.money.receiptSpend]));
   lines.push(csvRow(['Invested in horses', report.money.investedInHorses]));
   lines.push(csvRow(['Invested this month', report.money.investedThisMonth]));
+  lines.push(csvRow(['Unallocated overhead this month', report.money.unallocatedThisMonth]));
   lines.push(csvRow(['Monthly burn (3-month average)', report.money.monthlyBurn]));
   lines.push(csvRow(['Listed value', report.money.listedValue]));
   lines.push(csvRow(['Value at risk', report.money.valueAtRisk]));

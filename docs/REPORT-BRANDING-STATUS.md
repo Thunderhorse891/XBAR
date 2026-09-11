@@ -1,6 +1,6 @@
 # Report branding and legal status
 
-The horse header and X footer use the PNG artwork supplied by Erin on September 11, 2026, without changing the originals. `public/brand/xbar-report-watermark.png` is an AI-assisted print derivative on white, not a replacement master logo or trademark filing drawing. It is embedded faintly behind report content. Reports retain the customer's ranch identity and describe figures as based on workspace records.
+The horse header and X footer use the PNG artwork supplied by Erin on September 11, 2026, without changing the originals. `public/brand/xbar-report-watermark.png` is an AI-assisted print derivative on white, not a replacement master logo or trademark filing drawing. It is embedded at 1.8% opacity in the masthead only, away from operational data. Reports retain the customer's ranch identity and describe figures as based on workspace records.
 
 PDF exports display **XBAR™**, not a registered-mark symbol. They do not claim certification, legal review, independent audit, or company registration. CSV exports remain plain data and cannot carry an image watermark.
 
