@@ -14,6 +14,13 @@ export type RecoveryGateState = {
   session: { user: { id: string } } | null;
   /** The user id Supabase validated a recovery for, or '' for none. */
   passwordRecoveryFor: string;
+  /**
+   * The grant id the validated link was recorded under, or '' when the link's
+   * token carried no `session_id` claim to derive one from.
+   */
+  passwordRecoveryGrant: string;
+  /** The same id for the session held right now, or '' when not derivable. */
+  sessionGrant: string;
 };
 
 /**
@@ -38,11 +45,44 @@ export function reconcileStoredRecovery(input: { storedGrant: string; spentFor: 
   return spentFor.includes(input.storedGrant) ? '' : input.storedGrant;
 }
 
+/**
+ * Matching the account is necessary and was treated as sufficient.
+ *
+ * A recovery is validated against ONE session, and an ordinary sign-in for the
+ * same account replaces that session without ending the grant: auth-js keeps a
+ * single stored session, so signing in from another tab overwrites the
+ * recovery one, and the only events that clear the marker are SIGNED_OUT and
+ * USER_UPDATED -- neither of which a plain sign-in sends. The account still
+ * matched, so the screen went on showing an authorized reset form.
+ *
+ * It was a form that could never work. `updatePassword` derives the grant of
+ * the session it actually holds and finds the account marker still naming the
+ * recovery generation, so `isRecoveryGrantSpent` reports the link as used and
+ * every submission comes back "This reset link has already been used" -- and
+ * the marker release deliberately declines to clear a grant it does not name,
+ * so nothing retires the form either. The customer is left on a live-looking
+ * page that refuses them in a loop, with the one instruction that would help
+ * (request another link) attached to a message telling them their link was
+ * already spent.
+ *
+ * So the grant is compared as well as the account. Generations survive token
+ * refresh -- the id comes from the `session_id` claim, which rotation does not
+ * change -- so this closes on a REPLACED session, not a refreshed one.
+ *
+ * Both ids must be known to disagree. A token without a `session_id` claim
+ * yields '' for either side, and refusing on an id nobody could derive would
+ * make recovery impossible on such a token rather than merely unverified; the
+ * account check still applies there, exactly as before.
+ */
 export function hasValidatedPasswordRecovery(state: RecoveryGateState): boolean {
   const grantedTo = state.passwordRecoveryFor;
   if (!grantedTo) return false;
   // A grant that outlived its session must not transfer to the next one.
-  return state.session?.user.id === grantedTo;
+  if (state.session?.user.id !== grantedTo) return false;
+  if (state.passwordRecoveryGrant && state.sessionGrant && state.passwordRecoveryGrant !== state.sessionGrant) {
+    return false;
+  }
+  return true;
 }
 
 /**

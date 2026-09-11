@@ -15,13 +15,35 @@ import {
 
 const session = (id: string) => ({ user: { id } });
 
+/*
+ * Grants are named explicitly at every call rather than defaulted, so no case
+ * can pass on a default that happens to agree.
+ */
+const gate = (input: {
+  session: { user: { id: string } } | null;
+  passwordRecoveryFor: string;
+  passwordRecoveryGrant: string;
+  sessionGrant: string;
+}) => hasValidatedPasswordRecovery(input);
+
 test('a session with no recovery grant cannot change a password', () => {
   // The original defect: being signed in was treated as proof of a valid link.
-  assert.equal(hasValidatedPasswordRecovery({ session: session('user-a'), passwordRecoveryFor: '' }), false);
+  assert.equal(
+    gate({ session: session('user-a'), passwordRecoveryFor: '', passwordRecoveryGrant: '', sessionGrant: 'gen-1' }),
+    false,
+  );
 });
 
 test('a grant matching the current session authorizes it', () => {
-  assert.equal(hasValidatedPasswordRecovery({ session: session('user-a'), passwordRecoveryFor: 'user-a' }), true);
+  assert.equal(
+    gate({
+      session: session('user-a'),
+      passwordRecoveryFor: 'user-a',
+      passwordRecoveryGrant: 'gen-1',
+      sessionGrant: 'gen-1',
+    }),
+    true,
+  );
 });
 
 test('a grant does not transfer to a different account', () => {
@@ -31,20 +53,103 @@ test('a grant does not transfer to a different account', () => {
    * boolean would still read "recovery in progress" and let that new account's
    * password be changed with nothing validated.
    */
-  assert.equal(hasValidatedPasswordRecovery({ session: session('user-b'), passwordRecoveryFor: 'user-a' }), false);
+  assert.equal(
+    gate({
+      session: session('user-b'),
+      passwordRecoveryFor: 'user-a',
+      passwordRecoveryGrant: 'gen-1',
+      sessionGrant: 'gen-1',
+    }),
+    false,
+  );
+});
+
+test('a grant does not survive its session being replaced for the same account', () => {
+  /*
+   * The account matches, and that used to be the whole test. An ordinary
+   * sign-in for the same account overwrites the recovery session auth-js holds
+   * without sending SIGNED_OUT or USER_UPDATED, so the marker stays and the
+   * screen kept offering a form that `updatePassword` then refused on every
+   * submission -- while declining to clear a grant it did not name, so the
+   * form never expired either.
+   */
+  assert.equal(
+    gate({
+      session: session('user-a'),
+      passwordRecoveryFor: 'user-a',
+      passwordRecoveryGrant: 'gen-1',
+      sessionGrant: 'gen-2',
+    }),
+    false,
+  );
+});
+
+test('a refreshed token keeps the same grant and stays authorized', () => {
+  /*
+   * The reason the comparison is by GENERATION and not by credential: auth-js
+   * rotates the access token underneath a session that has not otherwise
+   * changed, and the `session_id` claim both tokens carry is unchanged. Were
+   * this compared by token, every refresh mid-reset would refuse the customer.
+   */
+  assert.equal(
+    gate({
+      session: session('user-a'),
+      passwordRecoveryFor: 'user-a',
+      passwordRecoveryGrant: 'gen-1',
+      sessionGrant: 'gen-1',
+    }),
+    true,
+  );
+});
+
+test('an underivable grant falls back to the account check rather than refusing', () => {
+  /*
+   * A token with no `session_id` claim yields '' on either side. Refusing on an
+   * id nobody could derive would make recovery impossible on such a token
+   * instead of merely unverified, so the account check still decides -- which
+   * is exactly the behaviour that shipped before the grant was compared.
+   */
+  assert.equal(
+    gate({
+      session: session('user-a'),
+      passwordRecoveryFor: 'user-a',
+      passwordRecoveryGrant: '',
+      sessionGrant: 'gen-1',
+    }),
+    true,
+  );
+  assert.equal(
+    gate({
+      session: session('user-a'),
+      passwordRecoveryFor: 'user-a',
+      passwordRecoveryGrant: 'gen-1',
+      sessionGrant: '',
+    }),
+    true,
+  );
+  assert.equal(
+    gate({ session: session('user-b'), passwordRecoveryFor: 'user-a', passwordRecoveryGrant: '', sessionGrant: '' }),
+    false,
+  );
 });
 
 test('a grant with no session authorizes nothing', () => {
-  assert.equal(hasValidatedPasswordRecovery({ session: null, passwordRecoveryFor: 'user-a' }), false);
+  assert.equal(
+    gate({ session: null, passwordRecoveryFor: 'user-a', passwordRecoveryGrant: 'gen-1', sessionGrant: '' }),
+    false,
+  );
 });
 
 test('neither a session nor a grant authorizes nothing', () => {
-  assert.equal(hasValidatedPasswordRecovery({ session: null, passwordRecoveryFor: '' }), false);
+  assert.equal(gate({ session: null, passwordRecoveryFor: '', passwordRecoveryGrant: '', sessionGrant: '' }), false);
 });
 
 test('an empty grant is never satisfied, even by an empty id', () => {
   // Guards against '' == '' quietly authorizing a malformed session.
-  assert.equal(hasValidatedPasswordRecovery({ session: session(''), passwordRecoveryFor: '' }), false);
+  assert.equal(
+    gate({ session: session(''), passwordRecoveryFor: '', passwordRecoveryGrant: '', sessionGrant: '' }),
+    false,
+  );
 });
 
 /*

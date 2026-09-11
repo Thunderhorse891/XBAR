@@ -210,6 +210,46 @@ set before release.
   rather than proof of it -- at a ~1.7% rate a clean 120 is not conclusive on
   its own -- which is why the deterministic case above carries the weight.
 
+- **A reset form that refused the customer in a loop and never expired. Now
+  fixed.** `hasValidatedPasswordRecovery` compared the ACCOUNT a recovery was
+  validated for and nothing else. auth-js keeps one stored session, so an
+  ordinary sign-in for the same account -- from another tab, with the old
+  password, because the reset email seemed not to arrive -- overwrites the
+  recovery session, and it sends neither `SIGNED_OUT` nor `USER_UPDATED`, the
+  only two events that release the marker. The account still matched, so the
+  reset tab went on drawing an authorized form.
+
+  It was a form that could not work, and measured rather than reasoned. With
+  the grant comparison removed, a probe filled and submitted it three times
+  against a replaced session:
+
+  ```
+  ATTEMPT 1 | formStillThere=1 | updateUserCalls=0   "This reset link has already been used. Request a new reset link."
+  ATTEMPT 2 | formStillThere=1 | updateUserCalls=0   "This reset link has already been used. Request a new reset link."
+  ATTEMPT 3 | formStillThere=1 | updateUserCalls=0   "This reset link has already been used. Request a new reset link."
+  ```
+
+  `updatePassword` derives the grant of the session it actually holds, finds
+  the account marker still naming the RECOVERY generation, and reports the link
+  as spent -- then declines to clear a grant it does not name, so the form does
+  not retire either. Zero requests ever left the browser. The customer is left
+  submitting into a loop whose only instruction (request another link) is
+  attached to a claim about their link that is not what happened.
+
+  The gate now compares the grant generation as well as the account
+  (`src/lib/passwordRecovery.ts`), with the grant carried in store state so the
+  screen re-renders when the session is replaced. Generations come from the
+  `session_id` claim, which token rotation does not change, so this closes on a
+  REPLACED session and not a refreshed one. Both ids must be known to disagree:
+  a token carrying no `session_id` falls back to the account check exactly as
+  before, rather than making recovery impossible on such a token.
+
+  Pinned in both places. `tests/passwordRecovery.test.ts` gains the replaced-
+  session case plus refresh and underivable-grant cases; `password-reset.spec.ts`
+  gains a rendered case where a second tab signs in normally and the reset tab
+  must show the refusal with no form. With the comparison removed the unit case
+  and the browser case fail and the other 20 and 54 stay green.
+
 - Not claimed: none of this was exercised against a live GoTrue or a live
   Supabase project. The browser suites intercept Auth and PostgREST, so what is
   established is the client's behaviour, not the server's.

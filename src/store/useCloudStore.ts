@@ -21,9 +21,7 @@ import {
   waitForStorageCatchUp,
   type StorageCatchUp,
 } from '@/lib/authBootstrap';
-import { hasValidatedPasswordRecovery, reconcileStoredRecovery } from '@/lib/passwordRecovery';
-
-export { hasValidatedPasswordRecovery };
+import { hasValidatedPasswordRecovery as recoveryGateOpen, reconcileStoredRecovery } from '@/lib/passwordRecovery';
 import { authRedirectUrl, passwordResetPath, publicAppRouteUrl } from '@/lib/routeCanon';
 
 type CloudActionResult = {
@@ -166,6 +164,16 @@ type CloudStore = {
    * ever compared against the session actually holding it.
    */
   passwordRecoveryFor: string;
+  /**
+   * The grant id that authorization was recorded under.
+   *
+   * Kept in the store rather than read from sessionStorage where it is needed,
+   * because the reset screen subscribes to this: a session replaced by an
+   * ordinary sign-in leaves `passwordRecoveryFor` untouched, so the grant is
+   * the only part of the state that changes, and a selector that reads it out
+   * of band would not re-render on it.
+   */
+  passwordRecoveryGrant: string;
   sendPasswordReset: (email: string) => Promise<CloudActionResult>;
   signInWithFacebook: () => Promise<CloudActionResult>;
   signInWithGoogle: () => Promise<CloudActionResult>;
@@ -852,11 +860,37 @@ function announceSpentRecovery(userId: string, grantToken = '') {
   }
 }
 
+function initialRecoveryGrantState(): { passwordRecoveryFor: string; passwordRecoveryGrant: string } {
+  const grantToken = readStoredRecoveryGrantToken();
+  const passwordRecoveryFor = reconcileStoredRecoveryGrant(readStoredRecoveryUser(), grantToken);
+  // A reconciled-away grant leaves no id behind: the two must never disagree.
+  return { passwordRecoveryFor, passwordRecoveryGrant: passwordRecoveryFor ? grantToken : '' };
+}
+
+/**
+ * The reset screen's question, asked of the whole store.
+ *
+ * The decision itself stays pure in lib/passwordRecovery.ts; this only supplies
+ * the two grant ids, one of which has to be derived from the live session.
+ */
+export function hasValidatedPasswordRecovery(state: {
+  session: { user: { id: string }; access_token?: string } | null;
+  passwordRecoveryFor: string;
+  passwordRecoveryGrant: string;
+}): boolean {
+  return recoveryGateOpen({
+    session: state.session,
+    passwordRecoveryFor: state.passwordRecoveryFor,
+    passwordRecoveryGrant: state.passwordRecoveryGrant,
+    sessionGrant: recoveryGrantToken(state.session as Session | null),
+  });
+}
+
 export const useCloudStore = create<CloudStore>((set, get) => ({
   initialized: false,
   authReady: false,
   workspaceReady: false,
-  passwordRecoveryFor: reconcileStoredRecoveryGrant(readStoredRecoveryUser(), readStoredRecoveryGrantToken()),
+  ...initialRecoveryGrantState(),
   status: isSupabaseConfigured() ? 'loading' : 'unavailable',
   session: null,
   workspaceId: '',
@@ -1032,14 +1066,14 @@ export const useCloudStore = create<CloudStore>((set, get) => ({
            * and it is still handled below.
            */
           if (heldGrant && message.grantToken === heldGrant) {
-            set({ passwordRecoveryFor: '' });
+            set({ passwordRecoveryFor: '', passwordRecoveryGrant: '' });
             storeRecoveryUser('');
             return;
           }
           // Anything else -- no grant id, or one this tab is not holding -- is
           // only a prompt to consult the durable record.
           if (!isRecoveryGrantSpent(message.userId, heldGrant)) return;
-          set({ passwordRecoveryFor: '' });
+          set({ passwordRecoveryFor: '', passwordRecoveryGrant: '' });
           storeRecoveryUser('');
         });
       }
@@ -1071,7 +1105,7 @@ export const useCloudStore = create<CloudStore>((set, get) => ({
         return;
       // Read current durable state: a delayed event may predate a new link.
       if (!isRecoveryGrantSpent(recoveryFor, heldGrant)) return;
-      set({ passwordRecoveryFor: '' });
+      set({ passwordRecoveryFor: '', passwordRecoveryGrant: '' });
       storeRecoveryUser('');
     };
     if (!recoveryChannel && typeof window !== 'undefined') window.addEventListener('storage', onRecoveryStorage);
@@ -1178,7 +1212,7 @@ export const useCloudStore = create<CloudStore>((set, get) => ({
       if (event === 'PASSWORD_RECOVERY' && session) {
         const grantToken = recoveryGrantToken(session);
         // Supabase has validated the link; record WHO it was validated for.
-        set({ passwordRecoveryFor: session.user.id });
+        set({ passwordRecoveryFor: session.user.id, passwordRecoveryGrant: grantToken });
         storeRecoveryUser(session.user.id, grantToken);
         // Supabase has just validated a NEW link, so an earlier completion no
         // longer says anything about this account -- and the generation this
@@ -1202,7 +1236,7 @@ export const useCloudStore = create<CloudStore>((set, get) => ({
          * Clearing on any other user update is deliberate too: a grant should
          * not outlive a change to the account it was issued against.
          */
-        set({ passwordRecoveryFor: '' });
+        set({ passwordRecoveryFor: '', passwordRecoveryGrant: '' });
         storeRecoveryUser('');
         if (event === 'SIGNED_OUT' && recoveryFor) {
           /*
@@ -1377,7 +1411,7 @@ export const useCloudStore = create<CloudStore>((set, get) => ({
       currentRecoveryFor &&
       (!get().session || reconcileStoredRecoveryGrant(currentRecoveryFor, readStoredRecoveryGrantToken()) === '')
     ) {
-      set({ passwordRecoveryFor: '' });
+      set({ passwordRecoveryFor: '', passwordRecoveryGrant: '' });
     }
     /*
      * And the tab-local marker is kept in step with the grant itself, including
@@ -1675,7 +1709,7 @@ export const useCloudStore = create<CloudStore>((set, get) => ({
     const releaseRecoveryMarker = (finishedGrant: string) => {
       const heldGrant = readStoredRecoveryGrantToken();
       if (heldGrant && finishedGrant && heldGrant !== finishedGrant) return;
-      set({ passwordRecoveryFor: '' });
+      set({ passwordRecoveryFor: '', passwordRecoveryGrant: '' });
       storeRecoveryUser('');
     };
 
@@ -1684,7 +1718,13 @@ export const useCloudStore = create<CloudStore>((set, get) => ({
       return { ok: false, message: 'This reset link has already been used. Request a new reset link.' };
     }
 
-    if (!hasValidatedPasswordRecovery({ session: recoverySession, passwordRecoveryFor: get().passwordRecoveryFor })) {
+    if (
+      !hasValidatedPasswordRecovery({
+        session: recoverySession,
+        passwordRecoveryFor: get().passwordRecoveryFor,
+        passwordRecoveryGrant: get().passwordRecoveryGrant,
+      })
+    ) {
       return {
         ok: false,
         message: 'This reset link was issued for a different account than the one signed in here. Request a new link.',
@@ -1936,6 +1976,7 @@ export const useCloudStore = create<CloudStore>((set, get) => ({
       status: 'signed-out',
       // Otherwise a later ordinary sign-in inherits a recovery that is over.
       passwordRecoveryFor: '',
+      passwordRecoveryGrant: '',
       workspaceId: '',
       workspaceRole: 'Owner',
       syncState: 'idle',
@@ -1984,6 +2025,7 @@ export const useCloudStore = create<CloudStore>((set, get) => ({
       status: 'signed-out',
       // Otherwise a later ordinary sign-in inherits a recovery that is over.
       passwordRecoveryFor: '',
+      passwordRecoveryGrant: '',
       workspaceId: '',
       workspaceRole: 'Owner',
       syncState: 'idle',

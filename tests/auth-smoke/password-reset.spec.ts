@@ -1523,6 +1523,57 @@ test('a link replaced while its tab was away is still dead when the tab comes ba
   expect(olderUpdates).toBe(0);
 });
 
+test('an ordinary sign-in for the same account retires the reset form', async ({ context }) => {
+  /*
+   * The account matched, and that was the whole gate.
+   *
+   * auth-js keeps ONE stored session. Signing in normally -- from another tab,
+   * with the old password, because the reset email seemed not to arrive --
+   * overwrites the recovery session with an ordinary one for the same account,
+   * and sends neither SIGNED_OUT nor USER_UPDATED, which are the only two
+   * events that release the marker. So `passwordRecoveryFor` still named the
+   * account, the account still matched, and the reset tab went on drawing an
+   * authorized form.
+   *
+   * It was a form that could not work. `updatePassword` derives the grant of
+   * the session it actually holds, finds the account marker still naming the
+   * RECOVERY generation, and reports the link as already used -- then declines
+   * to clear a grant it does not name, so the form does not retire either. The
+   * customer is left submitting into a loop that answers "this reset link has
+   * already been used" forever.
+   *
+   * Both sessions below belong to the same account and differ only by
+   * generation, which is the distinction the screen has to act on.
+   */
+  const reset = await context.newPage();
+  const elsewhere = await context.newPage();
+  await stubGoTrueUser(elsewhere);
+  let resetUpdates = 0;
+  await stubGoTrueUser(reset, async (route) => {
+    resetUpdates += 1;
+    await route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(userRecord()) });
+  });
+
+  const link = recoveryLink();
+  const ordinary = sessionLink('signin');
+  expect(sessionIdOf(link)).not.toBe(sessionIdOf(ordinary));
+
+  await reset.goto(link);
+  await expect(newPassword(reset)).toBeVisible({ timeout: 30_000 });
+  const grantToken = await heldGrantToken(reset);
+  expect(grantToken).not.toBe('');
+
+  // The same person, signing in the ordinary way in another tab.
+  await elsewhere.goto(ordinary);
+  await expect.poll(() => readStoredAccessToken(elsewhere), { timeout: 30_000 }).not.toBe('');
+
+  // The reset tab must stop offering a form it can no longer honour, and say
+  // the one useful thing instead: request another link.
+  await expect(refusal(reset)).toBeVisible({ timeout: 30_000 });
+  await expect(newPassword(reset)).toHaveCount(0);
+  expect(resetUpdates).toBe(0);
+});
+
 test('a full storage quota does not wedge a reset behind a stale claim', async ({ page }) => {
   /*
    * localStorage readable, its writes rejected -- a full quota, which is the
