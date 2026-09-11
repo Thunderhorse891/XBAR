@@ -311,6 +311,41 @@ set before release.
   version of that case passed with the guard reverted and was retargeted rather
   than kept.
 
+- **An auth-callback document opted out of stale-code recovery for its whole
+  life. Now handled, by a different route than suggested** (raised by Codex
+  against `002901c`). The `beganOnAuthCallback` latch stays true for the
+  document's lifetime, so every later `controllerchange` is ignored. That
+  matters because routes are lazy -- 35 of them, 94 built chunks -- so such a
+  document keeps fetching route code for as long as it stays open, and chunk
+  filenames are content-hashed, so a deploy replaces them.
+
+  Confirmed by reading the worker rather than assuming: it is network-first for
+  `/assets/`, and its handler returns a non-200 AS IS (`if (!response ||
+response.status !== 200) return response`). The cache fallback lives in the
+  `.catch`, which a 404 response never reaches. So an obsolete chunk URL fails
+  outright, whether or not the activating worker deleted the previous cache.
+
+  The latch itself is not the thing to loosen. It exists because a reload can
+  land between auth-js clearing the URL fragment and the session being saved,
+  which destroys a one-time link, and a clean URL is not evidence the save
+  happened. Codex's suggested remedy -- release the latch or fire the skipped
+  reload once authentication settles -- trades one harm for another: on the
+  reset screen, a reload fired on a timer or on a storage signal throws away a
+  password the customer is in the middle of typing.
+
+  So recovery moved to the point of failure instead (`staleChunkRecovery.ts`,
+  wrapping all 35 `lazy()` factories). Reloading because a chunk 404'd cannot be
+  premature by construction: the route has already failed, so there is nothing
+  left to interrupt. One reload per tab, marker cleared on a successful load so
+  a later deploy can recover too, and a second failure rethrows rather than
+  looping -- if a fresh document still cannot fetch the chunk, staleness was not
+  the cause. A genuine route bug is never swallowed: only the four engine
+  wordings for a missing module qualify.
+
+  Four rules, each mutation-checked: the loop guard, the non-Chromium wordings,
+  clearing the marker on success, and refusing to treat an ordinary error as a
+  stale chunk.
+
 - Not claimed: none of this was exercised against a live GoTrue or a live
   Supabase project. The browser suites intercept Auth and PostgREST, so what is
   established is the client's behaviour, not the server's.

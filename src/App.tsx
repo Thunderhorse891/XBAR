@@ -1,4 +1,5 @@
 import { Suspense, lazy, useEffect } from 'react';
+import { withStaleChunkRecovery } from './lib/staleChunkRecovery';
 import {
   BrowserRouter,
   HashRouter,
@@ -35,41 +36,41 @@ import './routes/premiumOperatingSystem.css';
 import './routes/premiumSaasExperience.css';
 import './styles/xbarSaas.css';
 
-const Dashboard = lazy(() => import('./pages/Dashboard'));
-const GettingStarted = lazy(() => import('./routes/GettingStarted'));
-const ResetPassword = lazy(() => import('./routes/ResetPassword'));
-const BuyerDealRoom = lazy(() => import('./routes/BuyerDealRoom'));
-const SalePacketStudio = lazy(() => import('./routes/SalePacketStudio'));
-const Reports = lazy(() => import('./routes/Reports'));
-const Financials = lazy(() => import('./routes/Financials'));
-const TodayWork = lazy(() => import('./routes/TodayWork'));
-const HerdGroups = lazy(() => import('./routes/HerdGroups'));
-const Pastures = lazy(() => import('./routes/Pastures'));
-const FeedInventory = lazy(() => import('./routes/FeedInventory'));
-const AnimalProfile = lazy(() => import('./routes/AnimalProfile'));
-const HealthCare = lazy(() => import('./routes/HealthCare'));
-const OwnershipChain = lazy(() => import('./routes/OwnershipChain'));
-const EquipmentPage = lazy(() => import('./routes/Equipment'));
-const BreedingFoaling = lazy(() => import('./routes/BreedingFoaling'));
-const Breeding = lazy(() => import('./routes/Breeding'));
-const BuyerProfile = lazy(() => import('./routes/BuyerProfile'));
-const VerifyPacket = lazy(() => import('./routes/VerifyPacket'));
-const Documents = lazy(() => import('./routes/Documents'));
-const Expenses = lazy(() => import('./routes/Expenses'));
-const Horses = lazy(() => import('./routes/Horses'));
-const Login = lazy(() => import('./routes/Login'));
-const MainLayout = lazy(() => import('./routes/layouts/MainLayout'));
-const Medical = lazy(() => import('./routes/Medical'));
-const NotFound = lazy(() => import('./routes/NotFound'));
-const Ownership = lazy(() => import('./routes/Ownership'));
-const RanchAssets = lazy(() => import('./routes/RanchAssets'));
-const Reminders = lazy(() => import('./routes/Reminders'));
-const Sales = lazy(() => import('./routes/Sales'));
-const Settings = lazy(() => import('./routes/Settings'));
-const SetupWorkspace = lazy(() => import('./routes/SetupWorkspace'));
-const SharedAccess = lazy(() => import('./routes/SharedAccess'));
-const Subscriptions = lazy(() => import('./routes/Subscriptions'));
-const Weather = lazy(() => import('./routes/Weather'));
+const Dashboard = lazy(withStaleChunkRecovery(() => import('./pages/Dashboard')));
+const GettingStarted = lazy(withStaleChunkRecovery(() => import('./routes/GettingStarted')));
+const ResetPassword = lazy(withStaleChunkRecovery(() => import('./routes/ResetPassword')));
+const BuyerDealRoom = lazy(withStaleChunkRecovery(() => import('./routes/BuyerDealRoom')));
+const SalePacketStudio = lazy(withStaleChunkRecovery(() => import('./routes/SalePacketStudio')));
+const Reports = lazy(withStaleChunkRecovery(() => import('./routes/Reports')));
+const Financials = lazy(withStaleChunkRecovery(() => import('./routes/Financials')));
+const TodayWork = lazy(withStaleChunkRecovery(() => import('./routes/TodayWork')));
+const HerdGroups = lazy(withStaleChunkRecovery(() => import('./routes/HerdGroups')));
+const Pastures = lazy(withStaleChunkRecovery(() => import('./routes/Pastures')));
+const FeedInventory = lazy(withStaleChunkRecovery(() => import('./routes/FeedInventory')));
+const AnimalProfile = lazy(withStaleChunkRecovery(() => import('./routes/AnimalProfile')));
+const HealthCare = lazy(withStaleChunkRecovery(() => import('./routes/HealthCare')));
+const OwnershipChain = lazy(withStaleChunkRecovery(() => import('./routes/OwnershipChain')));
+const EquipmentPage = lazy(withStaleChunkRecovery(() => import('./routes/Equipment')));
+const BreedingFoaling = lazy(withStaleChunkRecovery(() => import('./routes/BreedingFoaling')));
+const Breeding = lazy(withStaleChunkRecovery(() => import('./routes/Breeding')));
+const BuyerProfile = lazy(withStaleChunkRecovery(() => import('./routes/BuyerProfile')));
+const VerifyPacket = lazy(withStaleChunkRecovery(() => import('./routes/VerifyPacket')));
+const Documents = lazy(withStaleChunkRecovery(() => import('./routes/Documents')));
+const Expenses = lazy(withStaleChunkRecovery(() => import('./routes/Expenses')));
+const Horses = lazy(withStaleChunkRecovery(() => import('./routes/Horses')));
+const Login = lazy(withStaleChunkRecovery(() => import('./routes/Login')));
+const MainLayout = lazy(withStaleChunkRecovery(() => import('./routes/layouts/MainLayout')));
+const Medical = lazy(withStaleChunkRecovery(() => import('./routes/Medical')));
+const NotFound = lazy(withStaleChunkRecovery(() => import('./routes/NotFound')));
+const Ownership = lazy(withStaleChunkRecovery(() => import('./routes/Ownership')));
+const RanchAssets = lazy(withStaleChunkRecovery(() => import('./routes/RanchAssets')));
+const Reminders = lazy(withStaleChunkRecovery(() => import('./routes/Reminders')));
+const Sales = lazy(withStaleChunkRecovery(() => import('./routes/Sales')));
+const Settings = lazy(withStaleChunkRecovery(() => import('./routes/Settings')));
+const SetupWorkspace = lazy(withStaleChunkRecovery(() => import('./routes/SetupWorkspace')));
+const SharedAccess = lazy(withStaleChunkRecovery(() => import('./routes/SharedAccess')));
+const Subscriptions = lazy(withStaleChunkRecovery(() => import('./routes/Subscriptions')));
+const Weather = lazy(withStaleChunkRecovery(() => import('./routes/Weather')));
 
 // One unique label per route: no two routes may share a user-facing name, so
 // navigation, page titles, and the command palette always agree on where a
