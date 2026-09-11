@@ -848,7 +848,7 @@ export default function Documents() {
                             <div className="table-cell__stack">
                               <strong>{document.title}</strong>
                               <span>
-                                {document.type} · {Math.round(document.confidence * 100)}% OCR confidence
+                                {document.type} · {Math.round(document.confidence * 100)}% match confidence
                               </span>
                             </div>
                           </td>

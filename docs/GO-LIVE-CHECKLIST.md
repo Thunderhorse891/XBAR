@@ -182,6 +182,70 @@ set before release.
   Supabase project. The browser suites intercept Auth and PostgREST, so what is
   established is the client's behaviour, not the server's.
 
+## OCR and document ingestion, September 11, 2026
+
+Measured through the real Create > Upload Document pipeline on rendered PNGs
+(not `.txt` fixtures), reading the persisted workspace rather than the
+Documents table -- that table is stage-filtered, so a document OCR failed to
+match is simply not on screen and a naive check reads as "missing".
+
+- **On-device Tesseract is more robust than the single clean fixture suggested.**
+  The same certificate rendered four ways, extracted text and match:
+
+  | rendering                                        | text extracted                         | matched |
+  | ------------------------------------------------ | -------------------------------------- | ------- |
+  | clean 64px black on white (the existing fixture) | complete                               | yes     |
+  | 24px small type                                  | complete                               | yes     |
+  | rotated 4 degrees                                | complete                               | yes     |
+  | faded, grey #8a8a8a on #dddddd                   | complete                               | yes     |
+  | 6% salt-and-pepper speckle                       | **nothing**, or a fragment on a re-run | yes     |
+
+  Small type, mild rotation and poor contrast are handled. Heavy speckle is
+  not, and is non-deterministic between runs. **Not established:** handwriting,
+  real camera photographs, genuine scanner output, or scanned/mixed PDFs. Every
+  fixture here is synthetic and should be read as a floor, not a grade.
+
+- **Launch-blocking honesty defect: a document nothing was read from is
+  reported as a confident success.** In the run where the speckled scan
+  extracted nothing at all, the document was still recorded as
+  `confidence=0.91`, `state=Ready`, attached to a horse. The mechanism is
+  `xbarStoreHelpers.ts` in the create-a-horse-from-papers path:
+  `confidence: Math.max(document.confidence, 0.91)` and `state: 'Ready'`,
+  applied without reference to whether any text was extracted.
+
+- **The number was also labelled as something it is not.** `Documents.tsx`
+  rendered it as "% OCR confidence", but it is never an OCR measurement:
+  `documentIntelligence.ts` types the worker as returning `{ data: { text } }`
+  and discards Tesseract's own `confidence` entirely. The value is a
+  horse-match heuristic --
+  `max(match score, 0.48 + 0.07 x entityCount)`, floored at 0.42. A document
+  with zero extraction and no match still scores 0.54. Measured directly:
+  gibberish input and empty input both produce 0.54. The label now reads
+  "match confidence", which is what the number is; **the 0.91 floor and the
+  `Ready` state on an empty extraction are NOT fixed** and remain the real
+  defect.
+
+- **Entities are backfilled from the workspace and shown as extracted facts.**
+  The same path fills `ownerName` from the horse record, which takes the
+  workspace's default owner. Every document above reported
+  `ownerName: "Thunder Horse Ranch"` -- the name typed during setup, absent
+  from the certificate. The review UI offers "Apply facts" to write these onto
+  a horse profile. Each document also reported `sex: "Mare"` although no
+  fixture contains a sex word; that one is measured but not yet traced.
+
+- **Partial processing is silent.** `readDocumentText` returns a bare string and
+  applies every limit by truncation: `PDF_TEXT_PAGE_LIMIT` 8, `PDF_OCR_PAGE_LIMIT`
+  3, `TEXT_PREVIEW_LIMIT` 12,000 characters. A 40-page scanned PDF is read to
+  page 3 and nothing tells the customer. Nothing in the Documents UI mentions a
+  page or character limit.
+
+- **The text-layer heuristic mishandles mixed PDFs.** `MIN_TEXT_LAYER_CHARS` is
+  60, measured across the first 8 pages combined. A scan whose cover page has a
+  real text layer (a title block, a form header) clears 60 characters, so the
+  document is treated as text-bearing and the scanned pages are never OCR'd at
+  all. Not yet reproduced against a real mixed PDF; the threshold and its scope
+  are read from the source.
+
 ## Follow-up September 11, 2026
 
 - Account deletion now refuses unreadable ownership/membership results,
