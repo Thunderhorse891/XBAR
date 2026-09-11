@@ -1,4 +1,4 @@
-// Pure helpers for the destructive account-deletion flow. Kept framework-free
+// Planning helpers for the destructive account-deletion flow. Kept framework-free
 // so the intent/safety decisions are unit-testable without a live Supabase.
 //
 // Account deletion is irreversible and satisfies Apple Guideline 5.1.1(v)
@@ -58,4 +58,31 @@ export function planAccountDeletion(userId, ownedWorkspaces) {
     }
   }
   return { userId, workspacesToPurge, workspacesToTransfer };
+}
+
+// Supabase reports database failures in `error`, not just rejected promises.
+// An unreadable membership list is never evidence that a workspace is private.
+export async function loadAccountDeletionPlan(supabase, userId) {
+  const { data: owned, error: ownedError } = await supabase.from('workspaces').select('id').eq('owner_user_id', userId);
+  if (ownedError || !Array.isArray(owned))
+    throw new Error('Unable to verify owned workspaces. No account deletion was attempted.');
+  const workspaces = [];
+  for (const row of owned) {
+    if (typeof row?.id !== 'string' || !row.id) throw new Error('Invalid workspace ownership result.');
+    const { data: others, error: membersError } = await supabase
+      .from('workspace_memberships')
+      .select('user_id, role')
+      .eq('workspace_id', row.id)
+      .eq('status', 'active')
+      .neq('user_id', userId);
+    if (membersError || !Array.isArray(others))
+      throw new Error('Unable to verify shared workspace members. No account deletion was attempted.');
+    if (others.some((member) => typeof member?.user_id !== 'string' || !member.user_id))
+      throw new Error('Invalid shared workspace membership result.');
+    workspaces.push({
+      id: row.id,
+      otherActiveMembers: others.map((member) => ({ userId: member.user_id, role: member.role })),
+    });
+  }
+  return planAccountDeletion(userId, workspaces);
 }

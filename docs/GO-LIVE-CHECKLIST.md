@@ -3,6 +3,28 @@
 Track the evidence below separately from repository tests. Passing tests alone
 does not establish production readiness.
 
+## Follow-up September 11, 2026
+
+- Account deletion now refuses unreadable ownership/membership results,
+  unconfirmed ownership transfers and failed membership removal before deleting
+  the auth account. Thirteen targeted tests (including the real handler with
+  mocked service responses) and 1,120 unit/API tests passed. No real accounts or
+  records were deleted for these checks.
+- This does **not** close the shared-account deletion lifecycle: review changes
+  to membership between planning and deletion, and storage retention/access
+  after transferring a workspace. The current endpoint still invokes cleanup
+  of the departing user's storage prefix after transfers; shared documents
+  must not disappear or become inaccessible. Treat this as an open release gate.
+- Claude's `98f5655` removes inferred member deletion from stale saves and
+  carries reset uncertainty explicitly. Claude also measured intermittent
+  session/reload failures in the membership browser test; one passing battery
+  does not establish repeatability. That failure remains open.
+- Visual review at 1440px and 390px used a local Professional-plan fixture,
+  not a real paid account. Dashboard, Documents and Billing showed no horizontal
+  overflow. Follow up on empty Documents starting in Review and duplicated
+  billing limits extending the mobile comparison unnecessarily. Service success
+  and live premium entitlements were not established by this fixture.
+
 ## Verified September 10, 2026
 
 - Applied `20260911005818_workspace_access_policies.sql` (September 11 UTC):

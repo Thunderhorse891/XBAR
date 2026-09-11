@@ -1,6 +1,6 @@
 import { readJsonBody, sendJson } from '../_lib/http.js';
 import { getSupabaseAdmin } from '../_lib/supabase-admin.js';
-import { confirmationSatisfied, planAccountDeletion } from '../_lib/account-deletion.js';
+import { confirmationSatisfied, loadAccountDeletionPlan } from '../_lib/account-deletion.js';
 import { enforceRateLimit } from '../_lib/rate-limit.js';
 import { applyCors } from '../_lib/cors.js';
 
@@ -64,37 +64,34 @@ export default async function handler(req, res) {
   try {
     // Build the plan: for every owned workspace, look up its OTHER active members
     // so we can transfer rather than destroy shared workspaces.
-    const { data: owned } = await supabase.from('workspaces').select('id').eq('owner_user_id', user.id);
-    const ownedWorkspaces = [];
-    for (const row of owned ?? []) {
-      const { data: others } = await supabase
-        .from('workspace_memberships')
-        .select('user_id, role')
-        .eq('workspace_id', row.id)
-        .eq('status', 'active')
-        .neq('user_id', user.id);
-      ownedWorkspaces.push({
-        id: row.id,
-        otherActiveMembers: (others ?? []).map((member) => ({ userId: member.user_id, role: member.role })),
-      });
-    }
-    const plan = planAccountDeletion(user.id, ownedWorkspaces);
+    const plan = await loadAccountDeletionPlan(supabase, user.id);
 
     // 1. Transfer shared workspaces to a successor owner (non-destructive) so
     //    deleting the user can never cascade their data away.
     for (const transfer of plan.workspacesToTransfer) {
-      const { error } = await supabase
+      const { data: transferred, error } = await supabase
         .from('workspaces')
         .update({ owner_user_id: transfer.newOwnerUserId })
         .eq('id', transfer.workspaceId)
-        .eq('owner_user_id', user.id);
-      if (error) {
-        return sendJson(res, 502, { ok: false, message: `Could not transfer a shared workspace: ${error.message}` });
+        .eq('owner_user_id', user.id)
+        .select('id')
+        .single();
+      if (error || transferred?.id !== transfer.workspaceId) {
+        return sendJson(res, 502, {
+          ok: false,
+          message: 'Could not confirm transfer of a shared workspace. Account was not deleted.',
+        });
       }
     }
 
     // 2. Remove the user from every workspace they belong to (non-destructive).
-    await supabase.from('workspace_memberships').delete().eq('user_id', user.id);
+    const { error: membershipRemovalError } = await supabase
+      .from('workspace_memberships')
+      .delete()
+      .eq('user_id', user.id);
+    if (membershipRemovalError) {
+      return sendJson(res, 502, { ok: false, message: 'Unable to remove workspace access. Account was not deleted.' });
+    }
 
     // 3. Delete the auth account itself. Nothing destructive to the account's
     //    data has happened yet, so a failure here leaves it recoverable.
