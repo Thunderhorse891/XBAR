@@ -2025,3 +2025,72 @@ test('a sign-out records the generation it ended, even with no recovery in this 
   // key, where no later marker can overwrite it.
   await expect.poll(grantKeys, { timeout: 30_000 }).toBeGreaterThan(0);
 });
+
+test('a completed reset does not clear a newer link this tab has adopted', async ({ context }) => {
+  /*
+   * The mirror image of "an older completion must not burn the newer unused
+   * link", and a different tab.
+   *
+   * That case checks the tab that OPENED the newer link. This one checks the
+   * tab that merely HEARD about it: auth-js broadcasts PASSWORD_RECOVERY to
+   * every tab, and this store's handler adopts it -- `passwordRecoveryFor` and
+   * the tab-local sessionStorage markers are rewritten to name the new grant.
+   * So the tab with an older update still in flight ends up holding the NEWER
+   * grant, and its own completion then cleared that marker unconditionally.
+   *
+   * Both links are one-time. If the tab that opened the newer one is closed,
+   * the browser is left holding its session and no authorization to use it, and
+   * the link that would have restored it has already been redeemed.
+   */
+  const first = await context.newPage();
+  const second = await context.newPage();
+
+  let releaseFirst: () => void = () => {};
+  const firstUpdateHeld = new Promise<void>((resolve) => {
+    releaseFirst = resolve;
+  });
+  let sawFirstUpdate: () => void = () => {};
+  const firstUpdateStarted = new Promise<void>((resolve) => {
+    sawFirstUpdate = resolve;
+  });
+
+  try {
+    await stubGoTrueUser(first, async (route) => {
+      sawFirstUpdate();
+      await firstUpdateHeld;
+      await route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(userRecord()) });
+    });
+    await stubGoTrueUser(second);
+
+    await first.goto(recoveryLink());
+    await expect(newPassword(first)).toBeVisible({ timeout: 30_000 });
+    const firstGrantToken = await heldGrantToken(first);
+    expect(firstGrantToken).not.toBe('');
+
+    await fillNewPassword(first, 'older-reset-password');
+    await submit(first).click();
+    await firstUpdateStarted;
+
+    await second.goto(recoveryLink());
+    await expect(newPassword(second)).toBeVisible({ timeout: 30_000 });
+    const secondGrantToken = await heldGrantToken(second);
+    expect(secondGrantToken).not.toBe('');
+    expect(secondGrantToken).not.toBe(firstGrantToken);
+
+    /*
+     * The precondition, asserted rather than assumed: the first tab really does
+     * take on the newer grant. Without this the case could pass for the wrong
+     * reason -- a tab that never adopted anything has nothing to lose.
+     */
+    await expect.poll(() => heldGrantToken(first), { timeout: 15_000 }).toBe(secondGrantToken);
+
+    releaseFirst();
+    await expect(first.getByText('Password updated. You are signed in.').first()).toBeVisible({ timeout: 30_000 });
+
+    // The completion belonged to the OLDER grant. The newer one was never used.
+    expect(await heldGrantToken(first)).toBe(secondGrantToken);
+    expect(await heldGrant(first)).toBe(USER_ID);
+  } finally {
+    releaseFirst();
+  }
+});

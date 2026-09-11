@@ -1598,9 +1598,32 @@ export const useCloudStore = create<CloudStore>((set, get) => ({
     // so the durable record is consulted rather than the tab's cached grant.
     const recoveryGrant = recoveryGrantToken(recoverySession);
 
-    if (isRecoveryGrantSpent(recoverySession.user.id, recoveryGrant)) {
+    /*
+     * Give up this tab's recovery marker -- but only while it still names the
+     * grant being finished here.
+     *
+     * auth-js broadcasts PASSWORD_RECOVERY to every tab, and the subscriber
+     * above ADOPTS it: a newer link validated anywhere in this browser rewrites
+     * `passwordRecoveryFor` and the tab-local markers, including in a tab whose
+     * own update is still in flight. Clearing unconditionally when that older
+     * update finished therefore revoked a newer link that had never been used.
+     * Both links are one-time, so if the tab that opened the newer one is then
+     * closed, the browser holds its session with no authorization to use it and
+     * no way back except another email.
+     *
+     * An unreadable store reads as absent and still clears. Refusing a grant
+     * that may be good costs an email; reviving a spent one is the failure that
+     * matters, and that is the same direction the auth listener takes.
+     */
+    const releaseRecoveryMarker = (finishedGrant: string) => {
+      const heldGrant = readStoredRecoveryGrantToken();
+      if (heldGrant && finishedGrant && heldGrant !== finishedGrant) return;
       set({ passwordRecoveryFor: '' });
       storeRecoveryUser('');
+    };
+
+    if (isRecoveryGrantSpent(recoverySession.user.id, recoveryGrant)) {
+      releaseRecoveryMarker(recoveryGrant);
       return { ok: false, message: 'This reset link has already been used. Request a new reset link.' };
     }
 
@@ -1649,8 +1672,7 @@ export const useCloudStore = create<CloudStore>((set, get) => ({
         const claim = await claimRecoveryUpdate(recoverySession.user.id, recoveryGrant);
         if (!claim.ok) {
           if (claim.reason === 'spent') {
-            set({ passwordRecoveryFor: '' });
-            storeRecoveryUser('');
+            releaseRecoveryMarker(recoveryGrant);
             return { ok: false, message: 'This reset link has already been used. Request a new reset link.' };
           }
           return {
@@ -1679,8 +1701,7 @@ export const useCloudStore = create<CloudStore>((set, get) => ({
              * request that actually reached GoTrue.
              */
             const spentFor = recoverySession.user.id;
-            set({ passwordRecoveryFor: '' });
-            storeRecoveryUser('');
+            releaseRecoveryMarker(claim.claim.grantToken);
             completeRecoveryUpdateClaim(claim.claim);
             announceSpentRecovery(spentFor, claim.claim.grantToken);
             return {
@@ -1696,8 +1717,7 @@ export const useCloudStore = create<CloudStore>((set, get) => ({
               // A gateway/server failure can follow an applied update. Do not allow
               // a retry to race a password change whose outcome is still unknown.
               const spentFor = recoverySession.user.id;
-              set({ passwordRecoveryFor: '' });
-              storeRecoveryUser('');
+              releaseRecoveryMarker(claim.claim.grantToken);
               completeRecoveryUpdateClaim(claim.claim);
               announceSpentRecovery(spentFor, claim.claim.grantToken);
               return {
@@ -1723,8 +1743,7 @@ export const useCloudStore = create<CloudStore>((set, get) => ({
           // Only now is the recovery finished; clearing it earlier would release the
           // screen while the password was still the old one.
           const spentFor = recoverySession.user.id;
-          set({ passwordRecoveryFor: '' });
-          storeRecoveryUser('');
+          releaseRecoveryMarker(claim.claim.grantToken);
           completeRecoveryUpdateClaim(claim.claim);
           // auth-js is no longer in this path, so its USER_UPDATED broadcast will not
           // release the grant in other tabs. This module makes that announcement.
