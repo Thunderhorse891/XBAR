@@ -5,6 +5,18 @@ does not establish production readiness.
 
 ## Verified September 10, 2026
 
+- Applied `20260911005818_workspace_access_policies.sql` (September 11 UTC):
+  a live authenticated workspace read had failed with policy recursion
+  (`42P17`). After the fix, real SQL under the `authenticated` role passes
+  owner creation/read/write, tenant isolation, member read-only access,
+  Admin writes and owner removal. Self-enrollment and self-promotion are
+  denied. Invitation acceptance now verifies the current confirmed account,
+  consumes the pending invite atomically and applies its assigned role;
+  wrong-recipient, unconfirmed, revoked and replay cases refuse. All synthetic
+  users and records rolled back (one original auth user, zero workspace rows).
+  Nine relational browser cases passed without retries, including the new
+  client RPC path. Deploy the matching client before testing invitations;
+  the old client no longer has permission to accept via direct table writes.
 - Follow-up share fix applied at `20260911003739` UTC (September 10 Chicago):
   `20260911003739_share_release_selected_row.sql`. Reproduced a released sibling
   authorizing an unreleased draft with the same path before the fix. The live

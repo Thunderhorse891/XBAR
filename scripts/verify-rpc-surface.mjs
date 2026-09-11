@@ -103,6 +103,7 @@ const REQUIRED_BY_ROLE = {
     'xbar_can_manage_workspace(uuid)',
     'xbar_commercial_limits(uuid)',
     'xbar_subscription_limits(uuid)',
+    'xbar_accept_workspace_invitation(uuid, text)',
   ],
   service_role: ['xbar_workspace_storage_bytes(uuid)'],
 };
@@ -140,7 +141,7 @@ for (const { role, missing } of roleMissing) {
   for (const fn of missing) console.log(`  ${fn}`);
   console.log(
     role === 'authenticated'
-      ? 'Signed-in reads will fail with "permission denied for function" until these are granted.'
+      ? 'Signed-in operations will fail with "permission denied for function" until these are granted.'
       : 'Storage capacity cannot be read, so the storage gate refuses every upload.',
   );
 }

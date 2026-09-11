@@ -179,64 +179,20 @@ async function acceptPendingWorkspaceInvitation(session: Session) {
     return null;
   }
 
-  const acceptedAt = new Date().toISOString();
-  const payload =
-    invitation.payload && typeof invitation.payload === 'object'
-      ? {
-          ...(invitation.payload as Record<string, unknown>),
-          status: 'Accepted',
-          acceptedAt,
-        }
-      : {
-          id: invitation.invitation_id,
-          email: normalizedEmail,
-          role: invitation.role,
-          status: 'Accepted',
-          acceptedAt,
-        };
-
-  const role = normalizeWorkspaceRole(invitation.role) ?? 'Owner';
-  const { error: membershipError } = await client.from('workspace_memberships').upsert(
-    {
-      workspace_id: invitation.workspace_id,
-      user_id: session.user.id,
-      email: normalizedEmail,
-      display_name: session.user.user_metadata?.full_name ?? session.user.user_metadata?.name ?? normalizedEmail,
-      role,
-      status: 'active',
-      payload: {
-        id: `member-${normalizedEmail}`,
-        email: normalizedEmail,
-        role,
-        status: 'Active',
-        joinedAt: acceptedAt,
-        source: 'Invite',
-      },
-      updated_at: acceptedAt,
-    },
-    { onConflict: 'workspace_id,email' },
-  );
-
-  if (membershipError) {
-    return null;
-  }
-
-  const { error: invitationUpdateError } = await client
-    .from('workspace_invitations')
-    .update({
-      status: 'accepted',
-      payload,
-      updated_at: acceptedAt,
-    })
-    .eq('workspace_id', invitation.workspace_id)
-    .eq('invitation_id', invitation.invitation_id);
-
-  if (invitationUpdateError) {
+  // The server verifies the current confirmed email, locks the pending invite,
+  // and applies its assigned role atomically. Client-selected roles are not
+  // authorization, and two browser writes could leave a half-accepted invite.
+  const { data: accepted, error } = await client.rpc('xbar_accept_workspace_invitation', {
+    p_workspace_id: invitation.workspace_id,
+    p_invitation_id: invitation.invitation_id,
+  });
+  const role = normalizeWorkspaceRole(accepted?.role);
+  if (error || typeof accepted?.workspaceId !== 'string' || !role) {
     return null;
   }
 
   return {
-    workspaceId: invitation.workspace_id as string,
+    workspaceId: accepted.workspaceId,
     role,
   };
 }

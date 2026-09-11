@@ -175,6 +175,8 @@ was applied on September 10 as `20260910173613_private_share_token_fail_closed`;
 both deployed token guards and the validated constraint were checked afterward.
 Step 7 was applied as `20260911003739_share_release_selected_row` (September 11
 UTC / September 10 Chicago), with a failing-before/passing-after rollback test.
+Step 8 was applied as `20260911005818_workspace_access_policies`, with live
+authenticated-role permission and invitation checks; all fixture records rolled back.
 Do not rerun the billing data reconciliation merely because this checklist exists.
 Migration history establishes recorded execution, not a successful customer checkout.
 
@@ -228,6 +230,11 @@ own:
    Requires Live state and seller release approval on the exact listing selected
    by the resolver and tracker. A released sibling sharing a path must not
    authorize an unreleased draft. Preserves token guards and existing grants.
+8. `20260911005818_workspace_access_policies.sql` — **security and workspace access**.
+   Requires the June 5 workspace helpers. Removes recursive membership reads,
+   restricts membership/invitation management to owner/Admin, and adds atomic
+   server-authorized invitation acceptance. Deploy the matching client RPC call.
+   No existing rows are rewritten; direct invitee table writes are now denied.
 
 For migrations still missing from the target project, apply them **one at a time**, not with a single `supabase db push`. That command
 applies every pending migration in one go, which would run the data
@@ -306,6 +313,10 @@ psql "$DATABASE_URL" -f supabase/migrations/20260910173613_private_share_token_f
 psql "$DATABASE_URL" -f supabase/migrations/20260911003739_share_release_selected_row.sql
 # Optional deployed-schema check with all fixtures rolled back:
 psql -v ON_ERROR_STOP=1 "$DATABASE_URL" -f supabase/checks/share-token-live-rollback.sql
+
+# 8. Workspace access and safe invitation acceptance.
+psql "$DATABASE_URL" -f supabase/migrations/20260911005818_workspace_access_policies.sql
+psql -v ON_ERROR_STOP=1 "$DATABASE_URL" -f supabase/checks/workspace-access-live-rollback.sql
 ```
 
 **(4) and (5) are prerequisites for billing, not optimizations to schedule
