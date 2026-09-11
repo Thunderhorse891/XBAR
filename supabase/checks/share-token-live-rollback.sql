@@ -48,7 +48,17 @@ begin
   if public.xbar_resolve_public_listing(fixture_path, null) is not null then raise exception 'Archived listing resolved'; end if;
   perform public.xbar_track_public_share_view(fixture_path, null);
   if (select count(*) from public.public_share_events where workspace_id = fixture_workspace) <> 2 then raise exception 'Unexpected view count'; end if;
+
+  -- A released sibling must not authorize a newer draft with the same path.
+  update public.shared_listings set state = 'Live', access_mode = 'Public Link'
+  where workspace_id = fixture_workspace and listing_id = 'private';
+  insert into public.shared_listings (workspace_id, listing_id, horse_id, share_path, state, access_mode, payload, updated_at)
+  values (fixture_workspace, 'unreleased-draft', 'fixture-horse', fixture_path, 'Draft', 'Public Link', '{}', now() + interval '1 hour');
+  if public.xbar_resolve_public_listing(fixture_path, null) is not null then raise exception 'Released sibling authorized an unreleased draft'; end if;
+  if public.xbar_resolve_public_listing_legacy(fixture_path, null) is not null then raise exception 'Legacy resolver bypassed release approval'; end if;
+  perform public.xbar_track_public_share_view(fixture_path, null);
+  if (select count(*) from public.public_share_events where workspace_id = fixture_workspace) <> 2 then raise exception 'Unreleased draft view tracked'; end if;
 end;
 $check$;
 rollback;
-select 'PASS: constraint, private/public/archive resolution, view tracking; fixture rolled back' as result;
+select 'PASS: token constraint, private/public/archive resolution, selected-row release approval, view tracking; fixture rolled back' as result;

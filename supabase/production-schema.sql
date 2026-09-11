@@ -1180,6 +1180,13 @@ begin
     return null;
   end if;
 
+  -- Release approval must belong to the selected listing.
+  if coalesce(listing_row.state, '') <> 'Live'
+     or coalesce(listing_row.payload ->> 'releaseConfirmedAt', '') = ''
+     or coalesce(listing_row.payload ->> 'releaseConfirmedBy', '') = '' then
+    return null;
+  end if;
+
   -- An empty stored token is not a token to match against: without the first
   -- clause a Private Token listing that never got one resolves for a caller who
   -- supplies nothing. See migrations/20260910173613_private_share_token_fail_closed.sql.
@@ -1294,7 +1301,9 @@ begin
     sl.listing_id,
     sl.horse_id,
     coalesce(nullif(sl.access_mode, ''), 'Private Token') as access_mode,
-    coalesce(sl.share_token, '') as share_token
+    coalesce(sl.share_token, '') as share_token,
+    sl.state,
+    sl.payload
   into listing_row
   from public.shared_listings sl
   where sl.share_path = p_share_path
@@ -1303,6 +1312,13 @@ begin
   limit 1;
 
   if not found then
+    return;
+  end if;
+
+  -- Track only the selected listing's authorized release.
+  if coalesce(listing_row.state, '') <> 'Live'
+     or coalesce(listing_row.payload ->> 'releaseConfirmedAt', '') = ''
+     or coalesce(listing_row.payload ->> 'releaseConfirmedBy', '') = '' then
     return;
   end if;
 

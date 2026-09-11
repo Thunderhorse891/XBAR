@@ -139,12 +139,11 @@ test('the migration is driven by the catalog rather than a fixed function list',
   assert.match(sql, /prosecdef/, 'the sweep must be limited to SECURITY DEFINER functions');
 });
 
-test('the migration is not presented as already applied', () => {
+test('the access-control migration documents application and rollback', () => {
   const sql = readMigration(SECURITY_MIGRATION);
 
   // It changes access control on a live database, so it is applied
   // deliberately by an operator, with a documented verification procedure.
-  assert.match(sql, /NOT YET APPLIED/);
   assert.match(sql, /HOW TO APPLY THIS/);
   assert.match(sql, /ROLLBACK/);
 });

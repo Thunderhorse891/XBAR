@@ -173,16 +173,15 @@ On `xbar-records` (`uxvwfepyothlakhqazwv`), the Supabase migration ledger checke
 on September 10, 2026 records steps 1–5 below as applied on September 4. Step 6
 was applied on September 10 as `20260910173613_private_share_token_fail_closed`;
 both deployed token guards and the validated constraint were checked afterward.
+Step 7 was applied as `20260911003739_share_release_selected_row` (September 11
+UTC / September 10 Chicago), with a failing-before/passing-after rollback test.
 Do not rerun the billing data reconciliation merely because this checklist exists.
 Migration history establishes recorded execution, not a successful customer checkout.
 
-**Five migrations in `supabase/migrations/` still declare themselves NOT YET
-APPLIED in their own headers — steps 1–5 below.** That contradicts the ledger
-reading recorded above. The header is the only source that cannot drift from the
-file it describes, so the runbook counts headers, not prose: whoever confirmed
-the September 4 ledger should update those five the way step 6's was updated,
-and this count will follow them. Until then, treat 1–5 as unapplied for any
-project you have not checked yourself.
+Use the target project's migration ledger and deployed definitions to establish
+deployment state. File comments and migration counts can both become stale;
+neither establishes what ran on another project. A recorded name also does not
+prove that a subsequently edited file is identical to the executed SQL.
 
 For another project, check its migration history first. The order matters, and it is carried by
 the version prefixes rather than by convention — Supabase takes the digits
@@ -217,8 +216,7 @@ own:
    so a re-subscription completed in the same second as a cancellation is not
    thrown away. Additive: one nullable column, one index, one
    function, no backfill.
-6. `20260910173613_private_share_token_fail_closed.sql` — **security**, and the only
-   one here that closes an exposure rather than preventing a billing fault. A
+6. `20260910173613_private_share_token_fail_closed.sql` — **security**. A
    `Private Token` listing whose stored token is empty — which is what the
    column defaults produce — resolved for any caller who knew only the
    `share_path`, handing over the horse payload, its documents and its
@@ -226,6 +224,10 @@ own:
    `xbar_track_public_share_view`, and adds a CHECK so no such row can be
    created again. Order does not matter relative to the others; it shares
    nothing with them.
+7. `20260911003739_share_release_selected_row.sql` — **security**. Apply after step 6.
+   Requires Live state and seller release approval on the exact listing selected
+   by the resolver and tracker. A released sibling sharing a path must not
+   authorize an unreleased draft. Preserves token guards and existing grants.
 
 For migrations still missing from the target project, apply them **one at a time**, not with a single `supabase db push`. That command
 applies every pending migration in one go, which would run the data
@@ -299,6 +301,11 @@ psql "$DATABASE_URL" -f supabase/migrations/20260910173613_private_share_token_f
 #     Expect: no token refused, wrong token refused, correct token resolved,
 #     public link resolved. Anything else, including BOTH controls refusing,
 #     means the check did not exercise what it claims — see its header.
+
+# 7. Bind release approval to the selected listing (after step 6).
+psql "$DATABASE_URL" -f supabase/migrations/20260911003739_share_release_selected_row.sql
+# Optional deployed-schema check with all fixtures rolled back:
+psql -v ON_ERROR_STOP=1 "$DATABASE_URL" -f supabase/checks/share-token-live-rollback.sql
 ```
 
 **(4) and (5) are prerequisites for billing, not optimizations to schedule

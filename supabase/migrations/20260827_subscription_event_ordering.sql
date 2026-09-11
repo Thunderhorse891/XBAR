@@ -1,6 +1,7 @@
 -- Record when Stripe created each billing event, so a late one cannot win.
 --
--- NOT YET APPLIED. See "How to apply this" at the bottom.
+-- xbar-records ledger records this migration name on 2026-09-04 (checked 2026-09-10).
+-- Other projects: see "How to apply this" at the bottom and check their ledger.
 --
 -- WHY
 -- ---

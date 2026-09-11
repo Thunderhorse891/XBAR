@@ -2633,30 +2633,16 @@ test('the migration runbook lists every migration the code requires', async () =
   // The apply commands, not merely the prose list: a reader following the code
   // block is the case that goes wrong.
   assert.match(readme, /psql "\$DATABASE_URL" -f supabase\/migrations\/20260827_subscription_event_ordering\.sql/);
-  /*
-   * The count and the list were BOTH stale: the runbook said five and
-   * enumerated five while six unapplied migrations existed, so an operator
-   * could follow it to the end and leave a security fix unapplied. Pinning the
-   * literal word is what let that happen, so it is derived now.
-   *
-   * A migration declares its own state in its header, which is the only source
-   * that cannot drift from the file it describes.
-   */
+  // The runbook covers migrations added after the production baseline.
+  // Headers cannot tell us whether a migration ran on a particular project.
+  // Verify coverage of the rollout files, regardless of deployment status.
   const migrationDir = 'supabase/migrations';
-  const pending: string[] = [];
-  for (const file of (await readdir(migrationDir)).filter((name) => name.endsWith('.sql')).sort()) {
-    const sql = await readFile(`${migrationDir}/${file}`, 'utf8');
-    if (/NOT (YET )?APPLIED/i.test(sql)) pending.push(file);
-  }
-  assert.ok(pending.length > 0, 'the pending set must be discoverable, or this guard proves nothing');
-
-  const counted = ['zero', 'one', 'Two', 'Three', 'Four', 'Five', 'Six', 'Seven', 'Eight', 'Nine', 'Ten'];
-  assert.ok(
-    readme.includes(`${counted[pending.length]} migrations in \`supabase/migrations/\``),
-    `the runbook's count must match the ${pending.length} migrations that declare themselves unapplied`,
-  );
-  for (const file of pending) {
-    assert.ok(readme.includes(file), `the runbook must list ${file}, which declares itself unapplied`);
+  const rollout = (await readdir(migrationDir))
+    .filter((name) => /^\d{8}(?:\d{6})?_.*\.sql$/.test(name) && name.slice(0, 8) >= '20260820')
+    .sort();
+  assert.ok(rollout.length > 0, 'the rollout migration set must not be empty');
+  for (const file of rollout) {
+    assert.ok(readme.includes(file), `the runbook must list ${file}, which belongs to this rollout`);
     /*
      * Plain substring, not a pattern built from the filename. Escaping a value
      * into a regex is a trap even here -- the first version escaped `.` and

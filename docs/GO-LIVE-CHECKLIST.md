@@ -5,6 +5,16 @@ does not establish production readiness.
 
 ## Verified September 10, 2026
 
+- Follow-up share fix applied at `20260911003739` UTC (September 10 Chicago):
+  `20260911003739_share_release_selected_row.sql`. Reproduced a released sibling
+  authorizing an unreleased draft with the same path before the fix. The live
+  rollback test now passes: both resolvers refuse the draft and the tracker
+  records no view. Token/public/archive controls still pass, fixture counts
+  return to zero, and the legacy function remains unavailable to `anon`.
+- Required browser locking passes all 45 auth smoke cases without retries.
+  Unsupported/denied locks send no password change. This intentionally limits
+  reset availability in older browsers; it does not enforce single-use tokens
+  at the GoTrue server.
 - Independently ran the `e722979` candidate: 1,095 unit/API tests, 44
   built-bundle auth tests, and eight relational-sync-enabled held-workspace
   tests passed, with browser retries disabled. The browser suites intercept
