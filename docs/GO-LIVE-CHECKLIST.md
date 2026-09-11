@@ -70,8 +70,9 @@ set before release.
   cold-device staging that cleared only `localStorage` while the workspace
   records live in IndexedDB.
 - **Release gate, shared documents are unreadable by everyone but their
-  uploader.** The private-bucket policy `horse documents read own`
-  (production-schema.sql) authorizes an object by path prefix --
+  uploader. The defect is confirmed; my attempted fix was WITHDRAWN.** The
+  private-bucket policy `horse documents read own` (production-schema.sql)
+  authorizes an object by path prefix --
   `auth.uid()::text = split_part(name, '/', 1)` -- and client uploads are
   written to `${uploader}/documents/${horse}/${file}`. The document RECORD is
   authorized by workspace. Measured on PostgreSQL 16.13 with both policies
@@ -86,16 +87,38 @@ set before release.
 
   The app opens files with `createSignedUrl` under the customer's own JWT
   (`cloudWorkspace.ts` `getDocumentAccessUrl`), and a signed URL needs select on
-  the object, so a shared ranch could list its documents and open none of them.
-  `20260911150000_shared_document_storage_access.sql` adds a second read path
-  for objects that a reachable workspace's document rows name; after it the
-  member row reads 1 object, and the invited/outsider rows and the object no
-  record names are all unchanged at 0.
-  `supabase/checks/shared-document-storage-live-rollback.sql` is the operator
-  proof, and it was run both ways: before the migration it stops with "Member
-  cannot read a shared document object", after it reports all cases passed. It
-  rolls everything back. **Not yet applied to any real project** -- the runbook
-  step 9 is the owner's to run, and until then this defect is live.
+  the object, so a shared ranch can list its documents and open none of them.
+  That much stands.
+
+  `20260911150000_shared_document_storage_access.sql` granted select on any
+  object named by a document row in a workspace the caller can reach. Review
+  found two faults in it and both are correct:
+
+  1. **It never would have worked.** `saveWorkspaceBackupToRelationalCloud`
+     writes no `storage_path` column at all -- the path lives only inside
+     `payload` -- so for every document uploaded through the UI the column keeps
+     its empty default and the policy's predicate never matches. The evidence
+     recorded here earlier came from a synthetic row whose `storage_path` was
+     set by hand: a fixture was tested, not the path the product actually
+     writes.
+  2. **It was forgeable.** An owner or Admin can insert a document row in a
+     workspace they manage carrying any `storage_path` they like, including the
+     name of another tenant's object -- which a former member of that tenant
+     would know. The policy would then grant them select on it. A workspace
+     association that document writers can author is not an authorization fact.
+
+  The migration and its check were removed rather than patched, and runbook
+  step 9 with them. Nothing was ever applied to a real project, so no
+  production state depended on it.
+
+  A correct fix needs the object-to-workspace binding to be server-owned and
+  unforgeable. The cleanest is to stop keying storage paths by uploader: write
+  to `${workspaceId}/...` and have the INSERT policy require that first segment
+  be a workspace the uploader may write to, so Storage enforces the association
+  itself with no dependence on a table anyone can write. That changes the upload
+  path and leaves existing objects under user prefixes to migrate, which is a
+  design change and not a bounded fix. Until it is done, shared documents remain
+  openable only by whoever uploaded them.
 
 - `horse-media` is a PUBLIC bucket, so horse photos are unaffected by the above.
   That is worth a separate decision rather than relief: anyone holding the URL
