@@ -10,6 +10,53 @@ import {
 
 blockWebfonts();
 
+test('delayed cloud setup restores the requested Settings destination', async ({ page }) => {
+  let releaseProfile!: () => void;
+  const profileReady = new Promise<void>((resolve) => {
+    releaseProfile = resolve;
+  });
+  let profileRequests = 0;
+  await stubGoTrueUser(page);
+  await page.route('**/rest/v1/**', async (route) => {
+    const table = new URL(route.request().url()).pathname.split('/').pop();
+    if (table === 'workspace_profiles') {
+      profileRequests += 1;
+      await profileReady;
+      await route.fulfill({
+        status: 200,
+        json: {
+          payload: { setupCompleteAt: '2026-09-10T12:00:00Z', ranchName: 'Delayed ranch', businessName: 'Fixture' },
+          updated_at: '2026-09-10T12:00:00Z',
+        },
+      });
+      return;
+    }
+    await route.fulfill({
+      status: 200,
+      json:
+        table === 'workspaces'
+          ? { id: '7f1d0c44-0000-4000-8000-0000000000dd' }
+          : table === 'workspace_subscription_profiles'
+            ? { payload: {} }
+            : [],
+    });
+  });
+  await page.goto(sessionLink('signin'));
+  await expect(page.getByText(/This page needs a current password-reset link/)).toBeVisible();
+  await expect.poll(() => readStoredAccessToken(page)).not.toBe('');
+  await expect.poll(() => profileRequests).toBeGreaterThan(0);
+  await page.evaluate(() => {
+    // Exercise a setup entry that already carries a saved destination. The
+    // cold-deep-link suite separately verifies the guard waits for the cloud.
+    window.history.pushState({ usr: { from: '/settings?section=workspace' } }, '', '/app/setup');
+    window.dispatchEvent(new PopStateEvent('popstate'));
+  });
+  await expect(page).toHaveURL(/\/app\/setup$/);
+  releaseProfile();
+  await expect(page).toHaveURL(/\/app\/settings\?section=workspace$/);
+  await expect(page.getByRole('button', { name: 'Pull cloud', exact: true })).toBeVisible();
+});
+
 test('workspace bootstrap accepts an invitation through the server RPC without client membership writes', async ({
   page,
 }) => {

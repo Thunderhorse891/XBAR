@@ -1,5 +1,5 @@
 import { type FormEvent, useMemo, useState } from 'react';
-import { Navigate, useNavigate, useSearchParams } from 'react-router-dom';
+import { Navigate, useLocation, useNavigate, useSearchParams } from 'react-router-dom';
 import { XbarMark } from '@/components/BrandMark';
 import { billingPathForTier } from '@/lib/billingRoutes';
 import { saveWorkspaceBackupToCloud } from '@/lib/cloudWorkspace';
@@ -19,6 +19,7 @@ const setupStages = [
 
 export default function SetupWorkspace() {
   const navigate = useNavigate();
+  const location = useLocation();
   const [params] = useSearchParams();
   const workspaceHydrated = useWorkspaceHydrated();
   const workspaceReady = useWorkspaceReady();
@@ -60,10 +61,22 @@ export default function SetupWorkspace() {
    * the in-app pricing link is gone, so this is checked rather than assumed
    * unreachable.
    */
-  const postSetupPath = useMemo(
-    () => (selectedPlan && canPresentPurchaseFlow() ? billingPathForTier(selectedPlan) : '/'),
-    [selectedPlan],
-  );
+  const postSetupPath = useMemo(() => {
+    if (selectedPlan && canPresentPurchaseFlow()) return billingPathForTier(selectedPlan);
+    // The setup guard can run before cloud hydration restores a configured
+    // ranch. Return to that requested screen instead of losing its deep link.
+    const from = (location.state as { from?: unknown } | null)?.from;
+    if (
+      typeof from === 'string' &&
+      /^\/(?!\/)/.test(from) &&
+      !from.includes('\\') &&
+      !Array.from(from).some((character) => character.charCodeAt(0) < 32)
+    ) {
+      const pathname = from.split(/[?#]/, 1)[0];
+      if (pathname !== '/setup' && !pathname.startsWith('/setup/')) return from;
+    }
+    return '/';
+  }, [selectedPlan, location.state]);
   const cloudWorkspaceRequired = supabaseReady && status === 'signed-in' && !workspaceId;
 
   const accessLabel = useMemo(() => {
