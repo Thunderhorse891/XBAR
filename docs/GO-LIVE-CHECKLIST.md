@@ -173,8 +173,20 @@ set before release.
   (`waitForStorageCatchUp`, lib/authBootstrap.ts). An event that is genuinely
   superseded disagrees on every attempt and is dropped exactly as before, and
   ordering is untouched -- a late replay still takes its ticket from the same
-  write gate. A SIGNED_OUT is never retried: it carries no session to
-  reconcile, and dropping one that is not ours is the safe direction.
+  write gate.
+
+  **A SIGNED_OUT is retried on the same terms, and the first version of this
+  fix wrongly excluded it (raised by Codex against `a7f6bb2`, and correct).**
+  The reasoning given then -- that dropping a sign-out which is not ours is the
+  safe direction -- confused "safe" with "correct". The propagation delay runs
+  both ways: a REMOVAL is equally slow to become visible, so a tab sharing the
+  session that was just ended reads it as still present, drops the sign-out for
+  good, and goes on showing an authenticated workspace for an account that has
+  signed out. Leaving a stale authenticated view is not the safe direction.
+  Retrying cannot revoke a session this tab legitimately holds, because
+  agreement for a sign-out means storage is EMPTY: if this tab's session really
+  is still there, every attempt disagrees and the event is dropped exactly as
+  before.
 
   Pinned by `tests/auth-slow-workspace/stale-storage-read.spec.ts`, which
   stages the propagation delay deterministically rather than waiting on a 1.7%
@@ -184,6 +196,14 @@ set before release.
   passed with the fix reverted and were discarded -- one froze reads on a clock
   that had expired before the broadcast arrived, the other re-armed on every
   read so storage never caught up at all.
+
+  The sign-out direction is pinned by a second case in the same file: this tab
+  is parked on `/app/settings`, a second tab sharing the session signs out, and
+  `Pull cloud` -- a control only a signed-in session renders -- must disappear.
+  With `if (!session) return;` restored it fails on exactly that assertion. The
+  first version of this case was parked on the reset screen instead, where the
+  wording matched whether the sign-out had been processed or not, and it passed
+  with the fix reverted; it was rewritten rather than kept.
 
   The natural reproduction was then re-run at the same size: **120 of 120
   passed**, against 2 failures in 120 before. That is consistent with the fix

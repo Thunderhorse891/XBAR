@@ -1268,12 +1268,22 @@ export const useCloudStore = create<CloudStore>((set, get) => ({
        * read said 0001, the good event was dropped, and this tab stayed on the
        * previous account until it was reloaded.
        *
-       * A SIGNED_OUT is not retried. It carries no session, so there is nothing
-       * to reconcile, and dropping one that is not ours is the safe direction:
-       * the alternative is revoking a session this tab still legitimately
-       * holds. See the sign-out reasoning below.
+       * A SIGNED_OUT is retried on the same terms, and the first version of
+       * this fix wrongly excluded it. The reasoning given then -- that dropping
+       * a sign-out which is not ours is the safe direction -- confused "safe"
+       * with "correct". The asymmetry runs both ways: a REMOVAL is equally slow
+       * to become visible, so a tab sharing the session that was just ended
+       * reads it as still present, drops the sign-out for good, and goes on
+       * showing an authenticated workspace for an account that has signed out.
+       * Leaving a stale authenticated view is not the safe direction.
+       *
+       * Retrying cannot revoke a session this tab legitimately holds. Agreement
+       * for a sign-out means storage is EMPTY: if this tab's session really is
+       * still there, every attempt disagrees and the event is dropped exactly as
+       * before, and if a newer sign-in has replaced it, storage is non-empty for
+       * that reason and the sign-out is dropped too -- correctly, because the
+       * event for that new session is the one this tab should act on.
        */
-      if (!session) return;
       const catchUp = waitForStorageCatchUp(
         () => eventAgreesWithStorage(session),
         () => {

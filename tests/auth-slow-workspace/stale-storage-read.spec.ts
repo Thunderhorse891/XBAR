@@ -137,3 +137,92 @@ test('a sign-in broadcast that outruns its storage write is still applied', asyn
     'the superseded account must not be hydrated again',
   ).toBe(false);
 });
+
+/*
+ * The same propagation delay, in the other direction: a sign-out.
+ *
+ * A REMOVAL is equally slow to become visible across renderers, so a tab
+ * sharing the session that was just ended reads it as still present. The first
+ * version of this fix excluded sign-outs on the grounds that dropping one that
+ * is not ours is the safe direction; that confused "safe" with "correct".
+ * Dropping a real sign-out leaves the tab showing an authenticated workspace
+ * for an account that has signed out, until it is reloaded.
+ */
+test('a sign-out broadcast that outruns its storage removal is still applied', async ({ page, context }) => {
+  const workspaceId = '7f1d0c44-0000-4000-8000-0000000000aa';
+
+  await page.addInitScript(() => {
+    const STALE_READS = 3;
+    const getItem = Storage.prototype.getItem;
+    let lastSeen: string | null | undefined;
+    let hiddenValue: string | null | undefined;
+    let staleReadsLeft = 0;
+    Storage.prototype.getItem = function (key) {
+      const live = getItem.call(this, key);
+      const isAuthRecord = String(key).startsWith('sb-') && String(key).endsWith('-auth-token');
+      if (!isAuthRecord) return live;
+      if (lastSeen === undefined) {
+        lastSeen = live;
+        return live;
+      }
+      if (live !== lastSeen && hiddenValue !== live) {
+        hiddenValue = live;
+        staleReadsLeft = STALE_READS;
+      }
+      if (staleReadsLeft > 0) {
+        staleReadsLeft -= 1;
+        return lastSeen ?? null;
+      }
+      lastSeen = live;
+      return live;
+    };
+  });
+
+  const workspaceRest = (route: import('@playwright/test').Route) => {
+    const url = route.request().url();
+    const single = /workspace_(profiles|subscription_profiles)/.test(url);
+    return route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: url.includes('/workspaces?')
+        ? JSON.stringify({ id: workspaceId })
+        : single
+          ? JSON.stringify({
+              payload: url.includes('workspace_profiles')
+                ? { setupCompleteAt: '2026-09-10T12:00:00Z', ranchName: 'Sign-out fixture', businessName: 'Fixture' }
+                : {},
+              updated_at: '2026-09-10T12:00:00Z',
+            })
+          : '[]',
+    });
+  };
+
+  await stubGoTrueUser(page);
+  await page.route(/\/rest\/v1\//, workspaceRest);
+  await page.route('**/auth/v1/logout*', (route) => route.fulfill({ status: 204, body: '' }));
+
+  await page.goto(sessionLink('signin'));
+  await expect.poll(() => readStoredAccessToken(page), { timeout: 30_000 }).not.toBe('');
+
+  /*
+   * Park this tab on a screen that only a signed-in session can show. That is
+   * what makes the assertion discriminating: a first version left it on the
+   * reset screen, where the wording matched whether the sign-out had been
+   * processed or not, and the case passed with the fix reverted.
+   */
+  await page.goto('/app/settings');
+  await expect(page.getByRole('button', { name: 'Pull cloud', exact: true })).toBeVisible({ timeout: 30_000 });
+
+  // A second tab in the same browser shares that session, and signs out.
+  const second = await context.newPage();
+  await stubGoTrueUser(second);
+  await second.route(/\/rest\/v1\//, workspaceRest);
+  await second.route('**/auth/v1/logout*', (route) => route.fulfill({ status: 204, body: '' }));
+  await second.goto('/app/settings');
+  await second.getByRole('button', { name: 'Sign out', exact: true }).click();
+  await expect.poll(() => readStoredAccessToken(second), { timeout: 30_000 }).toBe('');
+
+  // The first tab must follow the account out rather than keep showing its
+  // workspace to someone who has signed out.
+  await expect(page.getByRole('button', { name: 'Pull cloud', exact: true })).toBeHidden({ timeout: 30_000 });
+});
