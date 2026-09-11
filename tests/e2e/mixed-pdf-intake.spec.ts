@@ -143,3 +143,60 @@ test('a scanned registration behind a text cover sheet is still read', async ({ 
   expect(entities.horseName).toBe('MIXED PDF MARE');
   expect(entities.registrationNumber).toBe('7788991');
 });
+
+/*
+ * A scan longer than the OCR budget.
+ *
+ * Every limit in the reader is applied by truncation -- 8 text pages, 3 OCR
+ * pages, 12,000 characters -- and it used to return a bare string, so a long
+ * scan was read as far as page 3 and the screen said nothing at all. Someone
+ * building a sale packet from it had no way to know two thirds of the file had
+ * never been looked at.
+ */
+test('a scan longer than the page budget says how far it got', async ({ page }) => {
+  test.setTimeout(600_000);
+  await bootstrapWorkspace(page);
+
+  const scanDataUrl = await page.evaluate(() => {
+    const canvas = document.createElement('canvas');
+    canvas.width = 1200;
+    canvas.height = 400;
+    const ctx = canvas.getContext('2d');
+    if (!ctx) throw new Error('no canvas context');
+    ctx.fillStyle = '#ffffff';
+    ctx.fillRect(0, 0, canvas.width, canvas.height);
+    ctx.fillStyle = '#000000';
+    ctx.font = 'bold 56px Arial';
+    ctx.fillText('Registered Name: LONG SCAN MARE', 40, 140);
+    ctx.fillText('Registration Number: 4455667', 40, 280);
+    return canvas.toDataURL('image/png');
+  });
+  const scanBytes = Buffer.from(scanDataUrl.split(',')[1], 'base64');
+
+  const pdf = await PDFDocument.create();
+  const image = await pdf.embedPng(scanBytes);
+  // Six scanned pages against a three-page OCR budget.
+  for (let page = 0; page < 6; page += 1) {
+    const scanned = pdf.addPage([612, 792]);
+    scanned.drawImage(image, { x: 20, y: 420, width: 572, height: 190 });
+  }
+  const pdfBytes = Buffer.from(await pdf.save());
+
+  await page.getByRole('button', { name: 'Create', exact: true }).click();
+  await page.getByRole('menuitem', { name: 'Upload Document' }).click();
+  const drawer = page.getByRole('dialog', { name: 'Upload Document' });
+  await expect(drawer).toBeVisible();
+  await drawer
+    .locator('input[type="file"]')
+    .setInputFiles({ name: 'long-scan.pdf', mimeType: 'application/pdf', buffer: pdfBytes });
+  await expect(drawer.getByText('1 file selected — click to change')).toBeVisible();
+  await drawer.getByRole('button', { name: 'Upload for review' }).click();
+  await expect(page).toHaveURL(/\/documents|\/horses\//, { timeout: 180_000 });
+
+  await page.getByRole('link', { name: /^Documents/ }).click();
+  await expect(
+    page.getByText(/Only 3 of 6 pages were read\./).first(),
+    'the customer has to be told the reader stopped short',
+  ).toBeVisible({ timeout: 30_000 });
+  await expect(page.getByText(/missing, not absent/).first()).toBeVisible();
+});

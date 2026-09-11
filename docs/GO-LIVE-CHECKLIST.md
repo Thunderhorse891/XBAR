@@ -280,12 +280,22 @@ match is simply not on screen and a naive check reads as "missing".
   regression fails without either, so neither is carrying the other.
   `tests/e2e/mixed-pdf-intake.spec.ts` pins it and runs in CI.
 
-- **Partial processing is still silent, and is NOT fixed.** The limits remain 8
-  text pages, 3 OCR pages, 12,000 characters, all applied by truncation, and
-  `readDocumentText` still returns a bare string with no way to say what it
-  skipped. A 40-page scanned PDF is read to page 3 and nothing tells the
-  customer. This needs the extractor to report coverage and a surface to show
-  it; it is the remaining piece of this half.
+- **Partial processing is now disclosed. Fixed.** The limits are unchanged -- 8
+  text pages, 3 OCR pages, 12,000 characters -- but they were applied by silent
+  truncation, and the extractor returned a bare string with no way to say what
+  it had skipped. A long scan was read as far as page 3 and the screen said
+  nothing, so a sale packet could be built on a third of a file with no hint.
+  The reader now reports coverage alongside the text, and a document that was
+  not read in full carries a plain sentence on its row: "Only 3 of 6 pages were
+  read. Facts on the parts that were not read are missing, not absent."
+
+  A file read end to end says nothing at all, so silence keeps meaning
+  "complete" rather than becoming noise. A failed read -- zero pages of nine --
+  makes no page claim either: the empty extraction is the honest signal there,
+  not a "0 of 9" that reads like a partial success. Both are pinned by unit
+  tests on the pure description, each branch of which was neutralised in turn
+  and breaks at least one case, and by a browser case uploading a six-page scan
+  against the three-page budget.
 
 ## Follow-up September 11, 2026
 

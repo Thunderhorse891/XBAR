@@ -6,6 +6,52 @@ const PDF_OCR_PAGE_LIMIT = 3;
 // characters we treat the text layer as unusable and fall through to OCR.
 const MIN_TEXT_LAYER_CHARS = 60;
 
+/**
+ * What was actually examined, so a partial read can say so.
+ *
+ * Every limit above is applied by truncation -- 8 text pages, 3 OCR pages,
+ * 12,000 characters -- and the extractor used to return a bare string, so a
+ * 40-page scan was read to page 3 and nothing told the customer. A document
+ * that says nothing about what it skipped invites someone to trust a sale
+ * packet built from a third of a file.
+ */
+export type DocumentCoverage = {
+  /** Pages the file has, when knowable. 0 for images and plain text. */
+  totalPages: number;
+  /** Pages whose own text layer was used. */
+  pagesRead: number;
+  /** Pages read by OCR because they carried no usable text layer. */
+  pagesOcrRead: number;
+  /** The text was cut at the character limit. */
+  truncated: boolean;
+};
+
+export const fullCoverage = (): DocumentCoverage => ({
+  totalPages: 0,
+  pagesRead: 0,
+  pagesOcrRead: 0,
+  truncated: false,
+});
+
+/**
+ * A plain sentence for a partial read, or '' when the whole file was examined.
+ *
+ * Pure, so what the customer is told can be tested without a browser.
+ */
+export function describeDocumentCoverage(coverage: DocumentCoverage): string {
+  const examined = coverage.pagesRead + coverage.pagesOcrRead;
+  const parts: string[] = [];
+  if (coverage.totalPages > 0 && examined > 0 && examined < coverage.totalPages) {
+    parts.push(`Only ${examined} of ${coverage.totalPages} pages were read.`);
+  }
+  if (coverage.truncated) {
+    parts.push('The text was longer than this reader handles and was cut short.');
+  }
+  if (parts.length === 0) return '';
+  parts.push('Facts on the parts that were not read are missing, not absent.');
+  return parts.join(' ');
+}
+
 // OCR runtime files are staged same-origin by scripts/prepare-ocr-assets.mjs
 // (see that file). Never fall back to the jsdelivr CDN defaults: they break
 // behind firewalls/content blockers and defeat offline support.
@@ -135,7 +181,7 @@ async function renderPdfPageToCanvas(pdf: PdfDocument, pageNumber: number) {
   }
 }
 
-async function extractPdfText(file: File) {
+async function extractPdfText(file: File): Promise<{ text: string; coverage: DocumentCoverage }> {
   try {
     await ensurePdfWorkerConfigured();
     const { getDocument } = await getPdfJs();
@@ -180,6 +226,7 @@ async function extractPdfText(file: File) {
      * as many as the budget allows -- a fully text-bearing PDF still does no
      * OCR at all, which is what keeps the common case fast.
      */
+    const ocrPages = new Set<number>();
     let ocrBudget = PDF_OCR_PAGE_LIMIT;
     for (const pageNumber of pagesWithoutText) {
       if (ocrBudget <= 0 || pageTexts.join(' ').length >= TEXT_PREVIEW_LIMIT) {
@@ -197,28 +244,50 @@ async function extractPdfText(file: File) {
       // reading of that page available.
       if (text) {
         pageTexts[pageNumber - 1] = text;
+        ocrPages.add(pageNumber);
       }
     }
 
-    return pageTexts.join(' ').trim();
+    const text = pageTexts.join(' ').trim();
+    return {
+      text,
+      coverage: {
+        totalPages: pdf.numPages,
+        // A page counts as read only if something came off it; a blank page
+        // that yielded nothing was examined but contributes no facts.
+        pagesRead: pageTexts.filter((pageText, index) => pageText.trim() && !ocrPages.has(index + 1)).length,
+        pagesOcrRead: ocrPages.size,
+        truncated: text.length > TEXT_PREVIEW_LIMIT,
+      },
+    };
   } catch (error) {
     console.error('PDF extraction failed', error);
-    return '';
+    return { text: '', coverage: fullCoverage() };
   }
 }
 
-export async function readDocumentText(file: File) {
+export async function readDocumentWithCoverage(file: File): Promise<{ text: string; coverage: DocumentCoverage }> {
+  const cut = (text: string) => ({
+    text: text.slice(0, TEXT_PREVIEW_LIMIT),
+    coverage: { ...fullCoverage(), truncated: text.length > TEXT_PREVIEW_LIMIT },
+  });
+
   if (file.type.startsWith('text/') || /\.(txt|csv|json|md)$/i.test(file.name)) {
-    return (await extractPlainText(file)).slice(0, TEXT_PREVIEW_LIMIT);
+    return cut(await extractPlainText(file));
   }
 
   if (file.type === 'application/pdf' || /\.pdf$/i.test(file.name)) {
-    return (await extractPdfText(file)).slice(0, TEXT_PREVIEW_LIMIT);
+    const { text, coverage } = await extractPdfText(file);
+    return { text: text.slice(0, TEXT_PREVIEW_LIMIT), coverage };
   }
 
   if (file.type.startsWith('image/') || /\.(png|jpe?g|webp|bmp|gif|tiff?)$/i.test(file.name)) {
-    return (await runImageOcr(file)).slice(0, TEXT_PREVIEW_LIMIT);
+    return cut(await runImageOcr(file));
   }
 
-  return '';
+  return { text: '', coverage: fullCoverage() };
+}
+
+export async function readDocumentText(file: File) {
+  return (await readDocumentWithCoverage(file)).text;
 }
