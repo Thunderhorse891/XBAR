@@ -239,12 +239,41 @@ match is simply not on screen and a naive check reads as "missing".
   page 3 and nothing tells the customer. Nothing in the Documents UI mentions a
   page or character limit.
 
-- **The text-layer heuristic mishandles mixed PDFs.** `MIN_TEXT_LAYER_CHARS` is
-  60, measured across the first 8 pages combined. A scan whose cover page has a
-  real text layer (a title block, a form header) clears 60 characters, so the
-  document is treated as text-bearing and the scanned pages are never OCR'd at
-  all. Not yet reproduced against a real mixed PDF; the threshold and its scope
-  are read from the source.
+- **Scanned PDFs read nothing at all, in every current browser. Fixed.**
+  Reproduced against a real three-page PDF built with pdf-lib -- a
+  137-character transmittal cover sheet over two scanned pages carrying the
+  registered name, registration number, sex and colour. Before: the upload
+  extracted only the cover sheet and produced `entities: {}`. Two independent
+  defects, either of which alone loses the document:
+
+  1. The text-layer decision was made once for the WHOLE file --
+     `MIN_TEXT_LAYER_CHARS` (60) measured across the first 8 pages _combined_.
+     A cover sheet clears 60 on its own, so every scanned page behind it was
+     skipped. The decision is now made per page: a page with no usable text
+     layer of its own is OCR'd, within the existing 3-page budget, and a fully
+     text-bearing PDF still does no OCR.
+  2. **pdfjs-dist 6.2.108 calls `Map.prototype.getOrInsertComputed`**, a TC39
+     proposal method that Chromium 141, Node 22, Safari and Firefox do not
+     have. `page.render()` threw for every page
+     (`PDF render failed for OCR (page 2)`), `renderPdfPageToCanvas` returned
+     null, and the OCR loop skipped the page **silently**. So PDF-to-image OCR
+     had never worked at all -- it was hidden because text-layer PDFs read fine
+     and only scans came back empty. The fix imports the LEGACY pdfjs build,
+     which ships the polyfill; same package, same version, no dependency
+     change.
+
+  After both: the scanned pages are read and the upload yields
+  `horseName: "MIXED PDF MARE"`, `registrationNumber: "7788991"`,
+  `sex: "Mare"`, `color: "Palomino"`. Each fix was reverted in turn and the
+  regression fails without either, so neither is carrying the other.
+  `tests/e2e/mixed-pdf-intake.spec.ts` pins it and runs in CI.
+
+- **Partial processing is still silent, and is NOT fixed.** The limits remain 8
+  text pages, 3 OCR pages, 12,000 characters, all applied by truncation, and
+  `readDocumentText` still returns a bare string with no way to say what it
+  skipped. A 40-page scanned PDF is read to page 3 and nothing tells the
+  customer. This needs the extractor to report coverage and a surface to show
+  it; it is the remaining piece of this half.
 
 ## Follow-up September 11, 2026
 

@@ -54,7 +54,7 @@ jobs:
         run: npm run test:prod-smoke
 
       - name: Document intake and report export
-        run: npx playwright test --grep "registration intake extracts|unreadable paper|multi-file batch|Needs-Review document|review-stage" --retries=0
+        run: npx playwright test --grep "registration intake extracts|unreadable paper|multi-file batch|Needs-Review document|review-stage|scanned registration behind a text cover sheet" --retries=0
 
       # Drives the password-recovery flow on a rendered, Supabase-configured
       # web bundle. The prod-smoke suite above cannot cover it: build:local

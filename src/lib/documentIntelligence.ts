@@ -28,7 +28,24 @@ let pdfWorkerUrlPromise: Promise<string> | null = null;
 
 async function getPdfJs() {
   if (!pdfJsPromise) {
-    pdfJsPromise = import('pdfjs-dist');
+    /*
+     * The LEGACY build, not the default one, and not a version change.
+     *
+     * pdfjs-dist 6.2.108 calls `Map.prototype.getOrInsertComputed` -- a TC39
+     * proposal method that Chromium 141 does not have, nor Node 22, nor any
+     * shipping Safari or Firefox. The default build assumes the runtime
+     * provides it; the legacy build ships the polyfill. Without it
+     * `page.render()` throws "getOrInsertComputed is not a function" for every
+     * page, `renderPdfPageToCanvas` returns null, and the OCR loop skips the
+     * page silently -- so a scanned PDF produced no text at all and said
+     * nothing. Measured: a three-page PDF with two scanned pages logged
+     * `PDF render failed for OCR (page 2)` and `(page 3)` and extracted only
+     * the cover sheet.
+     *
+     * Text-layer extraction was unaffected, which is why this stayed hidden:
+     * ordinary text PDFs read fine and only scans came back empty.
+     */
+    pdfJsPromise = import('pdfjs-dist/legacy/build/pdf.mjs');
   }
 
   return pdfJsPromise;
@@ -41,7 +58,8 @@ async function ensurePdfWorkerConfigured() {
 
   const pdfJs = await getPdfJs();
   if (!pdfWorkerUrlPromise) {
-    pdfWorkerUrlPromise = import('pdfjs-dist/build/pdf.worker.min.mjs?url').then((module) => module.default);
+    // Must match the build above, or the worker and the main thread disagree.
+    pdfWorkerUrlPromise = import('pdfjs-dist/legacy/build/pdf.worker.min.mjs?url').then((module) => module.default);
   }
 
   pdfJs.GlobalWorkerOptions.workerSrc = await pdfWorkerUrlPromise;
@@ -124,44 +142,65 @@ async function extractPdfText(file: File) {
     const buffer = new Uint8Array(await file.arrayBuffer());
     const pdf = await getDocument({ data: buffer }).promise;
     const pageCount = Math.min(pdf.numPages, PDF_TEXT_PAGE_LIMIT);
-    const chunks: string[] = [];
+
+    /*
+     * Each page decides for itself whether it has a usable text layer.
+     *
+     * This used to be one decision for the whole document: gather the text
+     * layers of the first 8 pages, and if the TOTAL cleared
+     * MIN_TEXT_LAYER_CHARS, return it and never OCR anything. A mixed PDF
+     * defeats that -- and a mixed PDF is the ordinary shape of a registration
+     * sent by a registry or a scanner: a transmittal cover sheet with real
+     * text, then the papers themselves as images.
+     *
+     * Measured on a three-page PDF built that way (a 137-character cover sheet
+     * over two scanned pages carrying the registered name, registration number,
+     * sex and colour): the cover sheet alone cleared the threshold, both
+     * scanned pages were skipped, and the upload produced `entities: {}` --
+     * not one fact, with nothing on screen to say two pages had been ignored.
+     */
+    const pageTexts: string[] = [];
+    const pagesWithoutText: number[] = [];
 
     for (let pageNumber = 1; pageNumber <= pageCount; pageNumber += 1) {
       const page = await pdf.getPage(pageNumber);
       const textContent = await page.getTextContent();
       const text = collectTextItems(textContent.items as Array<{ str?: string }>);
-      if (text) {
-        chunks.push(text);
+      pageTexts.push(text);
+      if (text.trim().length < MIN_TEXT_LAYER_CHARS) {
+        pagesWithoutText.push(pageNumber);
       }
-      if (chunks.join(' ').length >= TEXT_PREVIEW_LIMIT) {
+      if (pageTexts.join(' ').length >= TEXT_PREVIEW_LIMIT) {
         break;
       }
     }
 
-    const combined = chunks.join(' ').trim();
-    if (combined.length >= MIN_TEXT_LAYER_CHARS) {
-      return combined;
-    }
-
-    // No usable text layer — scanned document. OCR the first few pages, and
-    // fall back to whatever thin text layer we did find if OCR comes up empty.
-    const ocrPageCount = Math.min(pdf.numPages, PDF_OCR_PAGE_LIMIT);
-    const ocrChunks: string[] = [];
-    for (let pageNumber = 1; pageNumber <= ocrPageCount; pageNumber += 1) {
+    /*
+     * OCR only the pages that carry no usable text layer of their own, and only
+     * as many as the budget allows -- a fully text-bearing PDF still does no
+     * OCR at all, which is what keeps the common case fast.
+     */
+    let ocrBudget = PDF_OCR_PAGE_LIMIT;
+    for (const pageNumber of pagesWithoutText) {
+      if (ocrBudget <= 0 || pageTexts.join(' ').length >= TEXT_PREVIEW_LIMIT) {
+        break;
+      }
       const canvas = await renderPdfPageToCanvas(pdf, pageNumber);
       if (!canvas) {
+        // A page that could not be rendered consumed no OCR, so it must not
+        // consume the budget either.
         continue;
       }
+      ocrBudget -= 1;
       const text = await runImageOcr(canvas);
+      // Keep the thin text layer when OCR finds nothing: it is still the best
+      // reading of that page available.
       if (text) {
-        ocrChunks.push(text);
-      }
-      if (ocrChunks.join(' ').length >= TEXT_PREVIEW_LIMIT) {
-        break;
+        pageTexts[pageNumber - 1] = text;
       }
     }
 
-    return ocrChunks.join(' ').trim() || combined;
+    return pageTexts.join(' ').trim();
   } catch (error) {
     console.error('PDF extraction failed', error);
     return '';
