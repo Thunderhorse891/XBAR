@@ -40,6 +40,65 @@
 const memoryStore = new Map<string, string | null>();
 
 /*
+ * What localStorage held at the moment a key first fell into the overlay.
+ *
+ * A key enters the overlay in shared mode only because a durable write was
+ * REFUSED -- a quota that filled since the mode was resolved. From that instant
+ * this tab is effectively private for that key while still believing it shares
+ * one, and the overlay hides the divergence: `readAuthStorage` returns the
+ * overlay value, so nothing here can see what the other tabs went on to store.
+ *
+ * Rejoining blindly when the quota frees is what that costs. Measured on the
+ * adapter's own logic:
+ *
+ *   A refresh, quota full    durable=session-A-v1  tabA reads=session-A-v2
+ *   tab B signs in           durable=session-B-v1  tabA reads=session-A-v2
+ *   A refresh, quota freed   durable=session-A-v3   <- B's session destroyed
+ *
+ * and the same through `removeItem`, where A signing out DELETES B's session
+ * outright. auth-js then broadcasts the refresh or the sign-out and every other
+ * tab reconciles to A, or to nobody.
+ *
+ * So a diverged key may only rejoin shared storage if shared storage has not
+ * moved on: the durable value is compared against what it was when this tab
+ * left, and any change at all keeps the tab private. Compared by VALUE rather
+ * than by session generation deliberately -- this adapter is generic over keys
+ * and has no business decoding tokens, and "anything changed" is the more
+ * conservative test of the two.
+ */
+const divergedAt = new Map<string, string | null>();
+
+/*
+ * Records the divergence on the way into the overlay.
+ *
+ * The anchor must never move to a value another tab wrote while this tab was
+ * diverged, or the next successful write would match it and rejoin -- clobbering
+ * exactly what this exists to protect. In practice both callers already return
+ * early once diverged, so this is never reached with a stale anchor; the guard
+ * below keeps that a property of THIS function rather than of its call sites.
+ * It is deliberate redundancy and was measured as such: removing it alone
+ * changes no observable behaviour.
+ */
+function markDiverged(key: string) {
+  if (divergedAt.has(key)) return;
+  try {
+    divergedAt.set(key, localStorage.getItem(key));
+  } catch {
+    divergedAt.set(key, null);
+  }
+}
+
+/* Whether shared storage still holds what it held when this tab left it. */
+function mayRejoinSharedStorage(key: string): boolean {
+  if (!divergedAt.has(key)) return true;
+  try {
+    return localStorage.getItem(key) === (divergedAt.get(key) ?? null);
+  } catch {
+    return false;
+  }
+}
+
+/*
  * auth-js's own probe, matched deliberately: a WRITE and a REMOVE, not a read.
  * Storage that reads but cannot be written -- a full quota is the ordinary way
  * to get there -- is storage auth-js will refuse, and this has to agree with it
@@ -75,6 +134,7 @@ export function authStorageIsShared(): boolean {
 export function resetAuthStorageMode() {
   sharedMode = null;
   memoryStore.clear();
+  divergedAt.clear();
 }
 
 export function readAuthStorage(key: string): string | null {
@@ -102,14 +162,23 @@ export const authStorageAdapter = {
       memoryStore.set(key, value);
       return;
     }
+    // Already diverged and shared storage has moved on: stay private rather
+    // than overwrite the account another tab durably holds.
+    if (!mayRejoinSharedStorage(key)) {
+      memoryStore.set(key, value);
+      return;
+    }
     try {
       localStorage.setItem(key, value);
-      // Durable now, so the overlay must stop shadowing it.
+      // Durable now, so the overlay must stop shadowing it -- and this tab is
+      // back in step with shared storage, so the divergence is over.
       memoryStore.delete(key);
+      divergedAt.delete(key);
     } catch {
       // The mode was resolved before the client was built, so a write failing
       // now is a quota that filled since. Keep it readable rather than losing
       // the session to a write nobody was told about.
+      markDiverged(key);
       memoryStore.set(key, value);
     }
   },
@@ -118,12 +187,23 @@ export const authStorageAdapter = {
       memoryStore.delete(key);
       return;
     }
+    /*
+     * The same rule, and it matters more here: a sign-out that rejoined would
+     * not merely replace another tab's session, it would DELETE it, signing out
+     * an account this tab never had.
+     */
+    if (!mayRejoinSharedStorage(key)) {
+      memoryStore.set(key, null);
+      return;
+    }
     try {
       localStorage.removeItem(key);
       memoryStore.delete(key);
+      divergedAt.delete(key);
     } catch {
       // A tombstone, not a delete: dropping the entry would let the value
       // localStorage still holds come back as though it had never been removed.
+      markDiverged(key);
       memoryStore.set(key, null);
     }
   },

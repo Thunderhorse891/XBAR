@@ -277,6 +277,40 @@ set before release.
   load-bearing: removing either fails both the recogniser case and a full-path
   case that stages an earlier controller, a takeover, and asserts no reload.
 
+- **A tab whose session write was refused could later destroy another account's
+  session. Now fixed** (raised by Codex, and correct). In shared mode a key
+  enters `authStorage.ts`'s overlay only because a durable write was REFUSED --
+  a quota that filled after the mode was resolved. From that instant the tab is
+  effectively private while still believing it shares a store, and the overlay
+  hides the divergence: reads return the overlay value, so nothing can see what
+  the other tabs went on to write. Driven through the adapter's own logic:
+
+  ```
+  A refresh, quota full    durable=session-A-v1  tabA reads=session-A-v2
+  tab B signs in           durable=session-B-v1  tabA reads=session-A-v2
+  A refresh, quota freed   durable=session-A-v3   <- account B destroyed
+  ```
+
+  and through `removeItem` the same setup DELETES B's session outright, signing
+  out an account this tab never had. auth-js then broadcasts the refresh or the
+  sign-out and every other tab reconciles to A, or to nobody.
+
+  A diverged key may now rejoin shared storage only if shared storage has not
+  moved on -- the durable value is compared against what it was when this tab
+  left, and any change keeps the tab private. Compared by value rather than by
+  session generation on purpose: the adapter is generic over keys and has no
+  business decoding tokens, and "anything changed" is the more conservative
+  test. A transient quota with no competing tab still rejoins, so the ordinary
+  case does not lose durability.
+
+  Four guards, each mutation-checked: rejoin-check on write, rejoin-check on
+  remove, clearing the divergence on a successful rejoin, and allowing the
+  rejoin at all. **Not** load-bearing, and said so in the code: `markDiverged`'s
+  own record-once check, which both callers already make unreachable by
+  returning early -- removing it changes no observable behaviour. A first
+  version of that case passed with the guard reverted and was retargeted rather
+  than kept.
+
 - Not claimed: none of this was exercised against a live GoTrue or a live
   Supabase project. The browser suites intercept Auth and PostgREST, so what is
   established is the client's behaviour, not the server's.

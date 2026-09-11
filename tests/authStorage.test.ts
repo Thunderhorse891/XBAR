@@ -145,3 +145,127 @@ test('a removal localStorage refuses does not let the old session come back', ()
   assert.equal(readAuthStorage('sb-x-auth-token'), null);
   clearLocalStorage();
 });
+
+/*
+ * A localStorage whose quota can fill and free DURING a case, which the helper
+ * above cannot express -- it fixes the failure mode at install time, and the
+ * defect below only exists in the transition.
+ */
+function installTogglableLocalStorage() {
+  const backing = new Map<string, string>();
+  const state = { failWrites: false };
+  const store = {
+    getItem: (key: string) => backing.get(key) ?? null,
+    setItem: (key: string, value: string) => {
+      if (state.failWrites && !key.includes('probe')) throw new Error('QuotaExceededError');
+      backing.set(key, value);
+    },
+    removeItem: (key: string) => {
+      if (state.failWrites && !key.includes('probe')) throw new Error('QuotaExceededError');
+      backing.delete(key);
+    },
+  };
+  Object.defineProperty(globalThis, 'localStorage', { configurable: true, value: store });
+  resetAuthStorageMode();
+  return { backing, state };
+}
+
+const AUTH_KEY = 'sb-project-auth-token';
+
+test('a tab that fell into the overlay does not overwrite an account stored since', () => {
+  /*
+   * A key enters the overlay in shared mode only because a durable write was
+   * refused, and from that instant the tab is effectively private while still
+   * believing it shares a store -- the overlay hides what the other tabs went
+   * on to write. Rejoining when the quota frees destroys it:
+   *
+   *   A refresh, quota full    durable=session-A-v1  tabA reads=session-A-v2
+   *   tab B signs in           durable=session-B-v1  tabA reads=session-A-v2
+   *   A refresh, quota freed   durable=session-A-v3   <- B's session destroyed
+   *
+   * auth-js then broadcasts the refresh and every other tab reconciles to A.
+   */
+  const { backing, state } = installTogglableLocalStorage();
+  authStorageAdapter.setItem(AUTH_KEY, 'session-A-v1');
+  assert.equal(backing.get(AUTH_KEY), 'session-A-v1');
+
+  state.failWrites = true;
+  authStorageAdapter.setItem(AUTH_KEY, 'session-A-v2');
+  assert.equal(backing.get(AUTH_KEY), 'session-A-v1', 'the refused write must not have landed');
+  assert.equal(readAuthStorage(AUTH_KEY), 'session-A-v2', 'but it must still be readable here');
+
+  // Another tab signs in as a different account, durably.
+  state.failWrites = false;
+  backing.set(AUTH_KEY, 'session-B-v1');
+
+  authStorageAdapter.setItem(AUTH_KEY, 'session-A-v3');
+  assert.equal(backing.get(AUTH_KEY), 'session-B-v1', "account B's durable session must survive");
+  assert.equal(readAuthStorage(AUTH_KEY), 'session-A-v3', 'this tab keeps its own session, privately');
+  clearLocalStorage();
+});
+
+test('a diverged tab signing out does not sign out the account stored since', () => {
+  // Worse than a replacement: rejoining here DELETES a session this tab never
+  // had, and auth-js broadcasts the sign-out to every other tab.
+  const { backing, state } = installTogglableLocalStorage();
+  authStorageAdapter.setItem(AUTH_KEY, 'session-A-v1');
+  state.failWrites = true;
+  authStorageAdapter.setItem(AUTH_KEY, 'session-A-v2');
+  state.failWrites = false;
+  backing.set(AUTH_KEY, 'session-B-v1');
+
+  authStorageAdapter.removeItem(AUTH_KEY);
+  assert.equal(backing.get(AUTH_KEY), 'session-B-v1', 'account B must stay signed in');
+  assert.equal(readAuthStorage(AUTH_KEY), null, 'this tab is signed out, privately');
+  clearLocalStorage();
+});
+
+test('a diverged tab rejoins shared storage when nothing else wrote', () => {
+  /*
+   * The cost of being conservative has to stay bounded. A transient quota with
+   * no competing tab is the ordinary case, and that session must become durable
+   * again -- otherwise a reload signs the customer out for no reason.
+   */
+  const { backing, state } = installTogglableLocalStorage();
+  authStorageAdapter.setItem(AUTH_KEY, 'session-A-v1');
+  state.failWrites = true;
+  authStorageAdapter.setItem(AUTH_KEY, 'session-A-v2');
+  state.failWrites = false;
+
+  authStorageAdapter.setItem(AUTH_KEY, 'session-A-v3');
+  assert.equal(backing.get(AUTH_KEY), 'session-A-v3', 'nobody else moved, so this may rejoin');
+  assert.equal(readAuthStorage(AUTH_KEY), 'session-A-v3');
+
+  // And having rejoined, it is no longer diverged: an ordinary later write
+  // stays durable rather than falling back into the overlay for good.
+  authStorageAdapter.setItem(AUTH_KEY, 'session-A-v4');
+  assert.equal(backing.get(AUTH_KEY), 'session-A-v4');
+  clearLocalStorage();
+});
+
+test('a tab that stays diverged across repeated failures still protects the other account', () => {
+  /*
+   * The guard has to hold for as long as the quota does, not just for the first
+   * write after it frees. Here account B lands durably while this tab is still
+   * being refused, the tab is refused again, and only then does the quota free.
+   *
+   * Note on what this does NOT prove: `markDiverged`'s own "record once" check
+   * is redundant, because both adapter methods return early once diverged and
+   * never reach it with a stale anchor. Removing that check alone leaves every
+   * case here green -- it is kept as local redundancy, not load-bearing logic,
+   * and the comment on it says so.
+   */
+  const { backing, state } = installTogglableLocalStorage();
+  authStorageAdapter.setItem(AUTH_KEY, 'session-A-v1');
+  state.failWrites = true;
+  authStorageAdapter.setItem(AUTH_KEY, 'session-A-v2');
+
+  backing.set(AUTH_KEY, 'session-B-v1');
+  authStorageAdapter.setItem(AUTH_KEY, 'session-A-v3');
+
+  state.failWrites = false;
+  authStorageAdapter.setItem(AUTH_KEY, 'session-A-v4');
+  assert.equal(backing.get(AUTH_KEY), 'session-B-v1', "B's session must still survive");
+  assert.equal(readAuthStorage(AUTH_KEY), 'session-A-v4', 'and this tab keeps its own, privately');
+  clearLocalStorage();
+});
