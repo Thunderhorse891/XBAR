@@ -1,5 +1,5 @@
 import { create } from 'zustand';
-import type { Session } from '@supabase/supabase-js';
+import type { AuthChangeEvent, Session } from '@supabase/supabase-js';
 import { loadWorkspaceAccessProfile } from '@/lib/cloudWorkspace';
 import { authStorageKey, getSupabaseClient } from '@/lib/supabaseClient';
 import { readAuthStorage } from '@/lib/authStorage';
@@ -18,6 +18,8 @@ import {
   createLatestWriteGate,
   identityPublication,
   liveSessionAgrees,
+  waitForStorageCatchUp,
+  type StorageCatchUp,
 } from '@/lib/authBootstrap';
 import { hasValidatedPasswordRecovery, reconcileStoredRecovery } from '@/lib/passwordRecovery';
 
@@ -1078,7 +1080,15 @@ export const useCloudStore = create<CloudStore>((set, get) => ({
     // Track auth events immediately, before asynchronous workspace hydration.
     // A tab opened after recovery still knows the account it later signs out.
     let lastAuthUserId = get().session?.user.id ?? '';
-    const { data: subscription } = client.auth.onAuthStateChange((event, session) => {
+    /*
+     * Every re-check still pending, so a teardown cannot apply an event to a
+     * store the app has finished with.
+     */
+    const pendingCatchUps = new Set<StorageCatchUp>();
+    const eventAgreesWithStorage = (session: Session | null) =>
+      liveSessionAgrees(readAuthStorage(authStorageKey()), session, sessionGenerationOf);
+
+    const applyAuthEvent = (event: AuthChangeEvent, session: Session | null) => {
       /*
        * One question, asked of every event: does the session auth-js has
        * actually STORED agree with what this event says?
@@ -1103,7 +1113,6 @@ export const useCloudStore = create<CloudStore>((set, get) => ({
        * that is waiting for this callback to return. `lib/authStorage.ts` exists
        * so the record can be read synchronously instead, in either mode.
        */
-      if (!liveSessionAgrees(readAuthStorage(authStorageKey()), session, sessionGenerationOf)) return;
       /*
        * A SIGNED_OUT that a newer sign-in has already overtaken.
        *
@@ -1241,6 +1250,40 @@ export const useCloudStore = create<CloudStore>((set, get) => ({
         return;
       }
       void syncSessionState(session);
+    };
+
+    const { data: subscription } = client.auth.onAuthStateChange((event, session) => {
+      if (eventAgreesWithStorage(session)) {
+        applyAuthEvent(event, session);
+        return;
+      }
+      /*
+       * Disagreement is not proof that the event is stale.
+       *
+       * localStorage is not synchronously coherent across renderer processes,
+       * so another tab's SIGNED_IN can arrive here BEFORE the write it
+       * describes is visible to this one. Reproduced 2 times in 120
+       * instrumented runs: `BROADCAST event=SIGNED_IN eventSub=0002
+       * storedSub=0001`, after the sending tab had already stored 0002. The
+       * read said 0001, the good event was dropped, and this tab stayed on the
+       * previous account until it was reloaded.
+       *
+       * A SIGNED_OUT is not retried. It carries no session, so there is nothing
+       * to reconcile, and dropping one that is not ours is the safe direction:
+       * the alternative is revoking a session this tab still legitimately
+       * holds. See the sign-out reasoning below.
+       */
+      if (!session) return;
+      const catchUp = waitForStorageCatchUp(
+        () => eventAgreesWithStorage(session),
+        () => {
+          pendingCatchUps.delete(catchUp);
+          applyAuthEvent(event, session);
+        },
+        (run, delayMs) => setTimeout(run, delayMs),
+        (handle) => clearTimeout(handle as ReturnType<typeof setTimeout>),
+      );
+      pendingCatchUps.add(catchUp);
     });
 
     /*
@@ -1339,6 +1382,10 @@ export const useCloudStore = create<CloudStore>((set, get) => ({
       recoveryChannel?.close();
       if (typeof window !== 'undefined') window.removeEventListener('storage', onRecoveryStorage);
       subscription.subscription.unsubscribe();
+      // A re-read still waiting on storage must not apply an event to a store
+      // the app has finished with.
+      for (const catchUp of pendingCatchUps) catchUp.cancel();
+      pendingCatchUps.clear();
     };
   },
   setLastSyncAt: (value) => set({ lastSyncAt: value }),

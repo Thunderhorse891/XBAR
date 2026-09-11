@@ -143,12 +143,12 @@ set before release.
   ever read the `authError` parameter: signed in the customer saw nothing at
   all, and signed out the auth guard's redirect dropped the query before the
   one screen that would have read it.
-- **Open release gate, now diagnosed: a cross-tab sign-in is sometimes ignored,
-  and the cause is this PR's own auth gate.** What looked like a flaky test
+- **A cross-tab sign-in was sometimes ignored, and the cause was this PR's own
+  auth gate. Now fixed.** What looked like a flaky test
   (`held-workspace.spec.ts:449`, zero relational reads after 30s) was chased
-  rather than re-run. Reproduced twice in 120 instrumented runs (~1.7%), with
-  the same trace both times, captured by listening on auth-js's own broadcast
-  channel in the receiving tab:
+  rather than re-run. Reproduced twice in 120 instrumented runs, with the same
+  trace both times, captured by listening on auth-js's own broadcast channel in
+  the receiving tab:
 
   ```
   STORE     sub=0001                                    <- this tab stores its own session
@@ -156,27 +156,39 @@ set before release.
   BROADCAST event=SIGNED_IN         eventSub=0002 storedSub=0001   <- still 0001
   ```
 
-  The second tab had already signed in as account 0002 and written that session
-  to the SHARED localStorage before broadcasting. Yet at the instant the
-  broadcast was handled, this tab's own read of localStorage still returned
-  0001: localStorage is not synchronously coherent across renderer processes,
-  so a BroadcastChannel message can outrun the write it describes.
+  The second tab had already written session 0002 to the SHARED localStorage
+  before broadcasting. Yet at the instant the broadcast was handled, this tab's
+  own read still returned 0001: localStorage is not synchronously coherent
+  across renderer processes, so a BroadcastChannel message can outrun the write
+  it describes. `useCloudStore`'s listener asked whether the STORED session
+  agreed with the event, got "no" for a perfectly good newer event, and dropped
+  it -- the tab never switched accounts, never hydrated, and stayed on the
+  previous account until reloaded.
 
-  `useCloudStore`'s listener opens with
-  `if (!liveSessionAgrees(readAuthStorage(authStorageKey()), session, ...)) return;`
-  — it asks whether the STORED session agrees with the event. Against a stale
-  read that answers "no" for a perfectly good, newer event, and the sign-in is
-  dropped: the tab never switches accounts, never hydrates, and stays on the
-  previous account until it is reloaded. This is a false NEGATIVE in a gate
-  written to reject stale events, and it is the direction that costs a
-  customer something.
+  The repair does not weaken the gate. A stale read can only ever show
+  something OLDER than reality; it cannot invent a session that was never
+  stored. So disagreement means either "this event is stale" or "this read is
+  behind", and only time separates them. A session-bearing event that
+  disagrees is now re-read up to five times at 50ms before being dropped
+  (`waitForStorageCatchUp`, lib/authBootstrap.ts). An event that is genuinely
+  superseded disagrees on every attempt and is dropped exactly as before, and
+  ordering is untouched -- a late replay still takes its ticket from the same
+  write gate. A SIGNED_OUT is never retried: it carries no session to
+  reconcile, and dropping one that is not ours is the safe direction.
 
-  Not fixed here, deliberately. The gate compares session identity, which
-  cannot distinguish "older" from "merely different", and the correct repair —
-  ordering the two sessions rather than matching them, or re-reading once
-  before dropping — is a change to the most security-sensitive check in this
-  work. It should be designed and mutation-tested on its own rather than
-  appended to a long session. The evidence above is enough to start from.
+  Pinned by `tests/auth-slow-workspace/stale-storage-read.spec.ts`, which
+  stages the propagation delay deterministically rather than waiting on a 1.7%
+  race: this tab's reads of the auth record serve the previous value for the
+  first few reads after another renderer's write. Reverted, the case fails with
+  the tab making no requests at all. Two earlier versions of that staging
+  passed with the fix reverted and were discarded -- one froze reads on a clock
+  that had expired before the broadcast arrived, the other re-armed on every
+  read so storage never caught up at all.
+
+  The natural reproduction was then re-run at the same size: **120 of 120
+  passed**, against 2 failures in 120 before. That is consistent with the fix
+  rather than proof of it -- at a ~1.7% rate a clean 120 is not conclusive on
+  its own -- which is why the deterministic case above carries the weight.
 
 - Not claimed: none of this was exercised against a live GoTrue or a live
   Supabase project. The browser suites intercept Auth and PostgREST, so what is

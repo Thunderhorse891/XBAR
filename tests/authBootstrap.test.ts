@@ -5,6 +5,7 @@ import {
   createLatestWriteGate,
   identityPublication,
   liveSessionAgrees,
+  waitForStorageCatchUp,
 } from '../src/lib/authBootstrap.js';
 import { createRecoveryCallbackNavigationIntent, isRecoveryCallbackUrl } from '../src/lib/authCallbackArrival.js';
 
@@ -226,4 +227,103 @@ test('unnamed generations fall back to comparing the credential', () => {
   const unnamed = () => '';
   assert.equal(liveSessionAgrees(held('x'), { access_token: 'x' }, unnamed), true);
   assert.equal(liveSessionAgrees(held('x'), { access_token: 'y' }, unnamed), false);
+});
+
+// A scheduler with no real timers: every pending run is explicit, so a test
+// says exactly how many re-reads happened rather than waiting on a clock.
+function fakeScheduler() {
+  const pending = new Map<number, () => void>();
+  let next = 1;
+  return {
+    schedule(run: () => void) {
+      const handle = next++;
+      pending.set(handle, run);
+      return handle;
+    },
+    cancel(handle: unknown) {
+      pending.delete(handle as number);
+    },
+    get pendingCount() {
+      return pending.size;
+    },
+    /** Run every currently pending callback, once. */
+    tick() {
+      const due = [...pending.entries()];
+      pending.clear();
+      for (const [, run] of due) run();
+    },
+  };
+}
+
+test('an event is applied as soon as this tab can see the write it describes', () => {
+  const scheduler = fakeScheduler();
+  let visible = false;
+  let applied = 0;
+  waitForStorageCatchUp(
+    () => visible,
+    () => {
+      applied += 1;
+    },
+    scheduler.schedule,
+    scheduler.cancel,
+  );
+  scheduler.tick();
+  assert.equal(applied, 0, 'storage has not caught up yet, so nothing may be applied');
+  // The other renderer's write becomes visible here.
+  visible = true;
+  scheduler.tick();
+  assert.equal(applied, 1, 'once the write is visible the event belongs to this tab');
+  scheduler.tick();
+  assert.equal(applied, 1, 'and it is applied once, not once per attempt');
+});
+
+test('an event storage never agrees with is dropped, and stops re-reading', () => {
+  const scheduler = fakeScheduler();
+  let applied = 0;
+  waitForStorageCatchUp(
+    () => false,
+    () => {
+      applied += 1;
+    },
+    scheduler.schedule,
+    scheduler.cancel,
+    3,
+  );
+  for (let round = 0; round < 10; round += 1) scheduler.tick();
+  assert.equal(applied, 0, 'a genuinely superseded event must still be dropped');
+  assert.equal(scheduler.pendingCount, 0, 'the re-reads must stop rather than run forever');
+});
+
+test('re-reading stops after the attempt budget, not before', () => {
+  const scheduler = fakeScheduler();
+  let reads = 0;
+  waitForStorageCatchUp(
+    () => {
+      reads += 1;
+      return false;
+    },
+    () => {},
+    scheduler.schedule,
+    scheduler.cancel,
+    4,
+  );
+  for (let round = 0; round < 10; round += 1) scheduler.tick();
+  assert.equal(reads, 4, 'exactly the budget, so a stale event cannot be retried indefinitely');
+});
+
+test('cancelling stops a pending re-read from applying anything', () => {
+  const scheduler = fakeScheduler();
+  let applied = 0;
+  const catchUp = waitForStorageCatchUp(
+    () => true,
+    () => {
+      applied += 1;
+    },
+    scheduler.schedule,
+    scheduler.cancel,
+  );
+  catchUp.cancel();
+  scheduler.tick();
+  assert.equal(applied, 0, 'a torn-down subscription must not apply an event later');
+  assert.equal(scheduler.pendingCount, 0);
 });
