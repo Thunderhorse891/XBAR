@@ -311,79 +311,50 @@ set before release.
   version of that case passed with the guard reverted and was retargeted rather
   than kept.
 
-- **An auth-callback document opted out of stale-code recovery for its whole
-  life. Now handled, by a different route than suggested** (raised by Codex
-  against `002901c`). The `beganOnAuthCallback` latch stays true for the
-  document's lifetime, so every later `controllerchange` is ignored. That
-  matters because routes are lazy -- 35 of them, 94 built chunks -- so such a
-  document keeps fetching route code for as long as it stays open, and chunk
-  filenames are content-hashed, so a deploy replaces them.
+- **An auth-callback document opts out of stale-code recovery for its whole
+  life -- confirmed real, attempted, and WITHDRAWN** (raised by Codex against
+  `002901c`). The `beganOnAuthCallback` latch stays true for the document's
+  lifetime, so every later `controllerchange` is ignored. Routes are lazy (35 of
+  them, 94 built chunks), so such a document keeps fetching route code for as
+  long as it stays open, and chunk filenames are content-hashed, so a deploy
+  replaces them. The service worker is network-first for `/assets/` and returns
+  a non-200 AS IS (`if (!response || response.status !== 200) return response`);
+  its cache fallback lives in the `.catch`, which a 404 never reaches. So an
+  obsolete chunk URL fails outright and the route renders nothing.
 
-  Confirmed by reading the worker rather than assuming: it is network-first for
-  `/assets/`, and its handler returns a non-200 AS IS (`if (!response ||
-response.status !== 200) return response`). The cache fallback lives in the
-  `.catch`, which a 404 response never reaches. So an obsolete chunk URL fails
-  outright, whether or not the activating worker deleted the previous cache.
+  A recovery mechanism was built for this (`staleChunkRecovery.ts`, wrapping all
+  35 `lazy()` factories) and then removed. It drew **four** review findings
+  across four commits, two of them unbounded reload loops:
 
-  The latch itself is not the thing to loosen. It exists because a reload can
-  land between auth-js clearing the URL fragment and the session being saved,
-  which destroys a one-time link, and a clean URL is not evidence the save
-  happened. Codex's suggested remedy -- release the latch or fire the skipped
-  reload once authentication settles -- trades one harm for another: on the
-  reset screen, a reload fired on a timer or on a storage signal throws away a
-  password the customer is in the middle of typing.
+  1. _A reload loop where `sessionStorage` is blocked_ -- the marker write failed
+     silently, so a genuinely missing asset reloaded every fresh document
+     forever.
+  2. _The credential window, reopened_ -- the reset route is itself lazy, so its
+     chunk can fail while auth-js is still consuming an implicit-flow fragment,
+     and a reload there burns a one-time link. The claim that a reload "cannot be
+     premature by construction, because the route has already failed" considered
+     only the UI.
+  3. _The settled probe could not tell a new session from an old one_ -- a
+     browser already signed in has a stored record, so a recovery link opened
+     there read as safe before its own credential had been persisted.
+  4. **P1**: _a reload loop that needs no blocked storage at all_ -- the marker
+     is one global key and EVERY wrapped route clears it on a successful load,
+     so after a recovery reload the first working route (a layout, say) wipes it
+     and the still-missing chunk reloads again, indefinitely.
 
-  So recovery moved to the point of failure instead (`staleChunkRecovery.ts`,
-  wrapping all 35 `lazy()` factories) -- and a document that arrived on an auth
-  callback is excluded from it outright. One reload per tab, marker cleared on a successful load so
-  a later deploy can recover too, and a second failure rethrows rather than
-  looping -- if a fresh document still cannot fetch the chunk, staleness was not
-  the cause. A genuine route bug is never swallowed: only the four engine
-  wordings for a missing module qualify.
+  Three of the four are the same question in different clothes -- when is it
+  safe to reload a document that may hold a one-time credential, and how is one
+  reload counted across 35 independent importers. The underlying defect is a
+  modest P2 (a stale route renders nothing until the customer refreshes); the
+  mechanism kept producing P1-shaped failures in the auth path this PR exists to
+  repair. Withdrawn rather than patched a fourth time.
 
-  **That first version shipped with two defects of its own, both found in
-  review and both real.** They are recorded here rather than quietly folded in,
-  because one of them contradicts a claim made confidently above.
-
-  - _An unbounded reload loop where `sessionStorage` is blocked._ The write
-    failed silently and the read always said "not yet reloaded", so a genuinely
-    missing asset reloaded every fresh document forever. The code's own comment
-    claimed losing the marker "only costs one extra reload" -- simply wrong. The
-    marker is now written and READ BACK, and one that cannot be retained refuses
-    the reload outright.
-  - _The credential window, reopened by a different door._ The reasoning given
-    was that a reload here "cannot be premature by construction, because the
-    route has already failed". That considered only the UI. The reset route is
-    itself lazy, so its chunk can fail while auth-js is still consuming an
-    implicit-flow fragment, and a reload in that window leaves the token in
-    neither the URL nor storage and burns the link -- precisely the harm the
-    `offlineRuntime` latch exists to prevent. A failed route is not evidence
-    that nothing else is in flight.
-  - _And the repair for that was wrong too._ Waiting for "a session in storage"
-    reads as satisfied immediately in a browser that was ALREADY signed in, so a
-    recovery link opened there was declared safe before its own credential had
-    been persisted.
-
-  **Three rules in a row, each plausible and each holed, all on one question:
-  when is it safe to reload a document that may be holding a one-time
-  credential?** That is not a question this mechanism needs to answer, and the
-  cost of getting it wrong -- a link that cannot be recovered -- is far above
-  what it buys. A document that arrived on an auth callback is now simply
-  excluded: it keeps exactly the behaviour it had before any of this existed,
-  the error surfaces, and the customer can refresh once their reset has
-  completed. Every other document, which is the case this was actually added
-  for, still recovers.
-
-  A further gap, found by mutation rather than review: the browser wiring was a
-  bare module constant, so a mutant making EVERY document reloadable passed the
-  entire suite -- every case injects its own environment and none of them
-  reached it. It is now a pure `documentMayReloadForStaleChunk(href)`, covered
-  over the real callback shapes in both routers, and that mutant fails.
-
-  Rules mutation-checked: the loop guard, the non-Chromium wordings, clearing
-  the marker on success, refusing to treat an ordinary error as a stale chunk,
-  marker retainability, excluding callback documents, and that the loop guard
-  outranks the wait.
+  **Still open, and deliberately unfixed.** The honest statement of what remains:
+  a document that arrived on an auth callback never takes the service worker's
+  refresh, so after a deploy its not-yet-loaded route chunks 404 and those routes
+  render nothing until the customer reloads by hand. Any future attempt needs to
+  answer both questions above -- credential safety and per-import reload counting
+  -- before it is worth carrying.
 
 - **An accepted auth event could publish a superseded credential. Now fixed**
   (raised by Codex against `ee4c8df`). Agreement between an event and storage is
