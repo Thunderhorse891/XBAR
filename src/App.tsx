@@ -9,6 +9,7 @@ import {
   useLocation,
   useNavigate,
   useParams,
+  useSearchParams,
 } from 'react-router-dom';
 import ErrorBoundary from './components/ErrorBoundary';
 import { RequireCloudAuth } from './components/RequireCloudAuth';
@@ -20,10 +21,11 @@ import { OwnerTestModeBar } from './components/OwnerTestModeBar';
 import { Toaster } from './components/ui/sonner';
 import { billingPath } from './lib/billingRoutes';
 import { buyerFollowUpPath } from './lib/buyerRoutes';
-import { appBasePath, passwordResetPath, usesHashRouting } from './lib/routeCanon';
+import { appBasePath, loginPath, passwordResetPath, usesHashRouting } from './lib/routeCanon';
 import { trackRuntimeEvent } from './lib/runtimeEvents';
 import { consumeRecoveryCallbackNavigation } from '@/lib/authCallbackArrival';
 import { hasValidatedPasswordRecovery, useCloudStore } from './store/useCloudStore';
+import { useUiStore } from './store/useUiStore';
 import './routes/operationsHierarchy.css';
 import './routes/interactionSystem.css';
 import './routes/xbarCommandSystem.css';
@@ -197,6 +199,53 @@ function PasswordRecoveryRedirect() {
   return null;
 }
 
+/*
+ * A rejected callback that came back somewhere other than the sign-in screen.
+ *
+ * Magic-link and OAuth sign-in are offered from Settings as well as Login, and
+ * `currentAuthRedirectUrl()` sends Supabase back to the page the customer
+ * started from -- so the failure arrives on `/app/settings` or `/app/billing`
+ * as `#error=...`. main.tsx moves the reason to `?authError=`, and Login was
+ * the only screen that ever read it: with a session in hand the customer simply
+ * stayed put with nothing said, and without one the cloud-auth guard sent them
+ * to `/login` with a `<Navigate>` that drops the query, losing it there too.
+ *
+ * Answered here rather than by rewriting the path, because the signed-in case
+ * has nowhere better to go -- sending someone who is already signed in to the
+ * sign-in screen to be told a link failed is its own wrong answer.
+ *
+ * Mounted BEFORE <Routes>, so this effect runs before the cloud-auth guard's
+ * own navigation on the same commit; otherwise the redirect would take the
+ * parameter away before it had been read.
+ *
+ * A toast is weaker than a message in a form, and Login keeps its form: this
+ * skips that route entirely, so the screen that can do better still does.
+ */
+function AuthCallbackFailureNotice() {
+  const [params, setParams] = useSearchParams();
+  const location = useLocation();
+  const pushToast = useUiStore((state) => state.pushToast);
+
+  useEffect(() => {
+    if (location.pathname === loginPath) return;
+    const authError = params.get('authError');
+    if (!authError) return;
+    pushToast({
+      tone: 'error',
+      title: 'That sign-in link did not work',
+      message: authError,
+      // Long enough to read and act on. The default is tuned for confirmations.
+      duration: 12_000,
+    });
+    // Cleared once said, or a reload re-announces a failure already dealt with.
+    const next = new URLSearchParams(params);
+    next.delete('authError');
+    setParams(next, { replace: true });
+  }, [location.pathname, params, pushToast, setParams]);
+
+  return null;
+}
+
 export default function App() {
   const hashRouting = usesHashRouting();
   const Router = hashRouting ? HashRouter : BrowserRouter;
@@ -209,6 +258,7 @@ export default function App() {
         <SubscriptionEnforcement />
         <RouteTelemetry />
         <PasswordRecoveryRedirect />
+        <AuthCallbackFailureNotice />
         {/* Renders nothing unless the viewer is an authorized owner. */}
         <OwnerTestModeBar />
         <Suspense
