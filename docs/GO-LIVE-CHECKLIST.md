@@ -23,6 +23,53 @@ This scope does not authorize paid-service activation or assume that existing
 production integrations have been disabled. Record the actual enabled feature
 set before release.
 
+## Verified September 11, 2026
+
+- Diagnosed the intermittent "stored session not published after reload" failure
+  to its cause rather than retrying around it. The offline service worker
+  installs with `skipWaiting()` and activates with `clients.claim()`, so on any
+  load with no previous controller -- a first visit, a cleared cache, a private
+  window -- it claims the open document and fires `controllerchange`.
+  `src/lib/offlineRuntime.ts` reloaded on that unconditionally. Measured with
+  request, storage and navigation traces: the reload landed roughly 200ms into a
+  first load and aborted the `GET /auth/v1/user` that auth-js issues inside
+  `_getSessionFromURL` in **10 of 12 runs** (`net::ERR_ABORTED`, coincident with
+  the brand icons, `navType=reload`, `controller=true`). It was survivable only
+  because auth-js clears the fragment _after_ that request returns, so the
+  reloaded document could start the callback over -- at the cost of a second
+  round trip and a session published about 180ms late.
+- The residual risk that is now closed: auth-js clears the URL fragment with
+  `window.location.hash = ''` **before** the caller stores the session
+  (confirmed in `@supabase/auth-js` 2.100.1 `_getSessionFromURL`). A reload
+  arriving in that window leaves the token in neither the URL nor storage, and
+  recovery and magic links are single-use -- the customer would have had to
+  request another email. `offlineRuntime.ts` now refreshes only when a worker
+  replaces an _earlier_ controller, and never while the URL still carries an
+  auth callback.
+- Removing that reload exposed a second, pre-existing defect it had been
+  masking. `RequireWorkspaceSetup` decided "this ranch was never set up" from
+  `useWorkspaceHydrated()`, which only reports that zustand has read **local**
+  storage; on a device the account has never used that resolves at once with an
+  empty profile. Measured navigation trail on a cold load of `/app/settings`:
+  `/app/settings` -> `/app/setup` -> `/app`, with the redirect at 502ms and the
+  cloud `workspace_profiles` response not arriving until 615ms. A customer
+  signing in on a new phone was shown the onboarding wizard for a ranch they
+  finished months ago and then dropped on the dashboard, losing the link they
+  followed. The guard now waits for the cloud's answer before calling a
+  workspace unfinished, and renders immediately once it is set up so an ordinary
+  token refresh cannot blank a working screen.
+- Both fixes were mutation-checked rather than assumed. Each guard in
+  `offlineRuntime.ts` and in `lib/workspaceSetupGate.ts` was neutralised in turn
+  and confirmed to break at least one test; the browser cases were re-run
+  against the reverted source and fail 5/5 and 6/6 respectively. Two tests were
+  discarded during this work for passing with and without their fix -- a
+  document counter held on `window` (which the reload it measured resets) and a
+  cold-device staging that cleared only `localStorage` while the workspace
+  records live in IndexedDB.
+- Not claimed: none of this was exercised against a live GoTrue or a live
+  Supabase project. The browser suites intercept Auth and PostgREST, so what is
+  established is the client's behaviour, not the server's.
+
 ## Follow-up September 11, 2026
 
 - Account deletion now refuses unreadable ownership/membership results,
@@ -40,7 +87,9 @@ set before release.
 - Claude's `98f5655` removes inferred member deletion from stale saves and
   carries reset uncertainty explicitly. Claude also measured intermittent
   session/reload failures in the membership browser test; one passing battery
-  does not establish repeatability. That failure remains open.
+  does not establish repeatability. That failure was subsequently diagnosed to
+  the service-worker reload and the cold-device setup guard -- see "Verified
+  September 11, 2026" above -- and is no longer open.
 - Visual review at 1440px and 390px used a local Professional-plan fixture,
   not a real paid account. Dashboard, Documents and Billing showed no horizontal
   overflow. Empty Documents now opens Upload for users who can upload, with a

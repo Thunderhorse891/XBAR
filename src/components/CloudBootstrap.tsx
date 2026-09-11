@@ -272,7 +272,25 @@ export function CloudBootstrap() {
       );
     };
 
-    void hydrate();
+    /*
+     * A rejection has to settle the run too.
+     *
+     * Every decision branch inside `hydrate` ends in `finish`, but a throw on
+     * the way there -- a vault promotion failing hard, a serializer meeting a
+     * record it cannot read -- skipped all of them and left `autosaveReady`
+     * false for the rest of the page's life. That already stopped cloud
+     * autosave silently; now that RequireWorkspaceSetup waits on the same flag
+     * before it will call a workspace unfinished, it would also hold the app on
+     * its loading shell. `finish` is gated on `owns()`, so a superseded run
+     * still writes nothing.
+     */
+    void hydrate().catch(() => {
+      finish(
+        false,
+        'error',
+        'This ranch could not be reconciled with the cloud. The records on this device are unchanged and autosave is paused until you choose Push cloud or Pull cloud in Settings.',
+      );
+    });
     /*
      * No cleanup that invalidates the run.
      *

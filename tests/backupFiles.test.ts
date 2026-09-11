@@ -3208,3 +3208,31 @@ test('saving a workspace never infers a member removal', async () => {
     'explicit removal must still be the path that deletes a membership',
   );
 });
+test('a cloud hydration that throws still releases the app', async () => {
+  const bootstrap = await readFile('src/components/CloudBootstrap.tsx', 'utf8');
+
+  /*
+   * `autosaveReady` has to become true on EVERY way out of a hydration run,
+   * including one that throws.
+   *
+   * Each decision branch inside `hydrate` ends in `finish`, so a throw on the
+   * way to one reached none of them, and the flag stayed false for the life of
+   * the page. That was already a silent defect -- cloud autosave simply stopped
+   * -- and RequireWorkspaceSetup now reads the same flag to tell "the cloud has
+   * not answered yet" from "this ranch was never set up", so an unsettled run
+   * would hold the customer on a loading shell instead.
+   *
+   * A source guard, not a behavioural one: making the real hydration throw from
+   * a browser test means corrupting a response in a way supabase-js re-raises
+   * rather than returns, which pins the client's internals rather than this.
+   */
+  assert.match(
+    bootstrap,
+    /void hydrate\(\)\s*\.catch\([\s\S]{0,400}?finish\(/,
+    'a rejected hydration must still call finish, or nothing releases the loading shell',
+  );
+  assert.ok(
+    !/void hydrate\(\);/.test(bootstrap),
+    'an unhandled hydrate() leaves autosaveReady false forever; attach the rejection handler',
+  );
+});
