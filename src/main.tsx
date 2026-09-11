@@ -6,9 +6,6 @@ import ErrorBoundary from './components/ErrorBoundary';
 import { InteractionBootstrap } from './components/InteractionBootstrap';
 import { registerGlobalErrorHandlers } from './lib/globalErrorHandlers';
 import { registerOfflineRuntime } from './lib/offlineRuntime';
-import { setAuthCallbackSettledProbe } from './lib/staleChunkRecovery';
-import { readAuthStorage } from './lib/authStorage';
-import { authStorageKey } from './lib/supabaseClient';
 import { appBasePath, browserAuthFailureSearch, hashAuthFailureRoute, usesHashRouting } from './lib/routeCanon';
 import './index.css';
 import './styles/motion.css';
@@ -54,18 +51,6 @@ if (usesHashRouting()) {
 
 const rootElement = document.getElementById('root');
 if (!rootElement) throw new Error('Root element not found.');
-
-/*
- * Tells the lazy-route recovery when a credential this document arrived with is
- * safely stored. Installed here because the Supabase client lives here, not in
- * the recovery module, and BEFORE the first route can fail.
- */
-setAuthCallbackSettledProbe(() => {
-  const key = authStorageKey();
-  // Supabase unconfigured: there is no credential in flight to lose.
-  if (!key) return true;
-  return Boolean(readAuthStorage(key));
-});
 
 registerGlobalErrorHandlers();
 void registerOfflineRuntime();

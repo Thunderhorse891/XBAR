@@ -5,6 +5,7 @@ import {
   isChunkLoadFailure,
   withStaleChunkRecovery,
   type StaleChunkEnvironment,
+  documentMayReloadForStaleChunk,
 } from '../src/lib/staleChunkRecovery.js';
 
 /*
@@ -167,27 +168,24 @@ test('an already-reloaded document rethrows even while the callback is unsettled
   assert.equal(rule({ alreadyReloaded: true, authCallbackSettled: false }), 'rethrow');
 });
 
-test('a chunk failure waits for the callback and then reloads', async () => {
-  const { env, calls, settle } = environment({ settled: false });
-  const load = withStaleChunkRecovery(() => Promise.reject(chromium()), env, 5, 1);
-  const pending = load();
-  const settled = await Promise.race([pending.then(() => 'settled'), Promise.resolve('still-pending')]);
-  assert.equal(settled, 'still-pending');
-  assert.ok(calls.waits >= 1, 'it must wait rather than reload while the credential is in flight');
-  assert.equal(calls.reloads, 0);
-  settle();
-  await new Promise((resolve) => setTimeout(resolve, 5));
-  assert.equal(calls.reloads, 1, 'once the session is persisted the reload is safe');
-});
-
-test('a callback that never settles surfaces the error instead of reloading', async () => {
-  // The conservative end: after the budget, showing the error beats a reload
-  // that could still destroy the credential.
+test('a document that arrived on an auth callback never reloads', async () => {
+  /*
+   * Two earlier attempts tried to time the moment such a document becomes safe
+   * to reload, and review found a hole in each: the first claimed a failed
+   * route meant nothing was in flight, ignoring auth-js still consuming the
+   * fragment; the second waited for a session to appear in storage, which a
+   * browser that was ALREADY signed in has, so a recovery link opened there
+   * read as safe before its own credential was persisted.
+   *
+   * The cost of being wrong is a one-time link that cannot be recovered, so the
+   * question is no longer asked. Such a document keeps the behaviour it had
+   * before any of this existed, and the error surfaces.
+   */
   const { env, calls } = environment({ settled: false });
   const error = chromium();
   const load = withStaleChunkRecovery(() => Promise.reject(error), env, 3, 1);
   await assert.rejects(load(), (thrown: unknown) => thrown === error);
-  assert.equal(calls.reloads, 0);
+  assert.equal(calls.reloads, 0, 'a credential that may still be in flight outranks a stale route');
   assert.equal(calls.waits, 3);
 });
 
@@ -197,4 +195,30 @@ test('a blocked marker surfaces the error through the wrapper too', async () => 
   const load = withStaleChunkRecovery(() => Promise.reject(error), env, 3, 1);
   await assert.rejects(load(), (thrown: unknown) => thrown === error);
   assert.equal(calls.reloads, 0, 'a reload that cannot be counted must not happen');
+});
+
+/*
+ * The browser wiring, which an earlier version left uncovered: it was a bare
+ * module constant, and a mutation making every document reloadable passed the
+ * entire suite because every case injects its own environment and none of them
+ * reached it.
+ */
+
+test('a document holding an auth callback may never reload', () => {
+  // Implicit flow: the credential is in the fragment and auth-js is consuming it.
+  assert.equal(documentMayReloadForStaleChunk('https://x.test/app/reset-password#access_token=a&type=recovery'), false);
+  assert.equal(documentMayReloadForStaleChunk('https://x.test/app/login#error=access_denied'), false);
+  // PKCE, and the rewritten failure shapes main.tsx produces.
+  assert.equal(documentMayReloadForStaleChunk('https://x.test/app/login?code=pkce'), false);
+  assert.equal(documentMayReloadForStaleChunk('https://x.test/app/login?authError=otp_expired'), false);
+  assert.equal(documentMayReloadForStaleChunk('https://x.test/app/#/login?authError=otp_expired'), false);
+});
+
+test('an ordinary document may reload', () => {
+  // The case this mechanism actually exists for: a tab left open across a deploy.
+  assert.equal(documentMayReloadForStaleChunk('https://x.test/app/horses'), true);
+  assert.equal(documentMayReloadForStaleChunk('https://x.test/app/horses?sort=name'), true);
+  assert.equal(documentMayReloadForStaleChunk('https://x.test/app/#/horses'), true);
+  // No document URL at all: nothing in flight to protect.
+  assert.equal(documentMayReloadForStaleChunk(null), true);
 });

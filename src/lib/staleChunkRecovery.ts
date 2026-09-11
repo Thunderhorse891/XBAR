@@ -124,28 +124,46 @@ function clearReloaded() {
  * fragment here -- before auth-js consumes it and before main.tsx rewrites a
  * rejected callback. That is exactly the instant the question is asked about.
  */
-export const beganOnAuthCallback = typeof window !== 'undefined' && urlCarriesAuthCallback(window.location.href);
-
-/*
- * Whether the credential is on disk yet, supplied from outside.
+/**
+ * Whether a document at this URL may ever take a stale-chunk reload.
  *
- * Injected rather than imported so this module does not depend on the Supabase
- * client, which would pull the whole client chain into anything that loads a
- * route. `main.tsx` installs the real probe.
+ * Pure and exported so the browser wiring below is covered: an earlier version
+ * kept this as a bare module constant, and a mutation that made every document
+ * reloadable passed the whole suite -- the tests inject their own environment
+ * and never reached it.
  *
- * The default REFUSES to call a callback settled, so a document that arrived on
- * one recovers only once something has actually vouched for the session. If the
- * probe is never installed, such a document simply keeps the behaviour it had
- * before any of this existed: no reload, and the error surfaces.
+ * `null` means there is no document URL at all (tests, SSR), where there is no
+ * credential in flight to protect.
  */
-let settledProbe: () => boolean = () => !beganOnAuthCallback;
-
-export function setAuthCallbackSettledProbe(probe: () => boolean) {
-  settledProbe = probe;
+export function documentMayReloadForStaleChunk(href: string | null): boolean {
+  if (href === null) return true;
+  return !urlCarriesAuthCallback(href);
 }
 
+const mayReload = typeof window === 'undefined' ? true : documentMayReloadForStaleChunk(window.location.href);
+
+/*
+ * A document that arrived on an auth callback NEVER takes this reload.
+ *
+ * Two earlier attempts tried to find the moment such a document becomes safe to
+ * reload, and review found a hole in each. The first claimed a failed route
+ * meant nothing was in flight, which ignored auth-js still consuming the
+ * fragment. The second waited for a session to appear in storage -- but a
+ * browser that was ALREADY signed in has one, so a recovery link opened there
+ * read as settled before its own credential was persisted.
+ *
+ * The pattern is the point: every rule that tried to say "the credential is
+ * safe now" was wrong in a way that was invisible until someone looked again,
+ * and the cost of being wrong is a one-time link that cannot be recovered. So
+ * this stops trying to time the window and gives the answer up. Such a document
+ * keeps exactly the behaviour it had before any of this existed: no reload, the
+ * error surfaces, and the customer can refresh once their reset has completed.
+ *
+ * Every other document -- which is the case this mechanism was actually added
+ * for, an ordinary tab left open across a deploy -- still recovers.
+ */
 function authCallbackSettled(): boolean {
-  return !beganOnAuthCallback || settledProbe();
+  return mayReload;
 }
 
 export type StaleChunkEnvironment = {
