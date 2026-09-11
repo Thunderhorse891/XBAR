@@ -206,7 +206,7 @@ test('ready horses, losses and unpriced inventory produce honest labels and rank
   assert.equal(decisions.blocked.length, 2);
   assert.deepEqual(
     decisions.ranked.map((h) => h.horseId),
-    ['h2', 'h1', 'h0'],
+    ['h2', 'h0', 'h1'],
   );
   assert.equal(decisions.bands[2].count, 1);
   const bytes = await renderReportPdf(report, 'Mixed readiness fixture', await branding());

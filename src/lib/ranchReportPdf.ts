@@ -354,7 +354,7 @@ export async function renderReportPdf(
     540,
     7.5,
   );
-  newPage('Horse-level economics', 'Ranked by projected profit / sale inventory first');
+  newPage('Horse-level economics', 'Ranked by projected profit / priced sale inventory first');
   if (decision.listed.some((h) => h.projectedMargin < 0)) {
     text('ACTION / Review negative projected profits before discounting. Resolve blocked sale gates.', 36, 119, 7, red);
   } else if (decision.listed.some((h) => h.projectedMargin > 0)) {
@@ -378,7 +378,7 @@ export async function renderReportPdf(
       },
       { value: dollars(h.investedToDate) },
       { value: dollars(h.monthlyBurn) },
-      { value: priced ? dollars(h.askPrice) : 'Not set' },
+      { value: priced ? dollars(h.askPrice) : h.saleInventory ? 'Not set' : 'N/A' },
       { value: dollars(h.breakEvenPrice) },
       { value: priced ? dollars(h.projectedMargin) : 'N/A', color: priced ? color : muted, strong: true },
       { value: priced ? `${h.marginPercent}% ${band}` : 'N/A', color: priced ? color : muted },

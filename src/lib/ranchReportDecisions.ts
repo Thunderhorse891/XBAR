@@ -45,6 +45,7 @@ export function reportDecisions(report: RanchReport) {
   const ranked = [...report.horses].sort(
     (a, b) =>
       Number(b.saleInventory) - Number(a.saleInventory) ||
+      Number(b.saleInventory && b.askPrice > 0) - Number(a.saleInventory && a.askPrice > 0) ||
       b.projectedMargin - a.projectedMargin ||
       b.investedToDate - a.investedToDate ||
       a.horseName.localeCompare(b.horseName),
