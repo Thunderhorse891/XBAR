@@ -107,6 +107,28 @@ set before release.
   statement fails at `if` and takes the rest of the file with it. The first
   draft of the migration above made exactly that mistake and nothing caught it
   until PostgreSQL did; the prepare step now refuses it by name.
+- Two reset-flow defects raised in review were confirmed by measurement before
+  being fixed, not taken on description. (a) auth-js broadcasts
+  `PASSWORD_RECOVERY` to every tab and this store's subscriber ADOPTS it, so a
+  tab with an older password update still in flight ends up holding a NEWER
+  grant -- and its own completion cleared that marker unconditionally, revoking
+  a link that was never used. With the older update held open, the first tab's
+  stored grant really did become the second tab's token and read back empty on
+  completion. Both links are one-time, so a customer whose other tab had closed
+  had to request another email. (b) A rejected magic-link or OAuth callback
+  started from Settings or Billing comes back to that page, and only `Login`
+  ever read the `authError` parameter: signed in the customer saw nothing at
+  all, and signed out the auth guard's redirect dropped the query before the
+  one screen that would have read it.
+- **Open, not diagnosed:** `tests/auth-slow-workspace/held-workspace.spec.ts:449`
+  ("a session arriving while an obsolete one hangs resolves without waiting for
+  it") fails at a low rate with zero relational reads after 30 seconds --
+  meaning the second account was never hydrated at all. It reproduces on
+  unmodified code (1 failure in 40 runs), so it is pre-existing and not caused
+  by the changes above. It is recorded here rather than dismissed as flakiness
+  because the failing shape is a real one: a cross-tab session takeover that
+  sometimes never hydrates the account that took over. Nothing here establishes
+  that it is only a test artifact.
 - Not claimed: none of this was exercised against a live GoTrue or a live
   Supabase project. The browser suites intercept Auth and PostgREST, so what is
   established is the client's behaviour, not the server's.
