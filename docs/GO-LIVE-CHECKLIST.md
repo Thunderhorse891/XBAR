@@ -44,8 +44,11 @@ set before release.
   arriving in that window leaves the token in neither the URL nor storage, and
   recovery and magic links are single-use -- the customer would have had to
   request another email. `offlineRuntime.ts` now refreshes only when a worker
-  replaces an _earlier_ controller, and never while the URL still carries an
-  auth callback.
+  replaces an _earlier_ controller, and never in a document that arrived on an
+  auth callback. The guard was first written to lift as soon as the URL was
+  clean, which still left that window open, because a cleared URL is not
+  evidence that the session has been stored; `602f6fe` latched it for the
+  document's lifetime instead, and that is the correct reading.
 - Removing that reload exposed a second, pre-existing defect it had been
   masking. `RequireWorkspaceSetup` decided "this ranch was never set up" from
   `useWorkspaceHydrated()`, which only reports that zustand has read **local**
