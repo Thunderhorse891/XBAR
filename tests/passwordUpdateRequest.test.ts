@@ -3,19 +3,22 @@ import test from 'node:test';
 import {
   buildPasswordUpdateRequest,
   readPasswordUpdateError,
-  runPasswordUpdateWithLockFallback,
+  runPasswordUpdateWithLock,
 } from '../src/lib/passwordUpdateRequest.js';
 
 test('a failure after starting the password operation is never retried', async () => {
   let requests = 0;
   const failure = new Error('post-update processing failed');
   await assert.rejects(
-    runPasswordUpdateWithLockFallback(
+    runPasswordUpdateWithLock(
       async () => {
         requests++;
         throw failure;
       },
       (work) => work(),
+      () => {
+        throw new Error('Unexpected unavailable callback');
+      },
     ),
     (error) => error === failure,
   );
@@ -25,35 +28,38 @@ test('a failure after starting the password operation is never retried', async (
 test('a lock failure after a successful operation cannot repeat it', async () => {
   let requests = 0;
   await assert.rejects(
-    runPasswordUpdateWithLockFallback(
+    runPasswordUpdateWithLock(
       async () => ++requests,
       async (work) => {
         await work();
         throw new Error('lock completion failed');
       },
+      () => -1,
     ),
     /lock completion failed/,
   );
   assert.equal(requests, 1);
 });
 
-test('failure to acquire a lock still executes the existing fallback once', async () => {
+test('failure to acquire a lock sends no password operation', async () => {
   let requests = 0;
-  const result = await runPasswordUpdateWithLockFallback(
+  const result = await runPasswordUpdateWithLock(
     async () => ++requests,
     async () => {
       throw new Error('locking unavailable');
     },
+    () => -1,
   );
-  assert.equal(result, 1);
-  assert.equal(requests, 1);
+  assert.equal(result, -1);
+  assert.equal(requests, 0);
 });
 
 test('a busy lock does not start the password operation', async () => {
   let requests = 0;
-  const result = await runPasswordUpdateWithLockFallback(
+  const result = await runPasswordUpdateWithLock(
     async () => ++requests,
     async () => -1,
+    () => -2,
   );
   assert.equal(result, -1);
   assert.equal(requests, 0);

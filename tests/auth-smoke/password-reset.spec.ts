@@ -349,49 +349,37 @@ test('submitting actually sends a password request', async ({ page }) => {
   expect(sent[0]).toMatch(/^Bearer .+/);
 });
 
-test('the change targets the validated account even with no Web Locks', async ({ context }) => {
-  /*
-   * The invariant on the browser where the previous remedy protected nothing.
-   *
-   * Holding auth-js's session lock around the check and the mutation only works
-   * where `navigator.locks` exists: without it auth-js selects `lockNoOp`,
-   * which runs the callback with no exclusion at all. This build targets
-   * safari13 (vite.config.ts), so that fallback ships -- the lock was absent on
-   * a browser we support, and the correct-account invariant went with it.
-   *
-   * Web Locks are removed here for exactly that reason. The change still has to
-   * reach the account the link was issued for, because the request carries that
-   * session's token rather than re-reading an ambient one.
-   */
-  const page = await context.newPage();
-  await page.addInitScript(() => {
-    // The Safari 13 shape: no navigator.locks at all.
-    Object.defineProperty(navigator, 'locks', { get: () => undefined, configurable: true });
+for (const mode of ['absent', 'denied'] as const) {
+  test(`recovery sends no password change when browser locking is ${mode}`, async ({ context }) => {
+    await context.addInitScript((lockMode) => {
+      if (lockMode === 'absent') {
+        Object.defineProperty(navigator, 'locks', { get: () => undefined, configurable: true });
+        return;
+      }
+      const original = navigator.locks.request.bind(navigator.locks);
+      navigator.locks.request = ((name: string, options: LockOptions, callback: LockGrantedCallback<unknown>) => {
+        if (name.startsWith('xbar-password-recovery-update:')) {
+          return Promise.reject(new DOMException('Lock denied', 'SecurityError'));
+        }
+        return original(name, options, callback);
+      }) as typeof navigator.locks.request;
+    }, mode);
+    const page = await context.newPage();
+    let changes = 0;
+    await page.route('**/auth/v1/user*', async (route) => {
+      if (route.request().method() === 'PUT') changes++;
+      await route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(userRecord()) });
+    });
+    await page.goto(recoveryLink());
+    await expect(newPassword(page)).toBeVisible({ timeout: 30_000 });
+    await fillNewPassword(page, 'a-brand-new-password');
+    await submit(page).click();
+    await expect(page.getByText(/This browser cannot safely complete the reset/).first()).toBeVisible();
+    await expect(submit(page)).toBeEnabled();
+    expect(changes).toBe(0);
+    await expect(page.getByText('Password updated. You are signed in.')).toHaveCount(0);
   });
-
-  const sent: string[] = [];
-  await page.route('**/auth/v1/user*', async (route) => {
-    if (route.request().method() === 'PUT') sent.push(route.request().headers()['authorization'] ?? '');
-    await route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(userRecord()) });
-  });
-
-  await page.goto(recoveryLink());
-  await expect(newPassword(page)).toBeVisible({ timeout: 30_000 });
-  const grantToken = await page.evaluate(() => {
-    const key = Object.keys(window.localStorage).find((entry) => entry.includes('auth-token'));
-    return key ? (JSON.parse(window.localStorage.getItem(key) ?? '{}').access_token ?? '') : '';
-  });
-  expect(grantToken).not.toBe('');
-
-  await fillNewPassword(page, 'a-brand-new-password');
-  await submit(page).click();
-  await expect(page.getByText('Password updated. You are signed in.').first()).toBeVisible();
-
-  // The request carried the validated session's own token -- so which account
-  // is changed does not depend on a lock that this browser does not have.
-  expect(sent).toEqual([`Bearer ${grantToken}`]);
-});
-
+}
 test('a rejected update stays retryable and keeps the grant', async ({ page }) => {
   await stubGoTrueUser(page, async (route) => {
     await route.fulfill({
@@ -908,7 +896,7 @@ for (const failure of ['network', 500, 502, 504] as const) {
 }
 
 for (const withoutWebLocks of [false, true]) {
-  test(`two tabs submitting at the same instant still send one change (Web Locks absent: ${withoutWebLocks})`, async ({
+  test(`simultaneous recovery sends ${withoutWebLocks ? 'no changes without locks' : 'one change with locks'}`, async ({
     context,
   }) => {
     /*
@@ -919,13 +907,9 @@ for (const withoutWebLocks of [false, true]) {
      * refused by a claim that is durably there. That never exercises both tabs
      * reading before either writes.
      *
-     * Run twice on purpose, because two different mechanisms carry it. Where
-     * `navigator.locks` exists the lock decides and the race cannot happen;
-     * safari13 is a build target and has none, and there only the durable claim
-     * -- write, yield, re-read ownership -- stands between two tabs and two
-     * password changes. It remains best effort on that browser: a tab that
-     * pauses between reading and writing can still acquire an apparent second
-     * ownership, which is named on the PR rather than papered over.
+     * With Web Locks, one operation may run. Without them, both submissions
+     * must refuse before sending any password change; a storage lease alone
+     * cannot provide mutual exclusion.
      *
      * Both submissions are driven to a terminal state before the count is
      * asserted. Polling for "one request so far" would return the moment it
@@ -960,6 +944,15 @@ for (const withoutWebLocks of [false, true]) {
     await fillNewPassword(second, 'second-tab-password');
 
     await Promise.all([submit(first).click(), submit(second).click()]);
+
+    if (withoutWebLocks) {
+      for (const page of [first, second]) {
+        await expect(page.getByText(/This browser cannot safely complete the reset/).first()).toBeVisible();
+        await expect(submit(page)).toBeEnabled();
+      }
+      expect(sent).toHaveLength(0);
+      return;
+    }
 
     /*
      * Every tab has to reach a state it cannot leave: one succeeded, the other
@@ -1021,10 +1014,8 @@ test('a stale claim writer cannot send a second change', async ({ context }) => 
    * critical section, so a tab resuming mid-protocol cannot acquire one no
    * matter what the claim record says.
    *
-   * Not closed on safari13, which has no Web Locks and which this build
-   * targets: the same staging there produces a second request, because a check
-   * then a write over localStorage cannot be made atomic. That residual is the
-   * server's to close and is named as open on the PR.
+   * Browsers without Web Locks now refuse the mutation entirely, covered by
+   * the unsupported-browser cases. This case pins the supported lock path.
    */
   const link = recoveryLink();
   const first = await context.newPage();

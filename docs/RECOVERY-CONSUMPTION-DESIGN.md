@@ -19,16 +19,22 @@ Two of the three answers correct something I previously wrote.
 
 ## Why anything server-side is wanted
 
-Browser-side arbitration of a recovery password change is best effort, and the
-residuals are named rather than hidden:
+The application now requires a Web Lock for password changes and refuses when
+locking is missing or denied. This closes the app's former storage-only fallback
+at the cost of disabling reset in unsupported browsers. It is not a server-side
+security boundary and does not constrain direct GoTrue requests.
+
+The historical timing failures motivating this requirement were:
 
 - **No Web Locks, no exclusion.** `safari13` is in `vite.config.ts`'s
-  `build.target`, so a shipped target has no `navigator.locks`. The fallback
+  `build.target`, so a shipped target has no `navigator.locks`. The former fallback
   narrows the window; it cannot close it, because `localStorage` has no
   compare-and-set.
 - **A suspended tab cannot renew a lease.** A timer does not run in a suspended
   tab, so an expiry-based claim can lapse underneath a request that is still in
-  flight. No client-side lease can fence that; only a durable row can.
+  flight. The required Web Lock is independent of this lease while its context
+  remains alive. Context termination/network completion ambiguity and direct
+  bearer reuse still require server-side treatment for stronger guarantees.
 
 ## Correction 1 — the trusted database path
 

@@ -6,7 +6,7 @@ import { readAuthStorage } from '@/lib/authStorage';
 import {
   buildPasswordUpdateRequest,
   readPasswordUpdateError,
-  runPasswordUpdateWithLockFallback,
+  runPasswordUpdateWithLock,
 } from '@/lib/passwordUpdateRequest';
 import { supabaseConfig } from '@/lib/platformConfig';
 import { isSupabaseConfigured } from '@/lib/platformConfig';
@@ -702,9 +702,9 @@ function startRecoveryUpdateClaimRenewal(claim: RecoveryUpdateClaim) {
  * localStorage has no compare-and-set, so write-yield-re-read narrows the race
  * without closing it -- a tab that pauses after reading "absent" and resumes
  * after the other tab's settle window still acquires an apparent ownership of
- * its own. Web Locks do close it, and every browser this ships to has them
- * except safari13, which vite.config.ts still targets; there the claim remains
- * the only thing standing, and remains best effort.
+ * its own. A Web Lock is therefore required for this mutation. Browsers without
+ * it (including safari13) can use the app but cannot complete password reset;
+ * lock acquisition errors also refuse instead of using a timing fallback.
  *
  * This is OUR lock name and nothing from auth-js runs inside it, which is what
  * makes it safe here: the deadlock that came before was auth-js's own
@@ -713,15 +713,27 @@ function startRecoveryUpdateClaimRenewal(claim: RecoveryUpdateClaim) {
  * `ifAvailable` rather than queueing, so a second tab is told the link is in
  * use instead of sitting on "Saving..." behind a request it cannot see.
  */
-async function withRecoveryUpdateExclusion<T>(userId: string, run: () => Promise<T>, busy: () => T): Promise<T> {
-  const locks = globalThis.navigator?.locks;
-  if (!locks) return run();
-  return runPasswordUpdateWithLockFallback(
+async function withRecoveryUpdateExclusion<T>(
+  userId: string,
+  run: () => Promise<T>,
+  busy: () => T,
+  unavailable: () => T,
+): Promise<T> {
+  let locks: LockManager | undefined;
+  try {
+    locks = globalThis.navigator?.locks;
+  } catch {
+    return unavailable();
+  }
+  if (!locks) return unavailable();
+  const manager = locks;
+  return runPasswordUpdateWithLock(
     run,
     async (work) =>
-      await locks.request(`${RECOVERY_UPDATE_LOCK_PREFIX}${userId}`, { ifAvailable: true }, async (lock) =>
+      await manager.request(`${RECOVERY_UPDATE_LOCK_PREFIX}${userId}`, { ifAvailable: true }, async (lock) =>
         lock ? work() : busy(),
       ),
+    unavailable,
   );
 }
 
@@ -1710,6 +1722,11 @@ export const useCloudStore = create<CloudStore>((set, get) => ({
         }
       },
       busy,
+      () => ({
+        ok: false,
+        message:
+          'This browser cannot safely complete the reset. Use another up-to-date browser and request a new reset link. No password change was sent.',
+      }),
     );
   },
   sendPasswordReset: async (email) => {

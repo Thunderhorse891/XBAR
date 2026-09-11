@@ -61,10 +61,11 @@ export function readPasswordUpdateError(payload: unknown): string {
   }
   return '';
 }
-/** Fall back only when locking failed before the password operation started. */
-export async function runPasswordUpdateWithLockFallback<T>(
+/** Never send a password change unless the caller acquires its lock. */
+export async function runPasswordUpdateWithLock<T>(
   run: () => Promise<T>,
   withLock: (work: () => Promise<T>) => Promise<T>,
+  unavailable: () => T,
 ): Promise<T> {
   let started = false;
   try {
@@ -76,6 +77,6 @@ export async function runPasswordUpdateWithLockFallback<T>(
     // A callback failure can happen after the server accepted the update.
     // Retrying here would execute that operation a second time.
     if (started) throw error;
-    return run();
+    return unavailable();
   }
 }

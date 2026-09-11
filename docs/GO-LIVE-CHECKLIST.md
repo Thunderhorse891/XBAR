@@ -232,8 +232,11 @@ Vercel environment read.
 
 Recorded so they are not mistaken for protections that exist:
 
-- Browser-side arbitration of a recovery password change is best effort. Web
-  Locks close it where they exist; safari13 is a build target and has none.
+- Password reset now requires a Web Lock. Missing or denied locking refuses
+  without sending a change, including on safari13. The app no longer relies
+  on its storage lease alone for exclusion. Server-side enforcement, direct
+  bearer reuse, and requests surviving browser-context termination remain
+  separate concerns; this is not a single-use-session guarantee.
 - A server-side consumption row (`SECURITY DEFINER` RPC, RLS deny-all table,
   unique on the attempt) closes browser-side races only. **It does not make the
   recovery token single-use** — whoever holds it can call GoTrue's
