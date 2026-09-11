@@ -325,11 +325,23 @@ export async function createSectionedPdf(input) {
 
   let page = pdf.addPage([PAGE_WIDTH, PAGE_HEIGHT]);
   let y = PAGE_HEIGHT - MARGIN;
+  let activeSection = '';
 
   const newPage = () => {
     page = pdf.addPage([PAGE_WIDTH, PAGE_HEIGHT]);
     // Room reserved at the foot of every page for the footer rule and text.
     y = PAGE_HEIGHT - MARGIN;
+    if (input.continuationHeaders) {
+      const heading = activeSection ? `${title} - ${activeSection} (continued)` : title;
+      page.drawText(truncateToWidth(heading, bold, 9, maxWidth), {
+        x: MARGIN,
+        y: y - 9,
+        size: 9,
+        font: bold,
+        color: ACCENT,
+      });
+      y -= 24;
+    }
   };
 
   const ensureRoom = (needed) => {
@@ -385,6 +397,9 @@ export async function createSectionedPdf(input) {
   y -= 6;
 
   for (const section of sections || []) {
+    // A page break before a new section starts is not a continuation of the
+    // preceding section. Only label breaks that occur within its body.
+    activeSection = '';
     // Keep a heading with at least its first line, so a section never starts
     // alone at the foot of a page.
     ensureRoom(HEADING_SIZE + BODY_SIZE + SECTION_GAP);
@@ -392,6 +407,7 @@ export async function createSectionedPdf(input) {
     paragraph(section.heading, { size: HEADING_SIZE, useFont: bold });
     y -= 2;
     rule();
+    activeSection = section.heading;
 
     /*
      * How a label that will not fit its column has to be drawn.

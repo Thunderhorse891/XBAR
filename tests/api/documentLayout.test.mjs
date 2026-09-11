@@ -411,6 +411,26 @@ async function helveticaBold() {
   return doc.embedFont(StandardFonts.HelveticaBold);
 }
 
+test('multi-page reports identify continuing sections without dropping their rows', async () => {
+  const lines = Array.from({ length: 75 }, (_, i) => `Horse ${i + 1}: invested $12,345 and asking $20,000`);
+  const bytes = await createSectionedPdf({
+    title: 'Ranch Report',
+    continuationHeaders: true,
+    sections: [{ heading: 'Cost and margin by horse', lines }],
+  });
+  const pdf = await PDFDocument.load(bytes);
+  const drawn = drawnText(bytes);
+  const headers = drawn.filter((item) => item.text === 'Ranch Report - Cost and margin by horse (continued)');
+  assert.ok(pdf.getPageCount() > 1);
+  assert.equal(headers.length, pdf.getPageCount() - 1);
+  for (let i = 1; i <= 75; i++) {
+    assert.equal(drawn.filter((item) => item.text === `Horse ${i}`).length, 1);
+  }
+  assert.ok(headers.every((item) => item.y === 727));
+  const body = drawn.filter((item) => item.text.startsWith('Horse '));
+  assert.ok(body.every((item) => item.y < 712 && item.y > 70));
+});
+
 test('a label too wide for its column does not print through its value', async () => {
   const bold = await helveticaBold();
   const horseName = 'Thunderhorse Quarter Horse Champion';

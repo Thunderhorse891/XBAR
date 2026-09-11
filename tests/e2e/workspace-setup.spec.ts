@@ -1,4 +1,6 @@
 import { expect, test, type Page } from '@playwright/test';
+import { readFile } from 'node:fs/promises';
+import { PDFDocument } from 'pdf-lib';
 
 async function bootstrapWorkspace(page: Page) {
   await page.addInitScript(async () => {
@@ -263,6 +265,52 @@ test('registration intake extracts sex, color, sire and dam into a new horse pro
   await expect(edit).toBeHidden();
   await expect(page.locator('.xs-kv')).toContainText('Buckskin');
   await expect(page.locator('.xs-kv')).not.toContainText('Palomino');
+
+  // A synthetic local entitlement isolates export behavior from billing. The
+  // horse above still comes from the real upload -> correction workflow.
+  await page.evaluate(async () => {
+    const modulePath = '/src/store/useXbarStore.ts';
+    const { useXbarStore } = await import(/* @vite-ignore */ modulePath);
+    const subscription = useXbarStore.getState().subscription;
+    useXbarStore.setState({
+      subscription: {
+        ...subscription,
+        tier: 'Ranch Ops',
+        purchasedTier: 'Ranch Ops',
+        billingState: 'Manual Billing',
+      },
+    });
+    history.pushState({}, '', '/app/reports');
+    dispatchEvent(new PopStateEvent('popstate'));
+  });
+  await expect(page.getByRole('heading', { name: 'Know what the herd is worth' })).toBeVisible();
+  await expect(page.getByRole('heading', { name: 'Know what the herd is worth' })).toHaveCSS(
+    'color',
+    'rgb(255, 250, 242)',
+  );
+  for (const width of [1440, 390]) {
+    await page.setViewportSize({ width, height: 900 });
+    const csvEvent = page.waitForEvent('download');
+    await page.getByRole('button', { name: 'Export spreadsheet', exact: true }).click();
+    const csv = await csvEvent;
+    expect(await csv.failure()).toBeNull();
+    expect(await readFile((await csv.path())!, 'utf8')).toMatch(/DOCS SMART LENA/i);
+    const pdfEvent = page.waitForEvent('download');
+    await page.getByRole('button', { name: 'Download PDF report', exact: true }).click();
+    const pdf = await pdfEvent;
+    expect(await pdf.failure()).toBeNull();
+    expect((await PDFDocument.load(await readFile((await pdf.path())!))).getPageCount()).toBeGreaterThan(0);
+    const overflow = await page.evaluate(() => ({
+      width: innerWidth,
+      actual: document.documentElement.scrollWidth,
+      offenders: [...document.querySelectorAll('main *')]
+        .filter((el) => el.getBoundingClientRect().right > innerWidth)
+        .slice(0, 12)
+        .map((el) => ({ tag: el.tagName, class: el.className, right: el.getBoundingClientRect().right })),
+    }));
+    expect(overflow.actual, JSON.stringify(overflow)).toBeLessThanOrEqual(width);
+    await page.screenshot({ path: test.info().outputPath(`reports-${width}.png`), fullPage: true });
+  }
 });
 
 test('a multi-file batch upload creates one horse per registration paper', async ({ page }) => {

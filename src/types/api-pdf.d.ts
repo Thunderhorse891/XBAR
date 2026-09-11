@@ -24,6 +24,7 @@ declare module '*/api/_lib/pdf.js' {
     sections: PdfSection[];
     footer?: string;
     letterhead?: string;
+    continuationHeaders?: boolean;
     reference?: string;
   }): Promise<Uint8Array>;
 
