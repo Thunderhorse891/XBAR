@@ -334,9 +334,8 @@ response.status !== 200) return response`). The cache fallback lives in the
   password the customer is in the middle of typing.
 
   So recovery moved to the point of failure instead (`staleChunkRecovery.ts`,
-  wrapping all 35 `lazy()` factories). Reloading because a chunk 404'd cannot be
-  premature by construction: the route has already failed, so there is nothing
-  left to interrupt. One reload per tab, marker cleared on a successful load so
+  wrapping all 35 `lazy()` factories) -- and a document that arrived on an auth
+  callback is excluded from it outright. One reload per tab, marker cleared on a successful load so
   a later deploy can recover too, and a second failure rethrows rather than
   looping -- if a fresh document still cannot fetch the chunk, staleness was not
   the cause. A genuine route bug is never swallowed: only the four engine
@@ -359,14 +358,32 @@ response.status !== 200) return response`). The cache fallback lives in the
     implicit-flow fragment, and a reload in that window leaves the token in
     neither the URL nor storage and burns the link -- precisely the harm the
     `offlineRuntime` latch exists to prevent. A failed route is not evidence
-    that nothing else is in flight. The reload now waits for the credential to
-    be on disk, and after a bounded wait shows the error rather than gambling.
+    that nothing else is in flight.
+  - _And the repair for that was wrong too._ Waiting for "a session in storage"
+    reads as satisfied immediately in a browser that was ALREADY signed in, so a
+    recovery link opened there was declared safe before its own credential had
+    been persisted.
 
-  Five rules, each mutation-checked: the loop guard, the non-Chromium wordings,
-  clearing the marker on success, refusing to treat an ordinary error as a stale
-  chunk, marker retainability, and the callback-settled wait -- including that
-  the loop guard outranks the wait, since waiting on a document that has already
-  had its one reload can only delay the error.
+  **Three rules in a row, each plausible and each holed, all on one question:
+  when is it safe to reload a document that may be holding a one-time
+  credential?** That is not a question this mechanism needs to answer, and the
+  cost of getting it wrong -- a link that cannot be recovered -- is far above
+  what it buys. A document that arrived on an auth callback is now simply
+  excluded: it keeps exactly the behaviour it had before any of this existed,
+  the error surfaces, and the customer can refresh once their reset has
+  completed. Every other document, which is the case this was actually added
+  for, still recovers.
+
+  A further gap, found by mutation rather than review: the browser wiring was a
+  bare module constant, so a mutant making EVERY document reloadable passed the
+  entire suite -- every case injects its own environment and none of them
+  reached it. It is now a pure `documentMayReloadForStaleChunk(href)`, covered
+  over the real callback shapes in both routers, and that mutant fails.
+
+  Rules mutation-checked: the loop guard, the non-Chromium wordings, clearing
+  the marker on success, refusing to treat an ordinary error as a stale chunk,
+  marker retainability, excluding callback documents, and that the loop guard
+  outranks the wait.
 
 - **An accepted auth event could publish a superseded credential. Now fixed**
   (raised by Codex against `ee4c8df`). Agreement between an event and storage is
