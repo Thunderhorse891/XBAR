@@ -3164,3 +3164,47 @@ test('a writer cannot start in the middle of a sweep', async () => {
     restoreDb();
   }
 });
+
+test('saving a workspace never infers a member removal', async () => {
+  const cloud = await readFile('src/lib/cloudWorkspace.ts', 'utf8');
+
+  /*
+   * An autosave must not delete membership rows it does not recognise.
+   *
+   * The save used to read every membership for the workspace and delete the
+   * ones absent from the snapshot. An invitee who accepted while an owner had
+   * an older snapshot open is in `workspaceInvitations` there, not yet in
+   * `workspaceMembers` -- so the next autosave classified their newly inserted
+   * membership as stale and removed it, revoking them seconds after they
+   * accepted. The workspace-access policies are what made that delete
+   * effective rather than refused, which is why it has to be pinned here and
+   * not left to the browser suite.
+   *
+   * Removal has an explicit path, so nothing legitimate is lost.
+   */
+  const syncStart = cloud.indexOf('async function syncWorkspaceMembershipRows');
+  assert.ok(syncStart > -1, 'the membership sync must still be findable');
+  /*
+   * Bounded by the NEXT top-level declaration, not by the first `\n}`. The
+   * signature's inline type literal closes with a brace in column 0, so the
+   * naive boundary ended the slice at the signature and scanned no body at
+   * all -- a guard that passed with the defect reintroduced. The mutation
+   * check is what caught it.
+   */
+  const syncEnd = cloud.slice(syncStart + 1).search(/\n(?:export |async function |function )/);
+  assert.ok(syncEnd > -1, 'the membership sync must be followed by another declaration');
+  const syncBody = cloud.slice(syncStart, syncStart + 1 + syncEnd);
+  assert.ok(
+    syncBody.includes('workspace_memberships'),
+    'the slice must actually contain the membership sync body, or this guard proves nothing',
+  );
+  assert.ok(
+    !syncBody.includes('.delete()'),
+    'a workspace save must not delete membership rows; removal goes through removeWorkspaceMemberFromCloud',
+  );
+  assert.match(
+    cloud,
+    /export async function removeWorkspaceMemberFromCloud[\s\S]*?\.delete\(\)/,
+    'explicit removal must still be the path that deletes a membership',
+  );
+});

@@ -113,6 +113,14 @@ export default function ResetPassword() {
     } finally {
       setBusy(false);
     }
+    /*
+     * An outcome the request could not confirm is treated exactly like the
+     * thrown one above: the change may already have been applied, so the screen
+     * must not also draw the expired-link warning. Without this the customer
+     * was told both "try the new password" and "this link is spent", which are
+     * opposite instructions about the same attempt.
+     */
+    if (result.uncertain) setUnexpectedFailure(true);
     setMessage({ tone: result.ok ? 'success' : 'error', text: result.message });
     pushToast({
       title: result.ok ? 'Password updated' : 'We could not update that',

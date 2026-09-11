@@ -911,6 +911,16 @@ for (const failure of ['network', 500, 502, 504] as const) {
     await expect(page.getByText(/could not confirm that change/i).first()).toBeVisible({ timeout: 30_000 });
     await expect(page.getByText('Password updated. You are signed in.')).toHaveCount(0);
 
+    /*
+     * And told only THAT. Spending the grant is what makes the screen's
+     * ordinary answer "this link is expired", so the expired-link warning
+     * rendered beside "we could not confirm" -- two opposite instructions
+     * about one attempt: try the new password, and the link is spent. The
+     * caught exception already suppressed it; an outcome the request RETURNS
+     * as unconfirmable has to as well.
+     */
+    await expect(refusal(page)).toHaveCount(0);
+
     // And the link is finished durably, not just cleared in this tab: a tab that
     // still holds the grant has to be refused too, and this tab must stay
     // refused after a reload.

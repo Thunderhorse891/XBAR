@@ -27,6 +27,17 @@ import { authRedirectUrl, passwordResetPath, publicAppRouteUrl } from '@/lib/rou
 type CloudActionResult = {
   ok: boolean;
   message: string;
+  /*
+   * Set when the request may ALREADY HAVE BEEN APPLIED -- an aborted PUT, or a
+   * gateway failure after GoTrue may have accepted it. `ok: false` alone cannot
+   * carry that: it reads as a refusal, and the reset screen drew the
+   * expired-link warning beside "we could not confirm", telling the customer
+   * both that the link is spent and that they should try the new password.
+   *
+   * A flag rather than a message match, because the screen keying off prose is
+   * how the two fall out of step the first time either is reworded.
+   */
+  uncertain?: boolean;
 };
 
 /*
@@ -1674,6 +1685,7 @@ export const useCloudStore = create<CloudStore>((set, get) => ({
             announceSpentRecovery(spentFor, claim.claim.grantToken);
             return {
               ok: false,
+              uncertain: true,
               message:
                 'We could not confirm that change. Try the new password; if it does not work, request another link.',
             };
@@ -1690,6 +1702,7 @@ export const useCloudStore = create<CloudStore>((set, get) => ({
               announceSpentRecovery(spentFor, claim.claim.grantToken);
               return {
                 ok: false,
+                uncertain: true,
                 message:
                   'We could not confirm that change. Try the new password; if it does not work, request another link.',
               };

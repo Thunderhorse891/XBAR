@@ -1,5 +1,12 @@
 import { expect, test } from '@playwright/test';
-import { blockWebfonts, RECOVERY_EMAIL, sessionLink, stubGoTrueUser, USER_ID } from '../auth-smoke/support.js';
+import {
+  blockWebfonts,
+  readStoredAccessToken,
+  RECOVERY_EMAIL,
+  sessionLink,
+  stubGoTrueUser,
+  USER_ID,
+} from '../auth-smoke/support.js';
 
 blockWebfonts();
 
@@ -102,6 +109,16 @@ test('pushing a workspace preserves another member account binding', async ({ pa
   });
   await page.goto(sessionLink('signin'));
   await expect(page.getByText(/This page needs a current password-reset link/)).toBeVisible();
+  /*
+   * Wait for the session to be PERSISTED, not merely for the screen to render.
+   * The refusal above means the recovery grant is absent, which says nothing
+   * about whether auth-js has finished writing the session it just took from
+   * the URL. Navigating on the screen alone raced that write: the next load
+   * found no stored session, so `cloudSession` was null and the whole cloud
+   * block -- Pull cloud included -- never rendered. Measured at 3 failures in 5
+   * before this wait.
+   */
+  await expect.poll(() => readStoredAccessToken(page), { timeout: 15_000 }).not.toBe('');
   await page.goto('/app/settings');
   await expect(page.getByRole('button', { name: 'Pull cloud', exact: true })).toBeVisible({ timeout: 15_000 });
   await page.getByRole('button', { name: 'Pull cloud', exact: true }).click();

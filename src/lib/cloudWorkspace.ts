@@ -540,32 +540,24 @@ async function syncWorkspaceMembershipRows(params: {
 
   const { workspaceId, members, updatedAt } = params;
   const normalizedMembers = members.filter((member) => Boolean(member.email));
-  const nextEmails = new Set(normalizedMembers.map((member) => normalizeWorkspaceEmail(member.email)));
 
-  const { data: existingRows, error: existingError } = await client
-    .from('workspace_memberships')
-    .select('email')
-    .eq('workspace_id', workspaceId);
-
-  if (existingError) {
-    throw new Error(existingError.message);
-  }
-
-  const staleEmails = ((existingRows ?? []) as Array<{ email?: string | null }>)
-    .map((row) => normalizeWorkspaceEmail(row.email))
-    .filter((email) => email && !nextEmails.has(email));
-
-  if (staleEmails.length) {
-    const { error: deleteError } = await client
-      .from('workspace_memberships')
-      .delete()
-      .eq('workspace_id', workspaceId)
-      .in('email', staleEmails);
-
-    if (deleteError) {
-      throw new Error(deleteError.message);
-    }
-  }
+  /*
+   * A SAVE NEVER REMOVES A MEMBER.
+   *
+   * This used to read every membership row and delete the ones absent from the
+   * snapshot being saved -- removal by inference. An invitee who accepted while
+   * an owner had an older snapshot open is in `workspaceInvitations` there, not
+   * yet in `workspaceMembers`, so the very next autosave classified their
+   * freshly inserted membership as stale and deleted it: revoked seconds after
+   * accepting, by a save nobody thought of as a removal. Granting owners DELETE
+   * in `20260911005818_workspace_access_policies` is what turned that from a
+   * refused statement into an effective one.
+   *
+   * Removal already has an explicit path -- `removeWorkspaceMemberFromCloud`,
+   * which the store calls before it drops the member locally -- so nothing is
+   * lost by refusing to infer it here. A save reconciles the rows it knows
+   * about and leaves the rest alone.
+   */
 
   if (!normalizedMembers.length) {
     return;
