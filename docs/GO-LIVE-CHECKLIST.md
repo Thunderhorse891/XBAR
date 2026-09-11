@@ -409,6 +409,24 @@ response.status !== 200) return response`). The cache fallback lives in the
   did not compile, so the suite never ran against them -- and were redone in
   compiling form before the result was believed.
 
+- **A PDF where nothing could be read looked identical to one read in full.
+  Now fixed** (raised by Codex against `d7b8911`). The partial-read sentence was
+  guarded on `examined > 0`, which was written for a partial read and silently
+  swallowed the total failure: when every page fails to render, or OCR returns
+  nothing for all of them, both counters stay 0, no sentence is produced, and
+  the record carries no `processingNote` at all. `describeDocumentCoverage` now
+  handles the zero-of-N case explicitly. Files with no page count -- images and
+  plain text, which report `totalPages: 0` by design -- are still not described
+  as unread, or the old false silence would become a new false alarm.
+
+  **A test of mine had pinned the defect deliberately**, asserting that such a
+  document "makes no page claim" on the reasoning that "the empty extraction is
+  the honest signal". That was wrong: the empty extraction is not something the
+  customer ever sees -- the `processingNote` is -- so without one, a file read
+  end to end and a file that could not be read at all are indistinguishable on
+  screen. The case was replaced rather than added to, and the replacement says
+  why. A test can pin a defect as firmly as it pins a fix.
+
 - Not claimed: none of this was exercised against a live GoTrue or a live
   Supabase project. The browser suites intercept Auth and PostgREST, so what is
   established is the client's behaviour, not the server's.

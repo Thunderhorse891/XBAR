@@ -41,7 +41,20 @@ export const fullCoverage = (): DocumentCoverage => ({
 export function describeDocumentCoverage(coverage: DocumentCoverage): string {
   const examined = coverage.pagesRead + coverage.pagesOcrRead;
   const parts: string[] = [];
-  if (coverage.totalPages > 0 && examined > 0 && examined < coverage.totalPages) {
+  if (coverage.totalPages > 0 && examined === 0) {
+    /*
+     * Nothing came off the file at all, and this used to say nothing.
+     *
+     * The `examined > 0` guard below was written for a PARTIAL read and
+     * silently covered the total failure too: when every page fails to render
+     * or OCR returns nothing for all of them, both counters stay 0, no part is
+     * pushed, and the record carries no `processingNote` -- a document read to
+     * completion and a document not read at all produced the same silence. That
+     * is the exact dishonesty the coverage reporting exists to prevent, and it
+     * hid the worst case rather than an edge of it.
+     */
+    parts.push(`None of the ${coverage.totalPages} pages could be read.`);
+  } else if (coverage.totalPages > 0 && examined > 0 && examined < coverage.totalPages) {
     parts.push(`Only ${examined} of ${coverage.totalPages} pages were read.`);
   }
   if (coverage.truncated) {
