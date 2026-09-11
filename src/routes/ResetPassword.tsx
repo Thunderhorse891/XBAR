@@ -32,6 +32,7 @@ export default function ResetPassword() {
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState<{ tone: 'success' | 'error'; text: string } | null>(null);
   const [done, setDone] = useState(false);
+  const [unexpectedFailure, setUnexpectedFailure] = useState(false);
 
   const supabaseReady = isSupabaseConfigured();
   /*
@@ -95,7 +96,23 @@ export default function ResetPassword() {
       return;
     }
     setBusy(true);
-    const result = await updatePassword(password);
+    let result: Awaited<ReturnType<typeof updatePassword>>;
+    try {
+      result = await updatePassword(password);
+    } catch {
+      // An unexpected failure can happen after the server accepted the change.
+      // Stop the spinner without offering an immediate repeat of this attempt.
+      setUnexpectedFailure(true);
+      setPassword('');
+      setConfirm('');
+      setMessage({
+        tone: 'error',
+        text: 'We could not confirm that change. Try the new password; if it does not work, request another link.',
+      });
+      return;
+    } finally {
+      setBusy(false);
+    }
     setMessage({ tone: result.ok ? 'success' : 'error', text: result.message });
     pushToast({
       title: result.ok ? 'Password updated' : 'We could not update that',
@@ -107,7 +124,6 @@ export default function ResetPassword() {
       setConfirm('');
       setDone(true);
     }
-    setBusy(false);
   };
 
   return (
@@ -136,14 +152,14 @@ export default function ResetPassword() {
             </p>
           )}
 
-          {screen === 'refused' && (
+          {!unexpectedFailure && screen === 'refused' && (
             <p className="clean-auth-message clean-auth-message--error" role="alert">
               This page needs a current password-reset link. Recovery links expire, and each new one cancels the last,
               so request another from the sign-in screen.
             </p>
           )}
 
-          {(screen === 'form' || screen === 'saving') && (
+          {!unexpectedFailure && (screen === 'form' || screen === 'saving') && (
             <form className="clean-form" onSubmit={submit} aria-busy={busy}>
               <div className="clean-field">
                 <label htmlFor={passwordId}>New password</label>
@@ -202,7 +218,7 @@ export default function ResetPassword() {
 
           {screen === 'done' && <p className="clean-auth-hint">Taking you to your workspace...</p>}
 
-          {screen === 'refused' && (
+          {(screen === 'refused' || unexpectedFailure) && (
             <div className="clean-auth-footer">
               <button type="button" onClick={() => navigate('/login', { replace: true })}>
                 Back to sign in

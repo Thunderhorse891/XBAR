@@ -349,6 +349,33 @@ test('submitting actually sends a password request', async ({ page }) => {
   expect(sent[0]).toMatch(/^Bearer .+/);
 });
 
+test('a lock completion failure stops saving without repeating the password change', async ({ page }) => {
+  await page.addInitScript(() => {
+    const original = navigator.locks.request.bind(navigator.locks);
+    navigator.locks.request = (async (name: string, options: LockOptions, callback: LockGrantedCallback<unknown>) => {
+      const result = await original(name, options, callback);
+      if (name.startsWith('xbar-password-recovery-update:')) throw new Error('Lock completion failed');
+      return result;
+    }) as typeof navigator.locks.request;
+  });
+  let changes = 0;
+  await page.route('**/auth/v1/user*', async (route) => {
+    if (route.request().method() === 'PUT') changes++;
+    await route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(userRecord()) });
+  });
+  await page.goto(recoveryLink());
+  await expect(newPassword(page)).toBeVisible({ timeout: 30_000 });
+  await fillNewPassword(page, 'a-brand-new-password');
+  await submit(page).click();
+  await expect(page.getByText(/We could not confirm that change/).first()).toBeVisible();
+  await expect(page.getByText(/This page needs a current password-reset link/)).toHaveCount(0);
+  await expect(page.getByRole('button', { name: 'Back to sign in' })).toBeVisible();
+  await expect(page.getByRole('button', { name: 'Saving...' })).toHaveCount(0);
+  await expect(newPassword(page)).toHaveCount(0);
+  await expect(page.getByText('Password updated. You are signed in.')).toHaveCount(0);
+  expect(changes).toBe(1);
+});
+
 for (const mode of ['absent', 'denied'] as const) {
   test(`recovery sends no password change when browser locking is ${mode}`, async ({ context }) => {
     await context.addInitScript((lockMode) => {

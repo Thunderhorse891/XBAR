@@ -543,13 +543,13 @@ test('a revoked recovery generation stays revoked', () => {
   );
 });
 
-test('recovery exclusion uses a real lock where the browser has one', () => {
+test('recovery exclusion requires an available browser lock', () => {
   /*
    * The durable claim is best effort and cannot be otherwise: localStorage has
    * no compare-and-set, so write-yield-re-read narrows the race without closing
    * it -- a tab that pauses between reading and writing can still acquire an
-   * apparent second ownership. Web Locks close it, and exist everywhere this
-   * ships except safari13 (vite.config.ts), where the claim carries it.
+   * apparent second ownership. Missing/denied Web Locks therefore refuse the
+   * mutation; there is no storage-only fallback for unsupported browsers.
    */
   const update = body(store, /updatePassword: async[\s\S]*?\n {2}\},/, 'updatePassword');
   assert.match(
@@ -559,7 +559,7 @@ test('recovery exclusion uses a real lock where the browser has one', () => {
   );
   assert.match(
     store,
-    /locks\.request\(`\$\{RECOVERY_UPDATE_LOCK_PREFIX\}\$\{userId\}`, \{ ifAvailable: true \}/,
+    /manager\.request\(`\$\{RECOVERY_UPDATE_LOCK_PREFIX\}\$\{userId\}`, \{ ifAvailable: true \}/,
     'a second tab must be told the link is in use, not queued behind a request it cannot see',
   );
   /*

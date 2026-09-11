@@ -11,7 +11,12 @@ does not establish production readiness.
   rollback test now passes: both resolvers refuse the draft and the tracker
   records no view. Token/public/archive controls still pass, fixture counts
   return to zero, and the legacy function remains unavailable to `anon`.
-- Required browser locking passes all 45 auth smoke cases without retries.
+- Integrated the upstream auth-storage and sign-out changes through `5de5391`:
+  all 1,113 unit/API tests and 50 auth smoke cases passed without browser
+  retries. A subsequent reset-screen error-handling change passed three
+  targeted browser cases, including no repeated mutation after a lock
+  completion error. These browser tests use mocked Auth responses.
+- Required browser locking passes the integrated auth smoke suite.
   Unsupported/denied locks send no password change. This intentionally limits
   reset availability in older browsers; it does not enforce single-use tokens
   at the GoTrue server.
