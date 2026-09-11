@@ -66,6 +66,44 @@ set before release.
   document counter held on `window` (which the reload it measured resets) and a
   cold-device staging that cleared only `localStorage` while the workspace
   records live in IndexedDB.
+- **Release gate, shared documents are unreadable by everyone but their
+  uploader.** The private-bucket policy `horse documents read own`
+  (production-schema.sql) authorizes an object by path prefix --
+  `auth.uid()::text = split_part(name, '/', 1)` -- and client uploads are
+  written to `${uploader}/documents/${horse}/${file}`. The document RECORD is
+  authorized by workspace. Measured on PostgreSQL 16.13 with both policies
+  verbatim and a workspace holding an owner plus one active member:
+
+  | account                             | document records visible | storage objects visible |
+  | ----------------------------------- | ------------------------ | ----------------------- |
+  | uploader                            | 1                        | 2                       |
+  | active member of the same workspace | 1                        | **0**                   |
+  | invited, not yet active             | 0                        | 0                       |
+  | outsider                            | 0                        | 0                       |
+
+  The app opens files with `createSignedUrl` under the customer's own JWT
+  (`cloudWorkspace.ts` `getDocumentAccessUrl`), and a signed URL needs select on
+  the object, so a shared ranch could list its documents and open none of them.
+  `20260911150000_shared_document_storage_access.sql` adds a second read path
+  for objects that a reachable workspace's document rows name; after it the
+  member row reads 1 object, and the invited/outsider rows and the object no
+  record names are all unchanged at 0.
+  `supabase/checks/shared-document-storage-live-rollback.sql` is the operator
+  proof, and it was run both ways: before the migration it stops with "Member
+  cannot read a shared document object", after it reports all cases passed. It
+  rolls everything back. **Not yet applied to any real project** -- the runbook
+  step 9 is the owner's to run, and until then this defect is live.
+
+- `horse-media` is a PUBLIC bucket, so horse photos are unaffected by the above.
+  That is worth a separate decision rather than relief: anyone holding the URL
+  of a media object can read it without being signed in at all.
+- A migration can no longer smuggle in `create policy if not exists`, which is
+  not PostgreSQL syntax in any version. production-schema.sql survives it only
+  because `scripts/prepare-supabase-schema.mjs` rewrites that form, and it
+  rewrites the schema alone -- migrations are concatenated verbatim, so such a
+  statement fails at `if` and takes the rest of the file with it. The first
+  draft of the migration above made exactly that mistake and nothing caught it
+  until PostgreSQL did; the prepare step now refuses it by name.
 - Not claimed: none of this was exercised against a live GoTrue or a live
   Supabase project. The browser suites intercept Auth and PostgREST, so what is
   established is the client's behaviour, not the server's.

@@ -235,6 +235,14 @@ own:
    restricts membership/invitation management to owner/Admin, and adds atomic
    server-authorized invitation acceptance. Deploy the matching client RPC call.
    No existing rows are rewritten; direct invitee table writes are now denied.
+9. `20260911150000_shared_document_storage_access.sql` — **shared document access**.
+   Requires the June 5 workspace helpers. Private document objects were
+   authorized by path prefix (`auth.uid() = split_part(name, '/', 1)`) while the
+   document records they belong to are authorized by workspace, so every member
+   except the uploader could list a shared ranch's documents and open none of
+   them. Adds a second read path for objects a reachable workspace's records
+   name; the uploader's own access is unchanged and nothing else widens.
+   Grants no new access to objects no document row references.
 
 For migrations still missing from the target project, apply them **one at a time**, not with a single `supabase db push`. That command
 applies every pending migration in one go, which would run the data
@@ -317,6 +325,14 @@ psql -v ON_ERROR_STOP=1 "$DATABASE_URL" -f supabase/checks/share-token-live-roll
 # 8. Workspace access and safe invitation acceptance.
 psql "$DATABASE_URL" -f supabase/migrations/20260911005818_workspace_access_policies.sql
 psql -v ON_ERROR_STOP=1 "$DATABASE_URL" -f supabase/checks/workspace-access-live-rollback.sql
+
+# 9. Let a workspace's members open its shared documents (after step 8).
+#    Run the check BEFORE applying too: it fails with "Member cannot read a
+#    shared document object", which is this project's confirmation that the
+#    defect is present rather than already fixed.
+psql -v ON_ERROR_STOP=1 "$DATABASE_URL" -f supabase/checks/shared-document-storage-live-rollback.sql
+psql "$DATABASE_URL" -f supabase/migrations/20260911150000_shared_document_storage_access.sql
+psql -v ON_ERROR_STOP=1 "$DATABASE_URL" -f supabase/checks/shared-document-storage-live-rollback.sql
 ```
 
 **(4) and (5) are prerequisites for billing, not optimizations to schedule
