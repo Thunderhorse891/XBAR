@@ -6,6 +6,7 @@ import {
   identityPublication,
   liveSessionAgrees,
   waitForStorageCatchUp,
+  reconcilePublishedSession,
 } from '../src/lib/authBootstrap.js';
 import { createRecoveryCallbackNavigationIntent, isRecoveryCallbackUrl } from '../src/lib/authCallbackArrival.js';
 
@@ -326,4 +327,76 @@ test('cancelling stops a pending re-read from applying anything', () => {
   scheduler.tick();
   assert.equal(applied, 0, 'a torn-down subscription must not apply an event later');
   assert.equal(scheduler.pendingCount, 0);
+});
+
+/*
+ * Agreement is decided by session GENERATION, because auth-js rotates the
+ * access token underneath a session that has not otherwise changed. That is the
+ * right test for identity and says nothing about freshness.
+ *
+ * Reuses the `generation:nonce` token shape and `generationOf` above, so these
+ * cases and the agreement cases cannot drift apart on what a generation is.
+ */
+
+test('an older token of the same generation is replaced by the stored one', () => {
+  /*
+   * A broadcast delayed past another tab's refresh carries an older token with
+   * the same generation, so it agrees and used to be published verbatim. The
+   * store then held a credential that expires while the session is still live,
+   * and checkout, sale packets and account deletion all read that token rather
+   * than asking auth-js.
+   */
+  const stored = JSON.stringify({ access_token: 'gen-1:new', refresh_token: 'r-new', expires_at: 4242 });
+  const published = reconcilePublishedSession(
+    stored,
+    { access_token: 'gen-1:old', user: { id: 'user-a' } },
+    generationOf,
+  );
+  assert.equal(published?.access_token, 'gen-1:new', 'storage is settled: auth-js saves before it notifies');
+  assert.equal((published as { refresh_token?: string }).refresh_token, 'r-new');
+  assert.equal((published as { expires_at?: number }).expires_at, 4242);
+  assert.deepEqual(
+    (published as { user?: { id: string } }).user,
+    { id: 'user-a' },
+    'the event still supplies identity',
+  );
+});
+
+test('a stored record of a DIFFERENT generation is never substituted', () => {
+  // That record is not this event's session at all, and publishing it would put
+  // an identity into the store that no event ever reported.
+  const event = { access_token: 'gen-1:a' };
+  assert.equal(reconcilePublishedSession(held('gen-2:b'), event, generationOf)?.access_token, 'gen-1:a');
+});
+
+test('a matching token is published unchanged', () => {
+  const event = { access_token: 'gen-1:a', user: { id: 'user-a' } };
+  assert.equal(reconcilePublishedSession(held('gen-1:a'), event, generationOf), event);
+});
+
+test('a sign-out and an unreadable store publish the event as it came', () => {
+  assert.equal(reconcilePublishedSession(held('gen-1:a'), null, generationOf), null);
+  const event = { access_token: 'gen-1:a' };
+  assert.equal(reconcilePublishedSession('not json', event, generationOf), event);
+  assert.equal(reconcilePublishedSession(null, event, generationOf), event);
+});
+
+test('the nested currentSession shape is read as well as the flat one', () => {
+  // auth-js has written the record both ways over its life.
+  const stored = JSON.stringify({ currentSession: { access_token: 'gen-1:new' } });
+  assert.equal(
+    reconcilePublishedSession(stored, { access_token: 'gen-1:old' }, generationOf)?.access_token,
+    'gen-1:new',
+  );
+});
+
+test('tokens carrying no generation are left alone', () => {
+  /*
+   * Without a generation on both sides nothing proves the two belong to the
+   * same session, and swapping credentials between sessions is exactly what
+   * this must never do.
+   */
+  const noGeneration = (session: { access_token?: string } | null) => (session?.access_token ? '' : '');
+  const event = { access_token: 'opaque-old' };
+  assert.equal(reconcilePublishedSession(held('opaque-new'), event, noGeneration)?.access_token, 'opaque-old');
 });

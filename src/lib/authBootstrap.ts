@@ -156,31 +156,87 @@ type AuthSessionLike = { access_token?: string } | null;
  * callback to return. `lib/authStorage.ts` exists so the record can simply be
  * read instead.
  */
+type StoredSessionRecord = {
+  access_token?: unknown;
+  refresh_token?: unknown;
+  expires_at?: unknown;
+  expires_in?: unknown;
+};
+
+/*
+ * auth-js has written the record in two shapes over its life -- the session at
+ * the top level, and nested under `currentSession` -- so both are read.
+ */
+export function parseStoredSession(storedSession: string | null): StoredSessionRecord | null {
+  if (!storedSession) return null;
+  try {
+    const parsed: unknown = JSON.parse(storedSession);
+    if (!parsed || typeof parsed !== 'object') return null;
+    const record = parsed as StoredSessionRecord & { currentSession?: StoredSessionRecord };
+    const session = record.currentSession ?? record;
+    return typeof session.access_token === 'string' && session.access_token ? session : null;
+  } catch {
+    // An unparseable record names no session.
+    return null;
+  }
+}
+
 export function liveSessionAgrees(
   storedSession: string | null,
   eventSession: AuthSessionLike,
   generationOf: (session: AuthSessionLike) => string,
 ): boolean {
-  let stored: AuthSessionLike = null;
-  if (storedSession) {
-    try {
-      const parsed: unknown = JSON.parse(storedSession);
-      if (parsed && typeof parsed === 'object') {
-        const record = parsed as { access_token?: unknown; currentSession?: { access_token?: unknown } };
-        const token = record.currentSession?.access_token ?? record.access_token;
-        if (typeof token === 'string' && token) stored = { access_token: token };
-      }
-    } catch {
-      // An unparseable record names no session, which is not agreement with one.
-      stored = null;
-    }
-  }
+  const parsed = parseStoredSession(storedSession);
+  const stored: AuthSessionLike = parsed ? { access_token: parsed.access_token as string } : null;
   if (!eventSession) return !stored;
   if (!stored) return false;
   const storedGeneration = generationOf(stored);
   const eventGeneration = generationOf(eventSession);
   if (storedGeneration && eventGeneration) return storedGeneration === eventGeneration;
   return Boolean(stored.access_token) && stored.access_token === eventSession.access_token;
+}
+
+/**
+ * The credential to PUBLISH once an event has been accepted as this tab's.
+ *
+ * Agreement is decided by session GENERATION, because auth-js rotates the
+ * access token underneath a session that has not otherwise changed. That is the
+ * right test for identity and the wrong one for freshness: a broadcast delayed
+ * past another tab's refresh carries an OLDER token of the same generation, so
+ * it agrees, and publishing it verbatim put a superseded credential into the
+ * store while auth-js storage held the current one. Everything that reads the
+ * store's token rather than asking auth-js -- checkout, sale packets, account
+ * deletion -- then carries a token that expires while the session is still
+ * live.
+ *
+ * Storage is the settled answer, since auth-js saves before it notifies. So an
+ * accepted event supplies the identity and the stored record supplies the
+ * credential. The event's own object is kept for everything else: it carries
+ * the user and the fields the store reads, and a stored record is only ever a
+ * credential here, not a session in full.
+ *
+ * Only ever swaps WITHIN one generation. A stored record of a different
+ * generation is not this event's session at all, and substituting it would
+ * publish an identity nobody reported.
+ */
+export function reconcilePublishedSession<T extends { access_token?: string }>(
+  storedSession: string | null,
+  eventSession: T | null,
+  generationOf: (session: AuthSessionLike) => string,
+): T | null {
+  if (!eventSession) return eventSession;
+  const stored = parseStoredSession(storedSession);
+  if (!stored) return eventSession;
+  const storedToken = stored.access_token as string;
+  if (storedToken === eventSession.access_token) return eventSession;
+  const storedGeneration = generationOf({ access_token: storedToken });
+  const eventGeneration = generationOf(eventSession);
+  if (!storedGeneration || !eventGeneration || storedGeneration !== eventGeneration) return eventSession;
+  const credential: Record<string, unknown> = { access_token: storedToken };
+  if (typeof stored.refresh_token === 'string') credential.refresh_token = stored.refresh_token;
+  if (typeof stored.expires_at === 'number') credential.expires_at = stored.expires_at;
+  if (typeof stored.expires_in === 'number') credential.expires_in = stored.expires_in;
+  return { ...eventSession, ...credential };
 }
 
 /*

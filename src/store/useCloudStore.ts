@@ -18,6 +18,7 @@ import {
   createLatestWriteGate,
   identityPublication,
   liveSessionAgrees,
+  reconcilePublishedSession,
   waitForStorageCatchUp,
   type StorageCatchUp,
 } from '@/lib/authBootstrap';
@@ -1122,7 +1123,18 @@ export const useCloudStore = create<CloudStore>((set, get) => ({
     const eventAgreesWithStorage = (session: Session | null) =>
       liveSessionAgrees(readAuthStorage(authStorageKey()), session, sessionGenerationOf);
 
-    const applyAuthEvent = (event: AuthChangeEvent, session: Session | null) => {
+    const applyAuthEvent = (event: AuthChangeEvent, rawSession: Session | null) => {
+      /*
+       * The event supplies the identity; STORAGE supplies the credential.
+       *
+       * Agreement is decided by session generation, which is right for identity
+       * and silent about freshness: a broadcast delayed past another tab's
+       * token refresh carries an older token of the same generation, agrees,
+       * and used to be published verbatim -- leaving the store holding a
+       * credential that expires while the session is still live, which every
+       * caller reading the store's token rather than asking auth-js then sends.
+       */
+      const session = reconcilePublishedSession(readAuthStorage(authStorageKey()), rawSession, sessionGenerationOf);
       /*
        * One question, asked of every event: does the session auth-js has
        * actually STORED agree with what this event says?

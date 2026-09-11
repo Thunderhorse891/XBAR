@@ -368,6 +368,30 @@ response.status !== 200) return response`). The cache fallback lives in the
   the loop guard outranks the wait, since waiting on a document that has already
   had its one reload can only delay the error.
 
+- **An accepted auth event could publish a superseded credential. Now fixed**
+  (raised by Codex against `ee4c8df`). Agreement between an event and storage is
+  decided by session GENERATION, because auth-js rotates the access token
+  underneath a session that has not otherwise changed. That is the right test
+  for identity and says nothing about freshness: a broadcast delayed past
+  another tab's refresh carries an OLDER token of the same generation, so it
+  agrees, and it was published verbatim. The store then held a credential that
+  expires while the session is still live -- and checkout, sale packets and
+  account deletion all read the store's token rather than asking auth-js.
+
+  The event now supplies the identity and STORAGE supplies the credential,
+  which is the correct division: auth-js saves before it notifies, so the
+  stored record is the settled answer. The swap only ever happens WITHIN one
+  generation; a stored record of a different generation is not this event's
+  session at all, and substituting it would publish an identity no event
+  reported. Tokens carrying no generation on either side are left alone.
+
+  Four rules mutation-checked: swapping at all, refusing to swap across
+  generations, reading the nested `currentSession` shape as well as the flat
+  one, and carrying the refresh token and expiry rather than the access token
+  alone. Two earlier mutants produced NO output rather than a failure -- they
+  did not compile, so the suite never ran against them -- and were redone in
+  compiling form before the result was believed.
+
 - Not claimed: none of this was exercised against a live GoTrue or a live
   Supabase project. The browser suites intercept Auth and PostgREST, so what is
   established is the client's behaviour, not the server's.
