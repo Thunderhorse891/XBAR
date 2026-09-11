@@ -89,7 +89,9 @@ export default function Documents() {
   const fileInputRef = useRef<HTMLInputElement | null>(null);
 
   const uploadOpen = searchParams.get('upload') === '1';
-  const [activeStage, setActiveStage] = useState<PipelineStage>(uploadOpen ? 'Upload' : 'Review');
+  const [activeStage, setActiveStage] = useState<PipelineStage>(
+    uploadOpen || (documents.length === 0 && canUploadDocuments) ? 'Upload' : 'Review',
+  );
 
   useEffect(() => {
     if (uploadOpen) {
@@ -118,7 +120,9 @@ export default function Documents() {
 
   const stageCounts: Record<PipelineStage, number> = computeStageCounts(documents, stageBuckets);
 
-  const heroStatus = computeHeroStatus(stageBuckets);
+  const heroStatus = documents.length
+    ? computeHeroStatus(stageBuckets)
+    : { label: 'No documents yet', tone: 'blue' as const };
 
   const heroRisks = computeHeroRisks(stageBuckets);
 

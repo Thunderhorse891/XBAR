@@ -3,6 +3,26 @@
 Track the evidence below separately from repository tests. Passing tests alone
 does not establish production readiness.
 
+## Launch scope within the current budget
+
+Optional paid integrations may be deliberately deferred. Their absence alone
+does not block a launch of the features that work without them. Keep unavailable
+actions clearly labeled, offer usable local/manual paths, and never report an
+unsent email, unsynced record or incomplete purchase as successful.
+
+- **Fix before releasing enabled features:** data-loss and permission defects,
+  unreliable account/session behavior, broken core actions, and unusable layouts.
+  Cloud-account email/link completion still needs verification if cloud accounts
+  are offered. Shared-account deletion safety remains open below.
+- **Verify when enabling an integration:** real automated checkout/webhook flow,
+  paid email delivery, and other intentionally deferred API-backed features.
+  These checks are release gates for those features, not a requirement to buy
+  optional services before releasing a narrower, honestly labeled product.
+
+This scope does not authorize paid-service activation or assume that existing
+production integrations have been disabled. Record the actual enabled feature
+set before release.
+
 ## Follow-up September 11, 2026
 
 - Account deletion now refuses unreadable ownership/membership results,
@@ -21,8 +41,9 @@ does not establish production readiness.
   does not establish repeatability. That failure remains open.
 - Visual review at 1440px and 390px used a local Professional-plan fixture,
   not a real paid account. Dashboard, Documents and Billing showed no horizontal
-  overflow. Follow up on empty Documents starting in Review and duplicated
-  billing limits extending the mobile comparison unnecessarily. Service success
+  overflow. Empty Documents now opens Upload for users who can upload, with a
+  "No documents yet" status. Follow up on duplicated billing limits extending
+  the mobile comparison unnecessarily. Service success
   and live premium entitlements were not established by this fixture.
 
 ## Verified September 10, 2026
