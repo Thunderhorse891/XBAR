@@ -254,6 +254,17 @@ test('registration intake extracts sex, color, sire and dam into a new horse pro
   await expect(identity).toContainText('SMART CHIC OLENA (3120011)');
   await expect(identity).toContainText('DOCS SUGAR BARS (3220022)');
   await expect(identity).toContainText('5544332');
+  const reviewState = await page.evaluate(async () => {
+    const modulePath = '/src/store/useXbarStore.ts';
+    const { useXbarStore } = await import(/* @vite-ignore */ modulePath);
+    const state = useXbarStore.getState();
+    return {
+      document: state.documents[0].state,
+      ownership: state.ownershipRecords[0].confidence,
+      facts: state.horses[0].documentFacts.length,
+    };
+  });
+  expect(reviewState).toEqual({ document: 'Needs Review', ownership: 0, facts: 0 });
 
   // Correcting a wrong extraction must persist: open Edit details, fix the color.
   await page.getByRole('button', { name: 'Edit details' }).click();
@@ -313,6 +324,27 @@ test('registration intake extracts sex, color, sire and dam into a new horse pro
   }
 });
 
+test('unreadable paper cannot invent a horse or approve a document', async ({ page }) => {
+  await bootstrapWorkspace(page);
+  await page.getByRole('button', { name: 'Create', exact: true }).click();
+  await page.getByRole('menuitem', { name: 'Upload Document' }).click();
+  const drawer = page.getByRole('dialog', { name: 'Upload Document' });
+  await drawer.locator('input[type="file"]').setInputFiles({
+    name: 'registration-unreadable.txt',
+    mimeType: 'text/plain',
+    buffer: Buffer.from(''),
+  });
+  await drawer.getByRole('button', { name: 'Upload for review' }).click();
+  await expect(page).toHaveURL(/\/documents/);
+  const result = await page.evaluate(async () => {
+    const modulePath = '/src/store/useXbarStore.ts';
+    const { useXbarStore } = await import(/* @vite-ignore */ modulePath);
+    const state = useXbarStore.getState();
+    return { horses: state.horses.length, documents: state.documents.map((d: { state: string }) => d.state) };
+  });
+  expect(result).toEqual({ horses: 0, documents: ['Needs Review'] });
+});
+
 test('a multi-file batch upload creates one horse per registration paper', async ({ page }) => {
   test.setTimeout(120_000);
   await bootstrapWorkspace(page);
@@ -341,8 +373,15 @@ test('a multi-file batch upload creates one horse per registration paper', async
 
   // Both papers produced their own horse record in the roster.
   await page.getByRole('link', { name: 'Horses', exact: true }).click();
-  await expect(page.getByText('DESERT DAISY', { exact: false })).toBeVisible({ timeout: 15_000 });
-  await expect(page.getByText('CANYON BELLE', { exact: false })).toBeVisible();
+  const names = await page.evaluate(async () => {
+    const modulePath = '/src/store/useXbarStore.ts';
+    const { useXbarStore } = await import(/* @vite-ignore */ modulePath);
+    return useXbarStore
+      .getState()
+      .horses.map((horse: { name: string }) => horse.name)
+      .sort();
+  });
+  expect(names).toEqual(['CANYON BELLE', 'DESERT DAISY']);
 });
 
 test('a Needs-Review document can spawn a new horse from the review stage', async ({ page }) => {
@@ -424,8 +463,18 @@ test('review-stage "New horse" attaches to an existing match instead of duplicat
   await expect(page).toHaveURL(/\/horses\//, { timeout: 30_000 });
 
   // The roster still holds exactly one Silver Canyon King.
-  await page.getByRole('link', { name: 'Horses', exact: true }).click();
-  await expect(page.getByText('SILVER CANYON KING', { exact: false })).toHaveCount(1, { timeout: 15_000 });
+  const saved = await page.evaluate(async () => {
+    const modulePath = '/src/store/useXbarStore.ts';
+    const { useXbarStore } = await import(/* @vite-ignore */ modulePath);
+    const state = useXbarStore.getState();
+    return {
+      horses: state.horses.length,
+      document: state.documents[0].state,
+      linked: state.documents[0].horseId === state.horses[0].id,
+      facts: state.horses[0].documentFacts.length,
+    };
+  });
+  expect(saved).toEqual({ horses: 1, document: 'Needs Review', linked: true, facts: 0 });
 });
 
 test('panel sheen overlays stay inside their cards (no sidebar wash)', async ({ page }) => {

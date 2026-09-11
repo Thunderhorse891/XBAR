@@ -2054,14 +2054,14 @@ export function buildHorseInputFromDocuments(
   documents: DocumentRecord[],
   workspaceProfile: WorkspaceProfile,
 ): NewHorseInput | null {
-  const horseName =
-    documents.map((document) => document.entities.horseName?.trim()).find(Boolean) ??
-    documents.map((document) => inferHorseNameFromDocumentTitle(document.title)).find((title) => title.length >= 3) ??
-    '';
+  // A filename or fallback match is not evidence read from a paper. Keep
+  // unreadable uploads in review instead of inventing a horse from scan-001.
+  const readableDocuments = documents.filter((document) => document.extractedTextPreview?.trim());
+  const horseName = readableDocuments.map((document) => document.entities.horseName?.trim()).find(Boolean) ?? '';
   const registrationNumber =
-    documents.map((document) => document.entities.registrationNumber?.trim()).find(Boolean) ?? '';
+    readableDocuments.map((document) => document.entities.registrationNumber?.trim()).find(Boolean) ?? '';
   const ownerName =
-    documents.map((document) => document.entities.ownerName?.trim()).find(Boolean) ??
+    readableDocuments.map((document) => document.entities.ownerName?.trim()).find(Boolean) ??
     workspaceProfile.defaultOwnerName.trim() ??
     '';
   const ownerEntity =
@@ -2073,7 +2073,7 @@ export function buildHorseInputFromDocuments(
 
   // First non-empty value for a given entity field across all grouped documents.
   const firstEntity = (key: keyof DocumentRecord['entities']) =>
-    documents.map((document) => document.entities[key]?.trim()).find(Boolean) ?? '';
+    readableDocuments.map((document) => document.entities[key]?.trim()).find(Boolean) ?? '';
 
   const registry = firstEntity('registry');
   const normalizedHorseName = (horseName || registrationNumber).trim().toUpperCase();
@@ -2113,8 +2113,8 @@ export function createHorseFromDocuments(documents: DocumentRecord[], workspaceP
   const readyDocuments = documents.map((document) => ({
     ...document,
     horseId: horse.id,
-    state: 'Ready' as const,
-    confidence: Math.max(document.confidence, 0.91),
+    // Creating the profile attaches the source; it is not document approval.
+    state: document.state === 'Ready' ? ('Ready' as const) : ('Needs Review' as const),
     duplicateRisk: document.duplicateRisk === 'Possible Duplicate' ? 'Review' : document.duplicateRisk,
     entities: {
       ...document.entities,
@@ -2122,16 +2122,21 @@ export function createHorseFromDocuments(documents: DocumentRecord[], workspaceP
       ownerName: document.entities.ownerName ?? horse.owner,
       registrationNumber: document.entities.registrationNumber ?? horse.registrationNumber,
     },
-    summary: `${document.title} was used to create ${horse.name} and is now attached to the new horse profile.`,
+    summary: `${document.title} is attached to ${horse.name}.${document.state === 'Ready' ? '' : ' Review the source before approving its facts.'}`,
   }));
-  const promotedHorse = readyDocuments.reduce(promoteDocument, horse);
+  const promotedHorse = readyDocuments.reduce(
+    (current, document) =>
+      document.state === 'Ready'
+        ? promoteDocument(current, document)
+        : {
+            ...current,
+            documents: [...current.documents, document.id],
+          },
+    horse,
+  );
   const ownershipRecord = {
     ...createOwnershipRecord(promotedHorse),
     legalOwner: horse.owner,
-    pendingDocuments: readyDocuments
-      .filter((document) => document.type === 'Transfer Packet' || document.type === 'Bill of Sale')
-      .map((document) => document.title),
-    confidence: readyDocuments.some((document) => document.type === 'Registration') ? 78 : 52,
   };
 
   return {

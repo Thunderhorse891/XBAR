@@ -1055,14 +1055,34 @@ export const useXbarStore = create<XbarStore>()(
           return regMatch || nameMatch;
         });
         if (existingHorse) {
-          const attached = get().reviewDocument(documentId, existingHorse.id);
-          return attached.ok
-            ? {
-                ok: true,
-                message: `${existingHorse.name} is already on file — attached this document to it instead of creating a duplicate.`,
-                id: existingHorse.id,
-              }
-            : attached;
+          set((current) => {
+            const nextDocuments = current.documents.map((item) =>
+              item.id === documentId
+                ? {
+                    ...item,
+                    horseId: existingHorse.id,
+                    summary: `${item.title} is attached to ${existingHorse.name}. Review the source before approving its facts.`,
+                  }
+                : item,
+            );
+            return {
+              documents: nextDocuments,
+              horses: current.horses.map((horse) =>
+                horse.id === existingHorse.id
+                  ? {
+                      ...horse,
+                      documents: [...new Set([...horse.documents, documentId])],
+                    }
+                  : horse,
+              ),
+              intakeBatches: current.intakeBatches.map((batch) => summarizeBatch(batch, nextDocuments)),
+            };
+          });
+          return {
+            ok: true,
+            message: `${existingHorse.name} is already on file — attached this document for review instead of creating a duplicate.`,
+            id: existingHorse.id,
+          };
         }
 
         const availableHorseSlots = Math.max(0, entitledUsage(state.subscription).horseLimit - state.horses.length);
