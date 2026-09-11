@@ -92,7 +92,7 @@ test('an update does not reload a page still holding a recovery link', async () 
   }
 });
 
-test('the refresh resumes once the credential has left the URL', async () => {
+test('clearing the callback URL does not authorize a reload before session persistence', async () => {
   const browser = installBrowser({ controller: true, href: 'https://xbar.test/app/reset-password#access_token=a' });
   try {
     await registerOfflineRuntime();
@@ -101,7 +101,7 @@ test('the refresh resumes once the credential has left the URL', async () => {
     // What `window.location.hash = ''` leaves behind: a bare '#', no params.
     browser.location.href = 'https://xbar.test/app/reset-password#';
     browser.claim();
-    assert.deepEqual(browser.reloads, ['https://xbar.test/app/reset-password#'], 'the guard must lift, not latch');
+    assert.deepEqual(browser.reloads, [], 'a cleared URL is not proof that the session was persisted');
   } finally {
     uninstallBrowser();
   }

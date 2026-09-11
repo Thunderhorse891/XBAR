@@ -9,8 +9,9 @@ let refreshQueued = false;
  * The implicit flow returns them in the FRAGMENT and PKCE returns `code` in the
  * query, so both halves are checked. auth-js clears the fragment by assigning
  * `window.location.hash = ''`, which leaves a bare '#' and no parameters -- so
- * this stops being true the moment the credential is no longer in the URL,
- * which is the property the guard below depends on.
+ * this stops being true the moment the credential is no longer in the URL.
+ * The reload guard must retain that earlier callback state because URL cleanup
+ * is not evidence that auth-js has finished persisting the session.
  */
 const AUTH_CALLBACK_FRAGMENT_PARAMS = [
   'access_token',
@@ -66,6 +67,7 @@ export async function registerOfflineRuntime(): Promise<OfflineRuntimeStatus> {
      * recovery or magic link into a session.
      */
     const hadController = Boolean(navigator.serviceWorker.controller);
+    const beganOnAuthCallback = urlCarriesAuthCallback(window.location.href);
 
     navigator.serviceWorker.addEventListener('controllerchange', () => {
       if (refreshQueued) return;
@@ -86,7 +88,7 @@ export async function registerOfflineRuntime(): Promise<OfflineRuntimeStatus> {
        * Skipping the refresh costs nothing in comparison. The updated worker
        * still controls the next navigation.
        */
-      if (urlCarriesAuthCallback(window.location.href)) return;
+      if (beganOnAuthCallback || urlCarriesAuthCallback(window.location.href)) return;
       refreshQueued = true;
       window.location.reload();
     });
