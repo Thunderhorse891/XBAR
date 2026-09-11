@@ -129,7 +129,7 @@ test('verified private and shared workspaces produce distinct deletion plans', a
   assert.deepEqual(sharedPlan.workspacesToTransfer, [{ workspaceId: 'workspace', newOwnerUserId: 'u2' }]);
 });
 
-test('the real handler never deletes an auth account after lookup, transfer, or membership-removal failure', async (t) => {
+test('the real handler refuses failed prerequisites and shared-workspace deletion before destructive calls', async (t) => {
   const envKeys = ['SUPABASE_URL', 'SUPABASE_SERVICE_ROLE_KEY', 'UPSTASH_REDIS_REST_URL', 'UPSTASH_REDIS_REST_TOKEN'];
   const savedEnv = Object.fromEntries(envKeys.map((key) => [key, process.env[key]]));
   t.after(() => {
@@ -182,12 +182,16 @@ test('the real handler never deletes an auth account after lookup, transfer, or 
       },
     };
     await handler(req, res);
-    assert.ok(res.statusCode >= 500, `${scenario} must refuse deletion`);
+    assert.ok(
+      scenario === 'transfer' ? res.statusCode === 409 : res.statusCode >= 500,
+      `${scenario} must refuse deletion`,
+    );
     assert.equal(JSON.parse(res.body).ok, false);
     assert.ok(
       !writes.some((request) => request.includes('/auth/') || request.includes('/storage/')),
       `${scenario} reached irreversible deletion`,
     );
-    if (scenario === 'owned' || scenario === 'members') assert.deepEqual(writes, []);
+    if (scenario !== 'removal') assert.deepEqual(writes, []);
+    if (scenario === 'transfer') assert.equal(JSON.parse(res.body).code, 'shared_workspace_handoff_required');
   }
 });

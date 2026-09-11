@@ -38,7 +38,7 @@ function planAnchor(tier: SubscriptionTier) {
 }
 
 function formatLimit(value: number, noun: string) {
-  return `${value.toLocaleString()} ${noun}`;
+  return `${value.toLocaleString()} ${value === 1 && noun.endsWith('s') ? noun.slice(0, -1) : noun}`;
 }
 
 export default function Subscriptions() {
@@ -443,12 +443,11 @@ export default function Subscriptions() {
         </div>
         <ul>
           <li>{formatLimit(config.limits.horseLimit, 'horses')}</li>
-          <li>{formatLimit(config.limits.seatLimit, 'team seats')}</li>
-          <li>{formatLimit(config.limits.documentLimit, 'documents')}</li>
           <li>{formatLimit(config.limits.salePacketLimit, 'sale packets')}</li>
-          <li>{`${config.limits.storageLimitGb} GB storage`}</li>
         </ul>
-        {/* What the tier includes, not just how much of it. Rendered whatever
+        {/* Seat, document and storage quotas are already included in this
+            canonical feature copy; show each once in the comparison card.
+            What the tier includes, not just how much of it. Rendered whatever
             the billing configuration is: being unable to buy a plan is no
             reason to stop showing what it contains. */}
         <ul className="checkout-plan__features">

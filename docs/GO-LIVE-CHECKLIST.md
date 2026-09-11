@@ -32,9 +32,11 @@ set before release.
   records were deleted for these checks.
 - This does **not** close the shared-account deletion lifecycle: review changes
   to membership between planning and deletion, and storage retention/access
-  after transferring a workspace. The current endpoint still invokes cleanup
-  of the departing user's storage prefix after transfers; shared documents
-  must not disappear or become inaccessible. Treat this as an open release gate.
+  after transferring a workspace. The endpoint now refuses shared-workspace
+  owners before any mutation, rather than transferring the row and then deleting
+  the departing user's whole Storage prefix. A reviewed handoff is required;
+  automatic shared-workspace account deletion is not an available launch feature.
+  Concurrent changes and files previously shared elsewhere remain open checks.
 - Claude's `98f5655` removes inferred member deletion from stale saves and
   carries reset uncertainty explicitly. Claude also measured intermittent
   session/reload failures in the membership browser test; one passing battery
@@ -42,8 +44,9 @@ set before release.
 - Visual review at 1440px and 390px used a local Professional-plan fixture,
   not a real paid account. Dashboard, Documents and Billing showed no horizontal
   overflow. Empty Documents now opens Upload for users who can upload, with a
-  "No documents yet" status. Follow up on duplicated billing limits extending
-  the mobile comparison unnecessarily. Service success
+  "No documents yet" status. Billing cards now show seat/document/storage limits
+  once in the canonical feature copy and keep horse/packet limits separately.
+  Service success
   and live premium entitlements were not established by this fixture.
 
 ## Verified September 10, 2026

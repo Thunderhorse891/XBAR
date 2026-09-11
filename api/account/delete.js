@@ -4,15 +4,15 @@ import { confirmationSatisfied, loadAccountDeletionPlan } from '../_lib/account-
 import { enforceRateLimit } from '../_lib/rate-limit.js';
 import { applyCors } from '../_lib/cors.js';
 
-// In-app account deletion (Apple Guideline 5.1.1(v)). Irreversible. Deletes the
-// caller's own auth account and the workspaces they PRIVATELY own; a workspace
-// that still has other active members is transferred to a successor, never
-// destroyed. Requires the user to type their exact email to confirm.
+// In-app account deletion. Irreversible. Deletes the
+// caller's own auth account and the workspaces they PRIVATELY own. Accounts
+// owning shared workspaces require a reviewed handoff before deletion: changing
+// a workspace owner alone does not transfer its stored files or their access.
+// Requires the user to type their exact email to confirm.
 //
-// Ordering is failure-safe: ownership transfers and membership removal (which
-// destroy no data) run first; the auth user is deleted next; only then are the
-// user's private workspaces and storage objects purged — so a failed account
-// deletion can never leave the account half-erased.
+// Prerequisite checks precede membership removal and auth deletion. File cleanup
+// follows auth deletion. This ordering does not make the multi-request operation
+// transactional; concurrency and shared-file lifecycle remain separate checks.
 
 const RATE_LIMIT = { bucket: 'account-delete', limit: 5, windowSeconds: 300 };
 const DOCUMENT_BUCKET =
@@ -63,25 +63,19 @@ export default async function handler(req, res) {
 
   try {
     // Build the plan: for every owned workspace, look up its OTHER active members
-    // so we can transfer rather than destroy shared workspaces.
+    // so a shared workspace cannot be mistaken for private data to purge.
     const plan = await loadAccountDeletionPlan(supabase, user.id);
 
-    // 1. Transfer shared workspaces to a successor owner (non-destructive) so
-    //    deleting the user can never cascade their data away.
-    for (const transfer of plan.workspacesToTransfer) {
-      const { data: transferred, error } = await supabase
-        .from('workspaces')
-        .update({ owner_user_id: transfer.newOwnerUserId })
-        .eq('id', transfer.workspaceId)
-        .eq('owner_user_id', user.id)
-        .select('id')
-        .single();
-      if (error || transferred?.id !== transfer.workspaceId) {
-        return sendJson(res, 502, {
-          ok: false,
-          message: 'Could not confirm transfer of a shared workspace. Account was not deleted.',
-        });
-      }
+    // Transferring the row then deleting the entire user's Storage prefix
+    // destroyed shared files. Refuse before any mutation until the handoff
+    // includes verified file retention and successor access.
+    if (plan.workspacesToTransfer.length) {
+      return sendJson(res, 409, {
+        ok: false,
+        code: 'shared_workspace_handoff_required',
+        message:
+          'Your account owns a workspace with other members. Shared records and files need a reviewed ownership handoff before this account can be deleted. Nothing was changed.',
+      });
     }
 
     // 2. Remove the user from every workspace they belong to (non-destructive).
