@@ -352,7 +352,16 @@ export function CloudBootstrap() {
           setWorkspaceAccessProfile(result.workspaceId, 'Admin');
         }
         lastPersistedSignatureRef.current = signature;
-        settleStagedStorageBytes(stagedAtSnapshot);
+        /*
+         * Only when the DOCUMENT ROWS actually reached the database. With the
+         * snapshot fallback enabled a rejected relational save still reports
+         * `ok` once the legacy snapshot lands -- the rancher's work is safe,
+         * which is what `ok` means -- but `xbar_workspace_storage_bytes` reads
+         * `documents`, and nothing was added to it. Releasing the reservation
+         * there would leave the uploaded objects counted by nobody, and every
+         * later batch would pass the gate against a total that never grows.
+         */
+        if (result.relationalRowsPersisted) settleStagedStorageBytes(stagedAtSnapshot);
         if (result.updatedAt) setLastSyncAt(result.updatedAt);
         setSyncState('idle', result.message);
       } else {

@@ -353,12 +353,48 @@ test('staged bytes are released by the save that persists them, and only that mu
   );
   assert.match(
     bootstrap,
-    /if \(result\.ok\) \{[\s\S]{0,400}?settleStagedStorageBytes\(stagedAtSnapshot\)/,
-    'staged bytes may only be released by a save that actually succeeded',
+    /if \(result\.ok\) \{[\s\S]{0,900}?if \(result\.relationalRowsPersisted\) settleStagedStorageBytes\(stagedAtSnapshot\)/,
+    'staged bytes may only be released once the document rows actually reached the database',
   );
   assert.match(
     cloudStore,
     /settleStagedStorageBytes: \(bytes\) =>[\s\S]{0,260}?stagedStorageBytes: Math\.max\(0, state\.stagedStorageBytes - /,
     'the release must subtract the captured amount, never zero the counter',
+  );
+});
+
+test('a snapshot-only fallback does not claim the relational rows landed', async () => {
+  /*
+   * With `VITE_SUPABASE_SNAPSHOT_FALLBACK` on, a rejected relational save still
+   * returns `ok` once the legacy snapshot is written — the rancher's work is
+   * safe, which is what `ok` means. But `xbar_workspace_storage_bytes` reads
+   * the `documents` table, and that path added nothing to it. A caller cannot
+   * tell those apart from `ok`, so the distinction has to be reported.
+   *
+   * If it were not, the capacity gate would release its reservation for bytes
+   * the server never took over: the objects would be counted by nobody and
+   * every later batch would pass against a total that never grows.
+   */
+  const cloud = await readFile('src/lib/cloudWorkspace.ts', 'utf8');
+  const save = cloud.slice(
+    cloud.indexOf('export async function saveWorkspaceBackupToCloud'),
+    cloud.indexOf('export async function loadWorkspaceBackupFromCloud'),
+  );
+  assert.ok(save.length > 0, 'the save function must be findable');
+
+  const fallbackReturn = save.slice(
+    save.indexOf('Relational workspace unavailable') - 400,
+    save.indexOf('Relational workspace unavailable') + 200,
+  );
+  assert.ok(
+    !/relationalRowsPersisted/.test(fallbackReturn),
+    'the snapshot-only fallback must not report relational persistence',
+  );
+
+  // And the success paths must report it, or the reservation is never released.
+  assert.equal(
+    (save.match(/relationalRowsPersisted: true/g) ?? []).length,
+    2,
+    'both relational-success returns must report that the rows landed',
   );
 });

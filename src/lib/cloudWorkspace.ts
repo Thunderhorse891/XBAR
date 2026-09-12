@@ -57,6 +57,14 @@ type CloudSaveResult = {
   message: string;
   updatedAt?: string;
   workspaceId?: string;
+  /*
+   * Whether the RELATIONAL rows were written, which is not the same question as
+   * `ok`. With the snapshot fallback enabled a rejected relational save still
+   * reports success once the legacy snapshot lands, and callers that care about
+   * what the database now holds -- the document capacity gate, which reads
+   * `xbar_workspace_storage_bytes` -- cannot tell the two apart from `ok`.
+   */
+  relationalRowsPersisted?: boolean;
 };
 
 type WorkspaceAccessProfile = {
@@ -1012,6 +1020,7 @@ export async function saveWorkspaceBackupToCloud(backup: unknown): Promise<Cloud
             : `Relational workspace updated, but snapshot backup failed: ${snapshot.message}`,
           updatedAt,
           workspaceId: relational.workspaceId,
+          relationalRowsPersisted: true,
         };
       }
 
@@ -1020,6 +1029,7 @@ export async function saveWorkspaceBackupToCloud(backup: unknown): Promise<Cloud
         message: 'Cloud sync complete. Relational workspace updated.',
         updatedAt,
         workspaceId: relational.workspaceId,
+        relationalRowsPersisted: true,
       };
     }
 
@@ -1033,6 +1043,13 @@ export async function saveWorkspaceBackupToCloud(backup: unknown): Promise<Cloud
 
     const snapshot = await saveWorkspaceSnapshotToCloud(backup, session, updatedAt);
     if (snapshot.ok) {
+      /*
+       * Deliberately WITHOUT `relationalRowsPersisted`. The snapshot landed and
+       * the rancher's work is safe, which is what `ok` is about -- but no
+       * document row reached the database, so nothing a caller reads from
+       * `documents` has moved. Saying otherwise here is what would let the
+       * capacity gate release a reservation the server never took over.
+       */
       return {
         ok: true,
         message: `Relational workspace unavailable. Saved a legacy snapshot instead. ${relational.message}`,
