@@ -157,6 +157,21 @@ test('a re-sync of the same account does not put the app back into loading', () 
   assert.deepEqual(identityPublication('user-a', 'user-a'), { workspaceReady: false });
 });
 
+test('a staged storage reservation does not follow one account into another', () => {
+  /*
+   * The reservation counts bytes THIS account put in the document bucket and
+   * has not yet persisted as rows. Carried across an account change it is added
+   * to the next account's authoritative server total, refusing uploads that
+   * would have fit, until that account happens to complete a relational save.
+   * It belongs to the identity that made it.
+   */
+  assert.equal(identityPublication('user-a', 'user-b').stagedStorageBytes, 0);
+  assert.equal(identityPublication('', 'user-b').stagedStorageBytes, 0);
+
+  // A token refresh is the same account and must not discard a live reservation.
+  assert.equal(identityPublication('user-a', 'user-a').stagedStorageBytes, undefined);
+});
+
 test('an account change retires the previous account workspace with it', () => {
   /*
    * The regression this exists for: publishing the new session while leaving

@@ -883,10 +883,6 @@ export const useXbarStore = create<XbarStore>()(
                     file,
                     horseId: selectedHorse?.id ?? horseId,
                   });
-                  // Recorded the moment the object exists, not when the record
-                  // is installed: the next batch's capacity check may run
-                  // before this one finishes building its records.
-                  useCloudStore.getState().noteStagedStorageBytes(file.size);
                 } catch (error) {
                   console.error('Cloud document upload failed; keeping the file on this device instead.', error);
                 }
@@ -1015,13 +1011,32 @@ export const useXbarStore = create<XbarStore>()(
            * IndexedDB quota failure. In a local-only build the files on the
            * device ARE the usage.
            */
+          const cloudStoredBytes = documents
+            .filter((document) => Boolean(document.storagePath))
+            .reduce((total, document) => total + (document.fileSizeBytes ?? 0), 0);
           const chargedStorageGb =
-            (isSupabaseConfigured()
-              ? documents
-                  .filter((document) => Boolean(document.storagePath))
-                  .reduce((total, document) => total + (document.fileSizeBytes ?? 0), 0)
-              : fileList.reduce((total, file) => total + file.size, 0)) /
+            (isSupabaseConfigured() ? cloudStoredBytes : fileList.reduce((total, file) => total + file.size, 0)) /
             (1024 * 1024 * 1024);
+
+          /*
+           * Staged in the same synchronous step that installs the records, and
+           * deliberately not when each upload returned.
+           *
+           * A reservation has to mean "bytes the next saved snapshot will
+           * account for". Counted at upload time it did not: an autosave queued
+           * by an earlier edit could fire during the OCR that follows the
+           * upload, capture the reservation, and persist a snapshot that did
+           * not contain those records yet -- releasing a reservation for bytes
+           * the database had still not been told about. Set here, every
+           * exported snapshot holds either both the records and the reservation
+           * or neither, and nothing can run between these two statements.
+           *
+           * Counting at upload time was meant to protect a second batch started
+           * mid-flight, which neither entry point permits: both disable their
+           * submit while an intake is running, and a second TAB has its own
+           * counter regardless.
+           */
+          if (cloudStoredBytes > 0) useCloudStore.getState().noteStagedStorageBytes(cloudStoredBytes);
 
           set((current) => {
             const allDocuments = [...documents, ...current.documents];

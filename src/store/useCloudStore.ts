@@ -1023,6 +1023,7 @@ export const useCloudStore = create<CloudStore>((set, get) => ({
           session: null,
           workspaceId: '',
           workspaceRole: 'Owner',
+          stagedStorageBytes: 0,
         });
         return;
       }

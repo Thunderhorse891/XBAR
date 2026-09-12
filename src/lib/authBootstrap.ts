@@ -108,17 +108,24 @@ export function createLatestWriteGate(): LatestWriteGate {
  *
  * A previously signed-out browser has no previous id, which counts as a change
  * -- there is nothing to keep.
+ *
+ * The staged-storage reservation is retired for the same reason the workspace
+ * is. It counts bytes THIS account has put in the document bucket and not yet
+ * persisted as rows; carried into another account it is added to that account's
+ * authoritative total and refuses uploads that would have fit. It belongs to the
+ * identity that made it, so it leaves with the identity.
  */
 export type IdentityPublication = {
   workspaceReady: false;
   status?: 'loading';
   workspaceId?: '';
   workspaceRole?: 'Owner';
+  stagedStorageBytes?: 0;
 };
 
 export function identityPublication(previousUserId: string, nextUserId: string): IdentityPublication {
   if (previousUserId && previousUserId === nextUserId) return { workspaceReady: false };
-  return { workspaceReady: false, status: 'loading', workspaceId: '', workspaceRole: 'Owner' };
+  return { workspaceReady: false, status: 'loading', workspaceId: '', workspaceRole: 'Owner', stagedStorageBytes: 0 };
 }
 
 type AuthSessionLike = { access_token?: string } | null;

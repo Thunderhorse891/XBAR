@@ -231,12 +231,12 @@ test('document quota charges cloud bytes with a project and device bytes without
   assert.match(intake, /fileSizeBytes: uploadedAsset \? file\.size : undefined/);
   assert.match(
     intake,
-    /const chargedStorageGb =\s*\(isSupabaseConfigured\(\)\s*\?\s*documents[\s\S]{0,200}?filter\(\(document\) => Boolean\(document\.storagePath\)\)/,
-    'a cloud build must charge only records that reached the bucket',
+    /const cloudStoredBytes = documents\s*\.filter\(\(document\) => Boolean\(document\.storagePath\)\)/,
+    'the cloud figure must count only records that reached the bucket',
   );
   assert.match(
     intake,
-    /:\s*fileList\.reduce\(\(total, file\) => total \+ file\.size, 0\)\)\s*\/\s*\(1024 \* 1024 \* 1024\)/,
+    /const chargedStorageGb =\s*\(isSupabaseConfigured\(\) \? cloudStoredBytes : fileList\.reduce\(\(total, file\) => total \+ file\.size, 0\)\)/,
     'a local-only build must charge the batch it just stored on the device',
   );
   assert.match(
@@ -325,10 +325,23 @@ test('a second batch is measured against bytes already uploaded, not just persis
    * rounds to a zero increment and a run of small batches keeps measuring
    * itself against the pre-upload total.
    */
+  /*
+   * Staged in the same synchronous step that installs the records. Counted when
+   * each upload returned, it was not a reservation the next saved snapshot
+   * could honour: an autosave queued by an earlier edit could fire during the
+   * OCR that follows the upload, capture the reservation, and persist a
+   * snapshot that did not contain those records — releasing a reservation for
+   * bytes the database had still not been told about. Adjacency to the
+   * installing `set` is the property, so it is what is asserted.
+   */
   assert.match(
     intake,
-    /uploadedAsset = await uploadDocumentAssetToCloud\(\{[\s\S]{0,420}?noteStagedStorageBytes\(file\.size\)/,
-    'bytes must be staged as the upload succeeds, before the next batch can be gated',
+    /if \(cloudStoredBytes > 0\) useCloudStore\.getState\(\)\.noteStagedStorageBytes\(cloudStoredBytes\);\s*set\(\(current\) => \{/,
+    'the reservation must be taken in the same step that installs the records, with nothing between',
+  );
+  assert.ok(
+    !/noteStagedStorageBytes\(file\.size\)/.test(intake),
+    'a reservation taken at upload time can be released by a snapshot that does not contain the records',
   );
   assert.ok(
     !/planUsage\.storageUsedGb\) \* 1024/.test(intake),
