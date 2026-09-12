@@ -6,6 +6,7 @@ import {
   fullCoverage,
   imageRead,
   readableProcessingNote,
+  readDocumentWithCoverage,
 } from '../src/lib/documentIntelligence.js';
 
 test('a document read end to end says nothing', () => {
@@ -243,4 +244,56 @@ test('a restored note that is not a string never reaches the screen', () => {
   assert.equal(readableProcessingNote(['Only 1 of 9 pages were read.']), '');
   // And a real note is passed through untouched.
   assert.equal(readableProcessingNote('Only 1 of 9 pages were read.'), 'Only 1 of 9 pages were read.');
+});
+
+test('a PDF that never opened is reported as unreadable', () => {
+  /*
+   * `getDocument`, worker initialisation and text extraction all throw for a
+   * malformed or password-protected file, and the top-level catch returned
+   * `fullCoverage()`. The page counters cannot express that failure: totalPages
+   * is 0 because the document never opened, so the zero-of-N sentence had no N
+   * and the record looked exactly like a file examined in full.
+   *
+   * Same shape as the image path -- a catch returning an empty result is
+   * indistinguishable from an empty file unless it says which it was.
+   */
+  const note = describeDocumentCoverage({
+    totalPages: 0,
+    pagesRead: 0,
+    pagesOcrRead: 0,
+    truncated: false,
+    readFailed: true,
+  });
+  assert.match(note, /This file could not be read\./);
+  assert.doesNotMatch(note, /0 pages/, 'a file that never opened has no page count to claim');
+});
+
+test('a broken PDF really does come back marked unreadable, end to end', async () => {
+  /*
+   * Not just the sentence: the catch itself. This one IS drivable in node --
+   * pdfjs rejects "Invalid PDF structure." from `getDocument` and the handler
+   * returns rather than throwing past it -- unlike the image path, where
+   * tesseract fails asynchronously through process.nextTick and takes the
+   * process down, which is why that clause is documented as uncovered.
+   *
+   * Worth the round trip: a `readFailed` that is set in a catch nobody exercises
+   * is exactly the shape of wiring that has passed review while doing nothing.
+   */
+  const noise = console.error;
+  console.error = () => {};
+  try {
+    const broken = new File(
+      [new Uint8Array([0x25, 0x50, 0x44, 0x46, 0x2d, 0x31, 0x2e, 0x34, 0x0a, 0xff, 0xff])],
+      'broken.pdf',
+      {
+        type: 'application/pdf',
+      },
+    );
+    const result = await readDocumentWithCoverage(broken);
+    assert.equal(result.text, '');
+    assert.equal(result.coverage.readFailed, true, 'the customer must be told the file could not be read');
+    assert.match(describeDocumentCoverage(result.coverage), /This file could not be read\./);
+  } finally {
+    console.error = noise;
+  }
 });

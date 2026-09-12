@@ -104,6 +104,8 @@ export function describeDocumentCoverage(coverage: DocumentCoverage): string {
   const examined = coverage.pagesRead + coverage.pagesOcrRead;
   const parts: string[] = [];
   if (coverage.readFailed) {
+    // Says nothing about pages on purpose: a file that never opened has no page
+    // count to report, and inventing "0 pages" would be a claim of its own.
     parts.push('This file could not be read.');
   } else if (coverage.totalPages > 0 && examined === 0) {
     /*
@@ -347,8 +349,21 @@ async function extractPdfText(file: File): Promise<{ text: string; coverage: Doc
       },
     };
   } catch (error) {
+    /*
+     * Nothing was read, and `fullCoverage()` would say the opposite.
+     *
+     * `getDocument`, worker initialisation and text extraction all throw here --
+     * a malformed file, a password-protected one, a worker that could not load.
+     * The page counters cannot express that: `totalPages` is 0 because the
+     * document never opened, so the zero-of-N sentence has no N to speak of and
+     * the record looked exactly like a file examined in full.
+     *
+     * The same shape as the image path, and found the same way: a catch that
+     * returns an empty result is indistinguishable from an empty file unless it
+     * says which it was.
+     */
     console.error('PDF extraction failed', error);
-    return { text: '', coverage: fullCoverage() };
+    return { text: '', coverage: { ...fullCoverage(), readFailed: true } };
   }
 }
 

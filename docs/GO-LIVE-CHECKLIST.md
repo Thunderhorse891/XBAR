@@ -423,6 +423,16 @@ set before release.
   gains more logic and is not worth the indirection around three unbranching
   lines today.
 
+  The PDF equivalent was the same defect and is fully covered. `getDocument`,
+  worker initialisation and text extraction all throw for a malformed or
+  password-protected file, and the top-level catch returned `fullCoverage()` --
+  so a file that never opened looked exactly like one examined in full, and the
+  page counters could not say otherwise because `totalPages` was 0. It now
+  returns `readFailed: true`, and unlike the image path this catch IS drivable
+  in node: pdfjs rejects "Invalid PDF structure." and the handler returns rather
+  than throwing past it. The test feeds a real broken PDF end to end, so a
+  mutant flipping the flag fails on the behaviour rather than on a pure rule.
+
 - **A page the extractor judged unreadable was counted as read. Now fixed**
   (raised by Codex against `be53b3e`). `pagesRead` counted any page whose text
   survived in `pageTexts`, including one classified BELOW
