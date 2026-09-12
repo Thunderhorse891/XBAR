@@ -510,3 +510,55 @@ test('panel sheen overlays stay inside their cards (no sidebar wash)', async ({ 
   });
   expect(check, 'sheen hosts must not be position:static').toEqual([]);
 });
+
+test('a damaged PDF in a batch reports failure without losing the readable registration', async ({ page }) => {
+  await bootstrapWorkspace(page);
+  await page.getByRole('button', { name: 'Create', exact: true }).click();
+  await page.getByRole('menuitem', { name: 'Upload Document' }).click();
+  const drawer = page.getByRole('dialog', { name: 'Upload Document' });
+  await drawer.locator('input[type="file"]').setInputFiles([
+    {
+      name: 'damaged-registration.pdf',
+      mimeType: 'application/pdf',
+      buffer: Buffer.from('%PDF-1.7\ntruncated and unreadable'),
+    },
+    {
+      name: 'registration-batch-survivor.txt',
+      mimeType: 'text/plain',
+      buffer: Buffer.from(
+        'AMERICAN QUARTER HORSE ASSOCIATION CERTIFICATE OF REGISTRATION\nRegistered Name: BATCH SURVIVOR\nRegistration Number: 7003333\nSex: Mare Color: Bay',
+      ),
+    },
+  ]);
+  await drawer.getByRole('button', { name: 'Upload for review' }).click();
+  await expect(page).toHaveURL(/\/documents|\/horses\//, { timeout: 30_000 });
+  const result = await page.evaluate(async () => {
+    const modulePath = '/src/store/useXbarStore.ts';
+    const { useXbarStore } = await import(/* @vite-ignore */ modulePath);
+    const state = useXbarStore.getState();
+    return {
+      horses: state.horses.map((horse: { name: string }) => horse.name),
+      documents: state.documents.map((document: { title: string; processingNote?: string; state: string }) => ({
+        title: document.title,
+        processingNote: document.processingNote,
+        state: document.state,
+      })),
+    };
+  });
+  expect(result.horses).toEqual(['BATCH SURVIVOR']);
+  expect(result.documents).toHaveLength(2);
+  expect(
+    result.documents.some((document: { processingNote?: string }) =>
+      document.processingNote?.includes('This file could not be read.'),
+    ),
+  ).toBe(true);
+  await page
+    .getByRole('link', { name: /^Documents/ })
+    .first()
+    .click();
+  await page.getByRole('tab', { name: /Review/ }).click();
+  const row = page.getByRole('group', { name: 'damaged-registration review actions' });
+  await expect(row).toBeVisible();
+  await expect(row).not.toContainText('match confidence');
+  await expect(row).toContainText('Enter the details by hand below, or upload a clearer scan');
+});
