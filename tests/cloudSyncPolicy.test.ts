@@ -281,9 +281,22 @@ test('a second batch is measured against bytes already uploaded, not just persis
     /if \(knownBytes \+ incomingBytes > planUsage\.storageLimitGb/,
     'the comparison must use the greater of the two totals, not the server total alone',
   );
+  /*
+   * Counted from the records, not from `storageUsedGb`. That field passes
+   * through `normalizeUsage` — `Math.round(value * 1000) / 1000`, three decimals
+   * of a gigabyte — so an upload under about half a MiB rounds to a zero
+   * increment and a run of small batches keeps measuring itself against the
+   * pre-upload total. A rounded display value is the wrong input for a capacity
+   * decision.
+   */
   assert.match(
     intake,
-    /const localBytes = Math\.max\(0, planUsage\.storageUsedGb\) \* 1024 \* 1024 \* 1024/,
-    'local accounting is in GB and the RPC returns bytes; comparing them unconverted would compare 1 to 10^9',
+    /const localBytes = state\.documents\.reduce\(/,
+    'staged bytes must be counted exactly from the records, not reconstructed from a rounded GB display value',
+  );
+  assert.match(intake, /document\.storagePath \? total \+ \(document\.fileSizeBytes \?\? 0\) : total/);
+  assert.ok(
+    !/planUsage\.storageUsedGb\) \* 1024/.test(intake),
+    'the rounded gigabyte value must not be the capacity input',
   );
 });

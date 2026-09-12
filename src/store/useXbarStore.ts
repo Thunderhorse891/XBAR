@@ -822,7 +822,20 @@ export const useXbarStore = create<XbarStore>()(
              * backstop and stays one -- a client-side reservation cannot be
              * atomic across devices.
              */
-            const localBytes = Math.max(0, planUsage.storageUsedGb) * 1024 * 1024 * 1024;
+            /*
+             * Counted from the records themselves, NOT from `storageUsedGb`.
+             * That field goes through `normalizeUsage`, which is
+             * `Math.round(value * 1000) / 1000` -- three decimal places of a
+             * gigabyte, about 1 MiB. Anything under roughly half that rounds to
+             * a zero increment, so a run of small batches would keep measuring
+             * itself against the pre-upload total. A display value is the wrong
+             * input for a capacity decision; these are the exact bytes this
+             * client has put in the bucket and will push as `size_bytes`.
+             */
+            const localBytes = state.documents.reduce(
+              (total, document) => (document.storagePath ? total + (document.fileSizeBytes ?? 0) : total),
+              0,
+            );
             const knownBytes = Math.max(storedBytes, localBytes);
             if (knownBytes + incomingBytes > planUsage.storageLimitGb * 1024 * 1024 * 1024) {
               // Known to be over cap: refusing is right, and it is the one
