@@ -219,3 +219,43 @@ test('ready horses, losses and unpriced inventory produce honest labels and rank
   assert.ok(text.includes('N/A'));
   await assertFits(bytes);
 });
+
+// The export must work under a Pages base, and a first successful load must
+// remain usable without a service worker on the next offline attempt.
+test('report artwork honors the deployment base and survives offline after caching', async () => {
+  const { reportBrandAssetPaths, loadReportBranding } = await import('../src/lib/reportBranding.js');
+  assert.deepEqual(reportBrandAssetPaths('/XBAR/'), [
+    '/XBAR/brand/xbar-report-horse.png',
+    '/XBAR/brand/xbar-report-mark.png',
+    '/XBAR/brand/xbar-report-watermark.png',
+  ]);
+  const originals = await branding();
+  const values = [originals.logo, originals.mark, originals.watermark];
+  const cacheValues = new Map<string, Response>();
+  const cache = {
+    match: async (key: RequestInfo | URL) => cacheValues.get(String(key))?.clone(),
+    put: async (key: RequestInfo | URL, response: Response) => {
+      cacheValues.set(String(key), response.clone());
+    },
+  } as Pick<Cache, 'match' | 'put'>;
+  const paths: string[] = [];
+  const online = (async (path: RequestInfo | URL) => {
+    paths.push(String(path));
+    return new Response(new Uint8Array(values[reportBrandAssetPaths('/XBAR/').indexOf(String(path))]));
+  }) as typeof fetch;
+  await loadReportBranding('/XBAR/', online, cache);
+  assert.deepEqual(paths, reportBrandAssetPaths('/XBAR/'));
+  const offline = (async () => {
+    throw new Error('offline');
+  }) as typeof fetch;
+  const saved = await loadReportBranding('/XBAR/', offline, cache);
+  assert.deepEqual(saved.logo, new Uint8Array(originals.logo));
+  assert.deepEqual(saved.mark, new Uint8Array(originals.mark));
+  await assert.rejects(loadReportBranding('/different/', offline, cache), /Reconnect/);
+  // A successful HTML route fallback is not an image and must not poison cache.
+  await loadReportBranding('/XBAR/', (async () => new Response('<html>not an image</html>')) as typeof fetch, cache);
+  assert.deepEqual(
+    new Uint8Array(await cacheValues.get(paths[0])!.clone().arrayBuffer()),
+    new Uint8Array(originals.logo),
+  );
+});

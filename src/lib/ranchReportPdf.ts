@@ -3,20 +3,7 @@ import { toDrawableText } from '../../api/_lib/pdf.js';
 import type { RanchReport } from './ranchReport.js';
 import { reportDecisions, reportDollars as dollars, reportException } from './ranchReportDecisions.js';
 
-type ReportBranding = { logo: Uint8Array; mark: Uint8Array; watermark: Uint8Array };
-async function loadReportBranding(): Promise<ReportBranding> {
-  const load = async (path: string) => {
-    const response = await fetch(path);
-    if (!response.ok) throw new Error('Report branding could not be loaded. Please try again.');
-    return new Uint8Array(await response.arrayBuffer());
-  };
-  const [logo, mark, watermark] = await Promise.all([
-    load('/brand/xbar-report-horse.png'),
-    load('/brand/xbar-report-mark.png'),
-    load('/brand/xbar-report-watermark.png'),
-  ]);
-  return { logo, mark, watermark };
-}
+import { loadReportBranding, type ReportBranding } from './reportBranding.js';
 
 /** Decision-oriented US Letter report, with vector charts and searchable tables. */
 export async function renderReportPdf(

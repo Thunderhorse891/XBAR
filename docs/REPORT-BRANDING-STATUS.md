@@ -4,7 +4,7 @@ The horse header and X footer use the PNG artwork supplied by Erin on September 
 
 PDF exports display **XBAR™**, not a registered-mark symbol. They do not claim certification, legal review, independent audit, or company registration. CSV exports remain plain data and cannot carry an image watermark.
 
-Images are packaged with the application and loaded from the same origin; no report records are uploaded to generate the PDF. A first export needs those static assets available. Missing branding fails visibly rather than silently producing an unbranded report. The existing service worker caches successful brand asset requests for subsequent offline use; offline-first-use availability has not been established.
+Images are packaged with the application and loaded from the same origin; no report records are uploaded to generate the PDF. A first export needs those static assets available. Missing branding fails visibly rather than silently producing an unbranded report. The report loader also caches successful PNG responses independently of the service worker and reuses them when later requests fail. Paths honor the deployment base. First-use offline export still requires previously available artwork; it is not claimed.
 
 ## Still requires evidence
 
