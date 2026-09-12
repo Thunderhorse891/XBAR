@@ -46,6 +46,56 @@ export const fullCoverage = (): DocumentCoverage => ({
 });
 
 /**
+ * How many pages contributed text of their OWN that the reader trusted.
+ *
+ * Pure, because the call site cannot be tested: it needs a real pdfjs document.
+ *
+ * A page whose text layer fell below `MIN_TEXT_LAYER_CHARS` was explicitly
+ * CLASSIFIED as unusable -- that classification is the reason OCR was attempted
+ * on it. If OCR then failed or returned nothing, the thin layer stays in
+ * `pageTexts` and used to be counted as a page read, purely because it was
+ * non-empty. A scan whose every page carries the same boilerplate header
+ * therefore reported full coverage while the extractor had judged that not one
+ * page was readable, and the customer was told nothing at all.
+ *
+ * So a page counts here only if its own text layer was usable. Pages OCR
+ * rescued are counted separately, as `pagesOcrRead`; pages that were neither
+ * are counted by nobody, which is the point.
+ */
+export function countPagesRead(
+  pageTexts: readonly string[],
+  unusableTextLayers: ReadonlySet<number>,
+  ocrPages: ReadonlySet<number>,
+): number {
+  return pageTexts.filter((pageText, index) => {
+    const pageNumber = index + 1;
+    if (ocrPages.has(pageNumber)) return false;
+    if (unusableTextLayers.has(pageNumber)) return false;
+    return pageText.trim().length > 0;
+  }).length;
+}
+
+/**
+ * The processing note as something safe to render, whatever is in the record.
+ *
+ * `processingNote` is written by this module, so in a freshly read document it
+ * is always a string. It also arrives from IMPORTS and cloud restores, and the
+ * persisted-state validator's document entry does not list it -- a new field
+ * the table has not been taught about -- so a damaged or hand-edited backup can
+ * carry `{}` or a number straight through to the screen. React then throws
+ * "Objects are not valid as a React child" and takes the Documents page down
+ * with it: a defect in a backup becomes a broken app.
+ *
+ * Guarding at the point of render rather than at the boundary is deliberate for
+ * now -- the validator's shape table belongs to the report/store work in
+ * progress, and there is exactly one render site -- but the boundary is the
+ * better home for it and the table entry would be belt and braces.
+ */
+export function readableProcessingNote(note: unknown): string {
+  return typeof note === 'string' ? note : '';
+}
+
+/**
  * A plain sentence for a partial read, or '' when the whole file was examined.
  *
  * Pure, so what the customer is told can be tested without a browser.
@@ -288,9 +338,7 @@ async function extractPdfText(file: File): Promise<{ text: string; coverage: Doc
       text,
       coverage: {
         totalPages: pdf.numPages,
-        // A page counts as read only if something came off it; a blank page
-        // that yielded nothing was examined but contributes no facts.
-        pagesRead: pageTexts.filter((pageText, index) => pageText.trim() && !ocrPages.has(index + 1)).length,
+        pagesRead: countPagesRead(pageTexts, new Set(pagesWithoutText), ocrPages),
         pagesOcrRead: ocrPages.size,
         truncated: text.length > TEXT_PREVIEW_LIMIT,
         // A PDF reports its own shortfall through the page counters: the

@@ -1,6 +1,12 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { describeDocumentCoverage, fullCoverage, imageRead } from '../src/lib/documentIntelligence.js';
+import {
+  countPagesRead,
+  describeDocumentCoverage,
+  fullCoverage,
+  imageRead,
+  readableProcessingNote,
+} from '../src/lib/documentIntelligence.js';
 
 test('a document read end to end says nothing', () => {
   assert.equal(describeDocumentCoverage(fullCoverage()), '');
@@ -167,3 +173,74 @@ test('a failed image OCR is carried into the coverage, an empty one is not', () 
  * is worth doing if this area gains more logic; today it would add indirection
  * around three lines that cannot branch.
  */
+
+test('a page whose text layer was judged unusable is not counted as read', () => {
+  /*
+   * The extractor classifies a page below MIN_TEXT_LAYER_CHARS as unusable --
+   * that classification is the whole reason it attempts OCR on it. When OCR
+   * then fails or returns nothing, the thin layer stays in `pageTexts`, and it
+   * used to be counted as a page read purely because it was non-empty.
+   *
+   * A scan whose every page carries the same boilerplate header therefore
+   * reported FULL coverage while the extractor had judged not one page
+   * readable, so `describeDocumentCoverage` said nothing.
+   */
+  const pageTexts = ['REGISTRY COPY', 'REGISTRY COPY', 'REGISTRY COPY'];
+  const unusable = new Set([1, 2, 3]);
+  assert.equal(countPagesRead(pageTexts, unusable, new Set()), 0);
+
+  // And the customer is now told, rather than shown full coverage.
+  const note = describeDocumentCoverage({
+    totalPages: 3,
+    pagesRead: countPagesRead(pageTexts, unusable, new Set()),
+    pagesOcrRead: 0,
+    truncated: false,
+    readFailed: false,
+  });
+  assert.match(note, /None of the 3 pages could be read\./);
+});
+
+test('a page OCR rescued is counted once, as an OCR page', () => {
+  // Otherwise the same page is counted twice and coverage overstates itself.
+  const pageTexts = ['REGISTRY COPY', 'BAY MARE FOALED 2019 SIRE ...'];
+  assert.equal(countPagesRead(pageTexts, new Set([1, 2]), new Set([2])), 0);
+
+  /*
+   * And pinned independently of the unusable set, because today's caller only
+   * ever OCRs pages it has already classified unusable -- so the OCR check is
+   * redundant THERE and a mutant removing it survived the case above. This
+   * function is exported and its own contract is the thing under test: a page
+   * counted as an OCR page is never also counted as a text page, whatever the
+   * caller happens to pass.
+   */
+  assert.equal(countPagesRead(['a full page of usable registration text'], new Set(), new Set([1])), 0);
+});
+
+test('a page with a usable text layer of its own is counted', () => {
+  const pageTexts = ['a full page of registration text well past the threshold', ''];
+  assert.equal(countPagesRead(pageTexts, new Set([2]), new Set()), 1);
+});
+
+test('a blank page with a usable-length classification still contributes nothing', () => {
+  // Emptiness is checked as well as classification: a page that yielded no text
+  // was examined but contributes no facts.
+  assert.equal(countPagesRead(['', ''], new Set(), new Set()), 0);
+});
+
+test('a restored note that is not a string never reaches the screen', () => {
+  /*
+   * `processingNote` is written by this module, so a freshly read document
+   * always carries a string. It also arrives from imports and cloud restores,
+   * and the persisted-state validator's document entry does not list this new
+   * field, so a damaged or hand-edited backup carries `{}` or a number straight
+   * through. React then throws "Objects are not valid as a React child" and
+   * takes the Documents page down: a defect in a backup becomes a broken app.
+   */
+  assert.equal(readableProcessingNote({}), '');
+  assert.equal(readableProcessingNote(42), '');
+  assert.equal(readableProcessingNote(null), '');
+  assert.equal(readableProcessingNote(undefined), '');
+  assert.equal(readableProcessingNote(['Only 1 of 9 pages were read.']), '');
+  // And a real note is passed through untouched.
+  assert.equal(readableProcessingNote('Only 1 of 9 pages were read.'), 'Only 1 of 9 pages were read.');
+});

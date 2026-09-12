@@ -15,6 +15,7 @@ import { buildDocumentTrustProfile } from '@/lib/xbarPhaseTwo';
 import { useUiStore } from '@/store/useUiStore';
 import { useCloudStore } from '@/store/useCloudStore';
 import { useCurrentRoleCapability, useXbarStore } from '@/store/useXbarStore';
+import { readableProcessingNote } from '@/lib/documentIntelligence';
 import { buildHorseEnrichmentFromEntities, normalizeOwnershipRecord } from '@/store/xbarStoreLogic';
 import type { DocumentRecord, DocumentSource, SalePacketBuild } from '@/types/xbar';
 import { documentSources } from '@/features/documents/constants';
@@ -853,9 +854,9 @@ export default function Documents() {
                               {/* Only ever present when the reader stopped
                                   short of the whole file. Silence here used to
                                   mean "read in full" and did not. */}
-                              {document.processingNote ? (
+                              {readableProcessingNote(document.processingNote) ? (
                                 <span className="xs-muted" role="note">
-                                  {document.processingNote}
+                                  {readableProcessingNote(document.processingNote)}
                                 </span>
                               ) : null}
                             </div>

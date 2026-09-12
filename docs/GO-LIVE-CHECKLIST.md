@@ -423,6 +423,38 @@ set before release.
   gains more logic and is not worth the indirection around three unbranching
   lines today.
 
+- **A page the extractor judged unreadable was counted as read. Now fixed**
+  (raised by Codex against `be53b3e`). `pagesRead` counted any page whose text
+  survived in `pageTexts`, including one classified BELOW
+  `MIN_TEXT_LAYER_CHARS` -- the very classification that sends a page to OCR --
+  when OCR then failed or returned nothing. A scan whose every page carries the
+  same boilerplate header therefore reported full coverage while the extractor
+  had judged not one page readable, so nothing was said at all. Counting now
+  lives in a pure `countPagesRead()`, because the call site needs a real pdfjs
+  document and cannot be tested.
+
+  One of the four rules there is redundant at today's only call site: OCR is
+  attempted only on pages already classified unusable, so the OCR exclusion can
+  never fire independently. A mutant removing it survived until a case was added
+  pinning the exported function's own contract rather than the caller's usage.
+
+- **A damaged backup could take the Documents page down. Now fixed** (raised by
+  Codex against `be53b3e`). `processingNote` is a field this work added, and the
+  persisted-state validator's document entry does not list it, so an import or
+  cloud restore carrying `{}` or a number reaches JSX and React throws "Objects
+  are not valid as a React child". A defect in a backup became a broken app.
+  Guarded at the single render site via `readableProcessingNote()`. The
+  validator's shape table has an `optionalStrings` mechanism that would stop it
+  at the boundary instead, which is the better home; that table belongs to the
+  report/store work in flight, so it is flagged there rather than edited here.
+
+- **Observed once and NOT reproduced**: `password-reset.spec.ts:680` ("a grant
+  spent by another tab mid-submission never shows this one a refusal") failed in
+  one full auth-smoke run at `--retries=0`. It then passed 8/8 in isolation and
+  4/4 in full-suite runs, and the failing run left no artifacts. It is recorded
+  rather than dismissed because a "flaky test" chased in this same PR turned out
+  to be a real cross-tab defect. If it recurs, capture the trace before re-running.
+
 - Not claimed: none of this was exercised against a live GoTrue or a live
   Supabase project. The browser suites intercept Auth and PostgREST, so what is
   established is the client's behaviour, not the server's.
