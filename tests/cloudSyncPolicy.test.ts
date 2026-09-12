@@ -210,7 +210,7 @@ test('a known over-cap batch is still refused outright', async () => {
    */
   assert.match(
     intake,
-    /storedBytes \+ incomingBytes > planUsage\.storageLimitGb[\s\S]{0,240}?return \{[\s\S]{0,160}?ok: false,[\s\S]{0,160}?Storage limit reached for the current plan\./,
+    /knownBytes \+ incomingBytes > planUsage\.storageLimitGb[\s\S]{0,240}?return \{[\s\S]{0,160}?ok: false,[\s\S]{0,160}?Storage limit reached for the current plan\./,
     'a batch known to be over cap must be refused by that branch, not merely mentioned somewhere',
   );
 });
@@ -261,4 +261,29 @@ test('an autosave never revokes an invitation it simply has not seen', async () 
   // Revocation stays an explicit status update, which is why inferring deletion
   // buys nothing.
   assert.match(cloud, /\.from\('workspace_invitations'\)\s*\.update\(\{\s*status: nextStatus/);
+});
+
+test('a second batch is measured against bytes already uploaded, not just persisted rows', async () => {
+  /*
+   * `xbar_workspace_storage_bytes` sums `documents` and `sale_packets` ROWS. A
+   * row lands about 1.6 seconds after its object does — CloudBootstrap's
+   * autosave debounce — so a batch started inside that window was measured
+   * against a total that predated the previous one, and both could pass just
+   * under the cap. The later upsert is then rejected by the storage trigger,
+   * which is the wedge this gate exists to prevent.
+   */
+  const store = await readFile('src/store/useXbarStore.ts', 'utf8');
+  const intake = store.slice(store.indexOf('createDocumentIntake:'), store.indexOf('reviewDocument:'));
+
+  assert.match(intake, /const knownBytes = Math\.max\(storedBytes, localBytes\)/);
+  assert.match(
+    intake,
+    /if \(knownBytes \+ incomingBytes > planUsage\.storageLimitGb/,
+    'the comparison must use the greater of the two totals, not the server total alone',
+  );
+  assert.match(
+    intake,
+    /const localBytes = Math\.max\(0, planUsage\.storageUsedGb\) \* 1024 \* 1024 \* 1024/,
+    'local accounting is in GB and the RPC returns bytes; comparing them unconverted would compare 1 to 10^9',
+  );
 });

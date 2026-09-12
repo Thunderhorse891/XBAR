@@ -804,7 +804,27 @@ export const useXbarStore = create<XbarStore>()(
           try {
             const storedBytes = await loadWorkspaceStorageBytes();
             const incomingBytes = fileList.reduce((total, file) => total + file.size, 0);
-            if (storedBytes + incomingBytes > planUsage.storageLimitGb * 1024 * 1024 * 1024) {
+            /*
+             * The RPC is authoritative about PERSISTED ROWS, not about bytes.
+             * It sums `documents` and `sale_packets`, and a row lands about 1.6
+             * seconds after its object does -- CloudBootstrap's autosave
+             * debounce. A second batch started inside that window would be
+             * measured against a total that predates the first one, and both
+             * could pass just under the cap.
+             *
+             * Local accounting is ahead in exactly that window; the server is
+             * ahead when another device uploaded. Taking the greater is correct
+             * in both directions and can never under-count, which is the only
+             * direction that costs anything here.
+             *
+             * This closes the window within a client. Two devices uploading in
+             * the same instant still meet at the storage trigger, which is the
+             * backstop and stays one -- a client-side reservation cannot be
+             * atomic across devices.
+             */
+            const localBytes = Math.max(0, planUsage.storageUsedGb) * 1024 * 1024 * 1024;
+            const knownBytes = Math.max(storedBytes, localBytes);
+            if (knownBytes + incomingBytes > planUsage.storageLimitGb * 1024 * 1024 * 1024) {
               // Known to be over cap: refusing is right, and it is the one
               // answer the customer can act on by upgrading.
               return {
