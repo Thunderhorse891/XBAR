@@ -20,12 +20,14 @@ declare
   other_workspace uuid := gen_random_uuid();
   shared_object text;
   legacy_object text;
+  retained_object text;
   junk_object text := 'not-a-uuid/documents/fixture/junk.pdf';
   media_object text;
   affected integer;
 begin
   shared_object := workspace::text || '/documents/fixture/shared.pdf';
   legacy_object := admin_id::text || '/documents/fixture/legacy.pdf';
+  retained_object := admin_id::text || '/documents/fixture/retained.pdf';
   media_object := workspace::text || '/horses/fixture/photo.jpg';
 
   insert into auth.users (id, email, email_confirmed_at) values
@@ -57,6 +59,7 @@ begin
   insert into storage.objects (bucket_id, name, owner) values
     ('horse-documents', shared_object, admin_id),
     ('horse-documents', legacy_object, admin_id),
+    ('horse-documents', retained_object, admin_id),
     ('horse-documents', junk_object, admin_id),
     ('horse-media', media_object, admin_id);
 
@@ -193,8 +196,81 @@ begin
   -- This migration grants nothing outside its own bucket.
   if exists (select 1 from storage.objects where bucket_id = 'horse-media' and name = media_object)
     then raise exception 'Document policies granted reads in the media bucket'; end if;
+
+  -- ------------------------------------------------------------ upsert
+  -- Supabase's `upload({ upsert: true })` is INSERT ... ON CONFLICT DO UPDATE,
+  -- which Postgres checks against BOTH the insert and the update policy. It is
+  -- the one path that could satisfy neither on its own and still write, so it
+  -- is exercised rather than assumed.
+  insert into storage.objects (bucket_id, name, owner)
+  values ('horse-documents', shared_object, admin_id)
+  on conflict (bucket_id, name) do update set owner = excluded.owner;
+  get diagnostics affected = row_count;
+  if affected <> 1 then raise exception 'A manager cannot replace a file in their own workspace'; end if;
+  begin
+    insert into storage.objects (bucket_id, name, owner)
+    values ('horse-documents', other_workspace::text || '/documents/fixture/upsert.pdf', admin_id)
+    on conflict (bucket_id, name) do update set owner = excluded.owner;
+    raise exception 'Upsert wrote into another tenant workspace';
+  exception when insufficient_privilege then null;
+  end;
+
+  -- ------------------------------------------------------------ delete
+  -- DELETE carries no policy and so is denied for everyone, the workspace owner
+  -- included. The application never removes an object, and leaving the command
+  -- unpoliced is the safe default for the one operation that destroys a
+  -- customer's file; account deletion runs server-side with the service role
+  -- and is unaffected. With no policy granting it, no row is visible to delete,
+  -- so the refusal is an empty delete rather than an error.
+  delete from storage.objects where bucket_id = 'horse-documents' and name = shared_object;
+  get diagnostics affected = row_count;
+  if affected <> 0 then raise exception 'A manager deleted a stored file through the client'; end if;
+  reset role;
+
+  perform set_config('request.jwt.claim.sub', owner_id::text, true);
+  set local role authenticated;
+  delete from storage.objects where bucket_id = 'horse-documents' and name = shared_object;
+  get diagnostics affected = row_count;
+  if affected <> 0 then raise exception 'The workspace owner deleted a stored file through the client'; end if;
+  reset role;
+
+  -- --------------------------------------------------- leaving the ranch
+  -- Access ends when membership does, both ways a membership can end: the row
+  -- removed outright, and the row deactivated. A file is only as shared as the
+  -- membership behind it.
+  delete from public.workspace_memberships where workspace_id = workspace and user_id = reader_id;
+  perform set_config('request.jwt.claim.sub', reader_id::text, true);
+  set local role authenticated;
+  if exists (select 1 from storage.objects where bucket_id = 'horse-documents' and name = shared_object)
+    then raise exception 'A removed member still reads the workspace files'; end if;
+  reset role;
+
+  update public.workspace_memberships set status = 'inactive'
+  where workspace_id = workspace and user_id = admin_id;
+  perform set_config('request.jwt.claim.sub', admin_id::text, true);
+  set local role authenticated;
+  if exists (select 1 from storage.objects where bucket_id = 'horse-documents' and name = shared_object)
+    then raise exception 'A deactivated member still reads the workspace files'; end if;
+  begin
+    insert into storage.objects (bucket_id, name, owner)
+    values ('horse-documents', workspace::text || '/documents/fixture/after-removal.pdf', admin_id);
+    raise exception 'A deactivated member still uploads to the workspace';
+  exception when insufficient_privilege then null;
+  end;
+  -- KNOWN RESIDUAL, asserted rather than left to be discovered. The SELECT
+  -- policy keeps uploader-keyed objects readable by their uploader, which is
+  -- what stops this migration breaking every document a customer already has.
+  -- The cost is that a member who leaves keeps read access to the files THEY
+  -- uploaded under the old scheme. It is bounded three ways: only objects
+  -- written before this migration, only for the account that wrote them, and
+  -- only until that file is re-uploaded -- which is exactly what the app now
+  -- tells a teammate to do when an old file will not open for them. Closing it
+  -- instead would make every pre-existing document unopenable for everyone,
+  -- including its uploader, which is a worse day for a real ranch.
+  if (select count(*) from storage.objects where bucket_id = 'horse-documents' and name = retained_object) <> 1
+    then raise exception 'Legacy objects stopped being readable by their uploader'; end if;
   reset role;
 end;
 $check$;
 rollback;
-select 'PASS: workspace members share documents, owners without membership rows included; inactive members, other tenants and signed-out callers refused; uploader-keyed paths no longer mintable but legacy objects still readable and migratable; non-workspace paths denied rather than raising; all fixtures rolled back' as result;
+select 'PASS: workspace members share documents, owners without membership rows included; inactive, removed, outside-tenant and signed-out callers refused on read and write; insert, update, upsert and delete all covered; uploader-keyed paths no longer mintable but legacy objects still readable and migratable; non-workspace paths denied rather than raising; all fixtures rolled back' as result;

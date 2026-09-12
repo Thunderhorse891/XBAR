@@ -43,7 +43,25 @@
 -- migration is how storage gets orphaned.
 --
 -- DELETE stays unpoliced, and so stays denied. The application never removes an
--- object, and widening deletion is not part of fixing a read.
+-- object, and widening deletion is not part of fixing a read. Account deletion
+-- runs server-side with the service role and is unaffected by these policies.
+--
+-- ROLLBACK, and it is NOT symmetric. Dropping these policies and restoring the
+-- uploader-keyed ones strands every document uploaded after this ran: those
+-- objects are named `<workspace-id>/...`, which matches no `auth.uid()`, so
+-- nobody -- not even the uploader -- could open them. The safe reversal is to
+-- ADD the old policies back rather than remove these: they are PERMISSIVE, so
+-- the two sets OR together and both path shapes stay readable. Only once no
+-- object under a workspace-keyed path matters is it safe to drop these, and
+-- roll the client back first so it stops writing them. The migration itself is
+-- re-runnable: it drops by name before creating, and rewrites no rows.
+--
+-- KNOWN RESIDUAL: the legacy SELECT branch means someone who leaves a ranch
+-- keeps read access to files THEY uploaded before this migration. Bounded to
+-- pre-existing objects, to the account that wrote them, and to before the file
+-- is re-uploaded. Removing the branch instead would make every document a
+-- customer already has unopenable by everyone, which is worse. Asserted, not
+-- merely noted, in supabase/checks/document-storage-live-rollback.sql.
 
 drop policy if exists "horse documents upload own" on storage.objects;
 drop policy if exists "horse documents read own" on storage.objects;
