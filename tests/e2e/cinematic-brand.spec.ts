@@ -48,3 +48,36 @@ test('cinematic brand concept saves data until playback is requested', async ({ 
     .poll(() => page.locator('video').evaluate((node: HTMLVideoElement) => node.currentTime))
     .toBeGreaterThan(0);
 });
+
+test('cinematic brand concept settles once and replays on request', async ({ page }) => {
+  await page.goto('/brand/cinematic-preview/index.html');
+  const video = page.locator('video');
+  await expect.poll(() => video.evaluate((node: HTMLVideoElement) => node.currentTime)).toBeGreaterThan(0);
+  expect(await video.evaluate((node: HTMLVideoElement) => node.loop)).toBe(false);
+  await video.evaluate((node: HTMLVideoElement) => {
+    node.currentTime = node.duration - 0.2;
+  });
+  await expect(page.getByRole('button', { name: 'Replay motion' })).toBeVisible();
+  expect(await video.evaluate((node: HTMLVideoElement) => node.paused)).toBe(true);
+  await page.getByRole('button', { name: 'Replay motion' }).click();
+  await expect.poll(() => video.evaluate((node: HTMLVideoElement) => node.paused)).toBe(false);
+  expect(await video.evaluate((node: HTMLVideoElement) => node.currentTime)).toBeLessThan(3);
+});
+
+test('cinematic brand concept preserves manual pause and honors newly reduced motion', async ({ page }) => {
+  await page.goto('/brand/cinematic-preview/index.html');
+  const video = page.locator('video');
+  await expect.poll(() => video.evaluate((node: HTMLVideoElement) => node.currentTime)).toBeGreaterThan(0);
+  await page.getByRole('button', { name: 'Pause motion' }).click();
+  await page.emulateMedia({ reducedMotion: 'reduce' });
+  await page.emulateMedia({ reducedMotion: 'no-preference' });
+  await expect(page.getByRole('button', { name: 'Play motion' })).toBeVisible();
+  expect(await video.evaluate((node: HTMLVideoElement) => node.paused)).toBe(true);
+  await page.getByRole('button', { name: 'Play motion' }).click();
+  await page.emulateMedia({ reducedMotion: 'reduce' });
+  await expect.poll(() => video.evaluate((node: HTMLVideoElement) => node.paused)).toBe(true);
+  await page.getByRole('button', { name: 'Play motion' }).click();
+  await expect.poll(() => video.evaluate((node: HTMLVideoElement) => node.paused)).toBe(false);
+  await page.emulateMedia({ reducedMotion: 'no-preference' });
+  await expect(page.getByRole('button', { name: 'Pause motion' })).toBeVisible();
+});

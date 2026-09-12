@@ -4,10 +4,11 @@ const film = document.getElementById('film'),
 const limitedNetwork =
   !!navigator.connection?.saveData || ['2g', 'slow-2g'].includes(navigator.connection?.effectiveType);
 let paused = pref.matches || limitedNetwork,
-  visible = true;
+  visible = true,
+  chosenByHand = false;
 function sync() {
   document.body.classList.toggle('paused', paused);
-  toggle.textContent = paused ? 'Play motion' : 'Pause motion';
+  toggle.textContent = film.ended ? 'Replay motion' : paused ? 'Play motion' : 'Pause motion';
   toggle.setAttribute('aria-pressed', String(paused));
   if (paused || !visible || document.hidden) film.pause();
   else {
@@ -23,11 +24,20 @@ function sync() {
   }
 }
 toggle.addEventListener('click', () => {
+  chosenByHand = true;
+  if (film.ended) film.currentTime = 0;
   paused = !paused;
   sync();
 });
 pref.addEventListener('change', (e) => {
-  paused = e.matches || limitedNetwork;
+  // A newly enabled accessibility preference stops playback. Disabling it
+  // must not undo an explicit manual pause or a user's playback choice.
+  if (e.matches) paused = true;
+  else if (!chosenByHand) paused = limitedNetwork || film.ended;
+  sync();
+});
+film.addEventListener('ended', () => {
+  paused = true;
   sync();
 });
 new IntersectionObserver(

@@ -7,7 +7,7 @@ Erin's updated direction is graphics-rich and cinematic. This supersedes the ear
 - Preview: `/brand/cinematic-preview/index.html`, separate from normal application navigation.
 - Original supplied animated horse asset, unchanged; the visible Meta AI mark remains.
 - Charcoal/silver scene, blue edge detail, interactive identity/care/ownership graphic, sale-preparation and records views, and an illustrative executive-report graphic.
-- Pause/resume, reduced-motion support, save-data preference, muted inline playback and hidden/offscreen video suspension.
+- Play-once entrance with pause/resume and replay, reduced-motion support, save-data preference, muted inline playback and hidden/offscreen video suspension.
 - External local CSS/JavaScript works with the existing Content Security Policy. No external media service or paid API.
 - Desktop/mobile visual checks and Playwright coverage exercise playback, pause, keyboard tabs, reduced motion and horizontal overflow.
 
