@@ -129,6 +129,15 @@ test('buyer follow-up shows an empty state on a fresh workspace', async ({ page 
 test('documents shows an empty state on a fresh workspace', async ({ page }) => {
   await bootstrapWorkspace(page);
   await page.getByRole('link', { name: 'Documents', exact: true }).click();
+  // A workspace with nothing in it opens on Upload, not on an empty review
+  // queue: with no documents the useful next step is adding one, and showing
+  // someone a clear queue they never filled reads as a dead end. This asserted
+  // the pre-d9717cc landing stage and went unnoticed because CI does not run
+  // this suite.
+  await expect(page.getByText('No documents yet')).toBeVisible();
+  await expect(page.getByRole('tab', { name: /Upload/ })).toHaveAttribute('aria-selected', 'true');
+  // The review stage still says plainly that nothing is waiting there.
+  await page.getByRole('tab', { name: /Review/ }).click();
   await expect(page.getByText('Review queue is clear')).toBeVisible();
 });
 

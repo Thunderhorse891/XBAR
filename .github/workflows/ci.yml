@@ -10,7 +10,9 @@ on:
 jobs:
   ci:
     runs-on: ubuntu-latest
-    timeout-minutes: 20
+    # The e2e suite alone runs ~7 minutes; 20 left no headroom once it runs
+    # in full rather than as a grep.
+    timeout-minutes: 35
 
     steps:
       - name: Checkout
@@ -53,8 +55,14 @@ jobs:
       - name: Production smoke test (built dist)
         run: npm run test:prod-smoke
 
-      - name: Document intake and report export
-        run: npx playwright test --grep "registration intake extracts|unreadable paper|multi-file batch|Needs-Review document|review-stage|scanned registration behind a text cover sheet|longer than the page budget" --retries=0
+      # The whole ./tests/e2e suite, not a grep of it. This used to run a
+      # hand-listed subset of the same config, so the rest of the suite could
+      # rot unnoticed -- and did: `documents shows an empty state on a fresh
+      # workspace` asserted a landing stage that d9717cc deliberately changed,
+      # and stayed red through a dozen green CI runs because nothing ran it.
+      # Every test named in that old --grep lives in this suite.
+      - name: Product surfaces, document intake and report export
+        run: npm run test:e2e -- --retries=0
 
       # Drives the password-recovery flow on a rendered, Supabase-configured
       # web bundle. The prod-smoke suite above cannot cover it: build:local
