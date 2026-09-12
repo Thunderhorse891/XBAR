@@ -45,6 +45,42 @@ export function safeDocumentSegment(value, fallback) {
  * upload with a 502 or a skip — both of which are better than writing bytes
  * that the ranch cannot read and will not know to re-upload.
  */
+/**
+ * May this caller name an object that already exists, rather than sending bytes?
+ *
+ * The bulk endpoint accepts a `storagePath` so a client that has just uploaded
+ * a file directly to Storage can ask for it to be ingested without sending the
+ * bytes again. It then downloads that path with the SERVICE ROLE, which
+ * bypasses RLS completely -- so an unchecked path makes the endpoint a confused
+ * deputy: any authenticated member could name another tenant's object, have the
+ * server read it, and receive its extracted text back inside their own
+ * workspace. The path is also recorded on the resulting `documents` row, and
+ * horses-export.js and sale-packets.js later download by that recorded path
+ * with the same service role.
+ *
+ * The rule deliberately mirrors the SELECT policy in
+ * 20260912060000_workspace_keyed_document_storage.sql exactly: the caller's own
+ * workspace, or their own uploader-keyed object from before that migration.
+ * This is what the database would have allowed had the download used the
+ * caller's token instead of the service role -- which is the point. A privilege
+ * held only so the server can do its job must not widen what the caller can reach.
+ */
+export function mayUseClientStoragePath({ storagePath, workspaceId, userId }) {
+  if (typeof storagePath !== 'string' || !storagePath) {
+    return false;
+  }
+  // An empty namespace is refused here, which is also what stops an absent
+  // workspace or user id matching one: below, `namespace` is always non-empty,
+  // so a missing identity compares as '' and can never match it.
+  const namespace = (storagePath.split('/')[0] ?? '').toLowerCase();
+  if (!namespace) {
+    return false;
+  }
+  const workspace = typeof workspaceId === 'string' ? workspaceId.toLowerCase() : '';
+  const owner = typeof userId === 'string' ? userId.toLowerCase() : '';
+  return namespace === workspace || namespace === owner;
+}
+
 export function documentObjectPath({ workspaceId, documentId, fileName, fallbackName = 'upload.bin' }) {
   if (typeof workspaceId !== 'string' || !WORKSPACE_ID_PATTERN.test(workspaceId)) {
     throw new Error('A document can only be stored under a valid workspace id.');

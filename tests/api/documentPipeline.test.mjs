@@ -3,7 +3,7 @@ import test from 'node:test';
 import { readFileSync } from 'node:fs';
 import { Readable } from 'node:stream';
 import { deflateRawSync } from 'node:zlib';
-import { documentObjectPath } from '../../api/_lib/document-storage.js';
+import { documentObjectPath, mayUseClientStoragePath } from '../../api/_lib/document-storage.js';
 import buyerInquiryHandler from '../../api/_lib/buyer-inquiries.js';
 import buyerResponseHandler from '../../api/_lib/buyer-responses.js';
 import {
@@ -476,6 +476,58 @@ test('an unnamed file still lands somewhere, under the workspace', () => {
     documentObjectPath({ workspaceId: fixtureWorkspace.toUpperCase(), documentId: '', fileName: '' }),
     `${fixtureWorkspace}/documents/document/upload.bin`,
   );
+});
+
+const fixtureUser = 'cccccccc-cccc-4ccc-8ccc-cccccccccccc';
+const foreignWorkspace = 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb';
+
+test('a caller may name a file in their own workspace, or their own older upload', () => {
+  const allowed = { workspaceId: fixtureWorkspace, userId: fixtureUser };
+  assert.equal(mayUseClientStoragePath({ storagePath: `${fixtureWorkspace}/documents/doc-1/x.pdf`, ...allowed }), true);
+  // The legacy branch of the SELECT policy, mirrored: their own uploader-keyed
+  // object from before the storage migration.
+  assert.equal(mayUseClientStoragePath({ storagePath: `${fixtureUser}/documents/doc-1/x.pdf`, ...allowed }), true);
+});
+
+test('a caller cannot make the server read another tenant file for them', () => {
+  // The bulk endpoint downloads this path with the SERVICE ROLE, which bypasses
+  // RLS, and records it on a documents row that horses-export and sale-packets
+  // later download the same way. Unchecked, it hands any authenticated member a
+  // read of any object whose path they know -- including a member who has since
+  // been removed from that ranch and still remembers the paths.
+  const allowed = { workspaceId: fixtureWorkspace, userId: fixtureUser };
+  for (const foreign of [
+    `${foreignWorkspace}/documents/doc-1/x.pdf`,
+    `${'dddddddd-dddd-4ddd-8ddd-dddddddddddd'}/documents/doc-1/x.pdf`,
+    '../../etc/passwd',
+    'documents/doc-1/x.pdf',
+  ]) {
+    assert.equal(mayUseClientStoragePath({ storagePath: foreign, ...allowed }), false, `${foreign} was allowed`);
+  }
+});
+
+test('an absent identity never matches an absent namespace', () => {
+  for (const args of [
+    { storagePath: '', workspaceId: fixtureWorkspace, userId: fixtureUser },
+    { storagePath: '/documents/x.pdf', workspaceId: '', userId: '' },
+    { storagePath: `${fixtureWorkspace}/x.pdf`, workspaceId: undefined, userId: undefined },
+    { storagePath: undefined, workspaceId: fixtureWorkspace, userId: fixtureUser },
+  ]) {
+    assert.equal(mayUseClientStoragePath(args), false, `${JSON.stringify(args)} was allowed`);
+  }
+});
+
+test('the bulk endpoint checks a supplied path before reading or recording it', () => {
+  const source = readFileSync(new URL('../../api/_lib/documents-bulk-upload.js', import.meta.url), 'utf8');
+  assert.ok(source.includes('mayUseClientStoragePath('), 'the supplied path is never checked');
+  // The check has to precede the download, and the recorded value has to be the
+  // checked one -- a caller sending bytes AND a foreign path would otherwise
+  // skip the download and still persist the path for a later service-role read.
+  assert.ok(
+    source.indexOf('mayUseClientStoragePath(') < source.indexOf('.download('),
+    'the path is downloaded before it is checked',
+  );
+  assert.ok(!/storagePath:\s*typeof file\.storagePath/.test(source), 'an unchecked path is still recorded');
 });
 
 test('both server document writers use the shared path rule', () => {
