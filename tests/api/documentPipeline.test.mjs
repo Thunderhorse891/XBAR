@@ -1,7 +1,9 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
+import { readFileSync } from 'node:fs';
 import { Readable } from 'node:stream';
 import { deflateRawSync } from 'node:zlib';
+import { documentObjectPath } from '../../api/_lib/document-storage.js';
 import buyerInquiryHandler from '../../api/_lib/buyer-inquiries.js';
 import buyerResponseHandler from '../../api/_lib/buyer-responses.js';
 import {
@@ -399,3 +401,90 @@ function crc32(buffer) {
   }
   return (crc ^ 0xffffffff) >>> 0;
 }
+
+const fixtureWorkspace = 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa';
+
+test('a server-generated document is stored under the workspace, so the ranch can open it', () => {
+  // The storage policy reads split_part(name, '/', 1) and checks it against
+  // real membership. These writers used `${user.id}/${workspaceId}/...`, which
+  // puts the USER first -- read by the policy as an old uploader-keyed object,
+  // openable by its creator alone while the documents row is shared with
+  // everyone. The creator never sees it: the server holds the service role and
+  // signs the URL regardless.
+  const path = documentObjectPath({
+    workspaceId: fixtureWorkspace,
+    documentId: 'doc-123',
+    fileName: 'bill-of-sale.pdf',
+  });
+  assert.equal(path, `${fixtureWorkspace}/documents/doc-123/bill-of-sale.pdf`);
+  assert.equal(path.split('/')[0], fixtureWorkspace);
+});
+
+test('no usable workspace id means no write, rather than an unreadable file', () => {
+  // Nothing at the database can catch this: these writers use the service role,
+  // which bypasses RLS, so the INSERT policy never sees them.
+  for (const bad of [undefined, null, '', 'not-a-uuid', `${fixtureWorkspace}/../elsewhere`]) {
+    assert.throws(
+      () => documentObjectPath({ workspaceId: bad, documentId: 'doc-1', fileName: 'x.pdf' }),
+      /valid workspace id/,
+      `expected ${String(bad)} to be refused`,
+    );
+  }
+});
+
+test('a crafted file name cannot add path segments or traverse', () => {
+  const path = documentObjectPath({
+    workspaceId: fixtureWorkspace,
+    documentId: '../../../etc',
+    fileName: '../../passwd',
+  });
+  // What matters is the shape, not whether the characters ".." survive inside a
+  // name: with no separators left, `_.._passwd` is an ordinary file name, and a
+  // legitimate `report..final.pdf` must not be mangled on suspicion.
+  assert.equal(path.split('/').length, 4);
+  assert.equal(path.split('/')[0], fixtureWorkspace);
+  assert.ok(
+    path.split('/').every((segment) => segment !== '.' && segment !== '..'),
+    `a traversal segment survived: ${path}`,
+  );
+});
+
+test('a segment that is nothing but traversal falls back to a name', () => {
+  // `..` reduces to empty and takes the fallback; `../` reduces to `_`, which
+  // is an ordinary name rather than a traversal. Both are safe, and asserting
+  // the exact spelling of the second would be pinning an accident.
+  assert.equal(
+    documentObjectPath({ workspaceId: fixtureWorkspace, documentId: '..', fileName: '...' }),
+    `${fixtureWorkspace}/documents/document/upload.bin`,
+  );
+  for (const hostile of ['../', './', '/', '..\\..', '%2e%2e']) {
+    const segments = documentObjectPath({
+      workspaceId: fixtureWorkspace,
+      documentId: hostile,
+      fileName: hostile,
+    }).split('/');
+    assert.equal(segments.length, 4);
+    assert.ok(
+      segments.every((segment) => segment && segment !== '.' && segment !== '..'),
+      `${hostile} produced a traversal segment`,
+    );
+  }
+});
+
+test('an unnamed file still lands somewhere, under the workspace', () => {
+  assert.equal(
+    documentObjectPath({ workspaceId: fixtureWorkspace.toUpperCase(), documentId: '', fileName: '' }),
+    `${fixtureWorkspace}/documents/document/upload.bin`,
+  );
+});
+
+test('both server document writers use the shared path rule', () => {
+  // The regression this guards against is a one-line template literal, in two
+  // files, that nothing else would notice until a teammate could not open a
+  // file someone else generated.
+  for (const file of ['documents-generate-template.js', 'documents-bulk-upload.js']) {
+    const source = readFileSync(new URL(`../../api/_lib/${file}`, import.meta.url), 'utf8');
+    assert.ok(source.includes('documentObjectPath('), `${file} does not use the shared path rule`);
+    assert.ok(!/\$\{user\.id\}\/\$\{workspaceId\}/.test(source), `${file} still keys storage on the user id`);
+  }
+});

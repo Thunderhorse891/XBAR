@@ -4,6 +4,7 @@ import { requireWorkspaceAccess } from './supabase-admin.js';
 import { runOcr } from './ocr.js';
 import { extractDocument, groupExtractionsIntoCandidates, NEEDS_REVIEW_THRESHOLD } from './document-extraction.js';
 import { extractZipEntries, isZipBuffer, guessMimeType } from './zip.js';
+import { documentObjectPath } from './document-storage.js';
 import {
   getWorkspaceEntitlements,
   checkDocumentCapacity,
@@ -197,8 +198,14 @@ async function processBatch({ supabase, workspaceId, user, body, mode }) {
     let createdObjectPath = '';
 
     if (!storagePath && file.content) {
-      const safeName = file.fileName.replace(/[^a-zA-Z0-9._-]+/g, '_').slice(-80) || 'upload.bin';
-      storagePath = `${user.id}/${workspaceId}/${documentId}/${safeName}`;
+      try {
+        storagePath = documentObjectPath({ workspaceId, documentId, fileName: file.fileName });
+      } catch (error) {
+        // Same shape as a failed upload: skip this file and say why, rather
+        // than throwing out of a loop that has already stored earlier files.
+        skipped.push({ fileName: file.fileName, reason: error.message });
+        continue;
+      }
       const { error: uploadError } = await supabase.storage
         .from(DOCUMENT_BUCKET)
         .upload(storagePath, file.content, { contentType: file.mimeType, upsert: true });
