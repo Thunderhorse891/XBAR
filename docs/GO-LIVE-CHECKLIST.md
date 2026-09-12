@@ -474,6 +474,30 @@ set before release.
   let a tab that diverged from an empty slot overwrite whatever landed there
   since. Both mutants fail.
 
+- **A newer link could not be used from a tab stranded on an uncertain failure.
+  Now fixed** (raised by Codex against `ed9abed`). `unexpectedFailure`
+  suppresses the reset form on purpose -- after an aborted or 5xx update the
+  server may have applied the change, and offering an immediate repeat would
+  invite a second one. It was also per-mount and never cleared. auth-js
+  broadcasts PASSWORD_RECOVERY to every tab and this store ADOPTS it, so a link
+  validated elsewhere made the screen's state say `form` again while the stale
+  flag went on hiding it: the customer sat looking at an uncertainty message
+  about a link that had already been replaced, and the grant-preserving work
+  that keeps newer links alive could not be reached from that tab at all.
+
+  The state is now cleared when a newer grant is adopted, compared by GRANT
+  rather than by account -- the account does not change when one link replaces
+  another, which is exactly this case. A RELEASE (grant cleared to `''`) is
+  deliberately not an adoption: that is how a spent or revoked grant is retired,
+  including by the very failure the warning describes, so treating it as
+  adoption would erase the message at the moment it matters most.
+
+  Covered twice, because a pure rule does not prove the screen uses it: the
+  decision in `passwordRecovery.ts`, and a rendered case where the first tab's
+  update is aborted in flight, a second tab validates another link, and the
+  first tab's form must come back with the uncertainty gone. A mutant stopping
+  the effect fails the rendered case.
+
 - Not claimed: none of this was exercised against a live GoTrue or a live
   Supabase project. The browser suites intercept Auth and PostgREST, so what is
   established is the client's behaviour, not the server's.

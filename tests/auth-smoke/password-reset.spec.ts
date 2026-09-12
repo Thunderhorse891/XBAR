@@ -2145,3 +2145,48 @@ test('a completed reset does not clear a newer link this tab has adopted', async
     releaseFirst();
   }
 });
+
+test('a link validated elsewhere revives a screen left on an uncertain failure', async ({ context }) => {
+  /*
+   * `unexpectedFailure` suppresses the form on purpose: after an aborted or 5xx
+   * update the server may have applied the change, and offering an immediate
+   * repeat would invite a second one.
+   *
+   * It was also per-mount and never cleared. auth-js broadcasts
+   * PASSWORD_RECOVERY to every tab and this store ADOPTS it, so a link
+   * validated in another tab makes this screen's state say `form` again -- and
+   * the stale flag went on hiding it. The customer sat looking at an
+   * uncertainty message about a link that had already been replaced, unable to
+   * use the new one from this tab, so the grant-preserving work that keeps
+   * newer links alive could not be reached from here at all.
+   */
+  const stranded = await context.newPage();
+  const newer = await context.newPage();
+  await stubGoTrueUser(newer);
+
+  // The first attempt dies in flight, so its outcome is genuinely unknown.
+  await stubGoTrueUser(stranded, async (route) => {
+    await route.abort('failed');
+  });
+
+  const first = recoveryLink();
+  const second = recoveryLink();
+  expect(sessionIdOf(first)).not.toBe(sessionIdOf(second));
+
+  await stranded.goto(first);
+  await expect(newPassword(stranded)).toBeVisible({ timeout: 30_000 });
+  await fillNewPassword(stranded, 'first-attempt-password');
+  await submit(stranded).click();
+  await expect(stranded.getByText(/could not confirm that change/i).first()).toBeVisible({ timeout: 30_000 });
+  await expect(newPassword(stranded)).toHaveCount(0);
+
+  // A second email, opened in another tab. Both tabs share the store, so this
+  // one adopts the newer grant.
+  await newer.goto(second);
+  await expect(newPassword(newer)).toBeVisible({ timeout: 30_000 });
+
+  // The stranded tab must come back to a usable form for the NEW link, and stop
+  // showing the old attempt's uncertainty.
+  await expect(newPassword(stranded)).toBeVisible({ timeout: 30_000 });
+  await expect(stranded.getByText(/could not confirm that change/i)).toHaveCount(0);
+});

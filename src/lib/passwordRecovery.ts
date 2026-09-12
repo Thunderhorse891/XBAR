@@ -86,6 +86,32 @@ export function hasValidatedPasswordRecovery(state: RecoveryGateState): boolean 
 }
 
 /**
+ * Whether a NEWER recovery link has been adopted since the last one this screen
+ * acted on.
+ *
+ * The reset screen keeps attempt-local failure state: an aborted request or a
+ * 5xx sets `unexpectedFailure`, which suppresses the form deliberately, because
+ * the server may have applied the change and offering an immediate repeat would
+ * invite a second one.
+ *
+ * That state was per-mount and never cleared. auth-js broadcasts
+ * PASSWORD_RECOVERY to every tab and this store ADOPTS it, so a link validated
+ * in another tab makes this screen's state say `form` again -- while the stale
+ * `unexpectedFailure` from the previous attempt went on hiding it. The customer
+ * was left looking at an uncertainty message about a link that had already been
+ * replaced, unable to use the new one from this tab, and the grant-preserving
+ * work that keeps newer links alive could not be reached from here.
+ *
+ * Compared by GRANT, not by account: the account does not change when one link
+ * replaces another, which is precisely the case this exists for. An empty next
+ * grant is not an adoption -- that is a release, and it must not clear a
+ * warning about the attempt that caused it.
+ */
+export function recoveryGrantAdopted(previousGrant: string, nextGrant: string): boolean {
+  return Boolean(nextGrant) && nextGrant !== previousGrant;
+}
+
+/**
  * The single state the reset screen is in.
  *
  * These were four independent boolean expressions in the JSX, and independent

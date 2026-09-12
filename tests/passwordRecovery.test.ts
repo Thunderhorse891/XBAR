@@ -4,6 +4,7 @@ import {
   hasValidatedPasswordRecovery,
   reconcileStoredRecovery,
   resetScreenState,
+  recoveryGrantAdopted,
 } from '../src/lib/passwordRecovery.js';
 
 /*
@@ -251,4 +252,34 @@ test('a grant survives when nothing has been spent', () => {
 test('no grant stays no grant', () => {
   assert.equal(reconcileStoredRecovery({ storedGrant: '', spentFor: '' }), '');
   assert.equal(reconcileStoredRecovery({ storedGrant: '', spentFor: 'user-a' }), '');
+});
+
+/*
+ * Attempt-local failure state on the reset screen must not outlive the link it
+ * belongs to. auth-js broadcasts PASSWORD_RECOVERY to every tab and this store
+ * ADOPTS it, so a link validated elsewhere makes the screen usable again --
+ * while a stale `unexpectedFailure` from the previous attempt went on hiding
+ * the form, leaving the customer reading an uncertainty message about a link
+ * that had already been replaced.
+ */
+
+test('a newly adopted grant counts as adoption', () => {
+  assert.equal(recoveryGrantAdopted('grant-a', 'grant-b'), true);
+  assert.equal(recoveryGrantAdopted('', 'grant-a'), true, 'the first link this screen sees counts too');
+});
+
+test('the same grant is not a new adoption', () => {
+  // Otherwise every unrelated re-render would clear a warning about the attempt
+  // that is still in front of the customer.
+  assert.equal(recoveryGrantAdopted('grant-a', 'grant-a'), false);
+});
+
+test('a RELEASED grant is not an adoption', () => {
+  /*
+   * Clearing to '' is how a spent or revoked grant is released -- including by
+   * the very failure the warning describes. Treating that as adoption would
+   * erase the message at the moment it matters most.
+   */
+  assert.equal(recoveryGrantAdopted('grant-a', ''), false);
+  assert.equal(recoveryGrantAdopted('', ''), false);
 });

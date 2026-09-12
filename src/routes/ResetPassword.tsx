@@ -1,9 +1,9 @@
-import { type FormEvent, useEffect, useId, useState } from 'react';
+import { type FormEvent, useEffect, useId, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { XbarMark } from '@/components/BrandMark';
 import { isSupabaseConfigured } from '@/lib/platformConfig';
 import { hasValidatedPasswordRecovery, useCloudStore } from '@/store/useCloudStore';
-import { resetScreenState } from '@/lib/passwordRecovery';
+import { recoveryGrantAdopted, resetScreenState } from '@/lib/passwordRecovery';
 import { useUiStore } from '@/store/useUiStore';
 import './cleanEntryExperience.css';
 
@@ -25,6 +25,7 @@ export default function ResetPassword() {
   const updatePassword = useCloudStore((state) => state.updatePassword);
   const authReady = useCloudStore((state) => state.authReady);
   const recoveryPending = useCloudStore(hasValidatedPasswordRecovery);
+  const recoveryGrant = useCloudStore((state) => state.passwordRecoveryGrant);
 
   const [password, setPassword] = useState('');
   const [confirm, setConfirm] = useState('');
@@ -33,6 +34,20 @@ export default function ResetPassword() {
   const [message, setMessage] = useState<{ tone: 'success' | 'error'; text: string } | null>(null);
   const [done, setDone] = useState(false);
   const [unexpectedFailure, setUnexpectedFailure] = useState(false);
+  /*
+   * A link validated in ANOTHER tab is adopted by this store, so this screen can
+   * become usable again without remounting. Attempt-local failure state from the
+   * previous link must not outlive it -- otherwise the form stays suppressed and
+   * the customer reads an uncertainty message about a link that has already been
+   * replaced.
+   */
+  const actedOnGrant = useRef(recoveryGrant);
+  useEffect(() => {
+    if (!recoveryGrantAdopted(actedOnGrant.current, recoveryGrant)) return;
+    actedOnGrant.current = recoveryGrant;
+    setUnexpectedFailure(false);
+    setMessage(null);
+  }, [recoveryGrant]);
 
   const supabaseReady = isSupabaseConfigured();
   /*
