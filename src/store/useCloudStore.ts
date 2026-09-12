@@ -2,7 +2,7 @@ import { create } from 'zustand';
 import type { AuthChangeEvent, Session } from '@supabase/supabase-js';
 import { loadWorkspaceAccessProfile } from '@/lib/cloudWorkspace';
 import { authStorageKey, getSupabaseClient } from '@/lib/supabaseClient';
-import { readAuthStorage } from '@/lib/authStorage';
+import { mayRejoinDurableStore, readAuthStorage } from '@/lib/authStorage';
 import {
   buildPasswordUpdateRequest,
   readPasswordUpdateError,
@@ -390,6 +390,44 @@ function recoveryGrantToken(session: Session | null): string {
  */
 const memoryRecoveryRecords = new Map<string, string | null>();
 
+/*
+ * What localStorage held when a recovery key first fell into the overlay.
+ *
+ * The same hazard as the auth session store, and the same repair -- see
+ * `mayRejoinDurableStore` in lib/authStorage.ts, whose comment carries the
+ * measured trace. A key lands in the overlay only because a durable write was
+ * REFUSED, and from that instant this tab is effectively private for it while
+ * still believing it shares one. Rejoining blindly once storage recovers lets
+ * this tab overwrite what the other tabs wrote meanwhile.
+ *
+ * For recovery records that is worse than a stale read. A tab whose marker
+ * write was refused, signing out grant A after another tab has durably
+ * validated grant B, would replace `active:B` with the account-wide `spent`
+ * marker -- and B's unused link then reports as already used, with no way back
+ * except another email. The link is one-time, so there is no recovering it.
+ */
+const recoveryRecordsDivergedAt = new Map<string, string | null>();
+
+function readDurableRecoveryRecord(key: string): string | null {
+  try {
+    if (typeof localStorage !== 'undefined') return localStorage.getItem(key);
+  } catch {
+    // Blocked site data throws on access rather than returning null.
+  }
+  return null;
+}
+
+/* Records the divergence once; a later anchor would point at another tab's write. */
+function markRecoveryRecordDiverged(key: string) {
+  if (recoveryRecordsDivergedAt.has(key)) return;
+  recoveryRecordsDivergedAt.set(key, readDurableRecoveryRecord(key));
+}
+
+function mayRejoinRecoveryRecords(key: string): boolean {
+  if (!recoveryRecordsDivergedAt.has(key)) return true;
+  return mayRejoinDurableStore(recoveryRecordsDivergedAt.get(key), readDurableRecoveryRecord(key));
+}
+
 function recoveryRecordGet(key: string): string | null {
   // The overlay outranks the durable store: it exists only where the durable
   // store is known to be behind.
@@ -403,30 +441,44 @@ function recoveryRecordGet(key: string): string | null {
 }
 
 function recoveryRecordSet(key: string, value: string) {
+  // Diverged and the durable record has moved on: stay private rather than
+  // overwrite a grant another tab validated meanwhile.
+  if (!mayRejoinRecoveryRecords(key)) {
+    memoryRecoveryRecords.set(key, value);
+    return;
+  }
   try {
     if (typeof localStorage !== 'undefined') {
       localStorage.setItem(key, value);
       // Durable and readable by every tab; the overlay would only go stale.
       memoryRecoveryRecords.delete(key);
+      recoveryRecordsDivergedAt.delete(key);
       return;
     }
   } catch {
     // Falls through to the overlay.
   }
+  markRecoveryRecordDiverged(key);
   memoryRecoveryRecords.set(key, value);
 }
 
 function recoveryRecordRemove(key: string) {
+  if (!mayRejoinRecoveryRecords(key)) {
+    memoryRecoveryRecords.set(key, null);
+    return;
+  }
   try {
     if (typeof localStorage !== 'undefined') {
       localStorage.removeItem(key);
       memoryRecoveryRecords.delete(key);
+      recoveryRecordsDivergedAt.delete(key);
       return;
     }
   } catch {
     // Falls through to a tombstone, so the stale persisted value does not
     // reappear as though the removal never happened.
   }
+  markRecoveryRecordDiverged(key);
   memoryRecoveryRecords.set(key, null);
 }
 

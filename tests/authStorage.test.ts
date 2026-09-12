@@ -5,6 +5,7 @@ import {
   authStorageIsShared,
   readAuthStorage,
   resetAuthStorageMode,
+  mayRejoinDurableStore,
 } from '../src/lib/authStorage.js';
 
 /*
@@ -268,4 +269,37 @@ test('a tab that stays diverged across repeated failures still protects the othe
   assert.equal(backing.get(AUTH_KEY), 'session-B-v1', "B's session must still survive");
   assert.equal(readAuthStorage(AUTH_KEY), 'session-A-v4', 'and this tab keeps its own, privately');
   clearLocalStorage();
+});
+
+/*
+ * The rejoin rule itself, covered once for both callers.
+ *
+ * `useCloudStore`'s recovery records carry the same overlay and the same
+ * hazard, and duplicating a rule this subtle is how two copies drift apart.
+ * There it is worse than a stale read: a tab whose marker write was refused,
+ * signing out grant A after another tab durably validated grant B, would
+ * replace `active:B` with the account-wide `spent` marker -- and B's unused,
+ * one-time link then reports as already used.
+ */
+
+test('a key that never diverged may always rejoin', () => {
+  assert.equal(mayRejoinDurableStore(undefined, 'anything at all'), true);
+  assert.equal(mayRejoinDurableStore(undefined, null), true);
+});
+
+test('a diverged key may rejoin only while the durable value is unchanged', () => {
+  assert.equal(mayRejoinDurableStore('active:A', 'active:A'), true);
+  assert.equal(mayRejoinDurableStore('active:A', 'active:B'), false);
+  assert.equal(mayRejoinDurableStore('active:A', null), false, 'a removal is a change too');
+});
+
+test('a key that diverged from ABSENT is told apart from one that never diverged', () => {
+  /*
+   * The reason the anchor is `string | null | undefined` rather than just
+   * `string | null`: "there was nothing stored when I left" and "I never left"
+   * are different facts, and collapsing them would let a tab that diverged from
+   * an empty slot overwrite whatever landed there since.
+   */
+  assert.equal(mayRejoinDurableStore(null, null), true);
+  assert.equal(mayRejoinDurableStore(null, 'active:B'), false);
 });

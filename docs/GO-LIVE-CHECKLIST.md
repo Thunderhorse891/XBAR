@@ -455,6 +455,25 @@ set before release.
   rather than dismissed because a "flaky test" chased in this same PR turned out
   to be a real cross-tab defect. If it recurs, capture the trace before re-running.
 
+- **The recovery records had the same divergence hazard as the auth store, and
+  a worse consequence. Now fixed** (raised by Codex against `ed9abed`). A
+  recovery key enters `memoryRecoveryRecords` only because a durable write was
+  REFUSED, and from that instant the tab is effectively private for it while
+  still believing it shares one. Rejoining blindly once storage recovers lets
+  the tab overwrite what other tabs wrote meanwhile -- and here that is worse
+  than a stale read: a tab signing out grant A, after another tab has durably
+  validated grant B, replaces `active:B` with the account-wide `spent` marker,
+  so B's unused link reports as already used. The link is one-time, so there is
+  no recovering it without another email.
+
+  The repair is the same as the auth store's, and the RULE is now shared rather
+  than written twice -- `mayRejoinDurableStore()` in `lib/authStorage.ts`, used
+  by both. Duplicating a rule this subtle is how two copies drift apart. The
+  anchor is deliberately `string | null | undefined`: "there was nothing stored
+  when I left" and "I never left" are different facts, and collapsing them would
+  let a tab that diverged from an empty slot overwrite whatever landed there
+  since. Both mutants fail.
+
 - Not claimed: none of this was exercised against a live GoTrue or a live
   Supabase project. The browser suites intercept Auth and PostgREST, so what is
   established is the client's behaviour, not the server's.

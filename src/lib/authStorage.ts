@@ -88,11 +88,25 @@ function markDiverged(key: string) {
   }
 }
 
+/**
+ * Whether a diverged key may rejoin durable storage.
+ *
+ * Exported because the recovery records in `useCloudStore` have the same
+ * overlay and the same hazard, and a rule this subtle must not be written twice
+ * and allowed to drift. `anchor === undefined` means the key never diverged.
+ *
+ * Pure, so the rule itself is covered once for both callers.
+ */
+export function mayRejoinDurableStore(anchor: string | null | undefined, current: string | null): boolean {
+  if (anchor === undefined) return true;
+  return current === anchor;
+}
+
 /* Whether shared storage still holds what it held when this tab left it. */
 function mayRejoinSharedStorage(key: string): boolean {
   if (!divergedAt.has(key)) return true;
   try {
-    return localStorage.getItem(key) === (divergedAt.get(key) ?? null);
+    return mayRejoinDurableStore(divergedAt.get(key), localStorage.getItem(key));
   } catch {
     return false;
   }
