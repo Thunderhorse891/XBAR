@@ -4,7 +4,7 @@ import {
   countPagesRead,
   describeDocumentCoverage,
   fullCoverage,
-  imageRead,
+  readOutcome,
   readableProcessingNote,
   readDocumentWithCoverage,
 } from '../src/lib/documentIntelligence.js';
@@ -154,10 +154,10 @@ test('a failed image OCR is carried into the coverage, an empty one is not', () 
    * `readDocumentWithCoverage` needs a real tesseract worker and that throws
    * asynchronously in node and takes the process down.
    */
-  assert.equal(imageRead({ text: '', failed: true }).coverage.readFailed, true);
-  assert.equal(imageRead({ text: '', failed: false }).coverage.readFailed, false, 'no text is not a failure');
-  assert.equal(imageRead({ text: 'REGISTERED NAME', failed: false }).coverage.readFailed, false);
-  assert.equal(imageRead({ text: 'REGISTERED NAME', failed: false }).text, 'REGISTERED NAME');
+  assert.equal(readOutcome({ text: '', failed: true }).coverage.readFailed, true);
+  assert.equal(readOutcome({ text: '', failed: false }).coverage.readFailed, false, 'no text is not a failure');
+  assert.equal(readOutcome({ text: 'REGISTERED NAME', failed: false }).coverage.readFailed, false);
+  assert.equal(readOutcome({ text: 'REGISTERED NAME', failed: false }).text, 'REGISTERED NAME');
 });
 
 /*
@@ -296,4 +296,39 @@ test('a broken PDF really does come back marked unreadable, end to end', async (
   } finally {
     console.error = noise;
   }
+});
+
+test('a text file whose read was rejected is reported, not silently empty', async () => {
+  /*
+   * `file.text()` rejects when the selected local file has become unreadable --
+   * moved, unmounted, permission withdrawn between picking it and reading it.
+   * That used to become `''`, which is also what an empty file produces.
+   *
+   * This is the THIRD finding of the same shape (PDF, image, then text), which
+   * is why the shape was removed rather than patched again: every reader now
+   * returns `{ text, failed }` and `readOutcome()` is the only thing that turns
+   * that into coverage, so a new reader cannot report silence as success.
+   */
+  const unreadable = new File([''], 'notes.txt', { type: 'text/plain' });
+  Object.defineProperty(unreadable, 'text', {
+    value: () => Promise.reject(new DOMException('NotReadableError', 'NotReadableError')),
+  });
+  const result = await readDocumentWithCoverage(unreadable);
+  assert.equal(result.coverage.readFailed, true);
+  assert.match(describeDocumentCoverage(result.coverage), /This file could not be read\./);
+});
+
+test('a text file that is genuinely empty is not called a failure', async () => {
+  // The distinction the flag exists to draw, at the other end.
+  const empty = new File([''], 'notes.txt', { type: 'text/plain' });
+  const result = await readDocumentWithCoverage(empty);
+  assert.equal(result.coverage.readFailed, false);
+  assert.equal(describeDocumentCoverage(result.coverage), '');
+});
+
+test('a file type this reader has no opinion about is not called a failure', async () => {
+  // Nothing was attempted, so nothing failed; silence there is honest.
+  const other = new File([new Uint8Array([1, 2, 3])], 'scan.dwg', { type: 'application/acad' });
+  const result = await readDocumentWithCoverage(other);
+  assert.equal(result.coverage.readFailed, false);
 });

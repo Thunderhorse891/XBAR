@@ -190,11 +190,22 @@ async function ensurePdfWorkerConfigured() {
   pdfJs.GlobalWorkerOptions.workerSrc = await pdfWorkerUrlPromise;
 }
 
-async function extractPlainText(file: File) {
+/*
+ * Reports WHETHER it failed, like every other reader here.
+ *
+ * `file.text()` rejects when the selected local file has become unreadable --
+ * moved, unmounted, permission withdrawn between picking it and reading it --
+ * and this used to turn that into `''`, which is also what an empty file
+ * produces. Three separate findings landed on that same shape (PDF, image and
+ * this one) before it was made unrepresentable: every reader now returns
+ * `{ text, failed }` and `readOutcome()` is the only thing that builds coverage
+ * from it, so a new reader cannot quietly report silence as success.
+ */
+async function extractPlainText(file: File): Promise<{ text: string; failed: boolean }> {
   try {
-    return (await file.text()).trim();
+    return { text: (await file.text()).trim(), failed: false };
   } catch {
-    return '';
+    return { text: '', failed: true };
   }
 }
 
@@ -368,16 +379,16 @@ async function extractPdfText(file: File): Promise<{ text: string; coverage: Doc
 }
 
 /**
- * What an image OCR attempt amounts to, kept out of the call site on purpose.
+ * What any reader's attempt amounts to, kept out of the call sites on purpose.
  *
- * The mapping from "OCR failed" to "the customer is told" is the whole point of
- * this fix, and a mapping written inline at the call site could not be tested:
- * `readDocumentWithCoverage` needs a real tesseract worker, which throws
- * asynchronously in node and takes the process with it. With the decision here
- * the call site passes the reader's result through untouched and has no logic
- * left to get wrong.
+ * The mapping from "the reader failed" to "the customer is told" is the whole
+ * point, and written inline at a call site it could not be tested:
+ * `readDocumentWithCoverage` needs a real tesseract worker for the image path,
+ * and that throws asynchronously in node and takes the process with it. With
+ * the decision here every branch passes its reader's result through untouched
+ * and has no logic left to get wrong.
  */
-export function imageRead(read: { text: string; failed: boolean }): { text: string; coverage: DocumentCoverage } {
+export function readOutcome(read: { text: string; failed: boolean }): { text: string; coverage: DocumentCoverage } {
   return {
     text: read.text.slice(0, TEXT_PREVIEW_LIMIT),
     coverage: {
@@ -389,13 +400,8 @@ export function imageRead(read: { text: string; failed: boolean }): { text: stri
 }
 
 export async function readDocumentWithCoverage(file: File): Promise<{ text: string; coverage: DocumentCoverage }> {
-  const cut = (text: string) => ({
-    text: text.slice(0, TEXT_PREVIEW_LIMIT),
-    coverage: { ...fullCoverage(), truncated: text.length > TEXT_PREVIEW_LIMIT },
-  });
-
   if (file.type.startsWith('text/') || /\.(txt|csv|json|md)$/i.test(file.name)) {
-    return cut(await extractPlainText(file));
+    return readOutcome(await extractPlainText(file));
   }
 
   if (file.type === 'application/pdf' || /\.pdf$/i.test(file.name)) {
@@ -404,9 +410,11 @@ export async function readDocumentWithCoverage(file: File): Promise<{ text: stri
   }
 
   if (file.type.startsWith('image/') || /\.(png|jpe?g|webp|bmp|gif|tiff?)$/i.test(file.name)) {
-    return imageRead(await runImageOcr(file));
+    return readOutcome(await runImageOcr(file));
   }
 
+  // A type this reader has no opinion about: nothing was attempted, so nothing
+  // failed. Silence here is honest.
   return { text: '', coverage: fullCoverage() };
 }
 

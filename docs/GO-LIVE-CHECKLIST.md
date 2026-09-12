@@ -508,6 +508,26 @@ set before release.
   first tab's form must come back with the uncertainty gone. A mutant stopping
   the effect fails the rendered case.
 
+- **Three findings of one shape, so the shape was removed.** PDF, image and
+  plain-text reads each caught their own failure and returned `''` -- which is
+  also what an empty file produces -- so a failed read and a successfully
+  examined empty file were indistinguishable, and the record carried no
+  `processingNote` either way. Codex found all three separately, at three call
+  sites, over three commits.
+
+  Patching the third would have left the fourth reader free to repeat it. Every
+  reader now returns `{ text, failed }`, and `readOutcome()` is the only thing
+  that turns a reader's result into coverage, so the mapping exists once and a
+  new reader cannot report silence as success. The dead `cut()` helper went with
+  it. A file type the reader has no opinion about is still not a failure --
+  nothing was attempted, so silence there is honest.
+
+  Coverage is now end-to-end for two of the three catches rather than resting on
+  the pure rule: a real malformed PDF through `readDocumentWithCoverage`, and a
+  text file whose `text()` rejects. The image catch stays the documented
+  exception -- tesseract fails asynchronously through `process.nextTick` and
+  takes the node process down.
+
 - Not claimed: none of this was exercised against a live GoTrue or a live
   Supabase project. The browser suites intercept Auth and PostgREST, so what is
   established is the client's behaviour, not the server's.
