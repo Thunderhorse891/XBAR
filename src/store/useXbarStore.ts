@@ -786,23 +786,36 @@ export const useXbarStore = create<XbarStore>()(
         const state = get();
         const storageIncrease = estimateStorageGb(fileList);
         const planUsage = entitledUsage(state.subscription);
+        /*
+         * When the authoritative total cannot be read we stop uploading, but we
+         * do NOT stop the intake. Refusing outright would mean a rancher in a
+         * barn with no signal cannot add a document at all -- and keeping the
+         * bytes on the device when the cloud will not take them is the whole
+         * local-first promise this file makes everywhere else.
+         *
+         * Declining the upload is also what keeps the storage trigger happy: a
+         * document with no `storagePath` carries no `fileSizeBytes`, so it
+         * pushes `size_bytes: 0` and cannot be the over-cap row that fails the
+         * batched documents upsert and freezes every later table.
+         */
+        let cloudUploadsAllowed = true;
+        let capacityUnverified = false;
         if (isSupabaseConfigured()) {
           try {
             const storedBytes = await loadWorkspaceStorageBytes();
             const incomingBytes = fileList.reduce((total, file) => total + file.size, 0);
             if (storedBytes + incomingBytes > planUsage.storageLimitGb * 1024 * 1024 * 1024) {
+              // Known to be over cap: refusing is right, and it is the one
+              // answer the customer can act on by upgrading.
               return {
                 ok: false,
                 message: 'Storage limit reached for the current plan. Upgrade before adding more files.',
               };
             }
           } catch (error) {
-            console.error('Cloud storage usage could not be checked.', error);
-            return {
-              ok: false,
-              message:
-                'Storage usage could not be verified. No files were uploaded; try again when cloud access returns.',
-            };
+            console.error('Cloud storage usage could not be checked; keeping this batch on the device.', error);
+            cloudUploadsAllowed = false;
+            capacityUnverified = true;
           }
         } else if (planUsage.storageUsedGb + storageIncrease > planUsage.storageLimitGb) {
           return {
@@ -832,13 +845,15 @@ export const useXbarStore = create<XbarStore>()(
           let documents: DocumentRecord[] = await Promise.all(
             fileList.map(async (file) => {
               let uploadedAsset: Awaited<ReturnType<typeof uploadDocumentAssetToCloud>> = null;
-              try {
-                uploadedAsset = await uploadDocumentAssetToCloud({
-                  file,
-                  horseId: selectedHorse?.id ?? horseId,
-                });
-              } catch (error) {
-                console.error('Cloud document upload failed; keeping the file on this device instead.', error);
+              if (cloudUploadsAllowed) {
+                try {
+                  uploadedAsset = await uploadDocumentAssetToCloud({
+                    file,
+                    horseId: selectedHorse?.id ?? horseId,
+                  });
+                } catch (error) {
+                  console.error('Cloud document upload failed; keeping the file on this device instead.', error);
+                }
               }
               const document = await buildDocumentRecord({
                 file,
@@ -985,7 +1000,7 @@ export const useXbarStore = create<XbarStore>()(
 
           return {
             ok: true,
-            message: `${documents.length} file${documents.length === 1 ? '' : 's'} entered the document queue.${createdHorses.length ? ` ${createdHorses.length} new horse record${createdHorses.length === 1 ? ' was' : 's were'} created from the upload batch.` : ''}${omittedHorseCount ? ` ${omittedHorseCount} additional horse candidate${omittedHorseCount === 1 ? ' was' : 's were'} left for review because the horse limit was reached.` : ''}${localDocumentCount ? ` ${localDocumentCount} kept as metadata only — this browser could not store the file on this device either.` : ''}`,
+            message: `${documents.length} file${documents.length === 1 ? '' : 's'} entered the document queue.${createdHorses.length ? ` ${createdHorses.length} new horse record${createdHorses.length === 1 ? ' was' : 's were'} created from the upload batch.` : ''}${omittedHorseCount ? ` ${omittedHorseCount} additional horse candidate${omittedHorseCount === 1 ? ' was' : 's were'} left for review because the horse limit was reached.` : ''}${localDocumentCount ? ` ${localDocumentCount} kept as metadata only — this browser could not store the file on this device either.` : ''}${capacityUnverified ? ' Cloud storage could not be reached, so these are on this device only until it returns.' : ''}`,
             id: batch.id,
             createdHorseIds: createdHorses.map((horse) => horse.id),
           };

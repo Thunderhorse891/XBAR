@@ -177,7 +177,42 @@ test('document intake checks authoritative cloud capacity before uploading', asy
     intake.indexOf('await loadWorkspaceStorageBytes()') < intake.indexOf('uploadDocumentAssetToCloud({'),
     'capacity must be verified before object bytes leave the browser',
   );
-  assert.match(intake, /Storage usage could not be verified\. No files were uploaded/);
+  /*
+   * Codex's version refused the whole intake when the total could not be read.
+   * That closed the wedge and opened a worse hole: a rancher with no signal
+   * could not add a document AT ALL, on a build where every other failure path
+   * in this file falls back to the device.
+   *
+   * Unverified capacity now declines the UPLOAD and keeps the intake. The wedge
+   * stays closed by the same commit's other half: no `storagePath` means no
+   * `fileSizeBytes`, so the row pushes `size_bytes: 0` and cannot be the
+   * over-cap row that fails the batched upsert.
+   */
+  assert.match(intake, /cloudUploadsAllowed = false/);
+  assert.ok(
+    !/No files were uploaded/.test(intake),
+    'an unreadable total must not refuse the intake — the file still belongs on the device',
+  );
+  assert.match(intake, /if \(cloudUploadsAllowed\) \{/, 'the flag must actually gate the upload');
+  assert.match(intake, /Cloud storage could not be reached, so these are on this device only/);
+});
+
+test('a known over-cap batch is still refused outright', async () => {
+  // The distinction that matters: "we know you are over" is actionable and is
+  // refused; "we could not find out" is not the customer's fault and keeps
+  // their file.
+  const store = await readFile('src/store/useXbarStore.ts', 'utf8');
+  const intake = store.slice(store.indexOf('createDocumentIntake:'), store.indexOf('reviewDocument:'));
+  /*
+   * Tied to the branch, not just present in the file: the same
+   * "Storage limit reached" string also lives in the local-only branch below,
+   * so asserting it anywhere let a mutant that dropped this refusal survive.
+   */
+  assert.match(
+    intake,
+    /storedBytes \+ incomingBytes > planUsage\.storageLimitGb[\s\S]{0,240}?return \{[\s\S]{0,160}?ok: false,[\s\S]{0,160}?Storage limit reached for the current plan\./,
+    'a batch known to be over cap must be refused by that branch, not merely mentioned somewhere',
+  );
 });
 
 test('document quota accounts only for bytes accepted by cloud storage', async () => {
