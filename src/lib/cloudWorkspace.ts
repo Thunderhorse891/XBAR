@@ -483,17 +483,34 @@ async function replaceWorkspaceRows(params: {
   idColumn: string;
   workspaceId: string;
   rows: Record<string, unknown>[];
+  /*
+   * Whether a server row missing from this snapshot means "deleted".
+   *
+   * For a workspace's own records it does: the snapshot IS the workspace, and
+   * anything absent was removed locally. For ACCESS rows it does not, and the
+   * difference is the same one already written over syncWorkspaceMembershipRows
+   * -- a save is not a removal. An invitation created by another owner after
+   * this tab last loaded is simply missing here, and deleting it revokes a live
+   * invitation that nobody revoked.
+   *
+   * Nothing is lost by refusing to infer it: revocation and acceptance are
+   * UPDATES to `status` (revokeWorkspaceInvitationInCloud,
+   * xbar_accept_workspace_invitation), never deletes, so no legitimate path
+   * removes an invitation row at all. The delete could only ever destroy a row
+   * newer than the snapshot -- and 20260911005818 granting owners DELETE is
+   * what turned that from a refused statement into an effective one.
+   */
+  removeMissing?: boolean;
 }) {
   const client = getSupabaseClient();
   if (!client) {
     throw new Error('Supabase is not configured for this build.');
   }
 
-  const { table, idColumn, workspaceId, rows } = params;
-  const { data: existingRows, error: existingError } = await client
-    .from(table)
-    .select(idColumn)
-    .eq('workspace_id', workspaceId);
+  const { table, idColumn, workspaceId, rows, removeMissing = true } = params;
+  const { data: existingRows, error: existingError } = removeMissing
+    ? await client.from(table).select(idColumn).eq('workspace_id', workspaceId)
+    : { data: [], error: null };
 
   if (existingError) {
     throw new Error(existingError.message);
@@ -644,6 +661,9 @@ async function saveWorkspaceBackupToRelationalCloud(
       table: 'workspace_invitations',
       idColumn: 'invitation_id',
       workspaceId,
+      // An invitation absent from this snapshot was created by someone else
+      // after this tab loaded, not revoked here. See removeMissing.
+      removeMissing: false,
       rows: (workspace.workspaceInvitations ?? []).map((invitation) => ({
         workspace_id: workspaceId,
         invitation_id: invitation.id,

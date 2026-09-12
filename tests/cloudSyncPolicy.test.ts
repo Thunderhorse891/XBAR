@@ -230,3 +230,35 @@ test('automatic relational save failures are visible and deduplicated', async ()
   assert.match(bootstrap, /title: 'Cloud save paused'/);
   assert.match(bootstrap, /Changes remain local and will retry\./);
 });
+
+test('an autosave never revokes an invitation it simply has not seen', async () => {
+  /*
+   * `replaceWorkspaceRows` deletes server rows missing from the snapshot. For a
+   * workspace's own records that is correct — the snapshot IS the workspace.
+   * For ACCESS rows it is not, and the same argument already written over
+   * `syncWorkspaceMembershipRows` applies: a save is not a removal.
+   *
+   * An invitation created by another owner after this tab loaded is simply
+   * absent here, and deleting it revokes a live invitation nobody revoked.
+   * Nothing legitimate is lost: revocation and acceptance are UPDATES to
+   * `status`, never deletes, so no path removes an invitation row at all.
+   * 20260911005818 granting owners DELETE is what made this effective rather
+   * than refused.
+   */
+  const cloud = await readFile('src/lib/cloudWorkspace.ts', 'utf8');
+  const invitationPush = cloud.slice(cloud.indexOf("table: 'workspace_invitations'"), cloud.indexOf("table: 'horses'"));
+  assert.ok(invitationPush.length > 0, 'the invitation push must be findable');
+  assert.match(invitationPush, /removeMissing: false/, 'an unseen invitation must not be deleted by a save');
+
+  // And the flag has to actually skip the delete, not merely be accepted.
+  assert.match(cloud, /removeMissing = true \} = params/);
+  assert.match(
+    cloud,
+    /removeMissing\s*\?\s*await client\.from\(table\)\.select\(idColumn\)[\s\S]{0,120}?:\s*\{ data: \[\], error: null \}/,
+    'removeMissing:false must stop the stale-row lookup that feeds the delete',
+  );
+
+  // Revocation stays an explicit status update, which is why inferring deletion
+  // buys nothing.
+  assert.match(cloud, /\.from\('workspace_invitations'\)\s*\.update\(\{\s*status: nextStatus/);
+});
