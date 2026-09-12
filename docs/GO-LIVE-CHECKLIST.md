@@ -953,6 +953,25 @@ is in scope, do not launch it until invitation consumption excludes its own seat
 reservation and access lifecycle changes are server-owned or versioned so a
 snapshot save cannot overwrite concurrent membership or invitation changes.
 
+### Document-storage reservation — guarantees and limits
+
+The client-side staged-byte reservation now provides three concrete guarantees:
+
+- Bytes are reserved in the same synchronous update that installs their
+  document records, so an earlier autosave cannot settle bytes absent from its
+  snapshot.
+- A reservation is released only after the corresponding relational document
+  rows are persisted; snapshot-only fallback success keeps it reserved.
+- An authentication identity change retires the previous account's reservation,
+  while a token refresh for the same account preserves it.
+
+These guarantees do **not** make the reservation authoritative. Reloading before
+the document rows are persisted loses the in-memory reservation, and concurrent
+devices do not share it. The database storage-limit trigger remains the backstop
+for both cases. If another concurrency gap is found here, do not add another
+client-side counter refinement: use a database-owned capacity reservation and
+verify it against a live Supabase project.
+
 ### Recovery consumption — design requirements, not implemented
 
 Recorded so they are not mistaken for protections that exist:
