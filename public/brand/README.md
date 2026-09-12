@@ -4,14 +4,16 @@ This directory contains the artwork used by XBAR's application shell, marketing 
 
 ## Current consumers
 
-| Asset                                                                                                              | Current use                                   |
-| ------------------------------------------------------------------------------------------------------------------ | --------------------------------------------- |
-| `apple-touch-icon.png`, `icon-192.png`, `icon-512.png`, `icon-512-maskable.png`, `favicon.ico`, `xbar-favicon.png` | Browser, PWA, navigation, and dashboard icons |
-| `og-card.jpg`                                                                                                      | Social preview card                           |
-| `xbar-horse-outline-safe.png`, `xbar-x-watermark-main.png`, `xbar-wordmark.png`                                    | Sign-in artwork                               |
-| `xbar-report-horse.png`, `xbar-report-mark.png`, `xbar-report-watermark.png`                                       | Branded PDF reports                           |
+| Asset                                                                                               | Current use                                   |
+| --------------------------------------------------------------------------------------------------- | --------------------------------------------- |
+| `apple-touch-icon.png`, `icon-192.png`, `icon-512.png`, `icon-512-maskable.png`, `xbar-favicon.png` | Browser, PWA, navigation, and dashboard icons |
+| `og-card.jpg`                                                                                       | Social preview card                           |
+| `xbar-horse-outline-safe.png`, `xbar-x-watermark-main.png`, `xbar-wordmark.png`                     | Sign-in artwork                               |
+| `xbar-report-horse.png`, `xbar-report-mark.png`, `xbar-report-watermark.png`                        | Branded PDF reports                           |
 
 Other files are retained as supplied or historical aliases. Do not infer a supported treatment from a filename alone; check this inventory and the actual pixels first.
+
+`favicon.ico` has no consumer at all. Nothing references it, and a browser's implicit request goes to `/favicon.ico` while this file sits at `/brand/favicon.ico`, so it is never fetched either. `index.html` declares `brand/xbar-favicon.png` instead.
 
 ## Known aliases
 
