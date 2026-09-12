@@ -486,39 +486,21 @@ async function replaceWorkspaceRows(params: {
     | 'expense_receipts'
     | 'ranch_assets'
     | 'sales_leads'
-    | 'shared_listings'
-    | 'workspace_invitations';
+    | 'shared_listings';
   idColumn: string;
   workspaceId: string;
   rows: Record<string, unknown>[];
-  /*
-   * Whether a server row missing from this snapshot means "deleted".
-   *
-   * For a workspace's own records it does: the snapshot IS the workspace, and
-   * anything absent was removed locally. For ACCESS rows it does not, and the
-   * difference is the same one already written over syncWorkspaceMembershipRows
-   * -- a save is not a removal. An invitation created by another owner after
-   * this tab last loaded is simply missing here, and deleting it revokes a live
-   * invitation that nobody revoked.
-   *
-   * Nothing is lost by refusing to infer it: revocation and acceptance are
-   * UPDATES to `status` (revokeWorkspaceInvitationInCloud,
-   * xbar_accept_workspace_invitation), never deletes, so no legitimate path
-   * removes an invitation row at all. The delete could only ever destroy a row
-   * newer than the snapshot -- and 20260911005818 granting owners DELETE is
-   * what turned that from a refused statement into an effective one.
-   */
-  removeMissing?: boolean;
 }) {
   const client = getSupabaseClient();
   if (!client) {
     throw new Error('Supabase is not configured for this build.');
   }
 
-  const { table, idColumn, workspaceId, rows, removeMissing = true } = params;
-  const { data: existingRows, error: existingError } = removeMissing
-    ? await client.from(table).select(idColumn).eq('workspace_id', workspaceId)
-    : { data: [], error: null };
+  const { table, idColumn, workspaceId, rows } = params;
+  const { data: existingRows, error: existingError } = await client
+    .from(table)
+    .select(idColumn)
+    .eq('workspace_id', workspaceId);
 
   if (existingError) {
     throw new Error(existingError.message);
@@ -547,67 +529,6 @@ async function replaceWorkspaceRows(params: {
 
   const { error: upsertError } = await client.from(table).upsert(rows, {
     onConflict: `workspace_id,${idColumn}`,
-  });
-
-  if (upsertError) {
-    throw new Error(upsertError.message);
-  }
-}
-
-async function syncWorkspaceMembershipRows(params: {
-  workspaceId: string;
-  members: WorkspaceMemberRecord[];
-  updatedAt: string;
-}) {
-  const client = getSupabaseClient();
-  if (!client) {
-    throw new Error('Supabase is not configured for this build.');
-  }
-
-  const { workspaceId, members, updatedAt } = params;
-  const normalizedMembers = members.filter((member) => Boolean(member.email));
-
-  /*
-   * A SAVE NEVER REMOVES A MEMBER.
-   *
-   * This used to read every membership row and delete the ones absent from the
-   * snapshot being saved -- removal by inference. An invitee who accepted while
-   * an owner had an older snapshot open is in `workspaceInvitations` there, not
-   * yet in `workspaceMembers`, so the very next autosave classified their
-   * freshly inserted membership as stale and deleted it: revoked seconds after
-   * accepting, by a save nobody thought of as a removal. Granting owners DELETE
-   * in `20260911005818_workspace_access_policies` is what turned that from a
-   * refused statement into an effective one.
-   *
-   * Removal already has an explicit path -- `removeWorkspaceMemberFromCloud`,
-   * which the store calls before it drops the member locally -- so nothing is
-   * lost by refusing to infer it here. A save reconciles the rows it knows
-   * about and leaves the rest alone.
-   */
-
-  if (!normalizedMembers.length) {
-    return;
-  }
-
-  const rows = normalizedMembers.map((member) => {
-    const normalizedEmail = normalizeWorkspaceEmail(member.email);
-    return {
-      workspace_id: workspaceId,
-      // Account binding belongs to owner bootstrap / invitation acceptance.
-      // Omitting this column preserves the binding on conflict, including an
-      // invite accepted while this save was in flight. Sending null detached
-      // every member other than the account doing the save.
-      email: normalizedEmail,
-      display_name: normalizedEmail.split('@')[0] ?? normalizedEmail,
-      role: member.role,
-      status: member.status === 'Active' ? 'active' : 'inactive',
-      payload: member,
-      updated_at: updatedAt,
-    };
-  });
-
-  const { error: upsertError } = await client.from('workspace_memberships').upsert(rows, {
-    onConflict: 'workspace_id,email',
   });
 
   if (upsertError) {
@@ -659,30 +580,8 @@ async function saveWorkspaceBackupToRelationalCloud(
     const updatedAt = normalized.exportedAt ?? new Date().toISOString();
     const workspace = normalized.workspace ?? {};
 
-    await syncWorkspaceMembershipRows({
-      workspaceId,
-      members: workspace.workspaceMembers ?? [],
-      updatedAt,
-    });
-
-    await replaceWorkspaceRows({
-      table: 'workspace_invitations',
-      idColumn: 'invitation_id',
-      workspaceId,
-      // An invitation absent from this snapshot was created by someone else
-      // after this tab loaded, not revoked here. See removeMissing.
-      removeMissing: false,
-      rows: (workspace.workspaceInvitations ?? []).map((invitation) => ({
-        workspace_id: workspaceId,
-        invitation_id: invitation.id,
-        email: normalizeWorkspaceEmail(invitation.email),
-        role: invitation.role,
-        status: invitation.status.toLowerCase(),
-        invited_by_user_id: session.user.id,
-        payload: invitation,
-        updated_at: updatedAt,
-      })),
-    });
+    // Access changes use explicit cloud operations. An old ranch snapshot must
+    // never re-create members or reopen accepted/revoked invitations.
 
     await replaceWorkspaceRows({
       table: 'horses',

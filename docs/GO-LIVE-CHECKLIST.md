@@ -23,6 +23,25 @@ This scope does not authorize paid-service activation or assume that existing
 production integrations have been disabled. Record the actual enabled feature
 set before release.
 
+## September 12 follow-up — access changes are not snapshot data
+
+The current client no longer upserts invitations or non-owner memberships during
+ordinary relational snapshot saves. Invitation creation/revocation, server-side
+acceptance, and explicit member removal retain their separate operations. Owner
+bootstrap still writes the signed-in owner's own membership. Importing an old
+backup therefore does not provision its listed teammates or invitations.
+
+This removes this client's stale-save path for reopening revoked/accepted
+invitations and recreating removed members. A rendered regression submits a
+snapshot containing stale access records and checks outgoing requests. It does
+not establish live database protection against an older deployed client or a
+direct API caller. Server-owned lifecycle enforcement still needs verification.
+
+The single-owner launch boundary is **not yet enforced**: invitation controls
+remain enabled. The seat-consumption defect, invited-member save destination,
+live account/email checks and storage authorization gates remain open. Do not
+interpret this bounded fix as clearance to launch sharing.
+
 ## Verified September 11, 2026
 
 - Diagnosed the intermittent "stored session not published after reload" failure
