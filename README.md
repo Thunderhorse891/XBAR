@@ -318,6 +318,16 @@ psql -v ON_ERROR_STOP=1 "$DATABASE_URL" -f supabase/checks/share-token-live-roll
 psql "$DATABASE_URL" -f supabase/migrations/20260911005818_workspace_access_policies.sql
 psql -v ON_ERROR_STOP=1 "$DATABASE_URL" -f supabase/checks/workspace-access-live-rollback.sql
 
+# 9. Make shared documents actually shared. Until this runs, a document
+#    uploaded by one member is listed for the whole ranch and openable by
+#    nobody but the uploader: the `documents` row is workspace-scoped while the
+#    object in the private `horse-documents` bucket was keyed to the uploader's
+#    user id. Apply after step 8 -- the policies call the helper functions it
+#    installs. Existing objects are NOT moved; they stay readable by whoever
+#    uploaded them, and re-uploading is what shares one with the ranch.
+psql "$DATABASE_URL" -f supabase/migrations/20260912060000_workspace_keyed_document_storage.sql
+psql -v ON_ERROR_STOP=1 "$DATABASE_URL" -f supabase/checks/document-storage-live-rollback.sql
+
 ```
 
 **(4) and (5) are prerequisites for billing, not optimizations to schedule

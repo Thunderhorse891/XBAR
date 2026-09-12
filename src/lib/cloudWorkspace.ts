@@ -1,5 +1,6 @@
 import { apiConfig, isRelationalCloudEnabled, isSnapshotFallbackEnabled, supabaseConfig } from '@/lib/platformConfig';
 import { publicShareEventToBuyerRoomEvent, type PublicShareEventRow } from '@/lib/buyerDealRoom';
+import { buildDocumentStoragePath, explainUnopenableCloudDocument } from '@/lib/documentStoragePath';
 import { createId, todayStamp } from '@/lib/xbarRuntime';
 import { WORKSPACE_SCHEMA_VERSION } from '@/store/xbarStoreHelpers';
 import { getSupabaseClient } from '@/lib/supabaseClient';
@@ -1108,6 +1109,21 @@ export async function uploadMediaAssetToCloud(params: { file: File; horseId: str
   };
 }
 
+/**
+ * Put a document's bytes where the whole ranch can reach them.
+ *
+ * Keyed to the WORKSPACE, not to the person uploading. It used to be keyed to
+ * `session.user.id`, and since `horse-documents` is a private bucket whose
+ * policy compares that first segment against membership, every teammate saw the
+ * document listed and was refused when they opened it. The object path and the
+ * `documents` row now answer to the same workspace.
+ *
+ * When no workspace resolves -- a build with cloud sync off, a session whose
+ * membership has not loaded, a signed-out tab -- this returns `null` rather than
+ * writing the file somewhere unreadable. The caller reads `null` as "the cloud
+ * did not take this file" and keeps the bytes on the device, which is a file the
+ * customer still has rather than one nobody can open.
+ */
 export async function uploadDocumentAssetToCloud(params: { file: File; horseId?: string }) {
   const client = getSupabaseClient();
   if (!client) {
@@ -1119,10 +1135,17 @@ export async function uploadDocumentAssetToCloud(params: { file: File; horseId?:
     return null;
   }
 
-  const extension = params.file.name.includes('.') ? params.file.name.split('.').pop() : 'bin';
-  const fileName = `${createId('document')}.${extension}`;
-  const horseSegment = sanitizeStorageSegment(params.horseId ?? 'unassigned');
-  const path = `${session.user.id}/documents/${horseSegment}/${fileName}`;
+  const accessProfile = await loadWorkspaceAccessProfile(session);
+  const path = buildDocumentStoragePath({
+    workspaceId: accessProfile.workspaceId,
+    horseId: params.horseId,
+    objectId: createId('document'),
+    originalFileName: params.file.name,
+  });
+  if (!path) {
+    return null;
+  }
+
   const { error } = await client.storage.from(supabaseConfig.documentBucket).upload(path, params.file, {
     upsert: false,
     contentType: params.file.type || undefined,
@@ -1235,9 +1258,20 @@ export async function getDocumentAccessUrl(
     .from(supabaseConfig.documentBucket)
     .createSignedUrl(document.storagePath, 60 * 5);
   if (error || !data?.signedUrl) {
+    // A refusal here is usually not a broken link. Documents uploaded before
+    // shared storage sit under the uploader's own id, so a teammate sees the
+    // record and is turned away at the file -- and "Object not found" tells
+    // them nothing they can act on. The workspace is only looked up on this
+    // path, so a normal open still costs one request.
+    const accessProfile = await loadWorkspaceAccessProfile(session);
+    const legacyExplanation = explainUnopenableCloudDocument({
+      storagePath: document.storagePath,
+      viewerUserId: session.user.id,
+      workspaceId: accessProfile.workspaceId,
+    });
     return {
       ok: false,
-      message: error?.message ?? 'Unable to generate a secure file link for this document.',
+      message: legacyExplanation ?? error?.message ?? 'Unable to generate a secure file link for this document.',
     } as const;
   }
 
