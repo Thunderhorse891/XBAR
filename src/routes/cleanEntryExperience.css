@@ -148,7 +148,13 @@
   align-self: start;
   object-fit: contain;
   opacity: 0.09;
-  filter: grayscale(1) contrast(1.1);
+  /*
+   * No grayscale. The blue rim light is the one feature that identifies this
+   * mark -- in the artwork blue appears only as an edge light, never as a fill
+   * -- and desaturating it removed the brand at the only place it appeared on
+   * this screen. Contrast still tames it against the pale panel.
+   */
+  filter: contrast(1.1);
 }
 
 .clean-login-visual__watermark {

@@ -105,3 +105,45 @@ test('the token file is actually loaded, and the cinematic tier honours reduced 
   const guard = motion.slice(motion.indexOf('@media (prefers-reduced-motion: reduce)'));
   assert.match(guard, /\.motion-brand-in/, 'a brand animation is decoration, and must collapse under reduced motion');
 });
+
+test('sign-in brand images reserve their real shape and keep the rim light', async () => {
+  /*
+   * The `width`/`height` attributes are not decoration: they set the aspect
+   * ratio the browser reserves BEFORE the bytes arrive. Declared 980x331 for a
+   * 1122x912 file and 512x512 for a 1004x959 one, the reserved box was the
+   * wrong shape and the panel reflowed as each image decoded.
+   *
+   * The dimensions asserted here are the files' own, read from the PNG headers
+   * rather than copied from the markup, so re-exported artwork fails this
+   * instead of silently reintroducing the shift.
+   */
+  const login = await readFile('src/routes/Login.tsx', 'utf8');
+
+  for (const [file, className] of [
+    ['public/brand/xbar-horse-outline-safe.png', 'clean-login-visual__horse'],
+    ['public/brand/xbar-x-watermark-main.png', 'clean-login-visual__watermark'],
+    ['public/brand/xbar-wordmark.png', 'clean-login-visual__wordmark'],
+  ] as const) {
+    const header = await readFile(file);
+    assert.equal(header.subarray(0, 8).toString('hex'), '89504e470d0a1a0a', `${file} must be a PNG`);
+    const width = header.readUInt32BE(16);
+    const height = header.readUInt32BE(20);
+
+    const tag = login.slice(login.indexOf(className), login.indexOf(className) + 400);
+    assert.match(tag, new RegExp(`width="${width}"`), `${className} must declare its real width (${width})`);
+    assert.match(tag, new RegExp(`height="${height}"`), `${className} must declare its real height (${height})`);
+  }
+
+  /*
+   * And the mark keeps its colour. Blue appears in the artwork only as a rim
+   * light; desaturating it deletes the single feature that identifies the brand
+   * at the one place it appears on this screen.
+   */
+  const entry = await readFile('src/routes/cleanEntryExperience.css', 'utf8');
+  const watermark = entry.slice(
+    entry.indexOf('.clean-login-visual__watermark,'),
+    entry.indexOf('.clean-login-visual__copy'),
+  );
+  assert.ok(watermark.length > 0, 'the watermark rule must be findable');
+  assert.ok(!/grayscale\(/.test(watermark), 'the brand mark must not be desaturated on the sign-in panel');
+});

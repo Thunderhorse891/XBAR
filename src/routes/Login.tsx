@@ -355,26 +355,36 @@ export default function Login() {
         aria-label={authMode === 'signin' ? 'Sign in to XBAR' : 'Create an XBAR account'}
       >
         <aside className="clean-login-visual" aria-label="XBAR brand">
+          {/*
+            Intrinsic dimensions, not wished-for ones. These attributes exist to
+            reserve the right SHAPE before the bytes arrive: the horse is
+            1122x912 and was declared 980x331, the X 1004x959 and declared
+            512x512, so the box the browser held was the wrong aspect ratio and
+            the panel reflowed once each image decoded. CSS still sizes them.
+          */}
           <img
             className="clean-login-visual__horse"
             src="/brand/xbar-horse-outline-safe.png"
-            width="980"
-            height="331"
+            width="1122"
+            height="912"
+            decoding="async"
             alt=""
           />
           <img
             className="clean-login-visual__watermark"
             src="/brand/xbar-x-watermark-main.png"
-            width="512"
-            height="512"
+            width="1004"
+            height="959"
+            decoding="async"
             alt=""
           />
           <div className="clean-login-visual__copy">
             <img
               className="clean-login-visual__wordmark"
               src="/brand/xbar-wordmark.png"
-              width="420"
-              height="120"
+              width="550"
+              height="170"
+              fetchPriority="high"
               alt="XBAR"
             />
             <h2>XBAR Ranch Management</h2>
