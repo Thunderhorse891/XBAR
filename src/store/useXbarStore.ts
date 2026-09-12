@@ -806,37 +806,36 @@ export const useXbarStore = create<XbarStore>()(
             const incomingBytes = fileList.reduce((total, file) => total + file.size, 0);
             /*
              * The RPC is authoritative about PERSISTED ROWS, not about bytes.
-             * It sums `documents` and `sale_packets`, and a row lands about 1.6
+             * It sums `documents` AND `sale_packets`, and a row lands about 1.6
              * seconds after its object does -- CloudBootstrap's autosave
              * debounce. A second batch started inside that window would be
              * measured against a total that predates the first one, and both
              * could pass just under the cap.
              *
-             * Local accounting is ahead in exactly that window; the server is
-             * ahead when another device uploaded. Taking the greater is correct
-             * in both directions and can never under-count, which is the only
-             * direction that costs anything here.
+             * Staged bytes are ADDED to that total, never compared with it.
+             * Comparing was wrong because the two quantities have different
+             * scopes: a local document total carries no sale packets, so in a
+             * workspace holding more packet bytes than staged document bytes
+             * the server total won the comparison and the staged files dropped
+             * out of the sum entirely. What the server cannot know yet is
+             * exactly this -- objects already in the bucket whose rows have not
+             * been accepted -- so it is the one thing the client may add.
+             *
+             * Counted in exact bytes as each upload succeeds, NOT from
+             * `storageUsedGb`: that field goes through `normalizeUsage`,
+             * `Math.round(value * 1000) / 1000`, three decimals of a gigabyte
+             * or about 1 MiB, so anything under roughly half of that rounds to
+             * a zero increment and a run of small batches would keep measuring
+             * itself against the pre-upload total.
              *
              * This closes the window within a client. Two devices uploading in
              * the same instant still meet at the storage trigger, which is the
              * backstop and stays one -- a client-side reservation cannot be
-             * atomic across devices.
+             * atomic across devices. A reload before the first push also clears
+             * the staged counter; the next autosave lands ~1.6s later and the
+             * trigger covers that window too.
              */
-            /*
-             * Counted from the records themselves, NOT from `storageUsedGb`.
-             * That field goes through `normalizeUsage`, which is
-             * `Math.round(value * 1000) / 1000` -- three decimal places of a
-             * gigabyte, about 1 MiB. Anything under roughly half that rounds to
-             * a zero increment, so a run of small batches would keep measuring
-             * itself against the pre-upload total. A display value is the wrong
-             * input for a capacity decision; these are the exact bytes this
-             * client has put in the bucket and will push as `size_bytes`.
-             */
-            const localBytes = state.documents.reduce(
-              (total, document) => (document.storagePath ? total + (document.fileSizeBytes ?? 0) : total),
-              0,
-            );
-            const knownBytes = Math.max(storedBytes, localBytes);
+            const knownBytes = storedBytes + useCloudStore.getState().stagedStorageBytes;
             if (knownBytes + incomingBytes > planUsage.storageLimitGb * 1024 * 1024 * 1024) {
               // Known to be over cap: refusing is right, and it is the one
               // answer the customer can act on by upgrading.
@@ -884,6 +883,10 @@ export const useXbarStore = create<XbarStore>()(
                     file,
                     horseId: selectedHorse?.id ?? horseId,
                   });
+                  // Recorded the moment the object exists, not when the record
+                  // is installed: the next batch's capacity check may run
+                  // before this one finishes building its records.
+                  useCloudStore.getState().noteStagedStorageBytes(file.size);
                 } catch (error) {
                   console.error('Cloud document upload failed; keeping the file on this device instead.', error);
                 }
@@ -998,6 +1001,28 @@ export const useXbarStore = create<XbarStore>()(
             state: documents.some((document) => document.state === 'Needs Review') ? 'Reviewing' : 'Completed',
           };
 
+          /*
+           * What this batch costs the plan.
+           *
+           * With a cloud project the quota is cloud-stored bytes, so only
+           * records that reached the bucket are charged -- a device-only file
+           * occupies nothing there.
+           *
+           * With no cloud project there is no bucket and `storagePath` is never
+           * set, so charging by that rule charged nothing at all: every later
+           * batch was then measured against the same untouched total and the
+           * plan's cap could be walked past indefinitely, all the way to an
+           * IndexedDB quota failure. In a local-only build the files on the
+           * device ARE the usage.
+           */
+          const chargedStorageGb =
+            (isSupabaseConfigured()
+              ? documents
+                  .filter((document) => Boolean(document.storagePath))
+                  .reduce((total, document) => total + (document.fileSizeBytes ?? 0), 0)
+              : fileList.reduce((total, file) => total + file.size, 0)) /
+            (1024 * 1024 * 1024);
+
           set((current) => {
             const allDocuments = [...documents, ...current.documents];
             const nextHorses = current.horses.map((horse) => {
@@ -1019,13 +1044,7 @@ export const useXbarStore = create<XbarStore>()(
                   ...current.subscription.usage,
                   documentsProcessed: allDocuments.filter((document) => document.state !== 'Archived').length,
                   horsesUsed: createdHorses.length + nextHorses.length,
-                  storageUsedGb: normalizeUsage(
-                    current.subscription.usage.storageUsedGb +
-                      documents
-                        .filter((document) => Boolean(document.storagePath))
-                        .reduce((total, document) => total + (document.fileSizeBytes ?? 0), 0) /
-                        (1024 * 1024 * 1024),
-                  ),
+                  storageUsedGb: normalizeUsage(current.subscription.usage.storageUsedGb + chargedStorageGb),
                 },
               },
             };

@@ -21,6 +21,7 @@ export function CloudBootstrap() {
   const setSyncState = useCloudStore((state) => state.setSyncState);
   const setWorkspaceAccessProfile = useCloudStore((state) => state.setWorkspaceAccessProfile);
   const setAutosaveReady = useCloudStore((state) => state.setAutosaveReady);
+  const settleStagedStorageBytes = useCloudStore((state) => state.settleStagedStorageBytes);
   const setCurrentRole = useXbarStore((state) => state.setCurrentRole);
   const pushToast = useUiStore((state) => state.pushToast);
   const importWorkspaceBackup = useXbarStore((state) => state.importWorkspaceBackup);
@@ -329,6 +330,16 @@ export function CloudBootstrap() {
         return;
       }
       const backup = exportWorkspaceBackup();
+      /*
+       * Read before the request and released only for this amount. The document
+       * intake counts bytes it has put in the bucket so the capacity check can
+       * add them to the server's total; once the server holds those rows they
+       * are inside that total and would otherwise be counted twice. Releasing
+       * the captured amount rather than zeroing is what keeps an upload that
+       * lands while this save is in flight -- and so is not in this snapshot --
+       * still counted.
+       */
+      const stagedAtSnapshot = useCloudStore.getState().stagedStorageBytes;
       const signature = serializeWorkspaceBackup(backup);
       if (signature === lastPersistedSignatureRef.current) return;
       saving = true;
@@ -341,6 +352,7 @@ export function CloudBootstrap() {
           setWorkspaceAccessProfile(result.workspaceId, 'Admin');
         }
         lastPersistedSignatureRef.current = signature;
+        settleStagedStorageBytes(stagedAtSnapshot);
         if (result.updatedAt) setLastSyncAt(result.updatedAt);
         setSyncState('idle', result.message);
       } else {
@@ -381,6 +393,7 @@ export function CloudBootstrap() {
     setLastSyncAt,
     setSyncState,
     setWorkspaceAccessProfile,
+    settleStagedStorageBytes,
     workspaceHydrated,
     workspaceId,
   ]);

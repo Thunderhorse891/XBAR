@@ -215,12 +215,35 @@ test('a known over-cap batch is still refused outright', async () => {
   );
 });
 
-test('document quota accounts only for bytes accepted by cloud storage', async () => {
+test('document quota charges cloud bytes with a project and device bytes without one', async () => {
+  /*
+   * With a project the quota is cloud-stored bytes, so a device-only record is
+   * charged nothing — it occupies nothing in the bucket.
+   *
+   * With NO project `storagePath` is never set, so that same rule charged every
+   * batch zero: each later batch was measured against an untouched total and
+   * the plan's cap could be walked past indefinitely. In a local-only build the
+   * files on the device are the usage.
+   */
   const store = await readFile('src/store/useXbarStore.ts', 'utf8');
   const intake = store.slice(store.indexOf('createDocumentIntake:'), store.indexOf('reviewDocument:'));
 
   assert.match(intake, /fileSizeBytes: uploadedAsset \? file\.size : undefined/);
-  assert.match(intake, /filter\(\(document\) => Boolean\(document\.storagePath\)\)/);
+  assert.match(
+    intake,
+    /const chargedStorageGb =\s*\(isSupabaseConfigured\(\)\s*\?\s*documents[\s\S]{0,200}?filter\(\(document\) => Boolean\(document\.storagePath\)\)/,
+    'a cloud build must charge only records that reached the bucket',
+  );
+  assert.match(
+    intake,
+    /:\s*fileList\.reduce\(\(total, file\) => total \+ file\.size, 0\)\)\s*\/\s*\(1024 \* 1024 \* 1024\)/,
+    'a local-only build must charge the batch it just stored on the device',
+  );
+  assert.match(
+    intake,
+    /storageUsedGb: normalizeUsage\(current\.subscription\.usage\.storageUsedGb \+ chargedStorageGb\)/,
+    'the accumulated usage must be the charged amount',
+  );
 });
 
 test('automatic relational save failures are visible and deduplicated', async () => {
@@ -265,38 +288,77 @@ test('an autosave never revokes an invitation it simply has not seen', async () 
 
 test('a second batch is measured against bytes already uploaded, not just persisted rows', async () => {
   /*
-   * `xbar_workspace_storage_bytes` sums `documents` and `sale_packets` ROWS. A
+   * `xbar_workspace_storage_bytes` sums `documents` AND `sale_packets` ROWS. A
    * row lands about 1.6 seconds after its object does — CloudBootstrap's
    * autosave debounce — so a batch started inside that window was measured
    * against a total that predated the previous one, and both could pass just
    * under the cap. The later upsert is then rejected by the storage trigger,
    * which is the wedge this gate exists to prevent.
+   *
+   * Staged bytes are ADDED to the server total, never compared with it. A local
+   * document total carries no sale packets, so taking the greater of the two
+   * compared quantities of different scope: in a workspace holding more packet
+   * bytes than staged document bytes, the server total won and the staged files
+   * dropped out of the sum entirely.
    */
   const store = await readFile('src/store/useXbarStore.ts', 'utf8');
   const intake = store.slice(store.indexOf('createDocumentIntake:'), store.indexOf('reviewDocument:'));
 
-  assert.match(intake, /const knownBytes = Math\.max\(storedBytes, localBytes\)/);
+  assert.match(
+    intake,
+    /const knownBytes = storedBytes \+ useCloudStore\.getState\(\)\.stagedStorageBytes/,
+    'staged bytes must be added to the authoritative total, not compared with it',
+  );
+  assert.ok(
+    !/Math\.max\(storedBytes/.test(intake),
+    'the server total and a documents-only local total are not comparable quantities',
+  );
   assert.match(
     intake,
     /if \(knownBytes \+ incomingBytes > planUsage\.storageLimitGb/,
-    'the comparison must use the greater of the two totals, not the server total alone',
+    'the comparison must use the combined total',
   );
   /*
-   * Counted from the records, not from `storageUsedGb`. That field passes
-   * through `normalizeUsage` — `Math.round(value * 1000) / 1000`, three decimals
-   * of a gigabyte — so an upload under about half a MiB rounds to a zero
-   * increment and a run of small batches keeps measuring itself against the
-   * pre-upload total. A rounded display value is the wrong input for a capacity
-   * decision.
+   * Counted in exact bytes as each upload succeeds, not from `storageUsedGb`.
+   * That field passes through `normalizeUsage` — `Math.round(value * 1000) /
+   * 1000`, three decimals of a gigabyte — so an upload under about half a MiB
+   * rounds to a zero increment and a run of small batches keeps measuring
+   * itself against the pre-upload total.
    */
   assert.match(
     intake,
-    /const localBytes = state\.documents\.reduce\(/,
-    'staged bytes must be counted exactly from the records, not reconstructed from a rounded GB display value',
+    /uploadedAsset = await uploadDocumentAssetToCloud\(\{[\s\S]{0,420}?noteStagedStorageBytes\(file\.size\)/,
+    'bytes must be staged as the upload succeeds, before the next batch can be gated',
   );
-  assert.match(intake, /document\.storagePath \? total \+ \(document\.fileSizeBytes \?\? 0\) : total/);
   assert.ok(
     !/planUsage\.storageUsedGb\) \* 1024/.test(intake),
     'the rounded gigabyte value must not be the capacity input',
+  );
+});
+
+test('staged bytes are released by the save that persists them, and only that much', async () => {
+  /*
+   * Once the server holds the rows, those bytes are inside its total and
+   * counting them twice would refuse batches that fit. Releasing the amount
+   * captured with the snapshot — rather than zeroing — is what keeps an upload
+   * that lands mid-save, and so is absent from that snapshot, still counted.
+   */
+  const bootstrap = await readFile('src/components/CloudBootstrap.tsx', 'utf8');
+  const cloudStore = await readFile('src/store/useCloudStore.ts', 'utf8');
+
+  assert.match(
+    bootstrap,
+    /const stagedAtSnapshot = useCloudStore\.getState\(\)\.stagedStorageBytes;[\s\S]{0,200}?const signature = serializeWorkspaceBackup\(backup\)/,
+    'the staged amount must be captured with the snapshot, before the request',
+  );
+  assert.match(
+    bootstrap,
+    /if \(result\.ok\) \{[\s\S]{0,400}?settleStagedStorageBytes\(stagedAtSnapshot\)/,
+    'staged bytes may only be released by a save that actually succeeded',
+  );
+  assert.match(
+    cloudStore,
+    /settleStagedStorageBytes: \(bytes\) =>[\s\S]{0,260}?stagedStorageBytes: Math\.max\(0, state\.stagedStorageBytes - /,
+    'the release must subtract the captured amount, never zero the counter',
   );
 });

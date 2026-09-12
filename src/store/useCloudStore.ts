@@ -112,6 +112,18 @@ type CloudStore = {
    * wrong one deletes a rancher's only copy of a document.
    */
   autosaveUnlocked: boolean;
+  /*
+   * Bytes this client has already put in the document bucket whose relational
+   * rows the server has not accepted yet.
+   *
+   * `xbar_workspace_storage_bytes` is authoritative about PERSISTED ROWS, and
+   * it sums `documents` AND `sale_packets`. A local document total therefore is
+   * not a comparable quantity: taking the greater of the two drops staged bytes
+   * entirely whenever sale-packet usage exceeds them. What the server genuinely
+   * cannot know yet is this number, so this is the only thing that may be added
+   * to its total.
+   */
+  stagedStorageBytes: number;
   initialize: () => Promise<(() => void) | void>;
   setLastSyncAt: (value: string) => void;
   setSyncState: (state: CloudSyncState, message?: string) => void;
@@ -119,6 +131,8 @@ type CloudStore = {
   // Both arguments are required so a new call site cannot quietly inherit the
   // permissive half of this pair.
   setAutosaveReady: (ready: boolean, unlocked: boolean) => void;
+  noteStagedStorageBytes: (bytes: number) => void;
+  settleStagedStorageBytes: (bytes: number) => void;
   /*
    * The rancher resolved a `conflict-lock` by hand, choosing a copy with Push
    * cloud or Pull cloud in Settings.
@@ -956,6 +970,7 @@ export const useCloudStore = create<CloudStore>((set, get) => ({
   // reconciliation to wait for, and a local-only workspace must not be made to
   // wait for something that will never happen.
   autosaveUnlocked: !isSupabaseConfigured(),
+  stagedStorageBytes: 0,
   initialize: async () => {
     if (get().initialized) {
       return;
@@ -1500,6 +1515,19 @@ export const useCloudStore = create<CloudStore>((set, get) => ({
   setSyncState: (state, message = '') => set({ syncState: state, syncMessage: message }),
   setWorkspaceAccessProfile: (workspaceId, workspaceRole = 'Admin') => set({ workspaceId, workspaceRole }),
   setAutosaveReady: (ready, unlocked) => set({ autosaveReady: ready, autosaveUnlocked: unlocked }),
+  noteStagedStorageBytes: (bytes) =>
+    set((state) =>
+      Number.isFinite(bytes) && bytes > 0 ? { stagedStorageBytes: state.stagedStorageBytes + bytes } : state,
+    ),
+  /*
+   * Subtract what the snapshot carried rather than zeroing. An upload that
+   * lands while a save is in flight is not in that snapshot, and zeroing would
+   * forget it -- which is the very under-count this field exists to stop.
+   */
+  settleStagedStorageBytes: (bytes) =>
+    set((state) => ({
+      stagedStorageBytes: Math.max(0, state.stagedStorageBytes - (Number.isFinite(bytes) ? Math.max(0, bytes) : 0)),
+    })),
   unlockAutosaveAfterManualSync: () => set((state) => (state.autosaveReady ? { autosaveUnlocked: true } : state)),
   sendMagicLink: async (email) => {
     const client = getSupabaseClient();
@@ -2047,6 +2075,7 @@ export const useCloudStore = create<CloudStore>((set, get) => ({
       syncMessage: '',
       autosaveReady: false,
       autosaveUnlocked: false,
+      stagedStorageBytes: 0,
     });
     return { ok: true, message: 'Signed out of cloud sync.' };
   },
@@ -2096,6 +2125,7 @@ export const useCloudStore = create<CloudStore>((set, get) => ({
       syncMessage: '',
       autosaveReady: false,
       autosaveUnlocked: false,
+      stagedStorageBytes: 0,
     });
     return { ok: true, message: 'Your account and data have been deleted.' };
   },
