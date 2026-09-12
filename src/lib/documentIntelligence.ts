@@ -100,13 +100,38 @@ export function readableProcessingNote(note: unknown): string {
  *
  * Pure, so what the customer is told can be tested without a browser.
  */
+/*
+ * The two sentences that mean "the reader came away with nothing", exported so
+ * the screen can ask that question without parsing prose. This module is their
+ * only author, so comparing against these is comparing against the source.
+ */
+export const UNREADABLE_FILE_NOTE = 'This file could not be read.';
+const NO_PAGES_READ = /^None of the \d+ pages could be read\./;
+
+/**
+ * Did the read produce nothing at all?
+ *
+ * Worth asking separately from "was the read partial", because the screen owes
+ * a different answer. A partial read still has facts on it and a confidence
+ * figure that means something. A read that produced nothing has neither -- and
+ * the match confidence shown beside it is a floor (`0.54` when no candidate
+ * matched, never below `0.42`), not a measurement. Presenting that as
+ * "54% match confidence" next to "This file could not be read." states a
+ * precision that was never computed, which is the same dishonesty the coverage
+ * reporting exists to remove.
+ */
+export function extractionProducedNothing(note: unknown): boolean {
+  const text = readableProcessingNote(note);
+  return text.startsWith(UNREADABLE_FILE_NOTE) || NO_PAGES_READ.test(text);
+}
+
 export function describeDocumentCoverage(coverage: DocumentCoverage): string {
   const examined = coverage.pagesRead + coverage.pagesOcrRead;
   const parts: string[] = [];
   if (coverage.readFailed) {
     // Says nothing about pages on purpose: a file that never opened has no page
     // count to report, and inventing "0 pages" would be a claim of its own.
-    parts.push('This file could not be read.');
+    parts.push(UNREADABLE_FILE_NOTE);
   } else if (coverage.totalPages > 0 && examined === 0) {
     /*
      * Nothing came off the file at all, and this used to say nothing.

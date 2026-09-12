@@ -15,7 +15,7 @@ import { buildDocumentTrustProfile } from '@/lib/xbarPhaseTwo';
 import { useUiStore } from '@/store/useUiStore';
 import { useCloudStore } from '@/store/useCloudStore';
 import { useCurrentRoleCapability, useXbarStore } from '@/store/useXbarStore';
-import { readableProcessingNote } from '@/lib/documentIntelligence';
+import { extractionProducedNothing, readableProcessingNote } from '@/lib/documentIntelligence';
 import { buildHorseEnrichmentFromEntities, normalizeOwnershipRecord } from '@/store/xbarStoreLogic';
 import type { DocumentRecord, DocumentSource, SalePacketBuild } from '@/types/xbar';
 import { documentSources } from '@/features/documents/constants';
@@ -848,15 +848,37 @@ export default function Documents() {
                           <td>
                             <div className="table-cell__stack">
                               <strong>{document.title}</strong>
-                              <span>
-                                {document.type} · {Math.round(document.confidence * 100)}% match confidence
-                              </span>
+                              {/*
+                                A confidence figure is a claim about a match
+                                made from facts. When the reader came away with
+                                nothing there are no facts, and the number shown
+                                is a floor -- 0.54 with no candidate, never
+                                below 0.42 -- not a measurement. Printing
+                                "54% match confidence" beside "This file could
+                                not be read." states a precision nobody
+                                computed, so the row says what happened instead.
+                              */}
+                              {extractionProducedNothing(document.processingNote) ? (
+                                <span>{document.type} · nothing could be read from this file</span>
+                              ) : (
+                                <span>
+                                  {document.type} · {Math.round(document.confidence * 100)}% match confidence
+                                </span>
+                              )}
                               {/* Only ever present when the reader stopped
                                   short of the whole file. Silence here used to
                                   mean "read in full" and did not. */}
                               {readableProcessingNote(document.processingNote) ? (
-                                <span className="xs-muted" role="note">
+                                <span
+                                  className={
+                                    extractionProducedNothing(document.processingNote) ? 'field-error' : 'xs-muted'
+                                  }
+                                  role="note"
+                                >
                                   {readableProcessingNote(document.processingNote)}
+                                  {extractionProducedNothing(document.processingNote)
+                                    ? ' Enter the details by hand below, or upload a clearer scan of the same document.'
+                                    : ''}
                                 </span>
                               ) : null}
                             </div>

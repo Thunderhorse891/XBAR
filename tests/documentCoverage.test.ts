@@ -3,11 +3,13 @@ import test from 'node:test';
 import {
   countPagesRead,
   describeDocumentCoverage,
+  extractionProducedNothing,
   fullCoverage,
   readOutcome,
   readableProcessingNote,
   readDocumentWithCoverage,
 } from '../src/lib/documentIntelligence.js';
+import { readFile } from 'node:fs/promises';
 
 test('a document read end to end says nothing', () => {
   assert.equal(describeDocumentCoverage(fullCoverage()), '');
@@ -331,4 +333,59 @@ test('a file type this reader has no opinion about is not called a failure', asy
   const other = new File([new Uint8Array([1, 2, 3])], 'scan.dwg', { type: 'application/acad' });
   const result = await readDocumentWithCoverage(other);
   assert.equal(result.coverage.readFailed, false);
+});
+
+test('a read that produced nothing is told apart from a partial one', () => {
+  /*
+   * Fixtures, each described by the coverage the reader would hand back.
+   *
+   * The distinction matters because the screen owes different answers. A
+   * partial read still has facts and a confidence figure that means something;
+   * a read that produced nothing has neither.
+   */
+  const unreadablePhoto = { ...fullCoverage(), readFailed: true };
+  const scanWhereEveryPageFailed = { ...fullCoverage(), totalPages: 6 };
+  const partialScan = { ...fullCoverage(), totalPages: 6, pagesRead: 2, pagesOcrRead: 1 };
+  const ocrRescuedScan = { ...fullCoverage(), totalPages: 3, pagesOcrRead: 3 };
+  const truncatedButRead = { ...fullCoverage(), totalPages: 2, pagesRead: 2, truncated: true };
+  const cleanRead = fullCoverage();
+
+  assert.equal(extractionProducedNothing(describeDocumentCoverage(unreadablePhoto)), true);
+  assert.equal(extractionProducedNothing(describeDocumentCoverage(scanWhereEveryPageFailed)), true);
+
+  assert.equal(extractionProducedNothing(describeDocumentCoverage(partialScan)), false);
+  assert.equal(extractionProducedNothing(describeDocumentCoverage(ocrRescuedScan)), false);
+  assert.equal(
+    extractionProducedNothing(describeDocumentCoverage(truncatedButRead)),
+    false,
+    'a truncated read still produced facts',
+  );
+  assert.equal(extractionProducedNothing(describeDocumentCoverage(cleanRead)), false);
+
+  // Whatever a damaged import puts in the field, the screen must not decide
+  // from it that nothing was read.
+  for (const damaged of [undefined, null, {}, 42, ['This file could not be read.']]) {
+    assert.equal(extractionProducedNothing(damaged), false);
+  }
+});
+
+test('the review row drops the match figure when there was nothing to match on', async () => {
+  /*
+   * `confidence` has a FLOOR, not a measurement: 0.54 when no candidate matched
+   * and never below 0.42 (xbarRuntime.ts). Rendered beside "This file could not
+   * be read." it read as "54% match confidence" -- a precision nobody computed,
+   * on a row that simultaneously said the file was unreadable.
+   */
+  const screen = await readFile('src/routes/Documents.tsx', 'utf8');
+
+  assert.match(
+    screen,
+    /extractionProducedNothing\(document\.processingNote\) \? \(\s*<span>\{document\.type\} · nothing could be read from this file<\/span>/,
+    'a row with nothing extracted must not print a match percentage',
+  );
+  assert.match(
+    screen,
+    /Enter the details by hand below, or upload a clearer scan/,
+    'and it must say what the customer can do next',
+  );
 });
