@@ -1094,6 +1094,19 @@ export function canRestorePersistedState(raw: unknown): boolean {
          */
         'fileUrl',
         /*
+         * Rendered, at Documents.tsx:857. A non-string from a damaged backup
+         * reaches JSX as an invalid child, which React throws on — the whole
+         * Documents screen, not the one row.
+         *
+         * `readableProcessingNote` already guards that call site, and this does
+         * not replace it: the guard keeps ONE screen honest, while the boundary
+         * keeps the value out of the restored workspace entirely, so the next
+         * reader of `processingNote` inherits the protection instead of having
+         * to remember it. The render-site guard was the stopgap; this is the
+         * fix.
+         */
+        'processingNote',
+        /*
          * `localFileKey` was excluded as "only compared or passed through",
          * and that was wrong in the way this table keeps being wrong: passed
          * through TO WHERE. `storedFileLocation` routes on truthiness —

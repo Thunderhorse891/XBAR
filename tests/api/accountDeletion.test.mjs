@@ -1,8 +1,12 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 
+import { readFileSync } from 'node:fs';
+
 import {
   confirmationSatisfied,
+  documentPrefixesToPurge,
+  mediaPrefixesToPurge,
   pickSuccessorOwner,
   planAccountDeletion,
   loadAccountDeletionPlan,
@@ -194,4 +198,57 @@ test('the real handler refuses failed prerequisites and shared-workspace deletio
     if (scenario !== 'removal') assert.deepEqual(writes, []);
     if (scenario === 'transfer') assert.equal(JSON.parse(res.body).code, 'shared_workspace_handoff_required');
   }
+});
+
+test('a purged private workspace has its documents erased, not orphaned', () => {
+  // Documents are keyed to the workspace now, so sweeping only the departing
+  // account's own prefix would leave every file of a purged private workspace
+  // in the bucket while Settings promises it was "permanently erased".
+  const plan = planAccountDeletion('user-1', [{ id: 'ws-solo', otherActiveMembers: [] }]);
+  assert.deepEqual(documentPrefixesToPurge(plan), ['user-1', 'ws-solo']);
+});
+
+test('a transferred workspace is never swept, in either bucket', () => {
+  // The people who stayed keep their records. This is the one assertion that
+  // stands between a departing owner and the rest of the ranch's files.
+  const plan = planAccountDeletion('user-1', [
+    { id: 'ws-shared', otherActiveMembers: [{ userId: 'u-admin', role: 'Admin' }] },
+    { id: 'ws-solo', otherActiveMembers: [] },
+  ]);
+  assert.deepEqual(plan.workspacesToTransfer, [{ workspaceId: 'ws-shared', newOwnerUserId: 'u-admin' }]);
+  assert.ok(!documentPrefixesToPurge(plan).includes('ws-shared'));
+  assert.ok(!mediaPrefixesToPurge(plan).includes('ws-shared'));
+  assert.deepEqual(documentPrefixesToPurge(plan), ['user-1', 'ws-solo']);
+});
+
+test('media is swept by uploader only, because that is how media is keyed', () => {
+  // horse-media is a public bucket and never had the shared-read problem that
+  // moved documents onto workspace paths, so a workspace prefix here would
+  // erase nothing today and be a loaded gun if that ever changed.
+  const plan = planAccountDeletion('user-1', [{ id: 'ws-solo', otherActiveMembers: [] }]);
+  assert.deepEqual(mediaPrefixesToPurge(plan), ['user-1']);
+});
+
+test('an account owning nothing still has its own uploads erased', () => {
+  const plan = planAccountDeletion('user-1', []);
+  assert.deepEqual(documentPrefixesToPurge(plan), ['user-1']);
+  assert.deepEqual(mediaPrefixesToPurge(plan), ['user-1']);
+});
+
+test('a malformed plan sweeps nothing rather than the whole bucket', () => {
+  // An empty prefix lists every object in the bucket. Erasing a customer's
+  // files is the one operation where "best effort" has to mean "nothing".
+  assert.deepEqual(documentPrefixesToPurge({ userId: '', workspacesToPurge: ['', null] }), []);
+  assert.deepEqual(documentPrefixesToPurge({}), []);
+  assert.deepEqual(documentPrefixesToPurge(undefined), []);
+  assert.deepEqual(mediaPrefixesToPurge({ userId: undefined }), []);
+});
+
+test('the deletion endpoint actually uses those prefix lists', () => {
+  // A rule nothing calls is not a fix. This pins the wiring, since the sweep
+  // itself needs a live Supabase project to exercise end to end.
+  const source = readFileSync(new URL('../../api/account/delete.js', import.meta.url), 'utf8');
+  assert.ok(source.includes('documentPrefixesToPurge(plan)'), 'document prefixes are not used by the endpoint');
+  assert.ok(source.includes('mediaPrefixesToPurge(plan)'), 'media prefixes are not used by the endpoint');
+  assert.ok(!source.includes('removeUserStorage'), 'the uploader-only sweep is still present');
 });

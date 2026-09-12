@@ -1561,6 +1561,23 @@ test('a record that installs but crashes the route it lands on is refused', asyn
   assert.match(docsEntry, /optionalNonNegativeNumbers: \['fileSizeBytes'\]/);
 
   /*
+   * `processingNote` is rendered at Documents.tsx:857. A non-string from a
+   * damaged backup reaches JSX as an invalid child and React throws — taking
+   * the whole Documents screen, not the one row.
+   *
+   * `readableProcessingNote` guards that call site and this does not replace
+   * it. The guard keeps ONE screen honest; the boundary keeps the value out of
+   * the restored workspace, so the next reader inherits the protection rather
+   * than having to remember it. Excluding it because a guard exists is how the
+   * second reader gets written without one.
+   */
+  assert.match(
+    docsEntry,
+    /optionalStrings: \[[^\]]*'processingNote'/,
+    'processingNote is rendered as a React child, so a damaged backup must not carry a non-string through',
+  );
+
+  /*
    * Found by auditing the whole exclusion list rather than by being told, after
    * the fourth finding in a row named a field I had excluded.
    *

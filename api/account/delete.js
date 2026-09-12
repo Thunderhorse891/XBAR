@@ -1,6 +1,11 @@
 import { readJsonBody, sendJson } from '../_lib/http.js';
 import { getSupabaseAdmin } from '../_lib/supabase-admin.js';
-import { confirmationSatisfied, loadAccountDeletionPlan } from '../_lib/account-deletion.js';
+import {
+  confirmationSatisfied,
+  documentPrefixesToPurge,
+  loadAccountDeletionPlan,
+  mediaPrefixesToPurge,
+} from '../_lib/account-deletion.js';
 import { enforceRateLimit } from '../_lib/rate-limit.js';
 import { applyCors } from '../_lib/cors.js';
 
@@ -104,7 +109,14 @@ export default async function handler(req, res) {
         .in('id', plan.workspacesToPurge)
         .then(undefined, () => {});
     }
-    await removeUserStorage(supabase, user.id).catch(() => {});
+    // Documents moved onto workspace-keyed paths, so sweeping only the
+    // departing user's own prefix would leave every file in a purged private
+    // workspace sitting in the bucket after this endpoint reported success --
+    // while the Settings screen promises those documents were erased. Which
+    // prefixes are safe to sweep is decided in account-deletion.js, where the
+    // rule that a transferred workspace is never swept can be tested.
+    await removeStoragePrefixes(supabase, DOCUMENT_BUCKET, documentPrefixesToPurge(plan)).catch(() => {});
+    await removeStoragePrefixes(supabase, MEDIA_BUCKET, mediaPrefixesToPurge(plan)).catch(() => {});
 
     return sendJson(res, 200, {
       ok: true,
@@ -135,10 +147,10 @@ async function listAllObjects(supabase, bucket, prefix, out) {
   }
 }
 
-async function removeUserStorage(supabase, userId) {
-  for (const bucket of [DOCUMENT_BUCKET, MEDIA_BUCKET]) {
+async function removeStoragePrefixes(supabase, bucket, prefixes) {
+  for (const prefix of prefixes) {
     const paths = [];
-    await listAllObjects(supabase, bucket, userId, paths);
+    await listAllObjects(supabase, bucket, prefix, paths);
     for (let i = 0; i < paths.length; i += 100) {
       await supabase.storage.from(bucket).remove(paths.slice(i, i + 100));
     }
