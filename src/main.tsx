@@ -7,6 +7,7 @@ import { InteractionBootstrap } from './components/InteractionBootstrap';
 import { registerGlobalErrorHandlers } from './lib/globalErrorHandlers';
 import { registerOfflineRuntime } from './lib/offlineRuntime';
 import { appBasePath, browserAuthFailureSearch, hashAuthFailureRoute, usesHashRouting } from './lib/routeCanon';
+import './styles/brandTokens.css';
 import './index.css';
 import './styles/motion.css';
 import './mobilePolish.css';
