@@ -918,6 +918,41 @@ Vercel environment read.
 4. **Stripe:** `VITE_MANAGED_BILLING_ENABLED` stays `false` until the secret
    key, webhook secret and all four price IDs are set — see section 0.
 
+### Workspace sharing — launch scope and blockers
+
+Keep invitations and team membership management **out of the single-owner
+launch scope** until all four defects below are fixed and exercised against a
+live Supabase project. These are defects in enabled sharing functionality, not
+optional paid-integration work:
+
+1. **Invitation acceptance can fail at the final available seat.** The seat
+   limit trigger counts the pending invitation and then counts the membership
+   created from that same invitation, so the seat being consumed is counted
+   twice.
+2. **A stale autosave can reactivate an accepted or revoked invitation.** A
+   snapshot that still says `pending` can overwrite the newer terminal status;
+   for a revoked invitation, this makes the old link usable again and can grant
+   workspace access without a new invitation.
+3. **A stale autosave can recreate an explicitly removed membership.** The
+   recreated row has no restored account binding, but it appears active and
+   consumes a seat.
+4. **An invited member's first save targets a new caller-owned workspace.** The
+   access lookup finds the accepted host workspace, but persistence still calls
+   `ensurePrimaryWorkspace`, which creates a `primary` workspace owned by the
+   invitee. The host ranch does not receive the edit and the client adopts the
+   clone as an Admin workspace.
+
+The earlier defect where a stale snapshot could **delete a newly created
+invitation** is closed: invitation autosaves now preserve server rows missing
+from the local snapshot. That protection does not prevent stale status upserts
+or membership recreation, so it does not close the four blockers above.
+
+If single-owner workspaces are the Phase 1 product, record that decision and
+hide or disable invitations and team-management controls for launch. If sharing
+is in scope, do not launch it until invitation consumption excludes its own seat
+reservation and access lifecycle changes are server-owned or versioned so a
+snapshot save cannot overwrite concurrent membership or invitation changes.
+
 ### Recovery consumption — design requirements, not implemented
 
 Recorded so they are not mistaken for protections that exist:
