@@ -172,7 +172,6 @@ type OcrWorker = {
   ) => Promise<{ data: { text: string } }>;
 };
 
-let ocrWorkerPromise: Promise<OcrWorker> | null = null;
 let pdfJsPromise: Promise<typeof import('pdfjs-dist')> | null = null;
 let pdfWorkerUrlPromise: Promise<string> | null = null;
 
@@ -234,15 +233,44 @@ async function extractPlainText(file: File): Promise<{ text: string; failed: boo
   }
 }
 
-async function getOcrWorker() {
-  if (!ocrWorkerPromise) {
-    ocrWorkerPromise = import('tesseract.js').then(async ({ createWorker }) =>
-      createWorker('eng', undefined, OCR_ASSET_PATHS),
-    );
-  }
-
-  return ocrWorkerPromise;
+/**
+ * Start something once and keep it -- but only if it started.
+ *
+ * The OCR worker was cached as a promise the moment it was requested, and a
+ * REJECTED promise is still a cached promise. Starting the worker is exactly
+ * where a transient failure lives: the engine and its language data are fetched
+ * at first use, so a rancher who uploads the first photograph of the day on a
+ * dropped connection cached that failure for the life of the page. Every later
+ * upload awaited the same rejection and was told the file could not be read --
+ * with the connection long since back, and nothing but a reload to fix it.
+ *
+ * A success is cached, because starting the worker twice is the waste this
+ * exists to avoid. A failure is forgotten, because the next attempt is the
+ * whole point.
+ *
+ * Extracted and exported so the policy can be tested without a real worker: the
+ * `import()` inside the caller cannot be made to fail from a test.
+ */
+export function cacheOnlyOnSuccess<T>(start: () => Promise<T>): () => Promise<T> {
+  let pending: Promise<T> | null = null;
+  return () => {
+    if (!pending) {
+      pending = start().catch((error) => {
+        // Cleared before the caller resumes: promise callbacks run to
+        // completion before any awaiting code continues, so the next request
+        // always sees an empty cache rather than this rejection.
+        pending = null;
+        throw error;
+      });
+    }
+    return pending;
+  };
 }
+
+const getOcrWorker = cacheOnlyOnSuccess<OcrWorker>(async () => {
+  const { createWorker } = await import('tesseract.js');
+  return createWorker('eng', undefined, OCR_ASSET_PATHS);
+});
 
 /*
  * Returns WHETHER it failed as well as what it read.

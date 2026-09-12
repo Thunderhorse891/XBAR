@@ -2,6 +2,7 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 import {
   countPagesRead,
+  cacheOnlyOnSuccess,
   describeDocumentCoverage,
   extractionProducedNothing,
   fullCoverage,
@@ -388,4 +389,62 @@ test('the review row drops the match figure when there was nothing to match on',
     /Enter the details by hand below, or upload a clearer scan/,
     'and it must say what the customer can do next',
   );
+});
+
+test('a failed OCR start is retried, not cached for the life of the page', async () => {
+  /*
+   * The fixture Codex asked for: first load fails, assets come back, next
+   * upload retries.
+   *
+   * Starting the worker is where a transient failure lives -- the engine and
+   * its language data are fetched at first use. Caching the promise cached the
+   * rejection too, so the first photograph uploaded on a dropped connection
+   * made every later upload in that page fail instantly, with the connection
+   * long since back and nothing but a reload to fix it.
+   */
+  let starts = 0;
+  const get = cacheOnlyOnSuccess(async () => {
+    starts += 1;
+    if (starts === 1) throw new Error('assets unavailable');
+    return { id: starts };
+  });
+
+  await assert.rejects(get(), /assets unavailable/);
+  assert.equal(starts, 1);
+
+  // Assets restored: the next request must actually try again.
+  assert.deepEqual(await get(), { id: 2 });
+  assert.equal(starts, 2);
+
+  // And a success IS cached -- starting the worker twice is the waste the
+  // cache exists to prevent.
+  assert.deepEqual(await get(), { id: 2 });
+  assert.equal(starts, 2, 'a started worker must be reused');
+});
+
+test('uploads waiting on one failed start all fail, and the next one retries once', async () => {
+  /*
+   * Concurrency matters here: a batch calls this per image. Every caller
+   * awaiting the failed start must see the failure, and the recovery must be a
+   * SINGLE retry rather than one per waiter.
+   */
+  let starts = 0;
+  let failNext = true;
+  const get = cacheOnlyOnSuccess(async () => {
+    starts += 1;
+    if (failNext) throw new Error('assets unavailable');
+    return { id: starts };
+  });
+
+  const results = await Promise.allSettled([get(), get(), get()]);
+  assert.deepEqual(
+    results.map((result) => result.status),
+    ['rejected', 'rejected', 'rejected'],
+  );
+  assert.equal(starts, 1, 'one failed start, not three');
+
+  failNext = false;
+  const recovered = await Promise.all([get(), get(), get()]);
+  assert.equal(starts, 2, 'recovery is one retry shared by the batch');
+  assert.deepEqual(recovered, [{ id: 2 }, { id: 2 }, { id: 2 }]);
 });
