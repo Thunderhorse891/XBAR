@@ -4,6 +4,7 @@ import { requireWorkspaceAccess } from './supabase-admin.js';
 import { runOcr } from './ocr.js';
 import { extractDocument, groupExtractionsIntoCandidates, NEEDS_REVIEW_THRESHOLD } from './document-extraction.js';
 import { extractZipEntries, isZipBuffer, guessMimeType } from './zip.js';
+import { documentObjectPath, mayUseClientStoragePath } from './document-storage.js';
 import {
   getWorkspaceEntitlements,
   checkDocumentCapacity,
@@ -85,11 +86,21 @@ async function processBatch({ supabase, workspaceId, user, body, mode }) {
   const skipped = [];
   for (const file of inputFiles) {
     const fileName = typeof file.fileName === 'string' && file.fileName ? file.fileName : 'upload.bin';
+    // Checked once, before the path is either READ or RECORDED. Both matter:
+    // the download below uses the service role, and a recorded `storage_path`
+    // is later downloaded by the same service role in horses-export.js and
+    // sale-packets.js. A caller who sends bytes AND a foreign path would
+    // otherwise skip the download and still persist the path.
+    const suppliedPath = typeof file.storagePath === 'string' ? file.storagePath : '';
+    if (suppliedPath && !mayUseClientStoragePath({ storagePath: suppliedPath, workspaceId, userId: user.id })) {
+      skipped.push({ fileName, reason: 'storage path does not belong to this workspace' });
+      continue;
+    }
     let content = null;
     if (typeof file.contentBase64 === 'string' && file.contentBase64) {
       content = Buffer.from(file.contentBase64, 'base64');
-    } else if (typeof file.storagePath === 'string' && file.storagePath) {
-      const { data, error } = await supabase.storage.from(DOCUMENT_BUCKET).download(file.storagePath);
+    } else if (suppliedPath) {
+      const { data, error } = await supabase.storage.from(DOCUMENT_BUCKET).download(suppliedPath);
       if (error || !data) {
         skipped.push({ fileName, reason: `storage download failed: ${error?.message || 'not found'}` });
         continue;
@@ -123,7 +134,7 @@ async function processBatch({ supabase, workspaceId, user, body, mode }) {
       content,
       providedText: typeof file.providedText === 'string' ? file.providedText : '',
       providedConfidence: file.providedConfidence,
-      storagePath: typeof file.storagePath === 'string' ? file.storagePath : '',
+      storagePath: suppliedPath,
     });
   }
 
@@ -197,8 +208,14 @@ async function processBatch({ supabase, workspaceId, user, body, mode }) {
     let createdObjectPath = '';
 
     if (!storagePath && file.content) {
-      const safeName = file.fileName.replace(/[^a-zA-Z0-9._-]+/g, '_').slice(-80) || 'upload.bin';
-      storagePath = `${user.id}/${workspaceId}/${documentId}/${safeName}`;
+      try {
+        storagePath = documentObjectPath({ workspaceId, documentId, fileName: file.fileName });
+      } catch (error) {
+        // Same shape as a failed upload: skip this file and say why, rather
+        // than throwing out of a loop that has already stored earlier files.
+        skipped.push({ fileName: file.fileName, reason: error.message });
+        continue;
+      }
       const { error: uploadError } = await supabase.storage
         .from(DOCUMENT_BUCKET)
         .upload(storagePath, file.content, { contentType: file.mimeType, upsert: true });

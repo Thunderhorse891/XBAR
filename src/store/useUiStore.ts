@@ -1,6 +1,7 @@
 import { create } from 'zustand';
 import { toast as sonnerToast } from 'sonner';
 import { createId } from '@/lib/xbarRuntime';
+import { readBrowserStorage, writeBrowserStorage } from '@/lib/browserStorage';
 import {
   sanitizeSurfaceModes,
   transitionSurfaceMode,
@@ -48,17 +49,17 @@ type UiStore = {
 const surfaceMemoryKey = 'xbar-ui-surface-modes-v1';
 
 function readSurfaceModes() {
-  if (typeof window === 'undefined') return {};
   try {
-    return sanitizeSurfaceModes(JSON.parse(window.localStorage.getItem(surfaceMemoryKey) ?? '{}'));
+    return sanitizeSurfaceModes(JSON.parse(readBrowserStorage(surfaceMemoryKey) ?? '{}'));
   } catch {
     return {};
   }
 }
 
 function rememberSurfaceModes(modes: Record<string, SurfaceMode>) {
-  if (typeof window === 'undefined') return;
-  window.localStorage.setItem(surfaceMemoryKey, JSON.stringify(modes));
+  // A remembered surface mode is a convenience; failing to store it is not
+  // worth throwing out of a state update.
+  writeBrowserStorage(surfaceMemoryKey, JSON.stringify(modes));
 }
 
 function createToastId() {

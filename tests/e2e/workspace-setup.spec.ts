@@ -1,4 +1,6 @@
 import { expect, test, type Page } from '@playwright/test';
+import { readFile } from 'node:fs/promises';
+import { PDFDocument } from 'pdf-lib';
 
 async function bootstrapWorkspace(page: Page) {
   await page.addInitScript(async () => {
@@ -127,6 +129,15 @@ test('buyer follow-up shows an empty state on a fresh workspace', async ({ page 
 test('documents shows an empty state on a fresh workspace', async ({ page }) => {
   await bootstrapWorkspace(page);
   await page.getByRole('link', { name: 'Documents', exact: true }).click();
+  // A workspace with nothing in it opens on Upload, not on an empty review
+  // queue: with no documents the useful next step is adding one, and showing
+  // someone a clear queue they never filled reads as a dead end. This asserted
+  // the pre-d9717cc landing stage and went unnoticed because CI does not run
+  // this suite.
+  await expect(page.getByText('No documents yet')).toBeVisible();
+  await expect(page.getByRole('tab', { name: /Upload/ })).toHaveAttribute('aria-selected', 'true');
+  // The review stage still says plainly that nothing is waiting there.
+  await page.getByRole('tab', { name: /Review/ }).click();
   await expect(page.getByText('Review queue is clear')).toBeVisible();
 });
 
@@ -252,6 +263,17 @@ test('registration intake extracts sex, color, sire and dam into a new horse pro
   await expect(identity).toContainText('SMART CHIC OLENA (3120011)');
   await expect(identity).toContainText('DOCS SUGAR BARS (3220022)');
   await expect(identity).toContainText('5544332');
+  const reviewState = await page.evaluate(async () => {
+    const modulePath = '/src/store/useXbarStore.ts';
+    const { useXbarStore } = await import(/* @vite-ignore */ modulePath);
+    const state = useXbarStore.getState();
+    return {
+      document: state.documents[0].state,
+      ownership: state.ownershipRecords[0].confidence,
+      facts: state.horses[0].documentFacts.length,
+    };
+  });
+  expect(reviewState).toEqual({ document: 'Needs Review', ownership: 0, facts: 0 });
 
   // Correcting a wrong extraction must persist: open Edit details, fix the color.
   await page.getByRole('button', { name: 'Edit details' }).click();
@@ -263,6 +285,73 @@ test('registration intake extracts sex, color, sire and dam into a new horse pro
   await expect(edit).toBeHidden();
   await expect(page.locator('.xs-kv')).toContainText('Buckskin');
   await expect(page.locator('.xs-kv')).not.toContainText('Palomino');
+
+  // A synthetic local entitlement isolates export behavior from billing. The
+  // horse above still comes from the real upload -> correction workflow.
+  await page.evaluate(async () => {
+    const modulePath = '/src/store/useXbarStore.ts';
+    const { useXbarStore } = await import(/* @vite-ignore */ modulePath);
+    const subscription = useXbarStore.getState().subscription;
+    useXbarStore.setState({
+      subscription: {
+        ...subscription,
+        tier: 'Ranch Ops',
+        purchasedTier: 'Ranch Ops',
+        billingState: 'Manual Billing',
+      },
+    });
+    history.pushState({}, '', '/app/reports');
+    dispatchEvent(new PopStateEvent('popstate'));
+  });
+  await expect(page.getByRole('heading', { name: 'Know what the herd is worth' })).toBeVisible();
+  await expect(page.getByRole('heading', { name: 'Know what the herd is worth' })).toHaveCSS(
+    'color',
+    'rgb(255, 250, 242)',
+  );
+  for (const width of [1440, 390]) {
+    await page.setViewportSize({ width, height: 900 });
+    const csvEvent = page.waitForEvent('download');
+    await page.getByRole('button', { name: 'Export spreadsheet', exact: true }).click();
+    const csv = await csvEvent;
+    expect(await csv.failure()).toBeNull();
+    expect(await readFile((await csv.path())!, 'utf8')).toMatch(/DOCS SMART LENA/i);
+    const pdfEvent = page.waitForEvent('download');
+    await page.getByRole('button', { name: 'Download PDF report', exact: true }).click();
+    const pdf = await pdfEvent;
+    expect(await pdf.failure()).toBeNull();
+    expect((await PDFDocument.load(await readFile((await pdf.path())!))).getPageCount()).toBeGreaterThan(0);
+    const overflow = await page.evaluate(() => ({
+      width: innerWidth,
+      actual: document.documentElement.scrollWidth,
+      offenders: [...document.querySelectorAll('main *')]
+        .filter((el) => el.getBoundingClientRect().right > innerWidth)
+        .slice(0, 12)
+        .map((el) => ({ tag: el.tagName, class: el.className, right: el.getBoundingClientRect().right })),
+    }));
+    expect(overflow.actual, JSON.stringify(overflow)).toBeLessThanOrEqual(width);
+    await page.screenshot({ path: test.info().outputPath(`reports-${width}.png`), fullPage: true });
+  }
+});
+
+test('unreadable paper cannot invent a horse or approve a document', async ({ page }) => {
+  await bootstrapWorkspace(page);
+  await page.getByRole('button', { name: 'Create', exact: true }).click();
+  await page.getByRole('menuitem', { name: 'Upload Document' }).click();
+  const drawer = page.getByRole('dialog', { name: 'Upload Document' });
+  await drawer.locator('input[type="file"]').setInputFiles({
+    name: 'registration-unreadable.txt',
+    mimeType: 'text/plain',
+    buffer: Buffer.from(''),
+  });
+  await drawer.getByRole('button', { name: 'Upload for review' }).click();
+  await expect(page).toHaveURL(/\/documents/);
+  const result = await page.evaluate(async () => {
+    const modulePath = '/src/store/useXbarStore.ts';
+    const { useXbarStore } = await import(/* @vite-ignore */ modulePath);
+    const state = useXbarStore.getState();
+    return { horses: state.horses.length, documents: state.documents.map((d: { state: string }) => d.state) };
+  });
+  expect(result).toEqual({ horses: 0, documents: ['Needs Review'] });
 });
 
 test('a multi-file batch upload creates one horse per registration paper', async ({ page }) => {
@@ -293,8 +382,15 @@ test('a multi-file batch upload creates one horse per registration paper', async
 
   // Both papers produced their own horse record in the roster.
   await page.getByRole('link', { name: 'Horses', exact: true }).click();
-  await expect(page.getByText('DESERT DAISY', { exact: false })).toBeVisible({ timeout: 15_000 });
-  await expect(page.getByText('CANYON BELLE', { exact: false })).toBeVisible();
+  const names = await page.evaluate(async () => {
+    const modulePath = '/src/store/useXbarStore.ts';
+    const { useXbarStore } = await import(/* @vite-ignore */ modulePath);
+    return useXbarStore
+      .getState()
+      .horses.map((horse: { name: string }) => horse.name)
+      .sort();
+  });
+  expect(names).toEqual(['CANYON BELLE', 'DESERT DAISY']);
 });
 
 test('a Needs-Review document can spawn a new horse from the review stage', async ({ page }) => {
@@ -376,8 +472,18 @@ test('review-stage "New horse" attaches to an existing match instead of duplicat
   await expect(page).toHaveURL(/\/horses\//, { timeout: 30_000 });
 
   // The roster still holds exactly one Silver Canyon King.
-  await page.getByRole('link', { name: 'Horses', exact: true }).click();
-  await expect(page.getByText('SILVER CANYON KING', { exact: false })).toHaveCount(1, { timeout: 15_000 });
+  const saved = await page.evaluate(async () => {
+    const modulePath = '/src/store/useXbarStore.ts';
+    const { useXbarStore } = await import(/* @vite-ignore */ modulePath);
+    const state = useXbarStore.getState();
+    return {
+      horses: state.horses.length,
+      document: state.documents[0].state,
+      linked: state.documents[0].horseId === state.horses[0].id,
+      facts: state.horses[0].documentFacts.length,
+    };
+  });
+  expect(saved).toEqual({ horses: 1, document: 'Needs Review', linked: true, facts: 0 });
 });
 
 test('panel sheen overlays stay inside their cards (no sidebar wash)', async ({ page }) => {
@@ -403,4 +509,56 @@ test('panel sheen overlays stay inside their cards (no sidebar wash)', async ({ 
     return results;
   });
   expect(check, 'sheen hosts must not be position:static').toEqual([]);
+});
+
+test('a damaged PDF in a batch reports failure without losing the readable registration', async ({ page }) => {
+  await bootstrapWorkspace(page);
+  await page.getByRole('button', { name: 'Create', exact: true }).click();
+  await page.getByRole('menuitem', { name: 'Upload Document' }).click();
+  const drawer = page.getByRole('dialog', { name: 'Upload Document' });
+  await drawer.locator('input[type="file"]').setInputFiles([
+    {
+      name: 'damaged-registration.pdf',
+      mimeType: 'application/pdf',
+      buffer: Buffer.from('%PDF-1.7\ntruncated and unreadable'),
+    },
+    {
+      name: 'registration-batch-survivor.txt',
+      mimeType: 'text/plain',
+      buffer: Buffer.from(
+        'AMERICAN QUARTER HORSE ASSOCIATION CERTIFICATE OF REGISTRATION\nRegistered Name: BATCH SURVIVOR\nRegistration Number: 7003333\nSex: Mare Color: Bay',
+      ),
+    },
+  ]);
+  await drawer.getByRole('button', { name: 'Upload for review' }).click();
+  await expect(page).toHaveURL(/\/documents|\/horses\//, { timeout: 30_000 });
+  const result = await page.evaluate(async () => {
+    const modulePath = '/src/store/useXbarStore.ts';
+    const { useXbarStore } = await import(/* @vite-ignore */ modulePath);
+    const state = useXbarStore.getState();
+    return {
+      horses: state.horses.map((horse: { name: string }) => horse.name),
+      documents: state.documents.map((document: { title: string; processingNote?: string; state: string }) => ({
+        title: document.title,
+        processingNote: document.processingNote,
+        state: document.state,
+      })),
+    };
+  });
+  expect(result.horses).toEqual(['BATCH SURVIVOR']);
+  expect(result.documents).toHaveLength(2);
+  expect(
+    result.documents.some((document: { processingNote?: string }) =>
+      document.processingNote?.includes('This file could not be read.'),
+    ),
+  ).toBe(true);
+  await page
+    .getByRole('link', { name: /^Documents/ })
+    .first()
+    .click();
+  await page.getByRole('tab', { name: /Review/ }).click();
+  const row = page.getByRole('group', { name: 'damaged-registration review actions' });
+  await expect(row).toBeVisible();
+  await expect(row).not.toContainText('match confidence');
+  await expect(row).toContainText('Enter the details by hand below, or upload a clearer scan');
 });

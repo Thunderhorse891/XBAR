@@ -779,6 +779,13 @@ with check (
 
 alter table if exists public.shared_listings add column if not exists access_mode text not null default 'Private Token';
 alter table if exists public.shared_listings add column if not exists share_token text not null default '';
+-- A Private Token listing with an empty token would be resolvable by anyone
+-- who knows the share_path, because '' <> '' is false in the resolver's guard.
+alter table if exists public.shared_listings drop constraint if exists shared_listings_private_token_present;
+alter table if exists public.shared_listings add constraint shared_listings_private_token_present
+  check (coalesce(state, '') = 'Archived' or coalesce(nullif(access_mode, ''), 'Private Token') = 'Public Link' or coalesce(share_token, '') <> '') not valid;
+-- Defer historical validation until invalid private links are repaired; see
+-- 20260910173613_private_share_token_fail_closed.sql. New writes are still checked.
 alter table if exists public.shared_listings add column if not exists token_issued_at timestamptz not null default timezone('utc', now());
 alter table if exists public.shared_listings add column if not exists published_at timestamptz;
 
@@ -1173,7 +1180,18 @@ begin
     return null;
   end if;
 
-  if listing_row.access_mode <> 'Public Link' and coalesce(p_share_token, '') <> listing_row.share_token then
+  -- Release approval must belong to the selected listing.
+  if coalesce(listing_row.state, '') <> 'Live'
+     or coalesce(listing_row.payload ->> 'releaseConfirmedAt', '') = ''
+     or coalesce(listing_row.payload ->> 'releaseConfirmedBy', '') = '' then
+    return null;
+  end if;
+
+  -- An empty stored token is not a token to match against: without the first
+  -- clause a Private Token listing that never got one resolves for a caller who
+  -- supplies nothing. See migrations/20260910173613_private_share_token_fail_closed.sql.
+  if listing_row.access_mode <> 'Public Link'
+     and (listing_row.share_token = '' or coalesce(p_share_token, '') <> listing_row.share_token) then
     return null;
   end if;
 
@@ -1283,7 +1301,9 @@ begin
     sl.listing_id,
     sl.horse_id,
     coalesce(nullif(sl.access_mode, ''), 'Private Token') as access_mode,
-    coalesce(sl.share_token, '') as share_token
+    coalesce(sl.share_token, '') as share_token,
+    sl.state,
+    sl.payload
   into listing_row
   from public.shared_listings sl
   where sl.share_path = p_share_path
@@ -1295,7 +1315,18 @@ begin
     return;
   end if;
 
-  if listing_row.access_mode <> 'Public Link' and coalesce(p_share_token, '') <> listing_row.share_token then
+  -- Track only the selected listing's authorized release.
+  if coalesce(listing_row.state, '') <> 'Live'
+     or coalesce(listing_row.payload ->> 'releaseConfirmedAt', '') = ''
+     or coalesce(listing_row.payload ->> 'releaseConfirmedBy', '') = '' then
+    return;
+  end if;
+
+  -- An empty stored token is not a token to match against: without the first
+  -- clause a Private Token listing that never got one resolves for a caller who
+  -- supplies nothing. See migrations/20260910173613_private_share_token_fail_closed.sql.
+  if listing_row.access_mode <> 'Public Link'
+     and (listing_row.share_token = '' or coalesce(p_share_token, '') <> listing_row.share_token) then
     return;
   end if;
 

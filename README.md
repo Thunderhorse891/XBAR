@@ -110,6 +110,17 @@ Required for browser cloud auth and sync:
 - `VITE_SUPABASE_URL`
 - `VITE_SUPABASE_ANON_KEY`
 
+Optional, and empty by default:
+
+- `VITE_AUTH_OAUTH_PROVIDERS` — comma-separated list of `google`, `facebook`,
+  `apple`. Controls which third-party sign-in buttons the login screen draws.
+  Leave it unset until a provider is enabled in **Supabase → Authentication →
+  Providers** _and_ its OAuth client is registered with the provider itself.
+  Supabase answers a redirect for anything else with HTTP 400 `Unsupported
+provider: provider is not enabled`, which a customer experiences as a button
+  that does nothing. Native store builds never show these buttons, because a
+  web OAuth redirect cannot complete inside the app WebView.
+
 Required for managed Stripe billing and webhook reconciliation:
 
 - `SUPABASE_URL`
@@ -156,10 +167,25 @@ while saying **Billing not configured yet**. No checkout opens, no subscription
 record is created, and no identifier is invented — missing configuration is
 reported, never faked.
 
-### Pending Supabase migrations (not applied)
+### Supabase migration rollout and recorded deployment
 
-Five migrations in `supabase/migrations/` are written and reviewed but have
-**not** been run against any project. The order matters, and it is carried by
+On `xbar-records` (`uxvwfepyothlakhqazwv`), the Supabase migration ledger checked
+on September 10, 2026 records steps 1–5 below as applied on September 4. Step 6
+was applied on September 10 as `20260910173613_private_share_token_fail_closed`;
+both deployed token guards and the validated constraint were checked afterward.
+Step 7 was applied as `20260911003739_share_release_selected_row` (September 11
+UTC / September 10 Chicago), with a failing-before/passing-after rollback test.
+Step 8 was applied as `20260911005818_workspace_access_policies`, with live
+authenticated-role permission and invitation checks; all fixture records rolled back.
+Do not rerun the billing data reconciliation merely because this checklist exists.
+Migration history establishes recorded execution, not a successful customer checkout.
+
+Use the target project's migration ledger and deployed definitions to establish
+deployment state. File comments and migration counts can both become stale;
+neither establishes what ran on another project. A recorded name also does not
+prove that a subsequently edited file is identical to the executed SQL.
+
+For another project, check its migration history first. The order matters, and it is carried by
 the version prefixes rather than by convention — Supabase takes the digits
 before the first underscore as the migration version, so each file needs its
 own:
@@ -192,8 +218,25 @@ own:
    so a re-subscription completed in the same second as a cancellation is not
    thrown away. Additive: one nullable column, one index, one
    function, no backfill.
+6. `20260910173613_private_share_token_fail_closed.sql` — **security**. A
+   `Private Token` listing whose stored token is empty — which is what the
+   column defaults produce — resolved for any caller who knew only the
+   `share_path`, handing over the horse payload, its documents and its
+   ownership record. Patches `xbar_resolve_public_listing_legacy` and
+   `xbar_track_public_share_view`, and adds a CHECK so no such row can be
+   created again. Order does not matter relative to the others; it shares
+   nothing with them.
+7. `20260911003739_share_release_selected_row.sql` — **security**. Apply after step 6.
+   Requires Live state and seller release approval on the exact listing selected
+   by the resolver and tracker. A released sibling sharing a path must not
+   authorize an unreleased draft. Preserves token guards and existing grants.
+8. `20260911005818_workspace_access_policies.sql` — **security and workspace access**.
+   Requires the June 5 workspace helpers. Removes recursive membership reads,
+   restricts membership/invitation management to owner/Admin, and adds atomic
+   server-authorized invitation acceptance. Deploy the matching client RPC call.
+   No existing rows are rewritten; direct invitee table writes are now denied.
 
-Apply them **one at a time**, not with a single `supabase db push`. That command
+For migrations still missing from the target project, apply them **one at a time**, not with a single `supabase db push`. That command
 applies every pending migration in one go, which would run the data
 reconciliation before anyone had read its dry-run.
 
@@ -243,6 +286,48 @@ psql "$DATABASE_URL" -f supabase/migrations/20260826_checkout_session_lock.sql
 
 # 5. billing event ordering — additive, safe to apply directly
 psql "$DATABASE_URL" -f supabase/migrations/20260827_subscription_event_ordering.sql
+
+# 6. private share token fail-closed — the security one. Additive: two function
+#    replacements and one CHECK added NOT VALID, so it cannot fail on rows that
+#    already exist.
+psql "$DATABASE_URL" -f supabase/migrations/20260910173613_private_share_token_fail_closed.sql
+# 6a. The migration validates the constraint ONLY if no offending row exists,
+#     and otherwise raises a warning naming the count. Read that warning. New
+#     inserts and updates are checked either way, and the patched functions
+#     already deny the old links, so there is no rush — but the constraint is
+#     not fully enforced until it is validated.
+# 6b. Clean up any offending rows with the owner's authorization, then validate
+#     separately. Archiving is exempt from the CHECK and is the safer of the
+#     two paths: re-issuing hands a broken share a WORKING token on the way to
+#     retiring it, which is the one outcome this fix exists to prevent. Do not
+#     delete listings or make them public merely to pass validation.
+#       alter table public.shared_listings validate constraint <name>;
+# 6c. Prove it on a throwaway database rather than trusting the diff. Load the
+#     migrated function shape, then:
+#       psql "$THROWAWAY_URL" -f supabase/checks/share-token-fail-closed.sql
+#     Expect: no token refused, wrong token refused, correct token resolved,
+#     public link resolved. Anything else, including BOTH controls refusing,
+#     means the check did not exercise what it claims — see its header.
+
+# 7. Bind release approval to the selected listing (after step 6).
+psql "$DATABASE_URL" -f supabase/migrations/20260911003739_share_release_selected_row.sql
+# Optional deployed-schema check with all fixtures rolled back:
+psql -v ON_ERROR_STOP=1 "$DATABASE_URL" -f supabase/checks/share-token-live-rollback.sql
+
+# 8. Workspace access and safe invitation acceptance.
+psql "$DATABASE_URL" -f supabase/migrations/20260911005818_workspace_access_policies.sql
+psql -v ON_ERROR_STOP=1 "$DATABASE_URL" -f supabase/checks/workspace-access-live-rollback.sql
+
+# 9. Make shared documents actually shared. Until this runs, a document
+#    uploaded by one member is listed for the whole ranch and openable by
+#    nobody but the uploader: the `documents` row is workspace-scoped while the
+#    object in the private `horse-documents` bucket was keyed to the uploader's
+#    user id. Apply after step 8 -- the policies call the helper functions it
+#    installs. Existing objects are NOT moved; they stay readable by whoever
+#    uploaded them, and re-uploading is what shares one with the ranch.
+psql "$DATABASE_URL" -f supabase/migrations/20260912060000_workspace_keyed_document_storage.sql
+psql -v ON_ERROR_STOP=1 "$DATABASE_URL" -f supabase/checks/document-storage-live-rollback.sql
+
 ```
 
 **(4) and (5) are prerequisites for billing, not optimizations to schedule

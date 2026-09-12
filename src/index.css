@@ -20,7 +20,9 @@
   --muted-strong: #444b52;
   --border: #e0e3e6;
   --border-strong: #cbd0d5;
-  --blue: #2868a9;
+  /* Both from the brand role layer in styles/brandTokens.css — see the note
+     there on why the edge blue and the ink blue are different colours. */
+  --blue: var(--accent-ink);
   --blue-soft: rgba(40, 104, 169, 0.09);
   --slate: #717981;
   --slate-soft: rgba(113, 121, 129, 0.11);
@@ -37,8 +39,8 @@
   --radius-md: 6px;
   --radius-sm: 4px;
   --sidebar-width: 276px;
-  --brand-blue: #2868a9;
-  --brand-electric: #397bbb;
+  --brand-blue: var(--accent-ink);
+  --brand-electric: var(--accent-edge);
   --brand-silver: #c8d0da;
   --brand-gunmetal: #2c3038;
   --brand-charcoal: #1a1d22;
@@ -208,12 +210,19 @@ a:focus-visible,
 }
 
 .button--primary {
-  background: linear-gradient(180deg, #4880ff 0%, #2d6fff 100%);
+  /*
+   * White on the old #4880ff -> #2d6fff was 3.62:1 at the top of the gradient
+   * and 3.11:1 on hover. `.button` inherits body size at font-weight 700, so
+   * the 4.5:1 threshold applies, not the 3:1 large-text one -- the most-clicked
+   * control in the product failed AA, in a blue that belonged to none of the
+   * brand palettes. Every stop below clears 4.5:1 against white.
+   */
+  background: linear-gradient(180deg, var(--accent-ink-lift) 0%, var(--accent-ink) 100%);
   color: #ffffff;
   box-shadow:
-    0 2px 8px rgba(45, 111, 255, 0.32),
+    0 2px 8px rgba(40, 104, 169, 0.32),
     inset 0 1px 0 rgba(255, 255, 255, 0.16);
-  border: 1px solid rgba(45, 111, 255, 0.8);
+  border: 1px solid var(--accent-ink);
 }
 
 .button--ghost {
@@ -233,9 +242,10 @@ a:focus-visible,
 }
 
 .button--primary:hover {
-  background: linear-gradient(180deg, #5a8eff 0%, #3d7cff 100%);
+  /* Lighter than rest, and still 4.59:1 at the top stop. */
+  background: linear-gradient(180deg, var(--accent-ink-hover) 0%, var(--accent-ink-lift) 100%);
   box-shadow:
-    0 4px 14px rgba(45, 111, 255, 0.42),
+    0 4px 14px rgba(40, 104, 169, 0.42),
     inset 0 1px 0 rgba(255, 255, 255, 0.18);
 }
 
@@ -251,7 +261,7 @@ a:focus-visible,
 }
 
 .button--primary:active {
-  background: #1a57e8;
+  background: var(--accent-ink-press);
   box-shadow: none;
 }
 

@@ -27,6 +27,7 @@ import { buildOfferDecision } from '@/lib/profitIntelligence';
 import { scheduleBuyerActivityFollowUp } from '@/lib/salesFollowUp';
 import {
   createWorkspaceInvitationInCloud,
+  loadWorkspaceStorageBytes,
   removeWorkspaceMemberFromCloud,
   revokeWorkspaceInvitationInCloud,
   updateSharedListingChannelsInCloud,
@@ -785,7 +786,70 @@ export const useXbarStore = create<XbarStore>()(
         const state = get();
         const storageIncrease = estimateStorageGb(fileList);
         const planUsage = entitledUsage(state.subscription);
-        if (planUsage.storageUsedGb + storageIncrease > planUsage.storageLimitGb) {
+        /*
+         * When the authoritative total cannot be read we stop uploading, but we
+         * do NOT stop the intake. Refusing outright would mean a rancher in a
+         * barn with no signal cannot add a document at all -- and keeping the
+         * bytes on the device when the cloud will not take them is the whole
+         * local-first promise this file makes everywhere else.
+         *
+         * Declining the upload is also what keeps the storage trigger happy: a
+         * document with no `storagePath` carries no `fileSizeBytes`, so it
+         * pushes `size_bytes: 0` and cannot be the over-cap row that fails the
+         * batched documents upsert and freezes every later table.
+         */
+        let cloudUploadsAllowed = true;
+        let capacityUnverified = false;
+        if (isSupabaseConfigured()) {
+          try {
+            const storedBytes = await loadWorkspaceStorageBytes();
+            const incomingBytes = fileList.reduce((total, file) => total + file.size, 0);
+            /*
+             * The RPC is authoritative about PERSISTED ROWS, not about bytes.
+             * It sums `documents` AND `sale_packets`, and a row lands about 1.6
+             * seconds after its object does -- CloudBootstrap's autosave
+             * debounce. A second batch started inside that window would be
+             * measured against a total that predates the first one, and both
+             * could pass just under the cap.
+             *
+             * Staged bytes are ADDED to that total, never compared with it.
+             * Comparing was wrong because the two quantities have different
+             * scopes: a local document total carries no sale packets, so in a
+             * workspace holding more packet bytes than staged document bytes
+             * the server total won the comparison and the staged files dropped
+             * out of the sum entirely. What the server cannot know yet is
+             * exactly this -- objects already in the bucket whose rows have not
+             * been accepted -- so it is the one thing the client may add.
+             *
+             * Counted in exact bytes as each upload succeeds, NOT from
+             * `storageUsedGb`: that field goes through `normalizeUsage`,
+             * `Math.round(value * 1000) / 1000`, three decimals of a gigabyte
+             * or about 1 MiB, so anything under roughly half of that rounds to
+             * a zero increment and a run of small batches would keep measuring
+             * itself against the pre-upload total.
+             *
+             * This closes the window within a client. Two devices uploading in
+             * the same instant still meet at the storage trigger, which is the
+             * backstop and stays one -- a client-side reservation cannot be
+             * atomic across devices. A reload before the first push also clears
+             * the staged counter; the next autosave lands ~1.6s later and the
+             * trigger covers that window too.
+             */
+            const knownBytes = storedBytes + useCloudStore.getState().stagedStorageBytes;
+            if (knownBytes + incomingBytes > planUsage.storageLimitGb * 1024 * 1024 * 1024) {
+              // Known to be over cap: refusing is right, and it is the one
+              // answer the customer can act on by upgrading.
+              return {
+                ok: false,
+                message: 'Storage limit reached for the current plan. Upgrade before adding more files.',
+              };
+            }
+          } catch (error) {
+            console.error('Cloud storage usage could not be checked; keeping this batch on the device.', error);
+            cloudUploadsAllowed = false;
+            capacityUnverified = true;
+          }
+        } else if (planUsage.storageUsedGb + storageIncrease > planUsage.storageLimitGb) {
           return {
             ok: false,
             message: 'Storage limit reached for the current plan. Upgrade before adding more files.',
@@ -813,13 +877,15 @@ export const useXbarStore = create<XbarStore>()(
           let documents: DocumentRecord[] = await Promise.all(
             fileList.map(async (file) => {
               let uploadedAsset: Awaited<ReturnType<typeof uploadDocumentAssetToCloud>> = null;
-              try {
-                uploadedAsset = await uploadDocumentAssetToCloud({
-                  file,
-                  horseId: selectedHorse?.id ?? horseId,
-                });
-              } catch (error) {
-                console.error('Cloud document upload failed; keeping the file on this device instead.', error);
+              if (cloudUploadsAllowed) {
+                try {
+                  uploadedAsset = await uploadDocumentAssetToCloud({
+                    file,
+                    horseId: selectedHorse?.id ?? horseId,
+                  });
+                } catch (error) {
+                  console.error('Cloud document upload failed; keeping the file on this device instead.', error);
+                }
               }
               const document = await buildDocumentRecord({
                 file,
@@ -853,7 +919,7 @@ export const useXbarStore = create<XbarStore>()(
                 batchId,
                 fileName: file.name,
                 mimeType: file.type || undefined,
-                fileSizeBytes: file.size,
+                fileSizeBytes: uploadedAsset ? file.size : undefined,
                 localFileKey,
                 storagePath: uploadedAsset?.storagePath,
               };
@@ -931,6 +997,47 @@ export const useXbarStore = create<XbarStore>()(
             state: documents.some((document) => document.state === 'Needs Review') ? 'Reviewing' : 'Completed',
           };
 
+          /*
+           * What this batch costs the plan.
+           *
+           * With a cloud project the quota is cloud-stored bytes, so only
+           * records that reached the bucket are charged -- a device-only file
+           * occupies nothing there.
+           *
+           * With no cloud project there is no bucket and `storagePath` is never
+           * set, so charging by that rule charged nothing at all: every later
+           * batch was then measured against the same untouched total and the
+           * plan's cap could be walked past indefinitely, all the way to an
+           * IndexedDB quota failure. In a local-only build the files on the
+           * device ARE the usage.
+           */
+          const cloudStoredBytes = documents
+            .filter((document) => Boolean(document.storagePath))
+            .reduce((total, document) => total + (document.fileSizeBytes ?? 0), 0);
+          const chargedStorageGb =
+            (isSupabaseConfigured() ? cloudStoredBytes : fileList.reduce((total, file) => total + file.size, 0)) /
+            (1024 * 1024 * 1024);
+
+          /*
+           * Staged in the same synchronous step that installs the records, and
+           * deliberately not when each upload returned.
+           *
+           * A reservation has to mean "bytes the next saved snapshot will
+           * account for". Counted at upload time it did not: an autosave queued
+           * by an earlier edit could fire during the OCR that follows the
+           * upload, capture the reservation, and persist a snapshot that did
+           * not contain those records yet -- releasing a reservation for bytes
+           * the database had still not been told about. Set here, every
+           * exported snapshot holds either both the records and the reservation
+           * or neither, and nothing can run between these two statements.
+           *
+           * Counting at upload time was meant to protect a second batch started
+           * mid-flight, which neither entry point permits: both disable their
+           * submit while an intake is running, and a second TAB has its own
+           * counter regardless.
+           */
+          if (cloudStoredBytes > 0) useCloudStore.getState().noteStagedStorageBytes(cloudStoredBytes);
+
           set((current) => {
             const allDocuments = [...documents, ...current.documents];
             const nextHorses = current.horses.map((horse) => {
@@ -952,7 +1059,7 @@ export const useXbarStore = create<XbarStore>()(
                   ...current.subscription.usage,
                   documentsProcessed: allDocuments.filter((document) => document.state !== 'Archived').length,
                   horsesUsed: createdHorses.length + nextHorses.length,
-                  storageUsedGb: normalizeUsage(current.subscription.usage.storageUsedGb + storageIncrease),
+                  storageUsedGb: normalizeUsage(current.subscription.usage.storageUsedGb + chargedStorageGb),
                 },
               },
             };
@@ -960,7 +1067,7 @@ export const useXbarStore = create<XbarStore>()(
 
           return {
             ok: true,
-            message: `${documents.length} file${documents.length === 1 ? '' : 's'} entered the document queue.${createdHorses.length ? ` ${createdHorses.length} new horse record${createdHorses.length === 1 ? ' was' : 's were'} created from the upload batch.` : ''}${omittedHorseCount ? ` ${omittedHorseCount} additional horse candidate${omittedHorseCount === 1 ? ' was' : 's were'} left for review because the horse limit was reached.` : ''}${localDocumentCount ? ` ${localDocumentCount} kept as metadata only — this browser could not store the file on this device either.` : ''}`,
+            message: `${documents.length} file${documents.length === 1 ? '' : 's'} entered the document queue.${createdHorses.length ? ` ${createdHorses.length} new horse record${createdHorses.length === 1 ? ' was' : 's were'} created from the upload batch.` : ''}${omittedHorseCount ? ` ${omittedHorseCount} additional horse candidate${omittedHorseCount === 1 ? ' was' : 's were'} left for review because the horse limit was reached.` : ''}${localDocumentCount ? ` ${localDocumentCount} kept as metadata only — this browser could not store the file on this device either.` : ''}${capacityUnverified ? ' Cloud storage could not be reached, so these are on this device only until it returns.' : ''}`,
             id: batch.id,
             createdHorseIds: createdHorses.map((horse) => horse.id),
           };
@@ -1055,14 +1162,34 @@ export const useXbarStore = create<XbarStore>()(
           return regMatch || nameMatch;
         });
         if (existingHorse) {
-          const attached = get().reviewDocument(documentId, existingHorse.id);
-          return attached.ok
-            ? {
-                ok: true,
-                message: `${existingHorse.name} is already on file — attached this document to it instead of creating a duplicate.`,
-                id: existingHorse.id,
-              }
-            : attached;
+          set((current) => {
+            const nextDocuments = current.documents.map((item) =>
+              item.id === documentId
+                ? {
+                    ...item,
+                    horseId: existingHorse.id,
+                    summary: `${item.title} is attached to ${existingHorse.name}. Review the source before approving its facts.`,
+                  }
+                : item,
+            );
+            return {
+              documents: nextDocuments,
+              horses: current.horses.map((horse) =>
+                horse.id === existingHorse.id
+                  ? {
+                      ...horse,
+                      documents: [...new Set([...horse.documents, documentId])],
+                    }
+                  : horse,
+              ),
+              intakeBatches: current.intakeBatches.map((batch) => summarizeBatch(batch, nextDocuments)),
+            };
+          });
+          return {
+            ok: true,
+            message: `${existingHorse.name} is already on file — attached this document for review instead of creating a duplicate.`,
+            id: existingHorse.id,
+          };
         }
 
         const availableHorseSlots = Math.max(0, entitledUsage(state.subscription).horseLimit - state.horses.length);

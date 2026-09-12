@@ -1,5 +1,6 @@
 import { apiConfig, isRelationalCloudEnabled, isSnapshotFallbackEnabled, supabaseConfig } from '@/lib/platformConfig';
 import { publicShareEventToBuyerRoomEvent, type PublicShareEventRow } from '@/lib/buyerDealRoom';
+import { buildDocumentStoragePath, explainUnopenableCloudDocument } from '@/lib/documentStoragePath';
 import { createId, todayStamp } from '@/lib/xbarRuntime';
 import { WORKSPACE_SCHEMA_VERSION } from '@/store/xbarStoreHelpers';
 import { getSupabaseClient } from '@/lib/supabaseClient';
@@ -56,6 +57,14 @@ type CloudSaveResult = {
   message: string;
   updatedAt?: string;
   workspaceId?: string;
+  /*
+   * Whether the RELATIONAL rows were written, which is not the same question as
+   * `ok`. With the snapshot fallback enabled a rejected relational save still
+   * reports success once the legacy snapshot lands, and callers that care about
+   * what the database now holds -- the document capacity gate, which reads
+   * `xbar_workspace_storage_bytes` -- cannot tell the two apart from `ok`.
+   */
+  relationalRowsPersisted?: boolean;
 };
 
 type WorkspaceAccessProfile = {
@@ -179,64 +188,20 @@ async function acceptPendingWorkspaceInvitation(session: Session) {
     return null;
   }
 
-  const acceptedAt = new Date().toISOString();
-  const payload =
-    invitation.payload && typeof invitation.payload === 'object'
-      ? {
-          ...(invitation.payload as Record<string, unknown>),
-          status: 'Accepted',
-          acceptedAt,
-        }
-      : {
-          id: invitation.invitation_id,
-          email: normalizedEmail,
-          role: invitation.role,
-          status: 'Accepted',
-          acceptedAt,
-        };
-
-  const role = normalizeWorkspaceRole(invitation.role) ?? 'Owner';
-  const { error: membershipError } = await client.from('workspace_memberships').upsert(
-    {
-      workspace_id: invitation.workspace_id,
-      user_id: session.user.id,
-      email: normalizedEmail,
-      display_name: session.user.user_metadata?.full_name ?? session.user.user_metadata?.name ?? normalizedEmail,
-      role,
-      status: 'active',
-      payload: {
-        id: `member-${normalizedEmail}`,
-        email: normalizedEmail,
-        role,
-        status: 'Active',
-        joinedAt: acceptedAt,
-        source: 'Invite',
-      },
-      updated_at: acceptedAt,
-    },
-    { onConflict: 'workspace_id,email' },
-  );
-
-  if (membershipError) {
-    return null;
-  }
-
-  const { error: invitationUpdateError } = await client
-    .from('workspace_invitations')
-    .update({
-      status: 'accepted',
-      payload,
-      updated_at: acceptedAt,
-    })
-    .eq('workspace_id', invitation.workspace_id)
-    .eq('invitation_id', invitation.invitation_id);
-
-  if (invitationUpdateError) {
+  // The server verifies the current confirmed email, locks the pending invite,
+  // and applies its assigned role atomically. Client-selected roles are not
+  // authorization, and two browser writes could leave a half-accepted invite.
+  const { data: accepted, error } = await client.rpc('xbar_accept_workspace_invitation', {
+    p_workspace_id: invitation.workspace_id,
+    p_invitation_id: invitation.invitation_id,
+  });
+  const role = normalizeWorkspaceRole(accepted?.role);
+  if (error || typeof accepted?.workspaceId !== 'string' || !role) {
     return null;
   }
 
   return {
-    workspaceId: invitation.workspace_id as string,
+    workspaceId: accepted.workspaceId,
     role,
   };
 }
@@ -526,17 +491,34 @@ async function replaceWorkspaceRows(params: {
   idColumn: string;
   workspaceId: string;
   rows: Record<string, unknown>[];
+  /*
+   * Whether a server row missing from this snapshot means "deleted".
+   *
+   * For a workspace's own records it does: the snapshot IS the workspace, and
+   * anything absent was removed locally. For ACCESS rows it does not, and the
+   * difference is the same one already written over syncWorkspaceMembershipRows
+   * -- a save is not a removal. An invitation created by another owner after
+   * this tab last loaded is simply missing here, and deleting it revokes a live
+   * invitation that nobody revoked.
+   *
+   * Nothing is lost by refusing to infer it: revocation and acceptance are
+   * UPDATES to `status` (revokeWorkspaceInvitationInCloud,
+   * xbar_accept_workspace_invitation), never deletes, so no legitimate path
+   * removes an invitation row at all. The delete could only ever destroy a row
+   * newer than the snapshot -- and 20260911005818 granting owners DELETE is
+   * what turned that from a refused statement into an effective one.
+   */
+  removeMissing?: boolean;
 }) {
   const client = getSupabaseClient();
   if (!client) {
     throw new Error('Supabase is not configured for this build.');
   }
 
-  const { table, idColumn, workspaceId, rows } = params;
-  const { data: existingRows, error: existingError } = await client
-    .from(table)
-    .select(idColumn)
-    .eq('workspace_id', workspaceId);
+  const { table, idColumn, workspaceId, rows, removeMissing = true } = params;
+  const { data: existingRows, error: existingError } = removeMissing
+    ? await client.from(table).select(idColumn).eq('workspace_id', workspaceId)
+    : { data: [], error: null };
 
   if (existingError) {
     throw new Error(existingError.message);
@@ -574,7 +556,6 @@ async function replaceWorkspaceRows(params: {
 
 async function syncWorkspaceMembershipRows(params: {
   workspaceId: string;
-  session: Session;
   members: WorkspaceMemberRecord[];
   updatedAt: string;
 }) {
@@ -583,34 +564,26 @@ async function syncWorkspaceMembershipRows(params: {
     throw new Error('Supabase is not configured for this build.');
   }
 
-  const { workspaceId, session, members, updatedAt } = params;
+  const { workspaceId, members, updatedAt } = params;
   const normalizedMembers = members.filter((member) => Boolean(member.email));
-  const nextEmails = new Set(normalizedMembers.map((member) => normalizeWorkspaceEmail(member.email)));
 
-  const { data: existingRows, error: existingError } = await client
-    .from('workspace_memberships')
-    .select('email')
-    .eq('workspace_id', workspaceId);
-
-  if (existingError) {
-    throw new Error(existingError.message);
-  }
-
-  const staleEmails = ((existingRows ?? []) as Array<{ email?: string | null }>)
-    .map((row) => normalizeWorkspaceEmail(row.email))
-    .filter((email) => email && !nextEmails.has(email));
-
-  if (staleEmails.length) {
-    const { error: deleteError } = await client
-      .from('workspace_memberships')
-      .delete()
-      .eq('workspace_id', workspaceId)
-      .in('email', staleEmails);
-
-    if (deleteError) {
-      throw new Error(deleteError.message);
-    }
-  }
+  /*
+   * A SAVE NEVER REMOVES A MEMBER.
+   *
+   * This used to read every membership row and delete the ones absent from the
+   * snapshot being saved -- removal by inference. An invitee who accepted while
+   * an owner had an older snapshot open is in `workspaceInvitations` there, not
+   * yet in `workspaceMembers`, so the very next autosave classified their
+   * freshly inserted membership as stale and deleted it: revoked seconds after
+   * accepting, by a save nobody thought of as a removal. Granting owners DELETE
+   * in `20260911005818_workspace_access_policies` is what turned that from a
+   * refused statement into an effective one.
+   *
+   * Removal already has an explicit path -- `removeWorkspaceMemberFromCloud`,
+   * which the store calls before it drops the member locally -- so nothing is
+   * lost by refusing to infer it here. A save reconciles the rows it knows
+   * about and leaves the rest alone.
+   */
 
   if (!normalizedMembers.length) {
     return;
@@ -620,7 +593,10 @@ async function syncWorkspaceMembershipRows(params: {
     const normalizedEmail = normalizeWorkspaceEmail(member.email);
     return {
       workspace_id: workspaceId,
-      user_id: normalizedEmail === normalizeWorkspaceEmail(session.user.email) ? session.user.id : null,
+      // Account binding belongs to owner bootstrap / invitation acceptance.
+      // Omitting this column preserves the binding on conflict, including an
+      // invite accepted while this save was in flight. Sending null detached
+      // every member other than the account doing the save.
       email: normalizedEmail,
       display_name: normalizedEmail.split('@')[0] ?? normalizedEmail,
       role: member.role,
@@ -685,7 +661,6 @@ async function saveWorkspaceBackupToRelationalCloud(
 
     await syncWorkspaceMembershipRows({
       workspaceId,
-      session,
       members: workspace.workspaceMembers ?? [],
       updatedAt,
     });
@@ -694,6 +669,9 @@ async function saveWorkspaceBackupToRelationalCloud(
       table: 'workspace_invitations',
       idColumn: 'invitation_id',
       workspaceId,
+      // An invitation absent from this snapshot was created by someone else
+      // after this tab loaded, not revoked here. See removeMissing.
+      removeMissing: false,
       rows: (workspace.workspaceInvitations ?? []).map((invitation) => ({
         workspace_id: workspaceId,
         invitation_id: invitation.id,
@@ -1042,6 +1020,7 @@ export async function saveWorkspaceBackupToCloud(backup: unknown): Promise<Cloud
             : `Relational workspace updated, but snapshot backup failed: ${snapshot.message}`,
           updatedAt,
           workspaceId: relational.workspaceId,
+          relationalRowsPersisted: true,
         };
       }
 
@@ -1050,6 +1029,7 @@ export async function saveWorkspaceBackupToCloud(backup: unknown): Promise<Cloud
         message: 'Cloud sync complete. Relational workspace updated.',
         updatedAt,
         workspaceId: relational.workspaceId,
+        relationalRowsPersisted: true,
       };
     }
 
@@ -1063,6 +1043,13 @@ export async function saveWorkspaceBackupToCloud(backup: unknown): Promise<Cloud
 
     const snapshot = await saveWorkspaceSnapshotToCloud(backup, session, updatedAt);
     if (snapshot.ok) {
+      /*
+       * Deliberately WITHOUT `relationalRowsPersisted`. The snapshot landed and
+       * the rancher's work is safe, which is what `ok` is about -- but no
+       * document row reached the database, so nothing a caller reads from
+       * `documents` has moved. Saying otherwise here is what would let the
+       * capacity gate release a reservation the server never took over.
+       */
       return {
         ok: true,
         message: `Relational workspace unavailable. Saved a legacy snapshot instead. ${relational.message}`,
@@ -1159,6 +1146,21 @@ export async function uploadMediaAssetToCloud(params: { file: File; horseId: str
   };
 }
 
+/**
+ * Put a document's bytes where the whole ranch can reach them.
+ *
+ * Keyed to the WORKSPACE, not to the person uploading. It used to be keyed to
+ * `session.user.id`, and since `horse-documents` is a private bucket whose
+ * policy compares that first segment against membership, every teammate saw the
+ * document listed and was refused when they opened it. The object path and the
+ * `documents` row now answer to the same workspace.
+ *
+ * When no workspace resolves -- a build with cloud sync off, a session whose
+ * membership has not loaded, a signed-out tab -- this returns `null` rather than
+ * writing the file somewhere unreadable. The caller reads `null` as "the cloud
+ * did not take this file" and keeps the bytes on the device, which is a file the
+ * customer still has rather than one nobody can open.
+ */
 export async function uploadDocumentAssetToCloud(params: { file: File; horseId?: string }) {
   const client = getSupabaseClient();
   if (!client) {
@@ -1170,10 +1172,17 @@ export async function uploadDocumentAssetToCloud(params: { file: File; horseId?:
     return null;
   }
 
-  const extension = params.file.name.includes('.') ? params.file.name.split('.').pop() : 'bin';
-  const fileName = `${createId('document')}.${extension}`;
-  const horseSegment = sanitizeStorageSegment(params.horseId ?? 'unassigned');
-  const path = `${session.user.id}/documents/${horseSegment}/${fileName}`;
+  const accessProfile = await loadWorkspaceAccessProfile(session);
+  const path = buildDocumentStoragePath({
+    workspaceId: accessProfile.workspaceId,
+    horseId: params.horseId,
+    objectId: createId('document'),
+    originalFileName: params.file.name,
+  });
+  if (!path) {
+    return null;
+  }
+
   const { error } = await client.storage.from(supabaseConfig.documentBucket).upload(path, params.file, {
     upsert: false,
     contentType: params.file.type || undefined,
@@ -1186,6 +1195,40 @@ export async function uploadDocumentAssetToCloud(params: { file: File; horseId?:
   return {
     storagePath: path,
   };
+}
+
+/**
+ * Read the database's authoritative total for objects charged to this
+ * workspace. The RPC is security-definer and resolves membership server-side;
+ * callers must not fall back to a cached subscription total when it cannot be
+ * read, because doing so can upload bytes that the documents trigger rejects.
+ */
+export async function loadWorkspaceStorageBytes(): Promise<number> {
+  const client = getSupabaseClient();
+  if (!client) {
+    throw new Error('Cloud storage usage is unavailable.');
+  }
+
+  const session = await getActiveSession();
+  if (!session?.user) {
+    throw new Error('Sign in again before uploading documents.');
+  }
+
+  const accessProfile = await loadWorkspaceAccessProfile(session);
+  if (!accessProfile.workspaceId) {
+    throw new Error('Finish workspace setup before uploading documents.');
+  }
+
+  const { data, error } = await client.rpc('xbar_workspace_storage_bytes', {
+    p_workspace_id: accessProfile.workspaceId,
+  });
+  if (error) throw error;
+
+  const bytes = typeof data === 'number' ? data : Number(data);
+  if (!Number.isFinite(bytes) || bytes < 0) {
+    throw new Error('Cloud storage usage returned an invalid value.');
+  }
+  return bytes;
 }
 
 /**
@@ -1286,9 +1329,20 @@ export async function getDocumentAccessUrl(
     .from(supabaseConfig.documentBucket)
     .createSignedUrl(document.storagePath, 60 * 5);
   if (error || !data?.signedUrl) {
+    // A refusal here is usually not a broken link. Documents uploaded before
+    // shared storage sit under the uploader's own id, so a teammate sees the
+    // record and is turned away at the file -- and "Object not found" tells
+    // them nothing they can act on. The workspace is only looked up on this
+    // path, so a normal open still costs one request.
+    const accessProfile = await loadWorkspaceAccessProfile(session);
+    const legacyExplanation = explainUnopenableCloudDocument({
+      storagePath: document.storagePath,
+      viewerUserId: session.user.id,
+      workspaceId: accessProfile.workspaceId,
+    });
     return {
       ok: false,
-      message: error?.message ?? 'Unable to generate a secure file link for this document.',
+      message: legacyExplanation ?? error?.message ?? 'Unable to generate a secure file link for this document.',
     } as const;
   }
 

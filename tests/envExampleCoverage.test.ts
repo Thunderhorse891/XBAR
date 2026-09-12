@@ -111,7 +111,10 @@ test('every test file is actually run by npm test', () => {
     .filter((name) => name.endsWith('.test.ts'))
     .map((name) => name.replace(/\.ts$/, '.js'));
 
-  const missing = suites.filter((name) => !script.includes(`/tests/${name}`));
+  const missing = suites.filter(
+    (name) =>
+      !script.includes(`/tests/${name}`) && !script.includes(`tsx --test tests/${name.replace(/\.js$/, '.ts')}`),
+  );
   assert.deepEqual(missing, [], `these suites are never executed: ${missing.join(', ')}`);
 });
 

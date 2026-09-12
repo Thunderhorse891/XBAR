@@ -12,6 +12,27 @@ const migrationFiles = (await readdir(migrationsDir)).filter((file) => file.ends
 const migrations = await Promise.all(
   migrationFiles.map(async (file) => {
     const sql = await readFile(path.join(migrationsDir, file), 'utf8');
+    /*
+     * Migrations are concatenated VERBATIM; only the schema below is rewritten.
+     *
+     * `create policy if not exists` is not PostgreSQL syntax in any version --
+     * production-schema.sql only survives it because of the rewrite that
+     * follows. A migration copying that form parses as far as `if` and then
+     * fails, taking the rest of the file with it, and nothing here noticed:
+     * the guard after the rewrite inspects the schema string alone. Caught by
+     * writing exactly that mistake and watching PostgreSQL 16.13 reject it.
+     *
+     * Comments are stripped first: a migration explaining why it avoids the
+     * form would otherwise be refused for naming it, which is how the first
+     * version of this guard behaved.
+     */
+    const executable = sql.replace(/\/\*[\s\S]*?\*\//g, ' ').replace(/--[^\n]*/g, ' ');
+    if (/create\s+policy\s+if\s+not\s+exists/i.test(executable)) {
+      throw new Error(
+        `${file}: "create policy if not exists" is not valid PostgreSQL and migrations are not rewritten. ` +
+          'Use `drop policy if exists "name" on table;` followed by `create policy "name" ...`.',
+      );
+    }
     return `-- Migration: ${file}\n${sql.trim()}`;
   }),
 );

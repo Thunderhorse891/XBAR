@@ -6,7 +6,8 @@ import ErrorBoundary from './components/ErrorBoundary';
 import { InteractionBootstrap } from './components/InteractionBootstrap';
 import { registerGlobalErrorHandlers } from './lib/globalErrorHandlers';
 import { registerOfflineRuntime } from './lib/offlineRuntime';
-import { appBasePath } from './lib/routeCanon';
+import { appBasePath, browserAuthFailureSearch, hashAuthFailureRoute, usesHashRouting } from './lib/routeCanon';
+import './styles/brandTokens.css';
 import './index.css';
 import './styles/motion.css';
 import './mobilePolish.css';
@@ -16,12 +17,37 @@ import './mobilePolish.css';
 // the dev server serves it on every path — normalize so deep links like
 // /horses/123 opened against the dev server land on /app/horses/123 instead
 // of a blank screen. Hash routing (GitHub Pages previews) is exempt.
-const usesHashRouting =
-  import.meta.env.MODE !== 'e2e' &&
-  (import.meta.env.VITE_ROUTER_MODE === 'hash' || window.location.hostname.endsWith('.github.io'));
-if (!usesHashRouting && !window.location.pathname.startsWith(appBasePath)) {
+if (!usesHashRouting() && !window.location.pathname.startsWith(appBasePath)) {
   const { pathname, search, hash } = window.location;
   window.location.replace(`${appBasePath}${pathname === '/' ? '' : pathname}${search}${hash}`);
+}
+
+/*
+ * A rejected callback -- an expired link, a cancelled OAuth consent -- comes
+ * back as `#error=...`, which auth-js leaves in place while emitting nothing.
+ * Both routers need it moved somewhere a screen can read, for different
+ * reasons, and both are done BEFORE the router is created.
+ *
+ * Under the HASH router the fragment IS the route, so it is replaced outright
+ * or the customer meets the not-found screen. Under the BROWSER router nothing
+ * is unreachable -- but nothing reads the fragment either, so the customer got
+ * an ordinary sign-in form with no hint that anything had failed. There the
+ * PATH is left exactly where Supabase sent them and only the reason moves, so
+ * a failed recovery link still lands on the reset screen with its own
+ * expired-link guidance.
+ *
+ * Both helpers leave a SUCCESSFUL callback's fragment untouched.
+ */
+if (usesHashRouting()) {
+  const failureRoute = hashAuthFailureRoute(window.location.hash);
+  if (failureRoute) {
+    window.history.replaceState(null, '', `${window.location.pathname}${window.location.search}${failureRoute}`);
+  }
+} else {
+  const failureSearch = browserAuthFailureSearch(window.location.hash, window.location.search);
+  if (failureSearch) {
+    window.history.replaceState(null, '', `${window.location.pathname}${failureSearch}`);
+  }
 }
 
 const rootElement = document.getElementById('root');

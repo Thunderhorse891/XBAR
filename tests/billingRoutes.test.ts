@@ -77,11 +77,11 @@ test('paid signup creates the cloud workspace before billing checkout', () => {
    * plan and that it is computed after setup, not the shape of the ternary.
    */
   assert.match(setup, /const postSetupPath = useMemo\(/);
-  assert.match(setup, /selectedPlan && canPresentPurchaseFlow\(\)\s*\?\s*billingPathForTier\(selectedPlan\)/);
+  assert.match(setup, /if \(selectedPlan && canPresentPurchaseFlow\(\)\) return billingPathForTier\(selectedPlan\)/);
   assert.match(
     setup,
-    /:\s*'\/'/,
-    'setup must fall back to the app root rather than to billing when no plan was selected',
+    /return '\/';\s*\}, \[selectedPlan, location.state\]\)/,
+    'setup must fall back to the app root when neither a plan nor a safe requested destination exists',
   );
   assert.match(setup, /const cloudSaved = await persistCloudWorkspace\(\);/);
   assert.match(setup, /checkout needs the cloud workspace first/);

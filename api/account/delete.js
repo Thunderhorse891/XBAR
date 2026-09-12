@@ -1,18 +1,23 @@
 import { readJsonBody, sendJson } from '../_lib/http.js';
 import { getSupabaseAdmin } from '../_lib/supabase-admin.js';
-import { confirmationSatisfied, planAccountDeletion } from '../_lib/account-deletion.js';
+import {
+  confirmationSatisfied,
+  documentPrefixesToPurge,
+  loadAccountDeletionPlan,
+  mediaPrefixesToPurge,
+} from '../_lib/account-deletion.js';
 import { enforceRateLimit } from '../_lib/rate-limit.js';
 import { applyCors } from '../_lib/cors.js';
 
-// In-app account deletion (Apple Guideline 5.1.1(v)). Irreversible. Deletes the
-// caller's own auth account and the workspaces they PRIVATELY own; a workspace
-// that still has other active members is transferred to a successor, never
-// destroyed. Requires the user to type their exact email to confirm.
+// In-app account deletion. Irreversible. Deletes the
+// caller's own auth account and the workspaces they PRIVATELY own. Accounts
+// owning shared workspaces require a reviewed handoff before deletion: changing
+// a workspace owner alone does not transfer its stored files or their access.
+// Requires the user to type their exact email to confirm.
 //
-// Ordering is failure-safe: ownership transfers and membership removal (which
-// destroy no data) run first; the auth user is deleted next; only then are the
-// user's private workspaces and storage objects purged — so a failed account
-// deletion can never leave the account half-erased.
+// Prerequisite checks precede membership removal and auth deletion. File cleanup
+// follows auth deletion. This ordering does not make the multi-request operation
+// transactional; concurrency and shared-file lifecycle remain separate checks.
 
 const RATE_LIMIT = { bucket: 'account-delete', limit: 5, windowSeconds: 300 };
 const DOCUMENT_BUCKET =
@@ -63,38 +68,29 @@ export default async function handler(req, res) {
 
   try {
     // Build the plan: for every owned workspace, look up its OTHER active members
-    // so we can transfer rather than destroy shared workspaces.
-    const { data: owned } = await supabase.from('workspaces').select('id').eq('owner_user_id', user.id);
-    const ownedWorkspaces = [];
-    for (const row of owned ?? []) {
-      const { data: others } = await supabase
-        .from('workspace_memberships')
-        .select('user_id, role')
-        .eq('workspace_id', row.id)
-        .eq('status', 'active')
-        .neq('user_id', user.id);
-      ownedWorkspaces.push({
-        id: row.id,
-        otherActiveMembers: (others ?? []).map((member) => ({ userId: member.user_id, role: member.role })),
-      });
-    }
-    const plan = planAccountDeletion(user.id, ownedWorkspaces);
+    // so a shared workspace cannot be mistaken for private data to purge.
+    const plan = await loadAccountDeletionPlan(supabase, user.id);
 
-    // 1. Transfer shared workspaces to a successor owner (non-destructive) so
-    //    deleting the user can never cascade their data away.
-    for (const transfer of plan.workspacesToTransfer) {
-      const { error } = await supabase
-        .from('workspaces')
-        .update({ owner_user_id: transfer.newOwnerUserId })
-        .eq('id', transfer.workspaceId)
-        .eq('owner_user_id', user.id);
-      if (error) {
-        return sendJson(res, 502, { ok: false, message: `Could not transfer a shared workspace: ${error.message}` });
-      }
+    // Transferring the row then deleting the entire user's Storage prefix
+    // destroyed shared files. Refuse before any mutation until the handoff
+    // includes verified file retention and successor access.
+    if (plan.workspacesToTransfer.length) {
+      return sendJson(res, 409, {
+        ok: false,
+        code: 'shared_workspace_handoff_required',
+        message:
+          'Your account owns a workspace with other members. Shared records and files need a reviewed ownership handoff before this account can be deleted. Nothing was changed.',
+      });
     }
 
     // 2. Remove the user from every workspace they belong to (non-destructive).
-    await supabase.from('workspace_memberships').delete().eq('user_id', user.id);
+    const { error: membershipRemovalError } = await supabase
+      .from('workspace_memberships')
+      .delete()
+      .eq('user_id', user.id);
+    if (membershipRemovalError) {
+      return sendJson(res, 502, { ok: false, message: 'Unable to remove workspace access. Account was not deleted.' });
+    }
 
     // 3. Delete the auth account itself. Nothing destructive to the account's
     //    data has happened yet, so a failure here leaves it recoverable.
@@ -113,7 +109,14 @@ export default async function handler(req, res) {
         .in('id', plan.workspacesToPurge)
         .then(undefined, () => {});
     }
-    await removeUserStorage(supabase, user.id).catch(() => {});
+    // Documents moved onto workspace-keyed paths, so sweeping only the
+    // departing user's own prefix would leave every file in a purged private
+    // workspace sitting in the bucket after this endpoint reported success --
+    // while the Settings screen promises those documents were erased. Which
+    // prefixes are safe to sweep is decided in account-deletion.js, where the
+    // rule that a transferred workspace is never swept can be tested.
+    await removeStoragePrefixes(supabase, DOCUMENT_BUCKET, documentPrefixesToPurge(plan)).catch(() => {});
+    await removeStoragePrefixes(supabase, MEDIA_BUCKET, mediaPrefixesToPurge(plan)).catch(() => {});
 
     return sendJson(res, 200, {
       ok: true,
@@ -144,10 +147,10 @@ async function listAllObjects(supabase, bucket, prefix, out) {
   }
 }
 
-async function removeUserStorage(supabase, userId) {
-  for (const bucket of [DOCUMENT_BUCKET, MEDIA_BUCKET]) {
+async function removeStoragePrefixes(supabase, bucket, prefixes) {
+  for (const prefix of prefixes) {
     const paths = [];
-    await listAllObjects(supabase, bucket, userId, paths);
+    await listAllObjects(supabase, bucket, prefix, paths);
     for (let i = 0; i < paths.length; i += 100) {
       await supabase.storage.from(bucket).remove(paths.slice(i, i + 100));
     }

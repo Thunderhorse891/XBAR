@@ -356,6 +356,12 @@ export interface DocumentRecord {
   confidence: number;
   duplicateRisk: 'Low' | 'Review' | 'Possible Duplicate';
   extractedTextPreview: string;
+  /**
+   * What the reader could NOT examine, when it could not examine all of it.
+   * Empty or absent means the whole file was read. See
+   * lib/documentIntelligence.ts describeDocumentCoverage.
+   */
+  processingNote?: string;
   summary: string;
   entities: DocumentEntities;
   fileUrl?: string;
