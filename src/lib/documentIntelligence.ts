@@ -24,6 +24,17 @@ export type DocumentCoverage = {
   pagesOcrRead: number;
   /** The text was cut at the character limit. */
   truncated: boolean;
+  /**
+   * The reader could not examine the file at all -- OCR threw rather than
+   * returning nothing.
+   *
+   * Needed because emptiness is ambiguous and the page counters cannot say so
+   * for an image: an image has no page count, so `totalPages` is 0 and the
+   * zero-of-N sentence never applies. A photograph OCR failed on and a
+   * photograph with no writing in it both arrived as `text: ''` with full
+   * coverage, and the customer was told nothing either way.
+   */
+  readFailed: boolean;
 };
 
 export const fullCoverage = (): DocumentCoverage => ({
@@ -31,6 +42,7 @@ export const fullCoverage = (): DocumentCoverage => ({
   pagesRead: 0,
   pagesOcrRead: 0,
   truncated: false,
+  readFailed: false,
 });
 
 /**
@@ -41,7 +53,9 @@ export const fullCoverage = (): DocumentCoverage => ({
 export function describeDocumentCoverage(coverage: DocumentCoverage): string {
   const examined = coverage.pagesRead + coverage.pagesOcrRead;
   const parts: string[] = [];
-  if (coverage.totalPages > 0 && examined === 0) {
+  if (coverage.readFailed) {
+    parts.push('This file could not be read.');
+  } else if (coverage.totalPages > 0 && examined === 0) {
     /*
      * Nothing came off the file at all, and this used to say nothing.
      *
@@ -142,14 +156,22 @@ async function getOcrWorker() {
   return ocrWorkerPromise;
 }
 
-async function runImageOcr(image: File | Blob | HTMLCanvasElement) {
+/*
+ * Returns WHETHER it failed as well as what it read.
+ *
+ * This used to swallow the error and return '', which made a worker that could
+ * not load indistinguishable from a picture with no writing on it. The staged
+ * OCR runtime is the ordinary way to get there: blocked or missing assets fail
+ * the worker for every image, silently.
+ */
+async function runImageOcr(image: File | Blob | HTMLCanvasElement): Promise<{ text: string; failed: boolean }> {
   try {
     const worker = await getOcrWorker();
     const result = await worker.recognize(image, { rotateAuto: true });
-    return result.data.text.trim();
+    return { text: result.data.text.trim(), failed: false };
   } catch (error) {
     console.error('Image OCR failed', error);
-    return '';
+    return { text: '', failed: true };
   }
 }
 
@@ -252,7 +274,7 @@ async function extractPdfText(file: File): Promise<{ text: string; coverage: Doc
         continue;
       }
       ocrBudget -= 1;
-      const text = await runImageOcr(canvas);
+      const { text } = await runImageOcr(canvas);
       // Keep the thin text layer when OCR finds nothing: it is still the best
       // reading of that page available.
       if (text) {
@@ -271,12 +293,36 @@ async function extractPdfText(file: File): Promise<{ text: string; coverage: Doc
         pagesRead: pageTexts.filter((pageText, index) => pageText.trim() && !ocrPages.has(index + 1)).length,
         pagesOcrRead: ocrPages.size,
         truncated: text.length > TEXT_PREVIEW_LIMIT,
+        // A PDF reports its own shortfall through the page counters: the
+        // zero-of-N sentence covers "every page failed" without needing this.
+        readFailed: false,
       },
     };
   } catch (error) {
     console.error('PDF extraction failed', error);
     return { text: '', coverage: fullCoverage() };
   }
+}
+
+/**
+ * What an image OCR attempt amounts to, kept out of the call site on purpose.
+ *
+ * The mapping from "OCR failed" to "the customer is told" is the whole point of
+ * this fix, and a mapping written inline at the call site could not be tested:
+ * `readDocumentWithCoverage` needs a real tesseract worker, which throws
+ * asynchronously in node and takes the process with it. With the decision here
+ * the call site passes the reader's result through untouched and has no logic
+ * left to get wrong.
+ */
+export function imageRead(read: { text: string; failed: boolean }): { text: string; coverage: DocumentCoverage } {
+  return {
+    text: read.text.slice(0, TEXT_PREVIEW_LIMIT),
+    coverage: {
+      ...fullCoverage(),
+      truncated: read.text.length > TEXT_PREVIEW_LIMIT,
+      readFailed: read.failed,
+    },
+  };
 }
 
 export async function readDocumentWithCoverage(file: File): Promise<{ text: string; coverage: DocumentCoverage }> {
@@ -295,7 +341,7 @@ export async function readDocumentWithCoverage(file: File): Promise<{ text: stri
   }
 
   if (file.type.startsWith('image/') || /\.(png|jpe?g|webp|bmp|gif|tiff?)$/i.test(file.name)) {
-    return cut(await runImageOcr(file));
+    return imageRead(await runImageOcr(file));
   }
 
   return { text: '', coverage: fullCoverage() };

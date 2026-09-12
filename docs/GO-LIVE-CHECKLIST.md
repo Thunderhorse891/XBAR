@@ -398,6 +398,31 @@ set before release.
   screen. The case was replaced rather than added to, and the replacement says
   why. A test can pin a defect as firmly as it pins a fix.
 
+- **A failed image OCR looked exactly like a blank image. Now fixed** (raised by
+  Codex against `31aedad`). `runImageOcr` caught its error and returned `''`, so
+  a worker that could not load -- the staged OCR runtime being blocked or
+  missing is the ordinary way there, and it fails for every image -- produced
+  the same result as a photograph with no writing on it. This is the path the
+  PDF fix deliberately left alone, on the grounds that a file with no page count
+  should not be described as unread; that reasoning was right for the page
+  counters and wrong for the customer, because an image has no counters to speak
+  through. `runImageOcr` now reports whether it failed, and coverage carries a
+  `readFailed` flag that the note reads.
+
+  The mapping was deliberately moved OFF the call site into a pure `imageRead()`
+  after a mutant that called every blank image a failure survived the suite:
+  `readDocumentWithCoverage` needs a real tesseract worker, which throws
+  asynchronously through `process.nextTick` and takes the node process down
+  rather than returning, so nothing at that call site could be tested. With the
+  decision in `imageRead` the call site has no logic left to get wrong.
+
+  **Not covered, and stated rather than implied:** `runImageOcr`'s own `catch`
+  clause -- the line turning a thrown worker into `failed: true` -- for the same
+  reason. A mutant flipping it survives. Everything it feeds is covered; closing
+  it would mean injecting the worker factory, which is worth doing if this area
+  gains more logic and is not worth the indirection around three unbranching
+  lines today.
+
 - Not claimed: none of this was exercised against a live GoTrue or a live
   Supabase project. The browser suites intercept Auth and PostgREST, so what is
   established is the client's behaviour, not the server's.
