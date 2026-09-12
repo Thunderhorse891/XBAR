@@ -23,6 +23,15 @@ This scope does not authorize paid-service activation or assume that existing
 production integrations have been disabled. Record the actual enabled feature
 set before release.
 
+## September 12 — storage compatibility applied
+
+The live project now accepts both uploader-prefixed and workspace-prefixed
+document paths. The expand migration passed real authenticated RLS assertions;
+all synthetic fixtures were rolled back. Existing production upload rules were
+retained. See [the rollout evidence](DOCUMENT-STORAGE-ROLLOUT.md) for the applied
+scope, verification and deferred removal of legacy writes. HTTP upload and
+signed-URL verification remain separate; this is not whole-app launch clearance.
+
 ## September 12 follow-up — access changes are not snapshot data
 
 The current client no longer upserts invitations or non-owner memberships during

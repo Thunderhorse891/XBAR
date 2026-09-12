@@ -318,16 +318,23 @@ psql -v ON_ERROR_STOP=1 "$DATABASE_URL" -f supabase/checks/share-token-live-roll
 psql "$DATABASE_URL" -f supabase/migrations/20260911005818_workspace_access_policies.sql
 psql -v ON_ERROR_STOP=1 "$DATABASE_URL" -f supabase/checks/workspace-access-live-rollback.sql
 
-# 9. Make shared documents actually shared. Until this runs, a document
-#    uploaded by one member is listed for the whole ranch and openable by
-#    nobody but the uploader: the `documents` row is workspace-scoped while the
-#    object in the private `horse-documents` bucket was keyed to the uploader's
-#    user id. Apply after step 8 -- the policies call the helper functions it
-#    installs. Existing objects are NOT moved; they stay readable by whoever
-#    uploaded them, and re-uploading is what shares one with the ranch.
-psql "$DATABASE_URL" -f supabase/migrations/20260912060000_workspace_keyed_document_storage.sql
-psql -v ON_ERROR_STOP=1 "$DATABASE_URL" -f supabase/checks/document-storage-live-rollback.sql
+# 9. EXPAND before deploying the workspace-path client. Retains uploader paths
+#    for older app versions. Includes authenticated RLS checks with rolled-back
+#    fixtures. Run atomically so a failed assertion rolls back policy changes.
+psql -1 -v ON_ERROR_STOP=1 "$DATABASE_URL" -f supabase/migrations/20260912055000_expand_document_storage_paths.sql
 
+```
+
+**Stop after expansion while older production clients remain.** The live project
+has completed this phase. See [storage rollout evidence](docs/DOCUMENT-STORAGE-ROLLOUT.md).
+The separate contract phase below removes legacy uploads. Run it only after the
+workspace-path client and file upload/download behavior have been verified and
+older upload clients retired; it is not the next automatic deployment command.
+
+```sh
+# Deferred contract phase: existing legacy files remain uploader-readable.
+psql -1 -v ON_ERROR_STOP=1 "$DATABASE_URL" -f supabase/migrations/20260912060000_workspace_keyed_document_storage.sql
+psql -v ON_ERROR_STOP=1 "$DATABASE_URL" -f supabase/checks/document-storage-live-rollback.sql
 ```
 
 **(4) and (5) are prerequisites for billing, not optimizations to schedule
