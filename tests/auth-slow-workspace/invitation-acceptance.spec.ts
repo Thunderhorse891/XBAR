@@ -171,7 +171,8 @@ test('pushing a workspace preserves another member account binding', async ({ pa
   await page.getByRole('button', { name: 'Pull cloud', exact: true }).click();
   await expect(page.getByRole('button', { name: 'Push cloud', exact: true })).toBeEnabled();
   await page.getByRole('button', { name: 'Push cloud', exact: true }).click();
-  await expect.poll(() => membershipWrites.some((row) => row.email === memberEmail)).toBe(true);
-  const savedMember = membershipWrites.find((row) => row.email === memberEmail)!;
-  expect(savedMember).not.toHaveProperty('user_id');
+  await expect(page.getByText('Cloud sync complete', { exact: true })).toBeVisible();
+  expect(membershipWrites.some((row) => row.email === RECOVERY_EMAIL && row.user_id === USER_ID)).toBe(true);
+  // Ranch saves must leave other accounts' server-owned access bindings alone.
+  expect(membershipWrites.filter((row) => row.email === memberEmail)).toEqual([]);
 });
