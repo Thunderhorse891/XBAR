@@ -165,3 +165,33 @@ test('the first relational workspace id becomes active before billing depends on
     /result\.workspaceId && result\.workspaceId !== workspaceId\) \{\s*setWorkspaceAccessProfile\(result\.workspaceId, 'Admin'\);/,
   );
 });
+
+test('document intake checks authoritative cloud capacity before uploading', async () => {
+  const store = await readFile('src/store/useXbarStore.ts', 'utf8');
+  const cloud = await readFile('src/lib/cloudWorkspace.ts', 'utf8');
+
+  assert.match(cloud, /client\.rpc\('xbar_workspace_storage_bytes'/);
+  const intake = store.slice(store.indexOf('createDocumentIntake:'), store.indexOf('reviewDocument:'));
+  assert.match(intake, /await loadWorkspaceStorageBytes\(\)/);
+  assert.ok(
+    intake.indexOf('await loadWorkspaceStorageBytes()') < intake.indexOf('uploadDocumentAssetToCloud({'),
+    'capacity must be verified before object bytes leave the browser',
+  );
+  assert.match(intake, /Storage usage could not be verified\. No files were uploaded/);
+});
+
+test('document quota accounts only for bytes accepted by cloud storage', async () => {
+  const store = await readFile('src/store/useXbarStore.ts', 'utf8');
+  const intake = store.slice(store.indexOf('createDocumentIntake:'), store.indexOf('reviewDocument:'));
+
+  assert.match(intake, /fileSizeBytes: uploadedAsset \? file\.size : undefined/);
+  assert.match(intake, /filter\(\(document\) => Boolean\(document\.storagePath\)\)/);
+});
+
+test('automatic relational save failures are visible and deduplicated', async () => {
+  const bootstrap = await readFile('src/components/CloudBootstrap.tsx', 'utf8');
+
+  assert.match(bootstrap, /id: 'cloud-autosave-failed'/);
+  assert.match(bootstrap, /title: 'Cloud save paused'/);
+  assert.match(bootstrap, /Changes remain local and will retry\./);
+});

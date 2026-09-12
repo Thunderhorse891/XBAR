@@ -5,6 +5,7 @@ import { decideCloudReconciliation, serializeWorkspaceBackup } from '@/lib/cloud
 import { promoteLocalVaultFiles } from '@/lib/workspacePromotion';
 import { vaultOwnerId } from '@/lib/vaultOwner';
 import { useCloudStore } from '@/store/useCloudStore';
+import { useUiStore } from '@/store/useUiStore';
 import { useWorkspaceHydrated, useXbarStore } from '@/store/useXbarStore';
 
 export function CloudBootstrap() {
@@ -21,6 +22,7 @@ export function CloudBootstrap() {
   const setWorkspaceAccessProfile = useCloudStore((state) => state.setWorkspaceAccessProfile);
   const setAutosaveReady = useCloudStore((state) => state.setAutosaveReady);
   const setCurrentRole = useXbarStore((state) => state.setCurrentRole);
+  const pushToast = useUiStore((state) => state.pushToast);
   const importWorkspaceBackup = useXbarStore((state) => state.importWorkspaceBackup);
   const exportWorkspaceBackup = useXbarStore((state) => state.exportWorkspaceBackup);
   const workspaceHydrated = useWorkspaceHydrated();
@@ -342,7 +344,15 @@ export function CloudBootstrap() {
         if (result.updatedAt) setLastSyncAt(result.updatedAt);
         setSyncState('idle', result.message);
       } else {
-        setSyncState('error', `${result.message} Changes remain local and will retry.`);
+        const message = `${result.message} Changes remain local and will retry.`;
+        setSyncState('error', message);
+        pushToast({
+          id: 'cloud-autosave-failed',
+          title: 'Cloud save paused',
+          message,
+          tone: 'error',
+          duration: 10000,
+        });
       }
     };
 
@@ -367,6 +377,7 @@ export function CloudBootstrap() {
     autosaveUnlocked,
     cloudStatus,
     exportWorkspaceBackup,
+    pushToast,
     setLastSyncAt,
     setSyncState,
     setWorkspaceAccessProfile,

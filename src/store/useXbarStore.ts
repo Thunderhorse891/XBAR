@@ -27,6 +27,7 @@ import { buildOfferDecision } from '@/lib/profitIntelligence';
 import { scheduleBuyerActivityFollowUp } from '@/lib/salesFollowUp';
 import {
   createWorkspaceInvitationInCloud,
+  loadWorkspaceStorageBytes,
   removeWorkspaceMemberFromCloud,
   revokeWorkspaceInvitationInCloud,
   updateSharedListingChannelsInCloud,
@@ -785,7 +786,25 @@ export const useXbarStore = create<XbarStore>()(
         const state = get();
         const storageIncrease = estimateStorageGb(fileList);
         const planUsage = entitledUsage(state.subscription);
-        if (planUsage.storageUsedGb + storageIncrease > planUsage.storageLimitGb) {
+        if (isSupabaseConfigured()) {
+          try {
+            const storedBytes = await loadWorkspaceStorageBytes();
+            const incomingBytes = fileList.reduce((total, file) => total + file.size, 0);
+            if (storedBytes + incomingBytes > planUsage.storageLimitGb * 1024 * 1024 * 1024) {
+              return {
+                ok: false,
+                message: 'Storage limit reached for the current plan. Upgrade before adding more files.',
+              };
+            }
+          } catch (error) {
+            console.error('Cloud storage usage could not be checked.', error);
+            return {
+              ok: false,
+              message:
+                'Storage usage could not be verified. No files were uploaded; try again when cloud access returns.',
+            };
+          }
+        } else if (planUsage.storageUsedGb + storageIncrease > planUsage.storageLimitGb) {
           return {
             ok: false,
             message: 'Storage limit reached for the current plan. Upgrade before adding more files.',
@@ -853,7 +872,7 @@ export const useXbarStore = create<XbarStore>()(
                 batchId,
                 fileName: file.name,
                 mimeType: file.type || undefined,
-                fileSizeBytes: file.size,
+                fileSizeBytes: uploadedAsset ? file.size : undefined,
                 localFileKey,
                 storagePath: uploadedAsset?.storagePath,
               };
@@ -952,7 +971,13 @@ export const useXbarStore = create<XbarStore>()(
                   ...current.subscription.usage,
                   documentsProcessed: allDocuments.filter((document) => document.state !== 'Archived').length,
                   horsesUsed: createdHorses.length + nextHorses.length,
-                  storageUsedGb: normalizeUsage(current.subscription.usage.storageUsedGb + storageIncrease),
+                  storageUsedGb: normalizeUsage(
+                    current.subscription.usage.storageUsedGb +
+                      documents
+                        .filter((document) => Boolean(document.storagePath))
+                        .reduce((total, document) => total + (document.fileSizeBytes ?? 0), 0) /
+                        (1024 * 1024 * 1024),
+                  ),
                 },
               },
             };

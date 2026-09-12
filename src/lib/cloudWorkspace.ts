@@ -1161,6 +1161,40 @@ export async function uploadDocumentAssetToCloud(params: { file: File; horseId?:
 }
 
 /**
+ * Read the database's authoritative total for objects charged to this
+ * workspace. The RPC is security-definer and resolves membership server-side;
+ * callers must not fall back to a cached subscription total when it cannot be
+ * read, because doing so can upload bytes that the documents trigger rejects.
+ */
+export async function loadWorkspaceStorageBytes(): Promise<number> {
+  const client = getSupabaseClient();
+  if (!client) {
+    throw new Error('Cloud storage usage is unavailable.');
+  }
+
+  const session = await getActiveSession();
+  if (!session?.user) {
+    throw new Error('Sign in again before uploading documents.');
+  }
+
+  const accessProfile = await loadWorkspaceAccessProfile(session);
+  if (!accessProfile.workspaceId) {
+    throw new Error('Finish workspace setup before uploading documents.');
+  }
+
+  const { data, error } = await client.rpc('xbar_workspace_storage_bytes', {
+    p_workspace_id: accessProfile.workspaceId,
+  });
+  if (error) throw error;
+
+  const bytes = typeof data === 'number' ? data : Number(data);
+  if (!Number.isFinite(bytes) || bytes < 0) {
+    throw new Error('Cloud storage usage returned an invalid value.');
+  }
+  return bytes;
+}
+
+/**
  * Resolve a record to something the browser can open.
  *
  * The on-device vault is consulted before cloud storage, and deliberately so:
