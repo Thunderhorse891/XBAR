@@ -41,8 +41,8 @@ Keep existing aliases while code still references them. New consumers should use
 
 When adding an asset, record its provenance, intended surfaces, canonical filename, intrinsic dimensions, and whether it is an approved master or a derived export.
 
-## Cinematic identity study (September 12)
+## Cinematic identity study (updated September 14)
 
-`cinematic-preview/horse.mp4` is Erin's supplied 832x464 H.264 animation, 5.2 seconds, copied unchanged. It contains a visible Meta AI watermark, which is preserved. `poster.jpg` is a frame extracted from that clip. Both belong only to the explicitly labelled design study at `/brand/cinematic-preview/index.html`; neither is added to sign-in or the working app shell.
+The preview now animates the unchanged `xbar-report-horse.png` master (1672x941) using browser-native opacity and scale keyframes. The supplied Meta-marked `horse.mp4` and its extracted `poster.jpg` have been removed from published assets; Erin's original desktop files remain unchanged. The sample card also uses the original PNG.
 
-The study translates Erin's new cinematic direction into an animated entrance, interactive record relationships, a report graphic, silver/charcoal surfaces and blue edge lighting. It offers pause, honors reduced motion/data-saving preferences, and pauses video when out of view or the page is hidden. Figures and horse names are labelled illustrative. The final production asset decision and visual acceptance remain open; this study does not silently replace the official marks or strip third-party watermarks.
+The entrance plays once and offers pause/replay. Reduced-motion and data-saving visitors begin with static artwork. No video or external media service is loaded. Figures and horse names remain illustrative. This is a separate preview, not the production shell or a new vector logo master.

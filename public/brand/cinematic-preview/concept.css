@@ -80,11 +80,16 @@ a:focus-visible {
 }
 .film {
   position: absolute;
-  inset: 0;
-  width: 100%;
-  height: 100%;
-  object-fit: cover;
-  object-position: 60% 35%;
+  inset: 60px 0 auto auto;
+  width: 80%;
+  max-width: 1672px;
+  height: 76%;
+  object-fit: contain;
+  object-position: right top;
+  mask-image:
+    linear-gradient(90deg, transparent, #000 12%, #000 95%, transparent),
+    linear-gradient(180deg, transparent, #000 12%, #000 78%, transparent);
+  mask-composite: intersect;
   opacity: 0.82;
 }
 .shade {
@@ -234,7 +239,7 @@ a:focus-visible {
   inset: 0;
   background:
     linear-gradient(0deg, #080c11 6%, transparent 70%),
-    url('poster.jpg') center 15% / auto 94% no-repeat;
+    url('../xbar-report-horse.png') center 15% / contain no-repeat;
   opacity: 0.65;
 }
 .portrait > * {
@@ -468,6 +473,9 @@ a:focus-visible {
     padding: 0 6% 125px;
   }
   .film {
+    inset: 0;
+    width: 100%;
+    height: 100%;
     object-fit: contain;
     object-position: center 15%;
   }

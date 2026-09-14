@@ -354,7 +354,7 @@ export default function Login() {
         className="clean-login-layout"
         aria-label={authMode === 'signin' ? 'Sign in to XBAR' : 'Create an XBAR account'}
       >
-        <aside className="clean-login-visual" aria-label="XBAR brand">
+        <aside className="clean-login-visual motion-brand-in" aria-label="XBAR brand">
           {/*
             Intrinsic dimensions, not wished-for ones. These attributes exist to
             reserve the right SHAPE before the bytes arrive: the horse is

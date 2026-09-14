@@ -5,48 +5,58 @@ const limitedNetwork =
   !!navigator.connection?.saveData || ['2g', 'slow-2g'].includes(navigator.connection?.effectiveType);
 let paused = pref.matches || limitedNetwork,
   visible = true,
-  chosenByHand = false;
+  chosenByHand = false,
+  completed = false,
+  entrance = null;
+
 function sync() {
   document.body.classList.toggle('paused', paused);
-  toggle.textContent = film.ended ? 'Replay motion' : paused ? 'Play motion' : 'Pause motion';
+  toggle.textContent = completed ? 'Replay motion' : paused ? 'Play motion' : 'Pause motion';
   toggle.setAttribute('aria-pressed', String(paused));
-  if (paused || !visible || document.hidden) film.pause();
-  else {
-    const source = film.querySelector('source');
-    if (!source.getAttribute('src')) {
-      source.src = source.dataset.src;
-      film.load();
-    }
-    film.play().catch(() => {
+  if (paused || !visible || document.hidden) {
+    if (entrance && entrance.playState !== 'finished') entrance.pause();
+    return;
+  }
+  if (!film.complete || !film.naturalWidth) return;
+  if (!entrance) {
+    entrance = film.animate(
+      [
+        { transform: 'scale(1.055)', opacity: 0.18 },
+        { transform: 'scale(1.018)', opacity: 0.82, offset: 0.6 },
+        { transform: 'scale(1)', opacity: 0.82 },
+      ],
+      { duration: 4200, easing: 'cubic-bezier(.22,1,.36,1)', fill: 'forwards' },
+    );
+    entrance.onfinish = () => {
+      completed = true;
       paused = true;
       sync();
-    });
-  }
+    };
+  } else entrance.play();
 }
 toggle.addEventListener('click', () => {
   chosenByHand = true;
-  if (film.ended) film.currentTime = 0;
+  if (completed) {
+    entrance.cancel();
+    entrance = null;
+    completed = false;
+  }
   paused = !paused;
   sync();
 });
-pref.addEventListener('change', (e) => {
-  // A newly enabled accessibility preference stops playback. Disabling it
-  // must not undo an explicit manual pause or a user's playback choice.
-  if (e.matches) paused = true;
-  else if (!chosenByHand) paused = limitedNetwork || film.ended;
-  sync();
-});
-film.addEventListener('ended', () => {
-  paused = true;
+pref.addEventListener('change', (event) => {
+  if (event.matches) paused = true;
+  else if (!chosenByHand) paused = limitedNetwork || completed;
   sync();
 });
 new IntersectionObserver(
-  ([e]) => {
-    visible = e.isIntersecting;
+  ([entry]) => {
+    visible = entry.isIntersecting;
     sync();
   },
   { threshold: 0.1 },
 ).observe(film);
+film.addEventListener('load', sync);
 document.addEventListener('visibilitychange', sync);
 sync();
 const views = {

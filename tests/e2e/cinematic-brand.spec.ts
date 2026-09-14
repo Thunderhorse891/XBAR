@@ -1,83 +1,95 @@
-import { expect, test } from '@playwright/test';
+import { expect, test, type Page } from '@playwright/test';
 
-test('cinematic brand concept plays, pauses and switches views without mobile overflow', async ({ page }) => {
-  const errors: string[] = [];
+const state = (page: Page) => page.locator('#film').evaluate((node) => node.getAnimations()[0]?.playState ?? 'idle');
+const playing = async (page: Page) => expect.poll(() => state(page)).toBe('running');
+
+test('cinematic brand concept uses original artwork and works on desktop and mobile', async ({ page }) => {
+  const errors: string[] = [],
+    media: string[] = [];
   page.on('pageerror', (error) => errors.push(error.message));
+  page.on('request', (request) => {
+    if (/\.(mp4|webm)(\?|$)/.test(request.url())) media.push(request.url());
+  });
   await page.goto('/brand/cinematic-preview/index.html');
-  const video = page.locator('video');
-  await expect.poll(() => video.evaluate((node: HTMLVideoElement) => node.currentTime)).toBeGreaterThan(0);
+  await playing(page);
   await page.getByRole('button', { name: 'Pause motion' }).click();
-  await expect.poll(() => video.evaluate((node: HTMLVideoElement) => node.paused)).toBe(true);
+  await expect.poll(() => state(page)).toBe('paused');
+  await expect(page.locator('#film')).toHaveAttribute('src', '../xbar-report-horse.png');
+  await expect(page.getByText(/Meta AI/i)).toHaveCount(0);
+  await expect(page.locator('video')).toHaveCount(0);
   await page.getByRole('tab', { name: 'Sale preparation' }).click();
   await expect(page.locator('#value-c')).toHaveText('Blocked');
   await page.getByRole('tab', { name: 'Sale preparation' }).press('ArrowRight');
   await expect(page.getByRole('tab', { name: 'Records', exact: true })).toBeFocused();
-  await expect(page.locator('#detail-title')).toHaveText('From a document to a useful record.');
+  // Review the settled artwork, not an arbitrary point in the reveal.
+  await page.locator('#film').evaluate((node) => node.getAnimations()[0].finish());
   for (const width of [1440, 390]) {
     await page.setViewportSize({ width, height: 900 });
     await expect.poll(() => page.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(width);
     await page.screenshot({ path: test.info().outputPath(`cinematic-${width}.png`), fullPage: true });
   }
+  expect(media).toEqual([]);
   expect(errors).toEqual([]);
 });
 
-test('cinematic brand concept respects reduced motion', async ({ page }) => {
-  const videoRequests: string[] = [];
-  page.on('request', (request) => {
-    if (request.url().endsWith('.mp4')) videoRequests.push(request.url());
-  });
+test('cinematic brand concept starts static for reduced motion', async ({ page }) => {
   await page.emulateMedia({ reducedMotion: 'reduce' });
   await page.goto('/brand/cinematic-preview/index.html');
   await expect(page.getByRole('button', { name: 'Play motion' })).toBeVisible();
-  expect(await page.locator('video').evaluate((node: HTMLVideoElement) => node.paused)).toBe(true);
+  expect(await state(page)).toBe('idle');
+  expect(await page.locator('#film').evaluate((node) => getComputedStyle(node).opacity)).toBe('0.82');
   expect(await page.locator('.pulse').evaluate((node) => getComputedStyle(node).animationName)).toBe('none');
-  await expect(page.locator('video source')).not.toHaveAttribute('src');
-  expect(videoRequests).toEqual([]);
 });
 
-test('cinematic brand concept saves data until playback is requested', async ({ page }) => {
+test('cinematic brand concept stays static on data saving until requested', async ({ page }) => {
   await page.addInitScript(() =>
     Object.defineProperty(navigator, 'connection', { value: { saveData: true, effectiveType: '2g' } }),
   );
   await page.goto('/brand/cinematic-preview/index.html');
-  await expect(page.getByRole('button', { name: 'Play motion' })).toBeVisible();
-  await expect(page.locator('video source')).not.toHaveAttribute('src');
-  await expect(page.getByRole('heading', { name: 'Your ranch. In focus.' })).toBeVisible();
+  expect(await state(page)).toBe('idle');
   await page.getByRole('button', { name: 'Play motion' }).click();
-  await expect
-    .poll(() => page.locator('video').evaluate((node: HTMLVideoElement) => node.currentTime))
-    .toBeGreaterThan(0);
+  await playing(page);
 });
 
 test('cinematic brand concept settles once and replays on request', async ({ page }) => {
   await page.goto('/brand/cinematic-preview/index.html');
-  const video = page.locator('video');
-  await expect.poll(() => video.evaluate((node: HTMLVideoElement) => node.currentTime)).toBeGreaterThan(0);
-  expect(await video.evaluate((node: HTMLVideoElement) => node.loop)).toBe(false);
-  await video.evaluate((node: HTMLVideoElement) => {
-    node.currentTime = node.duration - 0.2;
+  await playing(page);
+  expect(await page.locator('#film').evaluate((node) => node.getAnimations()[0].effect?.getTiming().iterations)).toBe(
+    1,
+  );
+  await page.locator('#film').evaluate((node) => {
+    node.getAnimations()[0].currentTime = 4100;
   });
   await expect(page.getByRole('button', { name: 'Replay motion' })).toBeVisible();
-  expect(await video.evaluate((node: HTMLVideoElement) => node.paused)).toBe(true);
   await page.getByRole('button', { name: 'Replay motion' }).click();
-  await expect.poll(() => video.evaluate((node: HTMLVideoElement) => node.paused)).toBe(false);
-  expect(await video.evaluate((node: HTMLVideoElement) => node.currentTime)).toBeLessThan(3);
+  await playing(page);
+  expect(await page.locator('#film').evaluate((node) => Number(node.getAnimations()[0].currentTime))).toBeLessThan(
+    2000,
+  );
 });
 
 test('cinematic brand concept preserves manual pause and honors newly reduced motion', async ({ page }) => {
   await page.goto('/brand/cinematic-preview/index.html');
-  const video = page.locator('video');
-  await expect.poll(() => video.evaluate((node: HTMLVideoElement) => node.currentTime)).toBeGreaterThan(0);
+  await playing(page);
   await page.getByRole('button', { name: 'Pause motion' }).click();
   await page.emulateMedia({ reducedMotion: 'reduce' });
   await page.emulateMedia({ reducedMotion: 'no-preference' });
-  await expect(page.getByRole('button', { name: 'Play motion' })).toBeVisible();
-  expect(await video.evaluate((node: HTMLVideoElement) => node.paused)).toBe(true);
+  await expect.poll(() => state(page)).toBe('paused');
   await page.getByRole('button', { name: 'Play motion' }).click();
   await page.emulateMedia({ reducedMotion: 'reduce' });
-  await expect.poll(() => video.evaluate((node: HTMLVideoElement) => node.paused)).toBe(true);
+  await expect.poll(() => state(page)).toBe('paused');
   await page.getByRole('button', { name: 'Play motion' }).click();
-  await expect.poll(() => video.evaluate((node: HTMLVideoElement) => node.paused)).toBe(false);
+  await playing(page);
   await page.emulateMedia({ reducedMotion: 'no-preference' });
   await expect(page.getByRole('button', { name: 'Pause motion' })).toBeVisible();
+});
+
+test('sign-in brand entrance is shared with the app and respects reduced motion', async ({ page }) => {
+  await page.goto('/app/login');
+  const brand = page.getByRole('complementary', { name: 'XBAR brand' });
+  await expect(brand).toBeVisible();
+  expect(await brand.evaluate((node) => getComputedStyle(node).animationName)).toBe('xbar-brand-in');
+  await page.emulateMedia({ reducedMotion: 'reduce' });
+  await expect.poll(() => brand.evaluate((node) => getComputedStyle(node).animationName)).toBe('none');
+  await page.screenshot({ path: test.info().outputPath('sign-in-brand.png'), fullPage: true });
 });

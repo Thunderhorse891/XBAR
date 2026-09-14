@@ -5,9 +5,9 @@ Erin's updated direction is graphics-rich and cinematic. This supersedes the ear
 ## Reviewable implementation
 
 - Preview: `/brand/cinematic-preview/index.html`, separate from normal application navigation.
-- Original supplied animated horse asset, unchanged; the visible Meta AI mark remains.
+- Original supplied horse PNG, unchanged, animated with a browser-native reveal. The Meta-marked video and its poster are no longer published.
 - Charcoal/silver scene, blue edge detail, interactive identity/care/ownership graphic, sale-preparation and records views, and an illustrative executive-report graphic.
-- Play-once entrance with pause/resume and replay, reduced-motion support, save-data preference, muted inline playback and hidden/offscreen video suspension.
+- Play-once entrance with pause/resume and replay, reduced-motion support, save-data preference, no video download and hidden/offscreen motion suspension.
 - External local CSS/JavaScript works with the existing Content Security Policy. No external media service or paid API.
 - Desktop/mobile visual checks and Playwright coverage exercise playback, pause, keyboard tabs, reduced motion and horizontal overflow.
 
@@ -21,4 +21,6 @@ Brand PNG paths now respect the deployment base (including `/XBAR/`). Successful
 
 ## Acceptance still needed
 
-The study is a direction to review, not a replacement of the entire production UI. The supplied animation is 832x464, so enlarged full-screen playback is a visual concept rather than a high-resolution production master. No original logo was redrawn; no watermark was removed. Legal status and unrelated access/security launch gates are unchanged.
+The study remains separate from the production UI. The original 1672x941 horse artwork is animated in the browser without redrawing the logo. Reduced-motion and data-saving visitors see the static artwork until they request playback. Legal status and unrelated access/security launch gates are unchanged.
+
+The actual sign-in screen also consumes the shared `motion-brand-in` entrance on its decorative brand panel. Form controls remain stationary. A rendered test verifies that reduced-motion settings disable the entrance.
