@@ -47,8 +47,9 @@ not establish live database protection against an older deployed client or a
 direct API caller. Server-owned lifecycle enforcement still needs verification.
 
 The single-owner launch boundary is **not yet enforced**: invitation controls
-remain enabled. The seat-consumption defect, invited-member save destination,
-live account/email checks and storage authorization gates remain open. Do not
+remain enabled. The seat-consumption defect, live account/email checks and
+storage authorization gates remain open. The invited-administrator save fix
+below has controlled browser coverage but still needs live shared-account verification. Do not
 interpret this bounded fix as clearance to launch sharing.
 
 ## Verified September 11, 2026
@@ -964,16 +965,25 @@ optional paid-integration work:
 3. **A stale autosave can recreate an explicitly removed membership.** The
    recreated row has no restored account binding, but it appears active and
    consumes a seat.
-4. **An invited member's first save targets a new caller-owned workspace.** The
-   access lookup finds the accepted host workspace, but persistence still calls
-   `ensurePrimaryWorkspace`, which creates a `primary` workspace owned by the
-   invitee. The host ranch does not receive the edit and the client adopts the
-   clone as an Admin workspace.
+4. **Invited-member save destination � current client fixed, live check pending.**
+   As of September 14, persistence checks the caller's owned workspace, then
+   active membership before bootstrapping a personal ranch. An invited Admin
+   saves to the host workspace without creating a ranch or rewriting membership.
+   Non-Admin membership, failed access lookups, multiple active memberships,
+   and missing membership for a known invited snapshot refuse the save, including
+   legacy snapshot fallback. Six browser cases cover shared profile save/pull
+   after reload, a role downgrade, each lookup failing, a removed known invited
+   membership, and multiple active memberships; the full 21-case
+   workspace suite passes with no retries. These use controlled API responses,
+   not real cloud accounts. Existing clones are not migrated. This does not
+   establish safety for membership removal between hydration and save, multiple
+   workspace selection, older clients, or concurrent snapshot overwrites.
 
 The earlier defect where a stale snapshot could **delete a newly created
 invitation** is closed: invitation autosaves now preserve server rows missing
-from the local snapshot. That protection does not prevent stale status upserts
-or membership recreation, so it does not close the four blockers above.
+from the local snapshot. The current client also omits membership and invitation writes from ordinary
+snapshot saves, as recorded above. Live server enforcement against older
+clients/direct API calls and the remaining sharing checks still gate launch.
 
 If single-owner workspaces are the Phase 1 product, record that decision and
 hide or disable invitations and team-management controls for launch. If sharing

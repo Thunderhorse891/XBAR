@@ -46,7 +46,10 @@ type CloudWorkspaceBackup = {
   };
 };
 
+class WorkspaceSaveAccessError extends Error {}
+
 type RelationalMirrorResult = {
+  allowSnapshotFallback?: boolean;
   ok: boolean;
   message: string;
   workspaceId?: string;
@@ -407,50 +410,100 @@ async function ensurePrimaryWorkspace(session: Session, backup: CloudWorkspaceBa
   const businessName = profile?.businessName?.trim() || 'XBAR';
   const membershipRole = resolveSessionRole(session);
 
-  const { data: workspaceRow, error: workspaceError } = await client
+  // Match the workspace used by reads. A teammate must not bootstrap a new
+  // personally owned ranch from the shared ranch's snapshot. Lookup failures
+  // are not evidence that this account has no workspace.
+  const { data: ownedWorkspace, error: ownedError } = await client
     .from('workspaces')
-    .upsert(
-      {
-        owner_user_id: session.user.id,
-        workspace_key: 'primary',
-        name: workspaceName,
-        business_name: businessName,
-        updated_at: updatedAt,
-      },
-      { onConflict: 'owner_user_id,workspace_key' },
-    )
     .select('id')
-    .single();
+    .eq('owner_user_id', session.user.id)
+    .eq('workspace_key', 'primary')
+    .maybeSingle();
+  if (ownedError) throw new WorkspaceSaveAccessError(ownedError.message);
 
-  if (workspaceError || !workspaceRow?.id) {
-    throw new Error(workspaceError?.message ?? 'Unable to create the primary workspace record.');
+  let workspaceId = '';
+  if (!ownedWorkspace?.id) {
+    const { data: memberships, error: membershipError } = await client
+      .from('workspace_memberships')
+      .select('workspace_id, role')
+      .eq('user_id', session.user.id)
+      .eq('status', 'active')
+      .limit(2);
+    if (membershipError) throw new WorkspaceSaveAccessError(membershipError.message);
+    if ((memberships?.length ?? 0) > 1) {
+      throw new WorkspaceSaveAccessError(
+        'Multiple ranch memberships were found. Saving is paused until your ranch administrator resolves the active membership.',
+      );
+    }
+    const membership = memberships?.[0];
+    if (membership?.workspace_id) {
+      // Mirrors current server write policy; record access does not grant writes.
+      if (membership.role !== 'Admin') {
+        throw new WorkspaceSaveAccessError(
+          'Your ranch access is read-only. Ask the ranch administrator to save these changes.',
+        );
+      }
+      workspaceId = membership.workspace_id as string;
+    } else if (
+      backup.workspace?.workspaceMembers?.some(
+        (member) =>
+          member.source === 'Invite' &&
+          normalizeWorkspaceEmail(member.email) === normalizeWorkspaceEmail(session.user.email),
+      )
+    ) {
+      // A previously invited snapshot is not a request to create a personal ranch.
+      throw new WorkspaceSaveAccessError(
+        'Your shared ranch access could not be verified. Refresh your access before saving.',
+      );
+    }
   }
 
-  const workspaceId = workspaceRow.id as string;
+  if (!workspaceId) {
+    const { data: workspaceRow, error: workspaceError } = await client
+      .from('workspaces')
+      .upsert(
+        {
+          owner_user_id: session.user.id,
+          workspace_key: 'primary',
+          name: workspaceName,
+          business_name: businessName,
+          updated_at: updatedAt,
+        },
+        { onConflict: 'owner_user_id,workspace_key' },
+      )
+      .select('id')
+      .single();
 
-  const { error: membershipError } = await client.from('workspace_memberships').upsert(
-    {
-      workspace_id: workspaceId,
-      user_id: session.user.id,
-      email: normalizeWorkspaceEmail(session.user.email),
-      display_name: session.user.user_metadata?.full_name ?? session.user.user_metadata?.name ?? membershipRole,
-      role: membershipRole,
-      status: 'active',
-      payload: {
-        id: `member-${normalizeWorkspaceEmail(session.user.email) || session.user.id}`,
+    if (workspaceError || !workspaceRow?.id) {
+      throw new Error(workspaceError?.message ?? 'Unable to create the primary workspace record.');
+    }
+
+    workspaceId = workspaceRow.id as string;
+
+    const { error: membershipError } = await client.from('workspace_memberships').upsert(
+      {
+        workspace_id: workspaceId,
+        user_id: session.user.id,
         email: normalizeWorkspaceEmail(session.user.email),
+        display_name: session.user.user_metadata?.full_name ?? session.user.user_metadata?.name ?? membershipRole,
         role: membershipRole,
-        status: 'Active',
-        joinedAt: updatedAt,
-        source: 'Owner',
+        status: 'active',
+        payload: {
+          id: `member-${normalizeWorkspaceEmail(session.user.email) || session.user.id}`,
+          email: normalizeWorkspaceEmail(session.user.email),
+          role: membershipRole,
+          status: 'Active',
+          joinedAt: updatedAt,
+          source: 'Owner',
+        },
+        updated_at: updatedAt,
       },
-      updated_at: updatedAt,
-    },
-    { onConflict: 'workspace_id,email' },
-  );
+      { onConflict: 'workspace_id,email' },
+    );
 
-  if (membershipError) {
-    throw new Error(membershipError.message);
+    if (membershipError) {
+      throw new Error(membershipError.message);
+    }
   }
 
   const { error: profileError } = await client.from('workspace_profiles').upsert(
@@ -739,6 +792,7 @@ async function saveWorkspaceBackupToRelationalCloud(
     return {
       ok: false,
       message: error instanceof Error ? error.message : 'Unable to update the relational workspace.',
+      allowSnapshotFallback: !(error instanceof WorkspaceSaveAccessError),
     };
   }
 }
@@ -932,7 +986,7 @@ export async function saveWorkspaceBackupToCloud(backup: unknown): Promise<Cloud
       };
     }
 
-    if (!isSnapshotFallbackEnabled()) {
+    if (!isSnapshotFallbackEnabled() || relational.allowSnapshotFallback === false) {
       return {
         ok: false,
         message: relational.message,
