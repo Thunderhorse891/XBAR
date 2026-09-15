@@ -126,3 +126,31 @@ export function documentPrefixesToPurge(plan) {
 export function mediaPrefixesToPurge(plan) {
   return typeof plan?.userId === 'string' && plan.userId ? [plan.userId] : [];
 }
+
+/**
+ * Which of the planned purges are STILL private, moments before the delete.
+ *
+ * The plan is built before the account is removed, and the purge runs after.
+ * In between, an invitation acceptance or an administrator's add can insert an
+ * active membership: the invitation RPC locks the invitation row, not the
+ * workspace, so nothing stops it. The stale plan then purges a workspace that
+ * has become shared, cascading the new member's records and sweeping their
+ * files.
+ *
+ * So the membership is read again immediately before the delete and any
+ * workspace that gained one is dropped from the purge. What remains is an
+ * ownerless workspace with an active member -- which is the handoff case the
+ * endpoint already refuses on, and recoverable, unlike the records.
+ *
+ * This NARROWS the window, it does not close it. Closing it needs the final
+ * check and the delete in one locked transaction, which means a
+ * security-definer RPC and a migration.
+ */
+export function workspacesStillPrivate(plannedWorkspaceIds, activeMembershipRows) {
+  const nowShared = new Set(
+    (activeMembershipRows ?? [])
+      .map((row) => row?.workspace_id)
+      .filter((id) => typeof id === 'string' && id.length > 0),
+  );
+  return (plannedWorkspaceIds ?? []).filter((id) => typeof id === 'string' && id.length > 0 && !nowShared.has(id));
+}

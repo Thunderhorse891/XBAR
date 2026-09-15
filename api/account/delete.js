@@ -5,6 +5,7 @@ import {
   documentPrefixesToPurge,
   loadAccountDeletionPlan,
   mediaPrefixesToPurge,
+  workspacesStillPrivate,
 } from '../_lib/account-deletion.js';
 import { enforceRateLimit } from '../_lib/rate-limit.js';
 import { applyCors } from '../_lib/cors.js';
@@ -102,11 +103,33 @@ export default async function handler(req, res) {
     // 4. Account is gone — now purge the user's PRIVATE workspaces (child rows
     //    cascade via workspace_id FKs) and their storage. Best-effort: the
     //    account no longer exists, so leftover cleanup can never resurrect it.
+    /*
+     * Re-read membership immediately before destroying anything.
+     *
+     * The plan above was built before the account was deleted; between the two,
+     * an invitation acceptance or an administrator's add can insert an active
+     * membership. Purging on the stale plan then cascades that member's records
+     * and sweeps their files.
+     *
+     * Unreadable membership is never evidence that a workspace is private, so a
+     * failed re-check purges NOTHING -- leftover rows are recoverable, deleted
+     * records are not.
+     */
+    let purgeable = [];
     if (plan.workspacesToPurge.length) {
+      const { data: stillActive, error: recheckError } = await supabase
+        .from('workspace_memberships')
+        .select('workspace_id')
+        .in('workspace_id', plan.workspacesToPurge)
+        .eq('status', 'active');
+      purgeable = recheckError ? [] : workspacesStillPrivate(plan.workspacesToPurge, stillActive);
+    }
+
+    if (purgeable.length) {
       await supabase
         .from('workspaces')
         .delete()
-        .in('id', plan.workspacesToPurge)
+        .in('id', purgeable)
         .then(undefined, () => {});
     }
     // Documents moved onto workspace-keyed paths, so sweeping only the
@@ -115,12 +138,20 @@ export default async function handler(req, res) {
     // while the Settings screen promises those documents were erased. Which
     // prefixes are safe to sweep is decided in account-deletion.js, where the
     // rule that a transferred workspace is never swept can be tested.
-    await removeStoragePrefixes(supabase, DOCUMENT_BUCKET, documentPrefixesToPurge(plan)).catch(() => {});
-    await removeStoragePrefixes(supabase, MEDIA_BUCKET, mediaPrefixesToPurge(plan)).catch(() => {});
+    await removeStoragePrefixes(
+      supabase,
+      DOCUMENT_BUCKET,
+      documentPrefixesToPurge({ ...plan, workspacesToPurge: purgeable }),
+    ).catch(() => {});
+    await removeStoragePrefixes(
+      supabase,
+      MEDIA_BUCKET,
+      mediaPrefixesToPurge({ ...plan, workspacesToPurge: purgeable }),
+    ).catch(() => {});
 
     return sendJson(res, 200, {
       ok: true,
-      purgedWorkspaces: plan.workspacesToPurge.length,
+      purgedWorkspaces: purgeable.length,
       transferredWorkspaces: plan.workspacesToTransfer.length,
     });
   } catch (error) {
