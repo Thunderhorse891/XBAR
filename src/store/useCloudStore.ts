@@ -23,7 +23,7 @@ import {
   type StorageCatchUp,
 } from '@/lib/authBootstrap';
 import { hasValidatedPasswordRecovery as recoveryGateOpen, reconcileStoredRecovery } from '@/lib/passwordRecovery';
-import { authRedirectUrl, passwordResetPath, publicAppRouteUrl } from '@/lib/routeCanon';
+import { authRedirectUrl, loginPath, passwordResetPath, publicAppRouteUrl } from '@/lib/routeCanon';
 
 type CloudActionResult = {
   ok: boolean;
@@ -220,7 +220,25 @@ type CloudStore = {
  */
 function currentAuthRedirectUrl() {
   const nativeOrigin = authCallbackOrigin();
-  if (isNativeApp()) return nativeOrigin;
+  /*
+   * The native branch used to hand back the bare origin, and an origin is not
+   * a place the app is. VITE_PUBLIC_APP_URL is deliberately an ORIGIN with no
+   * path, the deployed site serves static marketing HTML at that root, and the
+   * auth client is mounted under `/app` -- so every link built from it dropped
+   * the customer on the marketing page with the session fragment still in the
+   * address bar, unread by anything. A confirmation that confirms nothing, a
+   * magic link that signs nobody in.
+   *
+   * `/app/login` is the screen that consumes a callback and sends them onward,
+   * so it is the landing for all of these. A flow needing a different screen
+   * says so at its own call site -- the password reset builds
+   * `/app/reset-password` this same way, and must keep doing so.
+   *
+   * Still undefined when the origin is unset, which tells the Supabase client
+   * to fall back to the project's configured Site URL rather than to a scheme
+   * it will reject.
+   */
+  if (isNativeApp()) return nativeOrigin ? publicAppRouteUrl(loginPath, nativeOrigin) : undefined;
   return typeof window !== 'undefined'
     ? `${window.location.origin}${window.location.pathname}${window.location.search}`
     : undefined;

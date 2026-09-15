@@ -13,12 +13,31 @@ const blank = {
   defaultPasture: '',
 };
 
-test('an unfilled optional field gets a usable default, not an empty string', () => {
+/*
+ * The first version of this shared the whole quick-start ladder and invented
+ * an operations email of `owner@ranch.local`. That address is printed into
+ * generated documents as "Operations email" and "Scheduling contact", it is
+ * the recipient of the Reminders alert-digest mail link, and
+ * `initializeWorkspace` writes it onto the workspace member record -- so the
+ * product published contact details for a mailbox that does not exist, as
+ * though the customer had supplied them. An absent address must stay absent.
+ */
+test('an omitted operations email is never invented', () => {
   const profile = applyWorkspaceProfileDefaults(blank);
-  assert.equal(profile.ranchManagerName, 'Operations Lead');
-  assert.equal(profile.operationsEmail, 'owner@ranch.local');
-  assert.equal(profile.defaultBarn, 'Barn 1');
-  assert.equal(profile.defaultPasture, 'Pasture 1');
+  assert.equal(profile.operationsEmail, '', 'a manufactured address reaches documents, mailto links and member rows');
+});
+
+/*
+ * The other three were unnecessary for a different reason: their consumers
+ * already degrade honestly on a blank ('Unassigned' for the manager, 'Main
+ * Barn' and 'North Pasture' as form placeholders), so filling them here
+ * replaced an honest absence with stored data that only looked real.
+ */
+test('the manager, barn and pasture are left blank for their consumers to handle', () => {
+  const profile = applyWorkspaceProfileDefaults(blank);
+  assert.equal(profile.ranchManagerName, '');
+  assert.equal(profile.defaultBarn, '');
+  assert.equal(profile.defaultPasture, '');
 });
 
 test('the owner defaults fall back to the ranch and the business, which is what the horse form needs', () => {
@@ -28,7 +47,7 @@ test('the owner defaults fall back to the ranch and the business, which is what 
   assert.notEqual(profile.defaultOwnerEntity, '', 'an empty owner entity is what blocked the first horse');
 });
 
-test('anything the customer actually typed wins over the fallback', () => {
+test('every field the customer typed is preserved, including the ones never defaulted', () => {
   const profile = applyWorkspaceProfileDefaults({
     ...blank,
     ranchManagerName: 'Erin Swyrick',
@@ -46,10 +65,16 @@ test('anything the customer actually typed wins over the fallback', () => {
   assert.equal(profile.defaultPasture, 'North 40');
 });
 
-test('whitespace is treated as unfilled', () => {
-  const profile = applyWorkspaceProfileDefaults({ ...blank, defaultOwnerEntity: '   ', defaultBarn: '\t' });
-  assert.equal(profile.defaultOwnerEntity, 'XBAR LLC');
-  assert.equal(profile.defaultBarn, 'Barn 1');
+test('whitespace is treated as unfilled, and trimmed away rather than stored', () => {
+  const profile = applyWorkspaceProfileDefaults({
+    ...blank,
+    defaultOwnerEntity: '   ',
+    defaultBarn: '\t',
+    operationsEmail: '  ',
+  });
+  assert.equal(profile.defaultOwnerEntity, 'XBAR LLC', 'a derived value still fills from what was typed');
+  assert.equal(profile.defaultBarn, '', 'a field with nothing to derive from stays empty');
+  assert.equal(profile.operationsEmail, '');
 });
 
 /*

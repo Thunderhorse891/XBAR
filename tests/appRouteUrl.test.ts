@@ -1,8 +1,10 @@
 import assert from 'node:assert/strict';
+import { readFile } from 'node:fs/promises';
 import test from 'node:test';
 import {
   appBasePath,
   authRedirectUrl,
+  loginPath,
   passwordResetPath,
   publicAppRouteUrl,
   usesHashRouting,
@@ -157,4 +159,47 @@ test('a hash build served from the root has no stray base segment', () => {
   withWindow(pagesHost, () => {
     assert.equal(authRedirectUrl(passwordResetPath, undefined, ''), 'https://someone.github.io/');
   });
+});
+
+/*
+ * The recovery link was fixed to name a route rather than an origin; the same
+ * defect stayed in every OTHER native auth link -- the signup confirmation,
+ * its resend, and the magic link -- because they all share one helper whose
+ * native branch returned the bare origin. The deployed site serves static
+ * marketing HTML at that root and mounts the auth client under `/app`, so
+ * those links dropped a native customer on the marketing page with the session
+ * fragment still in the address bar, unread by anything.
+ */
+test('a native confirmation or magic link points at the sign-in screen, not the site root', () => {
+  assert.equal(publicAppRouteUrl(loginPath, 'https://xbar.example'), 'https://xbar.example/app/login');
+  assert.notEqual(
+    publicAppRouteUrl(loginPath, 'https://xbar.example'),
+    'https://xbar.example',
+    'an origin is not a place the app is',
+  );
+});
+
+test('the shared native auth redirect builds an app route, and the reset flow keeps its own screen', async () => {
+  const store = await readFile('src/store/useCloudStore.ts', 'utf8');
+
+  /*
+   * A unit test cannot reach `currentAuthRedirectUrl` -- it is module-private
+   * to the store. What can be established here is that its native branch no
+   * longer hands back the bare origin, which is the whole defect.
+   */
+  assert.match(
+    store,
+    /if \(isNativeApp\(\)\) return nativeOrigin \? publicAppRouteUrl\(loginPath, nativeOrigin\) : undefined;/,
+    'the native branch must name an app route, and stay undefined when there is no origin to build one from',
+  );
+  assert.ok(
+    !/if \(isNativeApp\(\)\) return nativeOrigin;/.test(store),
+    'returning the bare origin lands the customer on static marketing HTML that never reads the fragment',
+  );
+  // And the flow that needs a different screen still overrides at its call site.
+  assert.match(
+    store,
+    /publicAppRouteUrl\(passwordResetPath, nativePublicOrigin\)/,
+    'a password reset must still land on the screen that can set a password',
+  );
 });

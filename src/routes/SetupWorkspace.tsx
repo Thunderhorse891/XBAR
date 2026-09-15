@@ -156,7 +156,24 @@ export default function SetupWorkspace() {
     if (signingOut || saving) return;
     const businessName = form.businessName.trim() || 'My Ranch LLC';
     const ranchName = form.ranchName.trim() || 'Main Ranch';
-    const result = initializeWorkspace(applyWorkspaceProfileDefaults({ ...form, businessName, ranchName }));
+    /*
+     * Quick-start keeps its own invented placeholders, because inventing is the
+     * point of it: this path exists so somebody can skip the whole form and get
+     * a working ranch. The shared helper deliberately invents nothing, so the
+     * form's own submit cannot manufacture a ranch manager or an operations
+     * email for a customer who simply left them blank.
+     */
+    const result = initializeWorkspace(
+      applyWorkspaceProfileDefaults({
+        ...form,
+        businessName,
+        ranchName,
+        ranchManagerName: form.ranchManagerName.trim() || 'Operations Lead',
+        operationsEmail: form.operationsEmail.trim() || 'owner@ranch.local',
+        defaultBarn: form.defaultBarn.trim() || 'Barn 1',
+        defaultPasture: form.defaultPasture.trim() || 'Pasture 1',
+      }),
+    );
 
     pushToast({
       title: result.ok ? 'Ranch ready' : 'Setup blocked',
