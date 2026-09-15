@@ -8,8 +8,8 @@ const env = {
   VITE_STATIC_TARGET: 'web',
 };
 
-delete env.VITE_SUPABASE_URL;
-delete env.VITE_SUPABASE_ANON_KEY;
+env.VITE_SUPABASE_URL = '';
+env.VITE_SUPABASE_ANON_KEY = '';
 
 const child = spawn('npm', ['run', 'build'], {
   stdio: 'inherit',
