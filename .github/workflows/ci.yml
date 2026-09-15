@@ -10,7 +10,9 @@ on:
 jobs:
   ci:
     runs-on: ubuntu-latest
-    timeout-minutes: 20
+    # The e2e suite alone runs ~7 minutes; 20 left no headroom once it runs
+    # in full rather than as a grep.
+    timeout-minutes: 35
 
     steps:
       - name: Checkout
@@ -52,6 +54,31 @@ jobs:
 
       - name: Production smoke test (built dist)
         run: npm run test:prod-smoke
+
+      # The whole ./tests/e2e suite, not a grep of it. This used to run a
+      # hand-listed subset of the same config, so the rest of the suite could
+      # rot unnoticed -- and did: `documents shows an empty state on a fresh
+      # workspace` asserted a landing stage that d9717cc deliberately changed,
+      # and stayed red through a dozen green CI runs because nothing ran it.
+      # Every test named in that old --grep lives in this suite.
+      - name: Product surfaces, document intake and report export
+        run: npm run test:e2e -- --retries=0
+
+      # Drives the password-recovery flow on a rendered, Supabase-configured
+      # web bundle. The prod-smoke suite above cannot cover it: build:local
+      # strips the Supabase credentials to enable local mode, so the reset
+      # screen there only ever reports that cloud accounts are unconfigured.
+      - name: Password recovery smoke test (supabase-configured web bundle)
+        run: npm run test:auth-smoke
+
+      # The same flow with relational sync ON -- the production default -- and
+      # the workspace API held open. The suite above pins relational sync OFF,
+      # so nothing in it ever waits on the PostgREST queries the store makes
+      # before publishing a session, which is exactly the wait a validated
+      # recovery used to sit behind. Separate bundle and port, so the two dist
+      # outputs never serve each other.
+      - name: Password recovery with the workspace API unreachable
+        run: npm run test:auth-slow
 
       # The only check that proves the STORE build behaves differently from the
       # web build. The gates are runtime checks a bundler cannot tree-shake, so

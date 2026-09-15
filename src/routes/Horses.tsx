@@ -13,6 +13,7 @@ import { useUiStore } from '@/store/useUiStore';
 import { buildHorsePacketCompleteness } from '@/lib/xbarPhaseTwo';
 import { useCurrentRoleCapability, useXbarStore } from '@/store/useXbarStore';
 import type { HorseSegment, HorseSex, HorseStatus } from '@/types/xbar';
+import { canSubmitHorseCreate, horseCreateFieldErrors } from '@/lib/horseCreateGate';
 import './horsesCommand.css';
 
 function createHorseFormDefaults(params: {
@@ -250,12 +251,7 @@ export default function Horses() {
       : [];
 
   const handleCreateHorse = () => {
-    const nextErrors: Partial<Record<'name' | 'barnName' | 'owner' | 'ownerEntity' | 'barn' | 'pasture', string>> = {};
-    if (form.name.trim().length < 3) nextErrors.name = 'Registered name is required.';
-    if (!form.barnName.trim()) nextErrors.barnName = 'Barn name is required.';
-    if (form.owner.trim().length < 2) nextErrors.owner = 'Legal owner is required.';
-    if (form.ownerEntity.trim().length < 2) nextErrors.ownerEntity = 'Owner entity is required.';
-
+    const nextErrors = horseCreateFieldErrors(form);
     setFormErrors(nextErrors);
     if (Object.keys(nextErrors).length) return;
 
@@ -517,7 +513,7 @@ export default function Horses() {
               className="button button--primary"
               type="button"
               onClick={handleCreateHorse}
-              disabled={!canCreateHorse || !form.name.trim() || !form.barnName.trim() || !form.owner.trim()}
+              disabled={!canCreateHorse || !canSubmitHorseCreate(form)}
             >
               Create horse record
             </button>

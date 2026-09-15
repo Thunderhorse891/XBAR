@@ -1175,7 +1175,8 @@ export default function Settings() {
         >
           <p className="settings-danger-note">
             Deleting your account removes your login and permanently erases every workspace you solely own — horses,
-            documents, sale packets, and receipts. Workspaces you share with other people simply lose your access.
+            documents, sale packets, and receipts. If you own a workspace with other members, deletion is blocked until
+            a reviewed ownership handoff protects its shared records and files.
           </p>
           <div className="settings-danger-confirm">
             <label className="field">

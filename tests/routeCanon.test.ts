@@ -2,7 +2,13 @@ import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import path from 'node:path';
 import test from 'node:test';
-import { canonicalRoutes, legacyRouteRedirects } from '../src/lib/routeCanon.js';
+import {
+  browserAuthFailureSearch,
+  canonicalRoutes,
+  hashAuthFailureRoute,
+  legacyRouteRedirects,
+  loginPath,
+} from '../src/lib/routeCanon.js';
 
 const canonicalSet = new Set(Object.values(canonicalRoutes));
 const repoRoot = process.cwd();
@@ -96,4 +102,68 @@ test('active user-facing surfaces use plain product language', () => {
       `${filePath} should use Horses, Documents, Buyer follow-up, and Sale Packets language`,
     );
   }
+});
+
+test('a rejected auth callback under the hash router becomes a routable sign-in', () => {
+  /*
+   * auth-js leaves an `#error=...` fragment in place and emits nothing, so
+   * nothing navigates -- and on a hash router that fragment is the route, so
+   * the customer met the not-found screen at exactly the moment they needed to
+   * be told what went wrong.
+   *
+   * Sign-in rather than the reset screen: the fragment carries no flow marker,
+   * so a cancelled OAuth consent and a dead recovery link look identical here,
+   * and answering the first three of four with password-reset instructions was
+   * worse than saying nothing.
+   */
+  assert.equal(
+    hashAuthFailureRoute('#error=access_denied&error_code=otp_expired&error_description=Email+link+is+invalid'),
+    `#${loginPath}?authError=Email%20link%20is%20invalid`,
+  );
+  // The reason travels, whichever key carries it.
+  assert.equal(hashAuthFailureRoute('#error_code=otp_expired'), `#${loginPath}?authError=otp_expired`);
+  assert.equal(hashAuthFailureRoute('#error=access_denied'), `#${loginPath}?authError=access_denied`);
+});
+
+test('a successful auth callback keeps its fragment, so auth-js can read the token', () => {
+  // Rewriting this would take the token away before auth-js sees it, turning a
+  // working reset into a broken one.
+  assert.equal(hashAuthFailureRoute('#access_token=abc&type=recovery'), '');
+  // Even alongside an error param, a token present means auth-js still has
+  // work to do here.
+  assert.equal(hashAuthFailureRoute('#access_token=abc&error=whatever'), '');
+});
+
+test('ordinary hash routes and empty fragments are left alone', () => {
+  assert.equal(hashAuthFailureRoute('#/horses'), '');
+  assert.equal(hashAuthFailureRoute('#/reset-password'), '');
+  assert.equal(hashAuthFailureRoute(''), '');
+  assert.equal(hashAuthFailureRoute('#'), '');
+  // A route that merely mentions the word is not an auth failure.
+  assert.equal(hashAuthFailureRoute('#/errors'), '');
+});
+
+test('the browser router keeps the path and moves only the reason', () => {
+  /*
+   * Nothing is unreachable there -- but nothing reads the fragment either, so
+   * a rejected OAuth consent or signup confirmation returned an ordinary
+   * sign-in form with no hint that anything had failed. The PATH stays where
+   * Supabase sent them, so a failed recovery link still lands on the reset
+   * screen and keeps its own guidance.
+   */
+  assert.equal(
+    browserAuthFailureSearch('#error=access_denied&error_description=Email+link+has+expired', ''),
+    '?authError=Email+link+has+expired',
+  );
+  // Existing parameters survive.
+  assert.equal(
+    browserAuthFailureSearch('#error_code=otp_expired', '?mode=signup'),
+    '?mode=signup&authError=otp_expired',
+  );
+  // A successful callback, an ordinary fragment and an empty one are left alone.
+  assert.equal(browserAuthFailureSearch('#access_token=abc&type=recovery', ''), '');
+  assert.equal(browserAuthFailureSearch('', ''), '');
+  assert.equal(browserAuthFailureSearch('#section', ''), '');
+  // And it does not stack on a reload that still carries one.
+  assert.equal(browserAuthFailureSearch('#error=access_denied', '?authError=already'), '');
 });

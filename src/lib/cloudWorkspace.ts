@@ -1,7 +1,9 @@
 import { apiConfig, isRelationalCloudEnabled, isSnapshotFallbackEnabled, supabaseConfig } from '@/lib/platformConfig';
 import { publicShareEventToBuyerRoomEvent, type PublicShareEventRow } from '@/lib/buyerDealRoom';
+import { buildDocumentStoragePath, explainUnopenableCloudDocument } from '@/lib/documentStoragePath';
 import { createId, todayStamp } from '@/lib/xbarRuntime';
 import { WORKSPACE_SCHEMA_VERSION } from '@/store/xbarStoreHelpers';
+import { intakeIdentityChanged, type IntakeIdentity } from '@/store/xbarStoreLogic';
 import { getSupabaseClient } from '@/lib/supabaseClient';
 import { isNavigableFileUrl } from '@/lib/navigableFileUrl';
 import { openLocalFile } from '@/lib/localFileVault';
@@ -45,10 +47,25 @@ type CloudWorkspaceBackup = {
   };
 };
 
+class WorkspaceSaveAccessError extends Error {}
+
 type RelationalMirrorResult = {
+  allowSnapshotFallback?: boolean;
   ok: boolean;
   message: string;
   workspaceId?: string;
+  /*
+   * Whether the DOCUMENTS upsert committed, which is not the same question as
+   * whether the save succeeded.
+   *
+   * The relational save is a sequence of independent statements, not a
+   * transaction: `documents` goes up, then six more tables. If a later one
+   * fails, `ok` is false while those document rows are already committed and
+   * already counted by `xbar_workspace_storage_bytes`. A caller holding a
+   * reservation for those bytes has to release it anyway, or it counts them
+   * twice -- once in the server total and once in its own staged figure.
+   */
+  documentsPersisted?: boolean;
 };
 
 type CloudSaveResult = {
@@ -56,6 +73,14 @@ type CloudSaveResult = {
   message: string;
   updatedAt?: string;
   workspaceId?: string;
+  /*
+   * Whether the RELATIONAL rows were written, which is not the same question as
+   * `ok`. With the snapshot fallback enabled a rejected relational save still
+   * reports success once the legacy snapshot lands, and callers that care about
+   * what the database now holds -- the document capacity gate, which reads
+   * `xbar_workspace_storage_bytes` -- cannot tell the two apart from `ok`.
+   */
+  relationalRowsPersisted?: boolean;
 };
 
 type WorkspaceAccessProfile = {
@@ -179,64 +204,20 @@ async function acceptPendingWorkspaceInvitation(session: Session) {
     return null;
   }
 
-  const acceptedAt = new Date().toISOString();
-  const payload =
-    invitation.payload && typeof invitation.payload === 'object'
-      ? {
-          ...(invitation.payload as Record<string, unknown>),
-          status: 'Accepted',
-          acceptedAt,
-        }
-      : {
-          id: invitation.invitation_id,
-          email: normalizedEmail,
-          role: invitation.role,
-          status: 'Accepted',
-          acceptedAt,
-        };
-
-  const role = normalizeWorkspaceRole(invitation.role) ?? 'Owner';
-  const { error: membershipError } = await client.from('workspace_memberships').upsert(
-    {
-      workspace_id: invitation.workspace_id,
-      user_id: session.user.id,
-      email: normalizedEmail,
-      display_name: session.user.user_metadata?.full_name ?? session.user.user_metadata?.name ?? normalizedEmail,
-      role,
-      status: 'active',
-      payload: {
-        id: `member-${normalizedEmail}`,
-        email: normalizedEmail,
-        role,
-        status: 'Active',
-        joinedAt: acceptedAt,
-        source: 'Invite',
-      },
-      updated_at: acceptedAt,
-    },
-    { onConflict: 'workspace_id,email' },
-  );
-
-  if (membershipError) {
-    return null;
-  }
-
-  const { error: invitationUpdateError } = await client
-    .from('workspace_invitations')
-    .update({
-      status: 'accepted',
-      payload,
-      updated_at: acceptedAt,
-    })
-    .eq('workspace_id', invitation.workspace_id)
-    .eq('invitation_id', invitation.invitation_id);
-
-  if (invitationUpdateError) {
+  // The server verifies the current confirmed email, locks the pending invite,
+  // and applies its assigned role atomically. Client-selected roles are not
+  // authorization, and two browser writes could leave a half-accepted invite.
+  const { data: accepted, error } = await client.rpc('xbar_accept_workspace_invitation', {
+    p_workspace_id: invitation.workspace_id,
+    p_invitation_id: invitation.invitation_id,
+  });
+  const role = normalizeWorkspaceRole(accepted?.role);
+  if (error || typeof accepted?.workspaceId !== 'string' || !role) {
     return null;
   }
 
   return {
-    workspaceId: invitation.workspace_id as string,
+    workspaceId: accepted.workspaceId,
     role,
   };
 }
@@ -442,50 +423,100 @@ async function ensurePrimaryWorkspace(session: Session, backup: CloudWorkspaceBa
   const businessName = profile?.businessName?.trim() || 'XBAR';
   const membershipRole = resolveSessionRole(session);
 
-  const { data: workspaceRow, error: workspaceError } = await client
+  // Match the workspace used by reads. A teammate must not bootstrap a new
+  // personally owned ranch from the shared ranch's snapshot. Lookup failures
+  // are not evidence that this account has no workspace.
+  const { data: ownedWorkspace, error: ownedError } = await client
     .from('workspaces')
-    .upsert(
-      {
-        owner_user_id: session.user.id,
-        workspace_key: 'primary',
-        name: workspaceName,
-        business_name: businessName,
-        updated_at: updatedAt,
-      },
-      { onConflict: 'owner_user_id,workspace_key' },
-    )
     .select('id')
-    .single();
+    .eq('owner_user_id', session.user.id)
+    .eq('workspace_key', 'primary')
+    .maybeSingle();
+  if (ownedError) throw new WorkspaceSaveAccessError(ownedError.message);
 
-  if (workspaceError || !workspaceRow?.id) {
-    throw new Error(workspaceError?.message ?? 'Unable to create the primary workspace record.');
+  let workspaceId = '';
+  if (!ownedWorkspace?.id) {
+    const { data: memberships, error: membershipError } = await client
+      .from('workspace_memberships')
+      .select('workspace_id, role')
+      .eq('user_id', session.user.id)
+      .eq('status', 'active')
+      .limit(2);
+    if (membershipError) throw new WorkspaceSaveAccessError(membershipError.message);
+    if ((memberships?.length ?? 0) > 1) {
+      throw new WorkspaceSaveAccessError(
+        'Multiple ranch memberships were found. Saving is paused until your ranch administrator resolves the active membership.',
+      );
+    }
+    const membership = memberships?.[0];
+    if (membership?.workspace_id) {
+      // Mirrors current server write policy; record access does not grant writes.
+      if (membership.role !== 'Admin') {
+        throw new WorkspaceSaveAccessError(
+          'Your ranch access is read-only. Ask the ranch administrator to save these changes.',
+        );
+      }
+      workspaceId = membership.workspace_id as string;
+    } else if (
+      backup.workspace?.workspaceMembers?.some(
+        (member) =>
+          member.source === 'Invite' &&
+          normalizeWorkspaceEmail(member.email) === normalizeWorkspaceEmail(session.user.email),
+      )
+    ) {
+      // A previously invited snapshot is not a request to create a personal ranch.
+      throw new WorkspaceSaveAccessError(
+        'Your shared ranch access could not be verified. Refresh your access before saving.',
+      );
+    }
   }
 
-  const workspaceId = workspaceRow.id as string;
+  if (!workspaceId) {
+    const { data: workspaceRow, error: workspaceError } = await client
+      .from('workspaces')
+      .upsert(
+        {
+          owner_user_id: session.user.id,
+          workspace_key: 'primary',
+          name: workspaceName,
+          business_name: businessName,
+          updated_at: updatedAt,
+        },
+        { onConflict: 'owner_user_id,workspace_key' },
+      )
+      .select('id')
+      .single();
 
-  const { error: membershipError } = await client.from('workspace_memberships').upsert(
-    {
-      workspace_id: workspaceId,
-      user_id: session.user.id,
-      email: normalizeWorkspaceEmail(session.user.email),
-      display_name: session.user.user_metadata?.full_name ?? session.user.user_metadata?.name ?? membershipRole,
-      role: membershipRole,
-      status: 'active',
-      payload: {
-        id: `member-${normalizeWorkspaceEmail(session.user.email) || session.user.id}`,
+    if (workspaceError || !workspaceRow?.id) {
+      throw new Error(workspaceError?.message ?? 'Unable to create the primary workspace record.');
+    }
+
+    workspaceId = workspaceRow.id as string;
+
+    const { error: membershipError } = await client.from('workspace_memberships').upsert(
+      {
+        workspace_id: workspaceId,
+        user_id: session.user.id,
         email: normalizeWorkspaceEmail(session.user.email),
+        display_name: session.user.user_metadata?.full_name ?? session.user.user_metadata?.name ?? membershipRole,
         role: membershipRole,
-        status: 'Active',
-        joinedAt: updatedAt,
-        source: 'Owner',
+        status: 'active',
+        payload: {
+          id: `member-${normalizeWorkspaceEmail(session.user.email) || session.user.id}`,
+          email: normalizeWorkspaceEmail(session.user.email),
+          role: membershipRole,
+          status: 'Active',
+          joinedAt: updatedAt,
+          source: 'Owner',
+        },
+        updated_at: updatedAt,
       },
-      updated_at: updatedAt,
-    },
-    { onConflict: 'workspace_id,email' },
-  );
+      { onConflict: 'workspace_id,email' },
+    );
 
-  if (membershipError) {
-    throw new Error(membershipError.message);
+    if (membershipError) {
+      throw new Error(membershipError.message);
+    }
   }
 
   const { error: profileError } = await client.from('workspace_profiles').upsert(
@@ -521,8 +552,7 @@ async function replaceWorkspaceRows(params: {
     | 'expense_receipts'
     | 'ranch_assets'
     | 'sales_leads'
-    | 'shared_listings'
-    | 'workspace_invitations';
+    | 'shared_listings';
   idColumn: string;
   workspaceId: string;
   rows: Record<string, unknown>[];
@@ -572,73 +602,6 @@ async function replaceWorkspaceRows(params: {
   }
 }
 
-async function syncWorkspaceMembershipRows(params: {
-  workspaceId: string;
-  session: Session;
-  members: WorkspaceMemberRecord[];
-  updatedAt: string;
-}) {
-  const client = getSupabaseClient();
-  if (!client) {
-    throw new Error('Supabase is not configured for this build.');
-  }
-
-  const { workspaceId, session, members, updatedAt } = params;
-  const normalizedMembers = members.filter((member) => Boolean(member.email));
-  const nextEmails = new Set(normalizedMembers.map((member) => normalizeWorkspaceEmail(member.email)));
-
-  const { data: existingRows, error: existingError } = await client
-    .from('workspace_memberships')
-    .select('email')
-    .eq('workspace_id', workspaceId);
-
-  if (existingError) {
-    throw new Error(existingError.message);
-  }
-
-  const staleEmails = ((existingRows ?? []) as Array<{ email?: string | null }>)
-    .map((row) => normalizeWorkspaceEmail(row.email))
-    .filter((email) => email && !nextEmails.has(email));
-
-  if (staleEmails.length) {
-    const { error: deleteError } = await client
-      .from('workspace_memberships')
-      .delete()
-      .eq('workspace_id', workspaceId)
-      .in('email', staleEmails);
-
-    if (deleteError) {
-      throw new Error(deleteError.message);
-    }
-  }
-
-  if (!normalizedMembers.length) {
-    return;
-  }
-
-  const rows = normalizedMembers.map((member) => {
-    const normalizedEmail = normalizeWorkspaceEmail(member.email);
-    return {
-      workspace_id: workspaceId,
-      user_id: normalizedEmail === normalizeWorkspaceEmail(session.user.email) ? session.user.id : null,
-      email: normalizedEmail,
-      display_name: normalizedEmail.split('@')[0] ?? normalizedEmail,
-      role: member.role,
-      status: member.status === 'Active' ? 'active' : 'inactive',
-      payload: member,
-      updated_at: updatedAt,
-    };
-  });
-
-  const { error: upsertError } = await client.from('workspace_memberships').upsert(rows, {
-    onConflict: 'workspace_id,email',
-  });
-
-  if (upsertError) {
-    throw new Error(upsertError.message);
-  }
-}
-
 async function saveWorkspaceSnapshotToCloud(backup: unknown, session: Session, updatedAt: string) {
   const client = getSupabaseClient();
   if (!client) {
@@ -678,33 +641,17 @@ async function saveWorkspaceBackupToRelationalCloud(
     };
   }
 
+  // Set the moment the documents upsert commits, and reported even when a LATER
+  // table fails: those rows are in the database whatever happens next.
+  let documentsPersisted = false;
+
   try {
     const workspaceId = await ensurePrimaryWorkspace(session, normalized);
     const updatedAt = normalized.exportedAt ?? new Date().toISOString();
     const workspace = normalized.workspace ?? {};
 
-    await syncWorkspaceMembershipRows({
-      workspaceId,
-      session,
-      members: workspace.workspaceMembers ?? [],
-      updatedAt,
-    });
-
-    await replaceWorkspaceRows({
-      table: 'workspace_invitations',
-      idColumn: 'invitation_id',
-      workspaceId,
-      rows: (workspace.workspaceInvitations ?? []).map((invitation) => ({
-        workspace_id: workspaceId,
-        invitation_id: invitation.id,
-        email: normalizeWorkspaceEmail(invitation.email),
-        role: invitation.role,
-        status: invitation.status.toLowerCase(),
-        invited_by_user_id: session.user.id,
-        payload: invitation,
-        updated_at: updatedAt,
-      })),
-    });
+    // Access changes use explicit cloud operations. An old ranch snapshot must
+    // never re-create members or reopen accepted/revoked invitations.
 
     await replaceWorkspaceRows({
       table: 'horses',
@@ -747,6 +694,8 @@ async function saveWorkspaceBackupToRelationalCloud(
         updated_at: updatedAt,
       })),
     });
+
+    documentsPersisted = true;
 
     await replaceWorkspaceRows({
       table: 'intake_batches',
@@ -857,11 +806,14 @@ async function saveWorkspaceBackupToRelationalCloud(
       ok: true,
       message: 'Relational workspace updated.',
       workspaceId,
+      documentsPersisted,
     };
   } catch (error) {
     return {
       ok: false,
       message: error instanceof Error ? error.message : 'Unable to update the relational workspace.',
+      allowSnapshotFallback: !(error instanceof WorkspaceSaveAccessError),
+      documentsPersisted,
     };
   }
 }
@@ -1042,6 +994,7 @@ export async function saveWorkspaceBackupToCloud(backup: unknown): Promise<Cloud
             : `Relational workspace updated, but snapshot backup failed: ${snapshot.message}`,
           updatedAt,
           workspaceId: relational.workspaceId,
+          relationalRowsPersisted: relational.documentsPersisted === true,
         };
       }
 
@@ -1050,11 +1003,13 @@ export async function saveWorkspaceBackupToCloud(backup: unknown): Promise<Cloud
         message: 'Cloud sync complete. Relational workspace updated.',
         updatedAt,
         workspaceId: relational.workspaceId,
+        relationalRowsPersisted: relational.documentsPersisted === true,
       };
     }
 
-    if (!isSnapshotFallbackEnabled()) {
+    if (!isSnapshotFallbackEnabled() || relational.allowSnapshotFallback === false) {
       return {
+        relationalRowsPersisted: relational.documentsPersisted === true,
         ok: false,
         message: relational.message,
         updatedAt,
@@ -1063,10 +1018,25 @@ export async function saveWorkspaceBackupToCloud(backup: unknown): Promise<Cloud
 
     const snapshot = await saveWorkspaceSnapshotToCloud(backup, session, updatedAt);
     if (snapshot.ok) {
+      /*
+       * `relationalRowsPersisted` is the DOCUMENTS question, not the `ok`
+       * question, and on this path the answer is usually no: the snapshot
+       * landed and the rancher's work is safe, which is what `ok` is about,
+       * while nothing a caller reads from `documents` has moved.
+       *
+       * Usually, but not always. The relational save is a sequence of
+       * statements rather than a transaction, so the documents upsert can
+       * commit and a later table still fail. Those rows are then in the
+       * database and in `xbar_workspace_storage_bytes`, and a reservation held
+       * for them counts the same bytes twice -- refusing uploads that fit.
+       * Asserting `false` here would cause exactly that, so the flag is
+       * forwarded rather than assumed either way.
+       */
       return {
         ok: true,
         message: `Relational workspace unavailable. Saved a legacy snapshot instead. ${relational.message}`,
         updatedAt,
+        relationalRowsPersisted: relational.documentsPersisted === true,
       };
     }
 
@@ -1074,6 +1044,7 @@ export async function saveWorkspaceBackupToCloud(backup: unknown): Promise<Cloud
       ok: false,
       message: `${relational.message} ${snapshot.message}`.trim(),
       updatedAt,
+      relationalRowsPersisted: relational.documentsPersisted === true,
     };
   }
 
@@ -1159,7 +1130,44 @@ export async function uploadMediaAssetToCloud(params: { file: File; horseId: str
   };
 }
 
-export async function uploadDocumentAssetToCloud(params: { file: File; horseId?: string }) {
+/**
+ * Put a document's bytes where the whole ranch can reach them.
+ *
+ * Keyed to the WORKSPACE, not to the person uploading. It used to be keyed to
+ * `session.user.id`, and since `horse-documents` is a private bucket whose
+ * policy compares that first segment against membership, every teammate saw the
+ * document listed and was refused when they opened it. The object path and the
+ * `documents` row now answer to the same workspace.
+ *
+ * When no workspace resolves -- a build with cloud sync off, a session whose
+ * membership has not loaded, a signed-out tab -- this returns `null` rather than
+ * writing the file somewhere unreadable. The caller reads `null` as "the cloud
+ * did not take this file" and keeps the bytes on the device, which is a file the
+ * customer still has rather than one nobody can open.
+ */
+export async function uploadDocumentAssetToCloud(params: {
+  file: File;
+  horseId?: string;
+  /*
+   * Who this upload is FOR, captured by the caller before its batch began.
+   *
+   * This function resolves the destination from the LIVE session, which is the
+   * right thing for a one-off upload and the wrong thing inside a long intake:
+   * another tab can sign a different account in while files and OCR are still
+   * in flight, and then these bytes -- one customer's Coggins, registration
+   * papers, vet records -- are written under the REPLACEMENT workspace's
+   * prefix, where that workspace's members can read them.
+   *
+   * The intake's own identity check catches the switch at commit time, but by
+   * then the object exists. It stops the row, not the file. So the caller says
+   * whose upload this is and it is refused rather than misfiled, which leaves
+   * nothing to clean up afterwards: a refusal returns null, the same as any
+   * other failed upload, and the file stays on the device as metadata only.
+   *
+   * Omit both to keep the old behaviour for callers with no batch to belong to.
+   */
+  expectedIdentity?: IntakeIdentity;
+}) {
   const client = getSupabaseClient();
   if (!client) {
     return null;
@@ -1170,10 +1178,27 @@ export async function uploadDocumentAssetToCloud(params: { file: File; horseId?:
     return null;
   }
 
-  const extension = params.file.name.includes('.') ? params.file.name.split('.').pop() : 'bin';
-  const fileName = `${createId('document')}.${extension}`;
-  const horseSegment = sanitizeStorageSegment(params.horseId ?? 'unassigned');
-  const path = `${session.user.id}/documents/${horseSegment}/${fileName}`;
+  const accessProfile = await loadWorkspaceAccessProfile(session);
+  if (
+    params.expectedIdentity &&
+    intakeIdentityChanged(params.expectedIdentity, {
+      userId: session.user.id ?? '',
+      workspaceId: accessProfile.workspaceId ?? '',
+    })
+  ) {
+    return null;
+  }
+
+  const path = buildDocumentStoragePath({
+    workspaceId: accessProfile.workspaceId,
+    horseId: params.horseId,
+    objectId: createId('document'),
+    originalFileName: params.file.name,
+  });
+  if (!path) {
+    return null;
+  }
+
   const { error } = await client.storage.from(supabaseConfig.documentBucket).upload(path, params.file, {
     upsert: false,
     contentType: params.file.type || undefined,
@@ -1186,6 +1211,40 @@ export async function uploadDocumentAssetToCloud(params: { file: File; horseId?:
   return {
     storagePath: path,
   };
+}
+
+/**
+ * Read the database's authoritative total for objects charged to this
+ * workspace. The RPC is security-definer and resolves membership server-side;
+ * callers must not fall back to a cached subscription total when it cannot be
+ * read, because doing so can upload bytes that the documents trigger rejects.
+ */
+export async function loadWorkspaceStorageBytes(): Promise<number> {
+  const client = getSupabaseClient();
+  if (!client) {
+    throw new Error('Cloud storage usage is unavailable.');
+  }
+
+  const session = await getActiveSession();
+  if (!session?.user) {
+    throw new Error('Sign in again before uploading documents.');
+  }
+
+  const accessProfile = await loadWorkspaceAccessProfile(session);
+  if (!accessProfile.workspaceId) {
+    throw new Error('Finish workspace setup before uploading documents.');
+  }
+
+  const { data, error } = await client.rpc('xbar_workspace_storage_bytes', {
+    p_workspace_id: accessProfile.workspaceId,
+  });
+  if (error) throw error;
+
+  const bytes = typeof data === 'number' ? data : Number(data);
+  if (!Number.isFinite(bytes) || bytes < 0) {
+    throw new Error('Cloud storage usage returned an invalid value.');
+  }
+  return bytes;
 }
 
 /**
@@ -1286,9 +1345,20 @@ export async function getDocumentAccessUrl(
     .from(supabaseConfig.documentBucket)
     .createSignedUrl(document.storagePath, 60 * 5);
   if (error || !data?.signedUrl) {
+    // A refusal here is usually not a broken link. Documents uploaded before
+    // shared storage sit under the uploader's own id, so a teammate sees the
+    // record and is turned away at the file -- and "Object not found" tells
+    // them nothing they can act on. The workspace is only looked up on this
+    // path, so a normal open still costs one request.
+    const accessProfile = await loadWorkspaceAccessProfile(session);
+    const legacyExplanation = explainUnopenableCloudDocument({
+      storagePath: document.storagePath,
+      viewerUserId: session.user.id,
+      workspaceId: accessProfile.workspaceId,
+    });
     return {
       ok: false,
-      message: error?.message ?? 'Unable to generate a secure file link for this document.',
+      message: legacyExplanation ?? error?.message ?? 'Unable to generate a secure file link for this document.',
     } as const;
   }
 

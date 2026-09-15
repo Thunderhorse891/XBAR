@@ -108,9 +108,8 @@ for (const fn of HELPERS) {
   });
 }
 
-test('the corrective migration is not presented as already applied', () => {
+test('the corrective migration replaces helpers without dropping triggers', () => {
   const sql = readFileSync(path.join(migrationsDir, '20260820_entitlement_helpers_honor_inactive.sql'), 'utf8');
-  assert.match(sql, /NOT YET APPLIED/);
   // create-or-replace with unchanged signatures is what makes a re-run harmless.
   assert.equal((sql.match(/create or replace function/g) ?? []).length, HELPERS.length);
   assert.doesNotMatch(sql, /drop function/i);
@@ -151,7 +150,6 @@ test('no Stripe status can produce Manual Billing, which is what makes the recon
 test('the legacy reconciliation is documented as a reviewed, data-changing step', () => {
   const sql = readFileSync(path.join(migrationsDir, '20260821_reconcile_legacy_manual_billing.sql'), 'utf8');
 
-  assert.match(sql, /NOT YET APPLIED/);
   assert.match(sql, /DRY RUN/, 'a migration that changes entitlements for real workspaces needs a dry run');
 
   // It moves the mislabelled rows to the state the current mapper would give

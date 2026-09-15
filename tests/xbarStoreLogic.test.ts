@@ -4,6 +4,7 @@ import { buildDocumentRecord } from '../src/lib/xbarRuntime.js';
 import {
   buildHorseEnrichmentFromEntities,
   composeParentField,
+  intakeIdentityChanged,
   summarizeBatch,
   validateAssetPatch,
   validateHorseNoteInput,
@@ -224,4 +225,55 @@ test('summarizeBatch recalculates processing counts from documents', () => {
   assert.equal(summary.needsReviewCount, 1);
   assert.equal(summary.matchedCount, 1);
   assert.equal(summary.state, 'Reviewing');
+});
+
+/*
+ * A document intake spans uploads and OCR, long enough for another tab to sign
+ * a different account in underneath it. The batch captures who it is for when
+ * it starts and checks again before it commits; without that check, account
+ * A's documents, extracted facts and workspace storage paths are installed
+ * into account B's freshly hydrated workspace and handed to B's next cloud
+ * snapshot.
+ */
+const asAccountA = { userId: 'user-a', workspaceId: 'ranch-a' };
+
+test('an intake that finishes as the account that started it commits', () => {
+  assert.equal(intakeIdentityChanged(asAccountA, { userId: 'user-a', workspaceId: 'ranch-a' }), false);
+});
+
+test('a different account signing in mid-intake is a change', () => {
+  assert.equal(intakeIdentityChanged(asAccountA, { userId: 'user-b', workspaceId: 'ranch-b' }), true);
+});
+
+test('the same person switching ranches mid-intake is a change', () => {
+  assert.equal(
+    intakeIdentityChanged(asAccountA, { userId: 'user-a', workspaceId: 'ranch-b' }),
+    true,
+    'the workspace decides where the records and their storage paths land, so it is half of the identity',
+  );
+});
+
+test('a different person on the same workspace id is a change', () => {
+  assert.equal(intakeIdentityChanged(asAccountA, { userId: 'user-b', workspaceId: 'ranch-a' }), true);
+});
+
+/*
+ * Neither direction across the signed-out state is excused. An empty id is a
+ * value, not a wildcard: signing out abandons the batch, and a batch begun
+ * signed out must not be adopted by whoever signs in while it runs.
+ */
+test('signing out mid-intake is a change', () => {
+  assert.equal(intakeIdentityChanged(asAccountA, { userId: '', workspaceId: '' }), true);
+});
+
+test('signing in during an intake that began signed out is a change', () => {
+  assert.equal(intakeIdentityChanged({ userId: '', workspaceId: '' }, asAccountA), true);
+});
+
+test('a local-only intake, signed out at both ends, still commits', () => {
+  assert.equal(
+    intakeIdentityChanged({ userId: '', workspaceId: '' }, { userId: '', workspaceId: '' }),
+    false,
+    'local-first use has no identity to change, and must not be blocked by this check',
+  );
 });

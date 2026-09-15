@@ -14,7 +14,7 @@ import type {
   SubscriptionProfile,
   SubscriptionTier,
 } from '../types/xbar.js';
-import { readDocumentText } from './documentIntelligence.js';
+import { describeDocumentCoverage, fullCoverage, readDocumentWithCoverage } from './documentIntelligence.js';
 import { extractRegistrationFields } from './registrationExtraction.js';
 
 const GIGABYTE = 1024 * 1024 * 1024;
@@ -269,9 +269,9 @@ export async function readFileAsDataUrl(file: File) {
 
 async function readFileTextSnippet(file: File) {
   try {
-    return await readDocumentText(file);
+    return await readDocumentWithCoverage(file);
   } catch {
-    return '';
+    return { text: '', coverage: fullCoverage() };
   }
 }
 
@@ -472,7 +472,7 @@ export async function buildDocumentRecord(params: {
   existingDocuments: DocumentRecord[];
 }) {
   const { file, uploadedBy, source, selectedHorse, horses, existingDocuments } = params;
-  const previewText = await readFileTextSnippet(file);
+  const { text: previewText, coverage } = await readFileTextSnippet(file);
   const inferredType = guessDocumentType(file.name);
   const extractedEntities = extractDocumentEntities({
     fileName: file.name,
@@ -549,6 +549,8 @@ export async function buildDocumentRecord(params: {
     confidence,
     duplicateRisk,
     extractedTextPreview: previewText,
+    // Empty unless the reader stopped short of the whole file.
+    processingNote: describeDocumentCoverage(coverage),
     summary: matchedHorse
       ? `${inferredType} matched to ${matchedHorse.name} with ${trustLabel} based on ${matchReason}.`
       : `${inferredType} added to the queue and needs manual assignment before it can be attached to a horse profile.`,

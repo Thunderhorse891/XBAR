@@ -1,0 +1,148 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width,initial-scale=1" />
+    <title>XBAR — Cinematic identity study</title>
+    <meta name="robots" content="noindex,nofollow" />
+    <link rel="stylesheet" href="concept.css" />
+  </head>
+  <body>
+    <header class="nav">
+      <a href="#" class="brand-home" aria-label="Back to top">Ranch workspace</a>
+      <nav class="navlinks" aria-label="Preview navigation">
+        <a href="#workspace">The workspace</a><a href="#reports">The reports</a
+        ><button class="quiet" id="motion" aria-pressed="false">Pause motion</button>
+      </nav>
+    </header>
+    <main>
+      <section class="hero">
+        <img
+          class="film"
+          id="film"
+          src="../xbar-report-horse.png"
+          width="1672"
+          height="941"
+          alt=""
+          aria-hidden="true"
+          fetchpriority="high"
+        />
+        <div class="shade"></div>
+        <div class="hero-atmosphere" aria-hidden="true">
+          <svg class="contour-light" viewBox="0 0 1000 800" fill="none" preserveAspectRatio="xMidYMid meet">
+            <path d="M180 690C420 650 352 480 510 376S820 220 868 90" />
+            <path d="M240 730C455 660 414 516 556 414S841 265 901 135" />
+            <path d="M490 727C584 643 561 554 651 477" />
+          </svg>
+          <i class="light-fleck light-fleck--one"></i>
+          <i class="light-fleck light-fleck--two"></i>
+          <i class="light-fleck light-fleck--three"></i>
+        </div>
+        <div class="hero-copy">
+          <h1>Your ranch.<br />In focus.</h1>
+          <p>The horses. The records. The next move.<br />A workspace built around your operation.</p>
+          <a class="primary" href="#workspace">Explore the workspace <span aria-hidden="true">↘</span></a>
+        </div>
+        <div class="asset-note">Cinematic identity study<br />XBAR original artwork · interactive preview</div>
+        <div class="scroll-mark" aria-hidden="true"></div>
+      </section>
+      <section class="intro" id="workspace">
+        <h2>A complete picture.<br />One horse at a time.</h2>
+        <p>
+          Bring the identity, care records and sale preparation into one view. The visual language follows your horse
+          mark: sculpted dark surfaces, silver structure and a controlled blue edge.
+        </p>
+      </section>
+      <section class="stage" aria-label="Interactive workspace design sample">
+        <div class="stagehead">
+          <div class="tabs" role="tablist" aria-label="Workspace examples">
+            <button role="tab" id="tab-passport" aria-controls="panel" aria-selected="true" data-tab="passport">
+              Horse passport</button
+            ><button role="tab" id="tab-sale" aria-controls="panel" aria-selected="false" tabindex="-1" data-tab="sale">
+              Sale preparation</button
+            ><button
+              role="tab"
+              id="tab-records"
+              aria-controls="panel"
+              aria-selected="false"
+              tabindex="-1"
+              data-tab="records"
+            >
+              Records
+            </button>
+          </div>
+          <span class="sample">Interactive concept · illustrative data</span>
+        </div>
+        <div class="workspace" role="tabpanel" id="panel" aria-labelledby="tab-passport">
+          <div class="portrait">
+            <span class="tag">Sample horse profile</span>
+            <h3>Silver Creek</h3>
+            <p>Quarter Horse · Gelding<br />Identity, care and ownership together.</p>
+          </div>
+          <div class="detail">
+            <h3 id="detail-title">Every record has a place.</h3>
+            <p id="detail-copy">
+              See how identity, care and ownership connect. Select a view above to explore the proposed workspace.
+            </p>
+            <div class="workflow-map">
+              <span class="pulse" aria-hidden="true"></span>
+              <ul class="workflow-steps" aria-label="Workspace record stages">
+                <li><span class="step-icon" aria-hidden="true">&#9671;</span><span id="node-a">Identity</span></li>
+                <li><span class="step-icon" aria-hidden="true">+</span><span id="node-b">Care</span></li>
+                <li><span class="step-icon" aria-hidden="true">&#10003;</span><span id="node-c">Ownership</span></li>
+              </ul>
+            </div>
+            <div class="facts">
+              <div><span id="label-a">Registration</span><strong id="value-a">On file</strong></div>
+              <div><span id="label-b">Health documents</span><strong id="value-b">Review needed</strong></div>
+              <div><span id="label-c">Ownership</span><strong id="value-c">In progress</strong></div>
+            </div>
+          </div>
+        </div>
+      </section>
+      <section class="story" id="reports">
+        <div>
+          <h2>Clarity carries<br />your signature.</h2>
+          <p>
+            On screen, the brand moves. On paper, the numbers lead. The same silver, charcoal and blue identity carries
+            into a crisp report built for decisions.
+          </p>
+          <p style="font-size: 12px">
+            This concept uses your supplied artwork unchanged. The sample figures at right illustrate layout only.
+          </p>
+        </div>
+        <div class="report-art">
+          <div class="rh"><b>XBAR™</b><span>Illustrative report</span></div>
+          <h3>Ranch at a glance</h3>
+          <div class="money">
+            <div><small>Capital invested</small><b>$108,800</b></div>
+            <div><small>Listed value</small><b>$252,000</b></div>
+            <div class="ready-metric"><small>Ready to close</small><b>$0</b><span>Action required</span></div>
+          </div>
+          <div class="value-comparison" aria-label="Illustrative portfolio value comparison">
+            <div class="value-row">
+              <div><span>Invested</span><b>$108,800</b></div>
+              <div class="value-track"><span style="--w: 43.17%"></span></div>
+            </div>
+            <div class="value-row">
+              <div><span>Listed</span><b>$252,000</b></div>
+              <div class="value-track"><span style="--w: 100%"></span></div>
+            </div>
+          </div>
+          <div class="report-exception">
+            <span>Sale readiness</span><strong>$252,000 blocked</strong>
+            <p>18 horses need ownership and Coggins records.</p>
+          </div>
+          <div class="report-action">
+            <b>Next action</b><span>Resolve ownership and Coggins requirements before closing.</span>
+          </div>
+        </div>
+      </section>
+    </main>
+    <footer class="end">
+      <span>XBAR™ · Cinematic identity concept</span
+      ><span>Original artwork. Purposeful movement. Clear working surfaces.</span>
+    </footer>
+    <script src="concept.js" defer></script>
+  </body>
+</html>
