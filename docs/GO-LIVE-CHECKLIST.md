@@ -1005,10 +1005,23 @@ The client-side staged-byte reservation now provides three concrete guarantees:
 
 These guarantees do **not** make the reservation authoritative. Reloading before
 the document rows are persisted loses the in-memory reservation, and concurrent
-devices do not share it. The database storage-limit trigger remains the backstop
-for both cases. If another concurrency gap is found here, do not add another
-client-side counter refinement: use a database-owned capacity reservation and
-verify it against a live Supabase project.
+devices do not share it. Importing a workspace backup that omits a document
+whose upload succeeded but whose row has not been saved releases that
+document's reservation on the next successful save, leaving its Storage object
+counted by neither the server total nor the client: the sequence is a failing
+relational autosave, a successful upload, then a restore omitting the file. All
+three leak capacity accounting rather than data, and the database storage-limit
+trigger remains the backstop.
+
+That third gap is recorded rather than patched **on purpose**. Nine distinct
+findings have now landed on this one client-side accounting mechanism, and each
+fix has been correct while the mechanism has not converged — a client cannot
+hold a sound reservation against a total it does not own. Do not add a tenth
+refinement. Either give the database a capacity reservation of its own and
+verify it against a live Supabase project, or settle the partial-sync decision
+so an over-cap document row fails alone instead of failing the batched upsert
+and stranding the tables behind it, which removes the need for a client-side
+reservation at all.
 
 ### Recovery consumption — design requirements, not implemented
 
