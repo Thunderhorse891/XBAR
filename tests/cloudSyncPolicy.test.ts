@@ -236,8 +236,22 @@ test('document quota charges cloud bytes with a project and device bytes without
   );
   assert.match(
     intake,
-    /const chargedStorageGb =\s*\(isSupabaseConfigured\(\) \? cloudStoredBytes : fileList\.reduce\(\(total, file\) => total \+ file\.size, 0\)\)/,
-    'a local-only build must charge the batch it just stored on the device',
+    /const chargedStorageGb =\s*\(isSupabaseConfigured\(\) \? cloudStoredBytes : localStoredBytes\)/,
+    'a local-only build must charge what the device kept, not what was offered',
+  );
+  /*
+   * Accumulated where `storeLocalFile` succeeds, so the figure cannot drift
+   * from what the vault holds. Charging the whole `fileList` billed the plan
+   * for files an exhausted IndexedDB quota meant it never stored.
+   */
+  assert.match(
+    intake,
+    /localFileKey = await storeLocalFile\([\s\S]{0,340}?localStoredBytes \+= file\.size;/,
+    'local bytes must be counted at the point the file is actually written',
+  );
+  assert.ok(
+    !/: fileList\.reduce\(\(total, file\) => total \+ file\.size, 0\)\)/.test(intake),
+    'the whole batch is not evidence that the device kept it',
   );
   assert.match(
     intake,
@@ -343,10 +357,16 @@ test('staged bytes are released by the save that persists them, and only that mu
     /const stagedAtSnapshot = useCloudStore\.getState\(\)\.stagedStorageBytes;[\s\S]{0,200}?const signature = serializeWorkspaceBackup\(backup\)/,
     'the staged amount must be captured with the snapshot, before the request',
   );
+  /*
+   * Outside the `ok` branch on purpose. `ok` and "the document rows landed"
+   * differ in BOTH directions: a snapshot-only fallback reports `ok` with no
+   * rows, and a save that commits `documents` and then fails a later table
+   * reports failure with the rows already in the server's total.
+   */
   assert.match(
     bootstrap,
-    /if \(result\.ok\) \{[\s\S]{0,900}?if \(result\.relationalRowsPersisted\) settleStagedStorageBytes\(stagedAtSnapshot\)/,
-    'staged bytes may only be released once the document rows actually reached the database',
+    /if \(result\.relationalRowsPersisted\) settleStagedStorageBytes\(stagedAtSnapshot\);\s*if \(result\.ok\) \{/,
+    'the release must be keyed on the document rows, not on overall success',
   );
   assert.match(
     cloudStore,
@@ -374,19 +394,71 @@ test('a snapshot-only fallback does not claim the relational rows landed', async
   );
   assert.ok(save.length > 0, 'the save function must be findable');
 
-  const fallbackReturn = save.slice(
-    save.indexOf('Relational workspace unavailable') - 400,
-    save.indexOf('Relational workspace unavailable') + 200,
-  );
+  /*
+   * Every path forwards the documents answer rather than asserting one. The
+   * fallback used to assert nothing landed, which is right in the ordinary case
+   * and wrong when the `documents` upsert committed before a later table
+   * failed -- there the bytes are in the server total and a retained
+   * reservation counts them twice.
+   */
   assert.ok(
-    !/relationalRowsPersisted/.test(fallbackReturn),
-    'the snapshot-only fallback must not report relational persistence',
+    !/relationalRowsPersisted: true/.test(save),
+    'no path may assert that the document rows landed without checking',
+  );
+  assert.equal(
+    (save.match(/relationalRowsPersisted: relational\.documentsPersisted === true/g) ?? []).length,
+    5,
+    'every return after the relational attempt must forward the documents answer',
   );
 
-  // And the success paths must report it, or the reservation is never released.
-  assert.equal(
-    (save.match(/relationalRowsPersisted: true/g) ?? []).length,
-    2,
-    'both relational-success returns must report that the rows landed',
+  const relationalSave = cloud.slice(
+    cloud.indexOf('async function saveWorkspaceBackupToRelationalCloud'),
+    cloud.indexOf('export async function saveWorkspaceBackupToCloud'),
+  );
+  assert.match(
+    relationalSave,
+    /documentsPersisted = true;\s*await replaceWorkspaceRows\(\{\s*table: 'intake_batches'/,
+    'the flag must be set the moment the documents upsert commits',
+  );
+  assert.match(
+    relationalSave,
+    /catch \(error\) \{[\s\S]{0,300}?documentsPersisted,/,
+    'and reported when a later table fails, because those rows are still committed',
+  );
+});
+
+test('one document intake at a time, guaranteed by the store rather than by two screens', async () => {
+  /*
+   * The capacity gate takes its reservation in the same step that installs the
+   * records, which is only safe if a second batch cannot start while the first
+   * is still uploading and reading.
+   *
+   * That used to be asserted of the UI — "both entry points disable their
+   * submit" — and the assertion was false. `Documents.tsx` guards on its own
+   * `isSubmitting` and `components/saas/flows.tsx` on its own `busy`: two
+   * independent component states, so the global create drawer could start an
+   * intake while the Documents page was mid-flight. The second preflight saw
+   * neither the first batch's rows nor its reservation.
+   *
+   * The guarantee now lives on the action both screens share, so it holds
+   * however many call sites appear later.
+   */
+  const store = await readFile('src/store/useXbarStore.ts', 'utf8');
+
+  assert.match(
+    store,
+    /createDocumentIntake: async \(intakeInput\) =>\s*serializeDocumentIntake\(async \(\) => \{/,
+    'the intake action itself must be serialized',
+  );
+  assert.match(
+    store,
+    /const result = documentIntakeQueue\.then\(run, run\);/,
+    'a failed intake must not wedge the queue — the chain continues through rejection',
+  );
+
+  // And the claim that was wrong must not come back.
+  assert.ok(
+    !/neither entry point permits/.test(store),
+    'the UI-guard justification was false and must not be restated',
   );
 });

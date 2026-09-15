@@ -53,6 +53,18 @@ type RelationalMirrorResult = {
   ok: boolean;
   message: string;
   workspaceId?: string;
+  /*
+   * Whether the DOCUMENTS upsert committed, which is not the same question as
+   * whether the save succeeded.
+   *
+   * The relational save is a sequence of independent statements, not a
+   * transaction: `documents` goes up, then six more tables. If a later one
+   * fails, `ok` is false while those document rows are already committed and
+   * already counted by `xbar_workspace_storage_bytes`. A caller holding a
+   * reservation for those bytes has to release it anyway, or it counts them
+   * twice -- once in the server total and once in its own staged figure.
+   */
+  documentsPersisted?: boolean;
 };
 
 type CloudSaveResult = {
@@ -628,6 +640,10 @@ async function saveWorkspaceBackupToRelationalCloud(
     };
   }
 
+  // Set the moment the documents upsert commits, and reported even when a LATER
+  // table fails: those rows are in the database whatever happens next.
+  let documentsPersisted = false;
+
   try {
     const workspaceId = await ensurePrimaryWorkspace(session, normalized);
     const updatedAt = normalized.exportedAt ?? new Date().toISOString();
@@ -677,6 +693,8 @@ async function saveWorkspaceBackupToRelationalCloud(
         updated_at: updatedAt,
       })),
     });
+
+    documentsPersisted = true;
 
     await replaceWorkspaceRows({
       table: 'intake_batches',
@@ -787,12 +805,14 @@ async function saveWorkspaceBackupToRelationalCloud(
       ok: true,
       message: 'Relational workspace updated.',
       workspaceId,
+      documentsPersisted,
     };
   } catch (error) {
     return {
       ok: false,
       message: error instanceof Error ? error.message : 'Unable to update the relational workspace.',
       allowSnapshotFallback: !(error instanceof WorkspaceSaveAccessError),
+      documentsPersisted,
     };
   }
 }
@@ -973,7 +993,7 @@ export async function saveWorkspaceBackupToCloud(backup: unknown): Promise<Cloud
             : `Relational workspace updated, but snapshot backup failed: ${snapshot.message}`,
           updatedAt,
           workspaceId: relational.workspaceId,
-          relationalRowsPersisted: true,
+          relationalRowsPersisted: relational.documentsPersisted === true,
         };
       }
 
@@ -982,12 +1002,13 @@ export async function saveWorkspaceBackupToCloud(backup: unknown): Promise<Cloud
         message: 'Cloud sync complete. Relational workspace updated.',
         updatedAt,
         workspaceId: relational.workspaceId,
-        relationalRowsPersisted: true,
+        relationalRowsPersisted: relational.documentsPersisted === true,
       };
     }
 
     if (!isSnapshotFallbackEnabled() || relational.allowSnapshotFallback === false) {
       return {
+        relationalRowsPersisted: relational.documentsPersisted === true,
         ok: false,
         message: relational.message,
         updatedAt,
@@ -997,16 +1018,24 @@ export async function saveWorkspaceBackupToCloud(backup: unknown): Promise<Cloud
     const snapshot = await saveWorkspaceSnapshotToCloud(backup, session, updatedAt);
     if (snapshot.ok) {
       /*
-       * Deliberately WITHOUT `relationalRowsPersisted`. The snapshot landed and
-       * the rancher's work is safe, which is what `ok` is about -- but no
-       * document row reached the database, so nothing a caller reads from
-       * `documents` has moved. Saying otherwise here is what would let the
-       * capacity gate release a reservation the server never took over.
+       * `relationalRowsPersisted` is the DOCUMENTS question, not the `ok`
+       * question, and on this path the answer is usually no: the snapshot
+       * landed and the rancher's work is safe, which is what `ok` is about,
+       * while nothing a caller reads from `documents` has moved.
+       *
+       * Usually, but not always. The relational save is a sequence of
+       * statements rather than a transaction, so the documents upsert can
+       * commit and a later table still fail. Those rows are then in the
+       * database and in `xbar_workspace_storage_bytes`, and a reservation held
+       * for them counts the same bytes twice -- refusing uploads that fit.
+       * Asserting `false` here would cause exactly that, so the flag is
+       * forwarded rather than assumed either way.
        */
       return {
         ok: true,
         message: `Relational workspace unavailable. Saved a legacy snapshot instead. ${relational.message}`,
         updatedAt,
+        relationalRowsPersisted: relational.documentsPersisted === true,
       };
     }
 
@@ -1014,6 +1043,7 @@ export async function saveWorkspaceBackupToCloud(backup: unknown): Promise<Cloud
       ok: false,
       message: `${relational.message} ${snapshot.message}`.trim(),
       updatedAt,
+      relationalRowsPersisted: relational.documentsPersisted === true,
     };
   }
 

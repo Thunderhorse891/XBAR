@@ -347,21 +347,29 @@ export function CloudBootstrap() {
       const result = await saveWorkspaceBackupToCloud(backup);
       saving = false;
       if (disposed) return;
+      /*
+       * Keyed on whether the DOCUMENT ROWS reached the database, which is a
+       * different question from `ok` in both directions -- so this sits outside
+       * the branch rather than inside the success half.
+       *
+       * `ok` without the rows: with the snapshot fallback enabled a rejected
+       * relational save still reports success once the legacy snapshot lands.
+       * The rancher's work is safe, but `xbar_workspace_storage_bytes` reads
+       * `documents` and nothing was added to it, so releasing the reservation
+       * would leave the uploaded objects counted by nobody.
+       *
+       * The rows without `ok`: the relational save is a sequence of statements,
+       * not a transaction. The documents upsert can commit and a later table
+       * still fail. Those bytes are then in the server's total, and holding the
+       * reservation as well counts them twice -- refusing batches that fit,
+       * until some later save happens to succeed.
+       */
+      if (result.relationalRowsPersisted) settleStagedStorageBytes(stagedAtSnapshot);
       if (result.ok) {
         if (result.workspaceId && result.workspaceId !== workspaceId) {
           setWorkspaceAccessProfile(result.workspaceId, 'Admin');
         }
         lastPersistedSignatureRef.current = signature;
-        /*
-         * Only when the DOCUMENT ROWS actually reached the database. With the
-         * snapshot fallback enabled a rejected relational save still reports
-         * `ok` once the legacy snapshot lands -- the rancher's work is safe,
-         * which is what `ok` means -- but `xbar_workspace_storage_bytes` reads
-         * `documents`, and nothing was added to it. Releasing the reservation
-         * there would leave the uploaded objects counted by nobody, and every
-         * later batch would pass the gate against a total that never grows.
-         */
-        if (result.relationalRowsPersisted) settleStagedStorageBytes(stagedAtSnapshot);
         if (result.updatedAt) setLastSyncAt(result.updatedAt);
         setSyncState('idle', result.message);
       } else {
