@@ -218,7 +218,7 @@ type CloudStore = {
  * is nothing sensible to use, which tells the Supabase client to fall back to
  * the project's configured Site URL rather than to a scheme it will reject.
  */
-function currentAuthRedirectUrl() {
+function currentAuthRedirectUrl(intent: 'signin' | 'signup' = 'signin') {
   const nativeOrigin = authCallbackOrigin();
   /*
    * The native branch used to hand back the bare origin, and an origin is not
@@ -238,7 +238,26 @@ function currentAuthRedirectUrl() {
    * to fall back to the project's configured Site URL rather than to a scheme
    * it will reject.
    */
-  if (isNativeApp()) return nativeOrigin ? publicAppRouteUrl(loginPath, nativeOrigin) : undefined;
+  if (isNativeApp()) {
+    if (!nativeOrigin) return undefined;
+    const url = publicAppRouteUrl(loginPath, nativeOrigin);
+    /*
+     * A confirmation link has to say what it is confirming.
+     *
+     * The sign-in screen reads its mode from the query string, and a session
+     * arriving without `mode=signup` is treated as an ordinary sign-in -- whose
+     * destination is billing. So a customer who had just confirmed a brand new
+     * account, and therefore had no ranch at all, was shown a pricing page
+     * instead of the setup screen. Nothing was broken, it was simply the wrong
+     * end of the product, and `/billing` sits outside the workspace-setup guard
+     * so nothing sent them back.
+     *
+     * The WEB branch below needs no equivalent: it returns the page the request
+     * was made from, and a signup is made from `/app/login?mode=signup`, so the
+     * mode survives on its own.
+     */
+    return intent === 'signup' ? `${url}?mode=signup` : url;
+  }
   return typeof window !== 'undefined'
     ? `${window.location.origin}${window.location.pathname}${window.location.search}`
     : undefined;
@@ -1681,7 +1700,7 @@ export const useCloudStore = create<CloudStore>((set, get) => ({
       return { ok: false, message: 'Use at least 8 characters for the password.' };
     }
 
-    const emailRedirectTo = currentAuthRedirectUrl();
+    const emailRedirectTo = currentAuthRedirectUrl('signup');
     const { data, error } = await client.auth.signUp({
       email: trimmedEmail,
       password,
@@ -1739,7 +1758,7 @@ export const useCloudStore = create<CloudStore>((set, get) => ({
     const { error } = await client.auth.resend({
       type: 'signup',
       email: trimmedEmail,
-      options: { emailRedirectTo: currentAuthRedirectUrl() },
+      options: { emailRedirectTo: currentAuthRedirectUrl('signup') },
     });
 
     if (error) {

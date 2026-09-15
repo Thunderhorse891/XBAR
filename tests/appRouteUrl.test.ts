@@ -189,8 +189,48 @@ test('the shared native auth redirect builds an app route, and the reset flow ke
    */
   assert.match(
     store,
-    /if \(isNativeApp\(\)\) return nativeOrigin \? publicAppRouteUrl\(loginPath, nativeOrigin\) : undefined;/,
-    'the native branch must name an app route, and stay undefined when there is no origin to build one from',
+    /const url = publicAppRouteUrl\(loginPath, nativeOrigin\);/,
+    'the native branch must name an app route rather than an origin',
+  );
+  assert.match(
+    store,
+    /if \(!nativeOrigin\) return undefined;/,
+    'with no origin to build from it must stay undefined, so Supabase falls back to its own Site URL',
+  );
+
+  /*
+   * A confirmation link has to say what it is confirming. The sign-in screen
+   * reads its mode from the query string, and a session arriving without
+   * `mode=signup` is treated as an ordinary sign-in -- whose destination is
+   * billing. A customer who had just confirmed a brand new account, and
+   * therefore had no ranch at all, was shown a pricing page instead of the
+   * setup screen, and `/billing` sits outside the workspace-setup guard so
+   * nothing sent them back.
+   */
+  assert.match(
+    store,
+    /return intent === 'signup' \? `\$\{url\}\?mode=signup` : url;/,
+    'a native confirmation link must carry the signup mode',
+  );
+  assert.match(
+    store,
+    /const emailRedirectTo = currentAuthRedirectUrl\('signup'\);\s*const \{ data, error \} = await client\.auth\.signUp\(\{/,
+    'the signup confirmation is a signup',
+  );
+  assert.match(
+    store,
+    /options: \{ emailRedirectTo: currentAuthRedirectUrl\('signup'\) \}/,
+    'resending that confirmation is still a signup',
+  );
+  /*
+   * And the magic link is NOT: it signs an existing account in, so it keeps the
+   * generic destination. Passing 'signup' here would send a returning customer
+   * to the setup screen for a ranch they already have.
+   */
+  assert.match(
+    store,
+    /const emailRedirectTo = currentAuthRedirectUrl\(\);\s*const \{ error \} = await client\.auth\.signInWithOtp\(\{/,
+    'a magic link signs an existing account in and must not claim to be a signup',
   );
   assert.ok(
     !/if \(isNativeApp\(\)\) return nativeOrigin;/.test(store),
