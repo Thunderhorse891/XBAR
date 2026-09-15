@@ -119,11 +119,7 @@ test('sign-in brand images reserve their real shape and keep the rim light', asy
    */
   const login = await readFile('src/routes/Login.tsx', 'utf8');
 
-  for (const [file, className] of [
-    ['public/brand/xbar-horse-outline-safe.png', 'clean-login-visual__horse'],
-    ['public/brand/xbar-x-watermark-main.png', 'clean-login-visual__watermark'],
-    ['public/brand/xbar-wordmark.png', 'clean-login-visual__wordmark'],
-  ] as const) {
+  for (const [file, className] of [['public/brand/xbar-report-horse.png', 'clean-login-visual__art']] as const) {
     const header = await readFile(file);
     assert.equal(header.subarray(0, 8).toString('hex'), '89504e470d0a1a0a', `${file} must be a PNG`);
     const width = header.readUInt32BE(16);
@@ -139,10 +135,10 @@ test('sign-in brand images reserve their real shape and keep the rim light', asy
    * light; desaturating it deletes the single feature that identifies the brand
    * at the one place it appears on this screen.
    */
-  const entry = await readFile('src/routes/cleanEntryExperience.css', 'utf8');
+  const entry = await readFile('src/routes/loginHero.css', 'utf8');
   const watermark = entry.slice(
-    entry.indexOf('.clean-login-visual__watermark,'),
-    entry.indexOf('.clean-login-visual__copy'),
+    entry.indexOf('.clean-login-visual__art {'),
+    entry.indexOf('.clean-login-visual .clean-login-visual__copy'),
   );
   assert.ok(watermark.length > 0, 'the watermark rule must be findable');
   assert.ok(!/grayscale\(/.test(watermark), 'the brand mark must not be desaturated on the sign-in panel');
