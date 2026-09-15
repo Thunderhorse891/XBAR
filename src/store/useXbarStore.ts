@@ -936,6 +936,9 @@ export const useXbarStore = create<XbarStore>()(
                     uploadedAsset = await uploadDocumentAssetToCloud({
                       file,
                       horseId: selectedHorse?.id ?? horseId,
+                      // Bind the bytes to the account this batch began as, so a
+                      // mid-flight sign-in cannot file them under someone else.
+                      expectedIdentity: intakeIdentity,
                     });
                   } catch (error) {
                     console.error('Cloud document upload failed; keeping the file on this device instead.', error);

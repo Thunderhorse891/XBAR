@@ -3,6 +3,7 @@ import { publicShareEventToBuyerRoomEvent, type PublicShareEventRow } from '@/li
 import { buildDocumentStoragePath, explainUnopenableCloudDocument } from '@/lib/documentStoragePath';
 import { createId, todayStamp } from '@/lib/xbarRuntime';
 import { WORKSPACE_SCHEMA_VERSION } from '@/store/xbarStoreHelpers';
+import { intakeIdentityChanged, type IntakeIdentity } from '@/store/xbarStoreLogic';
 import { getSupabaseClient } from '@/lib/supabaseClient';
 import { isNavigableFileUrl } from '@/lib/navigableFileUrl';
 import { openLocalFile } from '@/lib/localFileVault';
@@ -1144,7 +1145,29 @@ export async function uploadMediaAssetToCloud(params: { file: File; horseId: str
  * did not take this file" and keeps the bytes on the device, which is a file the
  * customer still has rather than one nobody can open.
  */
-export async function uploadDocumentAssetToCloud(params: { file: File; horseId?: string }) {
+export async function uploadDocumentAssetToCloud(params: {
+  file: File;
+  horseId?: string;
+  /*
+   * Who this upload is FOR, captured by the caller before its batch began.
+   *
+   * This function resolves the destination from the LIVE session, which is the
+   * right thing for a one-off upload and the wrong thing inside a long intake:
+   * another tab can sign a different account in while files and OCR are still
+   * in flight, and then these bytes -- one customer's Coggins, registration
+   * papers, vet records -- are written under the REPLACEMENT workspace's
+   * prefix, where that workspace's members can read them.
+   *
+   * The intake's own identity check catches the switch at commit time, but by
+   * then the object exists. It stops the row, not the file. So the caller says
+   * whose upload this is and it is refused rather than misfiled, which leaves
+   * nothing to clean up afterwards: a refusal returns null, the same as any
+   * other failed upload, and the file stays on the device as metadata only.
+   *
+   * Omit both to keep the old behaviour for callers with no batch to belong to.
+   */
+  expectedIdentity?: IntakeIdentity;
+}) {
   const client = getSupabaseClient();
   if (!client) {
     return null;
@@ -1156,6 +1179,16 @@ export async function uploadDocumentAssetToCloud(params: { file: File; horseId?:
   }
 
   const accessProfile = await loadWorkspaceAccessProfile(session);
+  if (
+    params.expectedIdentity &&
+    intakeIdentityChanged(params.expectedIdentity, {
+      userId: session.user.id ?? '',
+      workspaceId: accessProfile.workspaceId ?? '',
+    })
+  ) {
+    return null;
+  }
+
   const path = buildDocumentStoragePath({
     workspaceId: accessProfile.workspaceId,
     horseId: params.horseId,
