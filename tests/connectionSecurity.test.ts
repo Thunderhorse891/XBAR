@@ -18,6 +18,7 @@ const inviteSource = await readFile(fromRoot('api/invite.js'), 'utf8');
 const buyerInquiriesSource = await readFile(fromRoot('api/_lib/buyer-inquiries.js'), 'utf8');
 const rateLimitSource = await readFile(fromRoot('api/_lib/rate-limit.js'), 'utf8');
 const vercelConfigSource = await readFile(fromRoot('vercel.json'), 'utf8');
+const platformConfigSource = await readFile(fromRoot('src/lib/platformConfig.ts'), 'utf8');
 const validationSource = await readFile(fromRoot('api/_lib/validation.js'), 'utf8');
 const corsSource = await readFile(fromRoot('api/_lib/cors.js'), 'utf8');
 const managedBillingSource = await readFile(fromRoot('api/_lib/managed-billing.js'), 'utf8');
@@ -205,20 +206,46 @@ test('the deployment config cannot ship a local-mode, sign-in-less build', () =>
     `vercel.json buildCommand must not produce a local-mode bundle, got: ${buildCommand}`,
   );
 
+  /*
+   * Matched to how the app ACTUALLY reads these, not to the spellings that
+   * happened to come to mind.
+   *
+   * `platformConfig.readFlag` trims, lowercases, and accepts '1', 'yes' and
+   * 'on' as well as 'true'; `readEnv` trims before deciding whether Supabase
+   * is configured. A guard that tested for the exact string 'true', and for
+   * exactly '', let `VITE_ALLOW_LOCAL_MODE: "1"` and a single-space Supabase
+   * URL through -- both of which still produce the sign-in-less deployment
+   * this exists to stop. A guard narrower than the thing it guards is worse
+   * than none, because it reads as covered.
+   */
+  const TRUTHY_FLAGS = ['1', 'true', 'yes', 'on'];
+  const readsAsTrue = (value: string | undefined) => TRUTHY_FLAGS.includes((value ?? '').trim().toLowerCase());
+  const readsAsBlank = (value: string) => value.trim() === '';
+
+  /*
+   * And pinned to the source, so the mirror cannot drift silently. If someone
+   * teaches readFlag a new spelling, this fails here rather than quietly
+   * leaving a way past the guard.
+   */
+  assert.match(
+    platformConfigSource,
+    /\['1', 'true', 'yes', 'on'\]\.includes\(normalized\)/,
+    'the truthy spellings mirrored above must still be the ones platformConfig accepts',
+  );
+
   for (const [scope, env] of [
     ['env', vercelConfig.env],
     ['build.env', vercelConfig.build?.env],
   ] as const) {
     if (!env) continue;
-    assert.notEqual(
-      env.VITE_ALLOW_LOCAL_MODE,
-      'true',
-      `vercel.json ${scope} must not force local mode on a deployment`,
+    assert.ok(
+      !readsAsTrue(env.VITE_ALLOW_LOCAL_MODE),
+      `vercel.json ${scope} must not force local mode on a deployment, got: ${env.VITE_ALLOW_LOCAL_MODE}`,
     );
     for (const key of ['VITE_SUPABASE_URL', 'VITE_SUPABASE_ANON_KEY'] as const) {
       assert.ok(
-        !(key in env) || env[key] !== '',
-        `vercel.json ${scope} must not blank ${key} — an empty value is what makes the deployed app unable to sign anyone in`,
+        !(key in env) || !readsAsBlank(env[key]),
+        `vercel.json ${scope} must not blank ${key} — a value that trims to empty is what makes the deployed app unable to sign anyone in`,
       );
     }
   }
