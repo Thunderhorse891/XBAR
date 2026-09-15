@@ -9,6 +9,7 @@ import { useCloudStore } from '@/store/useCloudStore';
 import { useUiStore } from '@/store/useUiStore';
 import { useXbarStore } from '@/store/useXbarStore';
 import './cleanEntryExperience.css';
+import './loginHero.css';
 import { canPresentThirdPartySignIn, canPresentPurchaseFlow } from '@/lib/nativePlatform';
 import { presentableOAuthProviders } from '@/lib/authProviders';
 import { readBrowserStorage, removeBrowserStorage, writeBrowserStorage } from '@/lib/browserStorage';
@@ -259,6 +260,8 @@ export default function Login() {
     );
     if (result.ok && result.outcome !== 'signed-in') {
       setConfirmationEmail(email.trim());
+      // The confirmation panel supplies this initial message; later resend results remain visible.
+      setFormMessage(null);
       // The credential does not belong on a screen that is now about an inbox.
       // It was accepted, the next step is in the customer's email, and leaving
       // it in a field means it is still sitting there behind whatever the
@@ -355,55 +358,27 @@ export default function Login() {
         aria-label={authMode === 'signin' ? 'Sign in to XBAR' : 'Create an XBAR account'}
       >
         <aside className="clean-login-visual motion-brand-in" aria-label="XBAR brand">
-          {/*
-            Intrinsic dimensions, not wished-for ones. These attributes exist to
-            reserve the right SHAPE before the bytes arrive: the horse is
-            1122x912 and was declared 980x331, the X 1004x959 and declared
-            512x512, so the box the browser held was the wrong aspect ratio and
-            the panel reflowed once each image decoded. CSS still sizes them.
-          */}
           <img
-            className="clean-login-visual__horse"
-            src="/brand/xbar-horse-outline-safe.png"
-            width="1122"
-            height="912"
-            decoding="async"
-            alt=""
-          />
-          <img
-            className="clean-login-visual__watermark"
-            src="/brand/xbar-x-watermark-main.png"
-            width="1004"
-            height="959"
-            decoding="async"
-            alt=""
+            className="clean-login-visual__art"
+            src="/brand/xbar-report-horse.png"
+            width="1672"
+            height="941"
+            fetchPriority="high"
+            alt="XBAR horse emblem"
           />
           <div className="clean-login-visual__copy">
-            <img
-              className="clean-login-visual__wordmark"
-              src="/brand/xbar-wordmark.png"
-              width="550"
-              height="170"
-              fetchPriority="high"
-              alt="XBAR"
-            />
-            <h2>XBAR Ranch Management</h2>
-            <p>Keep your horse records, documents, and sale packets organized in one place.</p>
+            <h2>
+              Your ranch.
+              <br />
+              In clear view.
+            </h2>
+            <p>Bring your horses, records, and next decisions together.</p>
           </div>
-          <dl className="clean-login-proof" aria-label="XBAR workspace">
-            <div>
-              <dt>Local-first</dt>
-              <dd>Start offline</dd>
-            </div>
-            <div>
-              <dt>Cloud sync</dt>
-              <dd>When configured</dd>
-            </div>
-            <div>
-              <dt>Workspace</dt>
-              <dd>Ready when you are</dd>
-            </div>
-          </dl>
+          <ul className="clean-login-capabilities" aria-label="Workspace tools">
+            <li>Horse records</li>
+            <li>Documents</li>
+            <li>Sale reports</li>
+          </ul>
         </aside>
 
         <section className="clean-auth-card clean-auth-card--login">
