@@ -171,3 +171,55 @@ test('commercial entitlements are server-authoritative and audited', () => {
   assert.match(commercialMigrationSource, /trg_shared_listings_audit/);
   assert.doesNotMatch(cloudWorkspaceSource, /from\('workspace_subscription_profiles'\)\.upsert/);
 });
+
+/*
+ * The deployed build must not be a local-mode build.
+ *
+ * `scripts/build-local.mjs` sets VITE_ALLOW_LOCAL_MODE=true and DELETES
+ * VITE_SUPABASE_URL and VITE_SUPABASE_ANON_KEY, which is exactly right for the
+ * offline test bundles and catastrophic for a deployment: the site stops being
+ * able to check anybody's password and opens a browser-local workspace to
+ * whoever arrives, while every real customer's account becomes unreachable
+ * from it.
+ *
+ * Vercel takes its build command from the project settings unless the repo
+ * overrides it here, so the override is a FILE, and files travel with merges.
+ * A branch carrying one is one careless merge away from turning production
+ * into a no-auth app -- which is why "remember not to merge that branch" is
+ * not a control and this is.
+ *
+ * Deliberately narrow: a `buildCommand` is not banned, only one that routes
+ * through the local-mode build. Same for emptying the Supabase variables at
+ * build time, which reaches the same end by the other road.
+ */
+test('the deployment config cannot ship a local-mode, sign-in-less build', () => {
+  const vercelConfig = JSON.parse(vercelConfigSource) as {
+    buildCommand?: string;
+    build?: { env?: Record<string, string> };
+    env?: Record<string, string>;
+  };
+
+  const buildCommand = vercelConfig.buildCommand ?? '';
+  assert.ok(
+    !/build:local|build-local/.test(buildCommand),
+    `vercel.json buildCommand must not produce a local-mode bundle, got: ${buildCommand}`,
+  );
+
+  for (const [scope, env] of [
+    ['env', vercelConfig.env],
+    ['build.env', vercelConfig.build?.env],
+  ] as const) {
+    if (!env) continue;
+    assert.notEqual(
+      env.VITE_ALLOW_LOCAL_MODE,
+      'true',
+      `vercel.json ${scope} must not force local mode on a deployment`,
+    );
+    for (const key of ['VITE_SUPABASE_URL', 'VITE_SUPABASE_ANON_KEY'] as const) {
+      assert.ok(
+        !(key in env) || env[key] !== '',
+        `vercel.json ${scope} must not blank ${key} — an empty value is what makes the deployed app unable to sign anyone in`,
+      );
+    }
+  }
+});
