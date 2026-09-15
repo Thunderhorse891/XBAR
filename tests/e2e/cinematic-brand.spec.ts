@@ -106,3 +106,28 @@ test('hero accents leave workspace navigation usable on mobile', async ({ page }
   await page.getByRole('tab', { name: 'Sale preparation' }).click();
   await expect(page.locator('#value-c')).toHaveText('Blocked');
 });
+
+test('five visual refinements remain readable across phone, tablet and desktop', async ({ page }) => {
+  await page.emulateMedia({ reducedMotion: 'reduce' });
+  await page.goto('/brand/cinematic-preview/index.html');
+  await expect(page.getByRole('link', { name: 'Back to top' })).toBeVisible();
+  await expect(page.locator('.nav')).not.toContainText('XBAR');
+  for (const width of [320, 390, 768, 1440]) {
+    await page.setViewportSize({ width, height: 900 });
+    await expect.poll(() => page.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(width);
+    const headline = await page.locator('.hero h1').evaluate((node) => ({
+      height: node.getBoundingClientRect().height,
+      lineHeight: parseFloat(getComputedStyle(node).lineHeight),
+    }));
+    expect(headline.height / headline.lineHeight).toBeLessThanOrEqual(2.1);
+    for (const label of await page.locator('.workflow-steps li > span:last-child').all()) {
+      expect(await label.evaluate((node) => parseFloat(getComputedStyle(node).fontSize))).toBeGreaterThanOrEqual(14);
+    }
+    const report = page.locator('.report-art');
+    expect(await report.evaluate((node) => node.scrollWidth <= node.clientWidth)).toBe(true);
+    await expect(report.getByText('$252,000 blocked', { exact: true })).toBeVisible();
+    await expect(report.getByText('Ready to close', { exact: true })).toBeVisible();
+    await expect(report.getByText('Illustrative report', { exact: true })).toBeVisible();
+    await page.screenshot({ path: test.info().outputPath(`five-refinements-${width}.png`), fullPage: true });
+  }
+});

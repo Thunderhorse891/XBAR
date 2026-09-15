@@ -35,3 +35,13 @@ under reduced motion. No new media downloads or libraries. Desktop/mobile
 screenshots reviewed; decorative layers do not capture clicks or enter the
 accessibility tree. This remains an illustrative brand preview, not a replacement
 for the working ranch dashboard.
+
+## September 15 - five visual refinements
+
+1. Raised the rendered horse brightness and eased the dark overlay; the original PNG is unchanged. Mobile fading follows the image bounds.
+2. Replaced the duplicate navigation wordmark with a quiet back-to-top link; the artwork carries the hero's XBAR identity.
+3. Reduced headline weight and size, keeping it to two lines on narrow phones.
+4. Replaced the shrinking SVG workflow labels with real text and a vertical mobile layout; tab-driven labels still update.
+5. Rebuilt the illustrative report preview with readable value columns, labeled comparison bars, a prominent zero-ready/blocked-value exception and a next action. It uses the same illustrative figures, not real workspace data.
+
+Reviewed phone and desktop screenshots; responsive coverage includes 320, 390, 768 and 1440 pixels. These changes affect the cinematic preview, not the actual report PDF engine or working app screens.
