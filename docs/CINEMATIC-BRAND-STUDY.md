@@ -25,7 +25,7 @@ The study remains separate from the production UI. The original 1672x941 horse a
 
 The actual sign-in screen also consumes the shared `motion-brand-in` entrance on its decorative brand panel. Form controls remain stationary. A rendered test verifies that reduced-motion settings disable the entrance.
 
-## September 15 � hero detail enhancement
+## September 15 — hero detail enhancement
 
 Kept the layout, copy, supplied horse PNG and navigation intact. Added a
 non-interactive decorative layer with thin silver-blue contours and three small

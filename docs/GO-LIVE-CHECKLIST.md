@@ -965,7 +965,7 @@ optional paid-integration work:
 3. **A stale autosave can recreate an explicitly removed membership.** The
    recreated row has no restored account binding, but it appears active and
    consumes a seat.
-4. **Invited-member save destination � current client fixed, live check pending.**
+4. **Invited-member save destination — current client fixed, live check pending.**
    As of September 14, persistence checks the caller's owned workspace, then
    active membership before bootstrapping a personal ranch. An invited Admin
    saves to the host workspace without creating a ranch or rewriting membership.
