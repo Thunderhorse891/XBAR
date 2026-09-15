@@ -67,13 +67,13 @@ test('every declared provider is parseable, so the list cannot drift', () => {
   assert.deepEqual(parseOAuthProviders(OAUTH_PROVIDERS.join(',')), [...OAUTH_PROVIDERS]);
 });
 
-test('a web build shows exactly the configured providers', () => {
+test('the temporary pause hides OAuth even when providers are configured', () => {
   const configured: OAuthProvider[] = ['google', 'apple'];
   withWindow({}, () => {
-    assert.deepEqual(presentableOAuthProviders(configured), ['google', 'apple']);
+    assert.deepEqual(presentableOAuthProviders(configured), []);
   });
   withWindow(undefined, () => {
-    assert.deepEqual(presentableOAuthProviders(configured), ['google', 'apple']);
+    assert.deepEqual(presentableOAuthProviders(configured), []);
   });
 });
 

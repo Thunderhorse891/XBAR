@@ -25,6 +25,9 @@
 
 import { canPresentThirdPartySignIn } from './nativePlatform.js';
 
+// Temporarily paused at the owner's request; deployment provider settings cannot re-enable the UI.
+export const OAUTH_SIGN_IN_PAUSED = true;
+
 export const OAUTH_PROVIDERS = ['google', 'facebook', 'apple'] as const;
 
 export type OAuthProvider = (typeof OAUTH_PROVIDERS)[number];
@@ -71,6 +74,6 @@ export function configuredOAuthProviders(): OAuthProvider[] {
  * tell a working gate from a broken one.
  */
 export function presentableOAuthProviders(configured: OAuthProvider[] = configuredOAuthProviders()): OAuthProvider[] {
-  if (!canPresentThirdPartySignIn()) return [];
+  if (OAUTH_SIGN_IN_PAUSED || !canPresentThirdPartySignIn()) return [];
   return configured;
 }
