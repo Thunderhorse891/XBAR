@@ -424,6 +424,32 @@ export default function Login() {
           </div>
 
           {/*
+            A deployment whose build received no VITE_SUPABASE_URL /
+            VITE_SUPABASE_ANON_KEY cannot check anybody's password, and until
+            now said so only in a toast AFTER the form was submitted. Before
+            that, the screen was an ordinary sign-in form: email, password, a
+            Sign In button. Someone with a real account typed their real
+            password into it, pressed the button, and landed in an empty
+            browser-local workspace -- which reads exactly like "my login is
+            broken" rather than like "this deployment has no cloud auth".
+
+            A build-time misconfiguration is not something the customer can act
+            on, but it is something they are entitled to see before they hand
+            over a password. Stated up front, it also turns diagnosis into
+            reading the screen instead of reading the bundle.
+          */}
+          {!supabaseReady && (
+            <div className="clean-auth-callout" role="status">
+              <h2>Cloud sign-in is not configured here</h2>
+              <p>
+                This build has no connection to the XBAR account service, so no password typed here can be checked and
+                no existing account can be opened. Continuing starts a workspace stored only in this browser. If you
+                have an XBAR account, it is not reachable from this address.
+              </p>
+            </div>
+          )}
+
+          {/*
             One screen, one state. Leaving the signup form standing under this
             callout meant the screen told the customer to go and open an email
             while still offering the button that produced it -- with their

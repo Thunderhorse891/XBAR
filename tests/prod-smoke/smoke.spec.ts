@@ -105,6 +105,28 @@ test('indexing architecture: sitemap, robots, and app noindex hold', async ({ re
   }
 });
 
+/*
+ * A deployment built without VITE_SUPABASE_URL / VITE_SUPABASE_ANON_KEY cannot
+ * check anybody's password. That used to be announced only by a toast AFTER
+ * the form was submitted, so the screen beforehand was an ordinary sign-in
+ * form and someone with a real account typed a real password into it and
+ * landed in an empty local workspace. This is the prod-smoke bundle, which is
+ * exactly such a build, so the notice is asserted where it actually renders.
+ */
+test('a build with no cloud auth says so before a password is typed', async ({ page }) => {
+  const c = collect(page);
+  await page.goto('/login', { waitUntil: 'load' });
+  await expect(page.getByRole('heading', { name: 'Cloud sign-in is not configured here' })).toBeVisible({
+    timeout: 15_000,
+  });
+  // Visible with the form still standing, not instead of it, and before any
+  // submit: the password field is what the notice is warning about.
+  await expect(page.getByLabel('Password', { exact: false }).first()).toBeVisible();
+  // And the paid-auth affordances stay hidden, since neither can work here.
+  await expect(page.getByRole('button', { name: 'Forgot password?' })).toHaveCount(0);
+  assertClean(c);
+});
+
 test('local workspace setup is reachable without cloud sign-in', async ({ page }) => {
   const c = collect(page);
   await page.goto('/login', { waitUntil: 'load' });
