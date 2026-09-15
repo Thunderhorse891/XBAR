@@ -11,7 +11,7 @@ import { registerOfflineRuntime, resetOfflineRuntime, urlCarriesAuthCallback } f
  * taking an update. Only the rig can tell those two apart, so it models them
  * separately rather than firing one generic event.
  */
-function installBrowser(options: { controller?: boolean; href?: string } = {}) {
+function installBrowser(options: { controller?: boolean; href?: string; now?: number } = {}) {
   const listeners: Array<() => void> = [];
   const reloads: string[] = [];
   const location = {
@@ -27,10 +27,16 @@ function installBrowser(options: { controller?: boolean; href?: string } = {}) {
   };
   Object.defineProperty(globalThis, 'window', { configurable: true, value: { location } });
   Object.defineProperty(globalThis, 'navigator', { configurable: true, value: { serviceWorker, onLine: true } });
-  resetOfflineRuntime();
+  // A clock the test drives, so an exemption measured in minutes can be
+  // exercised without waiting for them.
+  let nowMs = options.now ?? 0;
+  resetOfflineRuntime({ now: () => nowMs });
   return {
     reloads,
     location,
+    advance: (ms: number) => {
+      nowMs += ms;
+    },
     // What clients.claim() does to an open page: a worker becomes the
     // controller, and only then is the event dispatched.
     claim: () => {
@@ -179,4 +185,84 @@ test('a rejected callback is recognised in the shape it actually has at registra
   assert.equal(urlCarriesAuthCallback('https://xbar.test/app/horses?sort=name'), false);
   assert.equal(urlCarriesAuthCallback('https://xbar.test/app/#/login'), false);
   assert.equal(urlCarriesAuthCallback('https://xbar.test/app/#/horses?sort=name'), false);
+});
+
+/*
+ * Both exemptions below were unbounded: set once, true for the document's
+ * lifetime. Each one correctly skipped the reload it was written for, and then
+ * skipped every genuine deployment takeover afterwards -- leaving the tab on
+ * the runtime it booted with while the new deployment removed the chunks its
+ * lazy routes were still going to request.
+ */
+test('a tab that started uncontrolled still reloads for a LATER deployment', async () => {
+  const browser = installBrowser({ controller: false });
+  try {
+    assert.equal(await registerOfflineRuntime(), 'registered');
+    browser.claim();
+    assert.deepEqual(browser.reloads, [], 'precondition: the first claim is not a reason to reload');
+    // A new deployment activates and claims the page again, minutes later.
+    browser.advance(10 * 60_000);
+    browser.claim();
+    assert.deepEqual(
+      browser.reloads,
+      ['https://xbar.test/app/settings'],
+      'the page is controlled now, so a takeover after it is a genuinely newer runtime',
+    );
+  } finally {
+    uninstallBrowser();
+  }
+});
+
+test('a tab that began on an auth callback stays exempt while the credential could still be in flight', async () => {
+  const browser = installBrowser({
+    controller: true,
+    href: 'https://xbar.test/app/login#access_token=abc&refresh_token=def',
+  });
+  try {
+    assert.equal(await registerOfflineRuntime(), 'registered');
+    // auth-js has cleared the fragment but may not have stored the session yet.
+    browser.location.href = 'https://xbar.test/app/login';
+    browser.advance(5_000);
+    browser.claim();
+    assert.deepEqual(browser.reloads, [], 'a reload here destroys a one-time credential with nothing left to retry');
+  } finally {
+    uninstallBrowser();
+  }
+});
+
+test('that exemption ends, so a later deployment is not swallowed by it', async () => {
+  const browser = installBrowser({
+    controller: true,
+    href: 'https://xbar.test/app/login#access_token=abc&refresh_token=def',
+  });
+  try {
+    assert.equal(await registerOfflineRuntime(), 'registered');
+    browser.location.href = 'https://xbar.test/app/horses';
+    browser.advance(10 * 60_000);
+    browser.claim();
+    assert.deepEqual(
+      browser.reloads,
+      ['https://xbar.test/app/horses'],
+      'ten minutes later there is no credential in flight, only a stale runtime',
+    );
+  } finally {
+    uninstallBrowser();
+  }
+});
+
+test('a URL still carrying the callback is exempt however long it has been', async () => {
+  const href = 'https://xbar.test/app/login#access_token=abc&refresh_token=def';
+  const browser = installBrowser({ controller: true, href });
+  try {
+    assert.equal(await registerOfflineRuntime(), 'registered');
+    browser.advance(10 * 60_000);
+    browser.claim();
+    assert.deepEqual(
+      browser.reloads,
+      [],
+      'the credential is in the URL right now, so elapsed time is not what decides this',
+    );
+  } finally {
+    uninstallBrowser();
+  }
 });

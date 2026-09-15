@@ -4,6 +4,29 @@ const SERVICE_WORKER_URL = '/xbar-service-worker.js?v=20260630-vercel-freshness'
 let refreshQueued = false;
 
 /*
+ * How long a page that began on an auth callback stays exempt from the
+ * takeover reload.
+ *
+ * The exemption has to outlive the URL -- clearing the fragment is not evidence
+ * that auth-js has finished persisting the session, which is why the flag
+ * exists at all. But it was never given an end, so a tab that once opened a
+ * recovery or confirmation link stayed exempt for the rest of its life: a
+ * deployment shipped an hour later claimed the page, this guard skipped the
+ * reload, and the tab kept running the old bundle until its next lazy import
+ * asked for a chunk that deployment had removed.
+ *
+ * The true end of the risky window is the session reaching storage, and nothing
+ * here can observe that, so this is a bound rather than a measurement. Sixty
+ * seconds is roughly an order of magnitude more than the sequence needs -- one
+ * network call, a fragment clear, a storage write -- and a deployment landing
+ * inside that window simply misses one reload, which the next navigation
+ * corrects.
+ */
+const AUTH_CALLBACK_EXEMPTION_MS = 60_000;
+
+let clock: () => number = () => Date.now();
+
+/*
  * The parameters Supabase puts in a redirect it sends a customer back on.
  *
  * The implicit flow returns them in the FRAGMENT and PKCE returns `code` in the
@@ -69,8 +92,9 @@ export function urlCarriesAuthCallback(href: string): boolean {
 }
 
 // Module state, so a test can put the latch back the way it found it.
-export function resetOfflineRuntime() {
+export function resetOfflineRuntime(options?: { now?: () => number }) {
   refreshQueued = false;
+  clock = options?.now ?? (() => Date.now());
 }
 
 export async function registerOfflineRuntime(): Promise<OfflineRuntimeStatus> {
@@ -98,12 +122,27 @@ export async function registerOfflineRuntime(): Promise<OfflineRuntimeStatus> {
      * `_getSessionFromURL` -- the single call that turns the token in a
      * recovery or magic link into a session.
      */
-    const hadController = Boolean(navigator.serviceWorker.controller);
+    let hadController = Boolean(navigator.serviceWorker.controller);
     const beganOnAuthCallback = urlCarriesAuthCallback(window.location.href);
+    const authCallbackAt = beganOnAuthCallback ? clock() : 0;
 
     navigator.serviceWorker.addEventListener('controllerchange', () => {
       if (refreshQueued) return;
-      if (!hadController) return;
+      /*
+       * The FIRST claim on an uncontrolled page, and only the first.
+       *
+       * A page that loaded without a controller cannot be served anything
+       * staler than what it already has, so that claim is not a reason to
+       * reload. Left false for the document's lifetime, though, this also
+       * swallowed every genuine takeover afterwards: the tab stayed on the
+       * runtime it booted with while a new deployment removed the chunks its
+       * lazy routes were still going to ask for. The page is controlled now,
+       * so say so.
+       */
+      if (!hadController) {
+        hadController = true;
+        return;
+      }
       /*
        * Never reload a document that is still holding a one-time credential.
        *
@@ -120,7 +159,8 @@ export async function registerOfflineRuntime(): Promise<OfflineRuntimeStatus> {
        * Skipping the refresh costs nothing in comparison. The updated worker
        * still controls the next navigation.
        */
-      if (beganOnAuthCallback || urlCarriesAuthCallback(window.location.href)) return;
+      if (urlCarriesAuthCallback(window.location.href)) return;
+      if (beganOnAuthCallback && clock() - authCallbackAt < AUTH_CALLBACK_EXEMPTION_MS) return;
       refreshQueued = true;
       window.location.reload();
     });
