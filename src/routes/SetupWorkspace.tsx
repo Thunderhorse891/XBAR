@@ -2,6 +2,7 @@ import { type FormEvent, useMemo, useState } from 'react';
 import { Navigate, useLocation, useNavigate, useSearchParams } from 'react-router-dom';
 import { XbarMark } from '@/components/BrandMark';
 import { billingPathForTier } from '@/lib/billingRoutes';
+import { applyWorkspaceProfileDefaults } from '@/lib/workspaceSetupDefaults';
 import { saveWorkspaceBackupToCloud } from '@/lib/cloudWorkspace';
 import { isStaticPreviewHost, isSupabaseConfigured } from '@/lib/platformConfig';
 import { useCloudStore } from '@/store/useCloudStore';
@@ -123,7 +124,7 @@ export default function SetupWorkspace() {
     setSaving(true);
     setCloudSetupBlocked(false);
 
-    const result = initializeWorkspace(form);
+    const result = initializeWorkspace(applyWorkspaceProfileDefaults(form));
     pushToast({
       title: result.ok ? 'Ranch created' : 'Setup blocked',
       message: result.message,
@@ -155,16 +156,7 @@ export default function SetupWorkspace() {
     if (signingOut || saving) return;
     const businessName = form.businessName.trim() || 'My Ranch LLC';
     const ranchName = form.ranchName.trim() || 'Main Ranch';
-    const result = initializeWorkspace({
-      businessName,
-      ranchName,
-      ranchManagerName: form.ranchManagerName.trim() || 'Operations Lead',
-      operationsEmail: form.operationsEmail.trim() || 'owner@ranch.local',
-      defaultOwnerName: form.defaultOwnerName.trim() || ranchName,
-      defaultOwnerEntity: form.defaultOwnerEntity.trim() || businessName,
-      defaultBarn: form.defaultBarn.trim() || 'Barn 1',
-      defaultPasture: form.defaultPasture.trim() || 'Pasture 1',
-    });
+    const result = initializeWorkspace(applyWorkspaceProfileDefaults({ ...form, businessName, ranchName }));
 
     pushToast({
       title: result.ok ? 'Ranch ready' : 'Setup blocked',
