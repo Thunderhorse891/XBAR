@@ -24,3 +24,14 @@ Brand PNG paths now respect the deployment base (including `/XBAR/`). Successful
 The study remains separate from the production UI. The original 1672x941 horse artwork is animated in the browser without redrawing the logo. Reduced-motion and data-saving visitors see the static artwork until they request playback. Legal status and unrelated access/security launch gates are unchanged.
 
 The actual sign-in screen also consumes the shared `motion-brand-in` entrance on its decorative brand panel. Form controls remain stationary. A rendered test verifies that reduced-motion settings disable the entrance.
+
+## September 15 � hero detail enhancement
+
+Kept the layout, copy, supplied horse PNG and navigation intact. Added a
+non-interactive decorative layer with thin silver-blue contours and three small
+light flecks (two on mobile), plus a soft light field and report/CTA rim lighting.
+Flecks drift once, follow pause and offscreen/hidden state, and remain static
+under reduced motion. No new media downloads or libraries. Desktop/mobile
+screenshots reviewed; decorative layers do not capture clicks or enter the
+accessibility tree. This remains an illustrative brand preview, not a replacement
+for the working ranch dashboard.

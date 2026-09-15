@@ -11,6 +11,7 @@ let paused = pref.matches || limitedNetwork,
 
 function sync() {
   document.body.classList.toggle('paused', paused);
+  document.body.classList.toggle('motion-suspended', !visible || document.hidden);
   toggle.textContent = completed ? 'Replay motion' : paused ? 'Play motion' : 'Pause motion';
   toggle.setAttribute('aria-pressed', String(paused));
   if (paused || !visible || document.hidden) {

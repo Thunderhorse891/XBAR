@@ -584,3 +584,126 @@ a:focus-visible {
   animation-duration: var(--motion-cinematic);
   animation-timing-function: var(--ease-cinematic);
 }
+
+/* Small light details echo the silver-blue edge of the original horse artwork.
+   They occupy their own decorative layer; content and hit targets stay intact. */
+.hero-atmosphere {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  overflow: hidden;
+  background: radial-gradient(ellipse at 82% 32%, #69baff0b, transparent 42%);
+}
+.contour-light {
+  position: absolute;
+  right: -3%;
+  top: 9%;
+  width: 70%;
+  height: 76%;
+  opacity: 0.3;
+  mask-image: linear-gradient(0deg, transparent 5%, #000 35%, #000 68%, transparent 96%);
+}
+.contour-light path {
+  stroke: #8cc7ed;
+  stroke-width: 0.7;
+  vector-effect: non-scaling-stroke;
+}
+.contour-light path:nth-child(2) {
+  opacity: 0.35;
+}
+.contour-light path:nth-child(3) {
+  opacity: 0.5;
+}
+.light-fleck {
+  position: absolute;
+  width: 3px;
+  height: 3px;
+  border-radius: 50%;
+  background: #cce8fa;
+  box-shadow: 0 0 10px 2px #69baff44;
+  opacity: 0.5;
+  animation: fleck-drift 4.2s cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+.light-fleck--one {
+  left: 59%;
+  top: 21%;
+}
+.light-fleck--two {
+  left: 89%;
+  top: 46%;
+  width: 2px;
+  height: 2px;
+}
+.light-fleck--three {
+  left: 72%;
+  top: 66%;
+  width: 2px;
+  height: 2px;
+}
+@keyframes fleck-drift {
+  from {
+    opacity: 0;
+    transform: translate(-9px, 16px);
+  }
+  35% {
+    opacity: 0.65;
+  }
+  to {
+    opacity: 0.35;
+    transform: translate(0, 0);
+  }
+}
+.primary {
+  box-shadow:
+    inset 0 1px 0 #fff9,
+    0 6px 24px #0003;
+  transition: box-shadow 0.25s ease;
+}
+.primary:hover,
+.primary:focus-visible {
+  box-shadow:
+    inset 0 1px 0 #fff,
+    0 0 0 1px #69baff66,
+    0 8px 32px #69baff26;
+}
+.report-art {
+  border-top: 1px solid #fff;
+  border-right: 1px solid #b9cddd;
+  box-shadow:
+    1px 0 0 #789cb866,
+    24px 30px 0 #1d344633,
+    0 24px 90px #0008;
+}
+.paused .light-fleck,
+.motion-suspended .light-fleck {
+  animation-play-state: paused;
+}
+@media (max-width: 760px) {
+  .contour-light {
+    top: 8%;
+    right: -16%;
+    width: 100%;
+    height: 44%;
+    opacity: 0.2;
+  }
+  .light-fleck--one {
+    left: 21%;
+    top: 19%;
+  }
+  .light-fleck--two {
+    left: 86%;
+    top: 30%;
+  }
+  .light-fleck--three {
+    display: none;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .light-fleck {
+    animation: none;
+    opacity: 0.35;
+  }
+  .primary {
+    transition: none;
+  }
+}

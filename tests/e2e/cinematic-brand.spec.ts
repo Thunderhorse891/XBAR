@@ -17,6 +17,8 @@ test('cinematic brand concept uses original artwork and works on desktop and mob
   await expect(page.locator('#film')).toHaveAttribute('src', '../xbar-report-horse.png');
   await expect(page.getByText(/Meta AI/i)).toHaveCount(0);
   await expect(page.locator('video')).toHaveCount(0);
+  await expect(page.locator('.hero-atmosphere')).toHaveAttribute('aria-hidden', 'true');
+  await expect(page.locator('.hero-atmosphere')).toHaveCSS('pointer-events', 'none');
   await page.getByRole('tab', { name: 'Sale preparation' }).click();
   await expect(page.locator('#value-c')).toHaveText('Blocked');
   await page.getByRole('tab', { name: 'Sale preparation' }).press('ArrowRight');
@@ -92,4 +94,15 @@ test('sign-in brand entrance is shared with the app and respects reduced motion'
   await page.emulateMedia({ reducedMotion: 'reduce' });
   await expect.poll(() => brand.evaluate((node) => getComputedStyle(node).animationName)).toBe('none');
   await page.screenshot({ path: test.info().outputPath('sign-in-brand.png'), fullPage: true });
+});
+
+test('hero accents leave workspace navigation usable on mobile', async ({ page }) => {
+  await page.setViewportSize({ width: 390, height: 844 });
+  await page.emulateMedia({ reducedMotion: 'reduce' });
+  await page.goto('/brand/cinematic-preview/index.html');
+  await page.getByRole('link', { name: 'Explore the workspace' }).click();
+  await expect(page).toHaveURL(/#workspace$/);
+  await expect(page.locator('#workspace')).toBeInViewport();
+  await page.getByRole('tab', { name: 'Sale preparation' }).click();
+  await expect(page.locator('#value-c')).toHaveText('Blocked');
 });
