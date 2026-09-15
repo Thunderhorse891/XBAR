@@ -120,15 +120,22 @@ begin
     then raise exception 'Member cannot read the document row'; end if;
   if (select count(*) from storage.objects where bucket_id = 'horse-documents' and name = shared_object) <> 1
     then raise exception 'Member can read the document row but not the file'; end if;
-  -- Reading is all they get: renaming an object is a manage operation. The row
-  -- is found (they may read it) and then refused on the way back in, so this
-  -- denial arrives as an error rather than as an empty update.
+  -- Reading is all they get: renaming an object is a manage operation.
+  --
+  -- Asserted as an OUTCOME rather than as a particular refusal. This used to
+  -- require the denial to arrive as `insufficient_privilege`, which encoded one
+  -- mechanism: the row was visible to USING, so it was found and then refused
+  -- by WITH CHECK on the way back in. Once USING required manage as well, the
+  -- row stopped being visible to the update at all, the denial became an empty
+  -- update, and an assertion about the error shape failed on a policy that had
+  -- just become stricter. What matters is that the object did not move.
   begin
     update storage.objects set name = workspace::text || '/documents/fixture/renamed.pdf'
     where bucket_id = 'horse-documents' and name = shared_object;
-    raise exception 'Read-only member rewrote an object';
   exception when insufficient_privilege then null;
   end;
+  if not exists (select 1 from storage.objects where bucket_id = 'horse-documents' and name = shared_object)
+    then raise exception 'Read-only member rewrote an object'; end if;
   -- A full-bucket listing crosses the badly named object without throwing, and
   -- shows nothing outside this member's workspace.
   if exists (
@@ -233,6 +240,50 @@ begin
   get diagnostics affected = row_count;
   if affected <> 0 then raise exception 'The workspace owner deleted a stored file through the client'; end if;
   reset role;
+
+  -- ------------------------------------------- moving a file between ranches
+  -- An UPDATE can rename an object anywhere in the bucket, so it is a MOVE
+  -- primitive, and a move has two ends. The WITH CHECK always required manage
+  -- on the destination; the USING clause once required only ACCESS on the
+  -- source, and guarding one end of a move is guarding neither.
+  --
+  -- The caller here is the shape that exploited it: an ordinary member of this
+  -- workspace who also manages another one. Reading a ranch's files is not
+  -- authority to take them somewhere else.
+  insert into public.workspace_memberships (workspace_id, user_id, email, role, status)
+  values (other_workspace, reader_id, reader_id::text || '@example.invalid', 'Admin', 'active');
+
+  perform set_config('request.jwt.claim.sub', reader_id::text, true);
+  set local role authenticated;
+  update storage.objects set name = other_workspace::text || '/documents/fixture/stolen.pdf'
+  where bucket_id = 'horse-documents' and name = shared_object;
+  get diagnostics affected = row_count;
+  if affected <> 0 then
+    raise exception 'A reader of this ranch moved its file into a ranch they manage';
+  end if;
+  reset role;
+
+  -- The same caller may still READ what they are a member of: this tightened
+  -- the move, not the membership.
+  perform set_config('request.jwt.claim.sub', reader_id::text, true);
+  set local role authenticated;
+  if not exists (select 1 from storage.objects where bucket_id = 'horse-documents' and name = shared_object)
+    then raise exception 'Tightening the move also removed a member''s read access'; end if;
+  reset role;
+
+  -- And a manager of THIS workspace can still rename within it, which is the
+  -- legitimate use the policy exists to permit.
+  perform set_config('request.jwt.claim.sub', owner_id::text, true);
+  set local role authenticated;
+  update storage.objects set name = workspace::text || '/documents/fixture/renamed.pdf'
+  where bucket_id = 'horse-documents' and name = shared_object;
+  get diagnostics affected = row_count;
+  if affected <> 1 then raise exception 'A workspace owner can no longer rename their own file'; end if;
+  update storage.objects set name = shared_object
+  where bucket_id = 'horse-documents' and name = workspace::text || '/documents/fixture/renamed.pdf';
+  reset role;
+
+  delete from public.workspace_memberships where workspace_id = other_workspace and user_id = reader_id;
 
   -- --------------------------------------------------- leaving the ranch
   -- Access ends when membership does, both ways a membership can end: the row

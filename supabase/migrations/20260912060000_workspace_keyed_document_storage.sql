@@ -106,13 +106,27 @@ on storage.objects
 for update
 to authenticated
 using (
+  -- MANAGE on the source, not merely access.
+  --
+  -- Reading a workspace's files is not authority to alter or move them, and an
+  -- UPDATE here can rename an object across the whole bucket. With access as
+  -- the source test, a plain member of ranch A who also manages ranch B passed
+  -- both halves of this policy -- access to A, manage over B -- and moved A's
+  -- file out of A and into B. Proved on PostgreSQL 16 under real RLS, not
+  -- inferred: as a 'Ranch Manager' of A and owner of B, one UPDATE renamed
+  -- `A/documents/coggins.pdf` to `B/documents/coggins.pdf` and was accepted.
+  --
+  -- The WITH CHECK below always required manage on the destination and says so.
+  -- Guarding one end of a move is guarding neither.
   bucket_id = 'horse-documents'
   and (
     case
       when split_part(name, '/', 1) ~ '^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$'
-        then public.xbar_has_workspace_access(split_part(name, '/', 1)::uuid)
+        then public.xbar_can_manage_workspace(split_part(name, '/', 1)::uuid)
       else false
     end
+    -- A legacy uploader-keyed object is the caller's own file; moving it into a
+    -- workspace they manage is the migration this policy exists to allow.
     or auth.uid()::text = split_part(name, '/', 1)
   )
 )
