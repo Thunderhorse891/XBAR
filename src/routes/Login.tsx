@@ -1,4 +1,4 @@
-import { type FormEvent, useEffect, useId, useMemo, useState } from 'react';
+import { type FormEvent, useEffect, useId, useMemo, useRef, useState } from 'react';
 import { useLocation, useNavigate, useSearchParams } from 'react-router-dom';
 import { XbarMark } from '@/components/BrandMark';
 import { billingPath, billingPathForTier } from '@/lib/billingRoutes';
@@ -41,6 +41,13 @@ export default function Login() {
   // Set only once a signup returns without a session, so the screen can stop
   // being a form and start being instructions about an inbox.
   const [confirmationEmail, setConfirmationEmail] = useState('');
+  const entryPanel = useRef<HTMLElement>(null);
+  const entryHeading = useRef<HTMLHeadingElement>(null);
+  useEffect(() => {
+    if (!confirmationEmail) return;
+    entryHeading.current?.focus({ preventScroll: true });
+    entryPanel.current?.scrollIntoView({ block: 'start' });
+  }, [confirmationEmail]);
   const authMode: AuthMode = params.get('mode') === 'signup' ? 'signup' : 'signin';
   const selectedPlan = params.get('plan') ?? '';
   const workspaceSetupPath = useMemo(() => {
@@ -149,9 +156,9 @@ export default function Login() {
    * code requested, a provider redirect started.
    */
   type ReportKind = 'session' | 'notice';
-  const report = (title: string, result: { ok: boolean; message: string }, kind: ReportKind) => {
+  const report = (title: string, result: { ok: boolean; message: string }, kind: ReportKind, showToast = true) => {
     const tone = result.ok ? 'success' : 'error';
-    pushToast({ title, message: result.message, tone });
+    if (showToast) pushToast({ title, message: result.message, tone });
     setFormMessage({ tone, text: result.message });
     /*
      * Only an attempt that actually PRODUCED A SESSION ends the hold.
@@ -257,6 +264,8 @@ export default function Login() {
       result,
       // Only the signed-in outcome created a session; the others are an inbox.
       result.outcome === 'signed-in' ? 'session' : 'notice',
+      // The dedicated confirmation screen is the announcement; a toast would cover it.
+      !(result.ok && result.outcome !== 'signed-in'),
     );
     if (result.ok && result.outcome !== 'signed-in') {
       setConfirmationEmail(email.trim());
@@ -354,7 +363,8 @@ export default function Login() {
   return (
     <main className="clean-entry-shell clean-entry-shell--brand-auth">
       <section
-        className="clean-login-layout"
+        ref={entryPanel}
+        className={`clean-login-layout${confirmationEmail ? ' clean-login-layout--confirmation' : ''}`}
         aria-label={authMode === 'signin' ? 'Sign in to XBAR' : 'Create an XBAR account'}
       >
         <aside className="clean-login-visual motion-brand-in" aria-label="XBAR brand">
@@ -394,8 +404,10 @@ export default function Login() {
 
           <div className="clean-auth-card__header">
             <p>{label}</p>
-            <h1>{title}</h1>
-            <span>{description}</span>
+            <h1 ref={entryHeading} tabIndex={-1}>
+              {confirmationEmail ? 'Check your email' : title}
+            </h1>
+            <span>{confirmationEmail ? 'New accounts need email confirmation.' : description}</span>
           </div>
 
           {/*
@@ -436,22 +448,36 @@ export default function Login() {
             once and rate-limited by Supabase as a resend rather than a signup.
           */}
           {confirmationEmail ? (
-            <div className="clean-auth-callout" role="status">
-              <h2>Check {confirmationEmail}</h2>
-              <p>
-                If that address is new to XBAR, a confirmation link is on its way and you must open it before you can
-                sign in. If it already has an account, nothing was sent -- sign in instead, or use "Forgot password?".
-                Either way, check spam before asking for another.
-              </p>
-              <div className="clean-auth-callout__actions">
-                <button type="button" disabled={busy !== ''} onClick={() => void resendConfirmation()}>
-                  {busy === 'resend' ? 'Sending...' : 'Send it again'}
-                </button>
+            <div className="clean-auth-callout clean-confirmation" role="status">
+              <div className="clean-confirmation__address">
+                <span>Email address</span>
+                <strong>{confirmationEmail}</strong>
                 <button type="button" disabled={busy !== ''} onClick={() => setMode('signup')}>
                   Use a different address
                 </button>
-                <button type="button" disabled={busy !== ''} onClick={() => setMode('signin')}>
+              </div>
+              <p>
+                <strong>New to XBAR?</strong> Open the confirmation link in your email to continue. Check your spam
+                folder if it hasn’t arrived.
+              </p>
+              <div className="clean-confirmation__existing">
+                <p>
+                  <strong>Already have an account?</strong> No new confirmation email is sent. Sign in with your
+                  existing details, or choose “Forgot password?” on the sign-in page.
+                </p>
+                <button
+                  className="clean-primary-button"
+                  type="button"
+                  disabled={busy !== ''}
+                  onClick={() => setMode('signin')}
+                >
                   Back to sign in
+                </button>
+              </div>
+              <div className="clean-confirmation__resend">
+                <span>Still waiting for a new-account email?</span>
+                <button type="button" disabled={busy !== ''} onClick={() => void resendConfirmation()}>
+                  {busy === 'resend' ? 'Sending...' : 'Send it again'}
                 </button>
               </div>
               {messagePanel}
@@ -572,7 +598,7 @@ export default function Login() {
           )}
 
           <div className="clean-auth-footer">
-            {supabaseReady ? (
+            {confirmationEmail ? null : supabaseReady ? (
               <div>
                 <span>{authMode === 'signin' ? "Don't have an account?" : 'Already have an account?'}</span>
                 <button type="button" onClick={() => setMode(authMode === 'signin' ? 'signup' : 'signin')}>
@@ -587,7 +613,7 @@ export default function Login() {
                 </button>
               </div>
             )}
-            {canPresentPurchaseFlow() && <a href="/pricing">View plans</a>}
+            {!confirmationEmail && canPresentPurchaseFlow() && <a href="/pricing">View plans</a>}
             <span>© 2026 XBAR</span>
           </div>
         </section>

@@ -193,3 +193,89 @@
     padding: 28px 22px;
   }
 }
+/* Confirmation is a focused second step, not the signup hero repeated. */
+.clean-login-layout--confirmation {
+  max-width: 580px;
+  min-height: 0;
+  grid-template-columns: minmax(0, 1fr);
+}
+.clean-login-layout--confirmation .clean-login-visual {
+  display: none;
+}
+.clean-login-layout--confirmation .clean-auth-card--login {
+  padding: clamp(24px, 5vw, 44px);
+  gap: 24px;
+}
+.clean-auth-card--login .clean-confirmation {
+  padding: 0;
+  border: 0;
+  background: transparent;
+  gap: 24px;
+}
+.clean-confirmation__address {
+  display: grid;
+  gap: 8px;
+  padding: 18px 20px;
+  border: 1px solid #d5dfe8;
+  border-left: 3px solid #168be0;
+  border-radius: 8px;
+  background: #f5f8fb;
+}
+.clean-confirmation__address > span,
+.clean-confirmation__resend > span {
+  color: #596168;
+  font-size: 13px;
+}
+.clean-confirmation__address > strong {
+  font-size: 18px;
+  font-weight: 550;
+  line-height: 1.45;
+  overflow-wrap: anywhere;
+}
+.clean-confirmation button:not(.clean-primary-button) {
+  justify-self: start;
+  padding: 8px 0;
+  min-height: 44px;
+  border: 0;
+  background: transparent;
+  color: #075e9b;
+  font: inherit;
+  font-size: 14px;
+  font-weight: 600;
+  text-align: left;
+  cursor: pointer;
+}
+.clean-confirmation button:focus-visible {
+  outline: 3px solid #168be0;
+  outline-offset: 3px;
+}
+.clean-confirmation button:disabled {
+  opacity: 0.55;
+  cursor: wait;
+}
+.clean-confirmation p strong {
+  color: #172331;
+  font-weight: 600;
+}
+.clean-confirmation__existing {
+  display: grid;
+  gap: 16px;
+}
+.clean-confirmation__existing .clean-primary-button {
+  width: 100%;
+  text-transform: none;
+  letter-spacing: 0;
+}
+.clean-confirmation__resend {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 0 12px;
+  border-top: 1px solid #e0e6ec;
+  padding-top: 12px;
+}
+.clean-login-layout--confirmation .clean-auth-footer {
+  border: 0;
+  padding-top: 0;
+}

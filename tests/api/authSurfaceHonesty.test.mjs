@@ -691,6 +691,6 @@ test('the signup confirmation surface never asserts an email that may not exist'
     assert.equal(login.includes(claim), false, `the signup surface asserts a confirmation exists: ${claim}`);
   }
   // It must still cover BOTH branches rather than going silent.
-  assert.match(login, /If that address is new to XBAR/, 'the new-account branch must be named');
-  assert.match(login, /nothing was sent/, 'the existing-account branch must be named');
+  assert.match(login, /New to XBAR\?/, 'the new-account branch must be named');
+  assert.match(login, /No new confirmation email is sent\./, 'the existing-account branch must be named');
 });

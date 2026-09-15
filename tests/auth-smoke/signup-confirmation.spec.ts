@@ -35,7 +35,17 @@ test('after signup the screen waits on the inbox instead of offering signup agai
   await page.getByLabel('Password', { exact: true }).fill('a-brand-new-password');
   await page.getByRole('button', { name: 'Create Account' }).click();
 
-  await expect(page.getByRole('heading', { name: `Check ${RECOVERY_EMAIL}` })).toBeVisible();
+  await expect(page.getByRole('heading', { name: 'Check your email' })).toBeVisible();
+  await expect(page.locator('.clean-confirmation__address strong')).toHaveText(RECOVERY_EMAIL);
+  await expect(page.getByRole('heading', { name: 'Create Account', exact: true })).toHaveCount(0);
+  await expect(page.locator('.clean-login-visual')).toBeHidden();
+  await expect(page.getByRole('heading', { name: 'Check your email' })).toBeFocused();
+  for (const width of [390, 1440]) {
+    await page.setViewportSize({ width, height: 900 });
+    await expect(page.getByRole('heading', { name: 'Check your email' })).toBeInViewport();
+    await expect(page.getByRole('button', { name: 'Back to sign in' })).toBeInViewport();
+    await page.screenshot({ path: `test-results/confirmation-${width}.png`, fullPage: true });
+  }
 
   /*
    * The form has to be GONE, not merely pushed below the fold. Telling someone
@@ -109,7 +119,7 @@ test('the confirmation state hands back a way to correct the address', async ({ 
   await page.getByLabel('Email or User ID').fill('typo@xbar.test');
   await page.getByLabel('Password', { exact: true }).fill('a-brand-new-password');
   await page.getByRole('button', { name: 'Create Account' }).click();
-  await expect(page.getByRole('heading', { name: 'Check typo@xbar.test' })).toBeVisible({ timeout: 30_000 });
+  await expect(page.getByRole('heading', { name: 'Check your email' })).toBeVisible({ timeout: 30_000 });
 
   /*
    * A mistyped address is the likeliest reason the email never arrives, and
@@ -138,7 +148,7 @@ test('the confirmation state hands back a way to correct the address', async ({ 
   // And the other way out still works.
   await page.getByLabel('Password', { exact: true }).fill('a-brand-new-password');
   await page.getByRole('button', { name: 'Create Account' }).click();
-  await expect(page.getByRole('heading', { name: 'Check typo@xbar.test' })).toBeVisible();
+  await expect(page.getByRole('heading', { name: 'Check your email' })).toBeVisible();
   await page.getByRole('button', { name: 'Back to sign in' }).click();
   await expect(page.getByRole('button', { name: 'Sign In', exact: true })).toBeVisible();
   await expect(page.getByRole('heading', { name: /Check / })).toHaveCount(0);
