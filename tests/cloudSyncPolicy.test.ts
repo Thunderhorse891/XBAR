@@ -332,6 +332,27 @@ test('a second batch is measured against bytes already uploaded, not just persis
     /if \(cloudStoredBytes > 0\) useCloudStore\.getState\(\)\.noteStagedStorageBytes\(cloudStoredBytes\);\s*set\(\(current\) => \{/,
     'the reservation must be taken in the same step that installs the records, with nothing between',
   );
+  /*
+   * The comparison itself is behaviour, tested in xbarStoreLogic.test.ts. What
+   * a source guard can establish, and the unit test cannot, is WHERE it runs:
+   * before the reservation and before the installing `set`, so an abandoned
+   * batch stages no bytes and installs no records. It cannot prove the runtime
+   * ordering -- only that the check has not been moved after the commit or
+   * deleted.
+   */
+  const identityCheck = intake.indexOf('intakeIdentityChanged(');
+  const reservation = intake.indexOf('noteStagedStorageBytes(cloudStoredBytes)');
+  assert.ok(identityCheck > -1, 'an intake must check that the account it started as is still the account here');
+  assert.ok(
+    identityCheck < reservation,
+    'a batch abandoned for an account switch must not have staged bytes against the new account first',
+  );
+  assert.match(
+    intake,
+    /const intakeIdentity = readIntakeIdentity\(\);/,
+    'the identity must be captured before any awaiting, or it records the account that is already here',
+  );
+
   assert.ok(
     !/noteStagedStorageBytes\(file\.size\)/.test(intake),
     'a reservation taken at upload time can be released by a snapshot that does not contain the records',

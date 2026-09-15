@@ -48,6 +48,7 @@ import {
   computeOwnershipConfidence,
   createAuditEvent,
   createOwnershipRecord,
+  intakeIdentityChanged,
   normalizeOwnershipRecord,
   validateExpenseReceiptInput,
   summarizeBatch,
@@ -58,6 +59,7 @@ import {
   validateNewHorseInput,
   workspaceBackupPayload,
 } from '@/store/xbarStoreLogic';
+import type { IntakeIdentity } from '@/store/xbarStoreLogic';
 import type {
   BreedingEconomics,
   HorseNote,
@@ -154,6 +156,16 @@ function entitledUsage(subscription: SubscriptionProfile): SubscriptionProfile['
  * chain continues through rejection as well as fulfilment.
  */
 let documentIntakeQueue: Promise<unknown> = Promise.resolve();
+
+/*
+ * Who a long-running document intake is being performed as. Read at the start
+ * of the batch and again at the moment it commits; if it has moved, the batch
+ * belongs to an account that is no longer here.
+ */
+function readIntakeIdentity(): IntakeIdentity {
+  const cloud = useCloudStore.getState();
+  return { userId: cloud.session?.user?.id ?? '', workspaceId: cloud.workspaceId ?? '' };
+}
 
 function serializeDocumentIntake<T>(run: () => Promise<T>): Promise<T> {
   const result = documentIntakeQueue.then(run, run);
@@ -814,6 +826,12 @@ export const useXbarStore = create<XbarStore>()(
             return { ok: false, message: 'Uploaded by is required before uploading.' };
           }
 
+          /*
+           * Whose workspace this batch is FOR, captured before any awaiting
+           * starts. See the check beside the commit below.
+           */
+          const intakeIdentity = readIntakeIdentity();
+
           const state = get();
           const storageIncrease = estimateStorageGb(fileList);
           const planUsage = entitledUsage(state.subscription);
@@ -1085,6 +1103,36 @@ export const useXbarStore = create<XbarStore>()(
              * component state. A second TAB has its own counter regardless and
              * meets the storage trigger.
              */
+            /*
+             * An intake spans uploads and OCR, which is long enough for another
+             * tab to sign a DIFFERENT account in underneath it. The identity is
+             * published into this store, so by the time the batch is ready to
+             * commit, `get()` can be account B's freshly hydrated workspace --
+             * and the two statements below would install account A's documents,
+             * A's extracted facts and A's workspace storage paths into it, then
+             * hand them to B's next cloud snapshot.
+             *
+             * Serializing the action does not help: it orders intakes against
+             * each other, not against a sign-in. Clearing reservations when the
+             * identity is published does not help either -- an intake already
+             * running adds them back afterwards.
+             *
+             * So the batch is abandoned rather than misfiled. What that costs is
+             * stated rather than hidden: files uploaded before the switch stay in
+             * the cloud under the workspace prefix they were written for, with no
+             * document row pointing at them. They are orphaned bytes in the
+             * workspace they actually belong to, which is the lesser of the two
+             * outcomes by a wide margin -- the alternative puts one customer's
+             * records inside another customer's ranch.
+             */
+            if (intakeIdentityChanged(intakeIdentity, readIntakeIdentity())) {
+              return {
+                ok: false,
+                message:
+                  'The signed-in account changed while these files were uploading, so they were not added. Sign in again and re-upload them.',
+              };
+            }
+
             if (cloudStoredBytes > 0) useCloudStore.getState().noteStagedStorageBytes(cloudStoredBytes);
 
             set((current) => {
