@@ -347,10 +347,33 @@ test('a second batch is measured against bytes already uploaded, not just persis
     identityCheck < reservation,
     'a batch abandoned for an account switch must not have staged bytes against the new account first',
   );
-  assert.match(
-    intake,
-    /const intakeIdentity = readIntakeIdentity\(\);/,
-    'the identity must be captured before any awaiting, or it records the account that is already here',
+
+  /*
+   * The capture must precede the FIRST await in the action, not merely exist.
+   * Captured after anything has been awaited, it records whoever is here by
+   * then rather than whoever started the batch -- which is the account switch
+   * this is meant to catch, read too late to see it.
+   */
+  const capture = intake.indexOf('const intakeIdentity = readIntakeIdentity();');
+  const firstAwait = intake.indexOf('await ');
+  assert.ok(capture > -1, 'the intake must record the account it started as');
+  assert.ok(
+    capture < firstAwait,
+    'an identity captured after the first await records the account that is already here',
+  );
+
+  /*
+   * And nothing may await between the final check and the install. An await
+   * there yields to the event loop, which is exactly where the cross-tab
+   * sign-in lands -- so the check would pass, the identity would change, and
+   * the records would be installed into the new account anyway. The whole
+   * point is that the check and the commit are one synchronous step.
+   */
+  const install = intake.indexOf('set((current) => {', identityCheck);
+  assert.ok(install > identityCheck, 'the identity check must come before the installing set');
+  assert.ok(
+    !intake.slice(identityCheck, install).includes('await '),
+    'an await between the identity check and the install makes the check stale before it is acted on',
   );
 
   assert.ok(
