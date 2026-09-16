@@ -1,7 +1,7 @@
 # Go-live checklist — actions outside this repository
 
-The repository is ready for these steps; none of them can be completed from
-code. Work top to bottom.
+Track these operational checks separately from repository tests. Neither a green
+build nor configured environment variables establishes public launch readiness.
 
 ## 0. Preflight — see what's configured before and after each step
 
@@ -13,14 +13,16 @@ npm run preflight -- --url https://xbar-horse-management-app.vercel.app  # + liv
 The report lists every production subsystem (Supabase accounts/sync, Stripe
 billing, email, cron, optional hardening), which env vars each one needs, and
 what turning it on unlocks. The `--url` probe compares intent against the
-deployed reality. Nothing here blocks a deploy — unconfigured subsystems
-degrade honestly (manual-billing panel, local-only mode, in-app reminders).
+deployment’s reported configuration. It does not prove any service works. Broken
+signup, password recovery, authorization or persistence blocks release of the
+affected feature. A browser-only preview must be labeled separately from cloud
+SaaS readiness.
 
 **Billing launch note:** `VITE_MANAGED_BILLING_ENABLED` is the client-side
-master switch. Leave it `false` (the app shows the honest manual-billing
+UI switch; it is not proof that server-side billing is ready. Leave it `false` (the app shows the honest manual-billing
 panel) until _all_ Stripe values — secret key, webhook secret, and the four
 price IDs — plus Supabase are configured in Vercel; then set it `true` and
-redeploy.
+redeploy only after the server billing flag and webhook-backed entitlement flow are verified.
 
 ## 1. Canonical domain
 
