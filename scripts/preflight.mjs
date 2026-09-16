@@ -90,7 +90,7 @@ for (const group of groups) {
   const requiredOk = group.required.every((v) => isSet(v.name));
   const enabled = group.enabled ? group.enabled() : requiredOk;
   const hasRequirements = group.required.length > 0 || group.enabled;
-  const status = !hasRequirements ? 'optional' : enabled ? 'READY' : 'NOT CONFIGURED';
+  const status = !hasRequirements ? 'optional' : enabled ? 'CONFIGURED (UNVERIFIED)' : 'NOT CONFIGURED';
   if (hasRequirements) {
     if (enabled) readyGroups++;
     else gatedGroups++;
@@ -110,23 +110,27 @@ for (const group of groups) {
   console.log('');
 }
 
-console.log(`Summary: ${readyGroups} subsystem(s) ready, ${gatedGroups} awaiting configuration.`);
-console.log('The app is safe to deploy at any point — unconfigured subsystems degrade honestly instead of failing.');
+console.log(`Summary: ${readyGroups} subsystem(s) configured but unverified, ${gatedGroups} awaiting configuration.`);
+console.log(
+  'Configuration presence is not launch readiness. Verify real sign-in, email callbacks, storage and enabled billing before public release.',
+);
+console.log('A browser-only preview does not validate cloud account access or production services.');
 
 if (probeUrl) {
   const origin = probeUrl.replace(/\/+$/, '');
   console.log(`\nProbing ${origin}/api/health ...`);
   try {
     const response = await fetch(`${origin}/api/health`, { headers: { accept: 'application/json' } });
+    if (!response.ok) throw new Error(`Health endpoint returned HTTP ${response.status}`);
     const health = await response.json();
     console.log(`  HTTP ${response.status}`);
     for (const [key, value] of Object.entries(health.subsystems ?? health)) {
       if (typeof value === 'boolean') {
-        console.log(`    ${value ? '✓ live' : '✗ off '}  ${key}`);
+        console.log(`    ${value ? '✓ reported configured' : '✗ reported unconfigured'}  ${key}`);
       }
     }
-    console.log('  Compare the live values above with the local env report — differences mean the');
-    console.log('  Vercel project is missing (or holding different) environment variables.');
+    console.log('  Compare reported configuration with the local env report. This does not test service access.');
+    console.log('  Email delivery, auth callbacks, storage policies, webhooks and migrations remain unverified.');
   } catch (error) {
     console.error(`  Probe failed: ${error?.message ?? error}`);
     process.exitCode = 1;
