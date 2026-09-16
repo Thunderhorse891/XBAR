@@ -69,7 +69,10 @@ export function documentExamTime(document: DatedDocument): number | null {
   const examDate = document.entities?.examDate;
   if (!examDate) return null;
   const parsed = Date.parse(examDate);
-  return Number.isNaN(parsed) ? null : parsed;
+  if (Number.isNaN(parsed)) return null;
+  // Date.parse normalizes impossible dates such as February 30 into March.
+  if (/^\d{4}-\d{2}-\d{2}$/.test(examDate) && new Date(parsed).toISOString().slice(0, 10) !== examDate) return null;
+  return parsed;
 }
 
 export function isCurrentDatedDocument(document: DatedDocument, maxAgeDays: number, now: Date = new Date()): boolean {

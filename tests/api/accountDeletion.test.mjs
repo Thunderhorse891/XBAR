@@ -10,6 +10,7 @@ import {
   pickSuccessorOwner,
   planAccountDeletion,
   loadAccountDeletionPlan,
+  workspacesStillPrivate,
 } from '../../api/_lib/account-deletion.js';
 
 test('confirmation requires the exact account email (trimmed, case-insensitive)', () => {
@@ -248,7 +249,107 @@ test('the deletion endpoint actually uses those prefix lists', () => {
   // A rule nothing calls is not a fix. This pins the wiring, since the sweep
   // itself needs a live Supabase project to exercise end to end.
   const source = readFileSync(new URL('../../api/account/delete.js', import.meta.url), 'utf8');
-  assert.ok(source.includes('documentPrefixesToPurge(plan)'), 'document prefixes are not used by the endpoint');
-  assert.ok(source.includes('mediaPrefixesToPurge(plan)'), 'media prefixes are not used by the endpoint');
+  assert.ok(source.includes('documentPrefixesToPurge('), 'document prefixes are not used by the endpoint');
+  assert.ok(source.includes('mediaPrefixesToPurge('), 'media prefixes are not used by the endpoint');
   assert.ok(!source.includes('removeUserStorage'), 'the uploader-only sweep is still present');
+
+  /*
+   * And they are built from the RE-CHECKED set, not the stale plan. Sweeping
+   * `plan.workspacesToPurge` would erase the files of a workspace the re-check
+   * had just spared -- deleting the new member's documents while leaving their
+   * rows, which is the worse half of the race rather than a fix for it.
+   */
+  assert.ok(
+    !source.includes('documentPrefixesToPurge(plan)') && !source.includes('mediaPrefixesToPurge(plan)'),
+    'the storage sweep must follow the re-check, not the plan it was built before the account was deleted',
+  );
+  assert.ok(
+    source.includes('workspacesStillPrivate(plan.workspacesToPurge'),
+    'the endpoint must re-read membership before purging',
+  );
+
+  /*
+   * And the re-check must run BEFORE the auth user is deleted.
+   *
+   * This is the ordering bug that shipped in the first version, found in
+   * review. `production-schema.sql` declares both
+   * `workspaces.owner_user_id ... on delete cascade` and
+   * `workspace_memberships.workspace_id ... on delete cascade`, so deleting the
+   * auth user destroys the owned workspaces and their membership rows first.
+   * A re-check asked afterwards reads an empty table, concludes nothing is
+   * shared, and marks EVERY planned workspace purgeable. The guard could only
+   * ever widen the purge while reading as protection -- strictly worse than
+   * having no guard, because it invited trust.
+   */
+  const recheckAt = source.indexOf('workspacesStillPrivate(plan.workspacesToPurge');
+  // The CALL, not the prose. The comment above the re-check names
+  // `auth.admin.deleteUser` to explain the ordering, and matching that instead
+  // would make this assertion pass for the wrong reason.
+  const deleteUserAt = source.indexOf('await supabase.auth.admin.deleteUser(');
+  assert.ok(recheckAt > 0 && deleteUserAt > 0, 'precondition: both statements were found');
+  assert.ok(
+    recheckAt < deleteUserAt,
+    'the membership re-check must run before deleteUser, or the owner cascade has already erased what it reads',
+  );
+
+  /*
+   * Unreadable membership is never evidence that a workspace is private, and
+   * because the owner FK cascades there is no "purge nothing but delete anyway"
+   * option: deleting the user destroys the workspace regardless. So the only
+   * safe answer to either doubt is to refuse and change nothing.
+   */
+  assert.ok(
+    /if \(recheckError\) \{\s*return sendJson\(res, 502,/.test(source),
+    'an unreadable membership re-check must refuse the deletion, not proceed on an assumption',
+  );
+  assert.ok(
+    /if \(purgeable\.length !== plan\.workspacesToPurge\.length\) \{\s*return sendJson\(res, 409,/.test(source),
+    'a workspace that gained a member must refuse the deletion, since the owner cascade would destroy it anyway',
+  );
+
+  /*
+   * The user's own membership is excluded in JS, not with `.neq`. `user_id` is
+   * nullable in the schema, and SQL would silently drop a NULL row -- an active
+   * membership belonging to nobody identifiable is evidence of sharing, not of
+   * privacy.
+   */
+  assert.ok(
+    source.includes('filter((row) => row?.user_id !== user.id)'),
+    'the self-membership exclusion must not be done in SQL, where a null user_id would vanish',
+  );
+});
+
+/*
+ * The plan is built before the account is deleted and the purge runs after.
+ * In between, an invitation acceptance or an administrator's add can insert an
+ * active membership -- the invitation RPC locks the invitation row, not the
+ * workspace. Purging on the stale plan cascades that member's records and
+ * sweeps their files, which is the one outcome this endpoint exists to avoid.
+ */
+test('a workspace that gained a member between the plan and the purge is not purged', () => {
+  assert.deepEqual(workspacesStillPrivate(['ws-private', 'ws-just-shared'], [{ workspace_id: 'ws-just-shared' }]), [
+    'ws-private',
+  ]);
+});
+
+test('a workspace nobody joined is still purged', () => {
+  assert.deepEqual(workspacesStillPrivate(['ws-a', 'ws-b'], []), ['ws-a', 'ws-b']);
+});
+
+/*
+ * Unreadable membership is never evidence that a workspace is private. The
+ * handler passes [] on a failed re-check, so the pure function must not treat
+ * "no rows" as "definitely safe" on its own -- the CALLER decides. What it must
+ * do is never invent a purge from junk.
+ */
+test('malformed membership rows cannot smuggle a workspace back into the purge', () => {
+  assert.deepEqual(
+    workspacesStillPrivate(['ws-a'], [{ workspace_id: null }, {}, { workspace_id: '' }, null]),
+    ['ws-a'],
+    'junk rows are not memberships, but they must not crash the narrowing either',
+  );
+});
+
+test('a planned id that is not a string is never purged', () => {
+  assert.deepEqual(workspacesStillPrivate([null, '', 42, 'ws-real'], []), ['ws-real']);
 });

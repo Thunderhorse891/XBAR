@@ -354,6 +354,35 @@ test('a second batch is measured against bytes already uploaded, not just persis
    * then rather than whoever started the batch -- which is the account switch
    * this is meant to catch, read too late to see it.
    */
+  /*
+   * The bytes must be bound too, not just the rows.
+   *
+   * `uploadDocumentAssetToCloud` resolves its destination from the LIVE
+   * session, so a sign-in landing mid-intake sent one customer's documents to
+   * the replacement workspace's storage prefix, where that workspace's members
+   * can read them. The commit check below stops the ROW; by then the object
+   * already exists. So the upload carries the batch's own identity and is
+   * refused rather than misfiled -- which is why there is nothing to clean up.
+   */
+  const uploadCall = intake.indexOf('uploadDocumentAssetToCloud({');
+  const boundIdentity = intake.indexOf('expectedIdentity: intakeIdentity', uploadCall);
+  assert.ok(uploadCall > -1, 'the intake must upload through uploadDocumentAssetToCloud');
+  assert.ok(
+    boundIdentity > uploadCall,
+    'every cloud upload in an intake must be bound to the account the batch started as',
+  );
+  const upload = await readFile('src/lib/cloudWorkspace.ts', 'utf8');
+  assert.match(
+    upload,
+    /intakeIdentityChanged\(params\.expectedIdentity, \{[\s\S]{0,160}?\}\)\s*\)\s*\{\s*return null;/,
+    'a bound upload whose account moved must refuse rather than write to the new workspace prefix',
+  );
+  assert.ok(
+    upload.indexOf('intakeIdentityChanged(params.expectedIdentity') <
+      upload.indexOf('client.storage.from(supabaseConfig.documentBucket).upload('),
+    'the refusal must come before the bytes leave the browser, not after',
+  );
+
   const capture = intake.indexOf('const intakeIdentity = readIntakeIdentity();');
   const firstAwait = intake.indexOf('await ');
   assert.ok(capture > -1, 'the intake must record the account it started as');
