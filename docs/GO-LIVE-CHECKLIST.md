@@ -1,11 +1,7 @@
 # Go-live checklist — actions outside this repository
 
-<<<<<<< HEAD
 Track these operational checks separately from repository tests. Neither a green
 build nor configured environment variables establishes public launch readiness.
-=======
-Track the evidence below separately from repository tests. Passing tests alone
-does not establish production readiness.
 
 ## Launch scope within the current budget
 
@@ -763,7 +759,6 @@ match is simply not on screen and a naive check reads as "missing".
   Auth mail logs/SMTP configuration before repeating requests.
 - The documented recovery concurrency residuals remain open; they have not
   been accepted as launch risks or closed by these checks.
->>>>>>> origin/main
 
 ## 0. Preflight — see what's configured before and after each step
 
