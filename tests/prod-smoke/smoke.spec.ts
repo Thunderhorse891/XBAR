@@ -105,6 +105,28 @@ test('indexing architecture: sitemap, robots, and app noindex hold', async ({ re
   }
 });
 
+/*
+ * A deployment built without VITE_SUPABASE_URL / VITE_SUPABASE_ANON_KEY cannot
+ * check anybody's password. That used to be announced only by a toast AFTER
+ * the form was submitted, so the screen beforehand was an ordinary sign-in
+ * form and someone with a real account typed a real password into it and
+ * landed in an empty local workspace. This is the prod-smoke bundle, which is
+ * exactly such a build, so the notice is asserted where it actually renders.
+ */
+test('a build with no cloud auth says so before a password is typed', async ({ page }) => {
+  const c = collect(page);
+  await page.goto('/login', { waitUntil: 'load' });
+  await expect(page.getByRole('heading', { name: 'Cloud sign-in is not configured here' })).toBeVisible({
+    timeout: 15_000,
+  });
+  // Visible with the form still standing, not instead of it, and before any
+  // submit: the password field is what the notice is warning about.
+  await expect(page.getByLabel('Password', { exact: false }).first()).toBeVisible();
+  // And the paid-auth affordances stay hidden, since neither can work here.
+  await expect(page.getByRole('button', { name: 'Forgot password?' })).toHaveCount(0);
+  assertClean(c);
+});
+
 test('local workspace setup is reachable without cloud sign-in', async ({ page }) => {
   const c = collect(page);
   await page.goto('/login', { waitUntil: 'load' });
@@ -114,6 +136,37 @@ test('local workspace setup is reachable without cloud sign-in', async ({ page }
   const rootChildren = await page.evaluate(() => document.getElementById('root')?.childElementCount ?? 0);
   expect(rootChildren, 'workspace setup rendered blank').toBeGreaterThan(0);
   assertClean(c);
+});
+
+test('local workspace setup survives a browser that refuses to store the entry marker', async ({ page }) => {
+  /*
+   * Entering a local workspace records a marker that the route guard reads
+   * back. Storage used to THROW when site data is blocked, which was at least
+   * loud; routing it through a reporting helper made the failure silent, and
+   * silent was worse. The marker was never stored, the guard read no marker,
+   * and the customer was sent straight back to the sign-in screen they had
+   * just left -- with a toast saying their workspace had opened. A loop,
+   * announced as a success.
+   *
+   * The marker is now held in memory as well, for as long as the page lives.
+   */
+  await page.addInitScript(() => {
+    Object.defineProperty(window, 'localStorage', {
+      configurable: true,
+      get() {
+        throw new DOMException('Access to storage is not allowed from this context.', 'SecurityError');
+      },
+    });
+  });
+
+  await page.goto('/login', { waitUntil: 'load' });
+  await page.getByRole('button', { name: 'Create workspace' }).click();
+
+  await expect(page).toHaveURL(/\/setup/, { timeout: 15_000 });
+  await expect(page.getByRole('heading', { name: 'Configure Workspace' })).toBeVisible({ timeout: 15_000 });
+  // And it stays: the guard must not bounce them back a moment later.
+  await page.waitForTimeout(2000);
+  await expect(page).toHaveURL(/\/setup/);
 });
 
 test('critical brand assets return 200 with non-empty body', async ({ request }) => {

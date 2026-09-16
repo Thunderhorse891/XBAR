@@ -1,0 +1,56 @@
+/*
+ * XBAR brand tokens — Erin's palette, and the roles the product plays it in.
+ * ---------------------------------------------------------------------------
+ * TWO LAYERS, and the split is the whole point.
+ *
+ *   BRAND CONSTANTS (--xbar-*)  the supplied palette, named after the artwork.
+ *                               Never referenced by a component.
+ *   ROLE TOKENS     (--accent-*) what a colour is FOR. Components use only
+ *                               these; roles point at constants.
+ *
+ * The layer exists because one brand blue cannot do every job on a light
+ * surface. Measured against the real working ground (#f5f6f7):
+ *
+ *   #0078d7  4.16:1  — fails AA for text; fine for edges and fills (>= 3)
+ *   #2868a9  5.33:1  — passes AA for text
+ *
+ * So the supplied blue is the EDGE colour, faithful to artwork where blue
+ * appears only as a rim light and never as a fill, and a darker relative of it
+ * carries text and button grounds. Collapsing the two is how the primary
+ * button came to sit at 3.62:1 with white on it.
+ *
+ * A colour that is not in here does not exist. Raw hexes in components are
+ * what produced nine unrelated blues across four families.
+ *
+ * NOTE: public/brand/xbar-brand-tokens.css holds the same constants but lives
+ * under public/, which is copied verbatim and is not part of the build graph —
+ * nothing has ever loaded it. This file is the one that governs.
+ */
+
+:root {
+  /* Brand constants — as supplied. Do not tune these to fix a contrast
+     problem; add or adjust a ROLE below instead. */
+  --xbar-black: #0b0d0f;
+  --xbar-graphite: #121518;
+  --xbar-gunmetal: #20252a;
+  --xbar-steel: #596168;
+  --xbar-silver: #b7bcc2;
+  --xbar-warm-white: #f5f2ec;
+  --xbar-muted-sand: #c7bdaa;
+  --xbar-blue: #0078d7;
+
+  /*
+   * Roles.
+   *
+   * --accent-edge   rim lights, 1px borders, focus rings, selected-row edges.
+   *                 Never a large fill behind text.
+   * --accent-ink    text, links, and the primary button's ground. Every value
+   *                 here clears 4.5:1 against white, because white is what sits
+   *                 on top of it.
+   */
+  --accent-edge: var(--xbar-blue);
+  --accent-ink: #2868a9;
+  --accent-ink-lift: #2f76bd;
+  --accent-ink-hover: #3179ba;
+  --accent-ink-press: #1a4f84;
+}

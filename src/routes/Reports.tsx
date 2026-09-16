@@ -141,7 +141,7 @@ export default function Reports() {
   // gating decision three lines up.
   if (horses.length === 0 && expenseReceipts.length === 0 && salesLeads.length === 0 && documents.length === 0) {
     return (
-      <div className="ops-experience">
+      <div className="ops-experience reports-experience">
         <section className="ops-hero ops-hero--solo" aria-labelledby="reports-title">
           <div>
             <div className="ops-kicker">Ranch reporting</div>
@@ -168,7 +168,7 @@ export default function Reports() {
   }
 
   return (
-    <div className="ops-experience">
+    <div className="ops-experience reports-experience">
       <section className="ops-hero" aria-labelledby="reports-title">
         <div>
           <div className="ops-kicker">Ranch reporting</div>

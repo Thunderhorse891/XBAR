@@ -2,11 +2,7 @@ import type { ReactNode } from 'react';
 import { Navigate, useLocation } from 'react-router-dom';
 import { isCloudAuthRequired, isLocalModeEnabled, isSupabaseConfigured } from '@/lib/platformConfig';
 import { useCloudStore } from '@/store/useCloudStore';
-
-function hasCommandCenterEntry() {
-  if (typeof window === 'undefined') return false;
-  return window.localStorage.getItem('xbar-command-center-entry') === 'true';
-}
+import { hasCommandCenterEntry } from '@/lib/commandCenterEntry';
 
 export function RequireCloudAuth({ children }: { children: ReactNode }) {
   const location = useLocation();

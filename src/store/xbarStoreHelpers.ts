@@ -23,6 +23,7 @@ import {
   countReservedWorkspaceSeats,
   normalizeWorkspaceEmail,
 } from '@/lib/workspaceAccess';
+import { resolveHorseNameForProfile } from '@/lib/horseNameFromDocument';
 import { isSupabaseConfigured } from '@/lib/platformConfig';
 import { createOwnershipRecord, normalizeOwnershipRecord } from '@/store/xbarStoreLogic';
 import { getCapabilityDeniedMessage, hasRoleCapability } from '@/lib/permissions';
@@ -1094,6 +1095,19 @@ export function canRestorePersistedState(raw: unknown): boolean {
          */
         'fileUrl',
         /*
+         * Rendered, at Documents.tsx:857. A non-string from a damaged backup
+         * reaches JSX as an invalid child, which React throws on — the whole
+         * Documents screen, not the one row.
+         *
+         * `readableProcessingNote` already guards that call site, and this does
+         * not replace it: the guard keeps ONE screen honest, while the boundary
+         * keeps the value out of the restored workspace entirely, so the next
+         * reader of `processingNote` inherits the protection instead of having
+         * to remember it. The render-site guard was the stopgap; this is the
+         * fix.
+         */
+        'processingNote',
+        /*
          * `localFileKey` was excluded as "only compared or passed through",
          * and that was wrong in the way this table keeps being wrong: passed
          * through TO WHERE. `storedFileLocation` routes on truthiness —
@@ -2054,29 +2068,47 @@ export function buildHorseInputFromDocuments(
   documents: DocumentRecord[],
   workspaceProfile: WorkspaceProfile,
 ): NewHorseInput | null {
-  const horseName =
-    documents.map((document) => document.entities.horseName?.trim()).find(Boolean) ??
-    documents.map((document) => inferHorseNameFromDocumentTitle(document.title)).find((title) => title.length >= 3) ??
-    '';
+  // A filename or fallback match is not evidence read from a paper. Keep
+  // unreadable uploads in review instead of inventing a horse from scan-001.
+  const readableDocuments = documents.filter((document) => document.extractedTextPreview?.trim());
+  const horseName = readableDocuments.map((document) => document.entities.horseName?.trim()).find(Boolean) ?? '';
   const registrationNumber =
-    documents.map((document) => document.entities.registrationNumber?.trim()).find(Boolean) ?? '';
+    readableDocuments.map((document) => document.entities.registrationNumber?.trim()).find(Boolean) ?? '';
   const ownerName =
-    documents.map((document) => document.entities.ownerName?.trim()).find(Boolean) ??
+    readableDocuments.map((document) => document.entities.ownerName?.trim()).find(Boolean) ??
     workspaceProfile.defaultOwnerName.trim() ??
     '';
   const ownerEntity =
     workspaceProfile.defaultOwnerEntity.trim() || workspaceProfile.businessName.trim() || ownerName || '';
 
-  if (!horseName && !registrationNumber) {
+  /*
+   * The paper's own title, cleaned of file clutter, when its text carried no
+   * labelled name. Read only from documents that were READABLE, so the paper is
+   * still the evidence that this horse exists -- the filename only supplies
+   * what to call it.
+   *
+   * This used to fall through to the registration NUMBER instead, which is how
+   * a bulk intake produced a roster of horses named 35012691962 and
+   * 539882319930. A number is not a name; when no name can be read the profile
+   * is not created at all and the document stays in review for manual
+   * assignment, which is what the comment at the top of this function always
+   * claimed the behaviour was.
+   */
+  const resolvedName = resolveHorseNameForProfile({
+    extractedName: horseName,
+    documentTitles: readableDocuments.map((document) => document.title),
+  });
+
+  if (!resolvedName) {
     return null;
   }
 
   // First non-empty value for a given entity field across all grouped documents.
   const firstEntity = (key: keyof DocumentRecord['entities']) =>
-    documents.map((document) => document.entities[key]?.trim()).find(Boolean) ?? '';
+    readableDocuments.map((document) => document.entities[key]?.trim()).find(Boolean) ?? '';
 
   const registry = firstEntity('registry');
-  const normalizedHorseName = (horseName || registrationNumber).trim().toUpperCase();
+  const normalizedHorseName = resolvedName.trim().toUpperCase();
   const normalizedBarnName = normalizedHorseName.split(/\s+/).slice(0, 2).join(' ') || normalizedHorseName;
   const isAqha = registry.toUpperCase() === 'AQHA' || registrationNumber.toUpperCase().startsWith('AQHA');
 
@@ -2113,8 +2145,8 @@ export function createHorseFromDocuments(documents: DocumentRecord[], workspaceP
   const readyDocuments = documents.map((document) => ({
     ...document,
     horseId: horse.id,
-    state: 'Ready' as const,
-    confidence: Math.max(document.confidence, 0.91),
+    // Creating the profile attaches the source; it is not document approval.
+    state: document.state === 'Ready' ? ('Ready' as const) : ('Needs Review' as const),
     duplicateRisk: document.duplicateRisk === 'Possible Duplicate' ? 'Review' : document.duplicateRisk,
     entities: {
       ...document.entities,
@@ -2122,16 +2154,21 @@ export function createHorseFromDocuments(documents: DocumentRecord[], workspaceP
       ownerName: document.entities.ownerName ?? horse.owner,
       registrationNumber: document.entities.registrationNumber ?? horse.registrationNumber,
     },
-    summary: `${document.title} was used to create ${horse.name} and is now attached to the new horse profile.`,
+    summary: `${document.title} is attached to ${horse.name}.${document.state === 'Ready' ? '' : ' Review the source before approving its facts.'}`,
   }));
-  const promotedHorse = readyDocuments.reduce(promoteDocument, horse);
+  const promotedHorse = readyDocuments.reduce(
+    (current, document) =>
+      document.state === 'Ready'
+        ? promoteDocument(current, document)
+        : {
+            ...current,
+            documents: [...current.documents, document.id],
+          },
+    horse,
+  );
   const ownershipRecord = {
     ...createOwnershipRecord(promotedHorse),
     legalOwner: horse.owner,
-    pendingDocuments: readyDocuments
-      .filter((document) => document.type === 'Transfer Packet' || document.type === 'Bill of Sale')
-      .map((document) => document.title),
-    confidence: readyDocuments.some((document) => document.type === 'Registration') ? 78 : 52,
   };
 
   return {

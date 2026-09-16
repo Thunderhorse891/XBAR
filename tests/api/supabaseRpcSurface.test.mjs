@@ -139,12 +139,11 @@ test('the migration is driven by the catalog rather than a fixed function list',
   assert.match(sql, /prosecdef/, 'the sweep must be limited to SECURITY DEFINER functions');
 });
 
-test('the migration is not presented as already applied', () => {
+test('the access-control migration documents application and rollback', () => {
   const sql = readMigration(SECURITY_MIGRATION);
 
   // It changes access control on a live database, so it is applied
   // deliberately by an operator, with a documented verification procedure.
-  assert.match(sql, /NOT YET APPLIED/);
   assert.match(sql, /HOW TO APPLY THIS/);
   assert.match(sql, /ROLLBACK/);
 });
@@ -299,6 +298,7 @@ test('the verifier requires the non-anonymous grants too', () => {
     'xbar_can_manage_workspace(uuid)',
     'xbar_commercial_limits(uuid)',
     'xbar_subscription_limits(uuid)',
+    'xbar_accept_workspace_invitation(uuid, text)',
     'xbar_workspace_storage_bytes(uuid)',
   ]) {
     assert.ok(code.includes(`'${required}'`), `${required} should be required of its role`);
@@ -339,5 +339,124 @@ test('the internal re-grant names exact signatures', () => {
     code,
     /p\.proname = grantee\.fn_name/,
     'a proname-only re-grant hands every overload of the name to the role',
+  );
+});
+
+/*
+ * The two functions `anon` may execute gate a non-public listing on the
+ * caller's token. Both compared `coalesce(p_share_token, '')` against a stored
+ * token that is itself `coalesce(sl.share_token, '')` — so for a Private Token
+ * row whose stored token is empty the comparison is '' <> '', which is false.
+ * The guard reads as though it rejects a missing token and only rejects a wrong
+ * one, and a caller knowing just the share_path got the horse, its documents
+ * and its ownership record.
+ *
+ * Not hypothetical from a schema standpoint: on the live project (read 9 Sep
+ * 2026) `access_mode` defaults to 'Private Token', `share_token` defaults to
+ * '', and the only constraints on the table were the primary key and the
+ * workspace foreign key. An insert that omitted the token produced exactly that
+ * row. `shared_listings` was empty, so this was latent rather than live.
+ *
+ * These are static assertions about intent, in the same spirit as the rest of
+ * this file: the executable check needs a PostgreSQL instance. What they pin is
+ * what can silently regress in a text file — the empty-token clause going away,
+ * or the constraint that makes the row impossible being dropped.
+ */
+const FAIL_CLOSED_MIGRATION = '20260910173613_private_share_token_fail_closed.sql';
+const schemaPath = path.join(repoRoot, 'supabase', 'production-schema.sql');
+
+test('an empty stored share token authorizes nothing', () => {
+  const sources = [
+    ['migration', readFileSync(path.join(migrationsDir, FAIL_CLOSED_MIGRATION), 'utf8')],
+    ['production schema', readFileSync(schemaPath, 'utf8')],
+  ];
+
+  for (const [label, sql] of sources) {
+    const code = withoutComments(sql, '--');
+    const guards = code.match(/access_mode <> 'Public Link'[\s\S]{0,220}?then/g) ?? [];
+    assert.equal(guards.length, 2, `${label} should gate both the resolver and the tracker`);
+    for (const guard of guards) {
+      assert.match(
+        guard,
+        /listing_row\.share_token = ''/,
+        `${label}: a listing whose stored token is empty must be refused, not matched by an empty caller token`,
+      );
+    }
+    /*
+     * Public Link is tokenless by design and must keep resolving without one,
+     * so the fix must stay inside the non-public branch.
+     */
+    assert.match(code, /access_mode <> 'Public Link'/, `${label} must still exempt Public Link listings`);
+  }
+});
+
+test('new private listings require tokens without rolling back fixes on historical rows', () => {
+  for (const [label, sql] of [
+    ['migration', readFileSync(path.join(migrationsDir, FAIL_CLOSED_MIGRATION), 'utf8')],
+    ['production schema', readFileSync(schemaPath, 'utf8')],
+  ]) {
+    const code = withoutComments(sql, '--');
+    assert.match(
+      code,
+      /add constraint shared_listings_private_token_present[\s\S]{0,240}coalesce\(share_token, ''\) <> ''/,
+      `${label}: the column defaults produce the vulnerable row, so the table has to refuse it`,
+    );
+    // NOT VALID enforces new writes but skips the historical scan. Validation
+    // in this transaction would roll back the function fixes on one old row.
+    assert.match(code, /not valid;/, `${label}: adding it must not fail on pre-existing rows`);
+    if (label === 'migration') {
+      assert.match(
+        code,
+        /if offending = 0 then\s+alter table public\.shared_listings\s+validate constraint shared_listings_private_token_present/,
+      );
+    } else {
+      assert.doesNotMatch(
+        code,
+        /validate constraint shared_listings_private_token_present/,
+        `${label}: historical validation must wait for authorized cleanup`,
+      );
+    }
+  }
+});
+
+/*
+ * Archived listings are exempt from the token CHECK, and that exemption is
+ * load-bearing rather than a loosening.
+ *
+ * Without it, `update ... set state = 'Archived'` on a broken listing is itself
+ * refused: NOT VALID stops the historical scan, not the re-check that happens
+ * when such a row is updated. The only way to retire a bad share would be to
+ * first issue it a working token -- making it more usable on the way to
+ * deleting it. Confirmed on PostgreSQL 16.13, both before and after.
+ *
+ * It costs nothing, because both functions select `where sl.state <>
+ * 'Archived'`: an archived listing is unresolvable whatever its token, which
+ * was also checked by executing the resolver against an archived tokenless row.
+ */
+test('a broken private listing can still be archived', () => {
+  for (const [label, sql] of [
+    ['migration', readFileSync(path.join(migrationsDir, FAIL_CLOSED_MIGRATION), 'utf8')],
+    ['production schema', readFileSync(schemaPath, 'utf8')],
+  ]) {
+    const code = withoutComments(sql, '--');
+    assert.match(
+      code,
+      /add constraint shared_listings_private_token_present[\s\S]{0,120}coalesce\(state, ''\) = 'Archived'/,
+      `${label}: without the exemption an operator cannot retire a listing without first re-issuing it`,
+    );
+  }
+  // And the resolver must keep filtering them, or the exemption would be one.
+  const schema = withoutComments(readFileSync(schemaPath, 'utf8'), '--');
+  assert.equal(
+    (schema.match(/sl\.state <> 'Archived'/g) ?? []).length,
+    2,
+    'both the resolver and the tracker must skip archived listings',
+  );
+  // The migration must not count archived rows as blocking validation either.
+  const migration = withoutComments(readFileSync(path.join(migrationsDir, FAIL_CLOSED_MIGRATION), 'utf8'), '--');
+  assert.match(
+    migration,
+    /select count\(\*\) into offending[\s\S]{0,200}coalesce\(state, ''\) <> 'Archived'/,
+    'an archived row is not an offending row, so it must not hold validation back',
   );
 });

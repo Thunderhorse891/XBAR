@@ -162,6 +162,13 @@ export type XbarStore = {
   deleteBreedingEvent: (horseId: string, eventId: string) => ActionResult;
   updateHorseLocation: (horseId: string, patch: LocationPatch) => ActionResult;
   updateHorse: (horseId: string, patch: HorsePatch) => ActionResult;
+  /*
+   * Give back the names of horses that were created named by their
+   * registration number. Takes the ids to repair, never the names: the
+   * replacement is recomputed from the papers still attached, so nothing can
+   * push an arbitrary name through this path.
+   */
+  applyHorseNameRepairs: (horseIds: readonly string[]) => ActionResult;
   deleteHorse: (horseId: string) => ActionResult;
   updateMedicalEvent: (
     horseId: string,

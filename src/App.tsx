@@ -1,5 +1,16 @@
 import { Suspense, lazy, useEffect } from 'react';
-import { BrowserRouter, HashRouter, Navigate, Outlet, Route, Routes, useLocation, useParams } from 'react-router-dom';
+import {
+  BrowserRouter,
+  HashRouter,
+  Navigate,
+  Outlet,
+  Route,
+  Routes,
+  useLocation,
+  useNavigate,
+  useParams,
+  useSearchParams,
+} from 'react-router-dom';
 import ErrorBoundary from './components/ErrorBoundary';
 import { RequireCloudAuth } from './components/RequireCloudAuth';
 import { RequireSharedListings } from './components/RequireSubscriptionFeature';
@@ -10,9 +21,11 @@ import { OwnerTestModeBar } from './components/OwnerTestModeBar';
 import { Toaster } from './components/ui/sonner';
 import { billingPath } from './lib/billingRoutes';
 import { buyerFollowUpPath } from './lib/buyerRoutes';
-import { appBasePath } from './lib/routeCanon';
+import { appBasePath, loginPath, passwordResetPath, usesHashRouting } from './lib/routeCanon';
 import { trackRuntimeEvent } from './lib/runtimeEvents';
-import { useCloudStore } from './store/useCloudStore';
+import { consumeRecoveryCallbackNavigation } from '@/lib/authCallbackArrival';
+import { hasValidatedPasswordRecovery, useCloudStore } from './store/useCloudStore';
+import { useUiStore } from './store/useUiStore';
 import './routes/operationsHierarchy.css';
 import './routes/interactionSystem.css';
 import './routes/xbarCommandSystem.css';
@@ -24,6 +37,7 @@ import './styles/xbarSaas.css';
 
 const Dashboard = lazy(() => import('./pages/Dashboard'));
 const GettingStarted = lazy(() => import('./routes/GettingStarted'));
+const ResetPassword = lazy(() => import('./routes/ResetPassword'));
 const BuyerDealRoom = lazy(() => import('./routes/BuyerDealRoom'));
 const SalePacketStudio = lazy(() => import('./routes/SalePacketStudio'));
 const Reports = lazy(() => import('./routes/Reports'));
@@ -97,11 +111,6 @@ function LegacyHorseRedirect() {
   return <Navigate to={id ? `/horses/${id}` : '/horses'} replace />;
 }
 
-function useHashRouting() {
-  if (typeof window === 'undefined' || import.meta.env.MODE === 'e2e') return false;
-  return import.meta.env.VITE_ROUTER_MODE === 'hash' || window.location.hostname.endsWith('.github.io');
-}
-
 function routeTitle(path: string) {
   if (path.startsWith('/profiles/')) return 'XBAR | Listings';
   if (path.startsWith('/horses/')) return 'XBAR | Horse';
@@ -156,8 +165,89 @@ function FollowUpsRedirect() {
   return <Navigate to={buyerFollowUpPath(leadId ?? undefined)} replace />;
 }
 
+/*
+ * Carries a password-recovery arrival to the reset screen.
+ *
+ * The recovery link cannot always name that screen itself: on the hash router
+ * the route and Supabase's implicit-flow session would have to share one URL
+ * fragment, so the email only loads the shell. This is also the more robust
+ * place for the decision -- it depends on the auth event rather than on a URL
+ * composed days earlier by a different build, which is exactly what went wrong
+ * twice in getting here.
+ */
+function PasswordRecoveryRedirect() {
+  const pending = useCloudStore(hasValidatedPasswordRecovery);
+  const location = useLocation();
+  const navigate = useNavigate();
+
+  /*
+   * Only the tab that opened the link. auth-js broadcasts PASSWORD_RECOVERY to
+   * every open tab -- which is right, and is how a spent grant gets released
+   * everywhere -- but it is not a reason to yank every other tab to this
+   * screen, unmounting whatever the customer had in progress there.
+   *
+   * Routing only. The grant still comes from Supabase's validated event, so a
+   * forged fragment moves someone to a screen that then refuses them.
+   */
+  useEffect(() => {
+    if (!pending || !consumeRecoveryCallbackNavigation()) return;
+    if (location.pathname !== passwordResetPath) {
+      navigate(passwordResetPath, { replace: true });
+    }
+  }, [pending, location.pathname, navigate]);
+
+  return null;
+}
+
+/*
+ * A rejected callback that came back somewhere other than the sign-in screen.
+ *
+ * Magic-link and OAuth sign-in are offered from Settings as well as Login, and
+ * `currentAuthRedirectUrl()` sends Supabase back to the page the customer
+ * started from -- so the failure arrives on `/app/settings` or `/app/billing`
+ * as `#error=...`. main.tsx moves the reason to `?authError=`, and Login was
+ * the only screen that ever read it: with a session in hand the customer simply
+ * stayed put with nothing said, and without one the cloud-auth guard sent them
+ * to `/login` with a `<Navigate>` that drops the query, losing it there too.
+ *
+ * Answered here rather than by rewriting the path, because the signed-in case
+ * has nowhere better to go -- sending someone who is already signed in to the
+ * sign-in screen to be told a link failed is its own wrong answer.
+ *
+ * Mounted BEFORE <Routes>, so this effect runs before the cloud-auth guard's
+ * own navigation on the same commit; otherwise the redirect would take the
+ * parameter away before it had been read.
+ *
+ * A toast is weaker than a message in a form, and Login keeps its form: this
+ * skips that route entirely, so the screen that can do better still does.
+ */
+function AuthCallbackFailureNotice() {
+  const [params, setParams] = useSearchParams();
+  const location = useLocation();
+  const pushToast = useUiStore((state) => state.pushToast);
+
+  useEffect(() => {
+    if (location.pathname === loginPath) return;
+    const authError = params.get('authError');
+    if (!authError) return;
+    pushToast({
+      tone: 'error',
+      title: 'That sign-in link did not work',
+      message: authError,
+      // Long enough to read and act on. The default is tuned for confirmations.
+      duration: 12_000,
+    });
+    // Cleared once said, or a reload re-announces a failure already dealt with.
+    const next = new URLSearchParams(params);
+    next.delete('authError');
+    setParams(next, { replace: true });
+  }, [location.pathname, params, pushToast, setParams]);
+
+  return null;
+}
+
 export default function App() {
-  const hashRouting = useHashRouting();
+  const hashRouting = usesHashRouting();
   const Router = hashRouting ? HashRouter : BrowserRouter;
 
   return (
@@ -167,6 +257,8 @@ export default function App() {
         <InteractionShell />
         <SubscriptionEnforcement />
         <RouteTelemetry />
+        <PasswordRecoveryRedirect />
+        <AuthCallbackFailureNotice />
         {/* Renders nothing unless the viewer is an authorized owner. */}
         <OwnerTestModeBar />
         <Suspense
@@ -182,6 +274,7 @@ export default function App() {
             <Route path="/verify" element={<VerifyPacket />} />
             <Route path="/verify/:packetId" element={<VerifyPacket />} />
             <Route path="/login" element={<Login />} />
+            <Route path={passwordResetPath} element={<ResetPassword />} />
             <Route path="/subscribe" element={<Navigate to={billingPath} replace />} />
             <Route
               path="/setup"

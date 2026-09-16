@@ -34,6 +34,41 @@
   --motion-lift: -2px;
   --motion-lift-strong: -4px;
   --motion-press: 0.97;
+
+  /*
+   * The BRAND tier, for cinematic moments only: the sign-in entrance, a report
+   * cover, a splash. One curve so brand movement reads as one thing rather than
+   * assorted animation, and a long settle with no overshoot.
+   *
+   * The rule that keeps "cinematic" from making the product feel slow: brand
+   * surfaces get this duration, CONTROLS NEVER DO. A 720ms button is not
+   * cinematic, it is broken -- controls stay on --motion-fast/base above.
+   */
+  --motion-cinematic: 720ms;
+  --ease-cinematic: cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+/*
+ * A brand element arriving: settles up and in, once, slowly. Reduced motion
+ * collapses it to a plain appearance along with everything else below -- a
+ * brand moment is decoration, and decoration is exactly what that setting is
+ * asking us to stop.
+ */
+/* `backwards` for the reason written above `.motion-in`: the end keyframe is the
+ * element's natural style, and nothing lingers to make it a containing block. */
+.motion-brand-in {
+  animation: xbar-brand-in var(--motion-cinematic) var(--ease-cinematic) backwards;
+}
+
+@keyframes xbar-brand-in {
+  from {
+    opacity: 0;
+    transform: translateY(14px) scale(0.985);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
 }
 
 /* Interactive surfaces — cards, tiles, list rows that respond to the cursor. */
@@ -101,6 +136,7 @@
   .motion-press,
   .motion-in,
   .motion-stagger > *,
+  .motion-brand-in,
   .motion-glow {
     animation: none !important;
     transition: none !important;

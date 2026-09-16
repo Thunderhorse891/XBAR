@@ -1,4 +1,6 @@
 -- Serialize Checkout Session creation per workspace.
+-- xbar-records ledger records this migration name on 2026-09-04 (checked 2026-09-10).
+-- Check each target project's ledger and deployed definitions before running.
 --
 -- WHY A DATABASE COLUMN AND NOT A SMARTER KEY
 --

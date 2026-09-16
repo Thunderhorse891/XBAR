@@ -232,3 +232,57 @@
     grid-template-columns: 1fr;
   }
 }
+
+/*
+ * Recovering the names of horses created before XBAR could read a name off the
+ * paper. The row has to make the change legible at a glance -- old name struck
+ * through, new name bold, source document named underneath -- because the
+ * person is approving a bulk rewrite of records they own.
+ */
+.horse-name-repair__list {
+  display: grid;
+  gap: 10px;
+  margin: 14px 0;
+  padding: 0;
+  list-style: none;
+}
+
+.horse-name-repair__row {
+  display: grid;
+  gap: 4px;
+  border: 1px solid var(--line, rgba(15, 23, 42, 0.12));
+  border-radius: 8px;
+  padding: 12px 14px;
+}
+
+.horse-name-repair__row label {
+  display: flex;
+  gap: 10px;
+  align-items: baseline;
+  cursor: pointer;
+}
+
+.horse-name-repair__row input[type='checkbox'] {
+  /* Aligns the control with the first line of a name that wraps. */
+  margin-top: 3px;
+  flex: none;
+}
+
+.horse-name-repair__names {
+  overflow-wrap: anywhere;
+}
+
+.horse-name-repair__names s {
+  color: var(--muted, #64748b);
+}
+
+.horse-name-repair__row small {
+  color: var(--muted, #64748b);
+  font-size: 12px;
+  padding-left: 24px;
+}
+
+.horse-name-repair__warning {
+  color: #b45309;
+  font-weight: 700;
+}

@@ -1,6 +1,7 @@
 -- Reconcile subscription rows the previous status mapper mislabelled.
 --
--- PROPOSED — NOT YET APPLIED. This one changes DATA, not schema. Run the
+-- xbar-records ledger records this migration name on 2026-09-04 (checked 2026-09-10).
+-- Do not replay based on an old header. This one changes DATA, not schema. Run the
 -- dry-run below and read its output before applying it.
 --
 -- WHY
