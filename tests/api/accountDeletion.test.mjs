@@ -267,9 +267,55 @@ test('the deletion endpoint actually uses those prefix lists', () => {
     source.includes('workspacesStillPrivate(plan.workspacesToPurge'),
     'the endpoint must re-read membership before purging',
   );
+
+  /*
+   * And the re-check must run BEFORE the auth user is deleted.
+   *
+   * This is the ordering bug that shipped in the first version, found in
+   * review. `production-schema.sql` declares both
+   * `workspaces.owner_user_id ... on delete cascade` and
+   * `workspace_memberships.workspace_id ... on delete cascade`, so deleting the
+   * auth user destroys the owned workspaces and their membership rows first.
+   * A re-check asked afterwards reads an empty table, concludes nothing is
+   * shared, and marks EVERY planned workspace purgeable. The guard could only
+   * ever widen the purge while reading as protection -- strictly worse than
+   * having no guard, because it invited trust.
+   */
+  const recheckAt = source.indexOf('workspacesStillPrivate(plan.workspacesToPurge');
+  // The CALL, not the prose. The comment above the re-check names
+  // `auth.admin.deleteUser` to explain the ordering, and matching that instead
+  // would make this assertion pass for the wrong reason.
+  const deleteUserAt = source.indexOf('await supabase.auth.admin.deleteUser(');
+  assert.ok(recheckAt > 0 && deleteUserAt > 0, 'precondition: both statements were found');
   assert.ok(
-    source.includes('purgeable = recheckError ? [] : workspacesStillPrivate'),
-    'an unreadable membership re-check must purge nothing, never fall back to the stale plan',
+    recheckAt < deleteUserAt,
+    'the membership re-check must run before deleteUser, or the owner cascade has already erased what it reads',
+  );
+
+  /*
+   * Unreadable membership is never evidence that a workspace is private, and
+   * because the owner FK cascades there is no "purge nothing but delete anyway"
+   * option: deleting the user destroys the workspace regardless. So the only
+   * safe answer to either doubt is to refuse and change nothing.
+   */
+  assert.ok(
+    /if \(recheckError\) \{\s*return sendJson\(res, 502,/.test(source),
+    'an unreadable membership re-check must refuse the deletion, not proceed on an assumption',
+  );
+  assert.ok(
+    /if \(purgeable\.length !== plan\.workspacesToPurge\.length\) \{\s*return sendJson\(res, 409,/.test(source),
+    'a workspace that gained a member must refuse the deletion, since the owner cascade would destroy it anyway',
+  );
+
+  /*
+   * The user's own membership is excluded in JS, not with `.neq`. `user_id` is
+   * nullable in the schema, and SQL would silently drop a NULL row -- an active
+   * membership belonging to nobody identifiable is evidence of sharing, not of
+   * privacy.
+   */
+  assert.ok(
+    source.includes('filter((row) => row?.user_id !== user.id)'),
+    'the self-membership exclusion must not be done in SQL, where a null user_id would vanish',
   );
 });
 
