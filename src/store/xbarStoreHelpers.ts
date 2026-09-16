@@ -23,6 +23,7 @@ import {
   countReservedWorkspaceSeats,
   normalizeWorkspaceEmail,
 } from '@/lib/workspaceAccess';
+import { resolveHorseNameForProfile } from '@/lib/horseNameFromDocument';
 import { isSupabaseConfigured } from '@/lib/platformConfig';
 import { createOwnershipRecord, normalizeOwnershipRecord } from '@/store/xbarStoreLogic';
 import { getCapabilityDeniedMessage, hasRoleCapability } from '@/lib/permissions';
@@ -2080,7 +2081,25 @@ export function buildHorseInputFromDocuments(
   const ownerEntity =
     workspaceProfile.defaultOwnerEntity.trim() || workspaceProfile.businessName.trim() || ownerName || '';
 
-  if (!horseName && !registrationNumber) {
+  /*
+   * The paper's own title, cleaned of file clutter, when its text carried no
+   * labelled name. Read only from documents that were READABLE, so the paper is
+   * still the evidence that this horse exists -- the filename only supplies
+   * what to call it.
+   *
+   * This used to fall through to the registration NUMBER instead, which is how
+   * a bulk intake produced a roster of horses named 35012691962 and
+   * 539882319930. A number is not a name; when no name can be read the profile
+   * is not created at all and the document stays in review for manual
+   * assignment, which is what the comment at the top of this function always
+   * claimed the behaviour was.
+   */
+  const resolvedName = resolveHorseNameForProfile({
+    extractedName: horseName,
+    documentTitles: readableDocuments.map((document) => document.title),
+  });
+
+  if (!resolvedName) {
     return null;
   }
 
@@ -2089,7 +2108,7 @@ export function buildHorseInputFromDocuments(
     readableDocuments.map((document) => document.entities[key]?.trim()).find(Boolean) ?? '';
 
   const registry = firstEntity('registry');
-  const normalizedHorseName = (horseName || registrationNumber).trim().toUpperCase();
+  const normalizedHorseName = resolvedName.trim().toUpperCase();
   const normalizedBarnName = normalizedHorseName.split(/\s+/).slice(0, 2).join(' ') || normalizedHorseName;
   const isAqha = registry.toUpperCase() === 'AQHA' || registrationNumber.toUpperCase().startsWith('AQHA');
 
