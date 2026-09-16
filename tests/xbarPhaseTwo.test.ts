@@ -1,11 +1,12 @@
 import assert from 'node:assert/strict';
-import test, { beforeEach } from 'node:test';
+import test, { beforeEach, afterEach, mock } from 'node:test';
 import { isCurrentDatedDocument } from '../src/lib/documentCurrency.js';
 
 // Freeze fixture time so records described as current never age out in CI.
-beforeEach((context) => {
-  context.mock.timers.enable({ apis: ['Date'], now: new Date('2026-04-15T12:00:00Z') });
+beforeEach(() => {
+  mock.timers.enable({ apis: ['Date'], now: new Date('2026-04-15T12:00:00Z') });
 });
+afterEach(() => mock.timers.reset());
 import { buildDocumentTrustProfile, buildHorsePacketCompleteness } from '../src/lib/xbarPhaseTwo.js';
 import { rankHorseMatches } from '../src/lib/xbarRuntime.js';
 import type { DocumentRecord, HorseRecord, OwnershipRecord } from '../src/types/xbar.js';
