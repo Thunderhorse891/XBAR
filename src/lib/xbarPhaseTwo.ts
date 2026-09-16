@@ -203,6 +203,7 @@ export function buildHorsePacketCompleteness(
   horse: PacketHorseInput,
   documents: PacketDocumentInput[],
   ownershipRecord?: PacketOwnershipInput,
+  asOfDate: Date = new Date(),
 ): PacketCompleteness {
   const registrationDocs = collectDocuments(documents, ['Registration', 'Bill of Sale']);
   const ownershipDocs = collectDocuments(documents, ['Ownership Memo', 'Transfer Packet']);
@@ -234,9 +235,9 @@ export function buildHorsePacketCompleteness(
 
   const cogginsDocs = collectDocuments(documents, ['Coggins']);
   const vetDocs = collectDocuments(documents, ['Vet Record']);
-  const hasCurrentCoggins = hasCurrentReadyDocument(cogginsDocs, CURRENT_COGGINS_DAYS);
-  const hasCurrentHealthSupport = hasCurrentReadyDocument(vetDocs, CURRENT_HEALTH_SUPPORT_DAYS);
-  const medicalDocsCurrent = hasCurrentReadyDocument(medicalDocs, CURRENT_HEALTH_SUPPORT_DAYS);
+  const hasCurrentCoggins = hasCurrentReadyDocument(cogginsDocs, CURRENT_COGGINS_DAYS, asOfDate);
+  const hasCurrentHealthSupport = hasCurrentReadyDocument(vetDocs, CURRENT_HEALTH_SUPPORT_DAYS, asOfDate);
+  const medicalDocsCurrent = hasCurrentReadyDocument(medicalDocs, CURRENT_HEALTH_SUPPORT_DAYS, asOfDate);
   const saleSlots: SalePacketSlot[] = [
     buildSalePacketSlot({
       key: 'aqha-papers',
@@ -267,7 +268,7 @@ export function buildHorsePacketCompleteness(
       ready: hasCurrentCoggins,
       review: cogginsDocs.some(isDocumentResolved),
       readyDetail: 'Current coggins is approved for travel and sale.',
-      reviewDetail: hasResolvedDocumentMissingCurrentDate(cogginsDocs, CURRENT_COGGINS_DAYS)
+      reviewDetail: hasResolvedDocumentMissingCurrentDate(cogginsDocs, CURRENT_COGGINS_DAYS, asOfDate)
         ? 'Coggins is attached but needs a current exam date before use.'
         : 'Coggins is attached but still needs final review.',
       missingDetail: 'No coggins is attached yet.',
@@ -281,7 +282,7 @@ export function buildHorsePacketCompleteness(
       reviewDetail:
         horse.status === 'Medical Review'
           ? 'Medical review is still open on the horse profile.'
-          : hasResolvedDocumentMissingCurrentDate(vetDocs, CURRENT_HEALTH_SUPPORT_DAYS)
+          : hasResolvedDocumentMissingCurrentDate(vetDocs, CURRENT_HEALTH_SUPPORT_DAYS, asOfDate)
             ? 'Health support is attached but needs a current exam date before use.'
             : 'Health support is attached but still needs final review.',
       missingDetail: 'No health certification is attached yet.',
@@ -346,7 +347,7 @@ export function buildHorsePacketCompleteness(
           ? 'Medical review is current for packet use.'
           : horse.status === 'Medical Review'
             ? 'A medical review is still open on the horse profile.'
-            : hasResolvedDocumentMissingCurrentDate(medicalDocs, CURRENT_HEALTH_SUPPORT_DAYS)
+            : hasResolvedDocumentMissingCurrentDate(medicalDocs, CURRENT_HEALTH_SUPPORT_DAYS, asOfDate)
               ? 'Medical support exists but needs a current exam date before use.'
               : medicalDocs.length
                 ? 'Medical support exists, but it is not fully ready to share.'
