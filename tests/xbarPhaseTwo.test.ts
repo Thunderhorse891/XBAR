@@ -2,28 +2,20 @@ import assert from 'node:assert/strict';
 import test, { beforeEach, afterEach, mock } from 'node:test';
 import { isCurrentDatedDocument } from '../src/lib/documentCurrency.js';
 
+const fixtureNow = new Date('2026-04-15T12:00:00Z');
+
 // Freeze fixture time so records described as current never age out in CI.
 beforeEach(() => {
-  mock.timers.enable({ apis: ['Date'], now: new Date('2026-04-15T12:00:00Z') });
+  mock.timers.enable({ apis: ['Date'], now: fixtureNow });
 });
 afterEach(() => mock.timers.reset());
 import { buildDocumentTrustProfile, buildHorsePacketCompleteness } from '../src/lib/xbarPhaseTwo.js';
 import { rankHorseMatches } from '../src/lib/xbarRuntime.js';
 import type { DocumentRecord, HorseRecord, OwnershipRecord } from '../src/types/xbar.js';
 
-/*
- * Fixture dates that mean "recent" have to be derived from today.
- *
- * Document currency is measured against the real clock -- health support is
- * current for CURRENT_HEALTH_SUPPORT_DAYS (180) and Coggins for
- * CURRENT_COGGINS_DAYS (365). A hardcoded date therefore ages out on its own:
- * the health note below was written as 2026-03-08, which stopped being current
- * on 2026-09-04, and this suite began failing the next morning with nobody
- * having touched the code. Dates that encode an INTENT ("current", "long
- * expired") are expressed as that intent instead of as a literal.
- */
+// Module-level fixtures and per-test clocks must share the same reference date.
 function daysAgo(days: number) {
-  const date = new Date();
+  const date = new Date(fixtureNow);
   date.setUTCDate(date.getUTCDate() - days);
   return date.toISOString().slice(0, 10);
 }
