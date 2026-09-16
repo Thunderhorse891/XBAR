@@ -6,6 +6,9 @@ on:
       - main
       - 'codex/**'
   pull_request:
+  schedule:
+    - cron: '17 10 * * *'
+  workflow_dispatch:
 
 jobs:
   ci:
