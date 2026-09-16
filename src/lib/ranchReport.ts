@@ -39,6 +39,8 @@ export interface RanchReportMoney {
   /** Acquisitions plus the receipts tied to a horse. The rest is ranch overhead. */
   investedInHorses: number;
   investedThisMonth: number;
+  /** Current-month receipts with no horse assignment. */
+  unallocatedThisMonth: number;
   /** Trailing three-month average spend across the whole operation. */
   monthlyBurn: number;
   /** Asking prices of everything listed for sale. */
@@ -441,6 +443,11 @@ export function buildRanchReport(input: RanchReportInput, now: Date = new Date()
       // years ago would land in whatever month this report was run.
       investedThisMonth: sum(
         expenseReceipts.filter((receipt) => sameMonth(receipt.receiptDate, now)).map((receipt) => receipt.amount),
+      ),
+      unallocatedThisMonth: sum(
+        expenseReceipts
+          .filter((receipt) => !receipt.horseId && sameMonth(receipt.receiptDate, now))
+          .map((receipt) => receipt.amount),
       ),
       monthlyBurn: trailingMonthlyBurn(expenseReceipts, now),
       listedValue: risk.totalListedValue,

@@ -1,6 +1,7 @@
 -- Make the database's entitlement helpers agree with the API about who is paying.
 --
--- PROPOSED — NOT YET APPLIED. See the apply procedure in docs/ before running.
+-- xbar-records ledger records this migration name on 2026-09-04 (checked 2026-09-10).
+-- Check the target project's ledger and deployed definitions before running.
 --
 -- WHY
 -- ---

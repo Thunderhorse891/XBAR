@@ -25,6 +25,15 @@
   padding: 0 4px;
 }
 
+/* The app's light theme resets headings globally; this hero remains dark. */
+.reports-experience.ops-experience .ops-hero h1 {
+  color: #fffaf2 !important;
+}
+
+.reports-experience.ops-experience .ops-hero p {
+  color: #e2e8f0 !important;
+}
+
 .report-table {
   width: 100%;
   min-width: 640px;
@@ -195,6 +204,12 @@
 }
 
 @media (max-width: 720px) {
+  .reports-experience .report-risk__row .button {
+    max-width: 100%;
+    white-space: normal;
+    overflow-wrap: anywhere;
+  }
+
   .report-risk__row {
     /* The action button wraps under the name rather than squeezing the
        blocker text down to one word per line. */

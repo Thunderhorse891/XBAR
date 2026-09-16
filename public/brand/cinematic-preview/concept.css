@@ -1,0 +1,951 @@
+:root {
+  color-scheme: dark;
+  --bg: #080b10;
+  --paper: #e9eef3;
+  --muted: #a6b5c7;
+  --blue: #69baff;
+  --line: #26394b;
+}
+* {
+  box-sizing: border-box;
+}
+html {
+  scroll-behavior: smooth;
+}
+body {
+  margin: 0;
+  background: var(--bg);
+  color: var(--paper);
+  font-family: Arial, sans-serif;
+}
+button,
+a {
+  font: inherit;
+}
+button {
+  cursor: pointer;
+}
+a {
+  color: inherit;
+  text-decoration: none;
+}
+button:focus-visible,
+a:focus-visible {
+  outline: 3px solid var(--blue);
+  outline-offset: 5px;
+}
+.nav {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  z-index: 4;
+  padding: 28px 5%;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 24px;
+}
+.brand {
+  font-size: 25px;
+  font-weight: 800;
+  letter-spacing: 8px;
+}
+.brand sup {
+  font-size: 9px;
+  letter-spacing: 0;
+}
+.navlinks {
+  display: flex;
+  gap: 24px;
+  align-items: center;
+  font-size: 13px;
+}
+.quiet {
+  border: 1px solid #8ca9bd66;
+  border-radius: 50px;
+  color: var(--paper);
+  background: #080b1077;
+  padding: 11px 18px;
+}
+.hero {
+  min-height: 790px;
+  height: 100svh;
+  max-height: 1080px;
+  position: relative;
+  overflow: hidden;
+  display: flex;
+  align-items: flex-end;
+  padding: 0 5% 78px;
+}
+.film {
+  position: absolute;
+  inset: 60px 0 auto auto;
+  width: 80%;
+  max-width: 1672px;
+  height: 76%;
+  object-fit: contain;
+  object-position: right top;
+  mask-image:
+    linear-gradient(90deg, transparent, #000 12%, #000 95%, transparent),
+    linear-gradient(180deg, transparent, #000 12%, #000 78%, transparent);
+  mask-composite: intersect;
+  opacity: 0.82;
+}
+.shade {
+  position: absolute;
+  inset: 0;
+  background:
+    linear-gradient(0deg, #080b10 0%, #080b1060 36%, transparent 74%),
+    linear-gradient(90deg, #080b10dd, transparent 67%);
+}
+.hero-copy {
+  position: relative;
+  z-index: 2;
+  width: 680px;
+  animation: arrive 1.1s ease-out both;
+}
+.hero h1 {
+  font-size: clamp(56px, 6.8vw, 108px);
+  line-height: 0.97;
+  font-weight: 800;
+  letter-spacing: -5px;
+  margin: 0 0 24px;
+  max-width: 720px;
+  text-shadow: 0 2px 35px #0008;
+}
+.hero p {
+  font-size: 18px;
+  line-height: 1.6;
+  max-width: 440px;
+  color: #ccd8e3;
+}
+.primary {
+  background: var(--paper);
+  color: #101923;
+  border: 0;
+  border-radius: 3px;
+  padding: 17px 24px;
+  font-size: 14px;
+  font-weight: 700;
+  display: inline-flex;
+  align-items: center;
+  gap: 28px;
+}
+.primary span {
+  font-size: 20px;
+}
+.asset-note {
+  position: absolute;
+  right: 5%;
+  bottom: 84px;
+  z-index: 2;
+  max-width: 200px;
+  font-size: 11px;
+  line-height: 1.6;
+  color: #adbac7;
+}
+.scroll-mark {
+  position: absolute;
+  bottom: 28px;
+  left: 5%;
+  width: 90%;
+  height: 1px;
+  background: #59758b55;
+}
+.scroll-mark:after {
+  content: '';
+  display: block;
+  width: 17%;
+  height: 1px;
+  background: var(--blue);
+  animation: travel 5s ease-in-out infinite;
+}
+.intro {
+  padding: 85px 5% 56px;
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10%;
+}
+.intro h2 {
+  font-size: clamp(36px, 4vw, 60px);
+  line-height: 1.06;
+  letter-spacing: -2px;
+  margin: 0;
+}
+.intro p {
+  color: var(--muted);
+  font-size: 17px;
+  line-height: 1.75;
+  margin: 0;
+}
+.stage {
+  margin: 0 5%;
+  border: 1px solid var(--line);
+  background: linear-gradient(145deg, #142332, #0d141d 60%);
+  padding: 28px;
+  position: relative;
+  overflow: hidden;
+  min-height: 525px;
+}
+.stagehead {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 18px;
+  margin-bottom: 25px;
+}
+.tabs {
+  display: flex;
+  gap: 5px;
+  flex-wrap: wrap;
+}
+.tabs button {
+  border: 1px solid transparent;
+  background: transparent;
+  color: var(--muted);
+  padding: 11px 18px;
+  border-radius: 3px;
+}
+.tabs button[aria-selected='true'] {
+  color: var(--paper);
+  border-color: #749cbb;
+  background: #263e52;
+}
+.sample {
+  font-size: 12px;
+  color: var(--muted);
+}
+.workspace {
+  display: grid;
+  grid-template-columns: 34% 1fr;
+  gap: 38px;
+  position: relative;
+}
+.portrait {
+  position: relative;
+  min-height: 355px;
+  background: #080c11;
+  overflow: hidden;
+  border: 1px solid #2f465b;
+  display: flex;
+  flex-direction: column;
+  justify-content: flex-end;
+  padding: 26px;
+}
+.portrait:before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background:
+    linear-gradient(0deg, #080c11 6%, transparent 70%),
+    url('../xbar-report-horse.png') center 15% / contain no-repeat;
+  opacity: 0.65;
+}
+.portrait > * {
+  position: relative;
+}
+.portrait .tag {
+  color: var(--blue);
+  font-size: 12px;
+}
+.portrait h3 {
+  font-size: 32px;
+  margin: 10px 0;
+}
+.portrait p {
+  color: var(--muted);
+  font-size: 13px;
+  margin: 0;
+  line-height: 1.6;
+}
+.detail {
+  padding: 18px 10px 0 0;
+}
+.detail h3 {
+  font-size: 29px;
+  margin: 0 0 10px;
+  letter-spacing: -0.6px;
+}
+.detail > p {
+  color: var(--muted);
+  line-height: 1.6;
+  max-width: 540px;
+  font-size: 14px;
+}
+.map {
+  position: relative;
+  width: 100%;
+  height: 150px;
+  margin: 14px 0;
+}
+.map svg {
+  width: 100%;
+  height: 100%;
+  overflow: visible;
+}
+.track {
+  stroke: #38546b;
+  stroke-width: 1.5;
+  fill: none;
+}
+.pulse {
+  stroke: var(--blue);
+  stroke-width: 2;
+  fill: none;
+  stroke-dasharray: 20 360;
+  animation: route 6s linear infinite;
+}
+.node {
+  fill: #122536;
+  stroke: #86b8dd;
+  stroke-width: 1;
+}
+.map text {
+  fill: #dce9f3;
+  font-size: 12px;
+  text-anchor: middle;
+  font-family: Arial, sans-serif;
+}
+.facts {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 12px;
+  border-top: 1px solid var(--line);
+  padding-top: 20px;
+}
+.facts span {
+  display: block;
+  color: var(--muted);
+  font-size: 11px;
+  margin-bottom: 9px;
+}
+.facts strong {
+  font-size: 16px;
+  font-weight: 500;
+}
+.story {
+  padding: 100px 5%;
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 70px;
+  align-items: center;
+}
+.story h2 {
+  font-size: 50px;
+  letter-spacing: -2px;
+  margin: 0 0 22px;
+}
+.story p {
+  font-size: 17px;
+  color: var(--muted);
+  line-height: 1.7;
+  max-width: 470px;
+}
+.report-art {
+  background: #edf1f5;
+  color: #142539;
+  padding: 28px 28px 34px;
+  transform: perspective(1000px) rotateY(-8deg) rotateX(4deg);
+  box-shadow:
+    24px 30px 0 #1d344633,
+    0 24px 90px #0008;
+  transition: transform 0.6s;
+}
+.report-art:hover {
+  transform: perspective(1000px) rotateY(0) rotateX(0);
+}
+.report-art .rh {
+  display: flex;
+  justify-content: space-between;
+  border-bottom: 2px solid #18354b;
+  padding-bottom: 14px;
+  font-size: 11px;
+}
+.report-art h3 {
+  font-size: 29px;
+  letter-spacing: -1px;
+  margin: 25px 0;
+}
+.report-art .money {
+  display: flex;
+  gap: 22px;
+  margin-bottom: 25px;
+}
+.money small {
+  font-size: 10px;
+  display: block;
+  color: #556576;
+  margin-bottom: 8px;
+}
+.money b {
+  font-size: 22px;
+}
+.bars {
+  display: grid;
+  gap: 11px;
+}
+.bar {
+  height: 9px;
+  background: #d6e0e8;
+  position: relative;
+}
+.bar:after {
+  content: '';
+  display: block;
+  width: var(--w);
+  height: 100%;
+  background: #284e6e;
+  transform-origin: left;
+  animation: grow 1.5s ease-out both;
+}
+.bar:nth-child(2):after {
+  background: #557c9e;
+  animation-delay: 0.1s;
+}
+.bar:nth-child(3):after {
+  background: #789cb8;
+  animation-delay: 0.2s;
+}
+.report-art p {
+  font-size: 11px;
+  line-height: 1.5;
+  margin: 23px 0 0;
+  color: #506274;
+}
+.end {
+  padding: 0 5% 35px;
+  display: flex;
+  justify-content: space-between;
+  gap: 30px;
+  color: var(--muted);
+  font-size: 12px;
+}
+.paused * {
+  animation-play-state: paused !important;
+}
+.paused .report-art {
+  transition: none;
+  transform: none;
+}
+@keyframes arrive {
+  from {
+    opacity: 0;
+    transform: translateY(24px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+@keyframes travel {
+  0%,
+  100% {
+    transform: translateX(0);
+  }
+  50% {
+    transform: translateX(480%);
+  }
+}
+@keyframes route {
+  to {
+    stroke-dashoffset: -760;
+  }
+}
+@keyframes grow {
+  from {
+    transform: scaleX(0);
+  }
+  to {
+    transform: scaleX(1);
+  }
+}
+@media (max-width: 760px) {
+  .nav {
+    padding: 22px 6%;
+  }
+  .navlinks > a {
+    display: none;
+  }
+  .hero {
+    min-height: 730px;
+    height: 94svh;
+    padding: 0 6% 125px;
+  }
+  .film {
+    inset: 0;
+    width: 100%;
+    height: 100%;
+    object-fit: contain;
+    object-position: center 15%;
+  }
+  .hero h1 {
+    font-size: 62px;
+    letter-spacing: -3px;
+  }
+  .hero p {
+    font-size: 16px;
+    max-width: 300px;
+  }
+  .asset-note {
+    left: 6%;
+    bottom: 49px;
+    max-width: 85%;
+    font-size: 10px;
+  }
+  .intro {
+    grid-template-columns: 1fr;
+    gap: 24px;
+    padding: 58px 6% 36px;
+  }
+  .stage {
+    padding: 18px;
+    margin: 0 6%;
+  }
+  .stagehead {
+    display: block;
+  }
+  .sample {
+    display: block;
+    margin-top: 16px;
+  }
+  .workspace {
+    grid-template-columns: 1fr;
+    gap: 22px;
+  }
+  .portrait {
+    min-height: 260px;
+  }
+  .portrait:before {
+    background-size: cover;
+    background-position: center;
+  }
+  .detail {
+    padding: 0;
+  }
+  .facts {
+    gap: 8px;
+  }
+  .facts strong {
+    font-size: 13px;
+  }
+  .tabs button {
+    padding: 10px 12px;
+  }
+  .story {
+    grid-template-columns: 1fr;
+    padding: 65px 6%;
+    gap: 34px;
+  }
+  .story h2 {
+    font-size: 40px;
+  }
+  .report-art {
+    transform: none;
+    padding: 22px;
+  }
+  .report-art h3 {
+    font-size: 24px;
+  }
+  .money b {
+    font-size: 17px;
+  }
+  .end {
+    padding: 0 6% 25px;
+    display: block;
+    line-height: 1.8;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  html {
+    scroll-behavior: auto;
+  }
+  *,
+  *:before,
+  *:after {
+    animation: none !important;
+    transition: none !important;
+  }
+  .report-art {
+    transform: none;
+  }
+}
+.paused .hero-copy,
+.paused .bar:after {
+  animation: none;
+  opacity: 1;
+  transform: none;
+}
+:root {
+  --motion-cinematic: 720ms;
+  --ease-cinematic: cubic-bezier(0.22, 1, 0.36, 1);
+}
+.hero-copy {
+  animation-duration: var(--motion-cinematic);
+  animation-timing-function: var(--ease-cinematic);
+}
+
+/* Small light details echo the silver-blue edge of the original horse artwork.
+   They occupy their own decorative layer; content and hit targets stay intact. */
+.hero-atmosphere {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  overflow: hidden;
+  background: radial-gradient(ellipse at 82% 32%, #69baff0b, transparent 42%);
+}
+.contour-light {
+  position: absolute;
+  right: -3%;
+  top: 9%;
+  width: 70%;
+  height: 76%;
+  opacity: 0.3;
+  mask-image: linear-gradient(0deg, transparent 5%, #000 35%, #000 68%, transparent 96%);
+}
+.contour-light path {
+  stroke: #8cc7ed;
+  stroke-width: 0.7;
+  vector-effect: non-scaling-stroke;
+}
+.contour-light path:nth-child(2) {
+  opacity: 0.35;
+}
+.contour-light path:nth-child(3) {
+  opacity: 0.5;
+}
+.light-fleck {
+  position: absolute;
+  width: 3px;
+  height: 3px;
+  border-radius: 50%;
+  background: #cce8fa;
+  box-shadow: 0 0 10px 2px #69baff44;
+  opacity: 0.5;
+  animation: fleck-drift 4.2s cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+.light-fleck--one {
+  left: 59%;
+  top: 21%;
+}
+.light-fleck--two {
+  left: 89%;
+  top: 46%;
+  width: 2px;
+  height: 2px;
+}
+.light-fleck--three {
+  left: 72%;
+  top: 66%;
+  width: 2px;
+  height: 2px;
+}
+@keyframes fleck-drift {
+  from {
+    opacity: 0;
+    transform: translate(-9px, 16px);
+  }
+  35% {
+    opacity: 0.65;
+  }
+  to {
+    opacity: 0.35;
+    transform: translate(0, 0);
+  }
+}
+.primary {
+  box-shadow:
+    inset 0 1px 0 #fff9,
+    0 6px 24px #0003;
+  transition: box-shadow 0.25s ease;
+}
+.primary:hover,
+.primary:focus-visible {
+  box-shadow:
+    inset 0 1px 0 #fff,
+    0 0 0 1px #69baff66,
+    0 8px 32px #69baff26;
+}
+.report-art {
+  border-top: 1px solid #fff;
+  border-right: 1px solid #b9cddd;
+  box-shadow:
+    1px 0 0 #789cb866,
+    24px 30px 0 #1d344633,
+    0 24px 90px #0008;
+}
+.paused .light-fleck,
+.motion-suspended .light-fleck {
+  animation-play-state: paused;
+}
+@media (max-width: 760px) {
+  .contour-light {
+    top: 8%;
+    right: -16%;
+    width: 100%;
+    height: 44%;
+    opacity: 0.2;
+  }
+  .light-fleck--one {
+    left: 21%;
+    top: 19%;
+  }
+  .light-fleck--two {
+    left: 86%;
+    top: 30%;
+  }
+  .light-fleck--three {
+    display: none;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .light-fleck {
+    animation: none;
+    opacity: 0.35;
+  }
+  .primary {
+    transition: none;
+  }
+}
+
+/* Five-point readability refinement: retain the original composition. */
+.brand-home {
+  font-size: 14px;
+  color: var(--muted);
+  font-weight: 600;
+}
+.film {
+  filter: brightness(1.65);
+  height: auto;
+}
+.shade {
+  background:
+    linear-gradient(0deg, #080b10 0%, #080b1040 36%, transparent 74%),
+    linear-gradient(90deg, #080b10cc, transparent 58%);
+}
+.hero h1 {
+  font-size: clamp(56px, 6vw, 88px);
+  font-weight: 700;
+  letter-spacing: -0.045em;
+  line-height: 1.02;
+}
+.workflow-map {
+  position: relative;
+  margin: 28px 0;
+}
+.workflow-steps {
+  position: relative;
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  gap: 12px;
+}
+.workflow-steps li {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  align-items: center;
+  font-size: 14px;
+  color: #dce9f3;
+}
+.step-icon {
+  display: grid;
+  place-items: center;
+  width: 48px;
+  height: 48px;
+  border: 1px solid #86b8dd;
+  border-radius: 50%;
+  background: #122536;
+  color: #c4def0;
+  font-size: 24px;
+}
+.workflow-map .pulse {
+  position: absolute;
+  top: 24px;
+  left: 16%;
+  width: 68%;
+  height: 1px;
+  background: #38546b;
+  animation: none;
+}
+.report-art {
+  transform: none;
+  padding: 30px;
+  border-radius: 4px;
+}
+.report-art:hover {
+  transform: none;
+}
+.report-art h3 {
+  margin: 22px 0;
+  font-size: 28px;
+}
+.report-art .money {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 18px;
+  margin-bottom: 24px;
+}
+.money small {
+  font-size: 12px;
+  color: #445669;
+}
+.money b {
+  font-size: clamp(23px, 2vw, 30px);
+  letter-spacing: -0.04em;
+}
+.money .ready-metric {
+  grid-column: 1 / -1;
+  border-top: 1px solid #c4d0da;
+  padding-top: 16px;
+  display: grid;
+  grid-template-columns: 1fr auto;
+  align-items: center;
+}
+.ready-metric small {
+  margin: 0;
+}
+.ready-metric b {
+  color: #87500e;
+  grid-column: 2;
+  grid-row: 1 / 3;
+  font-size: 32px;
+}
+.ready-metric span {
+  font-size: 11px;
+  color: #87500e;
+  margin-top: 4px;
+}
+.value-comparison {
+  display: grid;
+  gap: 15px;
+}
+.value-row > div:first-child {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  font-size: 12px;
+  margin-bottom: 7px;
+}
+.value-row b {
+  font-variant-numeric: tabular-nums;
+}
+.value-track {
+  height: 8px;
+  border-radius: 2px;
+  background: #d6e0e8;
+  overflow: hidden;
+}
+.value-track span {
+  display: block;
+  width: var(--w);
+  height: 100%;
+  background: #557c9e;
+}
+.value-row:last-child .value-track span {
+  background: #284e6e;
+}
+.report-exception {
+  margin-top: 24px;
+  padding: 15px;
+  border-left: 3px solid #a26b21;
+  background: #f1e8d9;
+}
+.report-exception > span {
+  display: block;
+  color: #68420f;
+  font-size: 12px;
+  margin-bottom: 6px;
+}
+.report-exception strong {
+  font-size: 21px;
+  color: #68420f;
+}
+.report-art .report-exception p {
+  margin: 7px 0 0;
+  font-size: 12px;
+  color: #584a38;
+}
+.report-action {
+  display: grid;
+  gap: 6px;
+  margin-top: 18px;
+  font-size: 12px;
+  line-height: 1.6;
+}
+.report-action span {
+  color: #445669;
+}
+@media (max-width: 760px) {
+  .hero h1 {
+    font-size: clamp(38px, 11.5vw, 54px);
+    letter-spacing: -0.04em;
+    max-width: 100%;
+  }
+  .hero-copy {
+    width: 100%;
+  }
+  .hero p {
+    font-size: 15px;
+  }
+  .workflow-steps {
+    grid-template-columns: 1fr;
+    gap: 20px;
+  }
+  .workflow-steps li {
+    flex-direction: row;
+    gap: 16px;
+    font-size: 15px;
+  }
+  .step-icon {
+    flex: 0 0 42px;
+    width: 42px;
+    height: 42px;
+    font-size: 22px;
+  }
+  .workflow-map .pulse {
+    top: 20px;
+    bottom: 20px;
+    left: 21px;
+    width: 1px;
+    height: auto;
+  }
+  .report-art {
+    padding: 22px;
+  }
+  .report-art h3 {
+    font-size: 25px;
+  }
+  .money b {
+    font-size: 24px;
+  }
+  .brand-home {
+    font-size: 12px;
+  }
+}
+
+@media (max-width: 1000px) {
+  .story {
+    grid-template-columns: 1fr;
+    gap: 34px;
+  }
+  .report-art {
+    width: 100%;
+    max-width: 620px;
+  }
+}
+@media (max-width: 760px) {
+  .film {
+    inset: 95px 0 auto;
+    height: auto;
+    object-position: center;
+  }
+}
+
+@media (max-width: 760px) {
+  .end > span {
+    display: block;
+  }
+}

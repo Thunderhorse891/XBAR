@@ -35,14 +35,10 @@ import { isSupabaseConfigured } from '@/lib/platformConfig';
 import { useCloudStore } from '@/store/useCloudStore';
 import { useUiStore } from '@/store/useUiStore';
 import { useXbarStore } from '@/store/useXbarStore';
+import { hasCommandCenterEntry } from '@/lib/commandCenterEntry';
 
 // Mirrors RequireCloudAuth: a local single-user entry grants app access even
 // when Supabase is configured, so the palette's private index is allowed too.
-function hasCommandCenterEntry() {
-  if (typeof window === 'undefined') return false;
-  return window.localStorage.getItem('xbar-command-center-entry') === 'true';
-}
-
 function isEditableTarget(target: EventTarget | null) {
   return target instanceof HTMLElement && Boolean(target.closest('input, textarea, select, [contenteditable="true"]'));
 }

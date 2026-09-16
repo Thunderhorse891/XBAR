@@ -388,3 +388,23 @@ export function workspaceBackupPayload(backup: unknown): Record<string, unknown>
 
   return record;
 }
+
+/*
+ * Who a long-running document intake is being performed as.
+ *
+ * An intake spans uploads and OCR, which is long enough for another tab to
+ * sign a different account in underneath it. Captured when the batch starts
+ * and compared again at the moment it commits: if either half has moved, the
+ * records belong to an account that is no longer the one this store holds, and
+ * installing them would file one customer's documents inside another
+ * customer's ranch.
+ *
+ * A missing value is not a wildcard. Signing out (an id becoming '') and
+ * signing in from a signed-out state (an id arriving) are both changes, so
+ * they are compared as plain values rather than being excused when empty.
+ */
+export type IntakeIdentity = { userId: string; workspaceId: string };
+
+export function intakeIdentityChanged(before: IntakeIdentity, after: IntakeIdentity): boolean {
+  return before.userId !== after.userId || before.workspaceId !== after.workspaceId;
+}

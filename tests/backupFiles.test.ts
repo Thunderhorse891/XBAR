@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import { readFile } from 'node:fs/promises';
+import { readdir, readFile } from 'node:fs/promises';
 import test from 'node:test';
 
 import {
@@ -1561,6 +1561,23 @@ test('a record that installs but crashes the route it lands on is refused', asyn
   assert.match(docsEntry, /optionalNonNegativeNumbers: \['fileSizeBytes'\]/);
 
   /*
+   * `processingNote` is rendered at Documents.tsx:857. A non-string from a
+   * damaged backup reaches JSX as an invalid child and React throws — taking
+   * the whole Documents screen, not the one row.
+   *
+   * `readableProcessingNote` guards that call site and this does not replace
+   * it. The guard keeps ONE screen honest; the boundary keeps the value out of
+   * the restored workspace, so the next reader inherits the protection rather
+   * than having to remember it. Excluding it because a guard exists is how the
+   * second reader gets written without one.
+   */
+  assert.match(
+    docsEntry,
+    /optionalStrings: \[[^\]]*'processingNote'/,
+    'processingNote is rendered as a React child, so a damaged backup must not carry a non-string through',
+  );
+
+  /*
    * Found by auditing the whole exclusion list rather than by being told, after
    * the fourth finding in a row named a field I had excluded.
    *
@@ -2633,7 +2650,28 @@ test('the migration runbook lists every migration the code requires', async () =
   // The apply commands, not merely the prose list: a reader following the code
   // block is the case that goes wrong.
   assert.match(readme, /psql "\$DATABASE_URL" -f supabase\/migrations\/20260827_subscription_event_ordering\.sql/);
-  assert.match(readme, /Five migrations in `supabase\/migrations\/`/, 'the count must match the list');
+  // The runbook covers migrations added after the production baseline.
+  // Headers cannot tell us whether a migration ran on a particular project.
+  // Verify coverage of the rollout files, regardless of deployment status.
+  const migrationDir = 'supabase/migrations';
+  const rollout = (await readdir(migrationDir))
+    .filter((name) => /^\d{8}(?:\d{6})?_.*\.sql$/.test(name) && name.slice(0, 8) >= '20260820')
+    .sort();
+  assert.ok(rollout.length > 0, 'the rollout migration set must not be empty');
+  for (const file of rollout) {
+    assert.ok(readme.includes(file), `the runbook must list ${file}, which belongs to this rollout`);
+    /*
+     * Plain substring, not a pattern built from the filename. Escaping a value
+     * into a regex is a trap even here -- the first version escaped `.` and
+     * nothing else, which CodeQL correctly called incomplete -- and `-f
+     * supabase/migrations/<file>` only ever appears in a psql invocation, so it
+     * already distinguishes an APPLY COMMAND from a prose mention without one.
+     */
+    assert.ok(
+      readme.includes(`-f supabase/migrations/${file}`),
+      `the runbook must give an apply command for ${file}, not only mention it`,
+    );
+  }
 
   /*
    * The migration that REVOKES is the one an operator can silently skip. The
@@ -3142,4 +3180,42 @@ test('a writer cannot start in the middle of a sweep', async () => {
     restoreLocks();
     restoreDb();
   }
+});
+
+test('snapshot saves leave membership changes to explicit cloud operations', async () => {
+  const cloud = await readFile('src/lib/cloudWorkspace.ts', 'utf8');
+  const start = cloud.indexOf('async function saveWorkspaceBackupToRelationalCloud');
+  const end = cloud.indexOf('async function loadWorkspaceBackupFromRelationalCloud', start);
+  const save = cloud.slice(start, end);
+  assert.ok(start > -1 && end > start);
+  assert.doesNotMatch(save, /workspaceMembers|syncWorkspaceMembershipRows/);
+  assert.match(cloud, /export async function removeWorkspaceMemberFromCloud[\s\S]*?\.delete\(\)/);
+});
+test('a cloud hydration that throws still releases the app', async () => {
+  const bootstrap = await readFile('src/components/CloudBootstrap.tsx', 'utf8');
+
+  /*
+   * `autosaveReady` has to become true on EVERY way out of a hydration run,
+   * including one that throws.
+   *
+   * Each decision branch inside `hydrate` ends in `finish`, so a throw on the
+   * way to one reached none of them, and the flag stayed false for the life of
+   * the page. That was already a silent defect -- cloud autosave simply stopped
+   * -- and RequireWorkspaceSetup now reads the same flag to tell "the cloud has
+   * not answered yet" from "this ranch was never set up", so an unsettled run
+   * would hold the customer on a loading shell instead.
+   *
+   * A source guard, not a behavioural one: making the real hydration throw from
+   * a browser test means corrupting a response in a way supabase-js re-raises
+   * rather than returns, which pins the client's internals rather than this.
+   */
+  assert.match(
+    bootstrap,
+    /void hydrate\(\)\s*\.catch\([\s\S]{0,400}?finish\(/,
+    'a rejected hydration must still call finish, or nothing releases the loading shell',
+  );
+  assert.ok(
+    !/void hydrate\(\);/.test(bootstrap),
+    'an unhandled hydrate() leaves autosaveReady false forever; attach the rejection handler',
+  );
 });
