@@ -401,6 +401,7 @@ export default function Horses() {
               const collidingHorse = repair.collidesWithHorseId
                 ? horses.find((candidate) => candidate.id === repair.collidesWithHorseId)
                 : undefined;
+              const horse = horses.find((candidate) => candidate.id === repair.horseId);
               return (
                 <li key={repair.horseId} className="horse-name-repair__row">
                   <label>
@@ -416,6 +417,13 @@ export default function Horses() {
                     </span>
                   </label>
                   <small>from {repair.sourceDocumentTitle}</small>
+                  {/* A second field changes here. Saying so is the difference
+                      between a reviewed edit and a silent one. */}
+                  {repair.proposedBarnName ? (
+                    <small>
+                      barn name also changes: <s>{horse?.barnName}</s> → <strong>{repair.proposedBarnName}</strong>
+                    </small>
+                  ) : null}
                   {collidingHorse ? (
                     <small className="horse-name-repair__warning" role="alert">
                       {collidingHorse.name} already uses this name. Rename it only if these are the same horse.

@@ -73,6 +73,31 @@ export function nameNeedsRepair(horse: Pick<RepairableHorse, 'name' | 'registrat
 }
 
 /**
+ * Whether the barn name is part of the same defect and should follow the rename.
+ *
+ * Narrower than `nameNeedsRepair` on purpose, and the difference is the whole
+ * point: "contains no letters" would sweep up a barn name a person deliberately
+ * chose. Plenty of barns call a horse "7". Renaming that to the first two words
+ * of a registered name, as a silent side effect of fixing a DIFFERENT field,
+ * would destroy a real choice to tidy up a machine's mistake.
+ *
+ * So it follows only when the barn name is demonstrably the same bad value: it
+ * repeats a registration identifier, or it repeats the broken registered name
+ * that is being replaced.
+ */
+function barnNameFollowsRepair(
+  horse: Pick<RepairableHorse, 'name' | 'barnName' | 'registrationNumber' | 'aqhaNumber'>,
+) {
+  const barnName = normalize(horse.barnName);
+  if (!barnName) return false;
+
+  const sameBadValues = [horse.registrationNumber, horse.aqhaNumber, horse.name]
+    .map((value) => normalize(value ?? ''))
+    .filter(Boolean);
+  return sameBadValues.includes(barnName);
+}
+
+/**
  * One proposed rename per horse whose name is a registration number and whose
  * attached papers carry a usable name.
  *
@@ -120,15 +145,7 @@ export function proposeHorseNameRepairs(params: {
         horseId: horse.id,
         currentName: horse.name,
         proposedName,
-        // The barn name follows only when it is also a number. A barn name a
-        // person chose is theirs, and this does not touch it.
-        proposedBarnName: nameNeedsRepair({
-          name: horse.barnName,
-          registrationNumber: horse.registrationNumber,
-          aqhaNumber: horse.aqhaNumber,
-        })
-          ? proposedName.split(/\s+/).slice(0, 2).join(' ')
-          : undefined,
+        proposedBarnName: barnNameFollowsRepair(horse) ? proposedName.split(/\s+/).slice(0, 2).join(' ') : undefined,
         sourceDocumentId: document.id,
         sourceDocumentTitle: document.title,
         collidesWithHorseId: collidesWithHorseId === horse.id ? undefined : collidesWithHorseId,

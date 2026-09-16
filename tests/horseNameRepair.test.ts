@@ -61,7 +61,7 @@ test('a number-named horse is offered the name on its paper', () => {
   assert.equal(repairs[0].collidesWithHorseId, undefined);
 });
 
-test('the barn name follows only when it is also a number', () => {
+test('the barn name follows only when it holds the same bad value', () => {
   const [followed] = proposeHorseNameRepairs({ horses: [horse()], documents: [document()] });
   assert.equal(followed.proposedBarnName, 'Bar B');
 
@@ -70,6 +70,38 @@ test('the barn name follows only when it is also a number', () => {
     documents: [document()],
   });
   assert.equal(untouched.proposedBarnName, undefined, 'a barn name a person chose is theirs');
+});
+
+/*
+ * Found in review. An earlier version asked `nameNeedsRepair` about the barn
+ * name, which is true for anything with no letters in it -- so a barn that
+ * deliberately calls a horse "7" would have had that replaced by the first two
+ * words of the registered name, as a silent side effect of fixing a different
+ * field, with nothing in the review UI showing it.
+ */
+test('a deliberately numeric barn name is left alone', () => {
+  for (const barnName of ['7', '42', '3B']) {
+    const [repair] = proposeHorseNameRepairs({
+      horses: [horse({ barnName })],
+      documents: [document()],
+    });
+    assert.equal(repair.proposedBarnName, undefined, `barn name ${barnName} is a choice, not the defect`);
+  }
+});
+
+test('a barn name repeating the AQHA number or the broken name does follow', () => {
+  const [byAqha] = proposeHorseNameRepairs({
+    horses: [horse({ barnName: 'AQHA77', registrationNumber: '35012691962', aqhaNumber: 'AQHA77' })],
+    documents: [document()],
+  });
+  assert.equal(byAqha.proposedBarnName, 'Bar B');
+
+  // The registered name was the bad value and the barn name copied it.
+  const [byName] = proposeHorseNameRepairs({
+    horses: [horse({ name: '999', barnName: '999', registrationNumber: '' })],
+    documents: [document()],
+  });
+  assert.equal(byName.proposedBarnName, 'Bar B');
 });
 
 test('a horse whose papers hold no usable name is not proposed at all', () => {
