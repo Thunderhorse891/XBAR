@@ -34,6 +34,38 @@ const titles: [string, string | undefined][] = [
   // the ends are stripped, and only while something is left.
   ['Docs Sale Bound pedigree', 'Docs Sale Bound'],
 
+  /*
+   * A title that is ENTIRELY paper vocabulary names no horse. Found in review:
+   * end-only stripping let "Bill of Sale.pdf" through and created a horse
+   * called BILL OF SALE, because none of its words sat at a strippable end in a
+   * way that emptied the string. "Insurance Policy" became POLICY and
+   * "Lab Results" became LAB RESULTS the same way.
+   */
+  ['Bill of Sale.pdf', undefined],
+  ['A Bill of Sale', undefined],
+  ['signed bill of sale - Copy', undefined],
+  ['Insurance Policy.pdf', undefined],
+  ['Lab Results', undefined],
+  ['Invoice 2026', undefined],
+  ['Sales Agreement', undefined],
+  ['Health Certificate.pdf', undefined],
+  ['Transfer of Ownership', undefined],
+  ['Certificate of Registration', undefined],
+
+  // A real name beside that vocabulary survives it, at either end.
+  ['Bill of Sale - Smart Little Pepto', 'Smart Little Pepto'],
+  ['Smart Little Pepto Bill of Sale', 'Smart Little Pepto'],
+  ['Registration for Frenchmans Guy', 'Frenchmans Guy'],
+
+  /*
+   * Registered names really do start with these words ("A Shiner Named Sioux"
+   * is an AQHA name), so filler is only ever eaten as part of a paper word's
+   * phrase, never on its own.
+   */
+  ['A Shiner Named Sioux', 'A Shiner Named Sioux'],
+  ['An Awesome Miss', 'An Awesome Miss'],
+  ['The Big Chex', 'The Big Chex'],
+
   // Nothing worth using. Each of these must refuse rather than invent.
   ['scan-001', undefined],
   ['IMG_4821', undefined],

@@ -65,17 +65,83 @@ const DOCUMENT_WORDS = [
   'page',
   'img',
   'image',
+  /*
+   * Words that name a KIND of paper without any of the above next to them.
+   * Missing these let "Bill of Sale.pdf" through as a horse called BILL OF
+   * SALE, "Insurance Policy.pdf" as POLICY and "Lab Results.pdf" as LAB
+   * RESULTS -- the same "a plausible answer is worse than no answer" failure
+   * this module exists to prevent, one level up.
+   */
+  'bill',
+  'sale',
+  'sales',
+  'invoice',
+  'receipt',
+  'policy',
+  'agreement',
+  'form',
+  'application',
+  'test',
+  'results',
+  'result',
+  'lab',
+  'statement',
+  'letter',
+  'notice',
+  'report',
+  'signed',
+  'unsigned',
+  'original',
+  'duplicate',
 ];
 
 const DOCUMENT_WORD_GROUP = DOCUMENT_WORDS.join('|');
+
+/*
+ * Words that carry no identity on their own.
+ *
+ * Two lists, because the two jobs differ. STRIPPABLE filler may be removed from
+ * a title beside a paper word. "a" and "an" are deliberately NOT in it: real
+ * registered names begin that way ("A Shiner Named Sioux"), and eating the
+ * first word of a horse's name to tidy a filename is the wrong trade.
+ */
+const STRIPPABLE_FILLER = ['of', 'the', 'for', 'and', 'to', 'in', 'on', 'from', 'with'];
+
+/*
+ * The wider list, used only to answer "is this title nothing but paper
+ * vocabulary?". "a" belongs here -- "A Bill of Sale" names no horse -- and
+ * including it is safe because this list never removes anything, it only
+ * decides whether to reject the title outright.
+ */
+const VOCABULARY_ONLY = new Set([...DOCUMENT_WORDS, ...STRIPPABLE_FILLER, 'a', 'an']);
 
 // "- Copy", "- Copy (2)", " (1)", "-kopie": what a file manager adds when the
 // same paper is duplicated, which is how "Berry Peachy Chic - Copy - Copy"
 // happens. Repeated until none is left, because they stack.
 const COPY_SUFFIX = new RegExp(String.raw`[\s._-]*(?:-\s*)?copy(?:\s*\(\d+\))?\s*$|[\s._-]*\(\d+\)\s*$`, 'i');
 
-const LEADING_DOCUMENT_WORD = new RegExp(String.raw`^(?:${DOCUMENT_WORD_GROUP})\b[\s._-]*`, 'i');
+const FILLER_GROUP = STRIPPABLE_FILLER.join('|');
+
+/*
+ * A paper word at the start, optionally behind filler that belongs to it:
+ * "Bill of Sale - Smart Little Pepto" sheds "Bill", then "of Sale", and the
+ * horse's name is what is left.
+ *
+ * Filler is only ever eaten as part of a paper word's phrase, never alone, so a
+ * horse called "A Sweet Lady" or "The Big Chex" keeps its first word.
+ */
+const LEADING_DOCUMENT_WORD = new RegExp(
+  // One filler may also follow the paper word: "Registration for Frenchmans Guy".
+  String.raw`^(?:(?:${FILLER_GROUP})[\s._-]+)*(?:${DOCUMENT_WORD_GROUP})\b[\s._-]*(?:(?:${FILLER_GROUP})[\s._-]+)?`,
+  'i',
+);
 const TRAILING_DOCUMENT_WORD = new RegExp(String.raw`[\s._-]*\b(?:${DOCUMENT_WORD_GROUP})$`, 'i');
+// The mirror case: "Smart Little Pepto Bill of" -> the trailing filler only
+// goes because the paper word in front of it does.
+const TRAILING_DOCUMENT_PHRASE = new RegExp(
+  String.raw`[\s._-]*\b(?:${DOCUMENT_WORD_GROUP})[\s._-]+(?:${FILLER_GROUP})$`,
+  'i',
+);
 
 /*
  * A filing year on the end: "Miss Kitty Jr coggins 2026". Removed in the same
@@ -130,12 +196,34 @@ export function horseNameFromDocumentTitle(title: string | undefined): string | 
   do {
     previous = value;
     value = tidySeparators(
-      value.replace(LEADING_DOCUMENT_WORD, '').replace(TRAILING_DOCUMENT_WORD, '').replace(TRAILING_YEAR, ''),
+      value
+        .replace(LEADING_DOCUMENT_WORD, '')
+        .replace(TRAILING_DOCUMENT_PHRASE, '')
+        .replace(TRAILING_DOCUMENT_WORD, '')
+        .replace(TRAILING_YEAR, ''),
     );
   } while (value !== previous && value.length > 0);
 
   if (!value) return undefined;
   if (SCAN_ARTIFACT.test(value)) return undefined;
+
+  /*
+   * Nothing left once the paper vocabulary is taken out of the WHOLE string.
+   *
+   * The end-stripping above is deliberately conservative -- it will not touch a
+   * middle word, so a horse called "Docs Sale Bound" keeps its name. That
+   * conservatism is what let "Bill of Sale" through: none of its words sit at a
+   * strippable end in a way that empties it.
+   *
+   * So the emptiness question is asked separately, over every word. It only
+   * ever REJECTS; the value returned is still the conservatively stripped one.
+   * "Docs Sale Bound" keeps "Docs" and "Bound" here and survives; "Bill of
+   * Sale", "Insurance Policy" and "Lab Results" keep nothing and do not.
+   */
+  const carriesSomethingOfItsOwn = value
+    .split(/\s+/)
+    .some((word) => word && !VOCABULARY_ONLY.has(word.replace(/[^A-Za-z]/g, '').toLowerCase()));
+  if (!carriesSomethingOfItsOwn) return undefined;
 
   // A registration number in the filename is the very thing this exists to
   // avoid putting in the name field.
