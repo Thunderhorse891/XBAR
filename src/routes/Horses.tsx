@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { Link, useNavigate, useSearchParams } from 'react-router-dom';
 import { ContextMenu } from '@/components/ContextMenu';
 import { ActionMenuButton } from '@/components/InteractionSystem';
@@ -14,6 +14,7 @@ import { buildHorsePacketCompleteness } from '@/lib/xbarPhaseTwo';
 import { useCurrentRoleCapability, useXbarStore } from '@/store/useXbarStore';
 import type { HorseSegment, HorseSex, HorseStatus } from '@/types/xbar';
 import { canSubmitHorseCreate, horseCreateFieldErrors } from '@/lib/horseCreateGate';
+import { proposeHorseNameRepairs } from '@/lib/horseNameRepair';
 import './horsesCommand.css';
 
 function createHorseFormDefaults(params: {
@@ -75,6 +76,8 @@ export default function Horses() {
   const openRightDrawer = useUiStore((state) => state.openRightDrawer);
   const canCreateHorse = useCurrentRoleCapability('createHorse');
   const canManageSharedAccess = useCurrentRoleCapability('manageSharedAccess');
+  const canEditHorse = useCurrentRoleCapability('editHorse');
+  const applyHorseNameRepairs = useXbarStore((state) => state.applyHorseNameRepairs);
   const [searchParams, setSearchParams] = useSearchParams();
   const [viewMode, setViewMode] = useState<ViewMode>('Cards');
   const [segmentFilter, setSegmentFilter] = useState<SegmentFilter>('All');
@@ -83,6 +86,8 @@ export default function Horses() {
     Partial<Record<'name' | 'barnName' | 'owner' | 'ownerEntity' | 'barn' | 'pasture', string>>
   >({});
   const [menuState, setMenuState] = useState<{ horseId: string; x: number; y: number } | null>(null);
+  const [repairsDismissed, setRepairsDismissed] = useState(false);
+  const [selectedRepairs, setSelectedRepairs] = useState<Set<string>>(new Set());
   const [togglingListingId, setTogglingListingId] = useState<string | null>(null);
   const [form, setForm] = useState(() =>
     createHorseFormDefaults({
@@ -168,6 +173,36 @@ export default function Horses() {
     } finally {
       setTogglingListingId(null);
     }
+  };
+
+  /*
+   * Recomputed from the live roster, so applying a rename removes that row from
+   * the list on the next render and the panel disappears once nothing is left.
+   */
+  const nameRepairs = useMemo(() => proposeHorseNameRepairs({ horses, documents }), [horses, documents]);
+
+  // Everything offered is pre-selected -- the common case is "yes, all of
+  // them" -- but the selection follows the proposals as they are applied.
+  useEffect(() => {
+    setSelectedRepairs(new Set(nameRepairs.map((repair) => repair.horseId)));
+  }, [nameRepairs]);
+
+  const toggleRepair = (horseId: string) => {
+    setSelectedRepairs((current) => {
+      const next = new Set(current);
+      if (next.has(horseId)) next.delete(horseId);
+      else next.add(horseId);
+      return next;
+    });
+  };
+
+  const handleApplyRepairs = () => {
+    const result = applyHorseNameRepairs([...selectedRepairs]);
+    pushToast({
+      title: result.ok ? 'Names recovered' : 'Nothing was renamed',
+      message: result.message,
+      tone: result.ok ? 'success' : 'warning',
+    });
   };
 
   const openHorseMenu = (horseId: string, x: number, y: number) => setMenuState({ horseId, x, y });
@@ -331,6 +366,94 @@ export default function Horses() {
           </div>
         </div>
       </div>
+
+      {/*
+        Only when there is something to repair, and never a silent bulk edit:
+        every proposed rename is listed with the document it came from, and
+        nothing changes until the person presses the button.
+      */}
+      {nameRepairs.length > 0 && !repairsDismissed ? (
+        <section className="panel" aria-labelledby="horse-name-repair-title">
+          <div className="panel__header">
+            <div>
+              <div className="panel__eyebrow">Names to recover</div>
+              <h2 className="panel__title" id="horse-name-repair-title">
+                {nameRepairs.length === 1
+                  ? '1 horse is named by its registration number'
+                  : `${nameRepairs.length} horses are named by their registration numbers`}
+              </h2>
+              <p className="panel__hint">
+                These profiles were created before XBAR could read a name off the paper, so the registration number was
+                used instead. The name on each attached document is shown below. Nothing is renamed until you choose it.
+              </p>
+            </div>
+            <button
+              className="button button--ghost button--compact"
+              type="button"
+              onClick={() => setRepairsDismissed(true)}
+            >
+              Not now
+            </button>
+          </div>
+
+          <ul className="horse-name-repair__list">
+            {nameRepairs.map((repair) => {
+              const collidingHorse = repair.collidesWithHorseId
+                ? horses.find((candidate) => candidate.id === repair.collidesWithHorseId)
+                : undefined;
+              return (
+                <li key={repair.horseId} className="horse-name-repair__row">
+                  <label>
+                    <input
+                      type="checkbox"
+                      checked={selectedRepairs.has(repair.horseId)}
+                      onChange={() => toggleRepair(repair.horseId)}
+                    />
+                    <span className="horse-name-repair__names">
+                      <s>{repair.currentName}</s>
+                      <span aria-hidden="true"> → </span>
+                      <strong>{repair.proposedName}</strong>
+                    </span>
+                  </label>
+                  <small>from {repair.sourceDocumentTitle}</small>
+                  {collidingHorse ? (
+                    <small className="horse-name-repair__warning" role="alert">
+                      {collidingHorse.name} already uses this name. Rename it only if these are the same horse.
+                    </small>
+                  ) : null}
+                </li>
+              );
+            })}
+          </ul>
+
+          <div className="inline-actions">
+            <button
+              className="button button--primary button--compact"
+              type="button"
+              disabled={selectedRepairs.size === 0 || !canEditHorse}
+              title={canEditHorse ? undefined : 'Your role cannot edit horse records.'}
+              onClick={handleApplyRepairs}
+            >
+              {selectedRepairs.size === horses.length || selectedRepairs.size === nameRepairs.length
+                ? `Rename all ${selectedRepairs.size}`
+                : `Rename ${selectedRepairs.size || ''} selected`.trim()}
+            </button>
+            <button
+              className="button button--ghost button--compact"
+              type="button"
+              onClick={() =>
+                setSelectedRepairs(
+                  selectedRepairs.size === nameRepairs.length
+                    ? new Set()
+                    : new Set(nameRepairs.map((repair) => repair.horseId)),
+                )
+              }
+            >
+              {selectedRepairs.size === nameRepairs.length ? 'Clear selection' : 'Select all'}
+            </button>
+          </div>
+        </section>
+      ) : null}
 
       {createOpen ? (
         <section className="panel">

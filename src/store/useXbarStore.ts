@@ -71,6 +71,7 @@ import type {
   WorkspaceInvitationRecord,
 } from '@/types/xbar';
 import type { BuyerRoomEvent, DocumentRecord, SalePacketBuild, SubscriptionProfile } from '@/types/xbar';
+import { proposeHorseNameRepairs } from '@/lib/horseNameRepair';
 import type { XbarStore } from '@/store/xbarStoreTypes';
 import {
   WORKSPACE_SCHEMA_VERSION,
@@ -2072,6 +2073,71 @@ export const useXbarStore = create<XbarStore>()(
           }),
         }));
         return { ok: true, message: 'Horse record updated.', id: horseId };
+      },
+      applyHorseNameRepairs: (horseIds) => {
+        const deniedMessage = requireRoleCapability(get().currentRole, 'editHorse');
+        if (deniedMessage) return { ok: false, message: deniedMessage };
+
+        const requested = new Set(horseIds);
+        if (requested.size === 0) return { ok: false, message: 'Select at least one horse to rename.' };
+
+        /*
+         * Recomputed here rather than trusted from the caller. The screen shows
+         * a proposal and the person approves an ID; the NAME is read again from
+         * the attached paper at the moment it is applied, so a stale screen
+         * cannot write a name that no longer follows from the record.
+         */
+        const state = get();
+        const repairs = proposeHorseNameRepairs({ horses: state.horses, documents: state.documents }).filter((repair) =>
+          requested.has(repair.horseId),
+        );
+
+        if (repairs.length === 0) {
+          return { ok: false, message: 'Those horses no longer have a name to recover from their documents.' };
+        }
+
+        const byHorseId = new Map(repairs.map((repair) => [repair.horseId, repair]));
+        set((current) => ({
+          horses: current.horses.map((horse) => {
+            const repair = byHorseId.get(horse.id);
+            if (!repair) return horse;
+            return {
+              ...horse,
+              name: repair.proposedName,
+              barnName: repair.proposedBarnName ?? horse.barnName,
+              activity: [
+                createTimelineEvent({
+                  title: 'Name recovered from document',
+                  summary: `Renamed from "${repair.currentName}" using ${repair.sourceDocumentTitle}.`,
+                  owner: current.currentRole,
+                  date: todayStamp(),
+                  category: 'Operations',
+                }),
+                ...horse.activity,
+              ],
+            };
+          }),
+          auditEvents: [
+            ...repairs.map((repair) =>
+              createAuditEvent({
+                actor: current.currentRole,
+                action: 'updated',
+                entityType: 'horse',
+                entityId: repair.horseId,
+                summary: `Horse renamed from "${repair.currentName}" to "${repair.proposedName}" from ${repair.sourceDocumentTitle}`,
+              }),
+            ),
+            ...current.auditEvents,
+          ],
+        }));
+
+        return {
+          ok: true,
+          message:
+            repairs.length === 1
+              ? `Renamed ${repairs[0].currentName} to ${repairs[0].proposedName}.`
+              : `Renamed ${repairs.length} horses from their documents.`,
+        };
       },
       deleteHorse: (horseId) => {
         const deniedMessage = requireRoleCapability(get().currentRole, 'editHorse');
