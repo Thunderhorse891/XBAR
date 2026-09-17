@@ -27,6 +27,69 @@ import {
   withPendingPurchaseLock,
 } from '../src/lib/pendingHostedPurchase.js';
 import type { PendingHostedPurchase } from '../src/lib/pendingHostedPurchase.js';
+import { subscriptionFromCloudRow } from '../src/lib/cloudSubscription.js';
+
+test('column-only operator grants reach the UI with the server tier and limits', () => {
+  const granted = subscriptionFromCloudRow({
+    tier: 'Enterprise',
+    billing_state: 'Manual Billing',
+    monthly_rate: 0,
+    payload: {},
+  });
+  assert.equal(granted?.tier, 'Enterprise');
+  assert.equal(granted?.monthlyRate, 0);
+  assert.equal(granted?.billingState, 'Manual Billing');
+  assert.equal(granted?.usage.horseLimit, 2000);
+  assert.equal(granted?.usage.seatLimit, 60);
+  assert.equal(granted?.sharedAccessEnabled, true);
+});
+
+test('canonical cancellation overrides a stale paid payload without losing usage or recovery', () => {
+  const canceled = subscriptionFromCloudRow({
+    tier: 'Professional',
+    billing_state: 'Inactive',
+    monthly_rate: 79,
+    payload: {
+      tier: 'Enterprise',
+      billingState: 'Active',
+      monthlyRate: 499,
+      renewalDate: '2026-10-01',
+      subscriptionRecoverable: true,
+      usage: { horsesUsed: 23, horseLimit: 2000 },
+    },
+  });
+  assert.equal(canceled?.tier, 'Starter');
+  assert.equal(canceled?.purchasedTier, 'Professional');
+  assert.equal(canceled?.billingState, 'Inactive');
+  assert.equal(canceled?.monthlyRate, 79);
+  assert.equal(canceled?.usage.horsesUsed, 23);
+  assert.equal(canceled?.usage.horseLimit, 5);
+  assert.equal(canceled?.renewalDate, '2026-10-01');
+  assert.equal(canceled?.subscriptionRecoverable, true);
+});
+
+test('unknown cloud values cannot reuse a privileged payload or permit duplicate checkout', () => {
+  const unknown = subscriptionFromCloudRow({
+    tier: 'unknown',
+    billing_state: 'unknown',
+    monthly_rate: -1,
+    payload: { tier: 'Enterprise', billingState: 'Active', subscriptionRecoverable: 'false' },
+  });
+  assert.equal(unknown?.tier, 'Starter');
+  assert.equal(unknown?.billingState, 'Inactive');
+  assert.equal(unknown?.monthlyRate, 0);
+  assert.equal(unknown?.subscriptionRecoverable, true);
+  assert.equal(subscriptionFromCloudRow(null), undefined);
+});
+
+test('relational subscription loading selects canonical access fields and uses the mapper', async () => {
+  const source = await readFile(path.resolve('src/lib/cloudWorkspace.ts'), 'utf8');
+  assert.match(
+    source,
+    /from\('workspace_subscription_profiles'\)\s*\.select\('tier, billing_state, monthly_rate, payload, updated_at'\)/,
+  );
+  assert.match(source, /subscription: subscriptionFromCloudRow\(subscriptionResult.data\)/);
+});
 
 test('hosted payment links keep checkout available when managed billing is paused', () => {
   const result = getCheckoutReadiness({
