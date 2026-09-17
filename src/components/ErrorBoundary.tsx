@@ -42,7 +42,7 @@ class ErrorBoundaryImpl extends Component<ErrorBoundaryProps, ErrorBoundaryState
     }
 
     const screenLoadFailed =
-      /Failed to fetch dynamically imported module|Importing a module script failed|error loading dynamically imported module|ChunkLoadError|Loading chunk \S+ failed/i.test(
+      /Failed to fetch dynamically imported module|Importing a module script failed|error loading dynamically imported module|Unable to preload CSS for|ChunkLoadError|Loading chunk \S+ failed/i.test(
         this.state.error.message,
       );
 
