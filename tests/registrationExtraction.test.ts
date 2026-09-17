@@ -107,7 +107,7 @@ test('a parent name is cleaned the same way', () => {
 
 test('"Name of Owner" never becomes the horse name', () => {
   /*
-   * The existing guard tests the value against /^(?:of\s+)?(?:sire|dam|owner)/,
+   * The old guard tested the value against /^(?:of\s+)?(?:sire|dam|owner)/,
    * which cannot fire here: `owner` is itself a stop label, so the value is
    * truncated to a bare "of" before that word is reached. The paper named the
    * horse "of".
@@ -118,8 +118,7 @@ test('"Name of Owner" never becomes the horse name', () => {
 });
 
 test('a real name that merely starts with a filler word survives', () => {
-  // The refusal above rejects a value whose EVERY word names nothing. A name
-  // carrying anything of its own is kept, articles and all.
+  // Label context selects horse data; words and articles inside it are kept.
   assert.equal(extractRegistrationFields('Registered Name THE ONE').horseName, 'THE ONE');
   assert.equal(extractRegistrationFields('Registered Name A SHINER NAMED SIOUX').horseName, 'A SHINER NAMED SIOUX');
 });
@@ -137,4 +136,39 @@ test('a labelled name still reads out of flattened OCR text', () => {
   assert.equal(fields.registrationNumber, '5551234');
   assert.equal(fields.sire, 'SHINING SPARK');
   assert.equal(fields.dam, 'MISS KITTY');
+});
+
+test('punctuation belonging to a value survives field separator cleanup', () => {
+  const fields = extractRegistrationFields(
+    'Registered Name | *RAFFLES Registration Number 1234567 ' +
+      'Sire: *BASK 2345678 Dam: "MISS KITTY" 3456789 Owner: *STAR RANCH',
+  );
+  assert.equal(fields.horseName, '*RAFFLES');
+  assert.equal(fields.sire, '*BASK');
+  assert.equal(fields.sireRegistration, '2345678');
+  assert.equal(fields.dam, '"MISS KITTY"');
+  assert.equal(fields.ownerName, '*STAR RANCH');
+  assert.equal(extractRegistrationFields('Registered Name -STAR').horseName, '-STAR');
+  assert.equal(extractRegistrationFields('Registered Name .STAR').horseName, '.STAR');
+});
+
+test('specific horse-name labels accept names without a word blacklist', () => {
+  for (const label of ['Registered Name', 'Horse Name', 'Name of Horse']) {
+    for (const name of ['THE', 'OF', 'THIS AND THAT', 'OWNER OF THE RANCH']) {
+      assert.equal(extractRegistrationFields(`${label}: ${name} Registration Number 1234567`).horseName, name);
+    }
+  }
+});
+
+test('qualified owner and parent labels do not hide a later horse name', () => {
+  assert.equal(
+    extractRegistrationFields('Name of Owner: ERIN WYRICK Registered Name: THE Registration Number 1234567').horseName,
+    'THE',
+  );
+  assert.equal(extractRegistrationFields('Owner Name: ERIN WYRICK Registration Number 1234567').horseName, undefined);
+  assert.equal(
+    extractRegistrationFields('Name of Breeder: ERIN WYRICK Registration Number 1234567').horseName,
+    undefined,
+  );
+  assert.equal(extractRegistrationFields('Name: THE Registration Number 1234567').horseName, 'THE');
 });

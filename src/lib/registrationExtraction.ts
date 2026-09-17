@@ -109,32 +109,32 @@ function normalizeWhitespace(text: string) {
   return text.replace(/\s+/g, ' ').trim();
 }
 
-/*
- * Separator characters a scan leaves clinging to a value: table pipes, ruled
- * lines read as underscores or equals, leader dots, bullets and doubled
- * punctuation. Stripped from BOTH ends.
- *
- * Only the trailing end used to be cleaned. That is how a ruled registration
- * paper produced horses called "| BERRY PEACHY CHIC" and "___ BLUE VALENTINE
- * DOT COM" -- and those are worse than no name at all, because they contain
- * letters. `nameNeedsRepair` in horseNameRepair.ts only offers to fix a name
- * that is a registration number, so a name with a pipe stuck to the front sails
- * past the repair pass and reaches ownership records and sale material looking
- * deliberate.
- *
- * Deliberately excludes quotes, parentheses and apostrophes: those appear
- * inside real registered names.
- */
-const EDGE_SEPARATORS = /^[|;,:_.\-\u2013\u2014=\u2022*\u00b7~\s]+|[|;,:_.\-\u2013\u2014=\u2022*\u00b7~\s]+$/g;
+// Remove field dividers and scan rules, preserving attached punctuation such
+// as *RAFFLES, -STAR, quoted names and apostrophes. A single dot or dash is a
+// divider only when followed by whitespace; repeated runs represent rules.
+const LEADING_SEPARATORS = /^(?:(?:[|;,:#=\u2022\u00b7]+|[_.\-\u2013\u2014~]{2,}|[_.\-\u2013\u2014~](?=\s))\s*)+/;
+
+function cleanFieldValue(value: string | undefined): string | undefined {
+  return value
+    ?.trim()
+    .replace(LEADING_SEPARATORS, '')
+    .replace(/[|;,:_.\-\s]+$/g, '')
+    .replace(/\s+/g, ' ')
+    .trim();
+}
 
 /**
  * Capture the text that follows a label, up to (but not including) the next
  * known field label or the end of the string.
  */
-function labeledValue(text: string, labelPattern: string): string | undefined {
-  const pattern = new RegExp(`\\b(?:${labelPattern})\\s*[:#.\\-]?\\s*(.+?)(?=\\s+(?:${STOP_GROUP})\\b|$)`, 'i');
-  const match = text.match(pattern);
-  const value = match?.[1]?.replace(EDGE_SEPARATORS, '').replace(/\s+/g, ' ').trim();
+function labeledValue(text: string, labelPattern: string, stopGroup = STOP_GROUP): string | undefined {
+  const label = text.match(new RegExp(`\\b(?:${labelPattern})\\b`, 'i'));
+  if (!label || label.index === undefined) return undefined;
+  // Clean label separators before finding the next field. Otherwise the colon
+  // alone can become a value when a real name starts with a label word (OWNER).
+  const remainder = cleanFieldValue(text.slice(label.index + label[0].length));
+  const match = remainder?.match(new RegExp(`^(.+?)(?=\\s+(?:${stopGroup})\\b|$)`, 'i'));
+  const value = cleanFieldValue(match?.[1]);
   return value && value.length >= 2 ? value : undefined;
 }
 
@@ -227,8 +227,7 @@ const PARENT_STOP_GROUP = [
 
 /** A sire/dam entry: the parent's name plus, when present, its registration number. */
 function findParent(text: string, label: 'sire' | 'dam'): { name?: string; registration?: string } {
-  const pattern = new RegExp(`\\b${label}\\s*[:#.\\-]?\\s*(.+?)(?=\\s+(?:${PARENT_STOP_GROUP})\\b|$)`, 'i');
-  const chunk = text.match(pattern)?.[1]?.replace(EDGE_SEPARATORS, '').replace(/\s+/g, ' ').trim();
+  const chunk = labeledValue(text, label, PARENT_STOP_GROUP);
   if (!chunk || chunk.length < 2) return {};
   // The registration number, if any, trails the name within the chunk.
   const regMatch = chunk.match(
@@ -253,33 +252,22 @@ function findRegistry(text: string, fallback?: string): string | undefined {
   return found ? found.toUpperCase() : fallback;
 }
 
-/*
- * Words that name nothing on their own. A captured value made only of these is
- * not a horse's name, however long it is.
- */
-const NAMES_NOTHING = /^(?:of|the|a|an|for|and|to|in|on|from|with|this|that)$/i;
+function findHorseName(text: string, sourceText: string): string | undefined {
+  // A specific horse-name label wins even if an owner label appears first.
+  const explicit = labeledValue(text, 'registered\\s+name|name\\s+of\\s+horse|horse\\s+name');
+  if (explicit) return explicit;
 
-function findHorseName(text: string): string | undefined {
-  const value = labeledValue(text, 'registered\\s+name|name\\s+of\\s+horse|horse\\s+name|name');
-  if (!value) return undefined;
-  // Guard against capturing "Name of Sire/Dam/Owner" style false positives.
-  if (/^(?:of\s+)?(?:sire|dam|owner|breeder)\b/i.test(value)) return undefined;
-
-  /*
-   * The guard above cannot catch the commonest form of that false positive.
-   *
-   * On "Name of Owner: ERIN WYRICK", the bare `name` alternative matches at
-   * "Name", and `owner` is itself a stop label -- so the value is truncated to
-   * "of" BEFORE the word the guard looks for, and the guard never fires. The
-   * paper then names the horse "of". Measured, not theorised: the captured
-   * value is exactly "of" for both "Name of Owner" and "Name of Sire".
-   *
-   * So refuse a value whose every word names nothing. "The One" keeps its
-   * "One"; "A Shiner Named Sioux" keeps everything but the article.
-   */
-  if (value.split(/\s+/).every((word) => NAMES_NOTHING.test(word))) return undefined;
-
-  return value;
+  for (const match of text.matchAll(/\bname\b/gi)) {
+    // Use the full source for context: the horse-only text can end immediately
+    // before "Sire", leaving just "Name of" and hiding the disqualifying label.
+    const before = sourceText.slice(0, match.index);
+    const after = sourceText.slice(match.index + match[0].length);
+    if (/\b(?:sire|dam|owner|breeder)(?:['’]s)?\s*$/i.test(before)) continue;
+    if (/^\s+(?:of\s+)?(?:sire|dam|owner|breeder)\b/i.test(after)) continue;
+    const value = labeledValue(text.slice(match.index), 'name');
+    if (value) return value;
+  }
+  return undefined;
 }
 
 function pad(value: string) {
@@ -308,7 +296,7 @@ export function extractRegistrationFields(rawText: string): RegistrationFields {
   const dam = findParent(text, 'dam');
 
   const fields: RegistrationFields = {
-    horseName: findHorseName(headText),
+    horseName: findHorseName(headText, text),
     registrationNumber: own.number,
     registry: findRegistry(text, own.registry),
     sex: findSex(text),
