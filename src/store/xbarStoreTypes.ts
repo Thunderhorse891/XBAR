@@ -162,6 +162,13 @@ export type XbarStore = {
   deleteBreedingEvent: (horseId: string, eventId: string) => ActionResult;
   updateHorseLocation: (horseId: string, patch: LocationPatch) => ActionResult;
   updateHorse: (horseId: string, patch: HorsePatch) => ActionResult;
+  /*
+   * Give back the names of horses that were created named by their
+   * registration number. Takes the ids to repair, never the names: the
+   * replacement is recomputed from the papers still attached, so nothing can
+   * push an arbitrary name through this path.
+   */
+  applyHorseNameRepairs: (horseIds: readonly string[]) => ActionResult;
   deleteHorse: (horseId: string) => ActionResult;
   updateMedicalEvent: (
     horseId: string,
@@ -199,6 +206,18 @@ export type XbarStore = {
      * returned with it. If present it is stored as the packet's credential in
      * place of the client-side one. */
     serverSeal?: SaleCredentialSeal;
+    /**
+     * When the packet was rendered in the browser, the seal that was rendered
+     * INTO it, plus where its bytes were kept and what they are called.
+     *
+     * The seal is passed rather than recomputed: sealing twice from the same
+     * records still produces two different digests, because `sealedAt` differs
+     * by however long generation took. A stored seal that does not match the
+     * one printed on the packet defeats the only thing the seal is for.
+     */
+    localSeal?: SaleCredentialSeal;
+    localFileKey?: string;
+    fileName?: string;
   }) => ActionResult & { packet?: SalePacketBuild };
   logBuyerRoomEvent: (input: {
     horseId: string;

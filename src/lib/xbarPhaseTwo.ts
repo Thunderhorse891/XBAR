@@ -1,4 +1,11 @@
 import { rankHorseMatches } from './xbarRuntime.js';
+import {
+  CURRENT_COGGINS_DAYS,
+  hasCurrentReadyDocument,
+  hasResolvedDocumentMissingCurrentDate,
+  isDocumentReady,
+  isDocumentResolved,
+} from './documentCurrency.js';
 import type { DocumentRecord, HorseRecord, OwnershipRecord, ProcessingState } from '../types/xbar.js';
 
 const TRUST_CONFIDENCE_WEIGHT = 68;
@@ -9,8 +16,6 @@ const TRUST_SCORE_CAP = 99;
 const REVIEW_PARTIAL_CREDIT = 0.55;
 const BUYER_LIVE_THRESHOLD = 84;
 const BUYER_NEEDS_REVIEW_THRESHOLD = 60;
-const DAY_MS = 24 * 60 * 60 * 1000;
-const CURRENT_COGGINS_DAYS = 365;
 const CURRENT_HEALTH_SUPPORT_DAYS = 180;
 
 type Tone = 'blue' | 'slate' | 'emerald' | 'amber' | 'rose';
@@ -110,46 +115,11 @@ function normalizeShareSlug(value: string) {
     .replace(/^-|-$/g, '');
 }
 
-function isDocumentReady(document: PacketDocumentInput) {
-  return document.state === 'Ready';
-}
-
-function isDocumentResolved(document: PacketDocumentInput) {
-  return document.state === 'Ready' || document.state === 'Matched' || document.state === 'Archived';
-}
-
 function collectDocuments<TDocument extends PacketDocumentInput>(
   documents: TDocument[],
   types: DocumentRecord['type'][],
 ) {
   return documents.filter((document) => types.includes(document.type));
-}
-
-function getDocumentExamTime(document: PacketDocumentInput) {
-  const examDate = document.entities.examDate;
-  if (!examDate) {
-    return null;
-  }
-
-  const parsed = Date.parse(examDate);
-  return Number.isNaN(parsed) ? null : parsed;
-}
-
-function isCurrentDatedDocument(document: PacketDocumentInput, maxAgeDays: number) {
-  const examTime = getDocumentExamTime(document);
-  if (examTime === null) {
-    return false;
-  }
-
-  return Date.now() - examTime <= maxAgeDays * DAY_MS;
-}
-
-function hasCurrentReadyDocument(documents: PacketDocumentInput[], maxAgeDays: number) {
-  return documents.some((document) => isDocumentReady(document) && isCurrentDatedDocument(document, maxAgeDays));
-}
-
-function hasResolvedDocumentMissingCurrentDate(documents: PacketDocumentInput[], maxAgeDays: number) {
-  return documents.some((document) => isDocumentResolved(document) && !isCurrentDatedDocument(document, maxAgeDays));
 }
 
 function buildSalePacketSlot(params: {
@@ -233,6 +203,7 @@ export function buildHorsePacketCompleteness(
   horse: PacketHorseInput,
   documents: PacketDocumentInput[],
   ownershipRecord?: PacketOwnershipInput,
+  asOfDate: Date = new Date(),
 ): PacketCompleteness {
   const registrationDocs = collectDocuments(documents, ['Registration', 'Bill of Sale']);
   const ownershipDocs = collectDocuments(documents, ['Ownership Memo', 'Transfer Packet']);
@@ -264,9 +235,9 @@ export function buildHorsePacketCompleteness(
 
   const cogginsDocs = collectDocuments(documents, ['Coggins']);
   const vetDocs = collectDocuments(documents, ['Vet Record']);
-  const hasCurrentCoggins = hasCurrentReadyDocument(cogginsDocs, CURRENT_COGGINS_DAYS);
-  const hasCurrentHealthSupport = hasCurrentReadyDocument(vetDocs, CURRENT_HEALTH_SUPPORT_DAYS);
-  const medicalDocsCurrent = hasCurrentReadyDocument(medicalDocs, CURRENT_HEALTH_SUPPORT_DAYS);
+  const hasCurrentCoggins = hasCurrentReadyDocument(cogginsDocs, CURRENT_COGGINS_DAYS, asOfDate);
+  const hasCurrentHealthSupport = hasCurrentReadyDocument(vetDocs, CURRENT_HEALTH_SUPPORT_DAYS, asOfDate);
+  const medicalDocsCurrent = hasCurrentReadyDocument(medicalDocs, CURRENT_HEALTH_SUPPORT_DAYS, asOfDate);
   const saleSlots: SalePacketSlot[] = [
     buildSalePacketSlot({
       key: 'aqha-papers',
@@ -297,7 +268,7 @@ export function buildHorsePacketCompleteness(
       ready: hasCurrentCoggins,
       review: cogginsDocs.some(isDocumentResolved),
       readyDetail: 'Current coggins is approved for travel and sale.',
-      reviewDetail: hasResolvedDocumentMissingCurrentDate(cogginsDocs, CURRENT_COGGINS_DAYS)
+      reviewDetail: hasResolvedDocumentMissingCurrentDate(cogginsDocs, CURRENT_COGGINS_DAYS, asOfDate)
         ? 'Coggins is attached but needs a current exam date before use.'
         : 'Coggins is attached but still needs final review.',
       missingDetail: 'No coggins is attached yet.',
@@ -311,7 +282,7 @@ export function buildHorsePacketCompleteness(
       reviewDetail:
         horse.status === 'Medical Review'
           ? 'Medical review is still open on the horse profile.'
-          : hasResolvedDocumentMissingCurrentDate(vetDocs, CURRENT_HEALTH_SUPPORT_DAYS)
+          : hasResolvedDocumentMissingCurrentDate(vetDocs, CURRENT_HEALTH_SUPPORT_DAYS, asOfDate)
             ? 'Health support is attached but needs a current exam date before use.'
             : 'Health support is attached but still needs final review.',
       missingDetail: 'No health certification is attached yet.',
@@ -376,7 +347,7 @@ export function buildHorsePacketCompleteness(
           ? 'Medical review is current for packet use.'
           : horse.status === 'Medical Review'
             ? 'A medical review is still open on the horse profile.'
-            : hasResolvedDocumentMissingCurrentDate(medicalDocs, CURRENT_HEALTH_SUPPORT_DAYS)
+            : hasResolvedDocumentMissingCurrentDate(medicalDocs, CURRENT_HEALTH_SUPPORT_DAYS, asOfDate)
               ? 'Medical support exists but needs a current exam date before use.'
               : medicalDocs.length
                 ? 'Medical support exists, but it is not fully ready to share.'

@@ -1,17 +1,19 @@
-// Server-side mirror of subscriptionTierConfig in src/lib/xbarRuntime.ts.
-// The two cannot share a module (this file is plain ESM run by the serverless
-// functions; the client config lives in the bundler's TS graph), so
-// tests/subscriptionPlanParity.test.ts fails the build if they ever drift —
-// the limits enforced here are the limits the app and /pricing promise.
+import {
+  BASELINE_TIER,
+  billingStateForStripeStatus,
+  entitledTierForBillingState,
+  isRecoverableStripeStatus,
+} from './subscription-status.js';
+
 export const subscriptionPlans = {
   Starter: {
     monthlyRate: 29,
     sharedAccessEnabled: false,
     featureFlags: [
       'Keep clean records — horses, care, documents, expenses, reminders',
-      'Documents with OCR intake and review',
+      'Proof vault with OCR intake and review',
       '1 team seat',
-      '250 documents and 25 GB storage',
+      '250 document capacity · 25 GB storage',
     ],
     limits: {
       horseLimit: 5,
@@ -19,6 +21,7 @@ export const subscriptionPlans = {
       documentLimit: 250,
       salePacketLimit: 2,
       storageLimitGb: 25,
+      sharedAccessSeatLimit: 0,
     },
   },
   Professional: {
@@ -26,10 +29,10 @@ export const subscriptionPlans = {
     sharedAccessEnabled: true,
     featureFlags: [
       'Everything in Starter',
-      'Share approved sale packets and keep buyer follow-up in one place',
-      'Sale listings for buyer-ready horse profiles',
-      '5 team seats — buyers open shared listings with no account',
-      '1,000 documents and 100 GB storage',
+      'Make money: watermarked sale packets and buyer folders',
+      'Sale listings — publish buyer-ready horse profiles to shared access',
+      '5 team seats and 10 client seats',
+      '1,000 document capacity · 100 GB storage',
     ],
     limits: {
       horseLimit: 30,
@@ -37,6 +40,7 @@ export const subscriptionPlans = {
       documentLimit: 1000,
       salePacketLimit: 30,
       storageLimitGb: 100,
+      sharedAccessSeatLimit: 10,
     },
   },
   'Ranch Ops': {
@@ -44,9 +48,9 @@ export const subscriptionPlans = {
     sharedAccessEnabled: true,
     featureFlags: [
       'Everything in Professional',
-      'Run the operation: team roles, breeding, equipment, and supplies',
-      '20 team seats — buyers open shared listings with no account',
-      '5,000 documents and 500 GB storage',
+      'Run the operation: team roles, breeding program, equipment at scale',
+      '20 team seats and 40 client seats',
+      '5,000 document capacity · 500 GB storage',
     ],
     limits: {
       horseLimit: 200,
@@ -54,6 +58,7 @@ export const subscriptionPlans = {
       documentLimit: 5000,
       salePacketLimit: 250,
       storageLimitGb: 500,
+      sharedAccessSeatLimit: 40,
     },
   },
   Enterprise: {
@@ -62,8 +67,8 @@ export const subscriptionPlans = {
     featureFlags: [
       'Everything in Ranch Ops',
       'Scale and control for large rosters and teams',
-      '60 team seats — buyers open shared listings with no account',
-      '20,000 documents and 2,500 GB storage',
+      '60 team seats and 200 client seats',
+      '20,000 document capacity · 2,500 GB storage',
     ],
     limits: {
       horseLimit: 2000,
@@ -71,6 +76,7 @@ export const subscriptionPlans = {
       documentLimit: 20000,
       salePacketLimit: 2000,
       storageLimitGb: 2500,
+      sharedAccessSeatLimit: 200,
     },
   },
 };
@@ -86,33 +92,79 @@ export function getStripePriceIdByTier(tier) {
   return envMap[tier] || '';
 }
 
+/**
+ * Resolve a Stripe price id to a tier, or null when it matches none.
+ *
+ * An empty price id never matches, even when a tier's STRIPE_PRICE_ID_* env var
+ * is also unset — otherwise an unconfigured deployment would resolve every
+ * unknown price to whichever tier happened to be blank.
+ */
 export function findTierByPriceId(priceId) {
-  return Object.keys(subscriptionPlans).find((tier) => getStripePriceIdByTier(tier) === priceId) || null;
+  const normalized = String(priceId ?? '').trim();
+  if (!normalized) return null;
+  return Object.keys(subscriptionPlans).find((tier) => getStripePriceIdByTier(tier) === normalized) || null;
 }
 
+/** Retained name; the decision itself lives in subscription-status.js. */
 export function normalizeBillingState(status) {
-  if (status === 'active' || status === 'trialing') {
-    return 'Active';
-  }
-
-  if (status === 'past_due' || status === 'unpaid' || status === 'incomplete_expired') {
-    return 'Past Due';
-  }
-
-  return 'Manual Billing';
+  return billingStateForStripeStatus(status);
 }
 
+/** True when `tier` is a plan this build actually sells. */
+export function isKnownTier(tier) {
+  return typeof tier === 'string' && Object.prototype.hasOwnProperty.call(subscriptionPlans, tier);
+}
+
+/**
+ * Build a stored subscription profile.
+ *
+ * An unrecognized tier resolves to the baseline rather than being trusted, and
+ * says so via `tierRecognized: false`. It used to be silently rewritten to
+ * Starter, which made a bad tier string indistinguishable from a real Starter
+ * subscription — the profile looked correct and nothing recorded that a value
+ * had been discarded.
+ */
 export function buildSubscriptionProfile(params) {
-  const tier = params.tier in subscriptionPlans ? params.tier : 'Starter';
+  const tierRecognized = isKnownTier(params.tier);
+  const purchasedTier = tierRecognized ? params.tier : BASELINE_TIER;
+  const billingState = billingStateForStripeStatus(params.billingStatus);
+
+  // Every entitlement field below comes from the tier the workspace is actually
+  // entitled to right now, not the one it bought.
+  //
+  // This payload is what the client stores and gates on, and the client gates
+  // read `tier`, `sharedAccessEnabled` and the usage limits — none of them look
+  // at billingState. Copying the purchased tier's values into a canceled or
+  // unpaid workspace's payload therefore left it rendering paid features and
+  // passing local gates while the API and the database both enforced Starter.
+  //
+  // `purchasedTier` keeps what was bought, so billing screens can say which
+  // plan lapsed and recovery has something to restore. It is deliberately not
+  // what anything gates on.
+  const tier = entitledTierForBillingState(purchasedTier, billingState);
   const plan = subscriptionPlans[tier];
   const existingUsage = params.existingUsage || {};
   const renewalDate = params.renewalDate || '';
 
   return {
     tier,
-    monthlyRate: plan.monthlyRate,
+    purchasedTier,
+    tierRecognized,
+    // The price of the plan that was bought, not of the fallback entitlement.
+    // Quoting Starter's rate to a canceled Enterprise workspace would imply a
+    // charge that is not happening; billingState is what says whether anything
+    // is being billed at all.
+    monthlyRate: subscriptionPlans[purchasedTier].monthlyRate,
     renewalDate,
-    billingState: normalizeBillingState(params.billingStatus),
+    billingState,
+    // Whether a Stripe subscription still exists that could bill again.
+    //
+    // billingState cannot answer this: 'Inactive' covers both a canceled
+    // subscription, which is gone, and a paused or unpaid one, which Stripe
+    // will resume once payment is sorted out. The billing screen has to tell
+    // those apart — offering checkout on the second kind opens a second
+    // subscription beside the live one and bills the customer twice.
+    subscriptionRecoverable: isRecoverableStripeStatus(params.billingStatus),
     sharedAccessEnabled: plan.sharedAccessEnabled,
     featureFlags: plan.featureFlags,
     usage: {
@@ -126,6 +178,8 @@ export function buildSubscriptionProfile(params) {
       salePacketLimit: plan.limits.salePacketLimit,
       storageUsedGb: Number(existingUsage.storageUsedGb || 0),
       storageLimitGb: plan.limits.storageLimitGb,
+      sharedAccessSeatsUsed: Number(existingUsage.sharedAccessSeatsUsed || 0),
+      sharedAccessSeatLimit: plan.limits.sharedAccessSeatLimit,
     },
   };
 }

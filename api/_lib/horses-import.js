@@ -102,9 +102,13 @@ export default async function handler(req, res) {
 
   if (plannedInserts > 0) {
     const entitlements = await getWorkspaceEntitlements(supabase, workspaceId, user?.email);
+    if (!entitlements.ok) {
+      return sendJson(res, entitlements.status, { ok: false, message: entitlements.message });
+    }
+
     const capacity = await checkHorseCapacity(supabase, workspaceId, plannedInserts, entitlements.limits);
     if (!capacity.ok) {
-      return sendJson(res, 403, { ok: false, message: capacity.message });
+      return sendJson(res, capacity.status ?? 403, { ok: false, message: capacity.message });
     }
   }
 

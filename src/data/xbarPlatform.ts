@@ -27,6 +27,9 @@ export const subscriptionSeed: SubscriptionProfile = {
   monthlyRate: 0,
   renewalDate: '',
   billingState: 'Manual Billing',
+  // A brand-new workspace has never had a Stripe subscription, so there is
+  // nothing to recover and every plan must be purchasable.
+  subscriptionRecoverable: false,
   sharedAccessEnabled: false,
   featureFlags: ['First-run workspace setup', 'Manual document upload', 'Receipt logging', 'Horse ledger'],
   usage: {
@@ -40,6 +43,8 @@ export const subscriptionSeed: SubscriptionProfile = {
     salePacketLimit: 2,
     storageUsedGb: 0,
     storageLimitGb: 5,
+    sharedAccessSeatsUsed: 0,
+    sharedAccessSeatLimit: 1,
   },
 };
 

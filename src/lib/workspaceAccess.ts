@@ -6,6 +6,7 @@ type InviteValidationParams = {
   members: WorkspaceMemberRecord[];
   invitations: WorkspaceInvitationRecord[];
   seatLimit: number;
+  sharedAccessSeatLimit: number;
 };
 
 export function normalizeWorkspaceEmail(value: string) {
@@ -20,6 +21,31 @@ export function countReservedWorkspaceSeats(
     members.filter((member) => member.status === 'Active').length +
     invitations.filter((invite) => invite.status === 'Pending').length
   );
+}
+
+/*
+ * Shared-access seats count Horse Owner / Client accounts, not buyers.
+ *
+ * The distinction matters because the two are easy to conflate and the plans
+ * used to be sold as "buyer seats". A buyer opens a share link with no account
+ * at all (see hasBuyerShareAccess below), so buyers never consume a seat and no
+ * limit applies to how many of them view a listing. What this caps is the
+ * number of people given the read-only 'Owner' role — the ranch's clients — who
+ * do hold real accounts in the workspace.
+ *
+ * The same rule is enforced independently by the
+ * xbar_enforce_workspace_seat_limits database trigger, which is the actual
+ * gate; this is the client-side check that produces a useful message first.
+ */
+export function countReservedSharedAccessSeats(
+  members: WorkspaceMemberRecord[],
+  invitations: WorkspaceInvitationRecord[],
+) {
+  const activeOwnerMembers = members.filter((member) => member.status === 'Active' && member.role === 'Owner').length;
+  const pendingOwnerInvites = invitations.filter(
+    (invite) => invite.status === 'Pending' && invite.role === 'Owner',
+  ).length;
+  return activeOwnerMembers + pendingOwnerInvites;
 }
 
 export function validateWorkspaceInvitation(params: InviteValidationParams) {
@@ -44,6 +70,14 @@ export function validateWorkspaceInvitation(params: InviteValidationParams) {
 
   if (countReservedWorkspaceSeats(params.members, params.invitations) >= params.seatLimit) {
     return 'Seat limit reached for the current plan.';
+  }
+
+  if (
+    params.role === 'Owner' &&
+    (params.sharedAccessSeatLimit <= 0 ||
+      countReservedSharedAccessSeats(params.members, params.invitations) >= params.sharedAccessSeatLimit)
+  ) {
+    return 'Shared access seat limit reached for the current plan.';
   }
 
   return null;

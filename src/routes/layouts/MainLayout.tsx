@@ -34,6 +34,7 @@ import { buildCareBoardRows } from '@/lib/dashboardOps';
 import { useCloudStore } from '@/store/useCloudStore';
 import { useUiStore } from '@/store/useUiStore';
 import { useXbarStore } from '@/store/useXbarStore';
+import { useEffectiveSubscription } from '@/hooks/useOwnerPreview';
 
 // 40KB touch icon for the 38px brand tile; the faded sidebar watermark
 // renders at 250px, so it uses the 512px source to avoid upscaling. Both
@@ -109,7 +110,7 @@ export default function MainLayout() {
   const ownershipRecords = useXbarStore((state) => state.ownershipRecords);
   const expenseReceipts = useXbarStore((state) => state.expenseReceipts);
   const workspaceProfile = useXbarStore((state) => state.workspaceProfile);
-  const subscription = useXbarStore((state) => state.subscription);
+  const subscription = useEffectiveSubscription();
   const currentRole = useXbarStore((state) => state.currentRole);
   const cloudSession = useCloudStore((state) => state.session);
   const signOutCloud = useCloudStore((state) => state.signOut);

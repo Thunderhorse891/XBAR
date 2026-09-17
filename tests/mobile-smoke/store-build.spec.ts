@@ -79,10 +79,36 @@ test('the store build offers no purchase path on the billing screen', async ({ p
   await expect(managed).toBeDisabled();
 });
 
-test('the store build never links out to Stripe or the pricing page', async ({ page }) => {
+test('the store build does not present the paywall at all', async ({ page }) => {
+  /*
+   * This replaces an assertion that could not fail.
+   *
+   * It was `expect(locator('a[href*="stripe"], a[href*="/pricing"]')).toHaveCount(0)`
+   * on the billing screen, and it passes on a WEB build too: checkout is
+   * reached through window.location.assign in a click handler, never through an
+   * anchor, so there is no such link in either bundle. The test asserted the
+   * absence of something that never exists. Verified rather than assumed --
+   * rebuilding this bundle with VITE_NATIVE_APP unset leaves it green while the
+   * other two fail.
+   *
+   * What genuinely differs is whether the paywall is DRAWN. This build has
+   * payment links configured, so on web the panel reads "Due at checkout" and
+   * renders a card-details box with card number, expiration and CVC rows.
+   * Guideline 3.1.1 forbids presenting a non-IAP purchase, not merely
+   * completing one, so a store build showing a card form is the rejection even
+   * with every button disabled.
+   */
   await openBillingScreen(page);
 
-  await expect(page.locator('a[href*="stripe"], a[href*="/pricing"]')).toHaveCount(0);
+  await expect(page.getByText('Card details')).toHaveCount(0);
+  await expect(page.getByText('Secure checkout')).toHaveCount(0);
+  await expect(page.getByText('Due at checkout')).toHaveCount(0);
+  await expect(page.getByText('Entered on the next secure step')).toHaveCount(0);
+  await expect(page.getByText('Handled at checkout')).toHaveCount(0);
+
+  // And what it shows instead, so this cannot pass because the screen failed to
+  // render at all.
+  await expect(page.getByText('Managed outside the app').first()).toBeVisible();
 });
 
 test('the store build resolves marketing links to the public site, not dead paths', async ({ page }) => {
@@ -136,46 +162,62 @@ test('@auth an account with no password still has a way into the store build', a
   await expect(page.getByText(/If you first signed up with Google, Apple or Facebook/)).toBeVisible();
 });
 
-test('the store build refuses a file export instead of silently doing nothing', async ({ page }) => {
-  // The regression this guards: a store build whose Capacitor bridge is not live
-  // still has document and URL.createObjectURL, because a WKWebView is a browser.
-  // A DOM-only check therefore let the save fall through to the anchor path that
-  // iOS ignores, and report success for a file that was never written.
-  //
-  // Headless Chromium reproduces that state exactly — VITE_NATIVE_APP is set in
-  // this bundle and there is no bridge — so the export here must decline rather
-  // than claim it worked.
-  await createWorkspace(page);
-  await goToRoute(page, '#/settings');
+/*
+ * Two tests from the original suite are deliberately absent rather than
+ * adapted, because the features they cover are not on this branch:
+ *
+ *   - the backup export refusing instead of silently doing nothing, which
+ *     belongs with the fileDownload work
+ *   - "See what {tier} includes", which needs the separate change that split
+ *     reviewing a plan from buying one
+ *
+ * Porting them here would mean asserting on code that does not exist, and the
+ * only way to make that pass is to weaken the assertion until it proves
+ * nothing. They come with their own changes.
+ */
 
-  const exportButton = page.getByRole('button', { name: 'Export backup' });
-  await expect(exportButton).toBeVisible({ timeout: 30_000 });
-  await exportButton.click();
+test('@auth a rejected auth callback lands on sign-in with the reason, not not-found', async ({ page }) => {
+  /*
+   * This bundle is the only hash-routing build there is, which is why the case
+   * lives here.
+   *
+   * An expired link, a cancelled OAuth consent and a rejected magic link all
+   * come back as `#error=...`. auth-js stops before clearing that fragment and
+   * emits nothing, so nothing navigates -- and on a hash router the fragment
+   * IS the route, so it matched nothing and the customer was shown "Page not
+   * found" at the moment they most needed to be told what went wrong.
+   *
+   * Sign-in rather than the reset screen: the fragment says nothing about
+   * which flow it belonged to, so answering all of them with password-reset
+   * instructions was wrong for three cases out of four.
+   */
+  await page.goto('/#error=access_denied&error_code=otp_expired&error_description=Email+link+has+expired');
 
-  await expect(page.getByText('Backup not saved')).toBeVisible({ timeout: 15_000 });
-  await expect(page.getByText('Backup exported')).toHaveCount(0);
+  await expect(page.getByText('Email link has expired')).toBeVisible({ timeout: 30_000 });
+  await expect(page.getByText('Page not found')).toHaveCount(0);
+  // On the sign-in screen, with a way onwards rather than a dead end.
+  await expect(page.getByLabel('Email')).toBeVisible();
 });
 
-test('every paid tier can be reviewed even when no purchase is possible', async ({ page }) => {
-  // The complaint this fixes: with checkout unconfigured, every paid tier's only
-  // control was a disabled purchase button, so the cards were inert and there
-  // was no way to read what a tier includes. A store build is the strictest
-  // version of that state — purchase is removed entirely — so if the tiers are
-  // reviewable here they are reviewable anywhere.
-  await openBillingScreen(page);
-
-  for (const tier of ['Professional', 'Ranch Ops', 'Enterprise']) {
-    const view = page.getByRole('button', { name: `See what ${tier} includes` });
-    await expect(view).toBeVisible();
-    await expect(view).toBeEnabled();
-    await view.click();
-
-    // The billing summary panel now describes the tier that was clicked, and the
-    // control reports itself as the selected one. Scoped to the summary panel:
-    // the tier name also appears as the plan card's own heading.
-    await expect(page.getByLabel('Payment method').getByRole('heading', { name: tier, exact: true })).toBeVisible({
-      timeout: 10_000,
+test('@auth the sign-in screen still renders when site data is blocked', async ({ page }) => {
+  /*
+   * `remember me` was read straight from localStorage in a `useState`
+   * initializer -- during RENDER. Reaching for it throws outright in a browser
+   * configured to block site data, so the error boundary replaced the first
+   * screen a customer ever sees. An earlier fix covered four such call sites
+   * and did not reach this one, because the case it was tested against was the
+   * reset screen.
+   */
+  await page.addInitScript(() => {
+    Object.defineProperty(window, 'localStorage', {
+      configurable: true,
+      get() {
+        throw new DOMException('Access to storage is not allowed from this context.', 'SecurityError');
+      },
     });
-    await expect(view).toHaveAttribute('aria-pressed', 'true');
-  }
+  });
+
+  await page.goto('/#/login');
+  await expect(page.getByLabel('Email')).toBeVisible({ timeout: 30_000 });
+  await expect(page.getByText('This screen hit a runtime problem')).toHaveCount(0);
 });

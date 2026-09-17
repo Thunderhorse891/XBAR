@@ -1,120 +1,179 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { subscriptionPlans as serverPlans } from '../../api/_lib/subscription-plans.js';
+import { readFileSync } from 'node:fs';
+import path from 'node:path';
+
+import { subscriptionPlans } from '../../api/_lib/subscription-plans.js';
 import { marketingPlans } from '../../scripts/marketing/pricing-data.mjs';
 
-// The tier definitions exist in three places, and none of them can import
-// another directly:
-//
-//   src/lib/xbarRuntime.ts        drives the app          (bundler TS graph)
-//   scripts/marketing/pricing-data.mjs  drives /pricing   (plain ESM)
-//   api/_lib/subscription-plans.js      drives enforcement (functions runtime)
-//
-// tests/marketingSite.test.ts already asserts marketing === client, from inside
-// the compiled TS suite where the client config is importable. This file closes
-// the remaining side — server === marketing — from the plain-ESM suite where the
-// server module is importable. Together the two pin all three to one set of
-// numbers.
-//
-// The server side is the one that had no guard, and it is the one that matters
-// most: if its limits drift, the app enforces something different from what it
-// sold, and the first sign is a customer hitting a wall the UI never showed.
-//
-// The server used to carry a `brandedListings` flag with no client counterpart.
-// It was removed rather than asserted: every capability it could have gated is
-// already gated elsewhere — listings by sharedAccessEnabled, packet export by
-// the Professional minimum in commercialEngine, and the branded asset pack by
-// its own template minimumPlan — so it was an entitlement the product implied
-// and never enforced.
+/*
+ * The same tiers are defined in three places that cannot import one another:
+ *
+ *   src/lib/xbarRuntime.ts          the app (TypeScript, bundler-resolved)
+ *   scripts/marketing/pricing-data  the public /pricing page (plain ESM)
+ *   api/_lib/subscription-plans.js  server-side enforcement (plain ESM)
+ *
+ * tests/marketingSite.test.ts already pins the app against marketing. Nothing
+ * pinned the server copy, which is the one that decides what a paying customer
+ * can actually do — so a price or a limit could have been changed in two places
+ * and quietly left wrong in the third, and the visible symptom would be a
+ * customer billed for one thing and given another.
+ *
+ * The app's config is read as text rather than imported: xbarRuntime.ts uses
+ * .js-suffixed TypeScript imports that Node cannot resolve outside the bundler,
+ * which is the same reason the marketing data is a hand-maintained mirror.
+ */
 
-const ASCENDING_TIERS = ['Starter', 'Professional', 'Ranch Ops', 'Enterprise'];
-const LIMIT_KEYS = ['horseLimit', 'seatLimit', 'documentLimit', 'salePacketLimit', 'storageLimitGb'];
+const repoRoot = process.cwd();
 
-test('the server defines exactly the published tiers, in the same order', () => {
-  // Order matters: the client's planOrder and the server's TIER_ORDER both rely
-  // on it to decide whether a tier includes a lower plan's features.
-  assert.deepEqual(Object.keys(serverPlans), ASCENDING_TIERS);
+function appTierConfigSource() {
+  return readFileSync(path.join(repoRoot, 'src/lib/xbarRuntime.ts'), 'utf8');
+}
+
+const marketingByTier = Object.fromEntries(marketingPlans.map((plan) => [plan.tier, plan]));
+const TIERS = ['Starter', 'Professional', 'Ranch Ops', 'Enterprise'];
+
+test('all three sources define exactly the same tiers', () => {
+  assert.deepEqual(Object.keys(subscriptionPlans), TIERS);
   assert.deepEqual(
     marketingPlans.map((plan) => plan.tier),
-    ASCENDING_TIERS,
+    TIERS,
   );
-});
 
-test('every tier charges the price it is sold at', () => {
-  for (const plan of marketingPlans) {
-    assert.equal(serverPlans[plan.tier].monthlyRate, plan.monthlyRate, `${plan.tier} monthlyRate drifted`);
+  const source = appTierConfigSource();
+  for (const tier of TIERS) {
+    const key = tier.includes(' ') ? `'${tier}'` : tier;
+    assert.ok(source.includes(`${key}: {`), `${tier} is missing from the app tier config`);
   }
 });
 
-test('every enforced limit matches the limit that was published', () => {
-  for (const plan of marketingPlans) {
-    assert.deepEqual(
-      serverPlans[plan.tier].limits,
-      plan.limits,
-      `${plan.tier} limits drifted — the server would enforce something /pricing never showed`,
-    );
-  }
-});
+for (const tier of TIERS) {
+  test(`${tier}: server price and limits match the published ones`, () => {
+    const server = subscriptionPlans[tier];
+    const marketing = marketingByTier[tier];
 
-test('the feature list a customer is shown is the same on both sides', () => {
-  // The server persists these strings onto the workspace subscription profile,
-  // so a divergent copy means a synced workspace and a local one describe the
-  // same paid tier differently.
-  for (const plan of marketingPlans) {
-    assert.deepEqual(serverPlans[plan.tier].featureFlags, plan.features, `${plan.tier} feature copy drifted`);
-  }
-});
-
-test('shared access is enabled from Professional up', () => {
-  assert.equal(serverPlans.Starter.sharedAccessEnabled, false, 'Starter must not grant shared access');
-  for (const tier of ['Professional', 'Ranch Ops', 'Enterprise']) {
-    assert.equal(serverPlans[tier].sharedAccessEnabled, true, `${tier} must grant shared access`);
-  }
-  // Buyers never consume a seat — they open a share link with no account — so
-  // sharedAccessEnabled is the whole tier boundary here, and there is no buyer
-  // capacity number to keep in sync. /pricing publishes the same boundary as a
-  // yes/no, so pin the two together.
-  for (const plan of marketingPlans) {
     assert.equal(
-      serverPlans[plan.tier].sharedAccessEnabled,
-      plan.sharedAccess,
-      `${plan.tier} buyer sharing drifted between /pricing and the server`,
+      server.monthlyRate,
+      marketing.monthlyRate,
+      `${tier} is billed at ${server.monthlyRate} but advertised at ${marketing.monthlyRate}`,
     );
-  }
-});
 
-test('every tier publishes a complete, usable set of limits', () => {
-  // Guards a tier being added with a limit omitted: it would read as undefined
-  // and compare falsely in every capacity check, silently granting nothing.
-  for (const tier of ASCENDING_TIERS) {
-    for (const key of LIMIT_KEYS) {
-      const value = serverPlans[tier].limits[key];
-      assert.equal(typeof value, 'number', `${tier} is missing ${key}`);
-      assert.ok(Number.isFinite(value) && value >= 0, `${tier} ${key} must be a non-negative number`);
+    // deepEqual both ways: a limit present on one side and absent on the other
+    // is drift too, not just a differing number.
+    assert.deepEqual(server.limits, marketing.limits, `${tier} server limits differ from the ones on the pricing page`);
+  });
+
+  test(`${tier}: the numbers in the feature copy match the enforced limits`, () => {
+    // Not string equality. The three feature lists are marketing prose and are
+    // worded differently on purpose ("Proof vault" vs "Documents"), so
+    // requiring them to be byte-identical would force churn without protecting
+    // anything.
+    //
+    // What must not drift is the numbers inside that prose. A plan advertising
+    // "1,000 documents" while the server enforces 500 is a promise the product
+    // breaks the moment a customer relies on it, and it reads as correct in
+    // every file taken on its own.
+    const { limits, featureFlags } = subscriptionPlans[tier];
+    const sources = {
+      server: featureFlags.join(' '),
+      marketing: marketingByTier[tier].features.join(' '),
+    };
+
+    const advertised = [
+      [limits.documentLimit, 'document limit'],
+      [limits.storageLimitGb, 'storage limit'],
+      [limits.seatLimit, 'team seat limit'],
+    ];
+
+    for (const [where, copy] of Object.entries(sources)) {
+      for (const [value, label] of advertised) {
+        // Both plain and comma-grouped, since the copy writes 1,000 not 1000.
+        const plain = String(value);
+        const grouped = value.toLocaleString('en-US');
+        assert.ok(
+          copy.includes(plain) || copy.includes(grouped),
+          `${tier} ${where} copy never mentions its ${label} of ${grouped}: ${copy}`,
+        );
+      }
     }
-    // Every paid tier must be able to hold at least one horse and one seat, or
-    // the plan cannot be used at all.
-    assert.ok(serverPlans[tier].limits.horseLimit > 0, `${tier} grants no horses`);
-    assert.ok(serverPlans[tier].limits.seatLimit > 0, `${tier} grants no seats`);
+  });
+}
+
+test('every limit the server enforces is a positive number', () => {
+  // A missing or zero limit silently becomes "nothing is allowed" or, worse,
+  // reads as falsy in a comparison and stops applying.
+  for (const tier of TIERS) {
+    for (const [name, value] of Object.entries(subscriptionPlans[tier].limits)) {
+      assert.equal(typeof value, 'number', `${tier}.${name} is not a number`);
+      assert.ok(Number.isFinite(value), `${tier}.${name} is not finite`);
+
+      // sharedAccessSeatLimit is deliberately 0 on Starter: that tier includes
+      // no Horse Owner / Client accounts at all.
+      if (!(tier === 'Starter' && name === 'sharedAccessSeatLimit')) {
+        assert.ok(value > 0, `${tier}.${name} is ${value}`);
+      }
+    }
   }
 });
 
-test('paying more never grants less', () => {
-  // A higher tier that grants less than a lower one is always a mistake, and it
-  // would take capacity away from the customer who just upgraded.
-  for (let index = 1; index < ASCENDING_TIERS.length; index += 1) {
-    const lowerTier = ASCENDING_TIERS[index - 1];
-    const higherTier = ASCENDING_TIERS[index];
-    const lower = serverPlans[lowerTier];
-    const higher = serverPlans[higherTier];
+test('limits never decrease as tiers get more expensive', () => {
+  // A cheaper plan that grants more of something is a pricing bug, and it is
+  // the kind that survives review because each tier looks fine on its own.
+  const limitNames = Object.keys(subscriptionPlans.Starter.limits);
 
-    assert.ok(higher.monthlyRate > lower.monthlyRate, `${higherTier} must cost more than ${lowerTier}`);
+  for (let index = 1; index < TIERS.length; index += 1) {
+    const lower = subscriptionPlans[TIERS[index - 1]];
+    const higher = subscriptionPlans[TIERS[index]];
 
-    for (const key of LIMIT_KEYS) {
+    assert.ok(higher.monthlyRate > lower.monthlyRate, `${TIERS[index]} is not priced above ${TIERS[index - 1]}`);
+
+    for (const name of limitNames) {
       assert.ok(
-        higher.limits[key] >= lower.limits[key],
-        `${higherTier} grants less ${key} (${higher.limits[key]}) than ${lowerTier} (${lower.limits[key]})`,
+        higher.limits[name] >= lower.limits[name],
+        `${TIERS[index]} grants less ${name} (${higher.limits[name]}) than ${TIERS[index - 1]} (${lower.limits[name]})`,
       );
     }
+  }
+});
+
+test('the server carries no entitlement field that nothing enforces', () => {
+  // brandedListings lived here, was copied into every stored subscription
+  // profile, and was read by nothing in src/ or api/. A field like that reads
+  // as a capability the plan grants while gating nothing at all.
+  //
+  // Anything added to a plan definition should either be enforced somewhere or
+  // not be here; this asserts the specific one that was removed stays removed.
+  const serverSource = readFileSync(path.join(repoRoot, 'api/_lib/subscription-plans.js'), 'utf8');
+  assert.doesNotMatch(serverSource, /brandedListings/);
+
+  for (const tier of TIERS) {
+    assert.equal(
+      Object.prototype.hasOwnProperty.call(subscriptionPlans[tier], 'brandedListings'),
+      false,
+      `${tier} still carries brandedListings`,
+    );
+  }
+});
+
+test('plans are not sold as buyer seats, which no limit actually counts', () => {
+  // sharedAccessSeatLimit caps Horse Owner / Client accounts, enforced by the
+  // xbar_enforce_workspace_seat_limits trigger and mirrored in
+  // src/lib/workspaceAccess.ts. Buyers open a share link with no account, so
+  // nothing limits how many of them view a listing — advertising "buyer seats"
+  // described a restriction that does not exist while hiding the one that does.
+  // scripts/marketing/pages.mjs is in this list because leaving it out is how
+  // the phrase survived: the three DATA files were cleaned and the template
+  // that RENDERS the public pricing table still headed that column "Buyer
+  // seats". The wrong label was live on /pricing while every test here passed.
+  const sources = [
+    'api/_lib/subscription-plans.js',
+    'src/lib/xbarRuntime.ts',
+    'scripts/marketing/pricing-data.mjs',
+    'scripts/marketing/pages.mjs',
+  ];
+
+  for (const file of sources) {
+    const contents = readFileSync(path.join(repoRoot, file), 'utf8');
+    assert.doesNotMatch(contents, /buyer seats/i, `${file} still advertises buyer seats`);
   }
 });

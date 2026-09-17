@@ -1,18 +1,24 @@
 import { readJsonBody, sendJson } from '../_lib/http.js';
 import { getSupabaseAdmin } from '../_lib/supabase-admin.js';
-import { confirmationSatisfied, planAccountDeletion } from '../_lib/account-deletion.js';
+import {
+  confirmationSatisfied,
+  documentPrefixesToPurge,
+  loadAccountDeletionPlan,
+  mediaPrefixesToPurge,
+  workspacesStillPrivate,
+} from '../_lib/account-deletion.js';
 import { enforceRateLimit } from '../_lib/rate-limit.js';
 import { applyCors } from '../_lib/cors.js';
 
-// In-app account deletion (Apple Guideline 5.1.1(v)). Irreversible. Deletes the
-// caller's own auth account and the workspaces they PRIVATELY own; a workspace
-// that still has other active members is transferred to a successor, never
-// destroyed. Requires the user to type their exact email to confirm.
+// In-app account deletion. Irreversible. Deletes the
+// caller's own auth account and the workspaces they PRIVATELY own. Accounts
+// owning shared workspaces require a reviewed handoff before deletion: changing
+// a workspace owner alone does not transfer its stored files or their access.
+// Requires the user to type their exact email to confirm.
 //
-// Ordering is failure-safe: ownership transfers and membership removal (which
-// destroy no data) run first; the auth user is deleted next; only then are the
-// user's private workspaces and storage objects purged — so a failed account
-// deletion can never leave the account half-erased.
+// Prerequisite checks precede membership removal and auth deletion. File cleanup
+// follows auth deletion. This ordering does not make the multi-request operation
+// transactional; concurrency and shared-file lifecycle remain separate checks.
 
 const RATE_LIMIT = { bucket: 'account-delete', limit: 5, windowSeconds: 300 };
 const DOCUMENT_BUCKET =
@@ -63,38 +69,83 @@ export default async function handler(req, res) {
 
   try {
     // Build the plan: for every owned workspace, look up its OTHER active members
-    // so we can transfer rather than destroy shared workspaces.
-    const { data: owned } = await supabase.from('workspaces').select('id').eq('owner_user_id', user.id);
-    const ownedWorkspaces = [];
-    for (const row of owned ?? []) {
-      const { data: others } = await supabase
-        .from('workspace_memberships')
-        .select('user_id, role')
-        .eq('workspace_id', row.id)
-        .eq('status', 'active')
-        .neq('user_id', user.id);
-      ownedWorkspaces.push({
-        id: row.id,
-        otherActiveMembers: (others ?? []).map((member) => ({ userId: member.user_id, role: member.role })),
+    // so a shared workspace cannot be mistaken for private data to purge.
+    const plan = await loadAccountDeletionPlan(supabase, user.id);
+
+    // Transferring the row then deleting the entire user's Storage prefix
+    // destroyed shared files. Refuse before any mutation until the handoff
+    // includes verified file retention and successor access.
+    if (plan.workspacesToTransfer.length) {
+      return sendJson(res, 409, {
+        ok: false,
+        code: 'shared_workspace_handoff_required',
+        message:
+          'Your account owns a workspace with other members. Shared records and files need a reviewed ownership handoff before this account can be deleted. Nothing was changed.',
       });
     }
-    const plan = planAccountDeletion(user.id, ownedWorkspaces);
 
-    // 1. Transfer shared workspaces to a successor owner (non-destructive) so
-    //    deleting the user can never cascade their data away.
-    for (const transfer of plan.workspacesToTransfer) {
-      const { error } = await supabase
-        .from('workspaces')
-        .update({ owner_user_id: transfer.newOwnerUserId })
-        .eq('id', transfer.workspaceId)
-        .eq('owner_user_id', user.id);
-      if (error) {
-        return sendJson(res, 502, { ok: false, message: `Could not transfer a shared workspace: ${error.message}` });
+    /*
+     * Re-read membership BEFORE anything is mutated.
+     *
+     * An earlier version of this ran the same query after
+     * `auth.admin.deleteUser`, which made it worse than useless.
+     * `production-schema.sql` declares `workspaces.owner_user_id ... on delete
+     * cascade` and `workspace_memberships.workspace_id ... on delete cascade`,
+     * so deleting the auth user destroys the owned workspaces AND their
+     * membership rows first. The re-check then read an empty table, concluded
+     * that nothing was shared, and marked EVERY planned workspace purgeable --
+     * a guard that could only ever widen the purge, reading as protection.
+     *
+     * Asked here, the query sees live rows. The user's own membership is
+     * excluded in JS rather than with `.neq`, because `user_id` is nullable and
+     * SQL would silently drop a NULL row: an active membership belonging to
+     * nobody identifiable is evidence of sharing, not of privacy.
+     */
+    let purgeable = plan.workspacesToPurge;
+    if (plan.workspacesToPurge.length) {
+      const { data: liveMemberships, error: recheckError } = await supabase
+        .from('workspace_memberships')
+        .select('workspace_id, user_id')
+        .in('workspace_id', plan.workspacesToPurge)
+        .eq('status', 'active');
+
+      // Unreadable membership is never evidence that a workspace is private.
+      if (recheckError) {
+        return sendJson(res, 502, {
+          ok: false,
+          message: 'Unable to confirm who still has access to your workspaces. Nothing was changed.',
+        });
+      }
+
+      const otherMembers = (liveMemberships ?? []).filter((row) => row?.user_id !== user.id);
+      purgeable = workspacesStillPrivate(plan.workspacesToPurge, otherMembers);
+
+      /*
+       * A workspace that gained a member since the plan was built cannot be
+       * kept while this account is deleted: the owner FK cascades, so deleting
+       * the user destroys that workspace whatever this endpoint does about
+       * storage. Refusing is the only outcome that does not take someone
+       * else's records with it, and it matches what a workspace shared at plan
+       * time already gets.
+       */
+      if (purgeable.length !== plan.workspacesToPurge.length) {
+        return sendJson(res, 409, {
+          ok: false,
+          code: 'shared_workspace_handoff_required',
+          message:
+            'Someone was given access to one of your workspaces while this request was being prepared. Shared records and files need a reviewed ownership handoff before this account can be deleted. Nothing was changed.',
+        });
       }
     }
 
     // 2. Remove the user from every workspace they belong to (non-destructive).
-    await supabase.from('workspace_memberships').delete().eq('user_id', user.id);
+    const { error: membershipRemovalError } = await supabase
+      .from('workspace_memberships')
+      .delete()
+      .eq('user_id', user.id);
+    if (membershipRemovalError) {
+      return sendJson(res, 502, { ok: false, message: 'Unable to remove workspace access. Account was not deleted.' });
+    }
 
     // 3. Delete the auth account itself. Nothing destructive to the account's
     //    data has happened yet, so a failure here leaves it recoverable.
@@ -103,21 +154,41 @@ export default async function handler(req, res) {
       return sendJson(res, 502, { ok: false, message: `Failed to delete the account: ${deleteUserError.message}` });
     }
 
-    // 4. Account is gone — now purge the user's PRIVATE workspaces (child rows
-    //    cascade via workspace_id FKs) and their storage. Best-effort: the
-    //    account no longer exists, so leftover cleanup can never resurrect it.
-    if (plan.workspacesToPurge.length) {
+    /*
+     * 4. Account is gone — now purge the workspaces confirmed private above.
+     *
+     * The owner FK has already cascaded these rows away; the delete below is
+     * kept because it is the statement that expresses the intent, and it is
+     * harmless when the rows are already gone. Storage is NOT cascaded by
+     * anything, which is the part that genuinely still has to run here.
+     */
+    if (purgeable.length) {
       await supabase
         .from('workspaces')
         .delete()
-        .in('id', plan.workspacesToPurge)
+        .in('id', purgeable)
         .then(undefined, () => {});
     }
-    await removeUserStorage(supabase, user.id).catch(() => {});
+    // Documents moved onto workspace-keyed paths, so sweeping only the
+    // departing user's own prefix would leave every file in a purged private
+    // workspace sitting in the bucket after this endpoint reported success --
+    // while the Settings screen promises those documents were erased. Which
+    // prefixes are safe to sweep is decided in account-deletion.js, where the
+    // rule that a transferred workspace is never swept can be tested.
+    await removeStoragePrefixes(
+      supabase,
+      DOCUMENT_BUCKET,
+      documentPrefixesToPurge({ ...plan, workspacesToPurge: purgeable }),
+    ).catch(() => {});
+    await removeStoragePrefixes(
+      supabase,
+      MEDIA_BUCKET,
+      mediaPrefixesToPurge({ ...plan, workspacesToPurge: purgeable }),
+    ).catch(() => {});
 
     return sendJson(res, 200, {
       ok: true,
-      purgedWorkspaces: plan.workspacesToPurge.length,
+      purgedWorkspaces: purgeable.length,
       transferredWorkspaces: plan.workspacesToTransfer.length,
     });
   } catch (error) {
@@ -144,10 +215,10 @@ async function listAllObjects(supabase, bucket, prefix, out) {
   }
 }
 
-async function removeUserStorage(supabase, userId) {
-  for (const bucket of [DOCUMENT_BUCKET, MEDIA_BUCKET]) {
+async function removeStoragePrefixes(supabase, bucket, prefixes) {
+  for (const prefix of prefixes) {
     const paths = [];
-    await listAllObjects(supabase, bucket, userId, paths);
+    await listAllObjects(supabase, bucket, prefix, paths);
     for (let i = 0; i < paths.length; i += 100) {
       await supabase.storage.from(bucket).remove(paths.slice(i, i + 100));
     }

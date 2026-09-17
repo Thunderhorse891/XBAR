@@ -6,7 +6,7 @@
 //   2. renders every public marketing page as complete static HTML with
 //      unique metadata and self-referencing canonicals,
 //   3. renders /privacy and /terms from the same legal source the app uses
-//      (src/lib/legalDocuments.ts — imported directly, so no drift),
+//      (src/lib/legalDocuments.ts — loaded through tsx, so no drift),
 //   4. generates the sample sale packet shown on /demo,
 //   5. writes sitemap.xml containing only canonical public pages.
 //

@@ -272,7 +272,7 @@ const ACTIVE_OFFER_STATUSES = new Set(['Accepted', 'Deposit Due', 'Deposit Paid'
 // Offers that are not live money on the table: a draft was never sent, a rejected
 // offer is dead. Neither may stand in as pipeline value. A status-less legacy lead
 // is not in this set, so it still counts through the stage fallback.
-const NON_LIVE_OFFER_STATUSES = new Set(['Draft', 'Rejected']);
+export const NON_LIVE_OFFER_STATUSES = new Set(['Draft', 'Rejected']);
 
 export function buildRanchFinancials(
   horses: HorseRecord[],

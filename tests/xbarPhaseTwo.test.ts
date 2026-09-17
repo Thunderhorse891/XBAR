@@ -1,8 +1,24 @@
 import assert from 'node:assert/strict';
-import test from 'node:test';
+import test, { beforeEach, afterEach, mock } from 'node:test';
+import { isCurrentDatedDocument } from '../src/lib/documentCurrency.js';
+
+const fixtureNow = new Date('2026-04-15T12:00:00Z');
+
+// Freeze fixture time so records described as current never age out in CI.
+beforeEach(() => {
+  mock.timers.enable({ apis: ['Date'], now: fixtureNow });
+});
+afterEach(() => mock.timers.reset());
 import { buildDocumentTrustProfile, buildHorsePacketCompleteness } from '../src/lib/xbarPhaseTwo.js';
 import { rankHorseMatches } from '../src/lib/xbarRuntime.js';
 import type { DocumentRecord, HorseRecord, OwnershipRecord } from '../src/types/xbar.js';
+
+// Module-level fixtures and per-test clocks must share the same reference date.
+function daysAgo(days: number) {
+  const date = new Date(fixtureNow);
+  date.setUTCDate(date.getUTCDate() - days);
+  return date.toISOString().slice(0, 10);
+}
 
 function createHorse(
   overrides: Partial<HorseRecord> &
@@ -174,7 +190,7 @@ const documentsSeed: DocumentRecord[] = [
     horseId: 'horse-wiggy',
     entities: {
       horseName: 'WIGGY N RED',
-      examDate: '2026-03-08',
+      examDate: daysAgo(30),
       veterinarian: 'Dr. Maya Brant',
     },
   }),
@@ -316,7 +332,7 @@ test('buildHorsePacketCompleteness requires current dated Coggins evidence', () 
       horseId: wiggy.id,
       entities: {
         horseName: wiggy.name,
-        examDate: '2024-01-12',
+        examDate: daysAgo(3 * 365),
       },
     }),
   ]);
@@ -330,9 +346,45 @@ test('buildHorsePacketCompleteness requires current dated Coggins evidence', () 
       horseId: wiggy.id,
       entities: {
         horseName: wiggy.name,
-        examDate: '2026-04-12',
+        examDate: daysAgo(60),
       },
     }),
   ]);
   assert.equal(currentPacket.saleSlots.find((slot) => slot.key === 'coggins')?.status, 'ready');
+});
+
+for (const age of [179, 180, 181]) {
+  test(`health support at ${age} days uses the inclusive 180-day boundary`, () => {
+    const now = new Date(2032, 8, 16, 12);
+    const exam = new Date(Date.UTC(2032, 8, 16 - age)).toISOString().slice(0, 10);
+    const horse = horsesSeed[0];
+    const packet = buildHorsePacketCompleteness(
+      horse,
+      [
+        createDocument({
+          id: 'boundary-health',
+          title: 'Health evidence',
+          type: 'Vet Record',
+          horseId: horse.id,
+          entities: { examDate: exam },
+        }),
+      ],
+      undefined,
+      now,
+    );
+    assert.equal(packet.saleSlots.find((slot) => slot.key === 'health-cert')?.status, age <= 180 ? 'ready' : 'review');
+  });
+}
+
+test('calendar currency handles leap day, missing, invalid and future dates', () => {
+  const now = new Date(2028, 2, 1, 12);
+  const current = (examDate: string | undefined, maxAge = 180) =>
+    isCurrentDatedDocument({ state: 'Ready', entities: { examDate } }, maxAge, now);
+  assert.equal(current('2028-02-29', 1), true);
+  assert.equal(current('2028-02-28', 1), false);
+  assert.equal(current(undefined), false);
+  assert.equal(current('not-a-date'), false);
+  assert.equal(current('2028-02-30'), false);
+  assert.equal(current('2028-03-02'), false);
+  assert.equal(current('2028-03-01'), true);
 });

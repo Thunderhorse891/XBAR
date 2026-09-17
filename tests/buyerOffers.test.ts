@@ -65,3 +65,33 @@ test('buyer follow-up offer action does not hard-code a fake amount', async () =
   const source = await readFile('src/routes/BuyerDealRoom.tsx', 'utf8');
   assert.doesNotMatch(source, /22000|22,000|\$22,000/);
 });
+
+test('the Sales screen refuses the money the deal room already refuses', async () => {
+  const screen = await readFile('src/routes/Sales.tsx', 'utf8');
+
+  /*
+   * Two doors into the same three fields, and only one of them was locked.
+   * `buildBuyerOfferPatch` sends every amount through `parsePositiveMoney`, but
+   * the Sales lead form stored `Number(value)` on a bare truthiness test — so
+   * `-500` was a figure a rancher could type and save, and it landed in
+   * `pipelineValue` on the report handed to a banker. The deposit rule that was
+   * there only fires when a deposit is due, and the offer and counteroffer had
+   * no rule at all.
+   */
+  const submitAt = screen.indexOf('const result = updateSalesLead(selectedLead.id, {');
+  assert.ok(submitAt > -1, 'the lead submit handler must be findable');
+  const guards = screen.slice(0, submitAt);
+
+  for (const field of ['leadOfferAmount', 'leadCounterOfferAmount', 'leadDepositAmount']) {
+    assert.match(
+      guards,
+      new RegExp(`\\['[^']+', ${field}\\]`),
+      `${field} must be checked before the lead is written, not just when a deposit is due`,
+    );
+  }
+  assert.match(guards, /!\(Number\(raw\) > 0\)/, 'zero and negative must both be refused');
+
+  // And an EMPTY field must stay optional — an offer with no counteroffer or
+  // deposit is the ordinary case, and demanding one would block real updates.
+  assert.match(guards, /raw && !\(Number\(raw\) > 0\)/, 'an unfilled amount must not be treated as invalid');
+});

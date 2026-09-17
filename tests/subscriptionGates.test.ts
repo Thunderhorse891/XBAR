@@ -18,6 +18,7 @@ function subscription(tier: SubscriptionTier): SubscriptionProfile {
       seatsUsed: 1,
       documentsProcessed: 0,
       salePacketsGenerated: 0,
+      sharedAccessSeatsUsed: 0,
       storageUsedGb: 0,
       ...config.limits,
     },
@@ -42,7 +43,10 @@ test('Enterprise promises only concrete enforced capacity', () => {
   );
   assert.match(features, /60 team seats/);
   assert.match(features, /20,000 documents/);
-  assert.match(features, /60 team seats/);
+  // "client seats", not "buyer seats": the limit caps Horse Owner / Client
+  // accounts (enforced by the xbar_enforce_workspace_seat_limits trigger).
+  // Buyers open a share link with no account and are not counted at all.
+  assert.match(features, /200 client seats/);
 });
 
 test('applying a tier upgrades limits and features while preserving usage counts', async () => {
@@ -60,6 +64,7 @@ test('applying a tier upgrades limits and features while preserving usage counts
   assert.equal(upgraded.usage.horseLimit, subscriptionPlans.Professional.limits.horseLimit);
   assert.equal(upgraded.usage.documentLimit, subscriptionPlans.Professional.limits.documentLimit);
   assert.equal(upgraded.usage.seatLimit, subscriptionPlans.Professional.limits.seatLimit);
+  assert.equal(upgraded.usage.sharedAccessSeatLimit, subscriptionPlans.Professional.limits.sharedAccessSeatLimit);
   // Usage counters carry over untouched.
   assert.equal(upgraded.usage.horsesUsed, 4);
   assert.equal(upgraded.usage.documentsProcessed, 200);

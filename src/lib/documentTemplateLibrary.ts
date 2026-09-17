@@ -1,4 +1,3 @@
-import { saveTextAsFile, type FileSaveResult } from './fileDownload.js';
 import type {
   DocumentRecord,
   HorseRecord,
@@ -6,6 +5,7 @@ import type {
   SubscriptionTier,
   WorkspaceProfile,
 } from '../types/xbar.js';
+import { saveTextAsFile, type FileSaveResult } from './fileDownload.js';
 
 export type DocumentTemplateTier = 'Basic' | 'Pro' | 'Business';
 

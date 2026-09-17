@@ -35,6 +35,7 @@ function subscription(tier: SubscriptionProfile['tier'], used = 0): Subscription
       seatsUsed: used,
       documentsProcessed: used,
       salePacketsGenerated: used,
+      sharedAccessSeatsUsed: 0,
       storageUsedGb: 0,
       ...config.limits,
     },

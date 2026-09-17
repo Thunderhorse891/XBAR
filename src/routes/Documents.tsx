@@ -1,4 +1,3 @@
-import { saveTextAsFile } from '@/lib/fileDownload';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import type { MouseEvent } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
@@ -8,16 +7,21 @@ import { Panel, Pill } from '@/components/app-ui';
 import { EmptyState } from '@/components/EmptyState';
 import { SalePacketWizard } from '@/components/SalePacketWizard';
 import { billingPath, billingPathForTier } from '@/lib/billingRoutes';
-import { getDocumentAccessUrl } from '@/lib/cloudWorkspace';
+import { openStoredFileInTab } from '@/lib/openStoredFile';
+import { hasStoredFile, storedFileLabel } from '@/lib/storedFiles';
 import { formatDateTimeLabel } from '@/lib/format';
-import { legalDocumentToHtml, legalDocuments, openPrintableLegalDocument } from '@/lib/legalDocuments';
+import { downloadLegalHtml, legalDocuments, openPrintableLegalDocument } from '@/lib/legalDocuments';
 import { buildDocumentTrustProfile } from '@/lib/xbarPhaseTwo';
 import { useUiStore } from '@/store/useUiStore';
 import { useCloudStore } from '@/store/useCloudStore';
 import { useCurrentRoleCapability, useXbarStore } from '@/store/useXbarStore';
+import { extractionProducedNothing, readableProcessingNote } from '@/lib/documentIntelligence';
 import { buildHorseEnrichmentFromEntities, normalizeOwnershipRecord } from '@/store/xbarStoreLogic';
-import type { DocumentRecord, DocumentSource } from '@/types/xbar';
+import type { DocumentRecord, DocumentSource, SalePacketBuild } from '@/types/xbar';
 import { documentSources } from '@/features/documents/constants';
+import { useEffectiveSubscription } from '@/hooks/useOwnerPreview';
+import { isNavigableFileUrl } from '@/lib/navigableFileUrl';
+import { canPresentPurchaseFlow } from '@/lib/nativePlatform';
 import {
   PIPELINE_STAGES,
   buildProofLinks,
@@ -38,7 +42,7 @@ export default function Documents() {
   const documents = useXbarStore((state) => state.documents);
   const horses = useXbarStore((state) => state.horses);
   const intakeBatches = useXbarStore((state) => state.intakeBatches);
-  const subscription = useXbarStore((state) => state.subscription);
+  const subscription = useEffectiveSubscription();
   const ownershipRecords = useXbarStore((state) => state.ownershipRecords);
   const salePacketBuilds = useXbarStore((state) => state.salePacketBuilds);
   const createDocumentIntake = useXbarStore((state) => state.createDocumentIntake);
@@ -82,10 +86,13 @@ export default function Documents() {
     | null
   >(null);
   const [openingDocumentId, setOpeningDocumentId] = useState('');
+  const [openingPacketId, setOpeningPacketId] = useState('');
   const fileInputRef = useRef<HTMLInputElement | null>(null);
 
   const uploadOpen = searchParams.get('upload') === '1';
-  const [activeStage, setActiveStage] = useState<PipelineStage>(uploadOpen ? 'Upload' : 'Review');
+  const [activeStage, setActiveStage] = useState<PipelineStage>(
+    uploadOpen || (documents.length === 0 && canUploadDocuments) ? 'Upload' : 'Review',
+  );
 
   useEffect(() => {
     if (uploadOpen) {
@@ -114,7 +121,9 @@ export default function Documents() {
 
   const stageCounts: Record<PipelineStage, number> = computeStageCounts(documents, stageBuckets);
 
-  const heroStatus = computeHeroStatus(stageBuckets);
+  const heroStatus = documents.length
+    ? computeHeroStatus(stageBuckets)
+    : { label: 'No documents yet', tone: 'blue' as const };
 
   const heroRisks = computeHeroRisks(stageBuckets);
 
@@ -197,38 +206,34 @@ export default function Documents() {
     setMenuState({ type: 'surface', surfaceId, x: event.clientX, y: event.clientY });
   };
 
-  const openDocument = async (document: Pick<DocumentRecord, 'id' | 'title' | 'fileUrl' | 'storagePath'>) => {
-    const previewWindow = typeof window !== 'undefined' ? window.open('', '_blank') : null;
-    if (previewWindow) {
-      previewWindow.opener = null;
-    }
+  // Packets generated in the browser live in this device's vault, so their
+  // address has to be created on demand — a `blob:` URL persisted at generation
+  // time would already be dead by the time this list rendered it.
+  const openPacket = async (packet: SalePacketBuild) => {
+    setOpeningPacketId(packet.id);
+    const result = await openStoredFileInTab(packet);
+    setOpeningPacketId('');
 
+    if (!result.ok) {
+      pushToast({ title: 'Packet unavailable', message: result.message, tone: 'error' });
+    }
+  };
+
+  const openDocument = async (
+    document: Pick<DocumentRecord, 'id' | 'title' | 'fileUrl' | 'storagePath' | 'localFileKey'>,
+  ) => {
     setOpeningDocumentId(document.id);
-    const access = await getDocumentAccessUrl(document);
+    const result = await openStoredFileInTab(document);
     setOpeningDocumentId('');
 
-    if (!access.ok) {
-      previewWindow?.close();
-      pushToast({
-        title: 'File unavailable',
-        message: access.message,
-        tone: 'error',
-      });
-      return;
+    if (!result.ok) {
+      pushToast({ title: 'File unavailable', message: result.message, tone: 'error' });
     }
-
-    if (previewWindow) {
-      previewWindow.location.href = access.url;
-      previewWindow.focus();
-      return;
-    }
-
-    window.open(access.url, '_blank', 'noopener,noreferrer');
   };
 
   const menuItems = menuDocument
     ? [
-        ...(menuDocument.fileUrl || menuDocument.storagePath
+        ...(hasStoredFile(menuDocument)
           ? [
               {
                 id: 'open-file',
@@ -282,7 +287,7 @@ export default function Documents() {
       ? [
           ...(menuState.surfaceId === 'review'
             ? [
-                ...(reviewQueue[0] && (reviewQueue[0].fileUrl || reviewQueue[0].storagePath)
+                ...(reviewQueue[0] && hasStoredFile(reviewQueue[0])
                   ? [
                       {
                         id: 'open-next',
@@ -330,11 +335,19 @@ export default function Documents() {
                   label: 'Go to OCR / Processing stage',
                   onSelect: () => goToStage('Processing'),
                 },
-                {
-                  id: 'open-subscriptions',
-                  label: 'Open Billing page',
-                  onSelect: () => navigate(billingPath),
-                },
+                // Neutral navigation, but gated for the same reason as the
+                // pitch above: a store build reaches billing from the nav, so
+                // nothing is lost, and leaving one route ungated in this file
+                // is how a real CTA slips back in beside it.
+                ...(canPresentPurchaseFlow()
+                  ? [
+                      {
+                        id: 'open-subscriptions',
+                        label: 'Open Billing page',
+                        onSelect: () => navigate(billingPath),
+                      },
+                    ]
+                  : []),
               ]
             : []),
           ...(menuState.surfaceId === 'batches'
@@ -835,9 +848,39 @@ export default function Documents() {
                           <td>
                             <div className="table-cell__stack">
                               <strong>{document.title}</strong>
-                              <span>
-                                {document.type} · {Math.round(document.confidence * 100)}% OCR confidence
-                              </span>
+                              {/*
+                                A confidence figure is a claim about a match
+                                made from facts. When the reader came away with
+                                nothing there are no facts, and the number shown
+                                is a floor -- 0.54 with no candidate, never
+                                below 0.42 -- not a measurement. Printing
+                                "54% match confidence" beside "This file could
+                                not be read." states a precision nobody
+                                computed, so the row says what happened instead.
+                              */}
+                              {extractionProducedNothing(document.processingNote) ? (
+                                <span>{document.type} · nothing could be read from this file</span>
+                              ) : (
+                                <span>
+                                  {document.type} · {Math.round(document.confidence * 100)}% match confidence
+                                </span>
+                              )}
+                              {/* Only ever present when the reader stopped
+                                  short of the whole file. Silence here used to
+                                  mean "read in full" and did not. */}
+                              {readableProcessingNote(document.processingNote) ? (
+                                <span
+                                  className={
+                                    extractionProducedNothing(document.processingNote) ? 'field-error' : 'xs-muted'
+                                  }
+                                  role="note"
+                                >
+                                  {readableProcessingNote(document.processingNote)}
+                                  {extractionProducedNothing(document.processingNote)
+                                    ? ' Enter the details by hand below, or upload a clearer scan of the same document.'
+                                    : ''}
+                                </span>
+                              ) : null}
                             </div>
                           </td>
                           <td>
@@ -886,12 +929,13 @@ export default function Documents() {
                           </td>
                           <td>
                             <div className="inline-actions inline-actions--card">
-                              {document.fileUrl || document.storagePath ? (
+                              {hasStoredFile(document) ? (
                                 <button
                                   className="button button--ghost button--compact"
                                   type="button"
                                   onClick={() => void openDocument(document)}
                                   disabled={openingDocumentId === document.id}
+                                  title={storedFileLabel(document)}
                                 >
                                   {openingDocumentId === document.id ? 'Opening...' : 'Open file'}
                                 </button>
@@ -1139,13 +1183,15 @@ export default function Documents() {
               <p className="panel__description" style={{ marginBottom: 12 }}>
                 Starter records the packet build. Upgrading to Professional unlocks the watermarked PDF and Buyer
                 follow-up.{' '}
-                <button
-                  className="button button--ghost button--compact"
-                  type="button"
-                  onClick={() => navigate(billingPathForTier('Professional'))}
-                >
-                  View Billing
-                </button>
+                {canPresentPurchaseFlow() ? (
+                  <button
+                    className="button button--ghost button--compact"
+                    type="button"
+                    onClick={() => navigate(billingPathForTier('Professional'))}
+                  >
+                    View Billing
+                  </button>
+                ) : null}
               </p>
             ) : null}
             {shareGroups.length ? (
@@ -1213,7 +1259,9 @@ export default function Documents() {
                           </div>
                         </div>
                         <div className="inline-actions" style={{ alignItems: 'center' }}>
-                          {packet.downloadUrl ? (
+                          {/* Scheme-checked: a packet record can arrive in an imported backup, and
+                              a `javascript:` href navigates this origin when the link is clicked. */}
+                          {isNavigableFileUrl(packet.downloadUrl) ? (
                             <a
                               className="button button--ghost button--compact"
                               href={packet.downloadUrl}
@@ -1222,6 +1270,15 @@ export default function Documents() {
                             >
                               Download PDF
                             </a>
+                          ) : packet.localFileKey ? (
+                            <button
+                              className="button button--ghost button--compact"
+                              type="button"
+                              onClick={() => void openPacket(packet)}
+                              disabled={openingPacketId === packet.id}
+                            >
+                              {openingPacketId === packet.id ? 'Opening...' : 'Open packet'}
+                            </button>
                           ) : null}
                           <Pill
                             tone={
@@ -1278,22 +1335,26 @@ export default function Documents() {
                         className="button button--ghost button--compact"
                         type="button"
                         onClick={() => {
-                          void (async () => {
-                            const saved = await saveTextAsFile(
-                              legalDoc.suggestedFileName,
-                              legalDocumentToHtml(legalDoc),
-                              'text/html;charset=utf-8',
+                          // The toast used to fire regardless of whether a file
+                          // appeared. In a store build none does -- WKWebView
+                          // ignores an anchor's download attribute -- so the
+                          // customer was told the export worked and then could
+                          // not find it.
+                          void downloadLegalHtml(legalDoc).then((saved) => {
+                            pushToast(
+                              saved.ok
+                                ? {
+                                    title: 'Legal document exported',
+                                    message: `${legalDoc.shortTitle} downloaded as a print-ready file.`,
+                                    tone: 'success',
+                                  }
+                                : {
+                                    title: 'Legal document was not saved',
+                                    message: saved.reason,
+                                    tone: 'warning',
+                                  },
                             );
-                            pushToast({
-                              title: saved.ok ? 'Legal document exported' : 'Export unavailable',
-                              message: saved.ok
-                                ? saved.via === 'share-sheet'
-                                  ? `${legalDoc.shortTitle} is ready to save or send.`
-                                  : `${legalDoc.shortTitle} downloaded as a print-ready file.`
-                                : saved.reason,
-                              tone: saved.ok ? 'success' : 'warning',
-                            });
-                          })();
+                          });
                         }}
                       >
                         Download

@@ -1,19 +1,31 @@
 import { Suspense, lazy, useEffect } from 'react';
-import { BrowserRouter, HashRouter, Navigate, Route, Routes, useLocation, useParams } from 'react-router-dom';
+import {
+  BrowserRouter,
+  HashRouter,
+  Navigate,
+  Outlet,
+  Route,
+  Routes,
+  useLocation,
+  useNavigate,
+  useParams,
+  useSearchParams,
+} from 'react-router-dom';
 import ErrorBoundary from './components/ErrorBoundary';
 import { RequireCloudAuth } from './components/RequireCloudAuth';
 import { RequireSharedListings } from './components/RequireSubscriptionFeature';
 import { RequireWorkspaceSetup } from './components/RequireWorkspaceSetup';
 import { SubscriptionEnforcement } from './components/SubscriptionEnforcement';
 import { InteractionShell } from './components/InteractionSystem';
+import { OwnerTestModeBar } from './components/OwnerTestModeBar';
 import { Toaster } from './components/ui/sonner';
 import { billingPath } from './lib/billingRoutes';
 import { buyerFollowUpPath } from './lib/buyerRoutes';
-import { appBasePath } from './lib/routeCanon';
+import { appBasePath, loginPath, passwordResetPath, usesHashRouting } from './lib/routeCanon';
 import { trackRuntimeEvent } from './lib/runtimeEvents';
-import { isCompedEmail } from './lib/compAccess';
-import { useCloudStore } from './store/useCloudStore';
-import { useXbarStore } from './store/useXbarStore';
+import { consumeRecoveryCallbackNavigation } from '@/lib/authCallbackArrival';
+import { hasValidatedPasswordRecovery, useCloudStore } from './store/useCloudStore';
+import { useUiStore } from './store/useUiStore';
 import './routes/operationsHierarchy.css';
 import './routes/interactionSystem.css';
 import './routes/xbarCommandSystem.css';
@@ -25,6 +37,7 @@ import './styles/xbarSaas.css';
 
 const Dashboard = lazy(() => import('./pages/Dashboard'));
 const GettingStarted = lazy(() => import('./routes/GettingStarted'));
+const ResetPassword = lazy(() => import('./routes/ResetPassword'));
 const BuyerDealRoom = lazy(() => import('./routes/BuyerDealRoom'));
 const SalePacketStudio = lazy(() => import('./routes/SalePacketStudio'));
 const Reports = lazy(() => import('./routes/Reports'));
@@ -98,11 +111,6 @@ function LegacyHorseRedirect() {
   return <Navigate to={id ? `/horses/${id}` : '/horses'} replace />;
 }
 
-function useHashRouting() {
-  if (typeof window === 'undefined' || import.meta.env.MODE === 'e2e') return false;
-  return import.meta.env.VITE_ROUTER_MODE === 'hash' || window.location.hostname.endsWith('.github.io');
-}
-
 function routeTitle(path: string) {
   if (path.startsWith('/profiles/')) return 'XBAR | Listings';
   if (path.startsWith('/horses/')) return 'XBAR | Horse';
@@ -118,24 +126,18 @@ function applyRouteMeta(path: string) {
   document.title = path === '/login' ? 'Sign in | XBAR' : routeTitle(path);
 }
 
-// Operator comp bridge: when the signed-in email is on the comp allowlist
-// (VITE_XBAR_COMP_EMAILS), grant the full Enterprise tier so an internal / QA /
-// owner account can exercise every gated feature. Self-heals after a cloud sync
-// that would otherwise restore the real tier. No-op for everyone else, and the
-// server enforces the same allowlist for cloud actions.
-function CompAccessBridge() {
-  const sessionEmail = useCloudStore((state) => state.session?.user?.email ?? '');
-  const tier = useXbarStore((state) => state.subscription.tier);
-  const applySubscriptionTier = useXbarStore((state) => state.applySubscriptionTier);
-
-  useEffect(() => {
-    if (isCompedEmail(sessionEmail) && tier !== 'Enterprise') {
-      applySubscriptionTier('Enterprise', { billingState: 'Manual Billing' });
-    }
-  }, [sessionEmail, tier, applySubscriptionTier]);
-
-  return null;
-}
+// Operator comp access is no longer a bridge that writes to the store.
+//
+// The previous version reacted to a comped email by calling
+// `applySubscriptionTier('Enterprise', { billingState: 'Manual Billing' })`,
+// which overwrites the workspace's real subscription — the same field a genuine
+// plan lives in, persisted and synced — and "self-healed" by rewriting it again
+// after every cloud sync that restored the truth. There was no way back to the
+// real plan because the real plan had been overwritten.
+//
+// Tier preview is now a read-time overlay (src/hooks/useOwnerPreview.ts) that
+// never writes to the subscription, so returning to the real entitlement is
+// simply switching the overlay off. See OwnerTestModeBar for the control.
 
 function RouteTelemetry() {
   const location = useLocation();
@@ -163,8 +165,89 @@ function FollowUpsRedirect() {
   return <Navigate to={buyerFollowUpPath(leadId ?? undefined)} replace />;
 }
 
+/*
+ * Carries a password-recovery arrival to the reset screen.
+ *
+ * The recovery link cannot always name that screen itself: on the hash router
+ * the route and Supabase's implicit-flow session would have to share one URL
+ * fragment, so the email only loads the shell. This is also the more robust
+ * place for the decision -- it depends on the auth event rather than on a URL
+ * composed days earlier by a different build, which is exactly what went wrong
+ * twice in getting here.
+ */
+function PasswordRecoveryRedirect() {
+  const pending = useCloudStore(hasValidatedPasswordRecovery);
+  const location = useLocation();
+  const navigate = useNavigate();
+
+  /*
+   * Only the tab that opened the link. auth-js broadcasts PASSWORD_RECOVERY to
+   * every open tab -- which is right, and is how a spent grant gets released
+   * everywhere -- but it is not a reason to yank every other tab to this
+   * screen, unmounting whatever the customer had in progress there.
+   *
+   * Routing only. The grant still comes from Supabase's validated event, so a
+   * forged fragment moves someone to a screen that then refuses them.
+   */
+  useEffect(() => {
+    if (!pending || !consumeRecoveryCallbackNavigation()) return;
+    if (location.pathname !== passwordResetPath) {
+      navigate(passwordResetPath, { replace: true });
+    }
+  }, [pending, location.pathname, navigate]);
+
+  return null;
+}
+
+/*
+ * A rejected callback that came back somewhere other than the sign-in screen.
+ *
+ * Magic-link and OAuth sign-in are offered from Settings as well as Login, and
+ * `currentAuthRedirectUrl()` sends Supabase back to the page the customer
+ * started from -- so the failure arrives on `/app/settings` or `/app/billing`
+ * as `#error=...`. main.tsx moves the reason to `?authError=`, and Login was
+ * the only screen that ever read it: with a session in hand the customer simply
+ * stayed put with nothing said, and without one the cloud-auth guard sent them
+ * to `/login` with a `<Navigate>` that drops the query, losing it there too.
+ *
+ * Answered here rather than by rewriting the path, because the signed-in case
+ * has nowhere better to go -- sending someone who is already signed in to the
+ * sign-in screen to be told a link failed is its own wrong answer.
+ *
+ * Mounted BEFORE <Routes>, so this effect runs before the cloud-auth guard's
+ * own navigation on the same commit; otherwise the redirect would take the
+ * parameter away before it had been read.
+ *
+ * A toast is weaker than a message in a form, and Login keeps its form: this
+ * skips that route entirely, so the screen that can do better still does.
+ */
+function AuthCallbackFailureNotice() {
+  const [params, setParams] = useSearchParams();
+  const location = useLocation();
+  const pushToast = useUiStore((state) => state.pushToast);
+
+  useEffect(() => {
+    if (location.pathname === loginPath) return;
+    const authError = params.get('authError');
+    if (!authError) return;
+    pushToast({
+      tone: 'error',
+      title: 'That sign-in link did not work',
+      message: authError,
+      // Long enough to read and act on. The default is tuned for confirmations.
+      duration: 12_000,
+    });
+    // Cleared once said, or a reload re-announces a failure already dealt with.
+    const next = new URLSearchParams(params);
+    next.delete('authError');
+    setParams(next, { replace: true });
+  }, [location.pathname, params, pushToast, setParams]);
+
+  return null;
+}
+
 export default function App() {
-  const hashRouting = useHashRouting();
+  const hashRouting = usesHashRouting();
   const Router = hashRouting ? HashRouter : BrowserRouter;
 
   return (
@@ -173,8 +256,11 @@ export default function App() {
         <Toaster position="top-right" richColors closeButton />
         <InteractionShell />
         <SubscriptionEnforcement />
-        <CompAccessBridge />
         <RouteTelemetry />
+        <PasswordRecoveryRedirect />
+        <AuthCallbackFailureNotice />
+        {/* Renders nothing unless the viewer is an authorized owner. */}
+        <OwnerTestModeBar />
         <Suspense
           fallback={
             <div className="app-loading-shell" role="status" aria-live="polite">
@@ -188,6 +274,7 @@ export default function App() {
             <Route path="/verify" element={<VerifyPacket />} />
             <Route path="/verify/:packetId" element={<VerifyPacket />} />
             <Route path="/login" element={<Login />} />
+            <Route path={passwordResetPath} element={<ResetPassword />} />
             <Route path="/subscribe" element={<Navigate to={billingPath} replace />} />
             <Route
               path="/setup"
@@ -201,61 +288,67 @@ export default function App() {
               path="/"
               element={
                 <RequireCloudAuth>
-                  <RequireWorkspaceSetup>
-                    <MainLayout />
-                  </RequireWorkspaceSetup>
+                  <MainLayout />
                 </RequireCloudAuth>
               }
             >
-              <Route index element={<Dashboard />} />
-              <Route path="getting-started" element={<GettingStarted />} />
-              <Route path="today" element={<TodayWork />} />
-              <Route path="herd-groups" element={<HerdGroups />} />
-              <Route path="pastures" element={<Pastures />} />
-              <Route path="feed" element={<FeedInventory />} />
-              <Route path="documents-vault" element={<Navigate to="/documents" replace />} />
-              <Route path="sales-pipeline" element={<Navigate to="/sales" replace />} />
-              <Route path="buyer-deal-room" element={<Navigate to="/buyers" replace />} />
-              <Route path="buyer-follow-up" element={<Navigate to="/buyers" replace />} />
-              <Route path="buyers" element={<BuyerDealRoom />} />
-              <Route path="buyers/:leadId" element={<BuyerDealRoom />} />
-              <Route path="sale-packets" element={<SalePacketStudio />} />
-              <Route path="sale-packet-studio" element={<Navigate to="/sale-packets" replace />} />
-              <Route path="reports" element={<Reports />} />
-              <Route path="financials" element={<Financials />} />
-              <Route path="animals" element={<Navigate to="/horses" replace />} />
-              <Route path="animals/:id" element={<LegacyHorseRedirect />} />
-              <Route path="health-care" element={<HealthCare />} />
-              <Route path="ownership-chain" element={<OwnershipChain />} />
-              <Route path="equipment" element={<EquipmentPage />} />
-              <Route path="breeding-foaling" element={<BreedingFoaling />} />
               <Route path="plans" element={<Navigate to={billingPath} replace />} />
-              <Route path="horses" element={<Horses />} />
-              <Route path="horses/:id" element={<AnimalProfile />} />
-              <Route path="documents" element={<Documents />} />
-              <Route path="document-library" element={<Navigate to="/documents" replace />} />
-              <Route path="weather" element={<Weather />} />
-              <Route path="ownership" element={<Ownership />} />
-              <Route path="medical" element={<Medical />} />
-              <Route path="breeding" element={<Breeding />} />
-              <Route path="sales" element={<Sales />} />
-              <Route path="follow-ups" element={<FollowUpsRedirect />} />
-              <Route path="expenses" element={<Expenses />} />
-              <Route path="reminders" element={<Reminders />} />
-              <Route path="assets" element={<RanchAssets />} />
-              <Route path="assets-equipment" element={<Navigate to="/assets" replace />} />
               <Route path="billing" element={<Subscriptions />} />
               <Route path="subscriptions" element={<Navigate to={billingPath} replace />} />
               <Route
-                path="shared-access"
                 element={
-                  <RequireSharedListings>
-                    <SharedAccess />
-                  </RequireSharedListings>
+                  <RequireWorkspaceSetup>
+                    <Outlet />
+                  </RequireWorkspaceSetup>
                 }
-              />
-              <Route path="settings" element={<Settings />} />
-              <Route path="*" element={<NotFound />} />
+              >
+                <Route index element={<Dashboard />} />
+                <Route path="getting-started" element={<GettingStarted />} />
+                <Route path="today" element={<TodayWork />} />
+                <Route path="herd-groups" element={<HerdGroups />} />
+                <Route path="pastures" element={<Pastures />} />
+                <Route path="feed" element={<FeedInventory />} />
+                <Route path="documents-vault" element={<Navigate to="/documents" replace />} />
+                <Route path="sales-pipeline" element={<Navigate to="/sales" replace />} />
+                <Route path="buyer-deal-room" element={<Navigate to="/buyers" replace />} />
+                <Route path="buyer-follow-up" element={<Navigate to="/buyers" replace />} />
+                <Route path="buyers" element={<BuyerDealRoom />} />
+                <Route path="buyers/:leadId" element={<BuyerDealRoom />} />
+                <Route path="sale-packets" element={<SalePacketStudio />} />
+                <Route path="sale-packet-studio" element={<Navigate to="/sale-packets" replace />} />
+                <Route path="reports" element={<Reports />} />
+                <Route path="financials" element={<Financials />} />
+                <Route path="animals" element={<Navigate to="/horses" replace />} />
+                <Route path="animals/:id" element={<LegacyHorseRedirect />} />
+                <Route path="health-care" element={<HealthCare />} />
+                <Route path="ownership-chain" element={<OwnershipChain />} />
+                <Route path="equipment" element={<EquipmentPage />} />
+                <Route path="breeding-foaling" element={<BreedingFoaling />} />
+                <Route path="horses" element={<Horses />} />
+                <Route path="horses/:id" element={<AnimalProfile />} />
+                <Route path="documents" element={<Documents />} />
+                <Route path="document-library" element={<Navigate to="/documents" replace />} />
+                <Route path="weather" element={<Weather />} />
+                <Route path="ownership" element={<Ownership />} />
+                <Route path="medical" element={<Medical />} />
+                <Route path="breeding" element={<Breeding />} />
+                <Route path="sales" element={<Sales />} />
+                <Route path="follow-ups" element={<FollowUpsRedirect />} />
+                <Route path="expenses" element={<Expenses />} />
+                <Route path="reminders" element={<Reminders />} />
+                <Route path="assets" element={<RanchAssets />} />
+                <Route path="assets-equipment" element={<Navigate to="/assets" replace />} />
+                <Route
+                  path="shared-access"
+                  element={
+                    <RequireSharedListings>
+                      <SharedAccess />
+                    </RequireSharedListings>
+                  }
+                />
+                <Route path="settings" element={<Settings />} />
+                <Route path="*" element={<NotFound />} />
+              </Route>
             </Route>
             <Route path="*" element={<NotFound />} />
           </Routes>

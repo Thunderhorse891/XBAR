@@ -1,13 +1,29 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
-import { startManagedCheckout } from '@/lib/billingApi';
+import { canUsePaymentLinkFallback, checkoutRouteFor, startManagedCheckout } from '@/lib/billingApi';
 import { formatCurrency } from '@/lib/format';
-import { canPresentPurchaseFlow } from '@/lib/nativePlatform';
+import { isNativeApp } from '@/lib/nativePlatform';
+import {
+  claimPendingHostedPurchase,
+  clearPendingHostedPurchase,
+  isPendingHostedPurchase,
+  pendingHostedPurchaseKey,
+  pendingHostedPurchaseNotice,
+  readPendingHostedPurchase,
+} from '@/lib/pendingHostedPurchase';
 import { getStripePaymentLink, stripeConfig } from '@/lib/platformConfig';
 import { productEvent, productEventNames } from '@/lib/productEvents';
 import { revenuePlanMatrix } from '@/lib/revenuePlanMatrix';
 import { trackRuntimeEvent } from '@/lib/runtimeEvents';
-import { getCheckoutReadiness, recommendedTier } from '@/lib/subscriptionDecision';
+import {
+  getBillingPortalAction,
+  getCheckoutReadiness,
+  isCurrentPaidPlan,
+  isEntitledBillingState,
+  hasActivePaidPlan,
+  isSubscriptionRecoverable,
+  recommendedTier,
+} from '@/lib/subscriptionDecision';
 import { subscriptionPlans } from '@/lib/subscriptionPlans';
 import { useCloudStore } from '@/store/useCloudStore';
 import { useUiStore } from '@/store/useUiStore';
@@ -22,7 +38,7 @@ function planAnchor(tier: SubscriptionTier) {
 }
 
 function formatLimit(value: number, noun: string) {
-  return `${value.toLocaleString()} ${noun}`;
+  return `${value.toLocaleString()} ${value === 1 && noun.endsWith('s') ? noun.slice(0, -1) : noun}`;
 }
 
 export default function Subscriptions() {
@@ -37,38 +53,125 @@ export default function Subscriptions() {
   const workspaceId = useCloudStore((state) => state.workspaceId);
   const pushToast = useUiStore((state) => state.pushToast);
   const [checkoutTier, setCheckoutTier] = useState<SubscriptionTier | null>(null);
-  const decisionTier = requestedTier ?? recommendedTier(subscription.tier);
+  // After a lapse, `tier` is the baseline the workspace fell back to, so
+  // recommending from it offers Professional to someone who just lost
+  // Enterprise. purchasedTier is what they had.
+  //
+  // It is selected directly rather than passed through recommendedTier, which
+  // advances to the next plan up: feeding a lapsed Professional through it
+  // returns Ranch Ops, and Ranch Ops returns Enterprise. Restoring what lapsed
+  // is not an upgrade recommendation, so the recommender is the wrong function
+  // for it — it only looked right for Enterprise, where the clamp hides the
+  // advance.
+  //
+  // Only when the workspace is not currently entitled. An active or comped
+  // workspace has purchasedTier === tier, and there the upgrade recommendation
+  // is exactly what the screen should lead with.
+  const lapsedTier = isEntitledBillingState(subscription.billingState) ? undefined : subscription.purchasedTier;
+  const defaultDecisionTier = requestedTier ?? lapsedTier ?? recommendedTier(subscription.tier);
+  const [selectedTier, setSelectedTier] = useState<SubscriptionTier>(defaultDecisionTier);
+  const decisionTier = selectedTier;
   const decisionConfig = subscriptionPlans[decisionTier];
   const decisionProfile = revenuePlanMatrix[decisionTier];
   const hasManagedIdentity = Boolean(session?.access_token && workspaceId);
   const billingEnabled = stripeConfig.managedBillingEnabled;
-  // Store builds never present a purchase path (App Store Guideline 3.1.1).
-  const nativeApp = !canPresentPurchaseFlow();
   const selectedPaymentLink = Boolean(getStripePaymentLink(decisionTier));
-  const selectedCheckoutConfigured = billingEnabled || selectedPaymentLink;
+  /*
+   * Read once per render and passed to every billing decision below.
+   *
+   * App Store Review Guideline 3.1.1: a digital subscription sold inside the
+   * app has to go through In-App Purchase, so a store build offers no purchase
+   * path at all. The refusals live in getCheckoutReadiness and
+   * getBillingPortalAction rather than in this JSX, so all four call sites
+   * answer the same question and no role or Stripe configuration can reopen a
+   * way around it.
+   */
+  const nativeApp = isNativeApp();
+  /*
+   * "Is there a checkout on this screen at all", which in a store build there
+   * is not.
+   *
+   * Disabling the button was not enough, and this is the line that fixes the
+   * rest. This flag drives the whole payment panel: without the native term it
+   * still read "Due at checkout", "then monthly", "Payment: handled at
+   * checkout", and rendered a "Card details / Secure checkout" box with card
+   * number, expiration and CVC rows. Apple forbids PRESENTING the paywall, not
+   * only completing it, so a store build that displays a card form and calls
+   * the price "due at checkout" is the rejection even though nothing can be
+   * bought behind it.
+   */
+  const selectedCheckoutConfigured = !nativeApp && (billingEnabled || selectedPaymentLink);
   const starterSetup = subscription.tier === 'Starter' && subscription.monthlyRate === 0;
+  // A workspace whose Stripe subscription can still bill it. Buying here would
+  // open a second one beside it, so every checkout path is blocked.
+  //
+  // Read from the profile rather than derived from billingState, which cannot
+  // answer this: 'Inactive' covers a canceled subscription, which is gone, and
+  // a paused or unpaid one, which Stripe resumes once payment is sorted out.
+  // Testing that state for the past-due value missed both of the latter and
+  // left their plan buttons enabled.
+  //
+  // Older profiles predate the field, and reading absent as "no live
+  // subscription" was wrong: the previous mapper stored past_due, unpaid and
+  // incomplete_expired all as 'Past Due' and never produced 'Inactive', so
+  // every legacy lapsed workspace sits in 'Past Due' with no flag — and two of
+  // those three statuses can still be collected on. isSubscriptionRecoverable
+  // falls back to the billing state for exactly that population.
+  const subscriptionRecoverable = isSubscriptionRecoverable(subscription);
+  // A paying workspace changing tiers is the other way to end up with two
+  // subscriptions, and it is not recoverable, so the check above misses it
+  // entirely. api/stripe/checkout.js refuses these server-side; this stops the
+  // screen offering a button that would be refused.
+  const subscriptionActive = hasActivePaidPlan(subscription);
+  /*
+   * Where a workspace that already has a subscription is sent instead.
+   *
+   * Refusing checkout is right and is not enough on its own: without this the
+   * primary action rendered disabled, the plan cards did nothing, and the copy
+   * pointed at a billing portal the app never linked to. See
+   * `getBillingPortalAction` for why routing here cannot duplicate a
+   * subscription the way checkout would.
+   */
+  const hasBillingPortal = Boolean(stripeConfig.billingPortalUrl.trim());
+  /*
+   * Read once per render and passed to every readiness call below.
+   *
+   * App Store Review Guideline 3.1.1: a digital subscription sold inside the
+   * app has to go through In-App Purchase, so a store build offers no purchase
+   * path at all. The refusal lives in getCheckoutReadiness rather than in the
+   * JSX here, so all three call sites answer the same question and no role or
+   * Stripe configuration can reopen a way around it.
+   */
+  const billingPortalAction = getBillingPortalAction({
+    portalUrl: stripeConfig.billingPortalUrl,
+    canManageBilling,
+    subscriptionActive,
+    subscriptionRecoverable,
+    nativeApp,
+  });
   const continuePath = workspaceReady ? '/' : '/setup';
-  const checkoutReadinessLabel = nativeApp
-    ? 'Plans are managed outside the app.'
-    : selectedCheckoutConfigured
-      ? 'Secure checkout opens next.'
-      : 'Online checkout is not configured. Contact support/manual billing required.';
+  const checkoutReadinessLabel = selectedCheckoutConfigured
+    ? 'Secure checkout opens next.'
+    : 'Billing is not configured yet, so plans cannot be purchased in the app.';
   const selectedReadiness = getCheckoutReadiness({
     billingEnabled,
     canManageBilling,
     hasManagedIdentity,
     hasPaymentLink: selectedPaymentLink,
     checkoutInProgress: checkoutTier !== null,
+    subscriptionRecoverable,
+    // The third call site. Without it the prominent CTA promised secure
+    // checkout while every plan card below it was disabled and clicking the CTA
+    // was refused — all three have to answer the same question.
+    subscriptionActive,
+    hasBillingPortal,
     nativeApp,
   });
-  // A store build shows no in-app payment surface at all: not the card fields,
-  // not the "due at checkout" framing, not the checkout CTA. Apple reads any of
-  // those as an in-app purchase flow (3.1.1), even with the buttons disabled.
-  const externalBilling = selectedReadiness.mode === 'external';
-  const selectedPaidCurrent =
-    decisionTier === subscription.tier &&
-    subscription.monthlyRate === decisionConfig.monthlyRate &&
-    subscription.monthlyRate > 0;
+  // Entitlement, not price. The stored rate is the price of the plan that was
+  // bought and survives a cancellation, so using it as the "this is your
+  // current plan" signal marked a lapsed tier as current and disabled the
+  // checkout the customer needed to resubscribe.
+  const selectedPaidCurrent = isCurrentPaidPlan(subscription, decisionTier);
 
   const emit = (
     eventName: Parameters<typeof productEvent>[0],
@@ -78,12 +181,113 @@ export default function Subscriptions() {
     void trackRuntimeEvent({ workspaceId, severity, ...productEvent(eventName, payload) });
   };
 
+  useEffect(() => {
+    setSelectedTier(defaultDecisionTier);
+  }, [defaultDecisionTier]);
+
+  /*
+   * A hosted purchase this deployment cannot confirm.
+   *
+   * With managed billing off there is no webhook, so completing a payment link
+   * changes nothing the app can see. The customer comes back from Stripe to a
+   * page that still says Starter with the buttons still enabled, does the
+   * obvious thing, and is charged twice. See `pendingHostedPurchase`.
+   */
+  const [pendingPurchase, setPendingPurchase] = useState(() => readPendingHostedPurchase(workspaceId));
+
+  /*
+   * Another tab may have started the purchase.
+   *
+   * This state is a cache, and it was read once. Two billing tabs open at the
+   * same time both began with nothing pending, so after the first redirected
+   * the second still showed an enabled button. The redirect itself re-reads
+   * storage — that is the guard — and this keeps what the customer is LOOKING
+   * at honest, so they are not invited to click something that will be refused.
+   */
+  useEffect(() => {
+    const syncFromStorage = (event: StorageEvent) => {
+      // A null key means the whole store was cleared, which is also our answer.
+      if (event.key && event.key !== pendingHostedPurchaseKey(workspaceId)) return;
+      setPendingPurchase(readPendingHostedPurchase(workspaceId));
+    };
+    window.addEventListener('storage', syncFromStorage);
+    return () => window.removeEventListener('storage', syncFromStorage);
+  }, [workspaceId]);
+  const purchaseAwaitingActivation =
+    isPendingHostedPurchase(pendingPurchase, new Date(), workspaceId) && !subscriptionActive;
+  const forgetPendingPurchase = () => {
+    clearPendingHostedPurchase(workspaceId);
+    setPendingPurchase(null);
+  };
+
+  /*
+   * THE only way this screen follows a payment link.
+   *
+   * There are two routes to one — the hosted-only primary route, and the
+   * `no_managed_identity` fallback — and they are the same act with the same
+   * consequence: a static link that cannot associate its subscription with a
+   * workspace, in a deployment with no webhook to confirm it. Guarding one and
+   * not the other is exactly the mistake that shipped, so there is no second
+   * `assign` to forget: both go through here.
+   */
+  const followPaymentLink = async (tier: SubscriptionTier, link: string, managedFailure?: string) => {
+    /*
+     * Nothing here knows whether the last payment went through — that is what
+     * the missing webhook was for. It does know one was started, and that is
+     * enough to stop offering the same purchase again.
+     */
+    /*
+     * CLAIM the purchase; do not read and then write.
+     *
+     * Reading storage instead of this tab's cached state fixed the tab that
+     * decided from a stale snapshot, but it left a narrower window open: two
+     * tabs clicking at the same moment can both finish the read before either
+     * writes, and a check-then-set that both sides pass guards nothing. The
+     * claim does the read and the write inside one cross-tab lock, so the
+     * second tab looks only after the first has finished writing.
+     */
+    const claim = await claimPendingHostedPurchase(
+      { tier, startedAt: new Date().toISOString(), workspaceId },
+      new Date(),
+      !subscriptionActive,
+    );
+    if (!claim.claimed) {
+      setPendingPurchase(claim.blockedBy);
+      emit(productEventNames.checkoutFailed, { tier, reason: 'hosted_purchase_pending' }, 'warning');
+      pushToast({
+        title: 'A purchase is already waiting to be activated',
+        message: pendingHostedPurchaseNotice(claim.blockedBy),
+        tone: 'warning',
+      });
+      setCheckoutTier(null);
+      return;
+    }
+
+    setPendingPurchase(claim.pending);
+
+    if (managedFailure) {
+      emit(productEventNames.checkoutRedirected, { tier, method: 'payment_link', managedFailure }, 'warning');
+    } else {
+      emit(productEventNames.checkoutRedirected, { tier, method: 'payment_link' });
+    }
+    window.location.assign(link);
+  };
+
+  const openBillingPortal = () => {
+    if (!billingPortalAction) return;
+    emit(productEventNames.checkoutRedirected, { tier: subscription.tier, method: 'billing_portal' });
+    window.location.assign(billingPortalAction.url);
+  };
+
+  const selectTier = (tier: SubscriptionTier) => {
+    setSelectedTier(tier);
+    const nextParams = new URLSearchParams(params);
+    nextParams.set('plan', tier);
+    setParams(nextParams, { replace: true });
+  };
+
   const beginCheckout = async (tier: SubscriptionTier) => {
-    // Hard stop before any navigation can happen. The buttons are already
-    // disabled in a store build; this makes it impossible for a later refactor
-    // to reach window.location.assign(stripeUrl) on iOS/Android, which is the
-    // thing App Review actually rejects.
-    if (nativeApp) return;
+    selectTier(tier);
     setCheckoutTier(tier);
     emit(productEventNames.checkoutStarted, {
       tier,
@@ -97,16 +301,47 @@ export default function Subscriptions() {
       hasManagedIdentity,
       hasPaymentLink: Boolean(getStripePaymentLink(tier)),
       checkoutInProgress: false,
+      subscriptionRecoverable,
+      subscriptionActive,
+      hasBillingPortal,
       nativeApp,
     });
     if (!readiness.ready) {
       emit(productEventNames.checkoutFailed, { tier, reason: readiness.reason }, 'warning');
       pushToast({
-        title: readiness.mode === 'manual' ? 'Manual billing required' : 'Checkout needs attention',
-        message: `${readiness.reason} Your workspace and current plan were not changed.`,
+        title:
+          readiness.mode === 'external'
+            ? 'Plans are managed outside the app'
+            : readiness.mode === 'manual'
+              ? 'Billing not configured yet'
+              : readiness.mode === 'recover'
+                ? 'Payment needs to be settled first'
+                : 'Checkout needs attention',
+        // The external refusal already says the workspace is unchanged, and
+        // saying it twice reads like something went wrong. Nothing did: a store
+        // build is not supposed to sell anything.
+        message:
+          readiness.mode === 'external'
+            ? readiness.reason
+            : `${readiness.reason} Your workspace and current plan were not changed.`,
         tone: 'warning',
       });
       setCheckoutTier(null);
+      return;
+    }
+
+    /*
+     * A hosted-link-only deployment never calls the managed endpoint at all.
+     *
+     * Not a fallback — the primary route. With managed billing off the
+     * endpoint refuses with no code before reading any billing row, and the
+     * allowlist below then rightly declines to follow it, which suppressed the
+     * one checkout route such a deployment has. See `checkoutRouteFor` for why
+     * skipping the request costs no protection.
+     */
+    const hostedOnlyLink = getStripePaymentLink(tier);
+    if (checkoutRouteFor({ managedBillingEnabled: billingEnabled, paymentLink: hostedOnlyLink }) === 'payment_link') {
+      await followPaymentLink(tier, hostedOnlyLink);
       return;
     }
 
@@ -117,14 +352,33 @@ export default function Subscriptions() {
       return;
     }
 
-    const fallback = getStripePaymentLink(tier);
+    /*
+     * The payment link is reached only when there was no identity to check.
+     *
+     * It is an unguarded `mode: 'subscription'` checkout that consults no
+     * billing row, so following it after the endpoint refused undid the refusal
+     * completely — the customer saw an ordinary Stripe page and paid twice.
+     * Blocking a list of refusal codes was not enough: `fetch` rejecting or a
+     * malformed body produces an UNCODED failure, and in exactly those cases the
+     * endpoint's guard never ran, so a workspace with a live subscription still
+     * got the link. A network error says nothing about whether a customer
+     * already pays us.
+     *
+     * So the rule is an allowlist. Only `no_managed_identity` — no workspace id,
+     * no access token, therefore no billing row that could hold a subscription —
+     * falls back, which is how a local-only workspace legitimately buys a plan.
+     */
+    const fallback = canUsePaymentLinkFallback(managed.code) ? getStripePaymentLink(tier) : '';
     if (fallback) {
-      emit(
-        productEventNames.checkoutRedirected,
-        { tier, method: 'payment_link', managedFailure: managed.message },
-        'warning',
-      );
-      window.location.assign(fallback);
+      /*
+       * The same guard as the hosted-only route, because this is the same act.
+       * A static link cannot tell Stripe which workspace it belongs to, and
+       * there is no webhook to confirm it either way — so returning to this
+       * page after paying left checkout enabled and bought a second
+       * subscription. It shipped guarded on one branch and not the other,
+       * which is why both now go through `followPaymentLink`.
+       */
+      await followPaymentLink(tier, fallback, managed.message);
       return;
     }
 
@@ -141,22 +395,11 @@ export default function Subscriptions() {
     navigate(continuePath);
   };
 
-  // Reviewing a plan is separate from buying one. The purchase button is
-  // disabled whenever checkout is unconfigured, the role cannot manage billing,
-  // or this is a store build — which previously left the whole card inert, with
-  // no way to read what a tier actually includes. This always works.
-  const viewPlan = (tier: SubscriptionTier) => {
-    const next = new URLSearchParams(params);
-    next.set('plan', tier);
-    setParams(next, { replace: true });
-  };
-
   const renderPaidPlan = (tier: SubscriptionTier) => {
     const config = subscriptionPlans[tier];
     const profile = revenuePlanMatrix[tier];
     const highlighted = tier === decisionTier;
-    const paidCurrent =
-      tier === subscription.tier && subscription.monthlyRate === config.monthlyRate && subscription.monthlyRate > 0;
+    const paidCurrent = isCurrentPaidPlan(subscription, tier);
     const setupCurrent = tier === 'Starter' && starterSetup;
     const busy = checkoutTier === tier;
     const readiness = getCheckoutReadiness({
@@ -165,8 +408,23 @@ export default function Subscriptions() {
       hasManagedIdentity,
       hasPaymentLink: Boolean(getStripePaymentLink(tier)),
       checkoutInProgress: checkoutTier !== null,
+      subscriptionRecoverable,
+      subscriptionActive,
+      hasBillingPortal,
       nativeApp,
     });
+    const chooseTier = () => {
+      selectTier(tier);
+      if (paidCurrent || setupCurrent) return;
+      if (!readiness.ready) {
+        // A subscription already exists, so this cannot open checkout — but it
+        // can open the place where that subscription is actually changed.
+        // Returning silently is what left every upgrade with nowhere to go.
+        if (billingPortalAction) openBillingPortal();
+        return;
+      }
+      void beginCheckout(tier);
+    };
 
     return (
       <article
@@ -185,34 +443,43 @@ export default function Subscriptions() {
         </div>
         <ul>
           <li>{formatLimit(config.limits.horseLimit, 'horses')}</li>
-          <li>{formatLimit(config.limits.seatLimit, 'team seats')}</li>
-          <li>{formatLimit(config.limits.documentLimit, 'documents')}</li>
+          <li>{formatLimit(config.limits.salePacketLimit, 'sale packets')}</li>
+        </ul>
+        {/* Seat, document and storage quotas are already included in this
+            canonical feature copy; show each once in the comparison card.
+            What the tier includes, not just how much of it. Rendered whatever
+            the billing configuration is: being unable to buy a plan is no
+            reason to stop showing what it contains. */}
+        <ul className="checkout-plan__features">
+          {config.featureFlags.map((feature) => (
+            <li key={feature}>{feature}</li>
+          ))}
         </ul>
         {paidCurrent || setupCurrent ? (
-          <button type="button" disabled>
-            {paidCurrent ? 'Current plan' : 'Current setup'}
+          <button
+            type="button"
+            disabled={checkoutTier !== null}
+            title={`View ${paidCurrent ? 'current plan' : 'Starter setup'} details`}
+            onClick={chooseTier}
+          >
+            {paidCurrent ? 'View current plan' : 'View Starter setup'}
           </button>
         ) : (
           <button
             type="button"
-            disabled={!readiness.ready}
-            title={readiness.reason}
-            onClick={() => void beginCheckout(tier)}
+            disabled={checkoutTier !== null}
+            title={readiness.ready ? readiness.reason : `View ${tier} details. ${readiness.reason}`}
+            onClick={chooseTier}
           >
             {busy
               ? 'Opening checkout...'
-              : readiness.mode === 'external'
-                ? 'Managed outside the app'
-                : readiness.mode === 'manual'
-                  ? 'Manual billing required'
+              : !readiness.ready
+                ? `View ${tier}`
+                : readiness.mode === 'recover'
+                  ? 'Payment needs attention'
                   : `Choose ${tier}`}
           </button>
         )}
-        {/* Label stays constant — the button's purpose does not change, and the
-            selected state is carried by aria-pressed plus the card highlight. */}
-        <button type="button" className="checkout-plan__view" onClick={() => viewPlan(tier)} aria-pressed={highlighted}>
-          {`See what ${tier} includes`}
-        </button>
         <small>
           {paidCurrent
             ? 'Your active paid capacity.'
@@ -232,8 +499,8 @@ export default function Subscriptions() {
             <p>Billing</p>
             <h1 id="checkout-title">Review Billing</h1>
             <span>
-              Choose the tier that fits your workflow. Paid plans change only after checkout succeeds or manual billing
-              is explicitly activated.
+              Choose the tier that fits your workflow. Plans change only after checkout succeeds — nothing here changes
+              your workspace on its own.
             </span>
           </div>
 
@@ -241,10 +508,7 @@ export default function Subscriptions() {
             <div>
               <span>Starter setup</span>
               <h2>Start with XBAR</h2>
-              <p>
-                No payment is collected in this local setup flow. Paid plans require checkout or manual billing
-                activation.
-              </p>
+              <p>No payment is collected in this local setup flow. Paid plans require completed checkout.</p>
             </div>
             <button type="button" onClick={startTrial}>
               {workspaceReady ? 'Continue' : 'Continue setup'}
@@ -269,31 +533,40 @@ export default function Subscriptions() {
           </div>
 
           <div className="checkout-total">
-            <span>{selectedCheckoutConfigured && !externalBilling ? 'Due at checkout' : 'Monthly price'}</span>
+            <span>{selectedCheckoutConfigured ? 'Due at checkout' : 'Monthly price'}</span>
             <strong>{formatCurrency(decisionConfig.monthlyRate)}</strong>
-            <small>{selectedCheckoutConfigured && !externalBilling ? 'then monthly' : 'not charged in app'}</small>
+            <small>{selectedCheckoutConfigured ? 'then monthly' : 'not charged in app'}</small>
           </div>
 
-          {externalBilling ? (
+          {selectedReadiness.mode === 'manual' ? (
+            <div className="checkout-card-box" aria-label="Billing details">
+              <div className="checkout-card-box__top">
+                <span>Billing</span>
+                <strong>Billing not configured yet</strong>
+              </div>
+              <p>
+                Payment is not set up for this deployment, so no plan can be purchased here and no payment details are
+                collected. Every tier below is still shown in full so you can compare what they include. Your workspace
+                and current plan are unchanged.
+              </p>
+            </div>
+          ) : selectedReadiness.mode === 'external' ? (
             <div className="checkout-card-box" aria-label="Billing details">
               <div className="checkout-card-box__top">
                 <span>Billing</span>
                 <strong>Managed outside the app</strong>
               </div>
+              {/*
+                Deliberately says nothing about where a plan CAN be bought.
+                Guideline 3.1.1 forbids calls to action that direct customers to
+                a purchasing mechanism other than In-App Purchase, and that
+                covers plain instructions as much as links -- "sign in on the
+                web to subscribe" is exactly such a direction, which is what an
+                earlier version of this sentence said. Current plan state only.
+              */}
               <p>
-                Plans are not sold in the app. Your current plan and workspace are unchanged here, and no payment
-                details are collected on this screen.
-              </p>
-            </div>
-          ) : selectedReadiness.mode === 'manual' ? (
-            <div className="checkout-card-box" aria-label="Billing details">
-              <div className="checkout-card-box__top">
-                <span>Billing</span>
-                <strong>Manual billing required</strong>
-              </div>
-              <p>
-                Online checkout is not configured. Contact support/manual billing required. Your workspace and plan will
-                not change in the app until manual billing is recorded by an admin.
+                Subscriptions are not sold in the app. Every tier is shown in full so you can compare what they include,
+                and your workspace and current plan are unchanged.
               </p>
             </div>
           ) : (
@@ -321,22 +594,7 @@ export default function Subscriptions() {
           )}
 
           <div className="checkout-status-list" aria-label="Billing details">
-            {externalBilling ? (
-              <>
-                <div>
-                  <span>Billing</span>
-                  <strong>Monthly</strong>
-                </div>
-                <div>
-                  <span>Payment</span>
-                  <strong>Not collected in app</strong>
-                </div>
-                <div>
-                  <span>Workspace</span>
-                  <strong>No plan change</strong>
-                </div>
-              </>
-            ) : selectedCheckoutConfigured ? (
+            {selectedCheckoutConfigured ? (
               <>
                 <div>
                   <span>Billing</span>
@@ -359,7 +617,7 @@ export default function Subscriptions() {
                 </div>
                 <div>
                   <span>Activation</span>
-                  <strong>Manual billing only</strong>
+                  <strong>Not available in app</strong>
                 </div>
                 <div>
                   <span>Workspace</span>
@@ -369,31 +627,58 @@ export default function Subscriptions() {
             )}
           </div>
 
-          <button
-            className="checkout-primary-action"
-            type="button"
-            disabled={!selectedReadiness.ready || selectedPaidCurrent}
-            title={selectedPaidCurrent ? 'This plan is already active.' : selectedReadiness.reason}
-            onClick={() => void beginCheckout(decisionTier)}
-          >
-            {checkoutTier === decisionTier
-              ? 'Opening checkout...'
-              : selectedPaidCurrent
-                ? 'Current plan'
-                : externalBilling
-                  ? 'Managed outside the app'
-                  : selectedReadiness.mode === 'manual'
-                    ? 'Manual billing required'
-                    : 'Continue to secure checkout'}
-          </button>
+          {billingPortalAction ? (
+            <button
+              className="checkout-primary-action"
+              type="button"
+              title={selectedReadiness.reason}
+              onClick={openBillingPortal}
+            >
+              {billingPortalAction.label}
+            </button>
+          ) : (
+            <button
+              className="checkout-primary-action"
+              type="button"
+              disabled={!selectedReadiness.ready || selectedPaidCurrent}
+              title={selectedPaidCurrent ? 'This plan is already active.' : selectedReadiness.reason}
+              onClick={() => void beginCheckout(decisionTier)}
+            >
+              {checkoutTier === decisionTier
+                ? 'Opening checkout...'
+                : selectedPaidCurrent
+                  ? 'Current plan'
+                  : selectedReadiness.mode === 'external'
+                    ? 'Managed outside the app'
+                    : selectedReadiness.mode === 'manual'
+                      ? 'Billing not configured yet'
+                      : 'Continue to secure checkout'}
+            </button>
+          )}
           <button className="checkout-secondary-action" type="button" onClick={startTrial}>
             Continue with Starter setup
           </button>
-          <p className="checkout-note">
-            {selectedPaidCurrent
-              ? 'This paid plan is already active.'
-              : selectedReadiness.reason || checkoutReadinessLabel}
-          </p>
+          {/*
+            Said plainly, because the alternative is a customer staring at a
+            page that still says Starter and concluding the payment failed. The
+            way out is offered in the same breath: nothing here can tell an
+            abandoned checkout from an unconfirmed one, so the person who knows
+            gets to say.
+          */}
+          {purchaseAwaitingActivation && pendingPurchase ? (
+            <p className="checkout-note">
+              {pendingHostedPurchaseNotice(pendingPurchase)}{' '}
+              <button type="button" className="checkout-inline-action" onClick={forgetPendingPurchase}>
+                I did not complete that purchase
+              </button>
+            </p>
+          ) : (
+            <p className="checkout-note">
+              {selectedPaidCurrent
+                ? 'This paid plan is already active.'
+                : selectedReadiness.reason || checkoutReadinessLabel}
+            </p>
+          )}
         </aside>
       </div>
     </section>

@@ -27,9 +27,13 @@ const env = {
   VITE_ROUTER_MODE: 'hash',
   VITE_STATIC_TARGET: 'web',
   VITE_NATIVE_APP: 'true',
-  // Same default the real mobile build applies, so the smoke suite asserts
-  // against the origin a release build would actually ship.
-  VITE_PUBLIC_APP_URL: SITE_ORIGIN,
+  // Same defaults the real mobile build applies, so the smoke suite asserts
+  // against the origins a release build would actually ship. Two of them: the
+  // SPA lives at /app and the marketing pages at the site root, and pointing
+  // in-app links at the root sends every shared buyer link to the marketing
+  // homepage.
+  VITE_PUBLIC_SITE_URL: SITE_ORIGIN,
+  VITE_PUBLIC_APP_URL: `${SITE_ORIGIN}/app`,
   ...(authMode
     ? {
         VITE_SUPABASE_URL: 'https://mobile-smoke.invalid',

@@ -22,7 +22,9 @@ export type ActivationStep = {
 
 export function buildActivationSteps(input: ActivationInput): ActivationStep[] {
   const teamCount = input.members + input.invitations;
-  const planActive = input.monthlyRate > 0 && !/manual/i.test(input.billingState);
+  // Entitled states only. The previous test was "not manual", which counted
+  // 'Inactive' (canceled, paused, never paid) as an active plan.
+  const planActive = input.billingState === 'Active';
   return [
     {
       id: 'horse',

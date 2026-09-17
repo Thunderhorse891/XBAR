@@ -1,5 +1,5 @@
-import { saveTextAsFile, type FileSaveResult } from './fileDownload.js';
 import type { DocumentRecord, HorseRecord, SharedListingRecord } from '../types/xbar.js';
+import { saveTextAsFile, type FileSaveResult } from './fileDownload.js';
 
 export type PublicBuyerPacketArtifact = {
   fileName: string;

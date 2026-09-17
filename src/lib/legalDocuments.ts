@@ -1,3 +1,5 @@
+import { saveTextAsFile, type FileSaveResult } from './fileDownload.js';
+
 export type LegalDocumentId =
   'terms' | 'privacy' | 'subscription-billing' | 'equine-records-disclaimer' | 'trademark-notice' | 'acceptable-use';
 
@@ -300,8 +302,6 @@ export function openPrintableLegalDocument(legalDoc: LegalDocument) {
   return true;
 }
 
-// NOTE: this module is imported directly by scripts/build-marketing.mjs under
-// plain node, so it must stay free of runtime imports — a './x.js' specifier
-// that only exists as .ts breaks the marketing build. Saving a legal document
-// therefore lives with its caller, which composes legalDocumentToHtml() with
-// saveTextAsFile() from ./fileDownload.
+export function downloadLegalHtml(legalDoc: LegalDocument): Promise<FileSaveResult> {
+  return saveTextAsFile(legalDoc.suggestedFileName, legalDocumentToHtml(legalDoc), 'text/html;charset=utf-8');
+}

@@ -1,6 +1,12 @@
 import Stripe from 'stripe';
 import { readRawBody, sendJson } from '../_lib/http.js';
 import { buildSubscriptionProfile, findTierByPriceId } from '../_lib/subscription-plans.js';
+import {
+  billingStateForStripeStatus,
+  isEntitledBillingState,
+  resolveWebhookTier,
+} from '../_lib/subscription-status.js';
+import { collectStripePages } from '../_lib/checkout-session.js';
 import { getSupabaseAdmin } from '../_lib/supabase-admin.js';
 
 export const config = {
@@ -13,6 +19,55 @@ const stripeSecretKey = process.env.STRIPE_SECRET_KEY || '';
 const webhookSecret = process.env.STRIPE_WEBHOOK_SECRET || '';
 const stripe = stripeSecretKey ? new Stripe(stripeSecretKey, { apiVersion: '2026-02-25.clover' }) : null;
 
+/*
+ * The subscription that still entitles this CUSTOMER, if any other one does.
+ *
+ * The workspace billing row is per-workspace; Stripe subscriptions are per
+ * customer, and a customer can have more than one. The checkout lock added in
+ * this change exists precisely because the previous flow could create a second
+ * Checkout Session for the same workspace — so duplicates are not hypothetical,
+ * they are the state this branch was written without.
+ *
+ * With two subscriptions, cancelling either one used to deactivate the whole
+ * workspace: the deleted payload was trusted as the final word, the row was
+ * overwritten with `Inactive` and the canceled subscription's id, and the
+ * sibling went on charging. The customer keeps paying and loses access, which
+ * is the worst direction of the two.
+ *
+ * Only consulted when the event would DEACTIVATE. On the ordinary path — one
+ * subscription, or an event that entitles — nothing here runs and no extra
+ * Stripe call is made.
+ *
+ * PAGINATED, through the same `collectStripePages` the checkout flow uses. The
+ * first version asked for one page of 100 and ignored `has_more`, which is the
+ * identical mistake that helper's own comment records being fixed for open
+ * Checkout Sessions — a single `list` call is the first page of the answer, not
+ * the answer. A customer with a long subscription history would have had the
+ * paying sibling sitting on page two and been deactivated anyway.
+ *
+ * An incomplete walk THROWS rather than reporting "no sibling". A partial list
+ * cannot show that nothing else is paying, and the rule this flow already
+ * follows is that unknown is not permission — there, not permission to charge;
+ * here, not permission to cut off access.
+ */
+export async function findEntitlingSibling(stripe, customerId, canceledSubscriptionId) {
+  const { items, complete } = await collectStripePages((params) =>
+    stripe.subscriptions.list({ customer: customerId, status: 'all', ...params }),
+  );
+
+  if (!complete) {
+    throw new Error(`Could not read every subscription for ${customerId}; refusing to deactivate on a partial list.`);
+  }
+
+  return (
+    items.find(
+      (candidate) =>
+        candidate.id !== canceledSubscriptionId &&
+        isEntitledBillingState(billingStateForStripeStatus(candidate.status)),
+    ) ?? null
+  );
+}
+
 async function syncWorkspaceSubscription({
   workspaceId,
   customerId,
@@ -23,19 +78,60 @@ async function syncWorkspaceSubscription({
   quantity,
   eventId,
   eventType,
+  eventCreatedAt,
   payload,
+  entitlementFromSibling = false,
 }) {
   const supabase = getSupabaseAdmin();
   if (!supabase) {
     throw new Error('Supabase admin credentials are not configured.');
   }
 
-  const tier = findTierByPriceId(priceId) || 'Starter';
-  const { data: existingProfile } = await supabase
+  /*
+   * The tier decision stays here: `resolveWebhookTier` needs the
+   * STRIPE_PRICE_ID_* mapping, which lives in this deployment's environment
+   * rather than in the database.
+   *
+   * Its `storedTier` read happens before the lock the RPC takes, which is
+   * deliberate and not a second race. The stored tier is a fallback used ONLY
+   * when the price id is unrecognized, and only for a non-entitling status — an
+   * entitling status with an unknown price refuses outright. So that path never
+   * grants access; it carries an existing tier label forward while the billing
+   * state marks it inactive.
+   */
+  const { data: existingProfile, error: existingProfileError } = await supabase
     .from('workspace_subscription_profiles')
-    .select('payload')
+    .select('tier, payload')
     .eq('workspace_id', workspaceId)
     .maybeSingle();
+
+  // A failed read is not the same as "no row", and the difference is
+  // destructive. resolveWebhookTier falls back to the baseline when there is no
+  // stored tier, which is right for a workspace that has never subscribed — but
+  // if this SELECT merely errored while the write below succeeds, a canceled
+  // Professional or Enterprise subscription would be rewritten as Starter,
+  // losing the purchased tier and its rate permanently rather than being marked
+  // inactive. Throwing writes nothing and leaves the event for Stripe to retry.
+  if (existingProfileError) {
+    throw new Error(`Could not read the existing subscription profile: ${existingProfileError.message}`);
+  }
+
+  // The asymmetry between granting and withdrawing access lives in
+  // resolveWebhookTier, next to the rest of the billing-status policy, so it is
+  // testable without a Stripe signature or a database.
+  const decision = resolveWebhookTier({
+    status,
+    mappedTier: findTierByPriceId(priceId),
+    storedTier: existingProfile?.tier,
+  });
+
+  if (!decision.ok) {
+    throw new Error(
+      `Unrecognized Stripe price id "${priceId}" — no STRIPE_PRICE_ID_* env var matches it, so the tier is unknown and no entitlement was written.`,
+    );
+  }
+
+  const tier = decision.tier;
 
   const existingUsage = existingProfile?.payload?.usage || {};
   const nextProfile = buildSubscriptionProfile({
@@ -45,41 +141,56 @@ async function syncWorkspaceSubscription({
     existingUsage,
   });
 
-  const { error: profileError } = await supabase.from('workspace_subscription_profiles').upsert({
-    workspace_id: workspaceId,
-    tier,
-    billing_state: nextProfile.billingState,
-    monthly_rate: nextProfile.monthlyRate,
-    payload: nextProfile,
-    updated_at: new Date().toISOString(),
+  /*
+   * One call, because the ordering check and the three writes have to be
+   * atomic.
+   *
+   * They were a SELECT for the newest applied event followed by three separate
+   * upserts. That is a read-modify-write with no serialization, and Stripe
+   * delivers concurrently: an older `updated` being retried and the `deleted`
+   * that superseded it can both read the same previous timestamp, both decide
+   * they are newest, and the older one write `Active` over the cancellation.
+   * Both are then logged as processed, so no retry ever corrects it.
+   *
+   * `xbar_apply_subscription_event` takes an advisory lock on the workspace for
+   * the length of its transaction, so the second caller sees the first one's
+   * row and refuses. It returns false when it declined as stale — which is a
+   * success for the delivery: the event has been superseded and Stripe should
+   * stop retrying it.
+   */
+  const { data: applied, error: applyError } = await supabase.rpc('xbar_apply_subscription_event', {
+    p_workspace_id: workspaceId,
+    p_event_id: eventId,
+    p_event_type: eventType,
+    p_event_created_at: Number.isFinite(Number(eventCreatedAt)) ? new Date(Number(eventCreatedAt)).toISOString() : null,
+    p_payload: payload,
+    p_tier: tier,
+    p_billing_state: nextProfile.billingState,
+    p_monthly_rate: nextProfile.monthlyRate,
+    p_profile: nextProfile,
+    p_customer_id: customerId || '',
+    p_subscription_id: subscriptionId || '',
+    p_price_id: priceId || '',
+    p_seat_count: Number(quantity || 1),
+    /*
+     * Whether this write's entitlement came from a SIBLING rather than from
+     * the subscription this event is about.
+     *
+     * Only those writes carry a snapshot that can already be stale — the
+     * sibling list is read before the advisory lock. An event about its own
+     * subscription is not speculative, and the tie rule must not refuse one:
+     * a re-subscription's `checkout.session.completed` can share a `created`
+     * second with the cancellation it replaces, and refusing it would leave a
+     * customer who has just paid with nothing.
+     */
+    p_from_sibling: entitlementFromSibling === true,
   });
-  if (profileError) {
-    throw new Error(`Subscription profile sync failed: ${profileError.message}`);
+
+  if (applyError) {
+    throw new Error(`Subscription entitlement sync failed: ${applyError.message}`);
   }
 
-  const { error: customerError } = await supabase.from('workspace_billing_customers').upsert({
-    workspace_id: workspaceId,
-    stripe_customer_id: customerId || '',
-    stripe_subscription_id: subscriptionId || '',
-    stripe_price_id: priceId || '',
-    seat_count: Number(quantity || 1),
-    entitlement_payload: nextProfile,
-    updated_at: new Date().toISOString(),
-  });
-  if (customerError) {
-    throw new Error(`Billing customer sync failed: ${customerError.message}`);
-  }
-
-  const { error: eventError } = await supabase.from('workspace_subscription_events').upsert({
-    workspace_id: workspaceId,
-    stripe_event_id: eventId,
-    event_type: eventType,
-    payload,
-    processed_at: new Date().toISOString(),
-  });
-  if (eventError) {
-    throw new Error(`Subscription event log failed: ${eventError.message}`);
-  }
+  return { applied: applied === true };
 }
 
 export default async function handler(req, res) {
@@ -129,6 +240,7 @@ export default async function handler(req, res) {
           quantity: lineItem?.quantity || 1,
           eventId: event.id,
           eventType: event.type,
+          eventCreatedAt: event.created * 1000,
           payload,
         });
       }
@@ -152,17 +264,76 @@ export default async function handler(req, res) {
       }
 
       if (resolvedWorkspaceId) {
+        /*
+         * An `updated` event is not trusted for the STATUS. It is a trigger to
+         * go and look.
+         *
+         * Timestamps cannot break a tie, and ties happen: a plan change and the
+         * cancellation that follows it can share an `event.created` second, and
+         * `event.created` has no sub-second component to separate them. If the
+         * cancellation is delivered first and the superseded update arrives
+         * afterwards, a strictly-older comparison lets the update through and
+         * it restores `Active`. The advisory lock serializes the writes; it
+         * cannot tell which of two identical timestamps came first, because
+         * nothing in the data says.
+         *
+         * So the ordering guard stops what it can — anything strictly older —
+         * and the authority for what the subscription IS comes from Stripe at
+         * the moment of handling. A retried update then writes the current
+         * truth rather than its own stale snapshot, whatever order it arrives
+         * in.
+         *
+         * `deleted` keeps its payload. A deleted subscription cannot become
+         * active again under the same id, so the event is already the final
+         * word for it, and retrieving one that Stripe has finished purging
+         * would fail and strand a cancellation unapplied — the one direction
+         * that must never be lost.
+         */
+        let effective = payload;
+        if (event.type === 'customer.subscription.updated' && payload.id) {
+          effective = await stripe.subscriptions.retrieve(payload.id);
+        }
+
+        /*
+         * A workspace is not deactivated while another subscription still pays
+         * for it. See `findEntitlingSibling`.
+         *
+         * Deliberately NOT wrapped in a try: a list call that fails leaves the
+         * question unanswered, and answering it wrongly deactivates a paying
+         * customer. Throwing writes nothing and leaves the event for Stripe to
+         * retry — the same choice the profile read above makes, for the same
+         * reason.
+         */
+        let entitlementFromSibling = false;
+        if (customerId && !isEntitledBillingState(billingStateForStripeStatus(effective.status))) {
+          const sibling = await findEntitlingSibling(stripe, customerId, payload.id);
+          if (sibling) {
+            effective = sibling;
+            // Recorded, not merely used: this is the one write whose
+            // entitlement comes from a list read before the lock, so it is the
+            // one the tie rule has to be able to tell apart from a real event.
+            entitlementFromSibling = true;
+          }
+        }
+
+        const effectiveLineItem = effective.items?.data?.[0] ?? lineItem;
+
         await syncWorkspaceSubscription({
           workspaceId: resolvedWorkspaceId,
           customerId,
-          subscriptionId: payload.id,
-          priceId: lineItem?.price?.id || '',
-          status: payload.status,
-          currentPeriodEnd: payload.current_period_end,
-          quantity: lineItem?.quantity || 1,
+          // The subscription the row DESCRIBES, which is the sibling when one
+          // was adopted above — writing the canceled id there would point the
+          // workspace's billing record at a subscription that no longer exists.
+          subscriptionId: effective.id || payload.id,
+          priceId: effectiveLineItem?.price?.id || '',
+          status: effective.status,
+          currentPeriodEnd: effective.current_period_end,
+          quantity: effectiveLineItem?.quantity || 1,
           eventId: event.id,
           eventType: event.type,
+          eventCreatedAt: event.created * 1000,
           payload,
+          entitlementFromSibling,
         });
       }
     }

@@ -14,13 +14,15 @@ import { breedingRevenueGate } from '@/lib/subscriptionGates';
 import { useCloudStore } from '@/store/useCloudStore';
 import { useUiStore } from '@/store/useUiStore';
 import { useCurrentRoleCapability, useXbarStore } from '@/store/useXbarStore';
+import { useEffectiveSubscription } from '@/hooks/useOwnerPreview';
+import { canPresentPurchaseFlow } from '@/lib/nativePlatform';
 
 export default function Breeding() {
   const navigate = useNavigate();
   const horses = useXbarStore((state) => state.horses);
   const documents = useXbarStore((state) => state.documents);
   const expenseReceipts = useXbarStore((state) => state.expenseReceipts);
-  const subscription = useXbarStore((state) => state.subscription);
+  const subscription = useEffectiveSubscription();
   const addBreedingEvent = useXbarStore((state) => state.addBreedingEvent);
   const deleteBreedingEvent = useXbarStore((state) => state.deleteBreedingEvent);
   const updateBreedingEconomics = useXbarStore((state) => state.updateBreedingEconomics);
@@ -390,13 +392,15 @@ export default function Breeding() {
                 <div className="stack-item">
                   <div className="stack-item__title">Unlock premium breeding-operation controls</div>
                   <div className="stack-item__copy">{revenueGate}</div>
-                  <button
-                    className="button button--primary button--compact"
-                    type="button"
-                    onClick={() => navigate(billingPath)}
-                  >
-                    Upgrade to unlock
-                  </button>
+                  {canPresentPurchaseFlow() ? (
+                    <button
+                      className="button button--primary button--compact"
+                      type="button"
+                      onClick={() => navigate(billingPath)}
+                    >
+                      Upgrade to unlock
+                    </button>
+                  ) : null}
                 </div>
               ) : (
                 <div className="form-grid form-grid--tight">

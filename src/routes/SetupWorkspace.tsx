@@ -1,11 +1,15 @@
 import { type FormEvent, useMemo, useState } from 'react';
-import { Navigate, useNavigate } from 'react-router-dom';
+import { Navigate, useLocation, useNavigate, useSearchParams } from 'react-router-dom';
 import { XbarMark } from '@/components/BrandMark';
+import { billingPathForTier } from '@/lib/billingRoutes';
+import { applyWorkspaceProfileDefaults } from '@/lib/workspaceSetupDefaults';
+import { saveWorkspaceBackupToCloud } from '@/lib/cloudWorkspace';
 import { isStaticPreviewHost, isSupabaseConfigured } from '@/lib/platformConfig';
 import { useCloudStore } from '@/store/useCloudStore';
 import { useUiStore } from '@/store/useUiStore';
 import { useWorkspaceHydrated, useWorkspaceReady, useXbarStore } from '@/store/useXbarStore';
 import './cleanEntryExperience.css';
+import { canPresentPurchaseFlow } from '@/lib/nativePlatform';
 
 const setupStages = [
   { label: 'Ranch identity', value: 'Business and ranch name' },
@@ -16,14 +20,26 @@ const setupStages = [
 
 export default function SetupWorkspace() {
   const navigate = useNavigate();
+  const location = useLocation();
+  const [params] = useSearchParams();
   const workspaceHydrated = useWorkspaceHydrated();
   const workspaceReady = useWorkspaceReady();
   const workspaceProfile = useXbarStore((state) => state.workspaceProfile);
   const initializeWorkspace = useXbarStore((state) => state.initializeWorkspace);
+  const exportWorkspaceBackup = useXbarStore((state) => state.exportWorkspaceBackup);
   const status = useCloudStore((state) => state.status);
+  const session = useCloudStore((state) => state.session);
+  const signOut = useCloudStore((state) => state.signOut);
+  const workspaceId = useCloudStore((state) => state.workspaceId);
+  const setLastSyncAt = useCloudStore((state) => state.setLastSyncAt);
+  const setSyncState = useCloudStore((state) => state.setSyncState);
+  const setWorkspaceAccessProfile = useCloudStore((state) => state.setWorkspaceAccessProfile);
   const pushToast = useUiStore((state) => state.pushToast);
   const [saving, setSaving] = useState(false);
+  const [signingOut, setSigningOut] = useState(false);
+  const [signOutError, setSignOutError] = useState('');
   const [formError, setFormError] = useState('');
+  const [cloudSetupBlocked, setCloudSetupBlocked] = useState(false);
   const [form, setForm] = useState({
     businessName: workspaceProfile.businessName,
     ranchName: workspaceProfile.ranchName,
@@ -37,6 +53,32 @@ export default function SetupWorkspace() {
   const previewMode = isStaticPreviewHost();
   const supabaseReady = isSupabaseConfigured();
   const canQuickStart = previewMode || !supabaseReady;
+  const selectedPlan = params.get('plan') ?? '';
+  /*
+   * A ?plan= parameter sends the customer to billing once setup finishes. In a
+   * store build that is a forced arrival at a screen which cannot sell them
+   * anything -- the same objection as a button inviting them there, reached
+   * without a button. The parameter can still arrive by deep link even though
+   * the in-app pricing link is gone, so this is checked rather than assumed
+   * unreachable.
+   */
+  const postSetupPath = useMemo(() => {
+    if (selectedPlan && canPresentPurchaseFlow()) return billingPathForTier(selectedPlan);
+    // The setup guard can run before cloud hydration restores a configured
+    // ranch. Return to that requested screen instead of losing its deep link.
+    const from = (location.state as { from?: unknown } | null)?.from;
+    if (
+      typeof from === 'string' &&
+      /^\/(?!\/)/.test(from) &&
+      !from.includes('\\') &&
+      !Array.from(from).some((character) => character.charCodeAt(0) < 32)
+    ) {
+      const pathname = from.split(/[?#]/, 1)[0];
+      if (pathname !== '/setup' && !pathname.startsWith('/setup/')) return from;
+    }
+    return '/';
+  }, [selectedPlan, location.state]);
+  const cloudWorkspaceRequired = supabaseReady && status === 'signed-in' && !workspaceId;
 
   const accessLabel = useMemo(() => {
     if (!supabaseReady) return 'Browser trial';
@@ -47,15 +89,42 @@ export default function SetupWorkspace() {
     return <div className="app-loading-shell">Loading ranch workspace...</div>;
   }
 
-  if (workspaceReady) {
-    return <Navigate to="/" replace />;
+  if (workspaceReady && !saving && !cloudSetupBlocked && !cloudWorkspaceRequired) {
+    return <Navigate to={postSetupPath} replace />;
   }
 
-  const handleSubmit = (event: FormEvent<HTMLFormElement>) => {
-    event.preventDefault();
-    setSaving(true);
+  const persistCloudWorkspace = async () => {
+    if (!supabaseReady || !session?.user) return { ok: true, message: '' };
 
-    const result = initializeWorkspace(form);
+    setSyncState('syncing', 'Creating cloud workspace...');
+    let saved: Awaited<ReturnType<typeof saveWorkspaceBackupToCloud>>;
+    try {
+      saved = await saveWorkspaceBackupToCloud(exportWorkspaceBackup());
+    } catch (error) {
+      saved = {
+        ok: false,
+        message: error instanceof Error ? error.message : 'Unable to create the cloud workspace.',
+      };
+    }
+
+    if (!saved.ok) {
+      setSyncState('error', `${saved.message} Try again before choosing a paid plan.`);
+      return saved;
+    }
+
+    if (saved.workspaceId) setWorkspaceAccessProfile(saved.workspaceId, 'Admin');
+    if (saved.updatedAt) setLastSyncAt(saved.updatedAt);
+    setSyncState('idle', saved.message);
+    return saved;
+  };
+
+  const handleSubmit = async (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    if (signingOut || saving) return;
+    setSaving(true);
+    setCloudSetupBlocked(false);
+
+    const result = initializeWorkspace(applyWorkspaceProfileDefaults(form));
     pushToast({
       title: result.ok ? 'Ranch created' : 'Setup blocked',
       message: result.message,
@@ -68,24 +137,43 @@ export default function SetupWorkspace() {
       return;
     }
 
+    const cloudSaved = await persistCloudWorkspace();
+    if (!cloudSaved.ok) {
+      const message = `${cloudSaved.message} Your ranch was created on this device, but checkout needs the cloud workspace first.`;
+      setFormError(message);
+      pushToast({ title: 'Cloud workspace not saved', message, tone: 'error' });
+      setCloudSetupBlocked(true);
+      setSaving(false);
+      return;
+    }
+
     setFormError('');
     setSaving(false);
-    navigate('/', { replace: true });
+    navigate(postSetupPath, { replace: true });
   };
 
   const handleQuickStart = () => {
+    if (signingOut || saving) return;
     const businessName = form.businessName.trim() || 'My Ranch LLC';
     const ranchName = form.ranchName.trim() || 'Main Ranch';
-    const result = initializeWorkspace({
-      businessName,
-      ranchName,
-      ranchManagerName: form.ranchManagerName.trim() || 'Operations Lead',
-      operationsEmail: form.operationsEmail.trim() || 'owner@ranch.local',
-      defaultOwnerName: form.defaultOwnerName.trim() || ranchName,
-      defaultOwnerEntity: form.defaultOwnerEntity.trim() || businessName,
-      defaultBarn: form.defaultBarn.trim() || 'Barn 1',
-      defaultPasture: form.defaultPasture.trim() || 'Pasture 1',
-    });
+    /*
+     * Quick-start keeps its own invented placeholders, because inventing is the
+     * point of it: this path exists so somebody can skip the whole form and get
+     * a working ranch. The shared helper deliberately invents nothing, so the
+     * form's own submit cannot manufacture a ranch manager or an operations
+     * email for a customer who simply left them blank.
+     */
+    const result = initializeWorkspace(
+      applyWorkspaceProfileDefaults({
+        ...form,
+        businessName,
+        ranchName,
+        ranchManagerName: form.ranchManagerName.trim() || 'Operations Lead',
+        operationsEmail: form.operationsEmail.trim() || 'owner@ranch.local',
+        defaultBarn: form.defaultBarn.trim() || 'Barn 1',
+        defaultPasture: form.defaultPasture.trim() || 'Pasture 1',
+      }),
+    );
 
     pushToast({
       title: result.ok ? 'Ranch ready' : 'Setup blocked',
@@ -94,7 +182,25 @@ export default function SetupWorkspace() {
     });
 
     if (result.ok) {
-      navigate('/', { replace: true });
+      navigate(postSetupPath, { replace: true });
+    }
+  };
+
+  const handleSignOut = async () => {
+    if (saving || signingOut) return;
+    setSigningOut(true);
+    setSignOutError('');
+    try {
+      const result = await signOut();
+      if (!result.ok) {
+        setSignOutError(result.message);
+        return;
+      }
+      navigate('/login', { replace: true });
+    } catch {
+      setSignOutError('Could not sign out. Check your connection and try again.');
+    } finally {
+      setSigningOut(false);
     }
   };
 
@@ -111,6 +217,25 @@ export default function SetupWorkspace() {
               <small>{accessLabel}</small>
             </span>
           </div>
+
+          {status === 'signed-in' ? (
+            <div className="clean-action-stack">
+              <span>Signed in{session?.user.email ? ` as ${session.user.email}` : ''}.</span>
+              <button
+                className="clean-secondary-button"
+                type="button"
+                disabled={saving || signingOut}
+                onClick={handleSignOut}
+              >
+                {signingOut ? 'Signing out...' : 'Sign out'}
+              </button>
+              {signOutError ? (
+                <div className="clean-form-error" role="alert">
+                  {signOutError}
+                </div>
+              ) : null}
+            </div>
+          ) : null}
 
           <div className="clean-auth-card__header">
             <p>Workspace setup</p>
@@ -208,11 +333,16 @@ export default function SetupWorkspace() {
             {formError ? <div className="clean-form-error">{formError}</div> : null}
 
             <div className="clean-action-stack">
-              <button className="clean-primary-button" type="submit" disabled={saving}>
+              <button className="clean-primary-button" type="submit" disabled={saving || signingOut}>
                 {saving ? 'Creating workspace...' : 'Create workspace'}
               </button>
               {canQuickStart ? (
-                <button className="clean-secondary-button" type="button" onClick={handleQuickStart}>
+                <button
+                  className="clean-secondary-button"
+                  type="button"
+                  disabled={saving || signingOut}
+                  onClick={handleQuickStart}
+                >
                   Use preview defaults
                 </button>
               ) : null}

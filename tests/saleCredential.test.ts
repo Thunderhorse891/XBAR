@@ -8,6 +8,7 @@ import {
   sealCodeFromDigest,
   verifySaleCredential,
 } from '../src/lib/saleCredential.js';
+import { sha256 } from '../src/lib/sha256.js';
 
 function docs(): CredentialDocument[] {
   return [
@@ -32,7 +33,10 @@ function docs(): CredentialDocument[] {
 
 function input(overrides: Partial<SaleCredentialInput> = {}): SaleCredentialInput {
   return {
+    // Most packets embed nothing; the cases that do override this.
+    attachments: [],
     passportId: 'XB-7Q2K-9F3M',
+    watermark: 'Jordan Reyes · 2026-02-14',
     identity: {
       name: 'Docs Smokin Gun',
       barnName: 'Smoke',
@@ -48,7 +52,6 @@ function input(overrides: Partial<SaleCredentialInput> = {}): SaleCredentialInpu
       microchipId: '985141000123456',
       sire: 'Smokin Whiz',
       dam: 'Docs Starlight',
-      owner: 'Erin Wyrick',
     },
     sale: { askPrice: 45000, listingState: 'Buyer Review' },
     ownership: {
@@ -61,9 +64,6 @@ function input(overrides: Partial<SaleCredentialInput> = {}): SaleCredentialInpu
     care: {
       status: 'Sale Prep',
       lastVetVisit: '2026-06-01',
-      veterinarian: 'Dr. Vasquez',
-      farrier: 'J. Reed',
-      medicalNotes: 'Sound; routine care current.',
     },
     documents: docs(),
     release: { status: 'Ready to release', allowed: true, blockers: [], warnings: [] },
@@ -129,9 +129,12 @@ test('changing a document summary or confidence changes the seal', () => {
   assert.notEqual(base.digest, editedConfidence.digest);
 });
 
-test('changing the medical-notes disclosure changes the seal', () => {
+test('changing the last vet visit changes the seal', () => {
+  // Was `medicalNotes`, which no longer belongs in a buyer-facing payload. The
+  // property under test is the same: a care fact the packet shows is sealed,
+  // so editing it after the fact breaks the digest.
   const base = buildSaleCredential(input());
-  const tampered = buildSaleCredential(input({ care: { ...input().care, medicalNotes: 'No disclosures.' } }));
+  const tampered = buildSaleCredential(input({ care: { ...input().care, lastVetVisit: '2020-01-01' } }));
   assert.notEqual(base.digest, tampered.digest);
 });
 
@@ -224,4 +227,106 @@ test('payload is canonical JSON with sorted top-level keys', () => {
   const parsed = JSON.parse(payload) as Record<string, unknown>;
   const keys = Object.keys(parsed);
   assert.deepEqual(keys, [...keys].sort());
+});
+
+test('swapping an embedded file breaks the seal', () => {
+  const file = {
+    id: 'doc-1',
+    fileName: 'coggins-2026.pdf',
+    sizeBytes: 18,
+    digest: sha256('%PDF-1.4 NEGATIVE'),
+  };
+
+  const sealed = buildSaleCredential(input({ attachments: [file] }));
+
+  // Same name, same size, same document metadata — different bytes. This is the
+  // whole attack: once the packet carries the FILES, a seal over their titles
+  // proves nothing about what the buyer opens, while the packet tells them a
+  // matching seal means it is unaltered.
+  const tampered = buildSaleCredential(input({ attachments: [{ ...file, digest: sha256('%PDF-1.4 FORGED') }] }));
+
+  assert.notEqual(tampered.digest, sealed.digest);
+  assert.notEqual(tampered.sealCode, sealed.sealCode);
+});
+
+test('the same files in a different read order seal identically', () => {
+  const a = { id: 'doc-a', fileName: 'a.pdf', sizeBytes: 3, digest: sha256('aaa') };
+  const b = { id: 'doc-b', fileName: 'b.pdf', sizeBytes: 3, digest: sha256('bbb') };
+
+  // The vault returns files in whatever order it reads them; the seal must not
+  // depend on that, or two identical packets would carry different codes.
+  assert.equal(
+    buildSaleCredential(input({ attachments: [a, b] })).digest,
+    buildSaleCredential(input({ attachments: [b, a] })).digest,
+  );
+});
+
+test('the manifest says whether files were sealed by content', () => {
+  const withFiles = buildSaleCredential(
+    input({ attachments: [{ id: 'doc-1', fileName: 'coggins.pdf', sizeBytes: 4, digest: sha256('abcd') }] }),
+  );
+  const withoutFiles = buildSaleCredential(input());
+
+  // The manifest is printed beside the seal, so it has to distinguish "these
+  // files are covered" from "this packet carries no files".
+  assert.ok(withFiles.manifest.some((line) => /Embedded files sealed by content: 1/.test(line)));
+  assert.ok(withoutFiles.manifest.some((line) => /Embedded files: none in this packet/.test(line)));
+});
+
+test('a packet with no embedded files still seals and verifies', () => {
+  const sealed = buildSaleCredential(input());
+  assert.equal(verifySaleCredential(sealed.payload, sealed.digest).valid, true);
+});
+
+/*
+ * The watermark is the packet's only means of tracing a leaked copy back to the
+ * buyer it was issued to, and it was OUTSIDE the seal. A recipient could edit
+ * it out of the HTML, or swap in someone else's name, and the verifier still
+ * reported a matching seal — while the packet says the seal fingerprints every
+ * buyer-facing fact in it.
+ */
+test('the buyer watermark is sealed, so re-attributing a copy breaks the digest', () => {
+  const issued = buildSaleCredential(input({ watermark: 'Jordan Reyes · 2026-02-14' }));
+  const reattributed = buildSaleCredential(input({ watermark: 'Alex Mercer · 2026-02-14' }));
+
+  assert.notEqual(issued.digest, reattributed.digest, 'a different buyer must be a different seal');
+  assert.notEqual(issued.sealCode, reattributed.sealCode);
+  // And the payload actually carries it, so the bundled verifier can compare
+  // the stamp on the page against the record rather than only rehashing.
+  assert.equal(JSON.parse(issued.payload).watermark, 'Jordan Reyes · 2026-02-14');
+});
+
+test('removing the watermark is as detectable as changing it', () => {
+  const issued = buildSaleCredential(input({ watermark: 'Jordan Reyes · 2026-02-14' }));
+  const stripped = buildSaleCredential(input({ watermark: 'XBAR' }));
+
+  assert.notEqual(issued.digest, stripped.digest, 'falling back to the default must not be silent');
+});
+
+/*
+ * The manifest is what the buyer reads beside the seal, so the attribution has
+ * to appear THERE too — read out of the sealed record rather than off the
+ * watermark on the page, which is the copy an altered packet would have changed.
+ */
+test('the seal tells the buyer which copy this is', () => {
+  const credential = buildSaleCredential(input({ watermark: 'Jordan Reyes · 2026-02-14' }));
+
+  assert.ok(
+    credential.manifest.some((line) => line.includes('Jordan Reyes · 2026-02-14')),
+    'the sealed facts must name the buyer this copy was issued to',
+  );
+});
+
+/*
+ * Two packets identical but for the watermark must still agree on everything
+ * else. Sealing the attribution must not disturb the facts around it — a change
+ * to the payload shape that reordered or dropped a field would show here.
+ */
+test('sealing the watermark leaves the rest of the payload alone', () => {
+  const a = JSON.parse(buildSaleCredential(input({ watermark: 'A' })).payload);
+  const b = JSON.parse(buildSaleCredential(input({ watermark: 'B' })).payload);
+
+  delete a.watermark;
+  delete b.watermark;
+  assert.deepEqual(a, b, 'only the attribution may differ');
 });

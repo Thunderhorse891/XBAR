@@ -173,6 +173,15 @@ export interface SalePacketBuild {
   status: 'draft' | 'generated' | 'shared';
   fileName?: string;
   downloadUrl?: string;
+  /**
+   * Key into the on-device file vault holding the generated packet.
+   *
+   * Set when the packet was rendered in the browser rather than by the cloud
+   * PDF service. Persisted deliberately: an object URL dies with the page, so a
+   * packet whose only address was a `blob:` URL was a broken link on the next
+   * reload — which is every time the seller went back to send it.
+   */
+  localFileKey?: string;
   /** Verifiable Sale Credential sealed at generation time — a tamper-evident
    * fingerprint of every buyer-facing fact in the packet. Present on packets
    * generated after the credential shipped; older records may omit it. */
@@ -347,10 +356,18 @@ export interface DocumentRecord {
   confidence: number;
   duplicateRisk: 'Low' | 'Review' | 'Possible Duplicate';
   extractedTextPreview: string;
+  /**
+   * What the reader could NOT examine, when it could not examine all of it.
+   * Empty or absent means the whole file was read. See
+   * lib/documentIntelligence.ts describeDocumentCoverage.
+   */
+  processingNote?: string;
   summary: string;
   entities: DocumentEntities;
   fileUrl?: string;
   storagePath?: string;
+  /** Key into the on-device file vault, when the bytes are held locally. */
+  localFileKey?: string;
   fileName?: string;
   mimeType?: string;
   fileSizeBytes?: number;
@@ -406,6 +423,8 @@ export interface ExpenseReceipt {
   uploadedBy: string;
   fileUrl?: string;
   storagePath?: string;
+  /** Key into the on-device file vault, when the bytes are held locally. */
+  localFileKey?: string;
   fileName?: string;
   mimeType?: string;
   fileSizeBytes?: number;
@@ -422,13 +441,35 @@ export interface SubscriptionUsage {
   salePacketLimit: number;
   storageUsedGb: number;
   storageLimitGb: number;
+  sharedAccessSeatsUsed: number;
+  sharedAccessSeatLimit: number;
 }
 
 export interface SubscriptionProfile {
+  // What this workspace may use right now. For a lapsed subscription this is
+  // the baseline, not what was bought — every feature gate reads it, so it must
+  // never carry entitlements the billing state does not support.
   tier: SubscriptionTier;
+  // What was bought, kept so billing screens can name the plan that lapsed.
+  // Deliberately not consulted by any gate.
+  purchasedTier?: SubscriptionTier;
   monthlyRate: number;
   renewalDate: string;
-  billingState: 'Active' | 'Manual Billing' | 'Past Due';
+  // 'Inactive' covers canceled, paused, unpaid and never-completed
+  // subscriptions. It exists so those cannot be filed under 'Manual
+  // Billing', which is an operator grant that carries the paid tier.
+  billingState: 'Active' | 'Manual Billing' | 'Past Due' | 'Inactive';
+  // True when a Stripe subscription still exists that could bill again —
+  // past_due, unpaid, paused, or a first payment that never completed.
+  //
+  // billingState cannot answer this. 'Inactive' covers a canceled subscription,
+  // which is gone, and a paused or unpaid one, which resumes once payment is
+  // sorted out. Buying a plan on the second kind opens a second subscription
+  // beside the live one, so the billing screen routes those to recovery instead
+  // of checkout. Absent on profiles written before this field existed, which is
+  // read as "no live subscription" — the same answer as a workspace that never
+  // had one.
+  subscriptionRecoverable?: boolean;
   sharedAccessEnabled: boolean;
   featureFlags: string[];
   usage: SubscriptionUsage;

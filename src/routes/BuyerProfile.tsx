@@ -1,5 +1,4 @@
 import { useEffect, useMemo, useState } from 'react';
-import { publicSiteHref } from '@/lib/nativePlatform';
 import { Link, useParams, useSearchParams } from 'react-router-dom';
 import { EmptyState } from '@/components/EmptyState';
 import { HorseMediaPreview } from '@/components/HorseMediaPreview';
@@ -24,6 +23,7 @@ import { hasBuyerShareAccess } from '@/lib/workspaceAccess';
 import { buildDocumentTrustProfile, buildHorsePacketCompleteness } from '@/lib/xbarPhaseTwo';
 import { useUiStore } from '@/store/useUiStore';
 import { useHorseRecord, useXbarStore } from '@/store/useXbarStore';
+import { publicSiteHref } from '@/lib/nativePlatform';
 
 // Buyer follow-up actions: questions, call requests, and offers flow back to
 // the seller — through the public API on real shared links, or straight into
@@ -44,9 +44,16 @@ function BuyerActionPanel({
     note?: string;
     amount?: number;
   }) => void;
-  // Resolves true only when the packet actually reached the device, so the
-  // status text below never claims a download that did not happen.
-  onDownloadPacket: () => Promise<boolean>;
+  /**
+   * Attempts the save and reports whether it happened.
+   *
+   * Returns a result rather than void because the seller notification below is
+   * a claim about the buyer's device: "the packet was downloaded". A void
+   * callback cannot contradict that claim, so the panel recorded the event and
+   * announced success before the save was even attempted — and on iOS a
+   * cancelled share sheet meant no file, while the seller was told otherwise.
+   */
+  onDownloadPacket: () => Promise<{ ok: boolean; reason?: string }>;
 }) {
   const [mode, setMode] = useState<
     null | 'question' | 'call-requested' | 'proof-requested' | 'offer' | 'packet-downloaded'
@@ -80,44 +87,42 @@ function BuyerActionPanel({
     setSubmitting(true);
     setStatusText('');
 
-    if (source === 'local') {
-      // Save first, then log. Recording a packet-downloaded event before the save
-      // resolves tells the seller a packet was delivered when it may not have
-      // been — a false signal in the buyer deal room that can trigger a
-      // download follow-up for a download that never happened.
-      const localPacketSaved = mode === 'packet-downloaded' ? await onDownloadPacket() : false;
-      if (mode !== 'packet-downloaded' || localPacketSaved) {
-        onLocalLog({
-          kind: mode,
-          actor: buyerName.trim(),
-          note:
-            [message.trim(), buyerEmail.trim() ? `Contact: ${buyerEmail.trim()}` : ''].filter(Boolean).join(' — ') ||
-            undefined,
-          amount: mode === 'offer' ? offerAmount : undefined,
-        });
+    /*
+     * The save is attempted BEFORE anything is recorded or sent, and only for
+     * this one kind.
+     *
+     * Every other kind is a message to the seller and is true the moment it is
+     * sent. `packet-downloaded` is different: it asserts something happened on
+     * the buyer's device. If the file never arrived, logging it tells the
+     * seller a buyer has their packet when they do not — which is worse than a
+     * failed download, because it is acted on.
+     */
+    if (mode === 'packet-downloaded') {
+      const saved = await onDownloadPacket();
+      if (!saved.ok) {
+        setSubmitting(false);
+        setStatusText(saved.reason ?? 'The packet could not be saved, so the seller was not notified.');
+        return;
       }
+    }
+
+    if (source === 'local') {
+      onLocalLog({
+        kind: mode,
+        actor: buyerName.trim(),
+        note:
+          [message.trim(), buyerEmail.trim() ? `Contact: ${buyerEmail.trim()}` : ''].filter(Boolean).join(' — ') ||
+          undefined,
+        amount: mode === 'offer' ? offerAmount : undefined,
+      });
       setSubmitting(false);
       setStatusText(
         mode === 'packet-downloaded'
-          ? localPacketSaved
-            ? 'Buyer packet downloaded and seller notified.'
-            : 'The packet did not save to this device, so nothing was sent to the seller. Try again.'
+          ? 'Buyer packet downloaded and seller notified.'
           : 'Delivered to the seller. They will respond using your contact details.',
       );
       setMode(null);
       return;
-    }
-
-    // Save before posting. A packet-downloaded inquiry tells the seller a packet
-    // reached the buyer and is counted in the deal room, so it must not be sent
-    // for a save that failed or a share sheet the buyer cancelled.
-    if (mode === 'packet-downloaded') {
-      const packetSaved = await onDownloadPacket();
-      if (!packetSaved) {
-        setSubmitting(false);
-        setStatusText('The packet did not save to this device, so nothing was sent to the seller. Try again.');
-        return;
-      }
     }
 
     try {
@@ -480,21 +485,24 @@ export default function BuyerProfile() {
         (asset.kind === 'Hero' || asset.kind === 'Conformation' || asset.kind === 'Sale Still'),
     )
     .slice(0, 4);
-  const downloadBuyerPacket = async () => {
-    const saved = await downloadPublicBuyerPacketArtifact(
+  /*
+   * Returns the outcome instead of toasting it.
+   *
+   * The caller has to know: it records a "packet downloaded" event against the
+   * seller's listing, and that event is only true if the file reached the
+   * buyer. A toast here would tell the buyer it failed while the seller was
+   * still told it succeeded — two messages disagreeing about one fact. The
+   * panel now reports the outcome in the status line the buyer is already
+   * reading, and withholds the event.
+   */
+  const downloadBuyerPacket = () =>
+    downloadPublicBuyerPacketArtifact(
       buildPublicBuyerPacketArtifact({
         horse,
         documents: visibleDocuments.map(({ document }) => document),
         sharedListing,
       }),
     );
-    // Say so when the packet did not reach the device. This is the buyer-facing
-    // surface, so a tap that quietly does nothing is the worst version of it.
-    if (!saved.ok) {
-      pushToast({ title: 'Packet not saved', message: saved.reason, tone: 'warning' });
-    }
-    return saved.ok;
-  };
 
   return (
     <main className="buyer-shell">

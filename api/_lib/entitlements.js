@@ -1,33 +1,79 @@
-import { subscriptionPlans } from './subscription-plans.js';
+import { subscriptionPlans, isKnownTier } from './subscription-plans.js';
+import { BASELINE_TIER, entitledTierForBillingState, isKnownBillingState } from './subscription-status.js';
 import { isCompedEmail } from './comp-access.js';
 
 const TIER_ORDER = ['Starter', 'Professional', 'Ranch Ops', 'Enterprise'];
 
+/*
+ * Shown whenever the database cannot tell us what a workspace has or is using.
+ *
+ * Deliberately not upgrade copy. "Upgrade to continue" asserts that the
+ * customer is over their limit, and at this point nothing establishes that —
+ * the query failed, so the usage is unknown. Telling a customer to pay because
+ * a database call errored is both wrong and expensive to un-say.
+ */
+const CLOUD_UNAVAILABLE_MESSAGE =
+  'Cloud services are unavailable right now, so this action was not applied. Try again in a moment.';
+
+function usageUnavailable(subject) {
+  return {
+    ok: false,
+    retryable: true,
+    status: 503,
+    message: `Current ${subject} could not be verified, so this action was not applied. Try again in a moment.`,
+  };
+}
+
+/**
+ * Resolve what a workspace is entitled to.
+ *
+ * Returns `{ ok: false }` when the lookup itself fails. That case used to be
+ * indistinguishable from a workspace on the baseline plan: the error was
+ * discarded, `data` came back null, and the caller proceeded as though it had
+ * read a real subscription. Callers must check `ok` before reading `limits`.
+ *
+ * Neither a missing row nor an unrecognized value resolves to 'Manual Billing'
+ * any more. That state grants the paid tier, so it is reachable only when an
+ * operator has deliberately written it.
+ */
 export async function getWorkspaceEntitlements(supabase, workspaceId, userEmail) {
-  const { data } = await supabase
+  const { data, error } = await supabase
     .from('workspace_subscription_profiles')
     .select('tier, billing_state')
     .eq('workspace_id', workspaceId)
     .maybeSingle();
 
-  const tier = data?.tier && data.tier in subscriptionPlans ? data.tier : 'Starter';
-  const billingState = data?.billing_state || 'Manual Billing';
-  // Failed payment => the workspace keeps read access but premium generation
-  // falls back to the free/Starter feature set until billing recovers.
-  let effectiveTier = billingState === 'Past Due' ? 'Starter' : tier;
+  if (error) {
+    return { ok: false, retryable: true, status: 503, message: CLOUD_UNAVAILABLE_MESSAGE };
+  }
 
-  // Operator comp: an allowlisted email (env XBAR_COMP_EMAILS) always resolves to
-  // full entitlements so internal/QA/owner accounts can exercise every feature.
-  // Off by default — an empty allowlist changes nothing for real customers.
-  if (isCompedEmail(userEmail)) {
+  // No row means the workspace has never had a subscription synced. That is a
+  // normal state, not an error, and it resolves to the baseline.
+  const tierRecognized = isKnownTier(data?.tier);
+  const tier = tierRecognized ? data.tier : BASELINE_TIER;
+
+  // An unrecognized string in this column is treated as inactive rather than
+  // trusted or coerced to the friendliest neighbouring value.
+  const storedBillingState = data?.billing_state;
+  const billingState = isKnownBillingState(storedBillingState) ? storedBillingState : 'Inactive';
+
+  let effectiveTier = entitledTierForBillingState(tier, billingState);
+
+  // Operator comp: an allowlisted email (env XBAR_COMP_EMAILS) resolves to full
+  // entitlements so internal/QA/owner accounts can exercise every feature. Off
+  // by default — an empty allowlist changes nothing for real customers.
+  const comped = isCompedEmail(userEmail);
+  if (comped) {
     effectiveTier = 'Enterprise';
   }
 
   return {
+    ok: true,
     tier,
+    tierRecognized,
     effectiveTier,
     billingState,
-    comped: effectiveTier === 'Enterprise' && isCompedEmail(userEmail),
+    comped,
     limits: subscriptionPlans[effectiveTier].limits,
   };
 }
@@ -40,24 +86,22 @@ export function tierIncludesPlan(tier, minimumPlan) {
 }
 
 /*
- * A capacity gate that cannot read current usage must not let the action past.
+ * Capacity gates.
  *
- * Every query below used to discard its `error`, so a failed read produced a
- * null count, `used` became 0, and the limit silently stopped applying — the
- * plan's enforcement lost its teeth on any transient database error, and the
- * request looked like a clean pass. That is the same "success with nothing
- * behind it" failure this codebase treats as a defect, sitting on the code
- * that protects paid tiers.
+ * Each one used to discard the error from its usage query:
  *
- * Refusing is the honest outcome. The caller turns this into a 403 the
- * customer can retry, which is recoverable; an unenforced limit is not.
+ *     const { count } = await supabase.from('horses')...
+ *     const used = Number(count || 0);
+ *
+ * On any failed read `count` is null, `used` collapses to 0, and the limit
+ * stops applying — while the request returns a clean pass. Every paid tier is
+ * sold on these limits, so a transient database error silently removed the
+ * enforcement behind all of them, with nothing in the response to show that
+ * anything had happened.
+ *
+ * A gate that cannot read current usage must not let the action past. Refusing
+ * is recoverable; an unenforced limit is not.
  */
-function usageUnavailable(subject) {
-  return {
-    ok: false,
-    message: `Current ${subject} could not be verified, so this action was not applied. Try again in a moment.`,
-  };
-}
 
 export async function checkDocumentCapacity(supabase, workspaceId, incomingCount, limits) {
   const { count, error } = await supabase
@@ -116,7 +160,10 @@ export async function checkSeatCapacity(supabase, workspaceId, incomingCount, li
     invitationQuery.eq('status', 'pending'),
   ]);
 
-  if (memberships.error || invitations.error) return usageUnavailable('seat usage');
+  // Both halves matter: seats in use are active members plus pending invites,
+  // so either query failing leaves the total unknown, not merely incomplete.
+  if (memberships.error) return usageUnavailable('team seat usage');
+  if (invitations.error) return usageUnavailable('pending invitation count');
 
   const used = Number(memberships.count || 0) + Number(invitations.count || 0);
   if (used + incomingCount > limits.seatLimit) {
