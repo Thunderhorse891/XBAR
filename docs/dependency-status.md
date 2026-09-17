@@ -7,7 +7,7 @@ contains the subsequent restricted-RPC rollout and verification.
 
 ## Consolidated updates
 
-- Production dependency group (#211): Capacitor 8.5.1, Supabase 2.115.0,
+- Production dependency group (#211): Capacitor 8.5.1,
   PDF.js 6.3.289 and the remaining compatible package updates.
 - Development dependency group (#203): Playwright 1.63.0, Vite 8.3.0,
   TypeScript ESLint 8.70.0 and related tooling.
@@ -26,6 +26,11 @@ GitHub checks for the actual integration commit.
 
 ## Incompatible proposals
 
+- Supabase 2.115.0: the rendered auth suite caught changed sign-out semantics.
+  On a failed logout request the SDK clears the local session, redirecting away
+  before the app displays the failure. Retain the proven 2.100.1 SDK until the
+  sign-out flow is adapted and its full recovery suite passes. Do not weaken
+  the failed-sign-out regression test to accept a lost error message.
 - #173: TypeScript 7.0.2 is outside typescript-eslint 8.70.0's declared
   peer range (>=4.8.4 <6.1.0), verified against npm package metadata.
   Retain TypeScript 5.9.3 until the lint toolchain supports version 7.
