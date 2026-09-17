@@ -16,11 +16,23 @@ A change is not done when the code is written. It is done when it is **live and 
 
 ### Merge green, not hopeful
 
-**Never merge while checks are still in progress.** This has already cost a scare: PR #201 merged at 05:31 with `ci` and `codeql` still running, on a head whose previous CI run had failed. It happened to pass, but nobody knew that at merge time.
+**Never merge while the PR's own checks are still in progress.** Read each check's `conclusion`, on the PR's head commit, before merging.
+
+### Read the right checks: pre-merge and post-merge runs are different things
+
+A merge commit starts its own `ci` and `codeql` runs on `main`, and those necessarily begin **after** the merge. They are not the PR's checks and say nothing about whether the merge was safe.
+
+This is written down because it caused a false alarm. #201's head `4fb48d4` had `ci` green at 05:31:05, `Analyze` at 05:25:35 and `CodeQL` at 05:25:27; it merged at 05:31:24 — properly green. What was observed instead was the post-merge runs on `f6af00d` sitting `in_progress`, which got reported as "merged before CI confirmed". The merge was fine; the reading was not.
+
+To check whether a PR merged green, look at the check runs **for its head SHA** and compare their `completed_at` against the PR's `merged_at`.
 
 ### Report only what was actually observed
 
-Never say "green", "deployed" or "pushed" without having read the result. Verify a claimed commit exists (`git cat-file -t <sha>`) before believing any report that work landed — several such claims on this repo turned out never to have been pushed. An empty API result is not evidence of absence; check the query was right first.
+Never say "green", "deployed", "pushed" or "broken" without having read the result that says so.
+
+- Verify a claimed commit exists (`git cat-file -t <sha>`) before believing any report that work landed. Several such claims on this repo turned out never to have been pushed.
+- An empty API result is not evidence of absence. Check the query first — a malformed `since` timestamp on the Vercel deployments API once returned nothing and was read as "no deployment started", when the deployment had in fact succeeded.
+- Before reporting something as broken, confirm the thing you measured is the thing you are describing. Both false alarms above came from measuring the wrong object, not from bad data.
 
 ## What this app is for
 
