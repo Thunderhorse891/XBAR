@@ -72,6 +72,15 @@ const COLORS = [
 
 const OWNER_LABELS = 'current\\s+owner|recorded\\s+owner|owner\\s+of\\s+record|owner';
 
+/*
+ * A line holding nothing but a word that qualifies a following `Name` field.
+ * Used to tell a label OCR split across a line break ("Association" / "Name:
+ * AQHA") from letterhead sitting above a genuine field ("Blue River Farm" /
+ * "Name: BLUE MOON"), which carries more than the bare qualifier.
+ */
+const QUALIFIER_ONLY_LINE =
+  /^(?:association|farm|ranch|stable|stables|barn|registry|company|corporation|club|owner|breeder|sire|dam)$/i;
+
 function parentLabel(label: 'sire' | 'dam') {
   return `${label}(?:['’]s)?(?:\\s+name)?|name\\s+of\\s+${label}`;
 }
@@ -158,7 +167,20 @@ function labeledField(text: string, labelPattern: string, stopGroup = STOP_GROUP
   // field/value pair, not a label word alone (COLOR ME BLUE is still a name).
   const ruled = /^\s*[:#]?\s*(?:[|;=\u2022\u00b7]+|[_.\-\u2013\u2014~]{2,})/.test(rawRemainder);
   if (ruled) {
-    if (new RegExp(`^(?:(?:sex|gender)\\s+${SEX_VALUE}|colou?r\\s+${COLOR_VALUE})\\b`, 'i').test(remainder)) {
+    /*
+     * A sex/colour pair means the labelled field was EMPTY only when the pair
+     * is the whole of what follows -- that is, when another field or the end of
+     * the text comes next. Matching the pair alone discards real names that
+     * merely begin with a field word: "COLOR BAY DREAM" is a horse, and the
+     * only thing separating it from an empty name field above a "Color Bay"
+     * field is that "DREAM" follows.
+     */
+    if (
+      new RegExp(
+        `^(?:(?:sex|gender)\\s+${SEX_VALUE}|colou?r\\s+${COLOR_VALUE})\\b(?=\\s*$|\\s+(?:${STOP_GROUP})\\b)`,
+        'i',
+      ).test(remainder)
+    ) {
       return undefined;
     }
     if (
@@ -349,10 +371,23 @@ export function extractRegistrationFields(rawText: string): RegistrationFields {
     .filter(Boolean);
   const lineStarts = new Set<number>();
   let offset = 0;
-  for (const line of lines) {
-    lineStarts.add(offset);
+  lines.forEach((line, index) => {
+    /*
+     * A line start normally means "this is a field of its own", which is what
+     * lets a bare `Name:` under a certificate heading be the horse's name.
+     *
+     * It must NOT do so when OCR has split a qualified label across the break:
+     * "Association / Name: AQHA" is one label, and treating the second line as
+     * a field names the horse after the association. The distinguishing signal
+     * is that the previous line is the qualifier and NOTHING else -- real
+     * letterhead reads "Blue River Farm", never a naked "Farm" -- so only a
+     * bare qualifier line withholds the free pass.
+     */
+    const previous = index > 0 ? lines[index - 1] : undefined;
+    const splitQualifiedLabel = previous !== undefined && QUALIFIER_ONLY_LINE.test(previous);
+    if (!splitQualifiedLabel) lineStarts.add(offset);
     offset += line.length + 1;
-  }
+  });
   const text = lines.join(' ');
   if (!text) return {};
 
