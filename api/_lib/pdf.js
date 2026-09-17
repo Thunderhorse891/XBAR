@@ -233,7 +233,6 @@ export function wrapLine(text, font, size, maxWidth) {
     // Does not fit beside what is already on the line, so end that line first.
     if (current) {
       lines.push(current);
-      current = '';
     }
 
     if (font.widthOfTextAtSize(word, size) <= maxWidth) {

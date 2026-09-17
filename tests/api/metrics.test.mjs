@@ -27,7 +27,7 @@ function invoke(handler, { method = 'POST', body, rawBody, headers = {} } = {}) 
         this.headers[String(name).toLowerCase()] = value;
       },
       end(payload) {
-        let parsed = null;
+        let parsed;
         try {
           parsed = payload ? JSON.parse(payload) : null;
         } catch {

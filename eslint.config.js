@@ -15,6 +15,12 @@ export default tseslint.config(
       'android',
       'ios',
       'coverage',
+      // Playwright writes traces, screenshots and its own JS artifacts here.
+      // They are not source, and linting them fails the build with hundreds of
+      // errors whenever a run has left artifacts behind — CI only escapes it
+      // because lint happens to run before the browser suites.
+      'test-results',
+      'playwright-report',
       '**/*.generated.*',
     ],
   },

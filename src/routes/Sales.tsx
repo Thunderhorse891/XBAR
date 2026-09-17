@@ -226,10 +226,17 @@ export default function Sales() {
             onSelect: async () => {
               const result = await recordSharedChannel(menuHorse.id, 'Direct Link');
               pushToast({
-                title: result.ok ? 'Buyer packet opened' : 'Release blocked',
+                title: result.ok ? 'Buyer packet share recorded' : 'Release blocked',
                 message: result.message,
                 tone: result.ok ? 'success' : 'error',
               });
+              // The toast reports the share being recorded, not a window
+              // opening — that second thing cannot be verified. `noopener`
+              // makes window.open return null by spec even when it succeeds,
+              // and Capacitor's iOS handler returns nil after passing the URL
+              // to UIApplication.shared.open, so there is no return value to
+              // check on either platform. Claiming "opened" would be a success
+              // message with nothing behind it.
               if (result.ok && typeof window !== 'undefined') {
                 window.open(menuShareUrl, '_blank', 'noopener,noreferrer');
               }
@@ -414,10 +421,13 @@ export default function Sales() {
                                   event.stopPropagation();
                                   const result = await recordSharedChannel(horse.id, 'Direct Link');
                                   pushToast({
-                                    title: result.ok ? 'Buyer packet opened' : 'Release blocked',
+                                    title: result.ok ? 'Buyer packet share recorded' : 'Release blocked',
                                     message: result.message,
                                     tone: result.ok ? 'success' : 'error',
                                   });
+                                  // See the note on the menu action above:
+                                  // the toast reports the recorded share, which
+                                  // is the part that can be verified.
                                   if (result.ok) window.open(publicShareUrl, '_blank', 'noopener,noreferrer');
                                 }}
                               >
