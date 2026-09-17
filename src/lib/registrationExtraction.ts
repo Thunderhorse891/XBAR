@@ -133,23 +133,33 @@ function cleanFieldValue(value: string | undefined): string | undefined {
  * Capture the text that follows a label, up to (but not including) the next
  * known field label or the end of the string.
  */
-function labeledValue(text: string, labelPattern: string, stopGroup = STOP_GROUP): string | undefined {
+interface LabeledField {
+  value: string;
+  start: number;
+  end: number;
+}
+
+function labeledField(text: string, labelPattern: string, stopGroup = STOP_GROUP): LabeledField | undefined {
   const label = text.match(new RegExp(`\\b(?:${labelPattern})\\b`, 'i'));
   if (!label || label.index === undefined) return undefined;
-  // Remove only the label's colon/hash before finding the next field. Keep
-  // table dividers until the boundary is found: "| Dam:" is an empty sire,
-  // not permission to consume the dam's name and registration number.
-  const remainder = text
-    .slice(label.index + label[0].length)
-    .replace(/^\s*[:#]\s*/, '')
-    .trim();
+  const labelEnd = label.index + label[0].length;
+  const remainder = cleanFieldValue(text.slice(labelEnd));
+  if (!remainder) return undefined;
+  // A complete next-field label means the current field is empty. A bare
+  // label word can still be data, as in COLOR ME BLUE or OWNER OF THE RANCH.
   if (new RegExp(`^(?:${stopGroup})\\s*[:#=|]`, 'i').test(remainder)) return undefined;
   if (stopGroup === STOP_GROUP && /^(?:registration|reg\.?)\s*(?:(?:number|no\.?)\b|#)/i.test(remainder)) {
     return undefined;
   }
   const match = remainder.match(new RegExp(`^(.+?)(?=\\s+(?:${stopGroup})\\b|$)`, 'i'));
   const value = cleanFieldValue(match?.[1]);
-  return value && value.length >= 2 ? value : undefined;
+  if (!value || value.length < 2) return undefined;
+  const start = text.indexOf(value, labelEnd);
+  return start >= 0 ? { value, start, end: start + value.length } : undefined;
+}
+
+function labeledValue(text: string, labelPattern: string, stopGroup = STOP_GROUP): string | undefined {
+  return labeledField(text, labelPattern, stopGroup)?.value;
 }
 
 /** Registry-prefixed or bare registration number, e.g. "AQHA 5551234" or "X0123456". */
@@ -266,20 +276,22 @@ function findRegistry(text: string, fallback?: string): string | undefined {
   return found ? found.toUpperCase() : fallback;
 }
 
-function findHorseName(text: string, sourceText: string): string | undefined {
+function findHorseName(text: string): LabeledField | undefined {
   // A specific horse-name label wins even if an owner label appears first.
-  const explicit = labeledValue(text, 'registered\\s+name|name\\s+of\\s+horse|horse\\s+name');
+  const explicit = labeledField(text, 'registered\\s+name|name\\s+of\\s+horse|horse\\s+name');
   if (explicit) return explicit;
 
   for (const match of text.matchAll(/\bname\b/gi)) {
-    // Use the full source for context: the horse-only text can end immediately
-    // before "Sire", leaving just "Name of" and hiding the disqualifying label.
-    const before = sourceText.slice(0, match.index);
-    const after = sourceText.slice(match.index + match[0].length);
+    const before = text.slice(0, match.index);
+    const after = text.slice(match.index + match[0].length);
+    // Do not turn another qualified field (Association Name, Farm Name, etc.)
+    // into horse data. A bare Name starts a field or follows a numeric value.
+    if (before.trim() && !/[\d|;]$/.test(before.trim())) continue;
+    if (/^\s+of\b/i.test(after)) continue;
     if (new RegExp(`\\b(?:sire|dam|${OWNER_LABELS}|breeder)(?:['’]s)?\\s*$`, 'i').test(before)) continue;
     if (new RegExp(`^\\s+(?:of\\s+)?(?:sire|dam|${OWNER_LABELS}|breeder)\\b`, 'i').test(after)) continue;
-    const value = labeledValue(text.slice(match.index), 'name');
-    if (value) return value;
+    const field = labeledField(text.slice(match.index), 'name');
+    if (field) return { ...field, start: field.start + match.index, end: field.end + match.index };
   }
   return undefined;
 }
@@ -301,16 +313,21 @@ export function extractRegistrationFields(rawText: string): RegistrationFields {
   const text = normalizeWhitespace(rawText);
   if (!text) return {};
 
-  // Everything before the first parent label describes the horse itself.
-  const parentIndex = text.search(new RegExp(`\\b(?:${parentLabel('sire')}|${parentLabel('dam')})\\b`, 'i'));
+  const horseName = findHorseName(text);
+  // A labeled name such as DAM GOOD contains data, not a parent-field label.
+  const parentIndex =
+    [...text.matchAll(new RegExp(`\\b(?:${parentLabel('sire')}|${parentLabel('dam')})\\b`, 'ig'))].find(
+      (match) => !horseName || match.index < horseName.start || match.index >= horseName.end,
+    )?.index ?? -1;
   const headText = parentIndex >= 0 ? text.slice(0, parentIndex) : text;
+  const parentText = parentIndex >= 0 ? text.slice(parentIndex) : '';
 
   const own = findRegistrationNumber(headText);
-  const sire = findParent(text, 'sire');
-  const dam = findParent(text, 'dam');
+  const sire = findParent(parentText, 'sire');
+  const dam = findParent(parentText, 'dam');
 
   const fields: RegistrationFields = {
-    horseName: findHorseName(headText, text),
+    horseName: horseName && (parentIndex < 0 || horseName.start < parentIndex) ? horseName.value : undefined,
     registrationNumber: own.number,
     registry: findRegistry(text, own.registry),
     sex: findSex(text),

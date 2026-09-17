@@ -46,6 +46,27 @@ test('registration paper intake extracts a new horse identity without an existin
   assert.equal(document.entities.ownerName, 'Blue River Ranch LLC');
 });
 
+test('filename parent words do not override fields read from the document', async () => {
+  for (const name of ['DAM GOOD', 'SIRE OF THE WIND']) {
+    const file = new File(
+      [`Registered Name: ${name} Registration Number 1234567 Sire: SHINING SPARK 3344556 Dam: MISS KITTY 7788990`],
+      `${name}.txt`,
+      { type: 'text/plain' },
+    );
+    const document = await buildDocumentRecord({
+      file,
+      uploadedBy: 'Ops Desk',
+      source: 'Bulk Intake',
+      horses: [],
+      existingDocuments: [],
+    });
+    assert.equal(document.entities.horseName, name);
+    assert.equal(document.entities.registrationNumber, '1234567');
+    assert.equal(document.entities.sire, 'SHINING SPARK');
+    assert.equal(document.entities.dam, 'MISS KITTY');
+  }
+});
+
 function makeHorse(patch: Partial<HorseRecord> = {}): HorseRecord {
   return {
     registrationNumber: '',

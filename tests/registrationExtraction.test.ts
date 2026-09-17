@@ -179,6 +179,7 @@ test('parent-only fragments never supply the horse registration number', () => {
     'Dam: MISS KITTY Reg No 7788990',
     "Sire's Name: SHINING SPARK Reg No 3344556",
     'Name of Sire: SHINING SPARK Reg No 3344556',
+    'Sire: SHINING SPARK Registered Name: SHINING SPARK Registration Number 3344556',
   ]) {
     const fields = extractRegistrationFields(text);
     assert.equal(fields.registrationNumber, undefined, text);
@@ -233,5 +234,35 @@ test('an empty field cannot consume the next labeled field', () => {
     assert.equal(parents.sireRegistration, undefined, divider);
     assert.equal(parents.dam, 'MISS KITTY', divider);
     assert.equal(parents.damRegistration, '2222222', divider);
+  }
+});
+
+test('field dividers preserve names beginning with a field-label word', () => {
+  for (const divider of [':', '-', '.', '|', '___', '....']) {
+    const fields = extractRegistrationFields(
+      `Registered Name ${divider} COLOR ME BLUE Registration Number 1234567 ` +
+        `Sire ${divider} OWNER OF THE RANCH 3344556 Dam: MISS KITTY 7788990`,
+    );
+    assert.equal(fields.horseName, 'COLOR ME BLUE', divider);
+    assert.equal(fields.sire, 'OWNER OF THE RANCH', divider);
+    assert.equal(fields.sireRegistration, '3344556', divider);
+  }
+});
+
+test('parent words inside the labeled horse name do not start a parent section', () => {
+  for (const name of ['DAM GOOD', 'SIRE OF THE WIND']) {
+    const fields = extractRegistrationFields(
+      `Registered Name: ${name} Registration Number 1234567 Sire: SHINING SPARK 3344556 Dam: MISS KITTY 7788990`,
+    );
+    assert.equal(fields.horseName, name);
+    assert.equal(fields.registrationNumber, '1234567');
+  }
+});
+
+test('a generic Name must be an unqualified field', () => {
+  for (const label of ['Association Name', 'Farm Name', 'Name of Association', 'Name of Farm']) {
+    const text = `Name of Owner: ERIN WYRICK ${label}: AQHA Registration Number 5551234`;
+    assert.equal(extractRegistrationFields(text).horseName, undefined, label);
+    assert.equal(extractRegistrationFields(`${text} Registered Name: THE`).horseName, 'THE', label);
   }
 });

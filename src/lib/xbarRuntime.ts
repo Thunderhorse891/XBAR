@@ -358,8 +358,9 @@ function extractDocumentEntities(params: {
 }) {
   const { fileName, previewText, inferredType, horses } = params;
   const haystack = `${fileName} ${previewText}`;
-  // Structured registration-paper fields (name, reg #, sex, color, sire, dam…).
-  const registration = extractRegistrationFields(haystack);
+  // Filename metadata can help match an existing record, but is not a field
+  // on the paper: a file called Dam Good must not start a parent section.
+  const registration = extractRegistrationFields(previewText);
 
   return {
     horseName:
