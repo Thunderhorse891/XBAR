@@ -31,6 +31,7 @@ import { GlobalCreateDrawer, createActions } from '@/components/saas/flows';
 import { billingPath } from '@/lib/billingRoutes';
 import { buyerFollowUpPath } from '@/lib/buyerRoutes';
 import { buildCareBoardRows } from '@/lib/dashboardOps';
+import { isSupabaseConfigured } from '@/lib/platformConfig';
 import { useCloudStore } from '@/store/useCloudStore';
 import { useUiStore } from '@/store/useUiStore';
 import { useXbarStore } from '@/store/useXbarStore';
@@ -317,7 +318,11 @@ export default function MainLayout() {
               items={[
                 { label: 'Settings', onSelect: () => navigate('/settings') },
                 { label: 'Billing', onSelect: () => navigate(billingPath) },
-                ...(cloudSession ? [{ label: 'Sign out', onSelect: () => void handleSignOut() }] : []),
+                ...(cloudSession
+                  ? [{ label: 'Sign out', onSelect: () => void handleSignOut() }]
+                  : isSupabaseConfigured()
+                    ? [{ label: 'Sign in', onSelect: () => navigate('/login') }]
+                    : []),
               ]}
               trigger={(open) => (
                 <button

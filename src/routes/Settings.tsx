@@ -694,6 +694,19 @@ export default function Settings() {
               </>
             ) : (
               <>
+                <p className="stack-item__copy">
+                  You are viewing this browser's saved workspace. Sign in to connect your cloud account and access its
+                  workspace and plan.
+                </p>
+                <div className="inline-actions">
+                  <button
+                    className="button button--primary button--compact"
+                    type="button"
+                    onClick={() => navigate('/login')}
+                  >
+                    Sign in to your account
+                  </button>
+                </div>
                 <div className="form-grid form-grid--tight">
                   <label className="field-stack">
                     <span className="field-label">Email</span>
