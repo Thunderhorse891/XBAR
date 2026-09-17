@@ -38,6 +38,16 @@ Never say "green", "deployed", "pushed" or "broken" without having read the resu
 
 XBAR keeps one trustworthy operational record per horse — documents, ownership, care, sale readiness. The people using it are running real ranches and making real money decisions from these records.
 
+## The brand is not decoration
+
+Owner's standing instruction: **use her logo and brand identity on this app, everywhere, so that anyone who sees a screen, an export or a share card knows immediately whose product it is.** Recognition is a product requirement here, not a finishing touch — it is most of what "premium" means to the person paying for it.
+
+- **The artwork in `public/brand/` is Erin's supplied master. Use it.** Do not redraw, trace, simplify, recolour, re-letter or approximate the horse, the X mark or the wordmark, and do not invent a new mark because the supplied one is awkward at a size. `public/brand/README.md` governs this and is the inventory: which asset each surface uses, which files are byte-identical aliases despite their names, and which `.svg` files are really PNGs in a wrapper rather than vector masters.
+- **Colour comes from the `--xbar-*` tokens** (`public/brand/xbar-brand-tokens.css`, `src/styles/brandTokens.css`), never from a hex typed into a component. Raw hexes are how this app once arrived at nine unrelated blues with the primary button below AA contrast. `tests/brandTokens.test.ts` measures that, contrast included.
+- **Every user-facing surface carries the identity** — app shell, sign-in, dashboard, PDF exports, favicon and PWA icons, the OG card. A new surface shipped without it is unfinished, not "styled later".
+- **Identity never costs readability.** Decoration stays off working data surfaces where it lowers contrast, and brand artwork never carries state or instructions.
+- A new visual derivative — a redraw, a recompose, a small-size mark, a wordmark set in a font — is **Erin's decision, not an implementation detail**. Ask.
+
 ## The principle behind most of the fixes here
 
 **Silent success is the enemy.** Nearly every serious defect found in this codebase has the same shape: something reported success while doing nothing, or did something plausible where it should have refused.
@@ -81,3 +91,4 @@ A test that pins broken behaviour gets replaced, not deleted — and the replace
 
 - The account-deletion race is **narrowed, not closed**. Closing it needs a locking RPC, which needs a migration, which needs authorization.
 - `engines.node` declares 20.19 while CI runs Node 24.
+- **The official wordmark is served but never rendered.** `public/brand/xbar-wordmark.png` is deployed and smoke-tested for a 200, and `public/brand/README.md` lists it as sign-in artwork — but no component references it. What renders as the wordmark is `XbarWordmark` in `src/components/BrandMark.tsx`, which sets the letters XBAR in Outfit beside two hardcoded hexes, exactly the font approximation the brand README forbids. Swapping it to the master is a brand decision for Erin, not a silent refactor.
