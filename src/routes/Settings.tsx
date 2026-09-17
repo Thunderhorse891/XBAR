@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useLocation, useNavigate } from 'react-router-dom';
 import { PageHeader, Panel, Pill } from '@/components/app-ui';
 import { formatDateLabel } from '@/lib/format';
 import { loadWorkspaceBackupFromCloud, saveWorkspaceBackupToCloud } from '@/lib/cloudWorkspace';
@@ -75,6 +75,7 @@ export default function Settings() {
   const signOutCloud = useCloudStore((state) => state.signOut);
   const deleteAccount = useCloudStore((state) => state.deleteAccount);
   const navigate = useNavigate();
+  const location = useLocation();
   const pushToast = useUiStore((state) => state.pushToast);
   const canManageSettings = useCurrentRoleCapability('manageSettings');
   const canSyncCloud = useCurrentRoleCapability('syncCloud');
@@ -694,6 +695,19 @@ export default function Settings() {
               </>
             ) : (
               <>
+                <p className="stack-item__copy">
+                  You are viewing this browser's saved workspace. Sign in to connect your cloud account and access its
+                  workspace and plan.
+                </p>
+                <div className="inline-actions">
+                  <button
+                    className="button button--primary button--compact"
+                    type="button"
+                    onClick={() => navigate('/login', { state: { from: `${location.pathname}${location.search}` } })}
+                  >
+                    Sign in to your account
+                  </button>
+                </div>
                 <div className="form-grid form-grid--tight">
                   <label className="field-stack">
                     <span className="field-label">Email</span>
