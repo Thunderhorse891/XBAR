@@ -70,6 +70,12 @@ const COLORS = [
   'paint',
 ];
 
+const OWNER_LABELS = 'current\\s+owner|recorded\\s+owner|owner\\s+of\\s+record|owner';
+
+function parentLabel(label: 'sire' | 'dam') {
+  return `${label}(?:['’]s)?(?:\\s+name)?|name\\s+of\\s+${label}`;
+}
+
 // Label tokens that mark the start of the *next* field. A captured value stops
 // when one of these appears, so "Sire: SHINING SPARK Dam: ..." splits cleanly.
 const STOP_LABELS = [
@@ -89,10 +95,10 @@ const STOP_LABELS = [
   'gender',
   'colou?r',
   'breed',
-  'sire',
-  'dam',
+  parentLabel('sire'),
+  parentLabel('dam'),
   'breeder',
-  'owner',
+  OWNER_LABELS,
   'microchip',
   'markings?',
   'tattoo',
@@ -130,10 +136,18 @@ function cleanFieldValue(value: string | undefined): string | undefined {
 function labeledValue(text: string, labelPattern: string, stopGroup = STOP_GROUP): string | undefined {
   const label = text.match(new RegExp(`\\b(?:${labelPattern})\\b`, 'i'));
   if (!label || label.index === undefined) return undefined;
-  // Clean label separators before finding the next field. Otherwise the colon
-  // alone can become a value when a real name starts with a label word (OWNER).
-  const remainder = cleanFieldValue(text.slice(label.index + label[0].length));
-  const match = remainder?.match(new RegExp(`^(.+?)(?=\\s+(?:${stopGroup})\\b|$)`, 'i'));
+  // Remove only the label's colon/hash before finding the next field. Keep
+  // table dividers until the boundary is found: "| Dam:" is an empty sire,
+  // not permission to consume the dam's name and registration number.
+  const remainder = text
+    .slice(label.index + label[0].length)
+    .replace(/^\s*[:#]\s*/, '')
+    .trim();
+  if (new RegExp(`^(?:${stopGroup})\\s*[:#=|]`, 'i').test(remainder)) return undefined;
+  if (stopGroup === STOP_GROUP && /^(?:registration|reg\.?)\s*(?:(?:number|no\.?)\b|#)/i.test(remainder)) {
+    return undefined;
+  }
+  const match = remainder.match(new RegExp(`^(.+?)(?=\\s+(?:${stopGroup})\\b|$)`, 'i'));
   const value = cleanFieldValue(match?.[1]);
   return value && value.length >= 2 ? value : undefined;
 }
@@ -206,10 +220,10 @@ function findFoaledOn(text: string): string | undefined {
 // Boundaries that end a sire/dam entry. Deliberately excludes reg/registration
 // so a parent's own "Reg No 0011223" tail stays inside the captured chunk.
 const PARENT_STOP_GROUP = [
-  'sire',
-  'dam',
+  parentLabel('sire'),
+  parentLabel('dam'),
   'breeder',
-  'owner',
+  OWNER_LABELS,
   'foaled',
   'foaling',
   'colou?r',
@@ -227,7 +241,7 @@ const PARENT_STOP_GROUP = [
 
 /** A sire/dam entry: the parent's name plus, when present, its registration number. */
 function findParent(text: string, label: 'sire' | 'dam'): { name?: string; registration?: string } {
-  const chunk = labeledValue(text, label, PARENT_STOP_GROUP);
+  const chunk = labeledValue(text, parentLabel(label), PARENT_STOP_GROUP);
   if (!chunk || chunk.length < 2) return {};
   // The registration number, if any, trails the name within the chunk.
   const regMatch = chunk.match(
@@ -262,8 +276,8 @@ function findHorseName(text: string, sourceText: string): string | undefined {
     // before "Sire", leaving just "Name of" and hiding the disqualifying label.
     const before = sourceText.slice(0, match.index);
     const after = sourceText.slice(match.index + match[0].length);
-    if (/\b(?:sire|dam|owner|breeder)(?:['’]s)?\s*$/i.test(before)) continue;
-    if (/^\s+(?:of\s+)?(?:sire|dam|owner|breeder)\b/i.test(after)) continue;
+    if (new RegExp(`\\b(?:sire|dam|${OWNER_LABELS}|breeder)(?:['’]s)?\\s*$`, 'i').test(before)) continue;
+    if (new RegExp(`^\\s+(?:of\\s+)?(?:sire|dam|${OWNER_LABELS}|breeder)\\b`, 'i').test(after)) continue;
     const value = labeledValue(text.slice(match.index), 'name');
     if (value) return value;
   }
@@ -288,8 +302,8 @@ export function extractRegistrationFields(rawText: string): RegistrationFields {
   if (!text) return {};
 
   // Everything before the first parent label describes the horse itself.
-  const parentIndex = text.search(/\b(?:sire|dam)\b/i);
-  const headText = parentIndex > 0 ? text.slice(0, parentIndex) : text;
+  const parentIndex = text.search(new RegExp(`\\b(?:${parentLabel('sire')}|${parentLabel('dam')})\\b`, 'i'));
+  const headText = parentIndex >= 0 ? text.slice(0, parentIndex) : text;
 
   const own = findRegistrationNumber(headText);
   const sire = findParent(text, 'sire');
@@ -307,7 +321,7 @@ export function extractRegistrationFields(rawText: string): RegistrationFields {
     sireRegistration: sire.registration,
     dam: dam.name,
     damRegistration: dam.registration,
-    ownerName: labeledValue(text, 'current\\s+owner|recorded\\s+owner|owner\\s+of\\s+record|owner'),
+    ownerName: labeledValue(text, OWNER_LABELS),
   };
 
   // Drop empty keys so callers can use `?? fallback` cleanly.

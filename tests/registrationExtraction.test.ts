@@ -172,3 +172,66 @@ test('qualified owner and parent labels do not hide a later horse name', () => {
   );
   assert.equal(extractRegistrationFields('Name: THE Registration Number 1234567').horseName, 'THE');
 });
+
+test('parent-only fragments never supply the horse registration number', () => {
+  for (const text of [
+    'Sire: SHINING SPARK Reg No 3344556 Dam: MISS KITTY Reg No 7788990',
+    'Dam: MISS KITTY Reg No 7788990',
+    "Sire's Name: SHINING SPARK Reg No 3344556",
+    'Name of Sire: SHINING SPARK Reg No 3344556',
+  ]) {
+    const fields = extractRegistrationFields(text);
+    assert.equal(fields.registrationNumber, undefined, text);
+    assert.equal(fields.horseName, undefined, text);
+    assert.ok(fields.sireRegistration || fields.damRegistration, text);
+  }
+});
+
+test('all supported owner-label qualifiers remain owner data', () => {
+  for (const label of ['Current Owner', 'Recorded Owner', 'Owner of Record']) {
+    const fields = extractRegistrationFields(`Name of ${label}: ERIN WYRICK Registration Number 5551234`);
+    assert.equal(fields.horseName, undefined, label);
+    assert.equal(fields.ownerName, 'ERIN WYRICK', label);
+    const withHorse = extractRegistrationFields(
+      `Registered Name: THE ${label}: ERIN WYRICK Registration Number 5551234`,
+    );
+    assert.equal(withHorse.horseName, 'THE', label);
+    assert.equal(withHorse.ownerName, 'ERIN WYRICK', label);
+  }
+});
+
+test('plain and possessive parent-name labels do not become part of a name', () => {
+  for (const [sireLabel, damLabel] of [
+    ['Sire Name', 'Dam Name'],
+    ["Sire's Name", "Dam's Name"],
+    ['Sire’s Name', 'Dam’s Name'],
+    ['Name of Sire', 'Name of Dam'],
+  ]) {
+    for (const withNumbers of [false, true]) {
+      const fields = extractRegistrationFields(
+        `Registered Name: THE Registration Number 1234567 ` +
+          `${sireLabel}: *SHINING SPARK${withNumbers ? ' 3344556' : ''} ` +
+          `${damLabel}: MISS KITTY${withNumbers ? ' 7788990' : ''}`,
+      );
+      assert.equal(fields.horseName, 'THE', sireLabel);
+      assert.equal(fields.registrationNumber, '1234567', sireLabel);
+      assert.equal(fields.sire, '*SHINING SPARK', sireLabel);
+      assert.equal(fields.dam, 'MISS KITTY', damLabel);
+      assert.equal(fields.sireRegistration, withNumbers ? '3344556' : undefined, sireLabel);
+      assert.equal(fields.damRegistration, withNumbers ? '7788990' : undefined, damLabel);
+    }
+  }
+});
+
+test('an empty field cannot consume the next labeled field', () => {
+  for (const divider of ['', '|', '___', '....']) {
+    const fields = extractRegistrationFields(`Registered Name: ${divider} Registration Number 1234567`);
+    assert.equal(fields.horseName, undefined, divider);
+    assert.equal(fields.registrationNumber, '1234567', divider);
+    const parents = extractRegistrationFields(`Sire: ${divider} Dam: MISS KITTY 2222222`);
+    assert.equal(parents.sire, undefined, divider);
+    assert.equal(parents.sireRegistration, undefined, divider);
+    assert.equal(parents.dam, 'MISS KITTY', divider);
+    assert.equal(parents.damRegistration, '2222222', divider);
+  }
+});
