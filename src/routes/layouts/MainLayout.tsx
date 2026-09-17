@@ -321,7 +321,13 @@ export default function MainLayout() {
                 ...(cloudSession
                   ? [{ label: 'Sign out', onSelect: () => void handleSignOut() }]
                   : isSupabaseConfigured()
-                    ? [{ label: 'Sign in', onSelect: () => navigate('/login') }]
+                    ? [
+                        {
+                          label: 'Sign in',
+                          onSelect: () =>
+                            navigate('/login', { state: { from: `${location.pathname}${location.search}` } }),
+                        },
+                      ]
                     : []),
               ]}
               trigger={(open) => (
