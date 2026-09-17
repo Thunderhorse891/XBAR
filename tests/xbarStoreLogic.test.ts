@@ -67,6 +67,23 @@ test('filename parent words do not override fields read from the document', asyn
   }
 });
 
+test('intake retains standalone horse names below headings and before explicit parent names', async () => {
+  for (const text of [
+    'AQHA\nCERTIFICATE OF REGISTRATION\nName: BLUE MOON\nRegistration Number: 1234567',
+    'Name: BLUE MOON Registration Number 1234567 Sire: SHINING SPARK Registered Name: SHINING SPARK Registration Number 3344556',
+  ]) {
+    const document = await buildDocumentRecord({
+      file: new File([text], 'registration-paper.txt', { type: 'text/plain' }),
+      uploadedBy: 'Ops Desk',
+      source: 'Bulk Intake',
+      horses: [],
+      existingDocuments: [],
+    });
+    assert.equal(document.entities.horseName, 'BLUE MOON');
+    assert.equal(document.entities.registrationNumber, '1234567');
+  }
+});
+
 function makeHorse(patch: Partial<HorseRecord> = {}): HorseRecord {
   return {
     registrationNumber: '',
