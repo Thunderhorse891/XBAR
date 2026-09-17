@@ -12,7 +12,7 @@ A change is not done when the code is written. It is done when it is **live and 
 6. **Wait for CI to conclude green** — `ci`, `codeql`, `Analyze (javascript-typescript)`, Vercel. Read the actual conclusions.
 7. **Merge to `main`** once, and only once, those are green.
 8. **Confirm the production Vercel deployment reaches READY on the merge commit** — check the deployment's `githubCommitSha` matches, not just that _a_ deployment exists.
-9. **Confirm Supabase is healthy** if the change touches auth, storage, policies or the schema.
+9. **Confirm Supabase is healthy.** No exceptions — the owner's instruction names Supabase alongside Vercel, and "this change probably doesn't touch it" is exactly the assumption that lets a billing, sync or RPC regression through. Always check the project responds and its advisors are clean. When the change does touch auth, storage, policies or the schema, also check the specific surface it touched.
 
 ### Merge green, not hopeful
 
@@ -56,7 +56,7 @@ A test that pins broken behaviour gets replaced, not deleted — and the replace
 
 - `npm test` compiles via `tsconfig.test.json`. Store modules using Vite's `@/` alias **cannot** be compiled by the node test runner — keep testable logic in dependency-free `src/lib/` modules and pin the call site to source if needed.
 - New test files must be registered in the `test` script in `package.json`, or they never run.
-- Playwright Chromium is at `/opt/pw-browsers/`; do not run `playwright install`.
+- Playwright needs a browser. CI installs its own (`.github/workflows/ci.yml` runs `npx playwright install --with-deps chromium`), and a clean dev container has none — run the install there. Some sandboxes preinstall one and set `PLAYWRIGHT_BROWSERS_PATH`; check that variable rather than assuming a path exists.
 - Rebuild before browser-driving a change — a stale `dist/` will happily serve the old bundle and produce a false pass.
 
 ## Authorization — ask first
