@@ -30,7 +30,8 @@ To check whether a PR merged green, look at the check runs **for its head SHA** 
 
 Never say "green", "deployed", "pushed" or "broken" without having read the result that says so.
 
-- Verify a claimed commit exists (`git cat-file -t <sha>`) before believing any report that work landed. Several such claims on this repo turned out never to have been pushed.
+- Verify a claimed commit is **on the remote** before believing any report that work landed: `git fetch origin <branch>` then `git branch -r --contains <sha>`. Several such claims on this repo turned out never to have been pushed.
+  `git cat-file -t <sha>` is **not** that check. It reads only the local object database, so a commit created locally and never pushed passes it — precisely the case being guarded against. Measured here: a commit built with `git commit-tree` and pushed nowhere returns `commit` from `cat-file` and nothing at all from `branch -r --contains`.
 - An empty API result is not evidence of absence. Check the query first — a malformed `since` timestamp on the Vercel deployments API once returned nothing and was read as "no deployment started", when the deployment had in fact succeeded.
 - Before reporting something as broken, confirm the thing you measured is the thing you are describing. Both false alarms above came from measuring the wrong object, not from bad data.
 
