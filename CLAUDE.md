@@ -77,7 +77,8 @@ A test that pins broken behaviour gets replaced, not deleted — and the replace
 ## Repo notes worth knowing
 
 - `npm test` compiles via `tsconfig.test.json`. Store modules using Vite's `@/` alias **cannot** be compiled by the node test runner — keep testable logic in dependency-free `src/lib/` modules and pin the call site to source if needed.
-- New test files must be registered in the `test` script in `package.json`, or they never run.
+- **New _Node_ test files must be registered in the `test` script in `package.json`, or they never run.** That script enumerates every file by hand: `.codex-test-dist/tests/*.js` compiled from `tests/*.ts`, plus the `tests/api/*.mjs` suites run directly.
+- This does **not** apply to browser tests. Each Playwright config discovers specs automatically under its own `testDir` — `tests/e2e`, `tests/auth-smoke`, `tests/auth-slow-workspace`, `tests/mobile-smoke`, `tests/prod-smoke`. Adding one of those to the Node chain would run it under the wrong runner and fail.
 - Playwright needs a browser. CI installs its own (`.github/workflows/ci.yml` runs `npx playwright install --with-deps chromium`), and a clean dev container has none — run the install there. Some sandboxes preinstall one and set `PLAYWRIGHT_BROWSERS_PATH`; check that variable rather than assuming a path exists.
 - Rebuild before browser-driving a change — a stale `dist/` will happily serve the old bundle and produce a false pass.
 
