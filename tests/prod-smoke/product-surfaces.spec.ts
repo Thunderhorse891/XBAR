@@ -70,3 +70,30 @@ test('billing page renders every advertised subscription tier', async ({ page })
   }
   expect(errors, `runtime errors on /billing:\n${errors.join('\n')}`).toEqual([]);
 });
+
+test.describe('screen recovery without cached assets', () => {
+  test.use({ serviceWorkers: 'block' });
+
+  for (const extension of ['js', 'css']) {
+    test(`a missing billing ${extension} asset offers recovery without deleting the saved workspace`, async ({
+      page,
+    }) => {
+      const billingAsset = `**/assets/Subscriptions-*.${extension}`;
+      await page.route(billingAsset, (route) => route.fulfill({ status: 404, body: 'Unavailable' }));
+      await completeLocalOnboarding(page);
+      await goToRoute(page, '/app/billing');
+
+      await expect(page.getByRole('heading', { name: 'This screen could not load' })).toBeVisible();
+      await expect(page.getByRole('alert')).toContainText('Reloading does not clear saved workspace data.');
+      await expect(page.getByRole('alert')).toContainText('Any unsaved edits on this screen may be lost.');
+      await expect(page.getByRole('button', { name: 'Clear browser workspace' })).toHaveCount(0);
+      await expect(page.getByText('Technical details')).toBeVisible();
+
+      await page.unroute(billingAsset);
+      await page.getByRole('button', { name: 'Reload app', exact: true }).click();
+      await expect(page.getByRole('heading', { name: 'Review Billing' })).toBeVisible({ timeout: 15_000 });
+      await expect(page.getByText('Primary Ranch', { exact: false }).first()).toBeVisible();
+      await expect(page).toHaveURL(/\/app\/billing$/);
+    });
+  }
+});

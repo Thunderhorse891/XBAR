@@ -113,23 +113,42 @@ test('a scanned registration behind a text cover sheet is still read', async ({ 
   await drawer.getByRole('button', { name: 'Upload for review' }).click();
   await expect(page).toHaveURL(/\/documents|\/horses\//, { timeout: 180_000 });
 
-  const documents = await page.evaluate(async () => {
-    const raw = await new Promise<string | null>((resolve) => {
-      const request = indexedDB.open('xbar-workspace', 1);
-      request.onsuccess = () => {
-        const db = request.result;
-        if (!db.objectStoreNames.contains('persist')) return resolve(null);
-        const read = db.transaction('persist', 'readonly').objectStore('persist').get('xbar-live-workspace');
-        read.onsuccess = () => resolve(typeof read.result === 'string' ? read.result : null);
-        read.onerror = () => resolve(null);
-      };
-      request.onerror = () => resolve(null);
+  const readDocuments = () =>
+    page.evaluate(async () => {
+      const raw = await new Promise<string | null>((resolve) => {
+        const request = indexedDB.open('xbar-workspace', 1);
+        request.onsuccess = () => {
+          const db = request.result;
+          if (!db.objectStoreNames.contains('persist')) {
+            db.close();
+            return resolve(null);
+          }
+          const read = db.transaction('persist', 'readonly').objectStore('persist').get('xbar-live-workspace');
+          read.onsuccess = () => {
+            db.close();
+            resolve(typeof read.result === 'string' ? read.result : null);
+          };
+          read.onerror = () => {
+            db.close();
+            resolve(null);
+          };
+        };
+        request.onerror = () => resolve(null);
+      });
+      if (!raw) return [];
+      const parsed = JSON.parse(raw) as { state?: { documents?: unknown[] } };
+      return (parsed.state?.documents ?? []) as Array<Record<string, unknown>>;
     });
-    if (!raw) return [];
-    const parsed = JSON.parse(raw) as { state?: { documents?: unknown[] } };
-    return (parsed.state?.documents ?? []) as Array<Record<string, unknown>>;
-  });
 
+  // Navigation follows the in-memory update; IndexedDB persistence is async.
+  // Wait for the saved record before inspecting the same OCR fields below.
+  await expect
+    .poll(async () => (await readDocuments()).length, {
+      message: 'the uploaded document must finish saving',
+      timeout: 15_000,
+    })
+    .toBe(1);
+  const documents = await readDocuments();
   const [record] = documents;
   expect(record, 'the upload must have produced a document').toBeTruthy();
   const preview = String(record.extractedTextPreview ?? '').replace(/\s+/g, ' ');
