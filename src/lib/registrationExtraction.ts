@@ -109,6 +109,24 @@ function normalizeWhitespace(text: string) {
   return text.replace(/\s+/g, ' ').trim();
 }
 
+/*
+ * Separator characters a scan leaves clinging to a value: table pipes, ruled
+ * lines read as underscores or equals, leader dots, bullets and doubled
+ * punctuation. Stripped from BOTH ends.
+ *
+ * Only the trailing end used to be cleaned. That is how a ruled registration
+ * paper produced horses called "| BERRY PEACHY CHIC" and "___ BLUE VALENTINE
+ * DOT COM" -- and those are worse than no name at all, because they contain
+ * letters. `nameNeedsRepair` in horseNameRepair.ts only offers to fix a name
+ * that is a registration number, so a name with a pipe stuck to the front sails
+ * past the repair pass and reaches ownership records and sale material looking
+ * deliberate.
+ *
+ * Deliberately excludes quotes, parentheses and apostrophes: those appear
+ * inside real registered names.
+ */
+const EDGE_SEPARATORS = /^[|;,:_.\-\u2013\u2014=\u2022*\u00b7~\s]+|[|;,:_.\-\u2013\u2014=\u2022*\u00b7~\s]+$/g;
+
 /**
  * Capture the text that follows a label, up to (but not including) the next
  * known field label or the end of the string.
@@ -116,10 +134,7 @@ function normalizeWhitespace(text: string) {
 function labeledValue(text: string, labelPattern: string): string | undefined {
   const pattern = new RegExp(`\\b(?:${labelPattern})\\s*[:#.\\-]?\\s*(.+?)(?=\\s+(?:${STOP_GROUP})\\b|$)`, 'i');
   const match = text.match(pattern);
-  const value = match?.[1]
-    ?.replace(/[|;,:_.\-\s]+$/g, '')
-    .replace(/\s+/g, ' ')
-    .trim();
+  const value = match?.[1]?.replace(EDGE_SEPARATORS, '').replace(/\s+/g, ' ').trim();
   return value && value.length >= 2 ? value : undefined;
 }
 
@@ -213,11 +228,7 @@ const PARENT_STOP_GROUP = [
 /** A sire/dam entry: the parent's name plus, when present, its registration number. */
 function findParent(text: string, label: 'sire' | 'dam'): { name?: string; registration?: string } {
   const pattern = new RegExp(`\\b${label}\\s*[:#.\\-]?\\s*(.+?)(?=\\s+(?:${PARENT_STOP_GROUP})\\b|$)`, 'i');
-  const chunk = text
-    .match(pattern)?.[1]
-    ?.replace(/[|;,:_.\-\s]+$/g, '')
-    .replace(/\s+/g, ' ')
-    .trim();
+  const chunk = text.match(pattern)?.[1]?.replace(EDGE_SEPARATORS, '').replace(/\s+/g, ' ').trim();
   if (!chunk || chunk.length < 2) return {};
   // The registration number, if any, trails the name within the chunk.
   const regMatch = chunk.match(
@@ -242,11 +253,32 @@ function findRegistry(text: string, fallback?: string): string | undefined {
   return found ? found.toUpperCase() : fallback;
 }
 
+/*
+ * Words that name nothing on their own. A captured value made only of these is
+ * not a horse's name, however long it is.
+ */
+const NAMES_NOTHING = /^(?:of|the|a|an|for|and|to|in|on|from|with|this|that)$/i;
+
 function findHorseName(text: string): string | undefined {
   const value = labeledValue(text, 'registered\\s+name|name\\s+of\\s+horse|horse\\s+name|name');
   if (!value) return undefined;
   // Guard against capturing "Name of Sire/Dam/Owner" style false positives.
   if (/^(?:of\s+)?(?:sire|dam|owner|breeder)\b/i.test(value)) return undefined;
+
+  /*
+   * The guard above cannot catch the commonest form of that false positive.
+   *
+   * On "Name of Owner: ERIN WYRICK", the bare `name` alternative matches at
+   * "Name", and `owner` is itself a stop label -- so the value is truncated to
+   * "of" BEFORE the word the guard looks for, and the guard never fires. The
+   * paper then names the horse "of". Measured, not theorised: the captured
+   * value is exactly "of" for both "Name of Owner" and "Name of Sire".
+   *
+   * So refuse a value whose every word names nothing. "The One" keeps its
+   * "One"; "A Shiner Named Sioux" keeps everything but the article.
+   */
+  if (value.split(/\s+/).every((word) => NAMES_NOTHING.test(word))) return undefined;
+
   return value;
 }
 

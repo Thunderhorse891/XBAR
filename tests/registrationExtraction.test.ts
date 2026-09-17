@@ -71,3 +71,70 @@ test('detects sex and color even without explicit labels', () => {
   assert.equal(fields.color, 'Bay');
   assert.equal(fields.registrationNumber, '9990001');
 });
+
+/*
+ * Two ways a paper produced a wrong NAME rather than no name.
+ *
+ * Both are the "silent success" shape: the extractor returned something
+ * plausible where it should have returned nothing or cleaned what it had, and
+ * the wrong value went on to label ownership records and sale material.
+ */
+
+test('separator junk from a ruled or tabled scan is stripped from the name', () => {
+  // Only the trailing end was cleaned, so a table pipe or a ruled line read as
+  // underscores stayed welded to the front of the name. These are worse than a
+  // missing name: they carry letters, so the number-named-horse repair pass
+  // does not flag them and nobody is ever asked about them.
+  const cases: [string, string][] = [
+    ['Registered Name | BERRY PEACHY CHIC Reg No 539882319930', 'BERRY PEACHY CHIC'],
+    ['Registered Name | BERRY PEACHY CHIC | Reg No 539882319930', 'BERRY PEACHY CHIC'],
+    ['Registered Name ___ BLUE VALENTINE DOT COM', 'BLUE VALENTINE DOT COM'],
+    ['Registered Name .... BONNY LIL MAN ROGERS', 'BONNY LIL MAN ROGERS'],
+    ['Registered Name :: SMART LITTLE LENA', 'SMART LITTLE LENA'],
+    ['Registered Name === HOLLYWOOD DUN IT', 'HOLLYWOOD DUN IT'],
+  ];
+
+  for (const [text, expected] of cases) {
+    assert.equal(extractRegistrationFields(text).horseName, expected, text);
+  }
+});
+
+test('a parent name is cleaned the same way', () => {
+  const fields = extractRegistrationFields('Sire | SHINING SPARK 3344556 Dam ___ MISS KITTY 7788990');
+  assert.equal(fields.sire, 'SHINING SPARK');
+  assert.equal(fields.dam, 'MISS KITTY');
+});
+
+test('"Name of Owner" never becomes the horse name', () => {
+  /*
+   * The existing guard tests the value against /^(?:of\s+)?(?:sire|dam|owner)/,
+   * which cannot fire here: `owner` is itself a stop label, so the value is
+   * truncated to a bare "of" before that word is reached. The paper named the
+   * horse "of".
+   */
+  assert.equal(extractRegistrationFields('Name of Owner ERIN WYRICK Registration Number 5551234').horseName, undefined);
+  assert.equal(extractRegistrationFields('Name of Sire SHINING SPARK').horseName, undefined);
+  assert.equal(extractRegistrationFields('Name of Dam MISS KITTY').horseName, undefined);
+});
+
+test('a real name that merely starts with a filler word survives', () => {
+  // The refusal above rejects a value whose EVERY word names nothing. A name
+  // carrying anything of its own is kept, articles and all.
+  assert.equal(extractRegistrationFields('Registered Name THE ONE').horseName, 'THE ONE');
+  assert.equal(extractRegistrationFields('Registered Name A SHINER NAMED SIOUX').horseName, 'A SHINER NAMED SIOUX');
+});
+
+test('a labelled name still reads out of flattened OCR text', () => {
+  // Checked because the opposite was claimed: flattening a scan onto one line
+  // does NOT break label adjacency, and the recovery-from-filename path is a
+  // safety net rather than a substitute for this.
+  const flattened =
+    'AMERICAN QUARTER HORSE ASSOCIATION CERTIFICATE OF REGISTRATION ' +
+    'Registered Name BAR B JOSEYWOOD Registration Number 5551234 ' +
+    'Foaled April 12 2019 Sex Mare Color Sorrel Sire SHINING SPARK 3344556 Dam MISS KITTY 7788990';
+  const fields = extractRegistrationFields(flattened);
+  assert.equal(fields.horseName, 'BAR B JOSEYWOOD');
+  assert.equal(fields.registrationNumber, '5551234');
+  assert.equal(fields.sire, 'SHINING SPARK');
+  assert.equal(fields.dam, 'MISS KITTY');
+});
