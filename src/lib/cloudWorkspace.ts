@@ -8,6 +8,7 @@ import { getSupabaseClient } from '@/lib/supabaseClient';
 import { isNavigableFileUrl } from '@/lib/navigableFileUrl';
 import { openLocalFile } from '@/lib/localFileVault';
 import { vaultOwnerId } from '@/lib/vaultOwner';
+import { subscriptionFromCloudRow } from '@/lib/cloudSubscription';
 import type { Session } from '@supabase/supabase-js';
 import type {
   DocumentRecord,
@@ -859,7 +860,7 @@ async function loadWorkspaceBackupFromRelationalCloud(session: Session) {
     client.from('shared_listings').select('payload, updated_at').eq('workspace_id', workspaceId),
     client
       .from('workspace_subscription_profiles')
-      .select('payload, updated_at')
+      .select('tier, billing_state, monthly_rate, payload, updated_at')
       .eq('workspace_id', workspaceId)
       .maybeSingle(),
     client.from('workspace_profiles').select('payload, updated_at').eq('workspace_id', workspaceId).maybeSingle(),
@@ -939,7 +940,7 @@ async function loadWorkspaceBackupFromRelationalCloud(session: Session) {
       ranchAssets: extractPayloadList<RanchAsset>(ranchAssetsResult.data),
       salesLeads: extractPayloadList<SalesLead>(salesLeadsResult.data),
       sharedListings: extractPayloadList<SharedListingRecord>(sharedListingsResult.data),
-      subscription: extractPayloadItem<SubscriptionProfile>(subscriptionResult.data),
+      subscription: subscriptionFromCloudRow(subscriptionResult.data),
       workspaceProfile: extractPayloadItem<WorkspaceProfile>(profileResult.data),
     },
   };
