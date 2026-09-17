@@ -83,9 +83,22 @@ A test that pins broken behaviour gets replaced, not deleted — and the replace
 - Playwright needs a browser. CI installs its own (`.github/workflows/ci.yml` runs `npx playwright install --with-deps chromium`), and a clean dev container has none — run the install there. Some sandboxes preinstall one and set `PLAYWRIGHT_BROWSERS_PATH`; check that variable rather than assuming a path exists.
 - Rebuild before browser-driving a change — a stale `dist/` will happily serve the old bundle and produce a false pass.
 
+## Supabase is on the FREE tier until launch
+
+Owner's standing instruction: **she has not purchased Supabase. Stay on the free tier until the app is ready and live in production.** Nothing here may assume, require, or quietly trigger a paid plan.
+
+- **Never propose or enable a feature that requires Pro.** Verify the plan requirement in the Supabase docs before recommending an auth or platform setting, rather than assuming a toggle in the dashboard is available. Known Pro-only items already checked: **leaked-password protection** (HaveIBeenPwned), and **session time-boxing / inactivity timeout / single-session-per-user**.
+- **Never run anything that asks to confirm a cost.** The Supabase MCP has `get_cost` and `confirm_cost`; a call that routes through them is a purchase. That includes creating projects and database branches.
+- **The project pauses if it goes quiet.** A free project is paused after roughly 7 days without database activity. A warning email arrives about a week ahead, and a paused project can be restored from the dashboard for 90 days. A few real requests a day prevent it. This matters during a quiet build week — production going "down" may just be a pause.
+- **Free egress is 5 GB uncached + 5 GB cached per month**, shared across database, auth, storage and functions. Documents, scans and report images are the ones that consume it here, so avoid designs that re-download originals where a cached or smaller asset would do.
+- The current state, read rather than assumed: organization `Thunderhorse891's Org` is on plan `free`; project `xbar-records` is `ACTIVE_HEALTHY`.
+
+When something genuinely needs a paid plan, say so plainly with what it costs and what it buys, and let Erin decide. Do not implement a workaround that weakens security to avoid the conversation.
+
 ## Authorization — ask first
 
 - **Database migrations** are not applied without the owner's explicit say-so.
+- **Anything that costs money** — a Supabase plan upgrade, a paid add-on, or any call that asks to confirm a cost.
 - **Production promotion** beyond the normal merge loop above, rollbacks and redeploys are the owner's call.
 - Do not weaken billing, Stripe or cloud permissions.
 
