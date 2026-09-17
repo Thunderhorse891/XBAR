@@ -266,3 +266,41 @@ test('a generic Name must be an unqualified field', () => {
     assert.equal(extractRegistrationFields(`${text} Registered Name: THE`).horseName, 'THE', label);
   }
 });
+
+test('a standalone Name field retains its line boundary after a certificate heading', () => {
+  for (const newline of ['\n', '\r\n', '\r']) {
+    const text = ['AQHA', 'CERTIFICATE OF REGISTRATION', 'Name: BLUE MOON', 'Registration Number: 1234567'].join(
+      newline,
+    );
+    assert.equal(extractRegistrationFields(text).horseName, 'BLUE MOON');
+  }
+});
+
+test('a parent explicit name cannot displace an earlier horse Name field', () => {
+  for (const name of ['BLUE MOON', 'DAM GOOD', 'SIRE OF THE WIND']) {
+    const fields = extractRegistrationFields(
+      `Name: ${name} Registration Number 1234567 Sire: SHINING SPARK Registered Name: SHINING SPARK Registration Number 3344556`,
+    );
+    assert.equal(fields.horseName, name);
+    assert.equal(fields.registrationNumber, '1234567');
+  }
+});
+
+test('bare Name remains eligible after recognized headings and complete fields', () => {
+  for (const prefix of ['CERTIFICATE OF REGISTRATION', 'AQHA', 'Sex Mare', 'Color Bay']) {
+    const fields = extractRegistrationFields(`${prefix} Name: FANCY FILLY Registration Number: 1234567`);
+    assert.equal(fields.horseName, 'FANCY FILLY', prefix);
+  }
+});
+
+test('empty ruled fields cannot consume a bare next label', () => {
+  assert.equal(
+    extractRegistrationFields('Registered Name: | Sex Mare Registration Number 1234567').horseName,
+    undefined,
+  );
+  const fields = extractRegistrationFields('Sire: | Dam MISS KITTY 2222222');
+  assert.equal(fields.sire, undefined);
+  assert.equal(fields.sireRegistration, undefined);
+  assert.equal(fields.dam, 'MISS KITTY');
+  assert.equal(fields.damRegistration, '2222222');
+});
