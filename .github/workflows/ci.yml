@@ -34,7 +34,12 @@ jobs:
         run: npm run lint
 
       - name: Format check
-        run: npm run format:check
+        run: |
+          if ! npm run format:check; then
+            npx prettier --write tests/api/fixtures/horsesImportHandler.cases.mjs
+            git diff -- tests/api/fixtures/horsesImportHandler.cases.mjs
+            exit 1
+          fi
 
       - name: Audit production dependencies
         run: npm audit --omit=dev --audit-level=high
