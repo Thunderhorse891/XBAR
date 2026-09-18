@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 import { readFile } from 'node:fs/promises';
 
-import { buildHorseUpdateFields, duplicateRegistrationRows } from '../../api/_lib/horses-import.js';
+import { authorizeImportRow, buildHorseUpdateFields, duplicateRegistrationRows } from '../../api/_lib/horses-import.js';
 import { getCapabilityDeniedMessage, hasRoleCapability } from '../../api/_lib/permissions.js';
 
 test('server horse import permissions match the intended create/edit role matrix', () => {
@@ -37,12 +37,22 @@ test('partial CSV updates include only supplied columns and preserve omitted fie
   assert.equal('owner_name' in fields, false);
 });
 
-test('an explicitly present blank remains an intentional blank on update', () => {
+test('an explicitly present blank remains an intentional blank on update, except status', () => {
   const header = { name: 0, registration_number: 1, status: 2, owner_name: 3 };
   const fields = buildHorseUpdateFields(['STAR', '111111', '', ''], header);
 
-  assert.equal(fields.status, '');
+  // A supplied blank owner_name is still an intentional clear.
   assert.equal(fields.owner_name, '');
+  // status is the exception: a blank cell must not clear the stored lifecycle
+  // state (the insert path defaults blank status to 'Active', never ''), so a
+  // blank status is preserved by omitting it from the update.
+  assert.equal('status' in fields, false);
+});
+
+test('a supplied non-empty status is still written on update', () => {
+  const header = { name: 0, status: 1 };
+  const fields = buildHorseUpdateFields(['STAR', 'Sold'], header);
+  assert.equal(fields.status, 'Sold');
 });
 
 test('birthdate is normalized only when the birthdate column is supplied', () => {
@@ -66,15 +76,17 @@ test('duplicate registration rows are identified before import writes', () => {
   assert.deepEqual([...result.registrationRows.keys()], ['5551234', '8889999']);
 });
 
-test('horse import checks authorization and ordinary Supabase errors before success counters', async () => {
+// The per-row authorization guarantee lives in authorizeImportRow, tested
+// directly below. This case pins that the handler actually routes every write
+// through it before touching the database, and that ordinary Supabase errors
+// are handled before the success counters increment.
+test('horse import authorizes every row and handles Supabase errors before success counters', async () => {
   const source = await readFile(new URL('../../api/_lib/horses-import.js', import.meta.url), 'utf8');
 
-  const createGate = source.indexOf("requireRoleCapability(access.role, 'createHorse')");
-  const editGate = source.indexOf("requireRoleCapability(access.role, 'editHorse')");
+  const rowGate = source.indexOf('const decision = authorizeImportRow(');
   const firstWrite = Math.min(source.indexOf('.update({ ...fields'), source.indexOf(".from('horses').insert({"));
 
-  assert.ok(createGate >= 0 && createGate < firstWrite, 'create capability must be checked before writes');
-  assert.ok(editGate >= 0 && editGate < firstWrite, 'edit capability must be checked before writes');
+  assert.ok(rowGate >= 0 && rowGate < firstWrite, 'every row must be authorized before any write');
 
   const lookupError = source.indexOf('if (lookupError)');
   const updateError = source.indexOf('if (updateError)');
@@ -87,4 +99,57 @@ test('horse import checks authorization and ordinary Supabase errors before succ
   assert.ok(insertError >= 0 && insertError < importedIncrement, 'insert errors must be handled before success count');
   assert.match(source, /existingRowsError/);
   assert.match(source, /partial:\s*errors\.length > 0/);
+});
+
+// The bug this closes: the capability/capacity gate was decided from the
+// preflight plan, but insert-vs-update is decided per row from a live lookup.
+// A planned update that races to an insert (registration deleted/re-registered
+// after the preflight) let a role with editHorse but not createHorse create a
+// horse, outside the plan's capacity limit. authorizeImportRow is the guard,
+// re-run per row against the live `existing` value.
+test('a row that races from a planned update to an insert is denied for a role without createHorse', () => {
+  // Owner holds editHorse but not createHorse (asserted in the matrix test above).
+  const decision = authorizeImportRow({ existing: null, role: 'Owner', insertsSoFar: 0, insertBudget: 100 });
+  assert.equal(decision.action, 'insert');
+  assert.match(decision.denied, /cannot create horse records/i);
+});
+
+test('the same race is denied for Sales Lead, which also lacks createHorse', () => {
+  const decision = authorizeImportRow({ existing: null, role: 'Sales Lead', insertsSoFar: 0, insertBudget: 100 });
+  assert.match(decision.denied, /cannot create horse records/i);
+});
+
+test('a surprise insert past the plan capacity budget is refused even for a creator role', () => {
+  const decision = authorizeImportRow({ existing: null, role: 'Ranch Manager', insertsSoFar: 5, insertBudget: 5 });
+  assert.equal(decision.capacityExceeded, true);
+  assert.equal(decision.denied, null);
+});
+
+test('a creator role within budget is allowed to insert', () => {
+  const decision = authorizeImportRow({ existing: null, role: 'Admin', insertsSoFar: 0, insertBudget: 3 });
+  assert.equal(decision.action, 'insert');
+  assert.equal(decision.denied, null);
+  assert.ok(!decision.capacityExceeded);
+});
+
+test('an existing row is authorized as an update by editHorse, independent of the plan', () => {
+  const decision = authorizeImportRow({
+    existing: { horse_id: 'h1' },
+    role: 'Sales Lead',
+    insertsSoFar: 0,
+    insertBudget: 0,
+  });
+  assert.equal(decision.action, 'update');
+  assert.equal(decision.denied, null);
+});
+
+test('an update is denied for a role without editHorse', () => {
+  const decision = authorizeImportRow({
+    existing: { horse_id: 'h1' },
+    role: 'Medical Lead',
+    insertsSoFar: 0,
+    insertBudget: 0,
+  });
+  assert.equal(decision.action, 'update');
+  assert.match(decision.denied, /cannot edit horse records/i);
 });
