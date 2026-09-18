@@ -2,7 +2,12 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 import { readFile } from 'node:fs/promises';
 
-import { authorizeImportRow, buildHorseUpdateFields, duplicateRegistrationRows } from '../../api/_lib/horses-import.js';
+import {
+  authorizeImportRow,
+  buildHorseUpdateFields,
+  duplicateRegistrationRows,
+  importHorseRows,
+} from '../../api/_lib/horses-import.js';
 import { getCapabilityDeniedMessage, hasRoleCapability } from '../../api/_lib/permissions.js';
 
 test('server horse import permissions match the intended create/edit role matrix', () => {
@@ -76,80 +81,287 @@ test('duplicate registration rows are identified before import writes', () => {
   assert.deepEqual([...result.registrationRows.keys()], ['5551234', '8889999']);
 });
 
-// The per-row authorization guarantee lives in authorizeImportRow, tested
-// directly below. This case pins that the handler actually routes every write
-// through it before touching the database, and that ordinary Supabase errors
-// are handled before the success counters increment.
-test('horse import authorizes every row and handles Supabase errors before success counters', async () => {
-  const source = await readFile(new URL('../../api/_lib/horses-import.js', import.meta.url), 'utf8');
-
-  const rowGate = source.indexOf('const decision = authorizeImportRow(');
-  const firstWrite = Math.min(source.indexOf('.update({ ...fields'), source.indexOf(".from('horses').insert({"));
-
-  assert.ok(rowGate >= 0 && rowGate < firstWrite, 'every row must be authorized before any write');
-
-  const lookupError = source.indexOf('if (lookupError)');
-  const updateError = source.indexOf('if (updateError)');
-  const insertError = source.indexOf('if (insertError)');
-  const updatedIncrement = source.indexOf('updated += 1');
-  const importedIncrement = source.indexOf('imported += 1');
-
-  assert.ok(lookupError >= 0, 'lookup errors must be handled explicitly');
-  assert.ok(updateError >= 0 && updateError < updatedIncrement, 'update errors must be handled before success count');
-  assert.ok(insertError >= 0 && insertError < importedIncrement, 'insert errors must be handled before success count');
-  assert.match(source, /existingRowsError/);
-  assert.match(source, /partial:\s*errors\.length > 0/);
-});
-
-// The bug this closes: the capability/capacity gate was decided from the
-// preflight plan, but insert-vs-update is decided per row from a live lookup.
-// A planned update that races to an insert (registration deleted/re-registered
-// after the preflight) let a role with editHorse but not createHorse create a
-// horse, outside the plan's capacity limit. authorizeImportRow is the guard,
-// re-run per row against the live `existing` value.
-test('a row that races from a planned update to an insert is denied for a role without createHorse', () => {
-  // Owner holds editHorse but not createHorse (asserted in the matrix test above).
-  const decision = authorizeImportRow({ existing: null, role: 'Owner', insertsSoFar: 0, insertBudget: 100 });
+// authorizeImportRow authorizes the action the PREFLIGHT chose, and never lets
+// the action switch. Tested directly for every role/action pair.
+test('an insert row is denied for a role without createHorse', () => {
+  const decision = authorizeImportRow({ action: 'insert', role: 'Owner', insertsSoFar: 0, insertBudget: 100 });
   assert.equal(decision.action, 'insert');
   assert.match(decision.denied, /cannot create horse records/i);
 });
 
-test('the same race is denied for Sales Lead, which also lacks createHorse', () => {
-  const decision = authorizeImportRow({ existing: null, role: 'Sales Lead', insertsSoFar: 0, insertBudget: 100 });
+test('an insert row is denied for Sales Lead, which also lacks createHorse', () => {
+  const decision = authorizeImportRow({ action: 'insert', role: 'Sales Lead', insertsSoFar: 0, insertBudget: 100 });
   assert.match(decision.denied, /cannot create horse records/i);
 });
 
-test('a surprise insert past the plan capacity budget is refused even for a creator role', () => {
-  const decision = authorizeImportRow({ existing: null, role: 'Ranch Manager', insertsSoFar: 5, insertBudget: 5 });
+test('an insert past the plan capacity budget is refused even for a creator role', () => {
+  const decision = authorizeImportRow({ action: 'insert', role: 'Ranch Manager', insertsSoFar: 5, insertBudget: 5 });
   assert.equal(decision.capacityExceeded, true);
   assert.equal(decision.denied, null);
 });
 
 test('a creator role within budget is allowed to insert', () => {
-  const decision = authorizeImportRow({ existing: null, role: 'Admin', insertsSoFar: 0, insertBudget: 3 });
+  const decision = authorizeImportRow({ action: 'insert', role: 'Admin', insertsSoFar: 0, insertBudget: 3 });
   assert.equal(decision.action, 'insert');
   assert.equal(decision.denied, null);
   assert.ok(!decision.capacityExceeded);
 });
 
-test('an existing row is authorized as an update by editHorse, independent of the plan', () => {
-  const decision = authorizeImportRow({
-    existing: { horse_id: 'h1' },
-    role: 'Sales Lead',
-    insertsSoFar: 0,
-    insertBudget: 0,
-  });
+test('an update row is authorized by editHorse, independent of capacity', () => {
+  const decision = authorizeImportRow({ action: 'update', role: 'Sales Lead', insertsSoFar: 0, insertBudget: 0 });
   assert.equal(decision.action, 'update');
   assert.equal(decision.denied, null);
 });
 
-test('an update is denied for a role without editHorse', () => {
-  const decision = authorizeImportRow({
-    existing: { horse_id: 'h1' },
-    role: 'Medical Lead',
-    insertsSoFar: 0,
-    insertBudget: 0,
-  });
+test('an update row is denied for a role without editHorse', () => {
+  const decision = authorizeImportRow({ action: 'update', role: 'Medical Lead', insertsSoFar: 0, insertBudget: 0 });
   assert.equal(decision.action, 'update');
   assert.match(decision.denied, /cannot edit horse records/i);
+});
+
+// The handler routes every write through importHorseRows. Pin the structure so
+// the per-row authorization, the pinned update target, and the error/zero-row
+// handling cannot be removed without a test noticing; the behaviour itself is
+// exercised against a simulated database below.
+test('the handler pins each write to authorizeImportRow, the original target, and a rows-changed check', async () => {
+  const source = await readFile(new URL('../../api/_lib/horses-import.js', import.meta.url), 'utf8');
+
+  const rowGate = source.indexOf('authorizeImportRow({ action, role');
+  const firstWrite = Math.min(source.indexOf('.update({ ...fields'), source.indexOf(".from('horses').insert({"));
+  assert.ok(rowGate >= 0 && rowGate < firstWrite, 'every row must be authorized before any write');
+
+  // The update is pinned to the preflight horse_id AND its registration, and
+  // reads back the changed rows, so it cannot edit the wrong horse or count a
+  // no-op as success.
+  assert.match(source, /\.eq\('horse_id', targetHorseId\)/);
+  assert.match(source, /\.eq\('registration_number', registration\)/);
+  assert.match(source, /\.select\('horse_id'\)/);
+  assert.match(source, /updatedRows\.length === 0/);
+
+  const updateError = source.indexOf('if (updateError)');
+  const insertError = source.indexOf('if (insertError)');
+  const updatedIncrement = source.indexOf('updated += 1');
+  const importedIncrement = source.indexOf('imported += 1');
+  assert.ok(updateError >= 0 && updateError < updatedIncrement, 'update errors handled before success count');
+  assert.ok(insertError >= 0 && insertError < importedIncrement, 'insert errors handled before success count');
+  assert.match(source, /existingRowsError/);
+  assert.match(source, /partial:\s*errors\.length > 0/);
+});
+
+// A minimal simulated Supabase: a mutable horses table and the exact query
+// chains importHorseRows uses (update(...).eq().eq().eq().select(), insert()).
+// The table reflects CURRENT reality; the preflight snapshot is passed in
+// separately, so a divergence between the two is modelled directly.
+function makeSupabase(initialHorses) {
+  const horses = initialHorses.map((h) => ({ ...h }));
+  const calls = { inserts: [], updates: [] };
+
+  function makeBuilder() {
+    const filters = [];
+    let op = null;
+    let patch = null;
+    let insertRow = null;
+    let wantRows = false;
+
+    const matches = (h) => filters.every(([kind, col, val]) => (kind === 'in' ? val.includes(h[col]) : h[col] === val));
+
+    async function exec() {
+      if (op === 'update') {
+        const matched = horses.filter(matches);
+        for (const h of matched) Object.assign(h, patch);
+        calls.updates.push({ patch, matchedIds: matched.map((h) => h.horse_id) });
+        return { data: wantRows ? matched.map((h) => ({ horse_id: h.horse_id })) : null, error: null };
+      }
+      if (op === 'insert') {
+        horses.push({ ...insertRow });
+        calls.inserts.push(insertRow);
+        return { error: null };
+      }
+      const data = horses.filter(matches);
+      return { data, error: null };
+    }
+
+    const builder = {
+      select() {
+        if (op === 'update') wantRows = true;
+        else op = 'select';
+        return builder;
+      },
+      eq(col, val) {
+        filters.push(['eq', col, val]);
+        return builder;
+      },
+      in(col, val) {
+        filters.push(['in', col, val]);
+        return builder;
+      },
+      update(obj) {
+        op = 'update';
+        patch = obj;
+        return builder;
+      },
+      insert(obj) {
+        op = 'insert';
+        insertRow = obj;
+        return exec();
+      },
+      then(onFulfilled, onRejected) {
+        return exec().then(onFulfilled, onRejected);
+      },
+    };
+    return builder;
+  }
+
+  return {
+    horses,
+    calls,
+    from(table) {
+      assert.equal(table, 'horses');
+      return makeBuilder();
+    },
+  };
+}
+
+function runImport({ horses, snapshot, role = 'Admin', insertBudget = 100, rows, columnMap }) {
+  const supabase = makeSupabase(horses);
+  return importHorseRows({
+    supabase,
+    workspaceId: 'W',
+    userId: 'U',
+    rows,
+    columnMap,
+    existingByRegistration: new Map(Object.entries(snapshot)),
+    role,
+    insertBudget,
+    capacityExceededMessage: 'over the horse limit',
+  }).then((result) => ({ result, supabase }));
+}
+
+const REG_COLS = { name: 0, registration_number: 1 };
+
+test('a normal update changes the targeted horse and counts once', async () => {
+  const { result, supabase } = await runImport({
+    horses: [{ horse_id: 'A', registration_number: 'REG1', workspace_id: 'W', name: 'OLD' }],
+    snapshot: { REG1: 'A' },
+    rows: [
+      ['Name', 'Registration Number'],
+      ['NEW', 'REG1'],
+    ],
+    columnMap: REG_COLS,
+  });
+  assert.deepEqual(result, { imported: 0, updated: 1, errors: [] });
+  assert.equal(supabase.horses.find((h) => h.horse_id === 'A').name, 'NEW');
+});
+
+test('an update whose target vanished is an error, not "updated: 1" and not an insert', async () => {
+  // The horse existed at preflight (snapshot) but is gone from the live table.
+  const { result, supabase } = await runImport({
+    horses: [],
+    snapshot: { REG1: 'A' },
+    rows: [
+      ['Name', 'Registration Number'],
+      ['NEW', 'REG1'],
+    ],
+    columnMap: REG_COLS,
+  });
+  assert.equal(result.updated, 0, 'a zero-row update must not count as success');
+  assert.equal(result.imported, 0, 'a vanished update target must not become an insert');
+  assert.equal(result.errors.length, 1);
+  assert.match(result.errors[0].message, /no longer matches/i);
+  assert.equal(supabase.calls.inserts.length, 0);
+  assert.equal(supabase.horses.length, 0);
+});
+
+test('an update whose registration moved to another horse never edits that other horse', async () => {
+  // Preflight saw REG1 on horse A. Since then A is gone and REG1 now belongs to
+  // horse B. The update is pinned to A, so B must be left untouched.
+  const { result, supabase } = await runImport({
+    horses: [{ horse_id: 'B', registration_number: 'REG1', workspace_id: 'W', name: 'HORSE B' }],
+    snapshot: { REG1: 'A' },
+    rows: [
+      ['Name', 'Registration Number'],
+      ['SHOULD NOT APPLY', 'REG1'],
+    ],
+    columnMap: REG_COLS,
+  });
+  assert.equal(result.updated, 0);
+  assert.equal(result.imported, 0);
+  assert.equal(result.errors.length, 1);
+  assert.match(result.errors[0].message, /no longer matches/i);
+  assert.equal(supabase.horses.find((h) => h.horse_id === 'B').name, 'HORSE B', 'horse B must be untouched');
+});
+
+test("an Admin's intended update does not silently become a horse creation", async () => {
+  // Admin holds createHorse, so the old bug would have let the vanished-target
+  // row fall through to an insert. Pinning the action forbids that.
+  const { result, supabase } = await runImport({
+    horses: [],
+    snapshot: { REG1: 'A' },
+    role: 'Admin',
+    rows: [
+      ['Name', 'Registration Number'],
+      ['NEW', 'REG1'],
+    ],
+    columnMap: REG_COLS,
+  });
+  assert.equal(result.imported, 0);
+  assert.equal(supabase.calls.inserts.length, 0);
+  assert.equal(result.errors.length, 1);
+});
+
+test('a genuinely new registration inserts once for a creator role', async () => {
+  const { result, supabase } = await runImport({
+    horses: [],
+    snapshot: {},
+    role: 'Admin',
+    rows: [
+      ['Name', 'Registration Number'],
+      ['FRESH', 'REG9'],
+    ],
+    columnMap: REG_COLS,
+  });
+  assert.equal(result.imported, 1);
+  assert.equal(result.updated, 0);
+  assert.equal(supabase.horses.length, 1);
+  assert.equal(supabase.horses[0].registration_number, 'REG9');
+});
+
+test('a new registration is refused for a role without createHorse, with no write', async () => {
+  const { result, supabase } = await runImport({
+    horses: [],
+    snapshot: {},
+    role: 'Owner',
+    rows: [
+      ['Name', 'Registration Number'],
+      ['FRESH', 'REG9'],
+    ],
+    columnMap: REG_COLS,
+  });
+  assert.equal(result.imported, 0);
+  assert.equal(supabase.calls.inserts.length, 0);
+  assert.match(result.errors[0].message, /cannot create horse records/i);
+});
+
+test('a mixed import reports exact successes and failures without cross-contamination', async () => {
+  const { result, supabase } = await runImport({
+    horses: [{ horse_id: 'A', registration_number: 'REG1', workspace_id: 'W', name: 'OLD' }],
+    snapshot: { REG1: 'A', REG2: 'GONE' },
+    role: 'Admin',
+    rows: [
+      ['Name', 'Registration Number'],
+      ['UPDATED', 'REG1'], // real update
+      ['LOST', 'REG2'], // update whose target vanished -> error
+      ['BRAND NEW', 'REG3'], // insert
+    ],
+    columnMap: REG_COLS,
+  });
+  assert.equal(result.updated, 1);
+  assert.equal(result.imported, 1);
+  assert.equal(result.errors.length, 1);
+  assert.equal(result.errors[0].row, 3);
+  assert.equal(supabase.horses.find((h) => h.horse_id === 'A').name, 'UPDATED');
+  assert.equal(
+    supabase.horses.some((h) => h.registration_number === 'REG3'),
+    true,
+  );
 });

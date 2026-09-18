@@ -87,18 +87,17 @@ export function duplicateRegistrationRows(dataRows, columnMap, rows) {
   };
 }
 
-// Authorize a single row's write against the LIVE lookup, not the preflight
-// plan. The plan gates the whole request up front for good UX, but the
-// insert-vs-update branch is remade per row from a fresh lookup, so the two can
-// diverge: a planned update falls through to an insert when the row's
-// registration is deleted or re-registered between the preflight and this
-// lookup. Gating only on the plan let a role holding editHorse but not
-// createHorse (Owner, Sales Lead) create a horse — and skip the capacity limit,
-// since that block is nested under the plan's insert count. This is a pure
-// function so the divergence cases are tested directly rather than by
-// source-text inspection.
-export function authorizeImportRow({ existing, role, insertsSoFar, insertBudget }) {
-  if (existing) {
+// Authorize a single row for the action DECIDED AT PREFLIGHT, and hold the row
+// to that action. `action` is 'update' when the row's registration matched an
+// existing horse in the preflight snapshot, 'insert' otherwise. Nothing may
+// switch it afterwards: a planned update whose target has since disappeared is
+// refused by importHorseRows, never quietly turned into an insert. That switch
+// was two bugs at once — a role holding editHorse but not createHorse (Owner,
+// Sales Lead) could create a horse, and even an Admin's intended update could
+// silently become a creation, both outside what the plan authorized. Pure, so
+// the cases are tested directly.
+export function authorizeImportRow({ action, role, insertsSoFar, insertBudget }) {
+  if (action === 'update') {
     return { action: 'update', denied: requireRoleCapability(role, 'editHorse') };
   }
   const denied = requireRoleCapability(role, 'createHorse');
@@ -111,6 +110,122 @@ export function authorizeImportRow({ existing, role, insertsSoFar, insertBudget 
     return { action: 'insert', denied: null, capacityExceeded: true };
   }
   return { action: 'insert', denied: null };
+}
+
+// Apply the parsed rows to the database, one at a time, holding each row to the
+// action and target the preflight chose. Exported so the whole write path can
+// be exercised against a simulated database, not just its helpers.
+//
+// `existingByRegistration` is the preflight snapshot: registration_number ->
+// horse_id for horses that existed when the plan was built. The live database
+// may have moved since, and every way it can move is refused rather than
+// papered over:
+//   - an intended update whose target row is gone writes to zero rows; that is
+//     an error, never a silent "updated: 1" and never a fallback insert;
+//   - an intended update whose registration now belongs to a different horse
+//     matches zero rows too (the update is pinned to the original horse_id AND
+//     its registration), so it never edits the wrong horse.
+export async function importHorseRows({
+  supabase,
+  workspaceId,
+  userId,
+  rows,
+  columnMap,
+  existingByRegistration,
+  role,
+  insertBudget,
+  capacityExceededMessage,
+}) {
+  let imported = 0;
+  let updated = 0;
+  const errors = [];
+
+  for (let rowIndex = 1; rowIndex < rows.length; rowIndex += 1) {
+    const row = rows[rowIndex];
+    if (!row.length || row.every((cell) => !cell.trim())) continue;
+
+    const value = (field) => (field in columnMap ? String(row[columnMap[field]] || '').trim() : '');
+    const name = value('name');
+    if (!name) {
+      errors.push({ row: rowIndex + 1, message: 'Missing horse name.' });
+      continue;
+    }
+
+    const registration = value('registration_number');
+    const targetHorseId = registration ? existingByRegistration.get(registration) : undefined;
+    const action = targetHorseId ? 'update' : 'insert';
+
+    const decision = authorizeImportRow({ action, role, insertsSoFar: imported, insertBudget });
+    if (decision.denied) {
+      errors.push({ row: rowIndex + 1, message: decision.denied });
+      continue;
+    }
+    if (decision.capacityExceeded) {
+      errors.push({ row: rowIndex + 1, message: capacityExceededMessage });
+      continue;
+    }
+
+    try {
+      if (action === 'update') {
+        const fields = buildHorseUpdateFields(row, columnMap);
+
+        // Pin the write to the horse the preflight identified AND to the
+        // registration it held. If either has moved, this matches zero rows.
+        const { data: updatedRows, error: updateError } = await supabase
+          .from('horses')
+          .update({ ...fields, updated_at: new Date().toISOString() })
+          .eq('workspace_id', workspaceId)
+          .eq('horse_id', targetHorseId)
+          .eq('registration_number', registration)
+          .select('horse_id');
+        if (updateError) {
+          errors.push({ row: rowIndex + 1, message: updateError.message || 'Horse update failed.' });
+          continue;
+        }
+        // Zero rows changed is a failure, not a success. It means the horse this
+        // update targeted no longer holds this registration — deleted, or the
+        // number moved to another horse — so report it for review rather than
+        // counting an update that did not happen or creating a new horse.
+        if (!updatedRows || updatedRows.length === 0) {
+          errors.push({
+            row: rowIndex + 1,
+            message: `Registration ${registration} no longer matches the horse this update targeted, so nothing was changed. Re-import to review it.`,
+          });
+          continue;
+        }
+        updated += 1;
+      } else {
+        const fields = {
+          name,
+          breed: value('breed'),
+          color: value('color'),
+          birthdate: normalizeDate(value('birthdate')) || value('birthdate'),
+          gender: value('gender'),
+          status: value('status') || 'Active',
+          registration_number: registration,
+          registry: value('registry'),
+          microchip: value('microchip'),
+          owner_name: value('owner_name'),
+          barn_name: value('barn_name'),
+        };
+        const { error: insertError } = await supabase.from('horses').insert({
+          workspace_id: workspaceId,
+          horse_id: `horse-${randomUUID()}`,
+          ...fields,
+          payload: { importedBy: userId, importSource: 'csv' },
+        });
+        if (insertError) {
+          errors.push({ row: rowIndex + 1, message: insertError.message || 'Horse insert failed.' });
+          continue;
+        }
+        imported += 1;
+      }
+    } catch (error) {
+      errors.push({ row: rowIndex + 1, message: error?.message || 'Unexpected import failure.' });
+    }
+  }
+
+  return { imported, updated, errors };
 }
 
 export default async function handler(req, res) {
@@ -182,11 +297,13 @@ export default async function handler(req, res) {
   }
 
   const csvRegistrations = [...registrationRows.keys()];
-  let existingRegistrations = new Set();
+  // Capture the target horse_id, not just that the registration exists, so the
+  // write can be pinned to the exact horse the plan chose (see importHorseRows).
+  const existingByRegistration = new Map();
   if (csvRegistrations.length) {
     const { data: existingRows, error: existingRowsError } = await supabase
       .from('horses')
-      .select('registration_number')
+      .select('horse_id, registration_number')
       .eq('workspace_id', workspaceId)
       .in('registration_number', csvRegistrations);
     if (existingRowsError) {
@@ -196,8 +313,17 @@ export default async function handler(req, res) {
           `Unable to verify existing horse registrations. No horses were imported. ${existingRowsError.message || ''}`.trim(),
       });
     }
-    existingRegistrations = new Set((existingRows || []).map((row) => row.registration_number).filter(Boolean));
+    for (const existingRow of existingRows || []) {
+      if (
+        existingRow.registration_number &&
+        existingRow.horse_id &&
+        !existingByRegistration.has(existingRow.registration_number)
+      ) {
+        existingByRegistration.set(existingRow.registration_number, existingRow.horse_id);
+      }
+    }
   }
+  const existingRegistrations = new Set(existingByRegistration.keys());
   const newRegistrationCount = csvRegistrations.filter((reg) => !existingRegistrations.has(reg)).length;
   const noRegistrationRowCount = dataRows.filter((row) => !cellAt(row, 'registration_number')).length;
   const plannedInserts = newRegistrationCount + noRegistrationRowCount;
@@ -206,10 +332,10 @@ export default async function handler(req, res) {
   const canCreateHorses = hasRoleCapability(access.role, 'createHorse');
   const canEditHorses = hasRoleCapability(access.role, 'editHorse');
 
-  // Fast, whole-request rejection when the preflight plan plainly needs a
-  // capability this role lacks. This is UX, not the guarantee: the plan is a
-  // snapshot, so the real authorization is remade per row against a live lookup
-  // (see authorizeImportRow), which is what closes the plan-vs-loop divergence.
+  // Fast, whole-request rejection when the plan plainly needs a capability this
+  // role lacks. Each row is also re-authorized for its pinned action in
+  // importHorseRows, so this is UX (one clear 403 instead of per-row errors),
+  // not the guarantee.
   if (plannedInserts > 0 && !canCreateHorses) {
     return sendJson(res, 403, { ok: false, message: getCapabilityDeniedMessage('createHorse') });
   }
@@ -217,11 +343,10 @@ export default async function handler(req, res) {
     return sendJson(res, 403, { ok: false, message: getCapabilityDeniedMessage('editHorse') });
   }
 
-  // Resolve the insert capacity budget whenever this role COULD create a horse —
-  // not only when the plan predicts inserts — because a planned update can fall
-  // through to an insert if the row's registration disappears after this
-  // preflight. Without a live budget, such a surprise insert would bypass the
-  // plan's capacity check entirely.
+  // Resolve the insert capacity budget whenever this role could create a horse.
+  // The budget is enforced per actual insert in importHorseRows, so the plan
+  // limit holds regardless of how many rows insert; a planned update never turns
+  // into an extra insert, because importHorseRows refuses that divergence.
   let insertBudget = 0;
   let capacityExceededMessage = '';
   if (canCreateHorses) {
@@ -239,100 +364,17 @@ export default async function handler(req, res) {
     capacityExceededMessage = `This import would exceed the plan's ${entitlements.limits.horseLimit} horse limit (${capacity.used} in use). Upgrade to continue.`;
   }
 
-  let imported = 0;
-  let updated = 0;
-  const errors = [];
-
-  for (let rowIndex = 1; rowIndex < rows.length; rowIndex += 1) {
-    const row = rows[rowIndex];
-    if (!row.length || row.every((cell) => !cell.trim())) continue;
-
-    const value = (field) => (field in columnMap ? String(row[columnMap[field]] || '').trim() : '');
-    const name = value('name');
-    if (!name) {
-      errors.push({ row: rowIndex + 1, message: 'Missing horse name.' });
-      continue;
-    }
-
-    const registration = value('registration_number');
-
-    try {
-      let existing = null;
-      if (registration) {
-        const { data, error: lookupError } = await supabase
-          .from('horses')
-          .select('horse_id')
-          .eq('workspace_id', workspaceId)
-          .eq('registration_number', registration)
-          .maybeSingle();
-        if (lookupError) {
-          errors.push({
-            row: rowIndex + 1,
-            message: `Unable to verify existing horse: ${lookupError.message || 'database lookup failed'}`,
-          });
-          continue;
-        }
-        existing = data;
-      }
-
-      const decision = authorizeImportRow({
-        existing,
-        role: access.role,
-        insertsSoFar: imported,
-        insertBudget,
-      });
-      if (decision.denied) {
-        errors.push({ row: rowIndex + 1, message: decision.denied });
-        continue;
-      }
-      if (decision.capacityExceeded) {
-        errors.push({ row: rowIndex + 1, message: capacityExceededMessage });
-        continue;
-      }
-
-      if (existing) {
-        const fields = buildHorseUpdateFields(row, columnMap);
-
-        const { error: updateError } = await supabase
-          .from('horses')
-          .update({ ...fields, updated_at: new Date().toISOString() })
-          .eq('workspace_id', workspaceId)
-          .eq('horse_id', existing.horse_id);
-        if (updateError) {
-          errors.push({ row: rowIndex + 1, message: updateError.message || 'Horse update failed.' });
-          continue;
-        }
-        updated += 1;
-      } else {
-        const fields = {
-          name,
-          breed: value('breed'),
-          color: value('color'),
-          birthdate: normalizeDate(value('birthdate')) || value('birthdate'),
-          gender: value('gender'),
-          status: value('status') || 'Active',
-          registration_number: registration,
-          registry: value('registry'),
-          microchip: value('microchip'),
-          owner_name: value('owner_name'),
-          barn_name: value('barn_name'),
-        };
-        const { error: insertError } = await supabase.from('horses').insert({
-          workspace_id: workspaceId,
-          horse_id: `horse-${randomUUID()}`,
-          ...fields,
-          payload: { importedBy: user.id, importSource: 'csv' },
-        });
-        if (insertError) {
-          errors.push({ row: rowIndex + 1, message: insertError.message || 'Horse insert failed.' });
-          continue;
-        }
-        imported += 1;
-      }
-    } catch (error) {
-      errors.push({ row: rowIndex + 1, message: error?.message || 'Unexpected import failure.' });
-    }
-  }
+  const { imported, updated, errors } = await importHorseRows({
+    supabase,
+    workspaceId,
+    userId: user.id,
+    rows,
+    columnMap,
+    existingByRegistration,
+    role: access.role,
+    insertBudget,
+    capacityExceededMessage,
+  });
 
   await recordAuditEvent(supabase, {
     workspaceId,
