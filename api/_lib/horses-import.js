@@ -87,6 +87,55 @@ export function duplicateRegistrationRows(dataRows, columnMap, rows) {
   };
 }
 
+// A lookup is evidence, not a suggestion. Never choose one of several horse
+// identities or turn an unreadable response into permission to create a horse.
+export function buildExistingRegistrationIndex(rows, requestedRegistrations) {
+  if (!Array.isArray(rows)) throw new Error('Registration lookup did not return a readable array.');
+  const requested = new Set(requestedRegistrations);
+  const index = new Map();
+  const horseIds = new Set();
+  for (const row of rows) {
+    if (
+      !row ||
+      typeof row.horse_id !== 'string' ||
+      !row.horse_id.trim() ||
+      typeof row.registration_number !== 'string' ||
+      !requested.has(row.registration_number)
+    ) {
+      throw new Error('Registration lookup returned an invalid horse identity.');
+    }
+    if (index.has(row.registration_number) || horseIds.has(row.horse_id)) {
+      throw new Error(`Registration ${row.registration_number} has an ambiguous horse identity. Review it first.`);
+    }
+    index.set(row.registration_number, row.horse_id);
+    horseIds.add(row.horse_id);
+  }
+  return index;
+}
+
+// Bound query URLs and detect server row-limit truncation. A truncated result
+// must not misclassify existing horses as new ones. Exact counts concern this
+// query only; they do not make the later writes a transaction.
+async function loadExistingRegistrationIndex(supabase, workspaceId, registrations) {
+  const index = new Map();
+  const chunkSize = 100;
+  for (let offset = 0; offset < registrations.length; offset += chunkSize) {
+    const chunk = registrations.slice(offset, offset + chunkSize);
+    const result = await supabase
+      .from('horses')
+      .select('horse_id, registration_number', { count: 'exact' })
+      .eq('workspace_id', workspaceId)
+      .in('registration_number', chunk);
+    if (result?.error) throw new Error(result.error.message || 'Registration lookup failed.');
+    const found = buildExistingRegistrationIndex(result?.data, chunk);
+    if (!Number.isSafeInteger(result.count) || result.count !== result.data.length) {
+      throw new Error('Registration lookup was incomplete. No import can be planned from a partial result.');
+    }
+    for (const [registration, horseId] of found) index.set(registration, horseId);
+  }
+  return index;
+}
+
 // Authorize a single row for the action DECIDED AT PREFLIGHT, and hold the row
 // to that action. `action` is 'update' when the row's registration matched an
 // existing horse in the preflight snapshot, 'insert' otherwise. Nothing may
@@ -97,6 +146,9 @@ export function duplicateRegistrationRows(dataRows, columnMap, rows) {
 // silently become a creation, both outside what the plan authorized. Pure, so
 // the cases are tested directly.
 export function authorizeImportRow({ action, role, insertsSoFar, insertBudget }) {
+  if (action !== 'update' && action !== 'insert') {
+    return { action, denied: 'Unrecognized import action.' };
+  }
   if (action === 'update') {
     return { action: 'update', denied: requireRoleCapability(role, 'editHorse') };
   }
@@ -106,7 +158,12 @@ export function authorizeImportRow({ action, role, insertsSoFar, insertBudget })
   }
   // Enforce the plan's capacity budget against every actual insert, so the true
   // limit holds even when more rows insert than the plan predicted.
-  if (insertsSoFar >= insertBudget) {
+  if (
+    !Number.isSafeInteger(insertBudget) ||
+    !Number.isSafeInteger(insertsSoFar) ||
+    insertsSoFar < 0 ||
+    insertsSoFar >= insertBudget
+  ) {
     return { action: 'insert', denied: null, capacityExceeded: true };
   }
   return { action: 'insert', denied: null };
@@ -118,8 +175,11 @@ export function authorizeImportRow({ action, role, insertsSoFar, insertBudget })
 //
 // `existingByRegistration` is the preflight snapshot: registration_number ->
 // horse_id for horses that existed when the plan was built. The live database
-// may have moved since, and every way it can move is refused rather than
-// papered over:
+// may have moved since. Conditional updates refuse changed targets; inserts
+// recheck that their registration is still unused. The latter is NOT atomic:
+// another writer can still race after that check. Closing that final window
+// requires a reviewed database constraint/transaction, not another API read.
+// In particular:
 //   - an intended update whose target row is gone writes to zero rows; that is
 //     an error, never a silent "updated: 1" and never a fallback insert;
 //   - an intended update whose registration now belongs to a different horse
@@ -186,15 +246,34 @@ export async function importHorseRows({
         // update targeted no longer holds this registration — deleted, or the
         // number moved to another horse — so report it for review rather than
         // counting an update that did not happen or creating a new horse.
-        if (!updatedRows || updatedRows.length === 0) {
+        if (!Array.isArray(updatedRows) || updatedRows.length !== 1 || updatedRows[0]?.horse_id !== targetHorseId) {
           errors.push({
             row: rowIndex + 1,
-            message: `Registration ${registration} no longer matches the horse this update targeted, so nothing was changed. Re-import to review it.`,
+            message: `Could not confirm the update for registration ${registration}; it may no longer match the targeted horse. Review the record before retrying.`,
           });
           continue;
         }
         updated += 1;
       } else {
+        if (registration) {
+          // A planned insertion must still be new. Never retarget it to UPDATE
+          // if the registration appeared since planning. A failed or malformed
+          // lookup is not evidence of absence either.
+          const current = await supabase
+            .from('horses')
+            .select('horse_id, registration_number')
+            .eq('workspace_id', workspaceId)
+            .eq('registration_number', registration);
+          if (current?.error) throw new Error(current.error.message || 'Registration recheck failed.');
+          const currentIndex = buildExistingRegistrationIndex(current?.data, [registration]);
+          if (currentIndex.size) {
+            errors.push({
+              row: rowIndex + 1,
+              message: `Registration ${registration} appeared after import planning. Nothing was inserted; review it before retrying.`,
+            });
+            continue;
+          }
+        }
         const fields = {
           name,
           breed: value('breed'),
@@ -208,14 +287,22 @@ export async function importHorseRows({
           owner_name: value('owner_name'),
           barn_name: value('barn_name'),
         };
-        const { error: insertError } = await supabase.from('horses').insert({
-          workspace_id: workspaceId,
-          horse_id: `horse-${randomUUID()}`,
-          ...fields,
-          payload: { importedBy: userId, importSource: 'csv' },
-        });
+        const horseId = `horse-${randomUUID()}`;
+        const { data: insertedRows, error: insertError } = await supabase
+          .from('horses')
+          .insert({
+            workspace_id: workspaceId,
+            horse_id: horseId,
+            ...fields,
+            payload: { importedBy: userId, importSource: 'csv' },
+          })
+          .select('horse_id');
         if (insertError) {
           errors.push({ row: rowIndex + 1, message: insertError.message || 'Horse insert failed.' });
+          continue;
+        }
+        if (!Array.isArray(insertedRows) || insertedRows.length !== 1 || insertedRows[0]?.horse_id !== horseId) {
+          errors.push({ row: rowIndex + 1, message: 'Could not confirm the inserted horse. Review before retrying.' });
           continue;
         }
         imported += 1;
@@ -297,31 +384,14 @@ export default async function handler(req, res) {
   }
 
   const csvRegistrations = [...registrationRows.keys()];
-  // Capture the target horse_id, not just that the registration exists, so the
-  // write can be pinned to the exact horse the plan chose (see importHorseRows).
-  const existingByRegistration = new Map();
-  if (csvRegistrations.length) {
-    const { data: existingRows, error: existingRowsError } = await supabase
-      .from('horses')
-      .select('horse_id, registration_number')
-      .eq('workspace_id', workspaceId)
-      .in('registration_number', csvRegistrations);
-    if (existingRowsError) {
-      return sendJson(res, 502, {
-        ok: false,
-        message:
-          `Unable to verify existing horse registrations. No horses were imported. ${existingRowsError.message || ''}`.trim(),
-      });
-    }
-    for (const existingRow of existingRows || []) {
-      if (
-        existingRow.registration_number &&
-        existingRow.horse_id &&
-        !existingByRegistration.has(existingRow.registration_number)
-      ) {
-        existingByRegistration.set(existingRow.registration_number, existingRow.horse_id);
-      }
-    }
+  let existingByRegistration;
+  try {
+    existingByRegistration = await loadExistingRegistrationIndex(supabase, workspaceId, csvRegistrations);
+  } catch (error) {
+    return sendJson(res, 502, {
+      ok: false,
+      message: `Unable to verify existing horse registrations. No horses were imported. ${error.message}`,
+    });
   }
   const existingRegistrations = new Set(existingByRegistration.keys());
   const newRegistrationCount = csvRegistrations.filter((reg) => !existingRegistrations.has(reg)).length;
@@ -343,13 +413,13 @@ export default async function handler(req, res) {
     return sendJson(res, 403, { ok: false, message: getCapabilityDeniedMessage('editHorse') });
   }
 
-  // Resolve the insert capacity budget whenever this role could create a horse.
-  // The budget is enforced per actual insert in importHorseRows, so the plan
-  // limit holds regardless of how many rows insert; a planned update never turns
-  // into an extra insert, because importHorseRows refuses that divergence.
+  // Only the pinned planned inserts consume capacity. Update-only imports
+  // remain possible after a downgrade or during a billing-read outage; they
+  // cannot become inserts. Database capacity enforcement remains authoritative
+  // for competing requests; this running budget covers only this batch.
   let insertBudget = 0;
   let capacityExceededMessage = '';
-  if (canCreateHorses) {
+  if (plannedInserts > 0) {
     const entitlements = await getWorkspaceEntitlements(supabase, workspaceId, user?.email);
     if (!entitlements.ok) {
       return sendJson(res, entitlements.status, { ok: false, message: entitlements.message });
@@ -360,7 +430,15 @@ export default async function handler(req, res) {
       return sendJson(res, capacity.status ?? 403, { ok: false, message: capacity.message });
     }
 
-    insertBudget = entitlements.limits.horseLimit - capacity.used;
+    if (
+      !Number.isSafeInteger(entitlements.limits.horseLimit) ||
+      !Number.isSafeInteger(capacity.used) ||
+      capacity.used < 0 ||
+      capacity.used + plannedInserts > entitlements.limits.horseLimit
+    ) {
+      return sendJson(res, 503, { ok: false, message: 'Unable to verify the horse capacity budget.' });
+    }
+    insertBudget = plannedInserts;
     capacityExceededMessage = `This import would exceed the plan's ${entitlements.limits.horseLimit} horse limit (${capacity.used} in use). Upgrade to continue.`;
   }
 

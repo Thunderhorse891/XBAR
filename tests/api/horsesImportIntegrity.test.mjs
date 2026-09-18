@@ -1,6 +1,8 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import { readFile } from 'node:fs/promises';
+import { spawnSync } from 'node:child_process';
+import { fileURLToPath } from 'node:url';
 
 import {
   authorizeImportRow,
@@ -127,7 +129,7 @@ test('the handler pins each write to authorizeImportRow, the original target, an
   const source = await readFile(new URL('../../api/_lib/horses-import.js', import.meta.url), 'utf8');
 
   const rowGate = source.indexOf('authorizeImportRow({ action, role');
-  const firstWrite = Math.min(source.indexOf('.update({ ...fields'), source.indexOf(".from('horses').insert({"));
+  const firstWrite = Math.min(source.indexOf('.update({ ...fields'), source.indexOf('.insert({'));
   assert.ok(rowGate >= 0 && rowGate < firstWrite, 'every row must be authorized before any write');
 
   // The update is pinned to the preflight horse_id AND its registration, and
@@ -136,7 +138,7 @@ test('the handler pins each write to authorizeImportRow, the original target, an
   assert.match(source, /\.eq\('horse_id', targetHorseId\)/);
   assert.match(source, /\.eq\('registration_number', registration\)/);
   assert.match(source, /\.select\('horse_id'\)/);
-  assert.match(source, /updatedRows\.length === 0/);
+  assert.match(source, /updatedRows\.length !== 1/);
 
   const updateError = source.indexOf('if (updateError)');
   const insertError = source.indexOf('if (insertError)');
@@ -144,7 +146,7 @@ test('the handler pins each write to authorizeImportRow, the original target, an
   const importedIncrement = source.indexOf('imported += 1');
   assert.ok(updateError >= 0 && updateError < updatedIncrement, 'update errors handled before success count');
   assert.ok(insertError >= 0 && insertError < importedIncrement, 'insert errors handled before success count');
-  assert.match(source, /existingRowsError/);
+  assert.match(source, /loadExistingRegistrationIndex/);
   assert.match(source, /partial:\s*errors\.length > 0/);
 });
 
@@ -175,7 +177,7 @@ function makeSupabase(initialHorses) {
       if (op === 'insert') {
         horses.push({ ...insertRow });
         calls.inserts.push(insertRow);
-        return { error: null };
+        return { data: wantRows ? [{ horse_id: insertRow.horse_id }] : null, error: null };
       }
       const data = horses.filter(matches);
       return { data, error: null };
@@ -183,7 +185,7 @@ function makeSupabase(initialHorses) {
 
     const builder = {
       select() {
-        if (op === 'update') wantRows = true;
+        if (op === 'update' || op === 'insert') wantRows = true;
         else op = 'select';
         return builder;
       },
@@ -203,7 +205,7 @@ function makeSupabase(initialHorses) {
       insert(obj) {
         op = 'insert';
         insertRow = obj;
-        return exec();
+        return builder;
       },
       then(onFulfilled, onRejected) {
         return exec().then(onFulfilled, onRejected);
@@ -267,7 +269,7 @@ test('an update whose target vanished is an error, not "updated: 1" and not an i
   assert.equal(result.updated, 0, 'a zero-row update must not count as success');
   assert.equal(result.imported, 0, 'a vanished update target must not become an insert');
   assert.equal(result.errors.length, 1);
-  assert.match(result.errors[0].message, /no longer matches/i);
+  assert.match(result.errors[0].message, /no longer match/i);
   assert.equal(supabase.calls.inserts.length, 0);
   assert.equal(supabase.horses.length, 0);
 });
@@ -287,7 +289,7 @@ test('an update whose registration moved to another horse never edits that other
   assert.equal(result.updated, 0);
   assert.equal(result.imported, 0);
   assert.equal(result.errors.length, 1);
-  assert.match(result.errors[0].message, /no longer matches/i);
+  assert.match(result.errors[0].message, /no longer match/i);
   assert.equal(supabase.horses.find((h) => h.horse_id === 'B').name, 'HORSE B', 'horse B must be untouched');
 });
 
@@ -364,4 +366,20 @@ test('a mixed import reports exact successes and failures without cross-contamin
     supabase.horses.some((h) => h.registration_number === 'REG3'),
     true,
   );
+});
+
+// Keep the full HTTP-handler contract in the registered Node chain. The child
+// enables VM modules for this test only; production Node needs no extra flag.
+test('default HTTP handler: complete registration identity safety contract', { timeout: 30000 }, () => {
+  const result = spawnSync(
+    process.execPath,
+    [
+      '--experimental-vm-modules',
+      '--test',
+      fileURLToPath(new URL('./fixtures/horsesImportHandler.cases.mjs', import.meta.url)),
+    ],
+    { encoding: 'utf8', timeout: 25000, maxBuffer: 4 * 1024 * 1024 },
+  );
+  assert.ifError(result.error);
+  assert.equal(result.status, 0, `${result.stdout}\n${result.stderr}`);
 });
