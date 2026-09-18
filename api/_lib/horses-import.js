@@ -7,6 +7,7 @@ import { normalizeDate } from './document-extraction.js';
 import { enforceRateLimit } from './rate-limit.js';
 import { horsesImportSchema, parseBody } from './validation.js';
 import { applyCors } from './cors.js';
+import { requireRoleCapability } from './permissions.js';
 
 // Bulk CSV import of horses. Accepts { workspaceId, csv } where csv is the
 // raw file contents. Header names are matched case-insensitively against the
@@ -86,19 +87,58 @@ export default async function handler(req, res) {
   // count), then verify plan capacity before any row is written.
   const cellAt = (row, field) => (field in columnMap ? String(row[columnMap[field]] || '').trim() : '');
   const dataRows = rows.slice(1).filter((row) => row.length && row.some((cell) => cell.trim()) && cellAt(row, 'name'));
-  const csvRegistrations = [...new Set(dataRows.map((row) => cellAt(row, 'registration_number')).filter(Boolean))];
+  const registrationRows = new Map();
+  for (let index = 0; index < dataRows.length; index += 1) {
+    const registration = cellAt(dataRows[index], 'registration_number');
+    if (!registration) continue;
+    const rowNumber = rows.indexOf(dataRows[index]) + 1;
+    const seen = registrationRows.get(registration) || [];
+    seen.push(rowNumber);
+    registrationRows.set(registration, seen);
+  }
+  const duplicateRegistrations = [...registrationRows.entries()].filter(([, rowNumbers]) => rowNumbers.length > 1);
+  if (duplicateRegistrations.length) {
+    return sendJson(res, 400, {
+      ok: false,
+      message: `CSV contains duplicate registration numbers: ${duplicateRegistrations
+        .map(([registration, rowNumbers]) => `${registration} (rows ${rowNumbers.join(', ')})`)
+        .join('; ')}. Resolve duplicates before importing.`,
+    });
+  }
+
+  const csvRegistrations = [...registrationRows.keys()];
   let existingRegistrations = new Set();
   if (csvRegistrations.length) {
-    const { data: existingRows } = await supabase
+    const { data: existingRows, error: existingRowsError } = await supabase
       .from('horses')
       .select('registration_number')
       .eq('workspace_id', workspaceId)
       .in('registration_number', csvRegistrations);
-    existingRegistrations = new Set((existingRows || []).map((row) => row.registration_number));
+    if (existingRowsError) {
+      return sendJson(res, 502, {
+        ok: false,
+        message: `Unable to verify existing horse registrations. No horses were imported. ${existingRowsError.message || ''}`.trim(),
+      });
+    }
+    existingRegistrations = new Set((existingRows || []).map((row) => row.registration_number).filter(Boolean));
   }
   const newRegistrationCount = csvRegistrations.filter((reg) => !existingRegistrations.has(reg)).length;
   const noRegistrationRowCount = dataRows.filter((row) => !cellAt(row, 'registration_number')).length;
   const plannedInserts = newRegistrationCount + noRegistrationRowCount;
+  const plannedUpdates = csvRegistrations.filter((reg) => existingRegistrations.has(reg)).length;
+
+  if (plannedInserts > 0) {
+    const denied = requireRoleCapability(access.role, 'createHorse');
+    if (denied) {
+      return sendJson(res, 403, { ok: false, message: denied });
+    }
+  }
+  if (plannedUpdates > 0) {
+    const denied = requireRoleCapability(access.role, 'editHorse');
+    if (denied) {
+      return sendJson(res, 403, { ok: false, message: denied });
+    }
+  }
 
   if (plannedInserts > 0) {
     const entitlements = await getWorkspaceEntitlements(supabase, workspaceId, user?.email);
@@ -128,50 +168,84 @@ export default async function handler(req, res) {
     }
 
     const registration = value('registration_number');
-    const fields = {
-      name,
-      breed: value('breed'),
-      color: value('color'),
-      birthdate: normalizeDate(value('birthdate')) || value('birthdate'),
-      gender: value('gender'),
-      status: value('status') || 'Active',
-      registration_number: registration,
-      registry: value('registry'),
-      microchip: value('microchip'),
-      owner_name: value('owner_name'),
-      barn_name: value('barn_name'),
-    };
 
     try {
       let existing = null;
       if (registration) {
-        const { data } = await supabase
+        const { data, error: lookupError } = await supabase
           .from('horses')
           .select('horse_id')
           .eq('workspace_id', workspaceId)
           .eq('registration_number', registration)
           .maybeSingle();
+        if (lookupError) {
+          errors.push({
+            row: rowIndex + 1,
+            message: `Unable to verify existing horse: ${lookupError.message || 'database lookup failed'}`,
+          });
+          continue;
+        }
         existing = data;
       }
 
       if (existing) {
-        await supabase
+        const fields = { name };
+        for (const field of [
+          'breed',
+          'color',
+          'gender',
+          'status',
+          'registration_number',
+          'registry',
+          'microchip',
+          'owner_name',
+          'barn_name',
+        ]) {
+          if (field in columnMap) fields[field] = value(field);
+        }
+        if ('birthdate' in columnMap) {
+          const rawBirthdate = value('birthdate');
+          fields.birthdate = normalizeDate(rawBirthdate) || rawBirthdate;
+        }
+
+        const { error: updateError } = await supabase
           .from('horses')
           .update({ ...fields, updated_at: new Date().toISOString() })
           .eq('workspace_id', workspaceId)
           .eq('horse_id', existing.horse_id);
+        if (updateError) {
+          errors.push({ row: rowIndex + 1, message: updateError.message || 'Horse update failed.' });
+          continue;
+        }
         updated += 1;
       } else {
-        await supabase.from('horses').insert({
+        const fields = {
+          name,
+          breed: value('breed'),
+          color: value('color'),
+          birthdate: normalizeDate(value('birthdate')) || value('birthdate'),
+          gender: value('gender'),
+          status: value('status') || 'Active',
+          registration_number: registration,
+          registry: value('registry'),
+          microchip: value('microchip'),
+          owner_name: value('owner_name'),
+          barn_name: value('barn_name'),
+        };
+        const { error: insertError } = await supabase.from('horses').insert({
           workspace_id: workspaceId,
           horse_id: `horse-${randomUUID()}`,
           ...fields,
           payload: { importedBy: user.id, importSource: 'csv' },
         });
+        if (insertError) {
+          errors.push({ row: rowIndex + 1, message: insertError.message || 'Horse insert failed.' });
+          continue;
+        }
         imported += 1;
       }
     } catch (error) {
-      errors.push({ row: rowIndex + 1, message: error.message });
+      errors.push({ row: rowIndex + 1, message: error?.message || 'Unexpected import failure.' });
     }
   }
 
@@ -183,7 +257,7 @@ export default async function handler(req, res) {
     metadata: { imported, updated, errors: errors.length },
   });
 
-  return sendJson(res, 200, { ok: true, imported, updated, errors });
+  return sendJson(res, 200, { ok: true, partial: errors.length > 0, imported, updated, errors });
 }
 
 // Small CSV parser with quoted-field support (no external dependency).
