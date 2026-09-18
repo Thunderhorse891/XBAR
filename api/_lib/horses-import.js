@@ -29,6 +29,48 @@ const COLUMN_ALIASES = {
 
 const RATE_LIMIT = { bucket: 'horses-import', limit: 6, windowSeconds: 60 };
 
+function rowValue(row, columnMap, field) {
+  return field in columnMap ? String(row[columnMap[field]] || '').trim() : '';
+}
+
+export function buildHorseUpdateFields(row, columnMap) {
+  const fields = { name: rowValue(row, columnMap, 'name') };
+  for (const field of [
+    'breed',
+    'color',
+    'gender',
+    'status',
+    'registration_number',
+    'registry',
+    'microchip',
+    'owner_name',
+    'barn_name',
+  ]) {
+    if (field in columnMap) fields[field] = rowValue(row, columnMap, field);
+  }
+  if ('birthdate' in columnMap) {
+    const rawBirthdate = rowValue(row, columnMap, 'birthdate');
+    fields.birthdate = normalizeDate(rawBirthdate) || rawBirthdate;
+  }
+  return fields;
+}
+
+export function duplicateRegistrationRows(dataRows, columnMap, rows) {
+  const registrationRows = new Map();
+  for (const row of dataRows) {
+    const registration = rowValue(row, columnMap, 'registration_number');
+    if (!registration) continue;
+    const rowNumber = rows.indexOf(row) + 1;
+    const seen = registrationRows.get(registration) || [];
+    seen.push(rowNumber);
+    registrationRows.set(registration, seen);
+  }
+  return {
+    registrationRows,
+    duplicates: [...registrationRows.entries()].filter(([, rowNumbers]) => rowNumbers.length > 1),
+  };
+}
+
 export default async function handler(req, res) {
   if (!applyCors(req, res)) {
     return;
@@ -85,18 +127,9 @@ export default async function handler(req, res) {
   // gate. Compute exactly how many NEW horses this CSV creates (rows whose
   // registration number matches an existing horse update in place and don't
   // count), then verify plan capacity before any row is written.
-  const cellAt = (row, field) => (field in columnMap ? String(row[columnMap[field]] || '').trim() : '');
+  const cellAt = (row, field) => rowValue(row, columnMap, field);
   const dataRows = rows.slice(1).filter((row) => row.length && row.some((cell) => cell.trim()) && cellAt(row, 'name'));
-  const registrationRows = new Map();
-  for (let index = 0; index < dataRows.length; index += 1) {
-    const registration = cellAt(dataRows[index], 'registration_number');
-    if (!registration) continue;
-    const rowNumber = rows.indexOf(dataRows[index]) + 1;
-    const seen = registrationRows.get(registration) || [];
-    seen.push(rowNumber);
-    registrationRows.set(registration, seen);
-  }
-  const duplicateRegistrations = [...registrationRows.entries()].filter(([, rowNumbers]) => rowNumbers.length > 1);
+  const { registrationRows, duplicates: duplicateRegistrations } = duplicateRegistrationRows(dataRows, columnMap, rows);
   if (duplicateRegistrations.length) {
     return sendJson(res, 400, {
       ok: false,
@@ -189,24 +222,7 @@ export default async function handler(req, res) {
       }
 
       if (existing) {
-        const fields = { name };
-        for (const field of [
-          'breed',
-          'color',
-          'gender',
-          'status',
-          'registration_number',
-          'registry',
-          'microchip',
-          'owner_name',
-          'barn_name',
-        ]) {
-          if (field in columnMap) fields[field] = value(field);
-        }
-        if ('birthdate' in columnMap) {
-          const rawBirthdate = value('birthdate');
-          fields.birthdate = normalizeDate(rawBirthdate) || rawBirthdate;
-        }
+        const fields = buildHorseUpdateFields(row, columnMap);
 
         const { error: updateError } = await supabase
           .from('horses')
