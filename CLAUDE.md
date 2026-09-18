@@ -18,6 +18,14 @@ A change is not done when the code is written. It is done when it is **live and 
 
 **Never merge while the PR's own checks are still in progress.** Read each check's `conclusion`, on the PR's head commit, before merging.
 
+### Merge on open threads, not just green checks
+
+**Green CI is not "no open findings."** Before merging, re-read the review threads on the PR's **current head** — not an earlier one — and confirm every finding is resolved or answered. Reviews arrive on their own clock: a reviewer can post against the exact head your checks just went green on.
+
+This is written down because it shipped a regression. #222 was merged on four green checks while four findings — one of them a P1 — had been posted three minutes earlier against that same head. Five wrong-name regressions reached production as a result. The checks were green and the merge was still wrong, because the threads were never read.
+
+Checks and threads are two separate gates. Both must be clear on the head SHA before the merge.
+
 ### Read the right checks: pre-merge and post-merge runs are different things
 
 A merge commit starts its own `ci` and `codeql` runs on `main`, and those necessarily begin **after** the merge. They are not the PR's checks and say nothing about whether the merge was safe.
@@ -61,6 +69,18 @@ Owner's standing instruction: **use her logo and brand identity on this app, eve
 
 When a value cannot be determined, **refuse** — return nothing and let a person decide. A plausible answer is worse than no answer, because nobody checks it.
 
+## Hold the whole contract, not the case in front of you
+
+A fix is finished when the **whole** behaviour is right, not when the case that prompted it passes. The OCR name extractor took five review rounds in ninety minutes: every round verified its fix against the case just raised, and every round silently broke a different one — twice reaching production — because nobody was holding the whole behaviour at once.
+
+The fix was `tests/registrationExtractionCorpus.test.ts` — 26 rows, every case anyone raised across #222 and #223, each asserting **what a person reading the paper would say**, not what the code currently does. It made "am I done?" checkable instead of a matter of opinion. Scores, for context: 11/26 before this work, 21/26 after the bad merge, 26/26 now.
+
+- A change to that extractor is done when **all 26 rows pass**, not when the row that prompted it passes.
+- When you find a new case, **add a row.** The corpus only holds the contract if it keeps growing with it.
+- **Never relax a row to make a change go green.** A row that pins correct behaviour is fixed by fixing the code — exactly the guarantees rule below. If a row is genuinely wrong, correct it and verify the correction by reintroducing the old behaviour and watching it fail.
+
+The same discipline applies to any surface with more than one case to satisfy: pin the full set, and measure against the full set.
+
 ## Guarantees that must not be weakened
 
 Tests pin these deliberately. If one fails, fix the code — do not soften the assertion.
@@ -71,9 +91,25 @@ Tests pin these deliberately. If one fails, fix the code — do not soften the a
 | Failed sign-out on workspace setup shows the error inline | `tests/auth-smoke/setup-signout.spec.ts`                                          |
 | Brand tokens                                              | `tests/brandTokens.test.ts`                                                       |
 | A registration number never becomes a horse's name        | `tests/horseNameFromDocument.test.ts`                                             |
+| The OCR extractor reads names the way a person would      | `tests/registrationExtractionCorpus.test.ts`                                      |
 | Account deletion re-checks membership _before_ deleting   | `tests/api/accountDeletion.test.mjs`                                              |
+| Server and client permission matrices cannot diverge      | `tests/api/permissionsParity.test.mjs`                                            |
+| Server and client entitlement helpers cannot diverge      | `tests/api/entitlementHelperParity.test.mjs`                                      |
 
 A test that pins broken behaviour gets replaced, not deleted — and the replacement is verified by reintroducing the defect and watching it fail.
+
+### Duplicated policy needs a parity test, not a comment
+
+When the same security or entitlement policy exists in two places — because one copy runs client-side and the other runs where it cannot import the first — **a comment saying "keep these in sync" is not a mechanism.** Two copies drift, and for a security matrix one direction is worse than the other: if the server copy ever grants a capability the client withholds, a role the product presents as unable to act can act through the API, and nothing in the UI would show it.
+
+Pin it with a test that reads both files and compares them, the way `tests/api/permissionsParity.test.mjs` and `tests/api/entitlementHelperParity.test.mjs` do:
+
+- Assert the privilege-escalating direction (server ⊆ client for grants) **separately**, because that is the direction that escalates.
+- Pin that an **unknown** role falls closed, not open.
+- Pin the specific grants the privileged path actually depends on, so a well-meaning tightening elsewhere can't silently break it.
+- Verify the test by **simulating the drift** — grant one side a capability the other lacks and watch the assertions fail — not by assuming it works.
+
+This is why `api/_lib/permissions.js` exists as a second copy at all: the CSV import handler holds the Supabase **service role**, which bypasses table RLS by design, so it must authorize the action itself before any privileged write and cannot reach the Vite-aliased client module to do it.
 
 ## Repo notes worth knowing
 
