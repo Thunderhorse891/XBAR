@@ -2,14 +2,8 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 import { readFile } from 'node:fs/promises';
 
-import {
-  buildHorseUpdateFields,
-  duplicateRegistrationRows,
-} from '../../api/_lib/horses-import.js';
-import {
-  getCapabilityDeniedMessage,
-  hasRoleCapability,
-} from '../../api/_lib/permissions.js';
+import { buildHorseUpdateFields, duplicateRegistrationRows } from '../../api/_lib/horses-import.js';
+import { getCapabilityDeniedMessage, hasRoleCapability } from '../../api/_lib/permissions.js';
 
 test('server horse import permissions match the intended create/edit role matrix', () => {
   const expectations = {
@@ -77,7 +71,7 @@ test('horse import checks authorization and ordinary Supabase errors before succ
 
   const createGate = source.indexOf("requireRoleCapability(access.role, 'createHorse')");
   const editGate = source.indexOf("requireRoleCapability(access.role, 'editHorse')");
-  const firstWrite = Math.min(source.indexOf(".update({ ...fields"), source.indexOf(".from('horses').insert({"));
+  const firstWrite = Math.min(source.indexOf('.update({ ...fields'), source.indexOf(".from('horses').insert({"));
 
   assert.ok(createGate >= 0 && createGate < firstWrite, 'create capability must be checked before writes');
   assert.ok(editGate >= 0 && editGate < firstWrite, 'edit capability must be checked before writes');

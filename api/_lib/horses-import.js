@@ -150,7 +150,8 @@ export default async function handler(req, res) {
     if (existingRowsError) {
       return sendJson(res, 502, {
         ok: false,
-        message: `Unable to verify existing horse registrations. No horses were imported. ${existingRowsError.message || ''}`.trim(),
+        message:
+          `Unable to verify existing horse registrations. No horses were imported. ${existingRowsError.message || ''}`.trim(),
       });
     }
     existingRegistrations = new Set((existingRows || []).map((row) => row.registration_number).filter(Boolean));
