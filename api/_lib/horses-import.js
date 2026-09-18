@@ -7,7 +7,7 @@ import { normalizeDate } from './document-extraction.js';
 import { enforceRateLimit } from './rate-limit.js';
 import { horsesImportSchema, parseBody } from './validation.js';
 import { applyCors } from './cors.js';
-import { requireRoleCapability } from './permissions.js';
+import { hasRoleCapability, getCapabilityDeniedMessage, requireRoleCapability } from './permissions.js';
 
 // Bulk CSV import of horses. Accepts { workspaceId, csv } where csv is the
 // raw file contents. Header names are matched case-insensitively against the
@@ -39,7 +39,6 @@ export function buildHorseUpdateFields(row, columnMap) {
     'breed',
     'color',
     'gender',
-    'status',
     'registration_number',
     'registry',
     'microchip',
@@ -47,6 +46,17 @@ export function buildHorseUpdateFields(row, columnMap) {
     'barn_name',
   ]) {
     if (field in columnMap) fields[field] = rowValue(row, columnMap, field);
+  }
+  // status is asymmetric from the other columns on purpose. It drives lifecycle
+  // and filtering, and '' is not a value the rest of the app understands. The
+  // insert path defaults a blank status to 'Active' rather than writing '', so
+  // the update path must not blank an existing status either: a supplied,
+  // non-empty status is honoured, but a supplied blank preserves the stored
+  // status instead of clearing it. Every other column keeps the "supplied blank
+  // is an intentional blank" rule.
+  if ('status' in columnMap) {
+    const status = rowValue(row, columnMap, 'status');
+    if (status) fields.status = status;
   }
   if ('birthdate' in columnMap) {
     const rawBirthdate = rowValue(row, columnMap, 'birthdate');
@@ -56,11 +66,17 @@ export function buildHorseUpdateFields(row, columnMap) {
 }
 
 export function duplicateRegistrationRows(dataRows, columnMap, rows) {
+  // Map each row array reference to its 1-based position once, so a large bulk
+  // import does not pay O(n^2) for rows.indexOf(row) per data row.
+  const rowNumberByRef = new Map();
+  rows.forEach((row, index) => {
+    if (!rowNumberByRef.has(row)) rowNumberByRef.set(row, index + 1);
+  });
   const registrationRows = new Map();
   for (const row of dataRows) {
     const registration = rowValue(row, columnMap, 'registration_number');
     if (!registration) continue;
-    const rowNumber = rows.indexOf(row) + 1;
+    const rowNumber = rowNumberByRef.get(row) ?? rows.indexOf(row) + 1;
     const seen = registrationRows.get(registration) || [];
     seen.push(rowNumber);
     registrationRows.set(registration, seen);
@@ -69,6 +85,32 @@ export function duplicateRegistrationRows(dataRows, columnMap, rows) {
     registrationRows,
     duplicates: [...registrationRows.entries()].filter(([, rowNumbers]) => rowNumbers.length > 1),
   };
+}
+
+// Authorize a single row's write against the LIVE lookup, not the preflight
+// plan. The plan gates the whole request up front for good UX, but the
+// insert-vs-update branch is remade per row from a fresh lookup, so the two can
+// diverge: a planned update falls through to an insert when the row's
+// registration is deleted or re-registered between the preflight and this
+// lookup. Gating only on the plan let a role holding editHorse but not
+// createHorse (Owner, Sales Lead) create a horse — and skip the capacity limit,
+// since that block is nested under the plan's insert count. This is a pure
+// function so the divergence cases are tested directly rather than by
+// source-text inspection.
+export function authorizeImportRow({ existing, role, insertsSoFar, insertBudget }) {
+  if (existing) {
+    return { action: 'update', denied: requireRoleCapability(role, 'editHorse') };
+  }
+  const denied = requireRoleCapability(role, 'createHorse');
+  if (denied) {
+    return { action: 'insert', denied };
+  }
+  // Enforce the plan's capacity budget against every actual insert, so the true
+  // limit holds even when more rows insert than the plan predicted.
+  if (insertsSoFar >= insertBudget) {
+    return { action: 'insert', denied: null, capacityExceeded: true };
+  }
+  return { action: 'insert', denied: null };
 }
 
 export default async function handler(req, res) {
@@ -161,20 +203,28 @@ export default async function handler(req, res) {
   const plannedInserts = newRegistrationCount + noRegistrationRowCount;
   const plannedUpdates = csvRegistrations.filter((reg) => existingRegistrations.has(reg)).length;
 
-  if (plannedInserts > 0) {
-    const denied = requireRoleCapability(access.role, 'createHorse');
-    if (denied) {
-      return sendJson(res, 403, { ok: false, message: denied });
-    }
+  const canCreateHorses = hasRoleCapability(access.role, 'createHorse');
+  const canEditHorses = hasRoleCapability(access.role, 'editHorse');
+
+  // Fast, whole-request rejection when the preflight plan plainly needs a
+  // capability this role lacks. This is UX, not the guarantee: the plan is a
+  // snapshot, so the real authorization is remade per row against a live lookup
+  // (see authorizeImportRow), which is what closes the plan-vs-loop divergence.
+  if (plannedInserts > 0 && !canCreateHorses) {
+    return sendJson(res, 403, { ok: false, message: getCapabilityDeniedMessage('createHorse') });
   }
-  if (plannedUpdates > 0) {
-    const denied = requireRoleCapability(access.role, 'editHorse');
-    if (denied) {
-      return sendJson(res, 403, { ok: false, message: denied });
-    }
+  if (plannedUpdates > 0 && !canEditHorses) {
+    return sendJson(res, 403, { ok: false, message: getCapabilityDeniedMessage('editHorse') });
   }
 
-  if (plannedInserts > 0) {
+  // Resolve the insert capacity budget whenever this role COULD create a horse —
+  // not only when the plan predicts inserts — because a planned update can fall
+  // through to an insert if the row's registration disappears after this
+  // preflight. Without a live budget, such a surprise insert would bypass the
+  // plan's capacity check entirely.
+  let insertBudget = 0;
+  let capacityExceededMessage = '';
+  if (canCreateHorses) {
     const entitlements = await getWorkspaceEntitlements(supabase, workspaceId, user?.email);
     if (!entitlements.ok) {
       return sendJson(res, entitlements.status, { ok: false, message: entitlements.message });
@@ -184,6 +234,9 @@ export default async function handler(req, res) {
     if (!capacity.ok) {
       return sendJson(res, capacity.status ?? 403, { ok: false, message: capacity.message });
     }
+
+    insertBudget = entitlements.limits.horseLimit - capacity.used;
+    capacityExceededMessage = `This import would exceed the plan's ${entitlements.limits.horseLimit} horse limit (${capacity.used} in use). Upgrade to continue.`;
   }
 
   let imported = 0;
@@ -220,6 +273,21 @@ export default async function handler(req, res) {
           continue;
         }
         existing = data;
+      }
+
+      const decision = authorizeImportRow({
+        existing,
+        role: access.role,
+        insertsSoFar: imported,
+        insertBudget,
+      });
+      if (decision.denied) {
+        errors.push({ row: rowIndex + 1, message: decision.denied });
+        continue;
+      }
+      if (decision.capacityExceeded) {
+        errors.push({ row: rowIndex + 1, message: capacityExceededMessage });
+        continue;
       }
 
       if (existing) {
