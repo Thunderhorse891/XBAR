@@ -136,12 +136,14 @@ async function invoke(options = {}) {
     },
     './supabase-admin.js': {
       requireWorkspaceAccess: async () => {
-        return options.access ?? {
-          ok: true,
-          role: options.role ?? 'Admin',
-          user: { id: 'U', email: 'test@example.invalid' },
-          supabase: database,
-        };
+        return (
+          options.access ?? {
+            ok: true,
+            role: options.role ?? 'Admin',
+            user: { id: 'U', email: 'test@example.invalid' },
+            supabase: database,
+          }
+        );
       },
     },
     './entitlements.js': {
@@ -416,7 +418,10 @@ test('mixed batch preserves successes and reports only failed rows', async () =>
   assert.equal(result.body.updated, 1);
   assert.equal(result.body.imported, 1);
   assert.equal(result.body.partial, true);
-  assert.deepEqual(result.body.errors.map((error) => error.row), [3]);
+  assert.deepEqual(
+    result.body.errors.map((error) => error.row),
+    [3],
+  );
   assert.deepEqual(result.audits[0].metadata, { imported: 1, updated: 1, errors: 1 });
 });
 
