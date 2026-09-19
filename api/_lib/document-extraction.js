@@ -412,27 +412,64 @@ function normalizeName(value) {
     .toLowerCase();
 }
 
-// Group a batch of extractions into horse profile candidates. Documents that
-// share a registration number, microchip, or normalized horse name merge into
-// a single candidate (e.g. Coggins + registration -> one horse record).
+// Two identifiers conflict when both are present and differ. An absent value
+// on either side is not a conflict — a Coggins with no registration number
+// does not contradict a registration paper that has one.
+function identitiesConflict(a, b) {
+  return Boolean(a) && Boolean(b) && a !== b;
+}
+
+// Group a batch of extractions into horse profile candidates. A shared
+// registration number or microchip is a strong identity and merges documents
+// into one candidate. A shared *name* is the weakest signal and merges only
+// when neither side carries a strong identifier the other contradicts —
+// otherwise a sire and a foal that happen to share a name (or two different
+// horses both read as "STAR") would collapse into one record. Any conflict —
+// same name but different registration/microchip, or the same registration
+// with a different microchip — is refused or flagged `ambiguous`, which keeps
+// documents-bulk-upload from auto-attaching or auto-creating from it (it gates
+// on `!ambiguous`), forcing a person to resolve the identity instead.
 export function groupExtractionsIntoCandidates(extractions) {
   const candidates = [];
 
-  const findCandidate = (extraction) => {
+  const locate = (registration, microchip, name) => {
+    // Strong identity wins first: a shared registration or microchip is the
+    // same horse. A conflicting *other* strong id on that match is suspicious
+    // rather than a different horse, so merge but flag for review.
+    const strong = candidates.find(
+      (candidate) =>
+        (registration && candidate.registrationNumber === registration) ||
+        (microchip && candidate.microchip === microchip),
+    );
+    if (strong) {
+      const conflicted =
+        identitiesConflict(registration, strong.registrationNumber) || identitiesConflict(microchip, strong.microchip);
+      return { candidate: strong, conflicted };
+    }
+
+    const named = candidates.find((candidate) => name && candidate.name === name);
+    if (named) {
+      if (
+        identitiesConflict(registration, named.registrationNumber) ||
+        identitiesConflict(microchip, named.microchip)
+      ) {
+        // Same name, different identity: not the same horse. Refuse the merge
+        // and flag the existing record so the collision surfaces for review.
+        named.ambiguous = true;
+        return { candidate: undefined, nameCollision: true };
+      }
+      return { candidate: named };
+    }
+    return { candidate: undefined };
+  };
+
+  for (const extraction of extractions) {
     const registration = normalizeIdentity(extraction.extractedData.registrationNumber);
     const microchip = normalizeIdentity(extraction.extractedData.microchip);
     const name = normalizeName(extraction.extractedData.name);
 
-    return candidates.find((candidate) => {
-      if (registration && candidate.registrationNumber === registration) return true;
-      if (microchip && candidate.microchip === microchip) return true;
-      if (name && candidate.name === name) return true;
-      return false;
-    });
-  };
-
-  for (const extraction of extractions) {
-    let candidate = findCandidate(extraction);
+    const { candidate: match, conflicted, nameCollision } = locate(registration, microchip, name);
+    let candidate = match;
     if (!candidate) {
       candidate = {
         registrationNumber: '',
@@ -447,6 +484,9 @@ export function groupExtractionsIntoCandidates(extractions) {
       };
       candidates.push(candidate);
     }
+    // A conflicting strong id on a merge, or a name collision that forced a new
+    // record, both mean the identity is not settled — never silently commit it.
+    if (conflicted || nameCollision) candidate.ambiguous = true;
 
     candidate.documentRefs.push(extraction.ref);
     candidate.documentTypes.push(extraction.documentType);

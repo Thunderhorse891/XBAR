@@ -196,6 +196,56 @@ test('different horses stay separate candidates', () => {
   assert.equal(candidates.length, 2);
 });
 
+// Build a minimal extraction in the shape groupExtractionsIntoCandidates reads,
+// so the grouping identity rules can be exercised without full OCR text.
+const extractionOf = (ref, extractedData, { multiple = false, confidence = 0.95 } = {}) => ({
+  ref,
+  documentType: 'registration',
+  overallConfidence: confidence,
+  multiHorse: { multiple },
+  extractedData,
+  confidenceMap: Object.fromEntries(Object.keys(extractedData).map((key) => [key, confidence])),
+});
+
+test('same name but conflicting registration numbers are two horses, both flagged ambiguous', () => {
+  const candidates = groupExtractionsIntoCandidates([
+    extractionOf('doc-1', { name: 'Star', registrationNumber: 'AQHA 111111' }),
+    extractionOf('doc-2', { name: 'Star', registrationNumber: 'AQHA 222222' }),
+  ]);
+  assert.equal(candidates.length, 2, 'a shared name must not merge horses with different registrations');
+  assert.ok(
+    candidates.every((candidate) => candidate.ambiguous),
+    'a name collision with a conflicting identity flags both records for review',
+  );
+});
+
+test('same name but conflicting microchips are two horses, both flagged ambiguous', () => {
+  const candidates = groupExtractionsIntoCandidates([
+    extractionOf('doc-1', { name: 'Star', microchip: '985112004567890' }),
+    extractionOf('doc-2', { name: 'Star', microchip: '985112009999999' }),
+  ]);
+  assert.equal(candidates.length, 2);
+  assert.ok(candidates.every((candidate) => candidate.ambiguous));
+});
+
+test('same registration with a different microchip merges as one horse but is flagged ambiguous', () => {
+  const candidates = groupExtractionsIntoCandidates([
+    extractionOf('doc-1', { name: 'Star', registrationNumber: 'AQHA 111111', microchip: '985112004567890' }),
+    extractionOf('doc-2', { name: 'Star', registrationNumber: 'AQHA 111111', microchip: '985112009999999' }),
+  ]);
+  assert.equal(candidates.length, 1, 'a shared registration is the same horse');
+  assert.equal(candidates[0].ambiguous, true, 'a conflicting microchip on that horse is flagged, not silently merged');
+});
+
+test('a shared name with no conflicting identity still merges (Coggins with no registration)', () => {
+  const candidates = groupExtractionsIntoCandidates([
+    extractionOf('doc-1', { name: 'Star', registrationNumber: 'AQHA 111111' }),
+    extractionOf('doc-2', { name: 'Star' }),
+  ]);
+  assert.equal(candidates.length, 1);
+  assert.equal(candidates[0].ambiguous, false, 'an absent identifier does not conflict with a present one');
+});
+
 test('date helpers normalize formats and add a year', () => {
   assert.equal(normalizeDate('03/15/2026'), '2026-03-15');
   assert.equal(normalizeDate('2026-3-5'), '2026-03-05');
