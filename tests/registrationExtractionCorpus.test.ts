@@ -110,6 +110,18 @@ const CORPUS: ExtractionCase[] = [
     sire: 'SHINING SPARK',
     dam: 'MISS KITTY',
   },
+  // The horse's own registration printed AFTER the pedigree. The dam must not
+  // swallow it and read as "MOM Registration Number". The number itself is left
+  // to review rather than guessed onto the horse or a parent -- distinguishing
+  // it from a parent's own trailing number is not reliable from the text, and a
+  // wrong registration is worse than an absent one.
+  {
+    id: 'reg-after-pedigree',
+    text: 'Registered Name: STAR\nSire: DAD\nDam: MOM\nRegistration Number 1234567',
+    name: 'STAR',
+    sire: 'DAD',
+    dam: 'MOM',
+  },
 ];
 
 test('the extraction corpus holds, every row', () => {

@@ -304,6 +304,12 @@ function findParent(text: string, label: 'sire' | 'dam'): { name?: string; regis
   name = name
     .replace(new RegExp(`\\b(?:${REGISTRIES.join('|')})\\b`, 'ig'), '')
     .replace(/\b(?:reg\.?\s*(?:no|number|#)?)\b/gi, '')
+    // A registration field printed right after the parent name -- the horse's
+    // own, on a certificate that puts it after the pedigree -- leaves the full
+    // word "Registration" (and "Number"/"No") clinging to the parent name once
+    // its digits are split off, e.g. "MOM Registration Number". Strip that tail
+    // so the parent name is just "MOM"; the digits stay in `registration`.
+    .replace(/\s*registration(?:\s+(?:number|no))?\.?\s*$/i, '')
     .replace(/[|;,:#.\-\s]+$/g, '')
     .replace(/\s+/g, ' ')
     .trim();

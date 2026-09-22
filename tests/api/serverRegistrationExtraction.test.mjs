@@ -106,6 +106,18 @@ const CORPUS = [
     sire: 'SHINING SPARK',
     dam: 'MISS KITTY',
   },
+  // The horse's own registration printed AFTER the pedigree. The dam must not
+  // swallow it and read as "MOM Registration Number". The number itself is left
+  // to review rather than guessed onto the horse or a parent -- distinguishing
+  // it from a parent's own trailing number is not reliable from the text, and a
+  // wrong registration is worse than an absent one.
+  {
+    id: 'reg-after-pedigree',
+    text: 'Registered Name: STAR\nSire: DAD\nDam: MOM\nRegistration Number 1234567',
+    name: 'STAR',
+    sire: 'DAD',
+    dam: 'MOM',
+  },
 ];
 
 test('the server extraction corpus holds, every row', () => {
@@ -131,18 +143,71 @@ test('the server extraction corpus holds, every row', () => {
   assert.deepEqual(failures, [], `\n${failures.join('\n')}\n`);
 });
 
+// Parse the browser corpus's expected values straight from its source, so the
+// drift check compares expectations, not just case ids. Each row is a JS object
+// literal; the browser file is case-sensitive TS, so a lowercased `name:` etc.
+// only ever appears in key position (the raw `text` values carry "Name:",
+// "Sire:", "Dam:" with capitals). Registry prefixes differ by design between the
+// two copies (the server keeps them, the browser strips them), so a leading
+// 2-5 letter registry code is normalized off both sides before comparing `reg`.
+function parseBrowserCorpus(source) {
+  const start = source.indexOf('const CORPUS');
+  const end = source.indexOf('];', start);
+  const body = source.slice(start, end);
+  const idMatches = [...body.matchAll(/id:\s*'([^']+)'/g)];
+  const rows = {};
+  for (let i = 0; i < idMatches.length; i += 1) {
+    const from = idMatches[i].index;
+    const to = i + 1 < idMatches.length ? idMatches[i + 1].index : body.length;
+    const slice = body.slice(from, to);
+    const row = {};
+    for (const key of ['name', 'reg', 'sire', 'dam']) {
+      const match = slice.match(new RegExp(`\\b${key}:\\s*(?:'([^']*)'|(undefined))`));
+      if (match) row[key] = match[2] === 'undefined' ? undefined : match[1];
+    }
+    rows[idMatches[i][1]] = row;
+  }
+  return rows;
+}
+
+const stripRegistry = (value) => (typeof value === 'string' ? value.replace(/^[A-Z]{2,5}/, '') : value);
+
 test('the server corpus stays in step with the browser corpus', () => {
-  // The two extractors are copies pinned to the same contract. If a row is
-  // added to the browser corpus for a newly found defect, the server copy must
-  // grow with it -- otherwise the server silently keeps reading the old way.
+  // The two extractors are copies pinned to the same contract, so their corpora
+  // must too. Comparing only case ids would let an existing row's expected name
+  // (or sire/dam/reg) change on one side while the other keeps the old value and
+  // both suites still pass -- the exact drift this guard exists to catch.
   const clientSource = readFileSync(new URL('../registrationExtractionCorpus.test.ts', import.meta.url), 'utf8');
-  const clientIds = [...clientSource.matchAll(/id:\s*'([^']+)'/g)].map((match) => match[1]).sort();
+  const browser = parseBrowserCorpus(clientSource);
+  const browserIds = Object.keys(browser).sort();
   const serverIds = CORPUS.map((row) => row.id).sort();
 
-  assert.ok(clientIds.length > 0, 'precondition: the browser corpus ids were found');
+  assert.ok(browserIds.length > 0, 'precondition: the browser corpus rows were found');
   assert.deepEqual(
     serverIds,
-    clientIds,
+    browserIds,
     'server and browser extraction corpora must cover the same cases; add the missing row to whichever side lacks it',
   );
+
+  const mismatches = [];
+  for (const row of CORPUS) {
+    const expected = browser[row.id];
+    for (const key of ['name', 'reg', 'sire', 'dam']) {
+      const inServer = key in row;
+      const inBrowser = key in expected;
+      if (inServer !== inBrowser) {
+        mismatches.push(`${row.id} -> ${key}: asserted on ${inServer ? 'server' : 'browser'} only`);
+        continue;
+      }
+      if (!inServer) continue;
+      const a = key === 'reg' ? stripRegistry(row[key]) : row[key];
+      const b = key === 'reg' ? stripRegistry(expected[key]) : expected[key];
+      if (a !== b) {
+        mismatches.push(
+          `${row.id} -> ${key}: server ${JSON.stringify(row[key])} vs browser ${JSON.stringify(expected[key])}`,
+        );
+      }
+    }
+  }
+  assert.deepEqual(mismatches, [], `\n${mismatches.join('\n')}\n`);
 });
