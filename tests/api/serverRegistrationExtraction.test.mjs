@@ -118,6 +118,28 @@ const CORPUS = [
     sire: 'DAD',
     dam: 'MOM',
   },
+  // A stop-label word inside the name must not truncate it: "NUMBER" is part of
+  // the name here, not the start of the registration field.
+  {
+    id: 'stop-word-in-name',
+    text: 'Registered Name: LUCKY NUMBER SEVEN Registration Number 1234567',
+    name: 'LUCKY NUMBER SEVEN',
+    reg: '1234567',
+  },
+  // Registries that label the horse "Animal Name" or "Horse's Name" name it as
+  // explicitly as "Registered Name"; the horse must not come out unnamed.
+  {
+    id: 'animal-name-label',
+    text: 'Animal Name: STAR Registration Number 1234567',
+    name: 'STAR',
+    reg: '1234567',
+  },
+  {
+    id: 'horses-name-label',
+    text: "Horse's Name: STAR Registration Number 1234567",
+    name: 'STAR',
+    reg: '1234567',
+  },
 ];
 
 test('the server extraction corpus holds, every row', () => {

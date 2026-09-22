@@ -115,7 +115,10 @@ const STOP_LABELS = [
   'dna',
   'panel',
   'signature',
-  'number',
+  // NB: no bare 'number'. A real registered name can contain "Number" ("LUCKY
+  // NUMBER SEVEN"), and a bare stop there truncated it to "LUCKY". The horse's
+  // own "Registration Number" field is already caught by 'registration' and
+  // 'reg no/number' above, so the bare token only ever did harm.
 ];
 
 const STOP_GROUP = STOP_LABELS.join('|');
@@ -325,7 +328,10 @@ function findHorseNames(text: string, lineStarts: Set<number>): LabeledField[] {
   // Keep candidates until the parent boundary is known. An explicit name in
   // the sire section must not displace the horse's earlier bare Name field.
   const candidates: LabeledField[] = [];
-  const explicitPattern = 'registered\\s+name|name\\s+of\\s+horse|horse\\s+name';
+  // Registries label the horse's name several ways. "Animal Name" and "Horse's
+  // Name" are as explicit as "Registered Name"; missing them left the bare-Name
+  // scan to reject the label as a qualifier and the horse came out unnamed.
+  const explicitPattern = "registered\\s+name|name\\s+of\\s+horse|horse(?:['’]s)?\\s+name|animal\\s+name";
   for (const match of text.matchAll(new RegExp(`\\b(?:${explicitPattern})\\b`, 'ig'))) {
     const field = labeledField(text.slice(match.index), explicitPattern);
     if (field) candidates.push({ ...field, start: field.start + match.index, end: field.end + match.index });
