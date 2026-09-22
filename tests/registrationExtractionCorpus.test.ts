@@ -162,6 +162,15 @@ const CORPUS: ExtractionCase[] = [
     name: 'STAR',
     reg: '1234567',
   },
+  // The other half of line-boundary handling: a value OCR wrapped onto the next
+  // line (no field label, no field syntax on that line) is a continuation, not
+  // a new field, so the whole name is kept -- not truncated at the first line.
+  {
+    id: 'name-wraps-line',
+    text: 'Registered Name: LUCKY\nNUMBER SEVEN\nRegistration Number 1234567',
+    name: 'LUCKY NUMBER SEVEN',
+    reg: '1234567',
+  },
 ];
 
 test('the extraction corpus holds, every row', () => {

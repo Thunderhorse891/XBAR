@@ -401,7 +401,21 @@ function findHorseNames(text, lineStarts) {
   const orderedLineStarts = [...lineStarts].sort((a, b) => a - b);
   const lineBoundedField = (index, labelPattern) => {
     const lineEnd = orderedLineStarts.find((start) => start > index) ?? text.length;
-    return labeledField(text.slice(index, lineEnd), labelPattern) ?? labeledField(text.slice(index), labelPattern);
+    // Only end the name at the line break when the NEXT line begins a new field
+    // -- it carries field syntax (a colon/hash/equals) or a known label. A next
+    // line with neither is a value OCR wrapped across the break ("LUCKY" /
+    // "NUMBER SEVEN"), so read across it. This is what tells "STAR" above a
+    // "Year Foaled:" field from "LUCKY" above its own continuation.
+    if (lineEnd < text.length) {
+      const nextEnd = orderedLineStarts.find((start) => start > lineEnd) ?? text.length;
+      const nextLine = text.slice(lineEnd, nextEnd);
+      const nextLineIsField = /[:#=]/.test(nextLine) || new RegExp(`\\b(?:${STOP_GROUP})\\b`, 'i').test(nextLine);
+      if (nextLineIsField) {
+        const bounded = labeledField(text.slice(index, lineEnd), labelPattern);
+        if (bounded) return bounded;
+      }
+    }
+    return labeledField(text.slice(index), labelPattern);
   };
 
   // Registries label the horse's name several ways. "Animal Name" and "Horse's
