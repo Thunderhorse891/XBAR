@@ -228,7 +228,8 @@ function parentLabel(label) {
 const STOP_LABELS = [
   'registered\\s+name',
   'name\\s+of\\s+horse',
-  'horse\\s+name',
+  "horse(?:['’]s)?\\s+name",
+  'animal\\s+name',
   'registration',
   'reg\\.?\\s*(?:no|number|#)',
   'certificate',

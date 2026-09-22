@@ -144,6 +144,15 @@ const CORPUS: ExtractionCase[] = [
     name: 'STAR',
     reg: '1234567',
   },
+  // A repeated explicit label (multi-page OCR flattened together) must end the
+  // first value, not be consumed into it: the name is STAR, not
+  // "STAR Animal Name: STAR". The variants must be stop boundaries too.
+  {
+    id: 'repeated-name-label',
+    text: 'Animal Name: STAR Animal Name: STAR Registration Number 1234567',
+    name: 'STAR',
+    reg: '1234567',
+  },
 ];
 
 test('the extraction corpus holds, every row', () => {
