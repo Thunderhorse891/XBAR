@@ -644,13 +644,25 @@ const EXTRACTORS = {
 // Count distinct horse-name captures so the pipeline can force a manual
 // "assign or create" decision instead of auto-creating a profile.
 export function detectMultipleHorses(text) {
-  const source = String(text || '');
+  // Flatten OCR line breaks the same way the field extractor does, so a name
+  // label and its value that OCR split across lines are read as one.
+  const source = String(text || '')
+    .split(/\r\n?|\n/)
+    .map(normalizeWhitespace)
+    .filter(Boolean)
+    .join(' ');
   const names = new Set();
-  const nameMatches = source.matchAll(
-    new RegExp(`(?:horse|registered|animal)\\s+name\\s*[:#-]?\\s*${NAME_VALUE}`, 'gi'),
-  );
-  for (const match of nameMatches) {
-    const value = cleanValue(match[1], { maxLength: 60 }).toLowerCase();
+  // Read each explicit horse-name label with the SAME separator-aware reader the
+  // field extractor now uses. The naive `Label: <value>` scan this replaced could
+  // not see "Registered Name | ALPHA" or a ruled blank, so a certificate carrying
+  // two such names -- a mare and her foal -- read as a single horse. With names
+  // now extractable but the detector still blind, a high-OCR document with only
+  // one recognizable registration number would clear the auto-create threshold
+  // and silently create only the first horse. The two must read names the same
+  // way. Pinned by the "two separator-formatted names" pipeline test.
+  const explicitPattern = 'horse\\s+name|registered\\s+name|animal\\s+name|name\\s+of\\s+horse';
+  for (const match of source.matchAll(new RegExp(`\\b(?:${explicitPattern})\\b`, 'gi'))) {
+    const value = labeledField(source.slice(match.index), explicitPattern)?.value?.toLowerCase();
     if (value) names.add(value);
   }
 
