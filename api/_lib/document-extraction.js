@@ -143,13 +143,337 @@ function nameField(text, labels, options = {}) {
   return captureField(text, patterns, options);
 }
 
+/*
+ * -------------------------------------------------------------------------
+ * Horse-name / sire / dam reader, ported from the browser extractor.
+ *
+ * This is a faithful copy of the name-family logic in
+ * src/lib/registrationExtraction.ts, which is pinned by
+ * tests/registrationExtractionCorpus.test.ts to read names "the way a person
+ * reading the paper would". The server cannot import that module -- it is a
+ * Vite `@/`-aliased browser module, and this file runs in the serverless
+ * runtime -- so the logic is duplicated here, exactly as api/_lib/permissions.js
+ * duplicates src/lib/permissions.ts.
+ *
+ * A comment is not a mechanism: tests/api/serverRegistrationExtraction.test.mjs
+ * runs the SAME corpus rows through this reader and fails the build if the two
+ * copies drift. The naive `Label: (value up to end-of-line)` reader this
+ * replaced happily named a horse after its owner ("Name of Owner ERIN WYRICK")
+ * or after separator junk, then handed that to the review queue as fact.
+ * -------------------------------------------------------------------------
+ */
+
+// Registry bodies whose presence identifies the paper and whose codes prefix
+// registration numbers. Longest-first so "APHC" wins over "AHA" etc.
+const REGISTRIES = ['AQHA', 'APHA', 'ApHC', 'APHC', 'JC', 'USEF', 'AHA', 'ABRA', 'PtHA', 'IBHA', 'PHBA', 'APHASSOC'];
+
+// Known coat colors, longest phrases first so "blue roan" beats "roan". Only
+// used here to recognize a colour value that follows a ruled-blank name label.
+const NAME_COLORS = [
+  'blue roan',
+  'red roan',
+  'bay roan',
+  'strawberry roan',
+  'red dun',
+  'dark bay',
+  'dark brown',
+  'liver chestnut',
+  'flea-bitten gray',
+  'flea bitten gray',
+  'dapple gray',
+  'dapple grey',
+  'grullo',
+  'grulla',
+  'palomino',
+  'buckskin',
+  'cremello',
+  'perlino',
+  'champagne',
+  'chestnut',
+  'sorrel',
+  'chocolate',
+  'brown',
+  'black',
+  'bay',
+  'gray',
+  'grey',
+  'roan',
+  'dun',
+  'white',
+  'gold',
+  'cream',
+  'pinto',
+  'tobiano',
+  'overo',
+  'paint',
+];
+
+const OWNER_LABELS = 'current\\s+owner|recorded\\s+owner|owner\\s+of\\s+record|owner';
+
+/*
+ * A line holding nothing but a word that qualifies a following `Name` field.
+ * Used to tell a label OCR split across a line break ("Association" / "Name:
+ * AQHA") from letterhead sitting above a genuine field ("Blue River Farm" /
+ * "Name: BLUE MOON"), which carries more than the bare qualifier.
+ */
+const QUALIFIER_ONLY_LINE =
+  /^(?:association|farm|ranch|stable|stables|barn|registry|company|corporation|club|owner|breeder|sire|dam)$/i;
+
+function parentLabel(label) {
+  return `${label}(?:['’]s)?(?:\\s+name)?|name\\s+of\\s+${label}`;
+}
+
+// Label tokens that mark the start of the *next* field. A captured value stops
+// when one of these appears, so "Sire: SHINING SPARK Dam: ..." splits cleanly.
+const STOP_LABELS = [
+  'registered\\s+name',
+  'name\\s+of\\s+horse',
+  "horse(?:['’]s)?\\s+name",
+  'animal\\s+name',
+  'registration',
+  'reg\\.?\\s*(?:no|number|#)',
+  'certificate',
+  'registry',
+  'association',
+  'foaled',
+  'foaling',
+  'date\\s+foaled',
+  'birth',
+  'sex',
+  'gender',
+  'colou?r',
+  'breed',
+  parentLabel('sire'),
+  parentLabel('dam'),
+  'breeder',
+  OWNER_LABELS,
+  'microchip',
+  'markings?',
+  'tattoo',
+  'height',
+  'dna',
+  'panel',
+  'signature',
+  // NB: no bare 'number'. A real registered name can contain "Number" ("LUCKY
+  // NUMBER SEVEN"), and a bare stop there truncated it to "LUCKY". The horse's
+  // own "Registration Number" field is already caught by 'registration' and
+  // 'reg no/number' above, so the bare token only ever did harm.
+];
+
+const STOP_GROUP = STOP_LABELS.join('|');
+const SEX_VALUE = '(?:gelding|stallion|stud|colt|filly|mare)';
+const COLOR_VALUE = `(?:${NAME_COLORS.map((color) => color.replace(/[-\s]/g, '[-\\s]')).join('|')})`;
+
+// Boundaries that end a sire/dam entry. Deliberately excludes reg/registration
+// so a parent's own "Reg No 0011223" tail stays inside the captured chunk.
+const PARENT_STOP_GROUP = [
+  parentLabel('sire'),
+  parentLabel('dam'),
+  'breeder',
+  OWNER_LABELS,
+  'foaled',
+  'foaling',
+  'colou?r',
+  'sex',
+  'gender',
+  'markings?',
+  'microchip',
+  'tattoo',
+  'height',
+  'dna',
+  'panel',
+  'signature',
+  'breed',
+].join('|');
+
+function normalizeWhitespace(value) {
+  return String(value).replace(/\s+/g, ' ').trim();
+}
+
+// Remove field dividers and scan rules, preserving attached punctuation such
+// as *RAFFLES, -STAR, quoted names and apostrophes. A single dot or dash is a
+// divider only when followed by whitespace; repeated runs represent rules.
+const LEADING_SEPARATORS = /^(?:(?:[|;,:#=•·]+|[_.\-–—~]{2,}|[_.\-–—~](?=\s))\s*)+/;
+
+function cleanFieldValue(value) {
+  if (value === undefined || value === null) return undefined;
+  return String(value)
+    .trim()
+    .replace(LEADING_SEPARATORS, '')
+    .replace(/[|;,:_.\-\s]+$/g, '')
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+
+/**
+ * Capture the text that follows a label, up to (but not including) the next
+ * known field label or the end of the string. Returns { value, start, end }.
+ */
+function labeledField(text, labelPattern, stopGroup = STOP_GROUP) {
+  const label = text.match(new RegExp(`\\b(?:${labelPattern})\\b`, 'i'));
+  if (!label || label.index === undefined) return undefined;
+  const labelEnd = label.index + label[0].length;
+  const rawRemainder = text.slice(labelEnd);
+  const remainder = cleanFieldValue(rawRemainder);
+  if (!remainder) return undefined;
+  // A complete next-field label means the current field is empty. A bare
+  // label word can still be data, as in COLOR ME BLUE or OWNER OF THE RANCH.
+  if (new RegExp(`^(?:${stopGroup})\\s*[:#=|]`, 'i').test(remainder)) return undefined;
+  if (stopGroup === STOP_GROUP && /^(?:registration|reg\.?)\s*(?:(?:number|no\.?)\b|#)/i.test(remainder)) {
+    return undefined;
+  }
+  // Ruled blanks can be followed by labels with no colon. Recognize a whole
+  // field/value pair, not a label word alone (COLOR ME BLUE is still a name).
+  const ruled = /^\s*[:#]?\s*(?:[|;=•·]+|[_.\-–—~]{2,})/.test(rawRemainder);
+  if (ruled) {
+    /*
+     * A sex/colour pair means the labelled field was EMPTY only when the pair
+     * is the whole of what follows -- that is, when another field or the end of
+     * the text comes next. Matching the pair alone discards real names that
+     * merely begin with a field word: "COLOR BAY DREAM" is a horse, and the
+     * only thing separating it from an empty name field above a "Color Bay"
+     * field is that "DREAM" follows.
+     */
+    if (
+      new RegExp(
+        `^(?:(?:sex|gender)\\s+${SEX_VALUE}|colou?r\\s+${COLOR_VALUE})\\b(?=\\s*$|\\s+(?:${STOP_GROUP})\\b)`,
+        'i',
+      ).test(remainder)
+    ) {
+      return undefined;
+    }
+    if (
+      stopGroup === PARENT_STOP_GROUP &&
+      new RegExp(`^(?:${parentLabel('sire')}|${parentLabel('dam')})\\b`, 'i').test(remainder)
+    ) {
+      return undefined;
+    }
+  }
+  const match = remainder.match(new RegExp(`^(.+?)(?=\\s+(?:${stopGroup})\\b|$)`, 'i'));
+  const value = cleanFieldValue(match?.[1]);
+  if (!value || value.length < 2) return undefined;
+  const start = text.indexOf(value, labelEnd);
+  return start >= 0 ? { value, start, end: start + value.length } : undefined;
+}
+
+function labeledValue(text, labelPattern, stopGroup = STOP_GROUP) {
+  return labeledField(text, labelPattern, stopGroup)?.value;
+}
+
+/** A sire/dam entry: the parent's name plus, when present, its registration number. */
+function findParent(text, label) {
+  const chunk = labeledValue(text, parentLabel(label), PARENT_STOP_GROUP);
+  if (!chunk || chunk.length < 2) return {};
+  // The registration number, if any, trails the name within the chunk.
+  const regMatch = chunk.match(
+    new RegExp(`\\b(?:${REGISTRIES.join('|')})?\\s*[:#-]?\\s*([A-Z]?\\d[\\d\\s-]{4,12}\\d)\\b`, 'i'),
+  );
+  const registration = regMatch ? regMatch[1].replace(/[\s-]/g, '').toUpperCase() : undefined;
+  let name = chunk;
+  if (regMatch) {
+    name = chunk.slice(0, regMatch.index).trim();
+  }
+  name = name
+    .replace(new RegExp(`\\b(?:${REGISTRIES.join('|')})\\b`, 'ig'), '')
+    .replace(/\b(?:reg\.?\s*(?:no|number|#)?)\b/gi, '')
+    // A registration field printed right after the parent name -- the horse's
+    // own, on a certificate that puts it after the pedigree -- leaves the full
+    // word "Registration" (and "Number"/"No") clinging to the parent name once
+    // its digits are split off, e.g. "MOM Registration Number". Strip that tail
+    // so the parent name is just "MOM"; the digits stay in `registration`.
+    .replace(/\s*registration(?:\s+(?:number|no))?\.?\s*$/i, '')
+    .replace(/[|;,:#.\-\s]+$/g, '')
+    .replace(/\s+/g, ' ')
+    .trim();
+  return { name: name.length >= 2 ? name : undefined, registration };
+}
+
+function findHorseNames(text, lineStarts) {
+  // Keep candidates until the parent boundary is known. An explicit name in
+  // the sire section must not displace the horse's earlier bare Name field.
+  const candidates = [];
+  // Registries label the horse's name several ways. "Animal Name" and "Horse's
+  // Name" are as explicit as "Registered Name"; missing them left the bare-Name
+  // scan to reject the label as a qualifier and the horse came out unnamed.
+  const explicitPattern = "registered\\s+name|name\\s+of\\s+horse|horse(?:['’]s)?\\s+name|animal\\s+name";
+  for (const match of text.matchAll(new RegExp(`\\b(?:${explicitPattern})\\b`, 'ig'))) {
+    const field = labeledField(text.slice(match.index), explicitPattern);
+    if (field) candidates.push({ ...field, start: field.start + match.index, end: field.end + match.index });
+  }
+
+  for (const match of text.matchAll(/\bname\b/gi)) {
+    const before = text.slice(0, match.index);
+    const after = text.slice(match.index + match[0].length);
+    // Do not turn another qualified field (Association Name, Farm Name, etc.)
+    // into horse data. A bare Name starts a field or follows a numeric value.
+    const prefix = before.trim();
+    const followsHeading =
+      /\bcertificate\s+of\s+registration$/i.test(prefix) ||
+      REGISTRIES.some((registry) => registry.toLowerCase() === prefix.toLowerCase());
+    const followsCompleteField = new RegExp(
+      `\\b(?:(?:sex|gender)\\s*[:#=-]?\\s*${SEX_VALUE}|colou?r\\s*[:#=-]?\\s*${COLOR_VALUE})$`,
+      'i',
+    ).test(prefix);
+    if (!lineStarts.has(match.index) && prefix && !/[\d|;]$/.test(prefix) && !followsHeading && !followsCompleteField)
+      continue;
+    if (/^\s+of\b/i.test(after)) continue;
+    if (new RegExp(`\\b(?:sire|dam|${OWNER_LABELS}|breeder)(?:['’]s)?\\s*$`, 'i').test(before)) continue;
+    if (new RegExp(`^\\s+(?:of\\s+)?(?:sire|dam|${OWNER_LABELS}|breeder)\\b`, 'i').test(after)) continue;
+    const field = labeledField(text.slice(match.index), 'name');
+    if (field) candidates.push({ ...field, start: field.start + match.index, end: field.end + match.index });
+  }
+  return candidates;
+}
+
+/**
+ * Read the horse's own name, sire and dam, and the head text (everything before
+ * the first sire/dam label) so the registration-number reader can be pointed at
+ * it and never pick up a parent's number. Faithful to the browser extractor's
+ * name-family behaviour; the corpus test pins the two together.
+ */
+function extractNameFamily(rawText) {
+  const lines = String(rawText || '')
+    .split(/\r\n?|\n/)
+    .map(normalizeWhitespace)
+    .filter(Boolean);
+  const lineStarts = new Set();
+  let offset = 0;
+  lines.forEach((line, index) => {
+    const previous = index > 0 ? lines[index - 1] : undefined;
+    const splitQualifiedLabel = previous !== undefined && QUALIFIER_ONLY_LINE.test(previous);
+    if (!splitQualifiedLabel) lineStarts.add(offset);
+    offset += line.length + 1;
+  });
+  const text = lines.join(' ');
+  if (!text) return { headText: '', horseName: undefined, sire: undefined, dam: undefined };
+
+  const horseNames = findHorseNames(text, lineStarts);
+  // A labeled name such as DAM GOOD contains data, not a parent-field label.
+  const parentIndex =
+    [...text.matchAll(new RegExp(`\\b(?:${parentLabel('sire')}|${parentLabel('dam')})\\b`, 'ig'))].find(
+      (match) => !horseNames.some((name) => match.index >= name.start && match.index < name.end),
+    )?.index ?? -1;
+  const headText = parentIndex >= 0 ? text.slice(0, parentIndex) : text;
+  const parentText = parentIndex >= 0 ? text.slice(parentIndex) : '';
+  const horseName = horseNames.find((name) => parentIndex < 0 || name.start < parentIndex)?.value;
+
+  const sire = findParent(parentText, 'sire').name;
+  const dam = findParent(parentText, 'dam').name;
+  return { headText, horseName, sire, dam };
+}
+
 export function extractRegistrationFields(text) {
   const fields = {};
-  const name = nameField(text, ['(?:horse\\s+)?name(?:\\s+of\\s+horse)?', 'registered\\s+name'], { maxLength: 60 });
-  if (name) fields.name = name;
+  const nameFamily = extractNameFamily(text);
+  if (nameFamily.horseName) fields.name = { value: nameFamily.horseName, confidence: 0.95 };
 
+  // Registration number keeps the server convention (registry prefix retained,
+  // whitespace stripped) but is read only from the head text -- the portion
+  // before the first sire/dam label -- so a parent's own number is never taken
+  // as the horse's. `tests/registrationExtractionCorpus.test.ts` row
+  // `parent-only-frag` is exactly this case.
   const registration = captureField(
-    text,
+    nameFamily.headText,
     [
       /registration\s*(?:no|number|#)\.?\s*[:#-]?\s*([A-Z]{0,4}[\s-]?\d{4,10}[A-Z]?)/i,
       /reg\.?\s*(?:no|#)\.?\s*[:#-]?\s*([A-Z]{0,4}[\s-]?\d{4,10}[A-Z]?)/i,
@@ -184,11 +508,8 @@ export function extractRegistrationFields(text) {
   const birthdate = dateField(text, ['(?:date\\s+)?foaled', 'foaling\\s+date', 'date\\s+of\\s+birth', 'birth\\s*date']);
   if (birthdate) fields.birthdate = birthdate;
 
-  const sire = nameField(text, ['sire'], { maxLength: 60 });
-  if (sire) fields.sire = sire;
-
-  const dam = nameField(text, ['dam'], { maxLength: 60 });
-  if (dam) fields.dam = dam;
+  if (nameFamily.sire) fields.sire = { value: nameFamily.sire, confidence: 0.95 };
+  if (nameFamily.dam) fields.dam = { value: nameFamily.dam, confidence: 0.95 };
 
   const dna = captureField(
     text,
@@ -336,13 +657,25 @@ const EXTRACTORS = {
 // Count distinct horse-name captures so the pipeline can force a manual
 // "assign or create" decision instead of auto-creating a profile.
 export function detectMultipleHorses(text) {
-  const source = String(text || '');
+  // Flatten OCR line breaks the same way the field extractor does, so a name
+  // label and its value that OCR split across lines are read as one.
+  const source = String(text || '')
+    .split(/\r\n?|\n/)
+    .map(normalizeWhitespace)
+    .filter(Boolean)
+    .join(' ');
   const names = new Set();
-  const nameMatches = source.matchAll(
-    new RegExp(`(?:horse|registered|animal)\\s+name\\s*[:#-]?\\s*${NAME_VALUE}`, 'gi'),
-  );
-  for (const match of nameMatches) {
-    const value = cleanValue(match[1], { maxLength: 60 }).toLowerCase();
+  // Read each explicit horse-name label with the SAME separator-aware reader the
+  // field extractor now uses. The naive `Label: <value>` scan this replaced could
+  // not see "Registered Name | ALPHA" or a ruled blank, so a certificate carrying
+  // two such names -- a mare and her foal -- read as a single horse. With names
+  // now extractable but the detector still blind, a high-OCR document with only
+  // one recognizable registration number would clear the auto-create threshold
+  // and silently create only the first horse. The two must read names the same
+  // way. Pinned by the "two separator-formatted names" pipeline test.
+  const explicitPattern = "horse(?:['’]s)?\\s+name|registered\\s+name|animal\\s+name|name\\s+of\\s+horse";
+  for (const match of source.matchAll(new RegExp(`\\b(?:${explicitPattern})\\b`, 'gi'))) {
+    const value = labeledField(source.slice(match.index), explicitPattern)?.value?.toLowerCase();
     if (value) names.add(value);
   }
 

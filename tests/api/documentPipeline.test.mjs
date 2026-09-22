@@ -170,6 +170,22 @@ Registration Number: AHA 0222222`;
   assert.equal(extraction.needsReview, true);
 });
 
+test('two separator-formatted names are flagged as multiple horses', () => {
+  // The name extractor accepts separator-formatted names ("Registered Name |
+  // ALPHA"); the multi-horse detector must see them too. A mare + foal
+  // certificate with only one recognizable registration number otherwise clears
+  // the auto-create gate and silently creates just the first horse.
+  const text = `Certificate of Registration
+Registered Name | ALPHA MARE
+Registered Name | BETA FOAL
+Registration Number: AHA 0111111`;
+  const detection = detectMultipleHorses(text);
+  assert.equal(detection.multiple, true, 'both separator-formatted names must be seen');
+  assert.deepEqual([...detection.horseNames].sort(), ['alpha mare', 'beta foal']);
+  const extraction = extractDocument({ text, ocrConfidence: 0.99 });
+  assert.equal(extraction.needsReview, true, 'a multi-horse document must never auto-create');
+});
+
 test('Coggins + registration for the same horse merge into one candidate', () => {
   const registration = extractDocument({ text: REGISTRATION_TEXT, ocrConfidence: 0.99 });
   const coggins = extractDocument({ text: COGGINS_TEXT, ocrConfidence: 0.99 });

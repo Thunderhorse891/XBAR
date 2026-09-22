@@ -90,7 +90,8 @@ function parentLabel(label: 'sire' | 'dam') {
 const STOP_LABELS = [
   'registered\\s+name',
   'name\\s+of\\s+horse',
-  'horse\\s+name',
+  "horse(?:['’]s)?\\s+name",
+  'animal\\s+name',
   'registration',
   'reg\\.?\\s*(?:no|number|#)',
   'certificate',
@@ -115,7 +116,10 @@ const STOP_LABELS = [
   'dna',
   'panel',
   'signature',
-  'number',
+  // NB: no bare 'number'. A real registered name can contain "Number" ("LUCKY
+  // NUMBER SEVEN"), and a bare stop there truncated it to "LUCKY". The horse's
+  // own "Registration Number" field is already caught by 'registration' and
+  // 'reg no/number' above, so the bare token only ever did harm.
 ];
 
 const STOP_GROUP = STOP_LABELS.join('|');
@@ -304,6 +308,12 @@ function findParent(text: string, label: 'sire' | 'dam'): { name?: string; regis
   name = name
     .replace(new RegExp(`\\b(?:${REGISTRIES.join('|')})\\b`, 'ig'), '')
     .replace(/\b(?:reg\.?\s*(?:no|number|#)?)\b/gi, '')
+    // A registration field printed right after the parent name -- the horse's
+    // own, on a certificate that puts it after the pedigree -- leaves the full
+    // word "Registration" (and "Number"/"No") clinging to the parent name once
+    // its digits are split off, e.g. "MOM Registration Number". Strip that tail
+    // so the parent name is just "MOM"; the digits stay in `registration`.
+    .replace(/\s*registration(?:\s+(?:number|no))?\.?\s*$/i, '')
     .replace(/[|;,:#.\-\s]+$/g, '')
     .replace(/\s+/g, ' ')
     .trim();
@@ -319,7 +329,10 @@ function findHorseNames(text: string, lineStarts: Set<number>): LabeledField[] {
   // Keep candidates until the parent boundary is known. An explicit name in
   // the sire section must not displace the horse's earlier bare Name field.
   const candidates: LabeledField[] = [];
-  const explicitPattern = 'registered\\s+name|name\\s+of\\s+horse|horse\\s+name';
+  // Registries label the horse's name several ways. "Animal Name" and "Horse's
+  // Name" are as explicit as "Registered Name"; missing them left the bare-Name
+  // scan to reject the label as a qualifier and the horse came out unnamed.
+  const explicitPattern = "registered\\s+name|name\\s+of\\s+horse|horse(?:['’]s)?\\s+name|animal\\s+name";
   for (const match of text.matchAll(new RegExp(`\\b(?:${explicitPattern})\\b`, 'ig'))) {
     const field = labeledField(text.slice(match.index), explicitPattern);
     if (field) candidates.push({ ...field, start: field.start + match.index, end: field.end + match.index });

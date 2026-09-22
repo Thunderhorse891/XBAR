@@ -1,34 +1,30 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { extractRegistrationFields } from '../src/lib/registrationExtraction.js';
+import { readFileSync } from 'node:fs';
+
+import { extractRegistrationFields } from '../../api/_lib/document-extraction.js';
 
 /*
- * The whole contract for horse-name extraction, in one table.
+ * The server reads horse names the way a person would -- same contract as the
+ * browser extractor.
  *
- * Written after four rounds of review on this file in ninety minutes, in which
- * every fix was verified against the cases just raised and silently broke a
- * different one. Twice that reached production. The cause was not carelessness
- * by any one reviewer -- it was that nobody held the WHOLE behaviour, so each
- * round could only measure the part it was looking at.
+ * api/_lib/document-extraction.js runs in the serverless bulk-upload pipeline
+ * and cannot import src/lib/registrationExtraction.ts (a Vite `@/`-aliased
+ * browser module), so the name-family reader is DUPLICATED there, exactly as
+ * api/_lib/permissions.js duplicates src/lib/permissions.ts. Two copies of a
+ * behaviour drift silently, and here the drift is quiet by construction: a
+ * misread name is written to the review queue as fact, and the only way to
+ * notice is to read the roster -- the same failure mode that once created
+ * twenty horses named by their registration numbers.
  *
- * Every row below was raised by someone as a real defect. `expected` is what a
- * person reading the paper would say, not what the code currently does. A
- * change to this extractor is finished when every row passes, not when the row
- * that prompted it passes.
- *
- * Add a row when a new case is found. Never relax one to make a change pass.
+ * This pins the server copy to the SAME corpus the browser copy is pinned to
+ * (tests/registrationExtractionCorpus.test.ts). `expected` is what a person
+ * reading the paper would say. The final test reads the ids out of that file
+ * and fails if the two corpora ever fall out of step, so a row added on one
+ * side must be added on the other -- a mechanism, not a comment.
  */
 
-type ExtractionCase = {
-  id: string;
-  text: string;
-  name?: string;
-  reg?: string;
-  sire?: string;
-  dam?: string;
-};
-
-const CORPUS: ExtractionCase[] = [
+const CORPUS = [
   // --- original #222 defects (separator junk) ---
   { id: 'pipe-lead', text: 'Registered Name | BERRY PEACHY CHIC Reg No 539882319930', name: 'BERRY PEACHY CHIC' },
   { id: 'rule-underscore', text: 'Registered Name ___ BLUE VALENTINE DOT COM', name: 'BLUE VALENTINE DOT COM' },
@@ -155,19 +151,19 @@ const CORPUS: ExtractionCase[] = [
   },
 ];
 
-test('the extraction corpus holds, every row', () => {
-  const failures: string[] = [];
+test('the server extraction corpus holds, every row', () => {
+  const failures = [];
 
   for (const row of CORPUS) {
     const fields = extractRegistrationFields(row.text);
     const actual = {
-      name: fields.horseName,
-      reg: fields.registrationNumber,
-      sire: fields.sire,
-      dam: fields.dam,
+      name: fields.name?.value,
+      reg: fields.registrationNumber?.value,
+      sire: fields.sire?.value,
+      dam: fields.dam?.value,
     };
 
-    for (const key of ['name', 'reg', 'sire', 'dam'] as const) {
+    for (const key of ['name', 'reg', 'sire', 'dam']) {
       if (!(key in row)) continue;
       if (actual[key] !== row[key]) {
         failures.push(`${row.id} -> ${key}: got ${JSON.stringify(actual[key])}, want ${JSON.stringify(row[key])}`);
@@ -175,7 +171,74 @@ test('the extraction corpus holds, every row', () => {
     }
   }
 
-  // Reported together: a change that breaks five rows should say so once,
-  // rather than hiding four behind the first assertion to fail.
   assert.deepEqual(failures, [], `\n${failures.join('\n')}\n`);
+});
+
+// Parse the browser corpus's expected values straight from its source, so the
+// drift check compares expectations, not just case ids. Each row is a JS object
+// literal; the browser file is case-sensitive TS, so a lowercased `name:` etc.
+// only ever appears in key position (the raw `text` values carry "Name:",
+// "Sire:", "Dam:" with capitals). Registry prefixes differ by design between the
+// two copies (the server keeps them, the browser strips them), so a leading
+// 2-5 letter registry code is normalized off both sides before comparing `reg`.
+function parseBrowserCorpus(source) {
+  const start = source.indexOf('const CORPUS');
+  const end = source.indexOf('];', start);
+  const body = source.slice(start, end);
+  const idMatches = [...body.matchAll(/id:\s*'([^']+)'/g)];
+  const rows = {};
+  for (let i = 0; i < idMatches.length; i += 1) {
+    const from = idMatches[i].index;
+    const to = i + 1 < idMatches.length ? idMatches[i + 1].index : body.length;
+    const slice = body.slice(from, to);
+    const row = {};
+    for (const key of ['name', 'reg', 'sire', 'dam']) {
+      const match = slice.match(new RegExp(`\\b${key}:\\s*(?:'([^']*)'|(undefined))`));
+      if (match) row[key] = match[2] === 'undefined' ? undefined : match[1];
+    }
+    rows[idMatches[i][1]] = row;
+  }
+  return rows;
+}
+
+const stripRegistry = (value) => (typeof value === 'string' ? value.replace(/^[A-Z]{2,5}/, '') : value);
+
+test('the server corpus stays in step with the browser corpus', () => {
+  // The two extractors are copies pinned to the same contract, so their corpora
+  // must too. Comparing only case ids would let an existing row's expected name
+  // (or sire/dam/reg) change on one side while the other keeps the old value and
+  // both suites still pass -- the exact drift this guard exists to catch.
+  const clientSource = readFileSync(new URL('../registrationExtractionCorpus.test.ts', import.meta.url), 'utf8');
+  const browser = parseBrowserCorpus(clientSource);
+  const browserIds = Object.keys(browser).sort();
+  const serverIds = CORPUS.map((row) => row.id).sort();
+
+  assert.ok(browserIds.length > 0, 'precondition: the browser corpus rows were found');
+  assert.deepEqual(
+    serverIds,
+    browserIds,
+    'server and browser extraction corpora must cover the same cases; add the missing row to whichever side lacks it',
+  );
+
+  const mismatches = [];
+  for (const row of CORPUS) {
+    const expected = browser[row.id];
+    for (const key of ['name', 'reg', 'sire', 'dam']) {
+      const inServer = key in row;
+      const inBrowser = key in expected;
+      if (inServer !== inBrowser) {
+        mismatches.push(`${row.id} -> ${key}: asserted on ${inServer ? 'server' : 'browser'} only`);
+        continue;
+      }
+      if (!inServer) continue;
+      const a = key === 'reg' ? stripRegistry(row[key]) : row[key];
+      const b = key === 'reg' ? stripRegistry(expected[key]) : expected[key];
+      if (a !== b) {
+        mismatches.push(
+          `${row.id} -> ${key}: server ${JSON.stringify(row[key])} vs browser ${JSON.stringify(expected[key])}`,
+        );
+      }
+    }
+  }
+  assert.deepEqual(mismatches, [], `\n${mismatches.join('\n')}\n`);
 });
