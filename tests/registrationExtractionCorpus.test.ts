@@ -153,6 +153,15 @@ const CORPUS: ExtractionCase[] = [
     name: 'STAR',
     reg: '1234567',
   },
+  // OCR that preserved the form's line breaks: the name ends at its own line, so
+  // a following field whose label isn't enumerated ("Year Foaled") does not leak
+  // its leading word into the name ("STAR Year").
+  {
+    id: 'name-ends-at-line',
+    text: 'Horse Name: STAR\nYear Foaled: 2020\nRegistration Number 1234567',
+    name: 'STAR',
+    reg: '1234567',
+  },
 ];
 
 test('the extraction corpus holds, every row', () => {
