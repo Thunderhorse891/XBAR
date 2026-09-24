@@ -17,7 +17,7 @@ import { useEffectiveSubscription } from '@/hooks/useOwnerPreview';
 import type { ChipTone } from '@/types/saas';
 import type { HorseStatus } from '@/types/xbar';
 import { canPresentPurchaseFlow } from '@/lib/nativePlatform';
-import { buildSaleReadinessScore } from '@/lib/saleReadinessScore';
+import { buildSaleReadinessScore, readinessNextStep } from '@/lib/saleReadinessScore';
 import { buildBuyerPacketReleaseGate } from '@/lib/buyerPacketReleaseGate';
 import { SaleReadinessCard } from '@/components/SaleReadinessCard';
 
@@ -383,7 +383,9 @@ export default function AnimalProfile() {
               <div className="xs-nba">
                 <div className="xs-nba__label">Suggested next step</div>
                 <div className="xs-nba__title">
-                  {animal.readiness?.blockers?.[0] ?? `Keep ${animal.name}'s records current`}
+                  {saleReadiness
+                    ? readinessNextStep(saleReadiness, animal.name)
+                    : `Keep ${animal.name}'s records current`}
                 </div>
               </div>
               {identity.missing.length ? (

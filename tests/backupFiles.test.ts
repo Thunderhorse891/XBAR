@@ -1816,10 +1816,14 @@ test('a record that installs but crashes the route it lands on is refused', asyn
    * is already stored, which is the same too-late ordering as the rest of these.
    */
   /*
-   * The ENTRIES, not just the container. `{animal.readiness?.blockers?.[0] ??
-   * …}` at AnimalProfile.tsx:353 indexes safely and then renders whatever it
-   * found; `??` does not catch an object. `stringItems` asserts the array as
-   * well as its contents, so it is not repeated under `lists`.
+   * The ENTRIES, not just the container. The profile used to render
+   * `{animal.readiness?.blockers?.[0] ?? …}`, where `??` does not catch an
+   * object. That suggestion now comes from the computed sale readiness score
+   * (the stored blockers are seeded at creation and never cleared), so no
+   * route renders an entry today; the guard is kept so a restored archive
+   * cannot put a non-string back into a field every writer treats as text.
+   * `stringItems` asserts the array as well as its contents, so it is not
+   * repeated under `lists`.
    */
   assert.match(shapeTable, /stringItems: \['readiness\.blockers'\]/);
 
@@ -2209,7 +2213,6 @@ test('a record that installs but crashes the route it lands on is refused', asyn
     ['src/routes/Ownership.tsx', /<strong>\{requirement\.label\}<\/strong>/],
     ['src/routes/SharedAccess.tsx', /\{sharedListing\?\.state \?\? horse\.sale\.listingState\}/],
     ['src/routes/SharedAccess.tsx', /\{sharedListing\?\.accessMode \?\? 'Private Token'\}/],
-    ['src/routes/AnimalProfile.tsx', /\{animal\.readiness\?\.blockers\?\.\[0\] \?\?/],
     ['src/routes/Ownership.tsx', /<span>\{formatDateTimeLabel\(event\.at\)\}<\/span>/],
     ['src/routes/Ownership.tsx', /<strong>\{event\.actor\}<\/strong>/],
     ['src/routes/AnimalProfile.tsx', /\{o\.role\} · \{o\.share\}%/],

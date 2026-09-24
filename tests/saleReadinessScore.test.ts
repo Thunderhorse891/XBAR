@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import { readFile } from 'node:fs/promises';
-import { PROOF_PACKET_THRESHOLD, buildSaleReadinessScore } from '../src/lib/saleReadinessScore.js';
+import { PROOF_PACKET_THRESHOLD, buildSaleReadinessScore, readinessNextStep } from '../src/lib/saleReadinessScore.js';
 import type {
   DocumentRecord,
   ExpenseReceipt,
@@ -331,4 +331,22 @@ test('every roster readiness figure is the computed score, and a private listing
   const gate = await readFile('src/lib/buyerPacketReleaseGate.ts', 'utf8');
   assert.match(gate, /buyerProfileStatus === 'Private'\) \{\s*blockers\.push\(PRIVATE_LISTING_BLOCKER\)/);
   assert.match(gate, /PRIVATE_LISTING_BLOCKER =\s*'Listing: [^']*asking price[^']*'/);
+});
+
+test('the profile suggests the next step from the computed score, never the stored blockers', async () => {
+  const fresh = complete({ documents: [], receipts: [], ownershipRecord: undefined });
+  const top = fresh.topActions[0]!;
+  assert.equal(readinessNextStep(fresh, 'COPPER CANYON'), `${top.label} to reach ${top.reach}`);
+
+  const blocked = complete({ releaseGate: { allowed: false, nextAction: 'Health cert: Attach one.' } });
+  assert.equal(readinessNextStep(blocked, 'COPPER CANYON'), 'Release gate: Health cert: Attach one.');
+
+  const ready = complete();
+  assert.equal(readinessNextStep(ready, 'COPPER CANYON'), "Generate COPPER CANYON's proof packet");
+
+  // The stored blockers are seeded at creation and never cleared, so a
+  // complete horse would still read "Registration not verified".
+  const profile = await readFile('src/routes/AnimalProfile.tsx', 'utf8');
+  assert.match(profile, /readinessNextStep\(saleReadiness, animal\.name\)/);
+  assert.doesNotMatch(profile, /animal\.readiness\?\.blockers/);
 });

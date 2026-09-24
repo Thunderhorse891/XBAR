@@ -321,3 +321,16 @@ export function buildSaleReadinessScore(params: {
     proofPacketBlocker,
   };
 }
+
+/**
+ * The one next step for this horse, from the same score the readiness card
+ * shows: the biggest action, else what still blocks the packet, else the
+ * packet itself. Never the stored `readiness.blockers`, which are seeded when
+ * the horse is created and are not cleared as records are completed.
+ */
+export function readinessNextStep(readiness: SaleReadinessScore, horseName: string): string {
+  const top = readiness.topActions[0];
+  if (top) return `${top.label} to reach ${top.reach}`;
+  if (readiness.proofPacketBlocker) return readiness.proofPacketBlocker;
+  return `Generate ${horseName}'s proof packet`;
+}
