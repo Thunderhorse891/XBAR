@@ -82,6 +82,7 @@ export const ROUTE_COMMANDS: readonly CommandEntry[] = (
     ['dashboard', 'Home', 'Daily ranch operations', '/'],
     ['horses', 'Horse registry', 'All horse records', '/horses'],
     ['documents', 'Documents', 'Source records and review', '/documents'],
+    ['expiring', 'Expiring soon', 'Coggins, health certificates, insurance and contracts', '/expiring'],
     ['ownership', 'Ownership', 'Transfers and documents', '/ownership'],
     ['medical', 'Health', 'Care records and due work', '/medical'],
     ['breeding', 'Breeding pipeline', 'Pairings and milestones', '/breeding'],

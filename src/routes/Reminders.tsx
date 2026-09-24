@@ -8,6 +8,7 @@ import type { ReminderFilter, ReminderKind } from '@/features/reminders/types';
 import { buildAlertDigest, buildAlertMailto } from '@/lib/alertCenter';
 import { assessRevenueAtRisk, detectSpendAnomalies } from '@/lib/businessIntelligence';
 import { buildCareBoardRows, buildTransferGapRows } from '@/lib/dashboardOps';
+import { buildExpiryRadar, expiryReminderItems } from '@/lib/documentExpiry';
 import { formatCompactCurrency, formatDateLabel } from '@/lib/format';
 import { buildOperationsPriorities } from '@/lib/operationsPriority';
 import { useXbarStore } from '@/store/useXbarStore';
@@ -33,6 +34,7 @@ export default function Reminders() {
         documents,
         salesLeads,
         horseNames: Object.fromEntries(horses.map((horse) => [horse.id, horse.name])),
+        expiringDocuments: expiryReminderItems(buildExpiryRadar(documents, horses)),
       }),
     [documents, expenseReceipts, horses, ownershipRecords, salesLeads],
   );

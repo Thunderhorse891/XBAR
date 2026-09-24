@@ -4,6 +4,7 @@ import {
   Bell,
   Boxes,
   Calculator,
+  CalendarClock,
   ChevronDown,
   CircleHelp,
   ClipboardList,
@@ -32,6 +33,7 @@ import { GlobalCreateDrawer, createActions } from '@/components/saas/flows';
 import { billingPath } from '@/lib/billingRoutes';
 import { buyerFollowUpPath } from '@/lib/buyerRoutes';
 import { buildCareBoardRows } from '@/lib/dashboardOps';
+import { buildExpiryRadar, expiryReminderItems } from '@/lib/documentExpiry';
 import { isSupabaseConfigured } from '@/lib/platformConfig';
 import { useCloudStore } from '@/store/useCloudStore';
 import { useUiStore } from '@/store/useUiStore';
@@ -44,7 +46,12 @@ import { useEffectiveSubscription } from '@/hooks/useOwnerPreview';
 const XBAR_ICON = '/brand/apple-touch-icon.png';
 const XBAR_WATERMARK = '/brand/icon-512.png';
 
-type NavItem = { label: string; path: string; icon: LucideIcon; badgeKey?: 'docs' | 'transfers' | 'care' };
+type NavItem = {
+  label: string;
+  path: string;
+  icon: LucideIcon;
+  badgeKey?: 'docs' | 'transfers' | 'care' | 'expiring';
+};
 type NavGroup = { heading: string; items: NavItem[] };
 
 const navGroups: NavGroup[] = [
@@ -81,6 +88,7 @@ const navGroups: NavGroup[] = [
     heading: 'Records',
     items: [
       { label: 'Documents', path: '/documents', icon: FolderOpen, badgeKey: 'docs' },
+      { label: 'Expiring soon', path: '/expiring', icon: CalendarClock, badgeKey: 'expiring' },
       { label: 'Equipment', path: '/equipment', icon: Boxes },
       { label: 'Expenses', path: '/expenses', icon: Coins },
       { label: 'Reports', path: '/reports', icon: Gauge },
@@ -128,8 +136,20 @@ export default function MainLayout() {
     return board.filter((row) => row.signals.some((s) => s.status === 'due')).length;
   }, [horses, documents, expenseReceipts]);
 
-  const badges: Record<string, number> = { docs: pendingReview, transfers: pendingTransfers, care: careDueCount };
-  const notifications = pendingReview + pendingTransfers + careDueCount;
+  // The nav badge counts every paper expired or under 30 days. The bell counts
+  // what the Reminders queue lists — Coggins is already in careDueCount, so it
+  // does not ring twice for one Coggins.
+  const expiryRadar = useMemo(() => buildExpiryRadar(documents, horses), [documents, horses]);
+  const expiringCount = expiryRadar.attentionCount;
+  const expiringNonCoggins = expiryReminderItems(expiryRadar).length;
+
+  const badges: Record<string, number> = {
+    docs: pendingReview,
+    transfers: pendingTransfers,
+    care: careDueCount,
+    expiring: expiringCount,
+  };
+  const notifications = pendingReview + pendingTransfers + careDueCount + expiringNonCoggins;
 
   const ranchName = workspaceProfile.ranchName || workspaceProfile.businessName || 'Your ranch';
   const planTier = subscription?.tier || 'Starter';

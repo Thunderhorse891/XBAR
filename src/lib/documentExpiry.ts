@@ -1,0 +1,364 @@
+import type { DocumentRecord, HorseRecord } from '../types/xbar.js';
+import type { ReminderItem } from '../features/reminders/types.js';
+import { CURRENT_COGGINS_DAYS, documentExamTime } from './documentCurrency.js';
+import { formatCurrency } from './format.js';
+
+/*
+ * The expiry radar: which time-sensitive documents run out, and when.
+ *
+ * Read-only by design. It never writes to a document — not a date, not a
+ * state, not an archive flag. Every expiry comes from one of two places:
+ *
+ *   - An exam date plus the rule XBAR already applies to that paper:
+ *     Coggins for twelve months (CURRENT_COGGINS_DAYS, the same window the
+ *     sale-packet gate and the revenue report use, so the three can never
+ *     disagree), and a health certificate for the usual 30-day interstate
+ *     window.
+ *   - An expiry date printed on the document itself, read from the stored
+ *     OCR text only when it sits right after a label such as "Expiration
+ *     date" or "Valid through" — and only when every labelled date agrees.
+ *
+ * When neither gives a date, the document is listed as undated. A guessed
+ * expiry is worse than none: nobody checks a date that looks right.
+ */
+
+export type ExpiryKind = 'Coggins' | 'Health certificate' | 'Insurance' | 'Contract';
+export type ExpiryUrgency = 'expired' | 'under30' | 'under90' | 'current' | 'undated';
+
+/** A health certificate (CVI) is usually good for 30 days of interstate travel. */
+export const HEALTH_CERTIFICATE_DAYS = 30;
+export const EXPIRY_SOON_DAYS = 30;
+export const EXPIRY_WATCH_DAYS = 90;
+
+const DAY_MS = 86_400_000;
+
+export type DocumentExpiryItem = {
+  documentId: string;
+  title: string;
+  kind: ExpiryKind;
+  horseId?: string;
+  /** The horse's name, or null for a document not linked to a horse. */
+  horseName: string | null;
+  /** Last day the document is good for, 'YYYY-MM-DD'; null when undated. */
+  expiresOn: string | null;
+  /** Days from today to `expiresOn`; negative once expired. */
+  daysLeft: number | null;
+  urgency: ExpiryUrgency;
+  /** Where the date came from, in plain words. */
+  basis: string;
+  /** False while the document still waits in review — its dates are unconfirmed. */
+  reviewed: boolean;
+};
+
+export type ExpiryRadar = {
+  items: DocumentExpiryItem[];
+  expired: DocumentExpiryItem[];
+  under30: DocumentExpiryItem[];
+  under90: DocumentExpiryItem[];
+  undated: DocumentExpiryItem[];
+  currentCount: number;
+  /** Expired plus under 30 days — what the nav badge counts. */
+  attentionCount: number;
+};
+
+const MONTHS = ['jan', 'feb', 'mar', 'apr', 'may', 'jun', 'jul', 'aug', 'sep', 'oct', 'nov', 'dec'];
+const MONTH_NAME =
+  '(jan(?:uary)?|feb(?:ruary)?|mar(?:ch)?|apr(?:il)?|may|june?|july?|aug(?:ust)?|sept?(?:ember)?|oct(?:ober)?|nov(?:ember)?|dec(?:ember)?)';
+const DATE_PATTERN = `(\\d{1,2}[/-]\\d{1,2}[/-]\\d{4}|\\d{4}-\\d{2}-\\d{2}|${MONTH_NAME}\\.?\\s+\\d{1,2},?\\s+\\d{4}|\\d{1,2}\\s+${MONTH_NAME}\\.?,?\\s+\\d{4})`;
+const EXPIRY_LABEL =
+  '(?:expir(?:es|ation|y)(?:\\s+date)?|exp\\.?\\s+date|valid\\s+(?:through|thru|until|to)|good\\s+(?:through|thru|until)|(?:policy|coverage|contract|agreement|term)\\s+(?:ends?|ending|end\\s+date|expires?)|end\\s+date|terminat(?:es|ion)(?:\\s+date)?)';
+const LABELLED_DATE = new RegExp(`${EXPIRY_LABEL}(?:\\s+on)?\\s*[:\\-–]?\\s*${DATE_PATTERN}`, 'gi');
+const PERIOD_RANGE = new RegExp(
+  `(?:policy|coverage|contract|agreement)?\\s*(?:period|term)\\s*(?:of\\s+coverage)?\\s*[:\\-–]?\\s*(?:from\\s+)?${DATE_PATTERN}\\s*(?:to|through|thru|-|–)\\s*${DATE_PATTERN}`,
+  'gi',
+);
+
+function dayNumber(year: number, month: number, day: number): number | null {
+  if (year < 2000 || year > 2100) return null;
+  const time = Date.UTC(year, month - 1, day);
+  const check = new Date(time);
+  if (check.getUTCFullYear() !== year || check.getUTCMonth() !== month - 1 || check.getUTCDate() !== day) return null;
+  return time / DAY_MS;
+}
+
+/** A printed date as a day number; US month/day order for slashed dates. */
+function parsePrintedDate(raw: string): number | null {
+  const text = raw.trim().toLowerCase();
+  let match = /^(\d{1,2})[/-](\d{1,2})[/-](\d{4})$/.exec(text);
+  if (match) return dayNumber(Number(match[3]), Number(match[1]), Number(match[2]));
+  match = /^(\d{4})-(\d{2})-(\d{2})$/.exec(text);
+  if (match) return dayNumber(Number(match[1]), Number(match[2]), Number(match[3]));
+  match = /^([a-z]+)\.?\s+(\d{1,2}),?\s+(\d{4})$/.exec(text);
+  if (match) {
+    const month = MONTHS.indexOf(match[1]!.slice(0, 3)) + 1;
+    return month ? dayNumber(Number(match[3]), month, Number(match[2])) : null;
+  }
+  match = /^(\d{1,2})\s+([a-z]+)\.?,?\s+(\d{4})$/.exec(text);
+  if (match) {
+    const month = MONTHS.indexOf(match[2]!.slice(0, 3)) + 1;
+    return month ? dayNumber(Number(match[3]), month, Number(match[1])) : null;
+  }
+  return null;
+}
+
+function isoDay(day: number): string {
+  return new Date(day * DAY_MS).toISOString().slice(0, 10);
+}
+
+/**
+ * The expiry date printed on a document, as 'YYYY-MM-DD', or null.
+ *
+ * Only a date directly after an expiry label counts, or the end of a stated
+ * policy or contract period. Two labelled dates that disagree return null:
+ * picking one would be a guess.
+ */
+export function findPrintedExpiryDate(text: string | undefined): string | null {
+  const source = String(text ?? '');
+  if (!source.trim()) return null;
+  const found = new Set<number>();
+  for (const match of source.matchAll(LABELLED_DATE)) {
+    const day = parsePrintedDate(match[1] ?? '');
+    if (day !== null) found.add(day);
+  }
+  for (const match of source.matchAll(PERIOD_RANGE)) {
+    // DATE_PATTERN captures three groups (the date and two month names), so
+    // the period's start is group 1 and its end is group 4. Both must read.
+    const startDay = parsePrintedDate(match[1] ?? '');
+    const endDay = parsePrintedDate(match[4] ?? '');
+    if (startDay !== null && endDay !== null && endDay > startDay) found.add(endDay);
+  }
+  return found.size === 1 ? isoDay([...found][0]!) : null;
+}
+
+const HEALTH_CERTIFICATE_TEXT =
+  /health\s+certificate|certificate\s+of\s+veterinary\s+inspection|\bCVI\b|interstate\s+health/i;
+
+/** Which time-sensitive paper a document is, or null when it does not expire. */
+export function expiryKindOf(
+  document: Pick<DocumentRecord, 'type' | 'title' | 'extractedTextPreview'>,
+): ExpiryKind | null {
+  if (document.type === 'Coggins') return 'Coggins';
+  if (document.type === 'Insurance') return 'Insurance';
+  if (document.type === 'Breeding Contract') return 'Contract';
+  if (
+    document.type === 'Vet Record' &&
+    HEALTH_CERTIFICATE_TEXT.test(`${document.title ?? ''} ${document.extractedTextPreview ?? ''}`)
+  ) {
+    return 'Health certificate';
+  }
+  return null;
+}
+
+function localDay(now: Date): number {
+  return Date.UTC(now.getFullYear(), now.getMonth(), now.getDate()) / DAY_MS;
+}
+
+function examDay(document: DocumentRecord): number | null {
+  const time = documentExamTime(document);
+  if (time === null) return null;
+  const exam = new Date(time);
+  return Date.UTC(exam.getUTCFullYear(), exam.getUTCMonth(), exam.getUTCDate()) / DAY_MS;
+}
+
+function readableDay(day: number): string {
+  return new Intl.DateTimeFormat('en-US', { month: 'short', day: 'numeric', year: 'numeric', timeZone: 'UTC' }).format(
+    new Date(day * DAY_MS),
+  );
+}
+
+function resolveExpiry(document: DocumentRecord, kind: ExpiryKind): { day: number | null; basis: string } {
+  if (kind === 'Coggins') {
+    const exam = examDay(document);
+    return exam === null
+      ? { day: null, basis: 'No exam date on this Coggins, so XBAR can’t tell when it runs out.' }
+      : { day: exam + CURRENT_COGGINS_DAYS, basis: `12 months from the ${readableDay(exam)} test.` };
+  }
+  const printed = findPrintedExpiryDate(document.extractedTextPreview);
+  if (printed) {
+    return {
+      day: parsePrintedDate(printed),
+      basis: 'Expiry date read from the document — check it against the paper.',
+    };
+  }
+  if (kind === 'Health certificate') {
+    const exam = examDay(document);
+    return exam === null
+      ? { day: null, basis: 'No inspection date on this certificate, so XBAR can’t tell when it runs out.' }
+      : {
+          day: exam + HEALTH_CERTIFICATE_DAYS,
+          basis: `30 days from the ${readableDay(exam)} inspection — the usual interstate window; some states differ.`,
+        };
+  }
+  return { day: null, basis: 'No expiry date XBAR can read on this document — check the paper.' };
+}
+
+function urgencyFor(daysLeft: number | null): ExpiryUrgency {
+  if (daysLeft === null) return 'undated';
+  if (daysLeft < 0) return 'expired';
+  if (daysLeft < EXPIRY_SOON_DAYS) return 'under30';
+  if (daysLeft < EXPIRY_WATCH_DAYS) return 'under90';
+  return 'current';
+}
+
+export function buildExpiryRadar(
+  documents: DocumentRecord[],
+  horses: Pick<HorseRecord, 'id' | 'name'>[],
+  now: Date = new Date(),
+): ExpiryRadar {
+  const today = localDay(now);
+  const horseNames = new Map(horses.map((horse) => [horse.id, horse.name]));
+
+  const candidates: DocumentExpiryItem[] = documents.flatMap((document) => {
+    // Archived is the rancher saying a paper is superseded; Queued has not been read yet.
+    if (document.state === 'Archived' || document.state === 'Queued') return [];
+    const kind = expiryKindOf(document);
+    if (!kind) return [];
+    const { day, basis } = resolveExpiry(document, kind);
+    const daysLeft = day === null ? null : day - today;
+    const linked = document.horseId && horseNames.has(document.horseId) ? document.horseId : undefined;
+    return [
+      {
+        documentId: document.id,
+        title: document.title,
+        kind,
+        horseId: linked,
+        horseName: linked ? (horseNames.get(linked) ?? null) : null,
+        expiresOn: day === null ? null : isoDay(day),
+        daysLeft,
+        urgency: urgencyFor(daysLeft),
+        basis,
+        reviewed: document.state === 'Ready',
+      },
+    ];
+  });
+
+  /*
+   * A renewed paper replaces the old one. For each horse (or the ranch) and
+   * kind, only the dated document that runs longest counts, so last year's
+   * Coggins does not read as expired beside this year's. Contracts are the
+   * exception: two breeding contracts are two agreements, not a renewal.
+   */
+  const groups = new Map<string, DocumentExpiryItem[]>();
+  for (const item of candidates) {
+    const key = item.kind === 'Contract' ? `doc:${item.documentId}` : `${item.kind}:${item.horseId ?? 'ranch'}`;
+    groups.set(key, [...(groups.get(key) ?? []), item]);
+  }
+  const items: DocumentExpiryItem[] = [];
+  for (const group of groups.values()) {
+    const dated = group.filter((item) => item.daysLeft !== null);
+    if (dated.length) {
+      items.push(dated.reduce((best, item) => ((item.daysLeft ?? 0) > (best.daysLeft ?? 0) ? item : best)));
+    } else {
+      items.push(...group);
+    }
+  }
+
+  const byDays = (left: DocumentExpiryItem, right: DocumentExpiryItem) =>
+    (left.daysLeft ?? 0) - (right.daysLeft ?? 0) || left.title.localeCompare(right.title);
+  const expired = items.filter((item) => item.urgency === 'expired').sort(byDays);
+  const under30 = items.filter((item) => item.urgency === 'under30').sort(byDays);
+  const under90 = items.filter((item) => item.urgency === 'under90').sort(byDays);
+  const undated = items
+    .filter((item) => item.urgency === 'undated')
+    .sort((left, right) => left.title.localeCompare(right.title));
+
+  return {
+    items: [...expired, ...under30, ...under90, ...undated],
+    expired,
+    under30,
+    under90,
+    undated,
+    currentCount: items.filter((item) => item.urgency === 'current').length,
+    attentionCount: expired.length + under30.length,
+  };
+}
+
+function plural(count: number, one: string, many: string) {
+  return `${count} ${count === 1 ? one : many}`;
+}
+
+function distinctHorses(items: DocumentExpiryItem[]): string[] {
+  return [...new Set(items.flatMap((item) => (item.horseId ? [item.horseId] : [])))];
+}
+
+/**
+ * What the radar puts at risk, in the words a rancher would use.
+ *
+ * Dollar figures come only from the horse records themselves — asking price
+ * and insured value — and appear only when they are on file.
+ */
+export function describeExpiryRisk(
+  radar: ExpiryRadar,
+  horses: Pick<HorseRecord, 'id' | 'sale' | 'insuredValue'>[],
+): string[] {
+  const byId = new Map(horses.map((horse) => [horse.id, horse]));
+  const lines: string[] = [];
+
+  const expiredCoggins = distinctHorses(radar.expired.filter((item) => item.kind === 'Coggins'));
+  if (expiredCoggins.length) {
+    const asking = expiredCoggins.reduce((sum, id) => sum + Math.max(0, byId.get(id)?.sale?.askPrice ?? 0), 0);
+    lines.push(
+      `${plural(expiredCoggins.length, 'horse', 'horses')} can’t legally travel or sell until Coggins is renewed${
+        asking > 0 ? ` — ${formatCurrency(asking)} in asking prices is on hold` : ''
+      }.`,
+    );
+  }
+  const soonCoggins = distinctHorses(radar.under30.filter((item) => item.kind === 'Coggins'));
+  if (soonCoggins.length) {
+    lines.push(
+      `${plural(soonCoggins.length, 'horse loses', 'horses lose')} travel and sale clearance within 30 days unless Coggins is redrawn.`,
+    );
+  }
+  const expiredCertificates = distinctHorses(radar.expired.filter((item) => item.kind === 'Health certificate'));
+  if (expiredCertificates.length) {
+    lines.push(
+      `${plural(expiredCertificates.length, 'horse needs', 'horses need')} a new health certificate before crossing state lines.`,
+    );
+  }
+  const expiredInsurance = radar.expired.filter((item) => item.kind === 'Insurance');
+  if (expiredInsurance.length) {
+    const insured = distinctHorses(expiredInsurance).reduce(
+      (sum, id) => sum + Math.max(0, byId.get(id)?.insuredValue ?? 0),
+      0,
+    );
+    lines.push(
+      `${plural(expiredInsurance.length, 'insurance policy has', 'insurance policies have')} lapsed${
+        insured > 0 ? ` — ${formatCurrency(insured)} of insured horse value is uncovered` : ''
+      }.`,
+    );
+  }
+  const soonInsurance = radar.under30.filter((item) => item.kind === 'Insurance');
+  if (soonInsurance.length) {
+    lines.push(`${plural(soonInsurance.length, 'insurance policy ends', 'insurance policies end')} within 30 days.`);
+  }
+  const expiredContracts = radar.expired.filter((item) => item.kind === 'Contract');
+  if (expiredContracts.length) {
+    lines.push(
+      `${plural(expiredContracts.length, 'contract has', 'contracts have')} passed ${expiredContracts.length === 1 ? 'its' : 'their'} end date — renew or close ${expiredContracts.length === 1 ? 'it' : 'them'} before relying on the terms.`,
+    );
+  }
+  return lines;
+}
+
+/**
+ * Radar entries for the Reminders queue and its alert digest.
+ *
+ * Coggins is left out on purpose: the care board already raises a Coggins
+ * reminder for every horse, and a second one for the same paper would be
+ * noise. Only what needs attention now goes in — expired or under 30 days.
+ */
+export function expiryReminderItems(radar: ExpiryRadar): ReminderItem[] {
+  return [...radar.expired, ...radar.under30]
+    .filter((item) => item.kind !== 'Coggins')
+    .map((item): ReminderItem => ({
+      id: `expiry-${item.documentId}`,
+      kind: 'Documents',
+      urgency: item.urgency === 'expired' ? 'Due' : 'Watch',
+      title: `${item.kind} ${item.urgency === 'expired' ? 'expired' : 'expiring'}: ${item.title}`,
+      horseId: item.horseId,
+      horseName: item.horseName ?? undefined,
+      dueDate: item.expiresOn ?? undefined,
+      detail: item.basis,
+      route: '/expiring',
+    }));
+}

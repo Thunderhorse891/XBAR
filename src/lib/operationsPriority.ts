@@ -21,6 +21,8 @@ type PriorityInput = {
   documents: DocumentRecord[];
   salesLeads: SalesLead[];
   horseNames: Record<string, string>;
+  /** Expired or soon-expiring papers from the expiry radar (lib/documentExpiry.ts). */
+  expiringDocuments?: ReminderItem[];
 };
 const dayMs = 24 * 60 * 60 * 1000;
 const urgencyRank: Record<ReminderUrgency, number> = { Due: 0, Watch: 1, Clear: 2 };
@@ -139,6 +141,9 @@ export function buildOperationsPriorities(input: PriorityInput, now = new Date()
           lead.stage === 'Offer' ? 12 : 0,
         );
       }),
+    // An expired paper outranks one merely running low, the same weighting the
+    // care board gives a due signal over a watch one.
+    ...(input.expiringDocuments ?? []).map((item) => withPriority(item, now, item.urgency === 'Due' ? 8 : 0)),
   ].sort(
     (left, right) =>
       urgencyRank[left.urgency] - urgencyRank[right.urgency] ||
