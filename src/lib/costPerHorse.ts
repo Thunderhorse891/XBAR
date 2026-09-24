@@ -296,7 +296,10 @@ function buildPriceRises(dated: DatedReceipt[], today: number): SupplierPriceRis
 }
 
 function buildFeedSuppliers(windowReceipts: DatedReceipt[]): FeedSupplierSummary[] {
-  const suppliers = new Map<string, { summary: FeedSupplierSummary; latestPricedDay: number }>();
+  const suppliers = new Map<
+    string,
+    { summary: FeedSupplierSummary; latestPricedDay: number; latestUploadedAt: string }
+  >();
   for (const entry of windowReceipts) {
     if (costGroupFor(entry.receipt.category) !== 'Feed') continue;
     const key = normalizeKey(entry.receipt.vendor) || 'unspecified supplier';
@@ -309,12 +312,20 @@ function buildFeedSuppliers(windowReceipts: DatedReceipt[]): FeedSupplierSummary
         unit: null,
       },
       latestPricedDay: -Infinity,
+      latestUploadedAt: '',
     };
     existing.summary.purchases += 1;
     existing.summary.spend += entry.amount;
     const unitPrice = unitPriceOf(entry.receipt);
-    if (unitPrice !== null && entry.day >= existing.latestPricedDay) {
+    // Same-day purchases are ordered by upload time, as the price watch does;
+    // the store lists newest first, so arrival order alone would pick the older.
+    const uploadedAt = String(entry.receipt.uploadedAt ?? '');
+    const newer =
+      entry.day > existing.latestPricedDay ||
+      (entry.day === existing.latestPricedDay && uploadedAt.localeCompare(existing.latestUploadedAt) > 0);
+    if (unitPrice !== null && newer) {
       existing.latestPricedDay = entry.day;
+      existing.latestUploadedAt = uploadedAt;
       existing.summary.latestUnitPrice = unitPrice;
       existing.summary.unit = String(entry.receipt.unit).trim();
     }

@@ -1,5 +1,6 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
+import { readFile } from 'node:fs/promises';
 import {
   COST_WINDOW_DAYS,
   DAYS_PER_MONTH,
@@ -13,6 +14,7 @@ import {
   unitKeyOf,
   unitPriceOf,
 } from '../src/lib/costPerHorse.js';
+import { localIsoDate } from '../src/lib/format.js';
 import {
   parseReceiptQuantity,
   validateExpenseReceiptInput,
@@ -478,4 +480,42 @@ test('a typed quantity is read as written or refused, never rewritten', () => {
     unit: 'bale',
   };
   assert.match(validateExpenseReceiptInput({ ...base, quantity: parseReceiptQuantity('-5') }) ?? '', /Quantity/);
+});
+
+test('the supplier card reports the newest of two same-day purchases', () => {
+  // The store lists newest first; arrival order must not decide "last time".
+  const summary = buildCostPerHorse({
+    horses: [horse('a')],
+    receipts: [
+      receipt({ amount: 440, quantity: 40, unit: 'bale', receiptDate: daysAgo(3), uploadedAt: '2026-06-27T18:00:00Z' }),
+      receipt({ amount: 360, quantity: 40, unit: 'bale', receiptDate: daysAgo(3), uploadedAt: '2026-06-27T09:00:00Z' }),
+    ],
+    now: NOW,
+  });
+  assert.equal(summary.feedSuppliers[0]?.latestUnitPrice, 11);
+});
+
+test('a receipt logged today on the local calendar counts today, west of UTC included', async () => {
+  const zone = process.env.TZ;
+  try {
+    // 8:30pm in Denver is already tomorrow in UTC.
+    process.env.TZ = 'America/Denver';
+    const evening = new Date(2026, 5, 30, 20, 30);
+    assert.equal(localIsoDate(evening), '2026-06-30');
+    const summary = buildCostPerHorse({
+      horses: [horse('a')],
+      receipts: [receipt({ amount: 50, receiptDate: localIsoDate(evening) })],
+      now: evening,
+    });
+    assert.equal(summary.windowTotal, 50, 'the default date is never "tomorrow"');
+  } finally {
+    if (zone === undefined) delete process.env.TZ;
+    else process.env.TZ = zone;
+  }
+  // Both receipt forms default to that local day, not the UTC one.
+  for (const file of ['src/components/saas/flows.tsx', 'src/routes/Expenses.tsx']) {
+    const source = await readFile(file, 'utf8');
+    assert.doesNotMatch(source, /toISOString\(\)\.slice\(0, 10\)/, `${file} defaults to the local day`);
+    assert.match(source, /localIsoDate\(\)/);
+  }
 });

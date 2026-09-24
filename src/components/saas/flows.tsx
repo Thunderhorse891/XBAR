@@ -4,6 +4,7 @@ import { useNavigate } from 'react-router-dom';
 import { FileUp } from 'lucide-react';
 import { ActionButton, SlideOverDrawer } from '@/components/saas';
 import { buyerFollowUpPath } from '@/lib/buyerRoutes';
+import { localIsoDate } from '@/lib/format';
 import { useUiStore } from '@/store/useUiStore';
 import { useXbarStore } from '@/store/useXbarStore';
 import { parseReceiptQuantity } from '@/store/xbarStoreLogic';
@@ -188,7 +189,7 @@ const LEAD_CHANNELS: SalesLead['channel'][] = ['Site Inquiry', 'Referral', 'Face
 const DOCUMENT_ACCEPT = '.pdf,.png,.jpg,.jpeg,.webp,.heic';
 
 function todayIso() {
-  return new Date().toISOString().slice(0, 10);
+  return localIsoDate();
 }
 
 export function GlobalCreateDrawer() {
