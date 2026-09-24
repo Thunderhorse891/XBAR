@@ -19,13 +19,22 @@ async function savedHorse(page: Page) {
     const modulePath = '/src/store/useXbarStore.ts';
     const { useXbarStore } = await import(/* @vite-ignore */ modulePath);
     const state = useXbarStore.getState();
-    return { horses: state.horses, ownership: state.ownershipRecords, profile: state.workspaceProfile };
+    return {
+      horses: state.horses,
+      ownership: state.ownershipRecords,
+      profile: state.workspaceProfile,
+      members: state.workspaceMembers,
+      seats: state.subscription.usage.seatsUsed,
+    };
   });
 }
 
 test('two names create one honest horse record and a next step, preserved after reload and retry', async ({ page }) => {
   await startRanch(page);
   const before = await savedHorse(page);
+  expect(before.members).toHaveLength(1);
+  expect(before.members[0]).toMatchObject({ email: '', role: 'Admin', source: 'Owner', status: 'Active' });
+  expect(before.seats).toBe(1);
   expect(before.horses).toHaveLength(1);
   expect(before.horses[0]).toMatchObject({
     name: 'BLUE',
@@ -59,6 +68,8 @@ test('two names create one honest horse record and a next step, preserved after 
   await page.reload();
   await expect(page.getByRole('heading', { name: 'Blue has a place in your ranch.' })).toBeVisible();
   expect((await savedHorse(page)).horses).toEqual(before.horses);
+  expect((await savedHorse(page)).members).toEqual(before.members);
+  expect((await savedHorse(page)).seats).toBe(1);
   // Returning to setup must not overwrite a configured ranch or add horses.
   await page.goto('/app/setup');
   await expect(page).toHaveURL(/\/app$/);
@@ -118,4 +129,32 @@ test('desktop keeps its existing navigation; medical staff only see permitted sh
   await expect(actions.getByRole('button')).toHaveCount(3);
   await expect(actions.getByRole('button', { name: 'Move a horse' })).toHaveCount(0);
   await expect(actions.getByRole('button', { name: 'Log expense' })).toHaveCount(0);
+});
+
+test('creator identity uses the account email and preserves a local creator without freeing its seat', async ({
+  page,
+}) => {
+  await startRanch(page);
+  const result = await page.evaluate(async () => {
+    const helpersPath = '/src/store/xbarStoreHelpers.ts';
+    const storePath = '/src/store/useXbarStore.ts';
+    const { createInitialWorkspaceMember, restoreWorkspaceMembers } = await import(/* @vite-ignore */ helpersPath);
+    const { useXbarStore } = await import(/* @vite-ignore */ storePath);
+    const state = useXbarStore.getState();
+    const accountOwner = createInitialWorkspaceMember(
+      { ...state.workspaceProfile, operationsEmail: 'ranch-contact@example.test' },
+      'Account-Owner@example.test',
+    );
+    return {
+      accountOwner,
+      restored: restoreWorkspaceMembers(state.workspaceMembers),
+      localOwner: state.workspaceMembers[0],
+    };
+  });
+  expect(result.accountOwner.email).toBe('account-owner@example.test');
+  expect(result.localOwner.email).toBe('');
+  expect(result.restored).toEqual([result.localOwner]);
+  await page.getByRole('link', { name: 'Settings', exact: true }).click();
+  await expect(page.getByText('Ranch creator — email not set', { exact: true })).toBeVisible();
+  await expect(page.getByText('workspace-admin@xbar.local', { exact: true })).toHaveCount(0);
 });

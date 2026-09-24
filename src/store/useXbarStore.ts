@@ -231,7 +231,7 @@ export const useXbarStore = create<XbarStore>()(
         }
         const createdInitialAdmin = seedState.workspaceMembers.length === 0;
         const workspaceMembers = createdInitialAdmin
-          ? [createInitialWorkspaceMember(nextProfile)]
+          ? [createInitialWorkspaceMember(nextProfile, useCloudStore.getState().session?.user.email)]
           : seedState.workspaceMembers;
         const derived = syncDerivedValues({
           horses: seedState.horses,

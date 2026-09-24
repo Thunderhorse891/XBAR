@@ -923,7 +923,7 @@ export default function Settings() {
                     <div key={member.id} className="stack-item">
                       <div className="stack-item__top">
                         <div>
-                          <div className="stack-item__title">{member.email}</div>
+                          <div className="stack-item__title">{member.email || 'Ranch creator — email not set'}</div>
                           <div className="stack-item__copy">
                             {roleLabel(member.role)} ·{' '}
                             {member.source === 'Owner' ? 'Ranch owner' : `Joined ${formatDateLabel(member.joinedAt)}`}

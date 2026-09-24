@@ -30,6 +30,8 @@ The new shortcut bar is hidden on desktop; desktop app layouts are unchanged. Th
 
 ## Verification and limits
 
+Review follow-up: the initial local creator no longer receives the invented `workspace-admin@xbar.local` email. Unknown local email is kept blank and labeled in Settings; the owner member ID and reserved seat survive reload. Cloud creation seeds the actual authenticated account email. A regression test failed on the fabricated address before the correction. Pastures now prompts for the deferred location settings when empty, and its existing detail-drawer test enters that pasture through Settings first.
+
 Focused browser tests cover the two-name flow, unknown identity fields, linking the next document to the correct horse, reload/retry preservation, five 360px shortcuts, real drawer target sizes, no overflow, role-restricted shortcuts, and desktop shortcut hiding. Pricing tests verify four canonical prices and plan-preserving signup links, FAQs, and mobile overflow. Existing setup helpers now use the explicit skip option so intake tests continue to begin with an empty ranch.
 
 Both mixed-PDF OCR regression cases passed after replacing a shared dependency junction with an isolated install. The shared Vite cache had caused an invalid PDF worker URL during an earlier local run. This was a test-environment correction; the OCR implementation is unchanged. It does not prove acceptance against Erin's actual registry document.

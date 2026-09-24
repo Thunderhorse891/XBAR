@@ -138,6 +138,12 @@ test('documents shows an empty state on a fresh workspace', async ({ page }) => 
 test('pasture location opens a detail drawer', async ({ page }) => {
   await bootstrapWorkspace(page);
   await page.getByRole('link', { name: 'Pastures', exact: true }).click();
+  // Location entry is deferred from setup; the empty view offers it when needed.
+  await page.getByRole('button', { name: 'Add barn or pasture' }).click();
+  await page.getByLabel('Default pasture', { exact: true }).fill('North Pasture');
+  await page.getByRole('button', { name: 'Save profile', exact: true }).click();
+  await page.getByRole('link', { name: 'Pastures', exact: true }).click();
+  await expect(page.getByRole('heading', { name: 'North Pasture' })).toBeVisible();
   await page.locator('.xs-grid-2 .xs-card').first().click();
   const drawer = page.getByRole('dialog');
   await expect(drawer).toBeVisible();

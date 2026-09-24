@@ -112,6 +112,10 @@ The separately requested setup change removes the old multi-field form: business
 
 ## Public pricing
 
+Settings now displays “Ranch creator — email not set” for a local creator with no supplied email, instead of presenting a fabricated address. Signed-in setup uses the account email; the owner seat remains reserved even when a local creator's email is unknown.
+
+The deferred-location prompt adds these strings on Pastures (no previous equivalent): “Add your first location”; “Add your usual barn or pasture in Settings. You can also record a location when you move a horse.”; “Locations appear when a horse is moved. Your ranch admin can also add the usual barn or pasture in Settings.”; “Add barn or pasture”. The Settings button appears only for roles allowed to manage settings.
+
 | Before                                                                                                                                                                                              | After                                                                                                                             |
 | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------- |
 | Simple plans. Published limits. No hidden capacity math.                                                                                                                                            | A plan for your horses. Room for your ranch.                                                                                      |

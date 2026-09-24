@@ -2,7 +2,7 @@ import { useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { MapPin, Move } from 'lucide-react';
 import { useUiStore } from '@/store/useUiStore';
-import { useXbarStore } from '@/store/useXbarStore';
+import { useCurrentRoleCapability, useXbarStore } from '@/store/useXbarStore';
 import { ActionButton, Card, PageHead, SlideOverDrawer, StatusChip } from '@/components/saas';
 import type { HorseRecord } from '@/types/xbar';
 
@@ -13,6 +13,7 @@ export default function Pastures() {
   const navigate = useNavigate();
   const horses = useXbarStore((s) => s.horses);
   const workspaceProfile = useXbarStore((s) => s.workspaceProfile);
+  const canManageSettings = useCurrentRoleCapability('manageSettings');
   const [selectedId, setSelectedId] = useState<string | null>(null);
 
   const locations = useMemo<Location[]>(() => {
@@ -60,6 +61,19 @@ export default function Pastures() {
           location to see the horses currently there.
         </div>
       </Card>
+
+      {locations.length === 0 ? (
+        <Card title="Add your first location">
+          <p className="xs-muted">
+            {canManageSettings
+              ? 'Add your usual barn or pasture in Settings. You can also record a location when you move a horse.'
+              : 'Locations appear when a horse is moved. Your ranch admin can also add the usual barn or pasture in Settings.'}
+          </p>
+          {canManageSettings ? (
+            <ActionButton onClick={() => navigate('/settings')}>Add barn or pasture</ActionButton>
+          ) : null}
+        </Card>
+      ) : null}
 
       <div className="xs-grid-2">
         {locations.map((p) => (
