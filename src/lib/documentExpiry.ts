@@ -156,18 +156,37 @@ export function findPrintedExpiryDate(text: string | undefined): string | null {
  * to the inspection window.
  */
 const CERTIFICATE_DATE = new RegExp(
-  `(?:(?:this\\s+)?(?:health\\s+)?certificate|\\bCVI)\\s+(?:is\\s+)?(?:expir(?:es|ation)(?:\\s+date)?|valid\\s+(?:through|thru|until|to)|good\\s+(?:through|thru|until))(?:\\s+on)?\\s*[:\\-–]?\\s*${DATE_PATTERN}`,
+  `(?:(?:this\\s+)?(?:health\\s+)?certificate(?:\\s+of\\s+veterinary\\s+inspection)?(?:\\s*\\(CVI\\))?|\\bCVI)\\s+(?:is\\s+)?(?:expir(?:es|ation)(?:\\s+date)?|valid\\s+(?:through|thru|until|to)|good\\s+(?:through|thru|until))(?:\\s+on)?\\s*[:\\-–]?\\s*${DATE_PATTERN}`,
   'gi',
 );
 
 /** The date a health certificate prints for its own expiry, or null. Disagreeing dates return null. */
 export function findCertificateExpiryDate(text: string | undefined): string | null {
+  const day = singleLabelledDay(text, CERTIFICATE_DATE);
+  return day === null ? null : isoDay(day);
+}
+
+/*
+ * The inspection date printed on a certificate, for one with no exam date on
+ * record. Local intake reads an exam date only for papers it filed as Vet
+ * Record or Coggins, so a CVI it filed as Registration arrives with none.
+ * Only a labelled date counts ("Inspection Date", "Date of Inspection",
+ * "Examination Date"): the first date anywhere on the paper could be a
+ * vaccination or a foaling date.
+ */
+const INSPECTION_DATE = new RegExp(
+  `(?:date\\s+of\\s+(?:inspection|examination|exam)|(?:inspection|examination|exam)\\s+date|date\\s+(?:inspected|examined))(?:\\s+on)?\\s*[:\\-–]?\\s*${DATE_PATTERN}`,
+  'gi',
+);
+
+/** Every date the pattern labels, as one day number; null when there is none or they disagree. */
+function singleLabelledDay(text: string | undefined, pattern: RegExp): number | null {
   const found = new Set<number>();
-  for (const match of String(text ?? '').matchAll(CERTIFICATE_DATE)) {
+  for (const match of String(text ?? '').matchAll(pattern)) {
     const day = parsePrintedDate(match[1] ?? '');
     if (day !== null) found.add(day);
   }
-  return found.size === 1 ? isoDay([...found][0]!) : null;
+  return found.size === 1 ? [...found][0]! : null;
 }
 
 const HEALTH_CERTIFICATE_TEXT =
@@ -262,13 +281,18 @@ function resolveExpiry(
     };
   }
   if (kind === 'Health certificate') {
-    const exam = examDay(document);
+    const stored = examDay(document);
+    const printed = stored === null ? singleLabelledDay(document.extractedTextPreview, INSPECTION_DATE) : null;
+    const exam = stored ?? printed;
     if (exam !== null && exam > today) return futureExam('inspection');
     return exam === null
       ? { day: null, basis: 'No inspection date on this certificate, so XBAR can’t tell when it runs out.' }
       : {
           day: exam + HEALTH_CERTIFICATE_DAYS,
-          basis: `30 days from the ${readableDay(exam)} inspection — the usual interstate window; some states differ.`,
+          basis:
+            printed === null
+              ? `30 days from the ${readableDay(exam)} inspection — the usual interstate window; some states differ.`
+              : `30 days from the ${readableDay(exam)} inspection read from the certificate — the usual interstate window; some states differ. Check it against the paper.`,
         };
   }
   return { day: null, basis: 'No expiry date XBAR can read on this document — check the paper.' };

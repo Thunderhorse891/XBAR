@@ -15,6 +15,7 @@ import { CURRENT_COGGINS_DAYS, isCurrentDatedDocument } from '../src/lib/documen
 import { buildAlertDigest } from '../src/lib/alertCenter.js';
 import { buildOperationsPriorities } from '../src/lib/operationsPriority.js';
 import { buildCareBoardRows } from '../src/lib/dashboardOps.js';
+import { buildDocumentRecord } from '../src/lib/xbarRuntime.js';
 import type { DocumentRecord, HorseRecord } from '../src/types/xbar.js';
 
 // The expiry radar tells a rancher which papers run out and what that puts at
@@ -763,4 +764,74 @@ test('the Reminders page passes its care board to the radar reminders', async ()
   const page = await readFile('src/routes/Reminders.tsx', 'utf8');
   assert.match(page, /expiryReminderItems\(buildExpiryRadar\(documents, horses\), careRows\)/);
   assert.match(page, /careRows,\n/);
+});
+
+test('a CVI is dated by its formal name too: "Certificate of Veterinary Inspection valid until …"', () => {
+  const inspected = { type: 'Vet Record' as const, horseId: 'h1', entities: { examDate: '2026-05-01' } };
+  for (const text of [
+    'Certificate of Veterinary Inspection valid until July 15, 2026',
+    'Certificate of Veterinary Inspection (CVI) valid until 07/15/2026',
+    'Certificate of Veterinary Inspection expires 07/15/2026  Rabies vaccination expires 05/01/2027',
+    'Interstate health certificate valid through 07/15/2026',
+  ]) {
+    const item = buildExpiryRadar([doc({ ...inspected, extractedTextPreview: text })], horses, NOW).items[0];
+    assert.equal(item?.expiresOn, '2026-07-15', text);
+    assert.equal(item?.urgency, 'under30', text);
+  }
+});
+
+test('a CVI recovered from a Registration upload is dated by the inspection date printed on it', async () => {
+  // The real local intake: "CVI" is not a name guessDocumentType knows, so the
+  // paper is filed as Registration, and entity extraction reads an exam date
+  // only for Vet Record and Coggins. The radar must read the labelled
+  // inspection date itself, or the certificate sits undated.
+  const upload = await buildDocumentRecord({
+    file: new File(
+      ['Certificate of Veterinary Inspection\nOrigin: Texas\nInspection Date: 2026-05-01\nDr. Jane Smith'],
+      'CVI.txt',
+      { type: 'text/plain' },
+    ),
+    uploadedBy: 'Ops Desk',
+    source: 'Manual Upload',
+    horses: [],
+    existingDocuments: [],
+  });
+  assert.equal(upload.type, 'Registration', 'intake still files it as Registration');
+  assert.equal(upload.entities.examDate, undefined, 'and reads no exam date');
+  const recovered = { ...upload, state: 'Ready' as const, horseId: 'h1' };
+  const item = buildExpiryRadar([recovered], horses, NOW).items[0];
+  assert.equal(item?.kind, 'Health certificate');
+  assert.equal(item?.expiresOn, '2026-05-31', '30 days from the printed inspection');
+  assert.equal(item?.urgency, 'expired');
+  assert.match(item?.basis ?? '', /inspection/);
+  assert.match(item?.basis ?? '', /check it against the paper/i);
+
+  const certificate = (text: string, type: DocumentRecord['type'] = 'Registration') =>
+    doc({ type, horseId: 'h2', title: 'CVI', extractedTextPreview: text });
+  // Other ways a certificate labels it; a vet record with no stored exam date reads it too.
+  for (const [text, type] of [
+    ['Date of Inspection: 06/10/2026', 'Registration'],
+    ['Date Inspected June 10, 2026', 'Ownership Memo'],
+    ['Certificate of Veterinary Inspection  Examination Date: 06/10/2026', 'Vet Record'],
+  ] as const) {
+    assert.equal(buildExpiryRadar([certificate(text, type)], horses, NOW).items[0]?.expiresOn, '2026-07-10', text);
+  }
+  // It refuses to guess: an unlabelled date, two labelled dates that disagree,
+  // or an inspection after today leave the certificate undated.
+  for (const text of [
+    'CVI  2026-06-10',
+    'Inspection Date: 06/10/2026  Inspection Date: 06/12/2026',
+    'Inspection Date: 12/01/2026',
+  ]) {
+    const item = buildExpiryRadar([certificate(text)], horses, NOW).items[0];
+    assert.equal(item?.urgency, 'undated', text);
+  }
+  // A stored exam date still decides when there is one.
+  const stored = doc({
+    type: 'Vet Record',
+    horseId: 'h3',
+    extractedTextPreview: 'Health certificate  Inspection Date: 06/12/2026',
+    entities: { examDate: '2026-06-10' },
+  });
+  assert.equal(buildExpiryRadar([stored], horses, NOW).items[0]?.expiresOn, '2026-07-10');
 });
