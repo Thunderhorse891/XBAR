@@ -338,6 +338,17 @@ psql -1 -v ON_ERROR_STOP=1 "$DATABASE_URL" -f supabase/migrations/20260912060000
 psql -v ON_ERROR_STOP=1 "$DATABASE_URL" -f supabase/checks/document-storage-live-rollback.sql
 ```
 
+```sh
+# 10. horse-media goes PRIVATE. Deploy the signed-URL client and the
+#    token-gated /api/buyer/media endpoint FIRST -- they work while the bucket
+#    is still public (createSignedUrl succeeds on a public bucket), so the
+#    flip is hitless. Applying this migration is Erin's explicit ops step
+#    (production engineering contract #15): existing public media URLs stop
+#    resolving the moment it runs, and rollback instructions live in the
+#    migration header.
+psql -1 -v ON_ERROR_STOP=1 "$DATABASE_URL" -f supabase/migrations/20260924134000_horse_media_private_signed_urls.sql
+```
+
 **(4) and (5) are prerequisites for billing, not optimizations to schedule
 later.** Apply both before Stripe is switched on, and note that they fail in
 opposite directions:

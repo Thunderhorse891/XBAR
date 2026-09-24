@@ -1405,12 +1405,16 @@ export const useXbarStore = create<XbarStore>()(
               }
               return {
                 file,
-                stored: Boolean(uploadedAsset?.storagePath && uploadedAsset?.publicUrl),
+                stored: Boolean(uploadedAsset?.storagePath),
                 asset: {
                   id: createId('media'),
                   label: file.name.replace(/\.[^.]+$/, ''),
                   kind: kind ?? guessGalleryKind(file.name),
-                  url: uploadedAsset?.publicUrl ?? '',
+                  // The horse-media bucket is private, so there is no durable
+                  // URL to store. Renders resolve a short-lived signed URL
+                  // from `storagePath` (see HorseMediaPreview); `url` keeps
+                  // legacy public URLs and local object URLs working.
+                  url: '',
                   storagePath: uploadedAsset?.storagePath,
                   status: 'Approved' as const,
                 },
@@ -1418,7 +1422,7 @@ export const useXbarStore = create<XbarStore>()(
             }),
           );
 
-          // Only assets that actually stored (real storagePath AND url) are usable
+          // Only assets that actually stored (a real storagePath) are usable
           // photos. A metadata-only "upload" — cloud unavailable, missing session,
           // or a bucket error — has no renderable image, so it must not become a
           // passport photo, advance readiness, or flip socialReady.

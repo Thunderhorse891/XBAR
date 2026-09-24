@@ -78,6 +78,15 @@ export const buyerResponseSchema = z.object({
     .transform((value) => value.slice(0, MAX_BUYER_MESSAGE_CHARS)),
 });
 
+// Buyer media signing: the storage path is validated again in the handler
+// (shape + membership in the listing's gallery), so the schema only enforces
+// that a value is present and bounded.
+export const buyerMediaSchema = z.object({
+  sharePath: z.string().trim().optional().default(''),
+  shareToken: z.string().trim().optional().default(''),
+  storagePath: z.string().trim().min(1).max(500),
+});
+
 // CSV imports are bounded so a single request cannot buffer unbounded input
 // through the service-role client.
 export const MAX_IMPORT_CSV_CHARS = 2_000_000;

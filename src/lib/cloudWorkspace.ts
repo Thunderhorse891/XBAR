@@ -1124,11 +1124,57 @@ export async function uploadMediaAssetToCloud(params: { file: File; horseId: str
     throw error;
   }
 
-  const { data } = client.storage.from(supabaseConfig.mediaBucket).getPublicUrl(path);
+  // The horse-media bucket is private, so there is deliberately no public URL
+  // here. Callers persist `storagePath` and every render resolves a
+  // short-lived signed URL via getHorseMediaSignedUrl (workspace members) or
+  // the token-gated buyer media endpoint (shared listings).
   return {
     storagePath: path,
-    publicUrl: data.publicUrl,
   };
+}
+
+/**
+ * How long a signed horse-media URL stays valid, in seconds.
+ *
+ * Fifteen minutes covers an in-app browsing session; the URL is re-resolved on
+ * every render, so a stale link never lingers. Buyer-facing links minted by
+ * the server for shared listings use their own (longer) TTL defined next to
+ * that endpoint.
+ */
+export const HORSE_MEDIA_SIGNED_URL_TTL_SECONDS = 15 * 60;
+
+/**
+ * Mint a short-lived signed URL for a horse-media object.
+ *
+ * The caller must be signed in and entitled to read the object under the
+ * bucket's storage policies (the uploader, or a member of the workspace whose
+ * horse references it). Returns null when the client is unavailable, the
+ * session is missing, or storage refuses -- the render layer treats null as
+ * "no image" and shows its fallback, never a broken link.
+ */
+export async function getHorseMediaSignedUrl(
+  storagePath: string,
+  expiresInSeconds: number = HORSE_MEDIA_SIGNED_URL_TTL_SECONDS,
+): Promise<string | null> {
+  const client = getSupabaseClient();
+  if (!client) {
+    return null;
+  }
+
+  const session = await getActiveSession();
+  if (!session?.user) {
+    return null;
+  }
+
+  const { data, error } = await client.storage
+    .from(supabaseConfig.mediaBucket)
+    .createSignedUrl(storagePath, expiresInSeconds);
+
+  if (error || !data?.signedUrl) {
+    return null;
+  }
+
+  return data.signedUrl;
 }
 
 /**

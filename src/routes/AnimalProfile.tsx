@@ -11,7 +11,9 @@ import { billingPath } from '@/lib/billingRoutes';
 import { buyerFollowUpPath } from '@/lib/buyerRoutes';
 import { hasRoleCapability } from '@/lib/permissions';
 import { hasActiveListing } from '@/lib/xbarPhaseTwo';
-import { animalPassportId, identityCompleteness } from '@/lib/animalPassport';
+import { primaryHorseMedia } from '@/lib/horseMedia';
+import { useHorseMediaUrl } from '@/hooks/useHorseMediaUrl';
+import { animalPassportId, identityCompleteness, isHorsePhotoAsset } from '@/lib/animalPassport';
 import { type AnimalFinancialStatus, buildRanchFinancials } from '@/lib/profitIntelligence';
 import { profitIntelligenceGate } from '@/lib/subscriptionGates';
 import { useEffectiveSubscription } from '@/hooks/useOwnerPreview';
@@ -151,6 +153,15 @@ export default function AnimalProfile() {
     }
   }
 
+  const photoMedia = primaryHorseMedia(animal ?? { profileImage: '', gallery: [] }, (gallery) =>
+    gallery.find(isHorsePhotoAsset),
+  );
+  // Resolved through the signed-URL path: the horse-media bucket is private,
+  // so the stored URL alone is not viewable. Falls back to the stored URL
+  // (legacy public URLs, external links) while the signature is in flight.
+  // Hoisted above the early return: hooks cannot run conditionally.
+  const photoUrl = useHorseMediaUrl(photoMedia.storagePath, photoMedia.src);
+
   if (!animal) {
     return (
       <>
@@ -183,12 +194,6 @@ export default function AnimalProfile() {
   // "Complete passport" (drawer) CTA only lists gaps the drawer can resolve —
   // the Photo gap is handled by its own Add Photo control instead of dead-ending.
   const drawerFixableMissing = identity.missing.filter((label) => label !== 'Photo');
-  const photoUrl =
-    animal.profileImage ||
-    animal.gallery?.find(
-      (asset) => asset.url && (asset.kind === 'Hero' || asset.kind === 'Conformation' || asset.kind === 'Sale Still'),
-    )?.url ||
-    '';
   const location =
     [animal.location.barn, animal.location.pasture].filter(Boolean).join(' · ') || animal.location.ranch || '—';
   // From the listing itself, not the stored readiness score, which is seeded at

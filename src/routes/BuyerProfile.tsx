@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import { Link, useParams, useSearchParams } from 'react-router-dom';
 import { EmptyState } from '@/components/EmptyState';
 import { HorseMediaPreview } from '@/components/HorseMediaPreview';
@@ -9,6 +9,7 @@ import { Field, FieldGroup, FieldLabel } from '@/components/ui/field';
 import { Input } from '@/components/ui/input';
 import { buildPublicShareUrl, openFacebookShareDialog } from '@/lib/facebookSharing';
 import { formatCompactCurrency, formatPercent } from '@/lib/format';
+import { fetchBuyerHorseMediaUrl, primaryHorseMedia } from '@/lib/horseMedia';
 import { apiConfig, isPublicShareLocalPreviewEnabled } from '@/lib/platformConfig';
 import { buildPublicBuyerPacketArtifact, downloadPublicBuyerPacketArtifact } from '@/lib/publicBuyerPacket';
 import {
@@ -283,6 +284,41 @@ function BuyerActionPanel({
   );
 }
 
+/**
+ * One photo tile on the buyer page. Horse media resolves through the signed-URL
+ * path: anonymous buyers hold no storage grant, so their resolver goes through
+ * the token-gated `/api/buyer/media` endpoint, while the internal local preview
+ * uses the workspace-member default.
+ */
+function BuyerMediaTile({
+  asset,
+  signedUrlResolver,
+}: {
+  asset: { id: string; url: string; label: string; kind: string; status: string; storagePath?: string };
+  signedUrlResolver?: (storagePath: string) => Promise<string | null>;
+}) {
+  return (
+    <div key={asset.id} className="media-tile">
+      <div className="media-tile__image-shell">
+        <HorseMediaPreview
+          src={asset.url}
+          storagePath={asset.storagePath ?? null}
+          signedUrlResolver={signedUrlResolver}
+          name={asset.label}
+          imageClassName="media-tile__image"
+          fallbackClassName="media-tile__image-fallback"
+          emptyLabel="No photo"
+        />
+      </div>
+      <div className="media-tile__label">{asset.label}</div>
+      <div className="media-tile__meta">
+        <span>{asset.kind}</span>
+        <Pill tone="blue">{asset.status}</Pill>
+      </div>
+    </div>
+  );
+}
+
 export default function BuyerProfile() {
   const { id } = useParams<{ id: string }>();
   const [searchParams] = useSearchParams();
@@ -383,6 +419,17 @@ export default function BuyerProfile() {
 
   const horse = resolvedPayload?.horse;
 
+  const primaryMedia = useMemo(() => (horse ? primaryHorseMedia(horse) : null), [horse]);
+
+  // Anonymous buyers cannot mint signed URLs themselves, so their media
+  // resolves through the token-gated server endpoint. The internal local
+  // preview is a signed-in member and keeps the default member resolver.
+  const buyerMediaResolver = useCallback(
+    (storagePath: string) => fetchBuyerHorseMediaUrl({ sharePath, shareToken, storagePath }),
+    [sharePath, shareToken],
+  );
+  const mediaResolver = remoteState.source === 'rpc' ? buyerMediaResolver : undefined;
+
   // Inject OG meta tags so social previews and link unfurls show horse info.
   useEffect(() => {
     if (!horse) return;
@@ -390,7 +437,7 @@ export default function BuyerProfile() {
     const description = [horse.breed, horse.sex, horse.age > 0 ? `${horse.age} yrs` : null, horse.color]
       .filter(Boolean)
       .join(' · ');
-    const image = horse.profileImage || horse.gallery?.[0]?.url || '';
+    const image = primaryMedia?.src || '';
 
     const setMeta = (property: string, content: string) => {
       let el = document.querySelector<HTMLMetaElement>(`meta[property="${property}"]`);
@@ -425,7 +472,7 @@ export default function BuyerProfile() {
     return () => {
       document.title = 'XBAR';
     };
-  }, [horse]);
+  }, [horse, primaryMedia?.src]);
   const documents = resolvedPayload?.documents ?? [];
   const sharedListing = resolvedPayload?.sharedListing;
 
@@ -516,7 +563,9 @@ export default function BuyerProfile() {
         <section className="buyer-hero">
           <div className="buyer-hero__media">
             <HorseMediaPreview
-              src={horse.profileImage || horse.gallery[0]?.url}
+              src={primaryMedia?.src}
+              storagePath={primaryMedia?.storagePath}
+              signedUrlResolver={mediaResolver}
               name={horse.name}
               imageClassName="buyer-hero__image"
               fallbackClassName="buyer-hero__image-fallback"
@@ -671,16 +720,7 @@ export default function BuyerProfile() {
             {salePhotoAssets.length ? (
               <div className="media-strip">
                 {salePhotoAssets.map((asset) => (
-                  <div key={asset.id} className="media-tile">
-                    <div className="media-tile__image-shell">
-                      <img src={asset.url} alt={asset.label} className="media-tile__image" />
-                    </div>
-                    <div className="media-tile__label">{asset.label}</div>
-                    <div className="media-tile__meta">
-                      <span>{asset.kind}</span>
-                      <Pill tone="blue">{asset.status}</Pill>
-                    </div>
-                  </div>
+                  <BuyerMediaTile key={asset.id} asset={asset} signedUrlResolver={mediaResolver} />
                 ))}
               </div>
             ) : (
