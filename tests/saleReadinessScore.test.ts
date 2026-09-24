@@ -10,6 +10,7 @@ import {
 } from '../src/lib/saleReadinessScore.js';
 import { hasRoleCapability } from '../src/lib/permissions.js';
 import { hasActiveListing } from '../src/lib/xbarPhaseTwo.js';
+import { computeStageBuckets } from '../src/features/documents/pipeline.js';
 import type {
   DocumentRecord,
   ExpenseReceipt,
@@ -420,4 +421,66 @@ test('the profile header says "for sale" from the listing, not the stored score'
   // step, so a row reading it could say "Needs Transfer Docs" beside a card
   // saying the packet is ready.
   assert.doesNotMatch(profile, /readiness\?\.packetStatus/, 'packet status comes from the computed score');
+});
+
+test('a file still being read is waited on, not offered for approval', () => {
+  // Documents puts only Needs Review and Matched papers in its review queue;
+  // a Queued one sits under Processing with nothing to approve yet.
+  const queuedTransfer = complete({ documents: [currentCoggins(), doc('Transfer Packet', { state: 'Queued' })] });
+  const transfer = queuedTransfer.actions.find((action) => action.key === 'transfer');
+  assert.equal(transfer?.label, 'Let the transfer file finish reading, then approve it');
+  assert.doesNotMatch(transfer?.label ?? '', /^Approve/);
+  assert.match(queuedTransfer.components.find((c) => c.key === 'transfer')?.detail ?? '', /still being read/);
+
+  const queuedCoggins = complete({
+    documents: [doc('Coggins', { state: 'Queued', entities: { examDate: '2026-06-02' } }), transferFile()],
+  });
+  assert.equal(queuedCoggins.actions[0]?.label, 'Let the Coggins finish reading, then approve it');
+  assert.match(queuedCoggins.components.find((c) => c.key === 'coggins')?.detail ?? '', /still being read/);
+
+  // Not read yet, so no exam date yet: still worth waiting for.
+  const unreadCoggins = complete({ documents: [doc('Coggins', { state: 'Queued', entities: {} }), transferFile()] });
+  assert.equal(unreadCoggins.actions[0]?.label, 'Let the Coggins finish reading, then approve it');
+
+  // Last year's reviewed Coggins beside this year's upload still being read: wait, don't re-upload.
+  const renewalReading = complete({
+    documents: [
+      doc('Coggins', { entities: { examDate: '2025-05-01' } }),
+      doc('Coggins', { state: 'Queued', entities: {} }),
+      transferFile(),
+    ],
+  });
+  assert.equal(renewalReading.actions[0]?.label, 'Let the Coggins finish reading, then approve it');
+
+  // A paper that can be approved wins over one still being read.
+  const both = complete({
+    documents: [
+      currentCoggins(),
+      doc('Transfer Packet', { state: 'Queued' }),
+      doc('Bill of Sale', { state: 'Matched' }),
+    ],
+  });
+  assert.equal(both.actions.find((action) => action.key === 'transfer')?.label, 'Approve the transfer file in review');
+
+  // A queued paper already dated out of the window would not help once read.
+  const oldQueued = complete({
+    documents: [doc('Coggins', { state: 'Queued', entities: { examDate: '2025-01-01' } }), transferFile()],
+  });
+  assert.equal(oldQueued.actions[0]?.label, 'Add a current Coggins');
+});
+
+test('the card offers approval for exactly the papers the Documents review queue holds', () => {
+  // The Documents screen also scores each paper against the roster, which reads these.
+  const horse = makeHorse({ barnName: 'Copper', ownerEntity: 'Thunder Horse Ranch LLC' });
+  for (const state of ['Queued', 'Needs Review', 'Matched', 'Ready'] as const) {
+    const transfer = doc('Transfer Packet', { state });
+    const coggins = doc('Coggins', { state, entities: { examDate: '2026-06-02' } });
+    const buckets = computeStageBuckets([transfer, coggins], [horse], [], NOW.getTime());
+    const readiness = complete({ documents: [transfer, coggins] });
+    const approvable = (key: string) =>
+      /^Approve/.test(readiness.actions.find((action) => action.key === key)?.label ?? '');
+
+    assert.equal(approvable('transfer'), buckets.reviewQueue.includes(transfer), `transfer, ${state}`);
+    assert.equal(approvable('coggins'), buckets.reviewQueue.includes(coggins), `Coggins, ${state}`);
+  }
 });
