@@ -333,16 +333,19 @@ test('the sealed seller block is the contact block the packet renders', () => {
 
 /* The quick-start placeholders are not seller contact details.
  *
- * handleQuickStart invents `owner@ranch.local` and `Operations Lead` so a
- * skipped setup yields a working ranch. Resolving them as real contact
- * details would seal — and print on the buyer packet — a mailbox and a
- * person that do not exist, as though the customer had supplied them. The
- * seller block degrades to an honest absence instead.
+ * handleQuickStart invents `Main Ranch` (as the ranch name —
+ * applyWorkspaceProfileDefaults then derives defaultOwnerName from it, so
+ * it also arrives as the seller name), `Operations Lead` and
+ * `owner@ranch.local` so a skipped setup yields a working ranch. Resolving
+ * them as real contact details would seal — and print on the buyer packet —
+ * an invented ranch, person and mailbox as authenticated contact
+ * information. The seller block degrades to an honest absence instead.
  */
 test('quick-start placeholder contact is excluded from the sealed seller block', () => {
   const quickStartProfile = {
     ...sealTestWorkspace,
-    defaultOwnerName: '',
+    defaultOwnerName: 'Main Ranch',
+    ranchName: 'Main Ranch',
     ranchManagerName: 'Operations Lead',
     operationsEmail: 'owner@ranch.local',
   } as unknown as WorkspaceProfile;
@@ -357,11 +360,17 @@ test('quick-start placeholder contact is excluded from the sealed seller block',
     now: new Date('2026-09-24T12:00:00Z'),
   });
 
-  const sealed = JSON.parse(packet.credential.payload).seller as { name: string; email: string };
-  assert.equal(sealed.name, '', 'the invented manager name must not be sealed');
+  const sealed = JSON.parse(packet.credential.payload).seller as {
+    name: string;
+    ranch: string;
+    email: string;
+  };
+  assert.equal(sealed.name, '', 'the invented ranch name must not be sealed as the seller');
+  assert.equal(sealed.ranch, '', 'the invented ranch name must not be sealed as the ranch');
   assert.equal(sealed.email, '', 'the invented mailbox must not be sealed');
   assert.ok(!packet.html.includes('owner@ranch.local'), 'the invented mailbox must not be printed');
   assert.ok(!packet.html.includes('Operations Lead'), 'the invented manager name must not be printed');
+  assert.ok(!packet.html.includes('Main Ranch'), 'the invented ranch name must not be printed');
 });
 
 /*

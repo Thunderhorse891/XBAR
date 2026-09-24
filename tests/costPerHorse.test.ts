@@ -572,6 +572,32 @@ test('the supplier card reports the newest of two same-day purchases', () => {
   assert.equal(summary.feedSuppliers[0]?.latestUnitPrice, 11);
 });
 
+test('same-day supplier ordering survives the timestamp format transition', () => {
+  // A stale PWA tab still writes legacy `YYYY-MM-DD HH:mm`; new writes are
+  // ISO. Lexicographic order puts the later legacy upload
+  // ('2026-06-27 20:00') BEFORE the earlier ISO one
+  // ('2026-06-27T19:40:00.000Z'), selecting the wrong latest supplier price.
+  const summary = buildCostPerHorse({
+    horses: [horse('a')],
+    receipts: [
+      receipt({
+        amount: 360,
+        quantity: 40,
+        unit: 'bale',
+        receiptDate: daysAgo(3),
+        uploadedAt: '2026-06-27T19:40:00.000Z',
+      }),
+      receipt({ amount: 440, quantity: 40, unit: 'bale', receiptDate: daysAgo(3), uploadedAt: '2026-06-27 20:00' }),
+    ],
+    now: NOW,
+  });
+  assert.equal(
+    summary.feedSuppliers[0]?.latestUnitPrice,
+    11,
+    'the later legacy upload (legacy interpreted as UTC) is the newest',
+  );
+});
+
 test('a receipt logged today on the local calendar counts today, west of UTC included', async () => {
   const zone = process.env.TZ;
   try {

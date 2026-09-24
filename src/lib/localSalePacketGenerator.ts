@@ -117,21 +117,30 @@ function row(label: string, value: unknown) {
 /**
  * Quick-start sentinel values that must never be treated as real seller
  * contact details. handleQuickStart (src/routes/SetupWorkspace.tsx) invents
- * `owner@ranch.local` and `Operations Lead` so a skipped setup still yields a
- * working ranch — the workspaceSetupDefaults comment documents why the shared
- * path deliberately invents nothing. Sealing or printing a sentinel publishes
- * contact details for a mailbox/person that does not exist, as though the
- * customer had supplied them.
+ * `Main Ranch` as the ranch name — applyWorkspaceProfileDefaults then
+ * derives defaultOwnerName from it, so it also arrives as the seller name —
+ * plus `Operations Lead` (ranch manager) and `owner@ranch.local`
+ * (operations email), so a skipped setup still yields a working ranch. The
+ * workspaceSetupDefaults comment documents why the shared path deliberately
+ * invents nothing. Sealing or printing a sentinel publishes contact details
+ * for a person, mailbox or ranch that does not exist, as though the
+ * customer had supplied them. A real customer who actually named their
+ * ranch "Main Ranch" loses the printed name — an honest absence, and the
+ * safer direction.
  */
-const QUICK_START_EMAIL_SENTINEL = 'owner@ranch.local';
-const QUICK_START_NAME_SENTINEL = 'Operations Lead';
+const QUICK_START_IDENTITY_SENTINELS = ['main ranch', 'operations lead', 'owner@ranch.local'];
+
+function isQuickStartSentinel(value: string): boolean {
+  return QUICK_START_IDENTITY_SENTINELS.includes(value.trim().toLowerCase());
+}
 
 export function resolveSellerByline(workspaceProfile?: WorkspaceProfile): string {
   const rawName = (workspaceProfile?.defaultOwnerName || workspaceProfile?.ranchManagerName || '').trim();
-  // A sentinel is a job title, not a person — printing it as the byline
-  // would present an invented contact as the seller.
-  const name = rawName === QUICK_START_NAME_SENTINEL ? '' : rawName;
-  const ranch = (workspaceProfile?.ranchName || '').trim();
+  const rawRanch = (workspaceProfile?.ranchName || '').trim();
+  // A sentinel is a placeholder, not a person or a ranch — printing it as
+  // the byline would present invented identity as the seller.
+  const name = isQuickStartSentinel(rawName) ? '' : rawName;
+  const ranch = isQuickStartSentinel(rawRanch) ? '' : rawRanch;
   return [name, ranch].filter(Boolean).join(' · ');
 }
 
@@ -243,9 +252,9 @@ function resolveSealedSeller(workspaceProfile: WorkspaceProfile | undefined, hor
   const heroPhotoUrl = toPublicPassport(horse).photoUrl;
   return {
     // Quick-start placeholders are not contact details (see above).
-    name: name === QUICK_START_NAME_SENTINEL ? '' : name,
-    ranch,
-    email: email.toLowerCase() === QUICK_START_EMAIL_SENTINEL ? '' : email,
+    name: isQuickStartSentinel(name) ? '' : name,
+    ranch: isQuickStartSentinel(ranch) ? '' : ranch,
+    email: isQuickStartSentinel(email) ? '' : email,
     heroPhotoUrl,
     heroPhotoDigest: photoContentDigest(heroPhotoUrl),
   };
