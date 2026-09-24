@@ -1066,3 +1066,129 @@ test('with no name to go on, a paper is what its heading says, not what its body
   // A heading that names one kind, and a body that proves another, is refused.
   assert.equal(expiryKindOf(unnamed('Horse Purchase Agreement\nCertificate of Veterinary Inspection attached')), null);
 });
+
+/*
+ * Every CVI expiry case raised across #240 and #249, in one place, each
+ * asserting what a person reading the paper would say. A change to how a
+ * certificate is dated is done when every row passes — not the row that
+ * prompted it. A new case gets a new row.
+ *
+ * Each paper is a Ready vet record titled CVI with a 05/01/2026 inspection,
+ * so the 30-day window gives 2026-05-31; a row expecting that is one where the
+ * paper gives no date the certificate owns.
+ */
+const CVI_EXPIRY_CORPUS: Array<[string, string, string]> = [
+  // Dates the certificate gives for itself.
+  ['formal name, valid until', 'Certificate of Veterinary Inspection valid until July 15, 2026', '2026-07-15'],
+  ['formal name with (CVI)', 'Certificate of Veterinary Inspection (CVI) valid until 07/15/2026', '2026-07-15'],
+  ['interstate health certificate', 'Interstate health certificate valid through 07/15/2026', '2026-07-15'],
+  ['this certificate', 'Health certificate\nThis certificate is valid through 07/15/2026', '2026-07-15'],
+  ['CVI valid until', 'CVI valid until July 15, 2026', '2026-07-15'],
+  [
+    'formal name directly above its own field',
+    'Certificate of Veterinary Inspection\nExpiration Date: 07/15/2026',
+    '2026-07-15',
+  ],
+  [
+    'bare label opening a line',
+    'Certificate of Veterinary Inspection\nCertificate expiration date: 07/15/2026',
+    '2026-07-15',
+  ],
+  ['bare label after a column gap', 'Health certificate  Certificate expiration date: 07/15/2026', '2026-07-15'],
+  [
+    'Expiration Date field in the header',
+    'Certificate of Veterinary Inspection\nInspection Date: 05/01/2026\nExpiration Date: 07/15/2026',
+    '2026-07-15',
+  ],
+  ['Valid Through field in the header', 'Health certificate\nValid Through: 07/15/2026', '2026-07-15'],
+  ['Exp. Date field in the header', 'Health certificate\nExp. Date: 07/15/2026', '2026-07-15'],
+  [
+    'header field, then a vaccine section',
+    'Health certificate\nExpiration Date: 07/15/2026\nRabies Vaccination\nExpiration Date: 05/01/2027',
+    '2026-07-15',
+  ],
+  [
+    'test on a cover line above the heading',
+    'EIA test attached\nCertificate of Veterinary Inspection\nInspection Date: 05/01/2026\nExpiration Date: 07/15/2026',
+    '2026-07-15',
+  ],
+  [
+    'own date beside a rabies expiry',
+    'Certificate of Veterinary Inspection expires 07/15/2026  Rabies vaccination expires 05/01/2027',
+    '2026-07-15',
+  ],
+  [
+    'own date beside a rabies certificate',
+    'Health certificate\nThis certificate is valid through 07/15/2026\nRabies vaccination certificate valid through 05/01/2027',
+    '2026-07-15',
+  ],
+  // Dates that belong to something else: the inspection window applies.
+  [
+    'rabies expiry on its line',
+    'Certificate of Veterinary Inspection  Rabies vaccination expires 05/01/2027',
+    '2026-05-31',
+  ],
+  ['EIA test valid through', 'Health certificate  EIA test valid through 04/20/2027', '2026-05-31'],
+  [
+    'rabies certificate mid-line',
+    'Health certificate\nRabies vaccination certificate valid through 05/01/2027',
+    '2026-05-31',
+  ],
+  ['Coggins test certificate', 'Health certificate\nCoggins test certificate valid through 04/20/2027', '2026-05-31'],
+  ['table column gap', 'Health certificate\nRabies  05/01/2026  Expires 05/01/2027', '2026-05-31'],
+  [
+    'component named on the line above',
+    'Health certificate\nRabies Vaccination\nExpiration Date: 05/01/2027',
+    '2026-05-31',
+  ],
+  [
+    'multi-field vaccine section',
+    'Health certificate\nRabies Vaccination\nVaccine: Imrab 3\nDate Given: 05/01/2026\nExpiration Date: 05/01/2027',
+    '2026-05-31',
+  ],
+  [
+    'unlisted disease by its lot number',
+    'Health certificate\nPotomac Horse Fever\nLot No. 12345\nExpiration Date: 05/01/2027',
+    '2026-05-31',
+  ],
+  ['EIA test line', 'Health certificate\nEIA Test Date: 01/01/2026\nExpiration Date: 01/01/2027', '2026-05-31'],
+  [
+    'CVI mentioned inside a vaccine section',
+    'Certificate of Veterinary Inspection\nRabies Vaccination\nRequired for CVI\nExpiration Date: 05/01/2027',
+    '2026-05-31',
+  ],
+  [
+    'bare label wrapped under a vaccine',
+    'Certificate of Veterinary Inspection\nRabies vaccination\ncertificate valid through 05/01/2027',
+    '2026-05-31',
+  ],
+  ['policy on its own line', 'Certificate of Veterinary Inspection\nPolicy expires 05/01/2027', '2026-05-31'],
+  ['contract on its own line', 'Certificate of Veterinary Inspection\nContract ends 05/01/2027', '2026-05-31'],
+  ['term on its own line', 'Certificate of Veterinary Inspection\nTerm ends 05/01/2027', '2026-05-31'],
+  ['end date on its own line', 'Certificate of Veterinary Inspection\nEnd date: 05/01/2027', '2026-05-31'],
+  [
+    'two own dates that disagree',
+    'Health certificate\nCertificate valid through 07/15/2026\nCertificate valid through 08/15/2026',
+    '2026-05-31',
+  ],
+  [
+    'two header fields that disagree',
+    'Health certificate\nExpiration Date: 07/15/2026\nExpires: 05/01/2027',
+    '2026-05-31',
+  ],
+];
+
+test('the CVI expiry corpus: every case raised reads the way a person reading the paper would', () => {
+  const failures = CVI_EXPIRY_CORPUS.flatMap(([name, text, expected]) => {
+    const paper = doc({
+      type: 'Vet Record',
+      horseId: 'h1',
+      title: 'CVI',
+      extractedTextPreview: text,
+      entities: { examDate: '2026-05-01' },
+    });
+    const actual = buildExpiryRadar([paper], horses, NOW).items[0]?.expiresOn ?? '(current, not listed)';
+    return actual === expected ? [] : [`${name}: expected ${expected}, got ${actual}`];
+  });
+  assert.deepEqual(failures, [], `${failures.length} of ${CVI_EXPIRY_CORPUS.length} rows wrong`);
+});

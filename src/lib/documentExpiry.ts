@@ -156,7 +156,7 @@ export function findPrintedExpiryDate(text: string | undefined): string | null {
  * to the inspection window.
  */
 const CERTIFICATE_DATE = new RegExp(
-  `(?:(?:this\\s+)?(?:health\\s+)?certificate(?:\\s+of\\s+veterinary\\s+inspection)?(?:\\s*\\(CVI\\))?|\\bCVI)\\s+(?:is\\s+)?(?:expir(?:es|ation)(?:\\s+date)?|valid\\s+(?:through|thru|until|to)|good\\s+(?:through|thru|until))(?:\\s+on)?\\s*[:\\-–]?\\s*${DATE_PATTERN}`,
+  `(?:(?:this\\s+)?(?:health\\s+)?certificate(?:\\s+of\\s+veterinary\\s+inspection)?(?:\\s*\\(CVI\\))?|\\bCVI)[ \\t]+(?:is[ \\t]+)?(?:expir(?:es|ation)(?:\\s+date)?|valid\\s+(?:through|thru|until|to)|good\\s+(?:through|thru|until))(?:\\s+on)?\\s*[:\\-–]?\\s*${DATE_PATTERN}`,
   'gi',
 );
 
@@ -167,15 +167,18 @@ const CERTIFICATE_DATE = new RegExp(
  * it names something else: "Rabies vaccination certificate valid through
  * 05/01/2027" is the vaccination's certificate, not the CVI's. "This
  * certificate", "health certificate", the formal name and "CVI" say whose it
- * is, so they need no such check. Refusing a doubtful bare label costs only
- * the fallback to the 30-day inspection window.
+ * is, so they need no such check — but only on their own line: "Required for
+ * CVI" followed by a vaccine's "Expiration Date:" on the next is not "CVI
+ * expires". Refusing a doubtful bare label costs only the fallback to the
+ * 30-day inspection window.
  */
 const BARE_CERTIFICATE_LABEL = /^certificate(?!\s+of\s+veterinary\s+inspection)/i;
 const FIELD_START = /(?:^|[\n\r.:;|•(]\s*|\s{2,})$/;
 
 function namesThisCertificate(match: RegExpMatchArray, text: string): boolean {
   if (!BARE_CERTIFICATE_LABEL.test(match[0])) return true;
-  return FIELD_START.test(text.slice(0, match.index ?? 0));
+  const index = match.index ?? 0;
+  return FIELD_START.test(text.slice(0, index)) && inCertificateHeader(index, text);
 }
 
 /*
@@ -199,28 +202,37 @@ const VALIDITY_DATE = new RegExp(
 /*
  * A line to itself is not enough: a CVI lists vaccines and tests as sections
  * of their own ("Rabies Vaccination" / "Expiration Date: 05/01/2027"), and
- * their fields look exactly like the certificate's. So a validity field counts
- * only in the certificate's own header — after the certificate's name and
- * before anything names a vaccine, test, lab or batch. A field XBAR can't place
- * falls back to the 30-day inspection window, which flags a certificate early
- * rather than showing a lapsed one as current.
+ * their fields look exactly like the certificate's. So a validity field, or a
+ * bare "Certificate …" label, counts only in the certificate's own header:
+ * from its heading (the first time the paper names itself) to the first line
+ * that names a vaccine, test, lab or batch. A later mention of the CVI inside
+ * a section ("Required for CVI") does not start a new header. A field XBAR
+ * can't place falls back to the 30-day inspection window, which flags a
+ * certificate early rather than showing a lapsed one as current. Labels that
+ * name the certificate itself ("This certificate…", "CVI valid until…") need
+ * no such check.
  */
 const COMPONENT_SECTION =
   /vaccin|immuniz|rabies|coggins|\bEIA\b|\bELISA\b|\bAGID\b|\btest|influenza|rhino|strangles|west\s+nile|tetanus|encephal|\bEEE\b|\bWEE\b|potomac|\bPHF\b|booster|\bdose|\blot\s*(?:no|#|number)|\bserial|administered|\bgiven\b|laborator|\blab\b|sample|accession/i;
 
-function inCertificateHeader(match: RegExpMatchArray, text: string): boolean {
-  const before = text.slice(0, match.index ?? 0);
-  if (!LINE_START.test(before)) return false;
-  let headerStart = 0;
-  for (const name of before.matchAll(CERTIFICATE_NAME)) headerStart = name.index ?? headerStart;
-  return !COMPONENT_SECTION.test(before.slice(headerStart));
+function inCertificateHeader(index: number, text: string): boolean {
+  const heading = text.search(HEALTH_CERTIFICATE_TEXT);
+  const start = heading < 0 ? 0 : heading;
+  const section = text.slice(start).search(COMPONENT_SECTION);
+  const end = section < 0 ? text.length : start + section;
+  return index >= start && index < end;
+}
+
+function certificateValidityField(match: RegExpMatchArray, text: string): boolean {
+  const index = match.index ?? 0;
+  return LINE_START.test(text.slice(0, index)) && inCertificateHeader(index, text);
 }
 
 /** The date a health certificate prints for its own expiry, or null. Disagreeing dates return null. */
 export function findCertificateExpiryDate(text: string | undefined): string | null {
   const found = new Set([
     ...labelledDays(text, CERTIFICATE_DATE, namesThisCertificate),
-    ...labelledDays(text, VALIDITY_DATE, inCertificateHeader),
+    ...labelledDays(text, VALIDITY_DATE, certificateValidityField),
   ]);
   return found.size === 1 ? isoDay([...found][0]!) : null;
 }
@@ -262,8 +274,6 @@ function singleLabelledDay(text: string | undefined, pattern: RegExp): number | 
 
 const HEALTH_CERTIFICATE_TEXT =
   /health\s+certificate|certificate\s+of\s+veterinary\s+inspection|\bCVI\b|interstate\s+health/i;
-/** Every mention of the certificate's name, to find where its own header starts. */
-const CERTIFICATE_NAME = new RegExp(HEALTH_CERTIFICATE_TEXT.source, 'gi');
 const INSURANCE_NAME = /\b(?:insurance|policy)\b/i;
 const INSURANCE_TEXT =
   /\binsurance\s+(?:policy|certificate|binder)\b|\bcertificate\s+of\s+(?:liability\s+)?insurance\b|\bpolicy\s+(?:number|no\.?|#)|\bnamed\s+insured\b|\bdeclarations\s+page\b/i;
