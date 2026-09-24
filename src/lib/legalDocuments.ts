@@ -15,11 +15,36 @@ export type LegalDocument = {
   purpose: string;
   lastUpdated: string;
   suggestedFileName: string;
+  /**
+   * Internal founder guidance about a document's readiness (for example,
+   * "have counsel review before launch"). Never printed in customer-facing
+   * output; legalDocumentToHtml deliberately omits it.
+   */
   notice: string;
   sections: LegalDocumentSection[];
 };
 
 export const legalLastUpdated = 'June 10, 2026';
+
+/**
+ * Single source of truth for the support contact block printed on every legal
+ * document. The email is Erin's current support address ("for now" — not
+ * necessarily permanent). No company/postal address has been provided yet;
+ * the printable documents use the email only until one is supplied.
+ */
+export const SUPPORT_CONTACT = {
+  email: 'Xbarje@gmail.com',
+  address: '[COMPANY ADDRESS]',
+};
+
+const contactParagraph = (topic: string) =>
+  `For questions about ${topic}, contact XBAR LLC at ${SUPPORT_CONTACT.email}.`;
+
+// Founder guidance (not printed on customer documents): venue and dispute
+// language should be reviewed by counsel before final launch. UI follow-up:
+// consider wiring a "have counsel review these documents" banner in the
+// settings/legal area for the rancher; none exists yet, so the guidance lives
+// here instead of in printable output.
 
 export const legalDocuments: LegalDocument[] = [
   {
@@ -82,10 +107,38 @@ export const legalDocuments: LegalDocument[] = [
         ],
       },
       {
+        title: 'Term, suspension, and termination',
+        body: [
+          'The agreement begins when the user first accesses the service and continues while the account and any subscription remain active.',
+          'XBAR LLC may suspend or terminate access for violation of these Terms or the acceptable use policy, failure to pay, or suspected security issues, with or without notice as circumstances require.',
+          'The customer may end the agreement at any time by canceling the subscription and deleting the account through the workflows made available in the service. Customers should export critical records before deleting data or closing an account.',
+          'Sections covering customer data, limitation of liability, and governing law survive termination or expiration of the agreement.',
+        ],
+      },
+      {
+        title: 'Assignment',
+        body: [
+          'The customer may not assign these Terms or transfer the account without the prior written consent of XBAR LLC.',
+          'XBAR LLC may assign these Terms in connection with a merger, acquisition, or sale of all or substantially all of its assets, with notice to the customer.',
+        ],
+      },
+      {
+        title: 'Entire agreement',
+        body: [
+          'These Terms, together with the privacy policy, billing policy, and acceptable use policy referenced in the service, constitute the entire agreement between the customer and XBAR LLC regarding the service.',
+          'These Terms supersede prior oral or written understandings between the customer and XBAR LLC on the same subject.',
+        ],
+      },
+      {
         title: 'Governing law',
         body: [
-          'Unless a separate written agreement states otherwise, these Terms are governed by the laws of the State of Texas, without regard to conflict-of-law rules. Venue and dispute language should be reviewed by counsel before final launch.',
+          // Founder guidance (not printed): venue and dispute language should be reviewed by counsel before final launch.
+          'Unless a separate written agreement states otherwise, these Terms are governed by the laws of the State of Texas, without regard to conflict-of-law rules.',
         ],
+      },
+      {
+        title: 'Contact us',
+        body: [contactParagraph('these Terms')],
       },
     ],
   },
@@ -103,7 +156,7 @@ export const legalDocuments: LegalDocument[] = [
         title: 'Information collected',
         body: [
           'XBAR may collect account information, user names, emails, workspace details, ranch profile data, horse records, ownership data, medical and care records, document files, media, receipts, expense records, buyer lead data, shared packet settings, device and usage information, and support communications.',
-          'Payment card details are handled by payment processors such as Stripe. XBAR does not intentionally store full payment card numbers in the application database.',
+          'Payment card details are handled by payment processors such as Stripe. XBAR does not store full payment card numbers in the application database. Card details are processed by our payment processor (Stripe).',
         ],
       },
       {
@@ -126,10 +179,33 @@ export const legalDocuments: LegalDocument[] = [
         ],
       },
       {
+        title: 'Your choices and rights',
+        body: [
+          'Customers may request access to, correction of, or deletion of their account and workspace data through the account settings or support workflows.',
+          'XBAR handles such requests within a reasonable time and as required by applicable law. Deleting data may limit or end use of the service.',
+        ],
+      },
+      {
+        title: 'Cookies and similar technologies',
+        body: [
+          'XBAR may use cookies or similar technologies for authentication, preferences, and security. Users can control cookies through their browser settings. Some features of the service may not work if cookies are disabled.',
+        ],
+      },
+      {
+        title: "Children's privacy",
+        body: [
+          'The service is intended for adults and is not directed to children. XBAR does not knowingly collect personal information from children. If XBAR learns that it has collected personal information from a child, XBAR will take steps to delete it.',
+        ],
+      },
+      {
         title: 'Security',
         body: [
           'XBAR uses reasonable safeguards to protect account and workspace data. No online system can be guaranteed completely secure. Users are responsible for protecting passwords and controlling workspace invitations.',
         ],
+      },
+      {
+        title: 'Contact us',
+        body: [contactParagraph('this Privacy Policy')],
       },
     ],
   },
@@ -152,7 +228,7 @@ export const legalDocuments: LegalDocument[] = [
       {
         title: 'Automatic renewal',
         body: [
-          'Unless otherwise stated at checkout, paid subscriptions renew automatically on a monthly basis until canceled. By subscribing, the customer authorizes recurring charges to the payment method on file.',
+          'Unless otherwise stated at checkout, paid subscriptions renew automatically for successive terms of the same length (monthly or annual, as selected) until canceled. By subscribing, the customer authorizes recurring charges to the payment method on file.',
         ],
       },
       {
@@ -166,6 +242,10 @@ export const legalDocuments: LegalDocument[] = [
         body: [
           'Taxes, payment authorization, invoices, receipts, and payment method updates may be handled by Stripe or another payment processor. Customers are responsible for applicable taxes, bank charges, failed payment fees, chargebacks, and amounts required by the selected subscription.',
         ],
+      },
+      {
+        title: 'Contact us',
+        body: [contactParagraph('this billing policy')],
       },
     ],
   },
@@ -203,6 +283,10 @@ export const legalDocuments: LegalDocument[] = [
           'Generated documents, templates, packets, and pre-filled forms are drafting aids. Users must review all generated content before signing, sending, filing, or relying on it.',
         ],
       },
+      {
+        title: 'Contact us',
+        body: [contactParagraph('this disclaimer')],
+      },
     ],
   },
   {
@@ -213,14 +297,16 @@ export const legalDocuments: LegalDocument[] = [
       'Trademark and brand notice for XBAR LLC, XBAR, product names, logo, app marks, and buyer packet attribution.',
     lastUpdated: legalLastUpdated,
     suggestedFileName: 'xbar-llc-trademark-brand-notice.html',
-    notice:
-      'Use TM for unregistered marks. Do not use the registered trademark symbol unless registration is complete.',
+    notice: 'Brand notice for XBAR LLC marks and buyer packet attribution.',
+    // Founder guidance (not printed on customer documents): use TM for
+    // unregistered marks. Do not use the registered trademark symbol unless
+    // registration is complete.
     sections: [
       {
         title: 'XBAR marks',
         body: [
-          'XBAR LLC(TM), XBAR(TM), XBAR Command Infrastructure(TM), XBAR Documents(TM), XBAR My Horses(TM), XBAR Listings(TM), the XBAR name, the XBAR logo, product names, service names, graphics, icons, and trade dress are trademarks, service marks, or brand identifiers of XBAR LLC unless otherwise stated.',
-          'The TM symbol gives notice that XBAR claims trademark rights. The registered trademark symbol should not be used unless and until a mark is registered with the appropriate trademark office.',
+          'XBAR LLC™ and XBAR™ are trademarks of XBAR LLC unless otherwise stated. The XBAR logo, product and feature names, graphics, icons, and trade dress may also be trademarks, service marks, or brand identifiers of XBAR LLC.',
+          'The ™ symbol gives notice that XBAR LLC claims trademark rights. The registered trademark symbol should not be used unless and until a mark is registered with the appropriate trademark office.',
         ],
       },
       {
@@ -234,6 +320,10 @@ export const legalDocuments: LegalDocument[] = [
         body: [
           'Buyer packets, generated documents, and shared links may identify that they were generated using XBAR. That attribution does not mean XBAR verified the horse, seller, buyer, price, ownership, health, title, or transaction terms.',
         ],
+      },
+      {
+        title: 'Contact us',
+        body: [contactParagraph('this trademark notice')],
       },
     ],
   },
@@ -264,6 +354,10 @@ export const legalDocuments: LegalDocument[] = [
           'Users are responsible for reviewing buyer-facing content before sharing any link. Public or token-based links may be forwarded beyond the original recipient. Sensitive internal notes, medical details, financial records, private owner information, and unverified documents should not be released unless the user has authority and a legitimate reason to share them.',
         ],
       },
+      {
+        title: 'Contact us',
+        body: [contactParagraph('this policy')],
+      },
     ],
   },
 ];
@@ -290,7 +384,9 @@ function escapeHtml(value: unknown) {
 }
 
 export function legalDocumentToHtml(legalDoc: LegalDocument) {
-  return `<!doctype html><html><head><meta charset="utf-8"><title>${escapeHtml(legalDoc.title)}</title><style>body{font-family:Arial,sans-serif;margin:42px;color:#17202a;line-height:1.55}header{border-bottom:2px solid #17202a;margin-bottom:24px;padding-bottom:16px}h1{font-size:26px;margin:0 0 8px}h2{font-size:15px;margin-top:24px;text-transform:uppercase;letter-spacing:.08em}p{font-size:13px}.notice{background:#fff8e5;border:1px solid #ead28a;padding:12px;margin:16px 0}.footer{margin-top:28px;color:#667;font-size:12px;border-top:1px solid #d8dee6;padding-top:12px}</style></head><body><header><h1>${escapeHtml(legalDoc.title)}</h1><div>XBAR LLC(TM) · Last updated ${escapeHtml(legalDoc.lastUpdated)}</div></header><div class="notice"><strong>Review notice:</strong> ${escapeHtml(legalDoc.notice)}</div>${legalDoc.sections.map((section) => `<section><h2>${escapeHtml(section.title)}</h2>${section.body.map((paragraph) => `<p>${escapeHtml(paragraph)}</p>`).join('')}</section>`).join('')}<div class="footer">XBAR LLC(TM). XBAR(TM) and related marks are trademarks or service marks claimed by XBAR LLC. This printable document is generated from the XBAR legal document library.</div></body></html>`;
+  // The printable document carries no draft metadata: the internal `notice`
+  // field is founder guidance and is intentionally not rendered here.
+  return `<!doctype html><html><head><meta charset="utf-8"><title>${escapeHtml(legalDoc.title)}</title><style>body{font-family:Arial,sans-serif;margin:42px;color:#17202a;line-height:1.55}header{border-bottom:2px solid #17202a;margin-bottom:24px;padding-bottom:16px}h1{font-size:26px;margin:0 0 8px}h2{font-size:15px;margin-top:24px;text-transform:uppercase;letter-spacing:.08em}p{font-size:13px}.footer{margin-top:28px;color:#667;font-size:12px;border-top:1px solid #d8dee6;padding-top:12px}</style></head><body><header><h1>${escapeHtml(legalDoc.title)}</h1><div>XBAR LLC™ · Last updated ${escapeHtml(legalDoc.lastUpdated)}</div></header>${legalDoc.sections.map((section) => `<section><h2>${escapeHtml(section.title)}</h2>${section.body.map((paragraph) => `<p>${escapeHtml(paragraph)}</p>`).join('')}</section>`).join('')}<div class="footer">XBAR LLC™. XBAR™ and related marks are trademarks or service marks of XBAR LLC. Generated by XBAR LLC.</div></body></html>`;
 }
 
 export function openPrintableLegalDocument(legalDoc: LegalDocument) {
