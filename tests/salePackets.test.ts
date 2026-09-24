@@ -285,6 +285,55 @@ const sealTestWorkspace = {
   operationsEmail: 'ranch@example.com',
 } as unknown as WorkspaceProfile;
 
+/*
+ * The seal attributes the packet to the seller by name, never by workspace
+ * role: when the byline is filtered (quick-start placeholder) or unset, the
+ * sealedBy field stays empty rather than sealing the role ("Admin") the
+ * wizard passes as generatedBy — a role is not a person, and sealing it
+ * would contradict the byline the packet omits.
+ */
+test('a filtered or unset seller identity leaves sealedBy empty, never a role', () => {
+  const quickStartWorkspace = {
+    ranchName: 'Main Ranch',
+    businessName: 'My Ranch LLC',
+    defaultOwnerName: 'Main Ranch',
+    ranchManagerName: 'Operations Lead',
+    operationsEmail: 'owner@ranch.local',
+  } as unknown as WorkspaceProfile;
+
+  for (const workspaceProfile of [quickStartWorkspace, undefined]) {
+    const packet = buildLocalSalePacket({
+      horse: sealTestHorse(),
+      workspaceProfile: workspaceProfile as WorkspaceProfile,
+      documents: [],
+      ownershipRecord: sealTestOwnership(),
+      selectedDocumentIds: [],
+      generatedBy: 'Admin',
+      now: new Date('2026-09-24T12:00:00Z'),
+    });
+    assert.equal(
+      JSON.parse(packet.credential.payload).sealedBy,
+      '',
+      'sealedBy must not carry the workspace role when there is no real seller identity',
+    );
+  }
+
+  // A real identity still seals by name.
+  const realPacket = buildLocalSalePacket({
+    horse: sealTestHorse(),
+    workspaceProfile: sealTestWorkspace,
+    documents: [],
+    ownershipRecord: sealTestOwnership(),
+    selectedDocumentIds: [],
+    generatedBy: 'Admin',
+    now: new Date('2026-09-24T12:00:00Z'),
+  });
+  assert.ok(
+    JSON.parse(realPacket.credential.payload).sealedBy.includes('Erin Wyrick'),
+    'a real seller identity is still attributed',
+  );
+});
+
 /* The seal and the page resolve the seller contact block from ONE profile.
  *
  * `buildLocalSalePacket` once called `buildPacketCredential` without

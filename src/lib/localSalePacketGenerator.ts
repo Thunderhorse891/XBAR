@@ -306,9 +306,10 @@ export function buildPacketCredential(params: PacketCredentialParams): SaleCrede
     seller,
     verifiedProofs,
     sealedAt: now.toISOString(),
-    // Attributed to the seller by name, not by workspace role — the same
-    // byline the rendered packet prints (or omits).
-    sealedBy: resolveSellerByline(params.workspaceProfile) || params.generatedBy,
+    // Attributed to the seller by name, never by workspace role: when the
+    // byline is filtered or unset, a role ("Admin"/"Owner") is not a person,
+    // and sealing it would contradict the byline the packet omits.
+    sealedBy: resolveSellerByline(params.workspaceProfile),
   });
 }
 
