@@ -159,6 +159,20 @@ async function syncWorkspaceSubscription({
   }
 
   /*
+   * One trial per workspace, ever: the trial record lives in the payload and
+   * buildSubscriptionProfile does not know about it, so writing the fresh
+   * profile over the stored one would erase it. A workspace that trialed,
+   * bought, then canceled would then read as never-trialed and get a second
+   * free trial. Carry the stored record forward, the same way the billing
+   * period is carried above.
+   */
+  const storedPayload = existingProfile?.payload;
+  const storedTrial = storedPayload && typeof storedPayload === 'object' ? storedPayload.trial : undefined;
+  if (storedTrial && typeof storedTrial === 'object') {
+    nextProfile.trial = storedTrial;
+  }
+
+  /*
    * One call, because the ordering check and the three writes have to be
    * atomic.
    *

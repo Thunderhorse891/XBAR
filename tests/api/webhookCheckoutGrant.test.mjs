@@ -207,6 +207,29 @@ test('an annual purchase grants the tier through the annual price id', async () 
   assert.equal(params.p_seat_count, 3, 'the subscription quantity becomes the seat count');
 });
 
+test('a purchase preserves the stored trial record so the one-trial rule survives billing', async () => {
+  stripeScenario.calls = [];
+  stripeScenario.retrieveSubscription = async () => activeSubscription(PRICE_PRO_MONTHLY);
+  const trial = {
+    startedAt: '2026-09-01T00:00:00.000Z',
+    endsAt: '2026-09-15T00:00:00.000Z',
+    plan: 'Professional',
+  };
+  const calls = supabaseFor({
+    profileRow: { tier: 'Starter', payload: { trial } },
+  });
+
+  const response = await deliver(completedEvent({ eventId: 'evt_test_trial_carry' }));
+
+  assert.equal(response.statusCode, 200);
+  const [params] = calls.rpcParams;
+  assert.deepEqual(
+    params.p_profile.trial,
+    trial,
+    'the webhook must not wipe the trial record: trial, buy, cancel must not reopen a second trial',
+  );
+});
+
 test('a duplicate delivery is acknowledged without re-granting', async () => {
   stripeScenario.calls = [];
   stripeScenario.retrieveSubscription = async () => activeSubscription(PRICE_PRO_MONTHLY);

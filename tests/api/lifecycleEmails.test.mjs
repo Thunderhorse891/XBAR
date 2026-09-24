@@ -211,13 +211,13 @@ test('dunning email with a portal URL links the portal, without one links Billin
     billingPortalUrl: 'https://billing.stripe.com/session/abc',
   });
   assert.match(withPortal.subject, /payment didn't go through/);
-  assert.ok(hrefsOf(withPortal.html).includes('https://billing.stripe.com/session/abc'));
+  assert.ok(hrefsOf(withPortal.html).some((h) => h === 'https://billing.stripe.com/session/abc'));
   assert.match(withPortal.text, /Professional/);
   assert.match(withPortal.text, /records are unaffected/);
   assert.match(withPortal.text, new RegExp(SUPPORT_EMAIL.replace('.', '\\.')));
 
   const withoutPortal = buildPaymentFailedEmail({ billingPortalUrl: '' });
-  assert.ok(!hostsOf(withoutPortal.html).includes('billing.stripe.com'));
+  assert.ok(!hostsOf(withoutPortal.html).some((h) => h === 'billing.stripe.com'));
   assert.match(withoutPortal.text, /Billing page in XBAR/);
   assert.match(withoutPortal.html, /\/billing/);
 });
@@ -539,7 +539,7 @@ test('dunning resolves the workspace, sends once per invoice', async () => {
   assert.equal(first.sent, true);
   assert.equal(sent.length, 1);
   assert.match(sent[0].subject, /payment didn't go through/);
-  assert.ok(hostsOf(sent[0].html).includes('billing.stripe.com'));
+  assert.ok(hostsOf(sent[0].html).some((h) => h === 'billing.stripe.com'));
 
   // A second failed attempt for the same invoice does not re-send.
   const second = await handleInvoicePaymentFailed({ ...args, eventId: 'evt_2' });
