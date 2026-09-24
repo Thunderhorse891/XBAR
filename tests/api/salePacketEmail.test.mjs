@@ -166,3 +166,20 @@ test('the SendGrid request body uses the v3 API field names (behavioral)', async
     globalThis.fetch = prevFetch;
   }
 });
+
+/*
+ * The server seal must authenticate the SAME filtered seller identity the
+ * PDF cover renders. buildServerSaleCredential hashed the raw workspace
+ * (My Ranch LLC / Main Ranch) before the identity filter ran, so the seal
+ * authenticated names the PDF omits. The handler now resolves
+ * sellerIdentity(context.workspace) first and passes it as sellerIdentity —
+ * the filter site and the seal site must not be reordered apart.
+ */
+test('the server seal is built over the filtered seller identity', () => {
+  const filterAt = handlerSrc.indexOf('const identity = sellerIdentity(context.workspace);');
+  const sealAt = handlerSrc.indexOf('const seal = buildServerSaleCredential({');
+  assert.ok(filterAt !== -1, 'the handler must resolve the filtered seller identity');
+  assert.ok(sealAt !== -1, 'the handler must build the server seal');
+  assert.ok(filterAt < sealAt, 'the identity filter must run before the seal so the seal covers the filtered names');
+  assert.ok(/sellerIdentity:\s*identity/.test(handlerSrc), 'the filtered identity must be passed into the seal');
+});

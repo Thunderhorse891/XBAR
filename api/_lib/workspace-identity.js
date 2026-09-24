@@ -6,12 +6,14 @@
  * `My Ranch LLC` (business name), `Main Ranch` (ranch name —
  * applyWorkspaceProfileDefaults also derives defaultOwnerName from it),
  * `Operations Lead` and `owner@ranch.local` (operations email) so a skipped
- * setup still yields a working ranch. The local sale packet filters the
- * same set (isQuickStartSentinel in src/lib/localSalePacketGenerator.ts);
- * this is the server copy for buyer-facing sender identity in cloud
- * packets, which cannot import from the client bundle. Presenting an
- * invented company, ranch or mailbox as the sender misidentifies the
- * seller to the buyer.
+ * setup still yields a working ranch. The local sale packet, share caption
+ * and report exports filter the same set (isQuickStartSentinel in
+ * src/lib/workspaceIdentity.ts); this is the server copy for buyer-facing
+ * sender identity in cloud packets, which cannot import from the client
+ * bundle. The two lists must stay identical — tests/api/
+ * workspaceIdentityParity.test.mjs fails the build if they drift.
+ * Presenting an invented company, ranch or mailbox as the sender
+ * misidentifies the seller to the buyer.
  */
 const QUICK_START_IDENTITY_SENTINELS = ['my ranch llc', 'main ranch', 'operations lead', 'owner@ranch.local'];
 

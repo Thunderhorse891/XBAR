@@ -170,6 +170,12 @@ export default async function handler(req, res) {
     // is the tamper-PROOF anchor a buyer verifies against.
     const packetId = `packet-${randomUUID()}`;
     const packetPath = `${workspaceId}/${horseId}/${packetId}.pdf`;
+    // The buyer-facing seller identity with quick-start placeholders removed —
+    // a packet must never present an invented company/ranch as the seller.
+    // Resolved BEFORE the seal: the seal authenticates this same filtered
+    // identity, so the seal and the PDF cover cannot disagree about who the
+    // seller is.
+    const identity = sellerIdentity(context.workspace);
     const seal = buildServerSaleCredential({
       packetId,
       horseId,
@@ -177,6 +183,7 @@ export default async function handler(req, res) {
       ownershipRecord,
       documents: includedDocs,
       sealedAt: new Date().toISOString(),
+      sellerIdentity: identity,
     });
     const appOrigin =
       process.env.PUBLIC_APP_URL ||
@@ -196,10 +203,6 @@ export default async function handler(req, res) {
     // Point verification straight at the canonical path so the link never depends
     // on a bare-path redirect resolving first.
     const verifyUrl = `${appOrigin}/app/verify/${packetId}`;
-
-    // The buyer-facing seller identity with quick-start placeholders removed —
-    // a packet must never present an invented company/ranch as the seller.
-    const identity = sellerIdentity(context.workspace);
 
     const coverBytes = await createSectionedPdf({
       title: `Sale Packet: ${context.horse.name}`,

@@ -128,3 +128,37 @@ test('payload is canonical JSON with sorted top-level keys and tolerates missing
   assert.equal(parsed.owner.legalOwner, '');
   assert.deepEqual(parsed.documents, []);
 });
+
+/*
+ * The server seal must authenticate the SAME filtered seller identity the
+ * PDF cover renders. For a quick-start workspace (My Ranch LLC / Main
+ * Ranch) the handler filters through api/_lib/workspace-identity.js BEFORE
+ * building the seal and passes the result as sellerIdentity; the sealed
+ * payload then carries the filtered names, so the seal and the cover cannot
+ * disagree about who the seller is.
+ */
+test('the seal covers the filtered seller identity, not the raw placeholders', async () => {
+  const { sellerIdentity } = await import('../../api/_lib/workspace-identity.js');
+  const quickStartWorkspace = { businessName: 'My Ranch LLC', ranchName: 'Main Ranch' };
+  const seal = buildServerSaleCredential({
+    ...input(),
+    context: { ...input().context, workspace: quickStartWorkspace },
+    sellerIdentity: sellerIdentity(quickStartWorkspace),
+  });
+  const parsed = JSON.parse(seal.payload);
+  assert.equal(parsed.workspace.businessName, '', 'the invented company is not sealed');
+  assert.equal(parsed.workspace.ranchName, '', 'the invented ranch is not sealed');
+});
+
+test('the seal still covers real workspace names through the identity', async () => {
+  const { sellerIdentity } = await import('../../api/_lib/workspace-identity.js');
+  const realWorkspace = { businessName: 'Rocking R', ranchName: 'Rocking R Ranch' };
+  const seal = buildServerSaleCredential({
+    ...input(),
+    context: { ...input().context, workspace: realWorkspace },
+    sellerIdentity: sellerIdentity(realWorkspace),
+  });
+  const parsed = JSON.parse(seal.payload);
+  assert.equal(parsed.workspace.businessName, 'Rocking R');
+  assert.equal(parsed.workspace.ranchName, 'Rocking R Ranch');
+});
