@@ -131,6 +131,7 @@ Required for managed Stripe billing and webhook reconciliation:
 - `STRIPE_PRICE_ID_PROFESSIONAL`
 - `STRIPE_PRICE_ID_RANCH_OPS`
 - `STRIPE_PRICE_ID_ENTERPRISE`
+- `STRIPE_PRICE_ID_*_ANNUAL` (one per tier, e.g. `STRIPE_PRICE_ID_STARTER_ANNUAL`) — annual billing; checkout refuses annual until these are set
 - `PUBLIC_APP_URL`
 
 Owner/QA access (all optional, all off by default):

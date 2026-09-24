@@ -168,10 +168,14 @@ test('recommendation moves one operating level at a time and respects selection'
   assert.match(planOutcomes['Ranch Ops'].join(' '), /one rhythm/);
 });
 test('subscription prices stay aligned to the current approved pricing table', () => {
-  assert.equal(subscriptionPlans.Starter.monthlyRate, 29);
-  assert.equal(subscriptionPlans.Professional.monthlyRate, 79);
-  assert.equal(subscriptionPlans['Ranch Ops'].monthlyRate, 199);
-  assert.equal(subscriptionPlans.Enterprise.monthlyRate, 499);
+  assert.equal(subscriptionPlans.Starter.monthlyRate, 12);
+  assert.equal(subscriptionPlans.Professional.monthlyRate, 29);
+  assert.equal(subscriptionPlans['Ranch Ops'].monthlyRate, 79);
+  assert.equal(subscriptionPlans.Enterprise.monthlyRate, 199);
+  assert.equal(subscriptionPlans.Starter.annualRate, 120);
+  assert.equal(subscriptionPlans.Professional.annualRate, 290);
+  assert.equal(subscriptionPlans['Ranch Ops'].annualRate, 790);
+  assert.equal(subscriptionPlans.Enterprise.annualRate, 1990);
 });
 
 test('no configuration produces a purchasable path when Stripe is absent', () => {

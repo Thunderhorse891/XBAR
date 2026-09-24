@@ -13,6 +13,7 @@ const load = (relPath: string) => import(pathToFileURL(path.join(repoRoot, relPa
 type MarketingPlan = {
   tier: string;
   monthlyRate: number;
+  annualRate: number;
   fit: string;
   features: string[];
   limits: Record<string, number>;
@@ -42,6 +43,7 @@ test('published pricing exactly matches the tier configuration the app enforces'
     const config = subscriptionTierConfig[plan.tier as keyof typeof subscriptionTierConfig];
     assert.ok(config, `unknown marketing tier ${plan.tier}`);
     assert.equal(plan.monthlyRate, config.monthlyRate, `${plan.tier} price drifted from the app`);
+    assert.equal(plan.annualRate, config.annualRate, `${plan.tier} annual price drifted from the app`);
     assert.deepEqual(plan.features, config.featureFlags, `${plan.tier} feature list drifted from the app`);
     assert.deepEqual(plan.limits, config.limits, `${plan.tier} limits drifted from the app`);
   }

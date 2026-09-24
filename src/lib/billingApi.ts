@@ -91,6 +91,7 @@ export async function startManagedCheckout(params: {
   tier: SubscriptionTier;
   workspaceId: string;
   accessToken: string;
+  billingPeriod?: 'monthly' | 'annual';
 }): Promise<CheckoutResult> {
   if (!params.workspaceId || !params.accessToken) {
     return {
@@ -113,6 +114,7 @@ export async function startManagedCheckout(params: {
       body: JSON.stringify({
         tier: params.tier,
         workspaceId: params.workspaceId,
+        billingPeriod: params.billingPeriod === 'annual' ? 'annual' : 'monthly',
         returnUrl: typeof window !== 'undefined' ? window.location.href : '',
       }),
     });

@@ -601,22 +601,24 @@ test('payback is measured against what is paid now, never a lapsed plan’s stor
   const profile = (fields: Pick<SubscriptionProfile, 'tier' | 'monthlyRate' | 'billingState'>) =>
     fields as SubscriptionProfile;
 
-  assert.deepEqual(paybackPlan(profile({ tier: 'Ranch Ops', monthlyRate: 199, billingState: 'Active' })), {
+  assert.deepEqual(paybackPlan(profile({ tier: 'Ranch Ops', monthlyRate: 79, billingState: 'Active' })), {
     tier: 'Ranch Ops',
-    monthlyRate: 199,
+    monthlyRate: 79,
     paying: true,
   });
   // Canceled: the tier drops to Starter but the purchased rate stays on file.
+  // The stored rate below is a legacy price on purpose — whatever it is, the
+  // payback card measures against the current list price (12), never it.
   assert.deepEqual(paybackPlan(profile({ tier: 'Starter', monthlyRate: 199, billingState: 'Inactive' })), {
     tier: 'Starter',
-    monthlyRate: 29,
+    monthlyRate: 12,
     paying: false,
   });
-  assert.equal(paybackPlan(profile({ tier: 'Ranch Ops', monthlyRate: 199, billingState: 'Past Due' })).paying, false);
+  assert.equal(paybackPlan(profile({ tier: 'Ranch Ops', monthlyRate: 79, billingState: 'Past Due' })).paying, false);
   // A fresh workspace is seeded at rate 0 under Manual Billing: a list price, not a purchase.
   assert.deepEqual(paybackPlan(profile({ tier: 'Starter', monthlyRate: 0, billingState: 'Manual Billing' })), {
     tier: 'Starter',
-    monthlyRate: 29,
+    monthlyRate: 12,
     paying: false,
   });
 
