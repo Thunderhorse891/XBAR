@@ -1172,6 +1172,11 @@ const CVI_EXPIRY_CORPUS: Array<[string, string, string]> = [
     '2026-05-31',
   ],
   [
+    '"this certificate" inside a vaccine section',
+    'Health certificate\nRabies Vaccination Certificate\nThis certificate is valid through 05/01/2027',
+    '2026-05-31',
+  ],
+  [
     'certificate-prefixed field in a vaccine section',
     'Health certificate\nRabies Vaccination\nCertificate Expiration Date: 05/01/2027',
     '2026-05-31',
@@ -1291,6 +1296,17 @@ const UNPLACED_IDENTITY_CORPUS: Array<[string, string, string, string | null]> =
     null,
   ],
   ['an expiry label with nothing to say what it is', 'scan0044', 'Expiration Date: 06/15/2026', null],
+  ['CVI requirements', 'CVI Requirements', 'Expiration Date: 07/15/2026', null],
+  ['CVI instructions', 'CVI Instructions', '', null],
+  ['insurance requirements', 'Insurance Requirements', 'Expiration Date: 06/15/2026', null],
+  ['a lease template', 'Lease Agreement Template', '', null],
+  ['a health certificate checklist', 'Health Certificate Checklist', '', null],
+  [
+    'a requirements heading',
+    'scan0049',
+    'CVI Requirements for Interstate Travel\nCertificate of Veterinary Inspection\nExpiration Date: 07/15/2026',
+    null,
+  ],
   [
     'a registration paper',
     'AQHA Registration',
@@ -1305,4 +1321,34 @@ test('the unplaced-paper identity corpus: a paper is what its name or heading sa
     return actual === expected ? [] : [`${name}: expected ${expected}, got ${actual}`];
   });
   assert.deepEqual(failures, [], `${failures.length} of ${UNPLACED_IDENTITY_CORPUS.length} rows wrong`);
+});
+
+test('a paper about a certificate, policy or contract is not one, whatever intake typed it', () => {
+  // Intake types by filename, so "Insurance Requirements.pdf" arrives typed Insurance
+  // and "Coggins Instructions.pdf" typed Coggins. A name that says the paper is about
+  // the thing — requirements, instructions, a checklist, a template — says it isn't it.
+  const kind = (type: DocumentRecord['type'], title: string, text = '') =>
+    expiryKindOf({ type, title, extractedTextPreview: text });
+  assert.equal(kind('Insurance', 'Insurance Requirements', 'Expiration Date: 06/15/2026'), null);
+  assert.equal(kind('Coggins', 'Coggins Instructions'), null);
+  assert.equal(kind('Breeding Contract', 'Breeding Contract Template'), null);
+  assert.equal(kind('Vet Record', 'CVI Requirements', 'Certificate of Veterinary Inspection'), null);
+  // Controls: the papers themselves.
+  assert.equal(kind('Insurance', 'Farm Insurance'), 'Insurance');
+  assert.equal(kind('Coggins', 'Coggins 2026'), 'Coggins');
+  assert.equal(kind('Vet Record', 'CVI', 'Certificate of Veterinary Inspection'), 'Health certificate');
+  const radar = buildExpiryRadar(
+    [
+      doc({
+        type: 'Insurance',
+        horseId: 'h1',
+        title: 'Insurance Requirements',
+        extractedTextPreview: 'Expiration Date: 06/15/2026',
+      }),
+    ],
+    horses,
+    NOW,
+  );
+  assert.equal(radar.attentionCount, 0);
+  assert.deepEqual(describeExpiryRisk(radar, horses), [], 'no uncovered-value claim from a requirements sheet');
 });

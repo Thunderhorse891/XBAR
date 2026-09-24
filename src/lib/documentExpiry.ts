@@ -173,11 +173,15 @@ const CERTIFICATE_DATE = new RegExp(
  * 30-day inspection window.
  */
 const BARE_CERTIFICATE_LABEL = /^certificate(?!\s+of\s+veterinary\s+inspection)/i;
+const THIS_CERTIFICATE_LABEL = /^this\s+certificate\b/i;
 const FIELD_START = /(?:^|[\n\r.:;|•(]\s*|\s{2,})$/;
 
 function namesThisCertificate(match: RegExpMatchArray, text: string): boolean {
-  if (!BARE_CERTIFICATE_LABEL.test(match[0])) return true;
   const index = match.index ?? 0;
+  // "This certificate" means whichever certificate it sits in: in a "Rabies
+  // Vaccination Certificate" section it is the vaccination's.
+  if (THIS_CERTIFICATE_LABEL.test(match[0])) return inCertificateHeader(index, text);
+  if (!BARE_CERTIFICATE_LABEL.test(match[0])) return true;
   return FIELD_START.test(text.slice(0, index)) && inCertificateHeader(index, text);
 }
 
@@ -310,10 +314,21 @@ const CONTRACT_TEXT = /\b(?:breeding|stallion\s+service|service|lease|boarding)\
  */
 const UNPLACED_TYPES: ReadonlySet<DocumentRecord['type']> = new Set(['Registration', 'Ownership Memo']);
 
+/*
+ * A paper about a certificate, policy or contract is not one: "CVI
+ * Requirements", "Coggins Instructions", "Insurance Requirements", "Lease
+ * Agreement Template". Intake types by filename, so such a sheet can arrive
+ * typed Insurance or Coggins; its expiry label would otherwise read as a lapsed
+ * policy or a current certificate. Its name or heading saying so is enough.
+ */
+const REFERENCE_DOCUMENT =
+  /\b(?:requirements?|checklists?|instructions?|guide(?:lines)?|rules|procedures?|how\s+to|faq|templates?|blank|sample)\b/i;
+
 /** Which time-sensitive paper a document is, or null when it does not expire. */
 export function expiryKindOf(
   document: Pick<DocumentRecord, 'type' | 'title' | 'extractedTextPreview'>,
 ): ExpiryKind | null {
+  if (REFERENCE_DOCUMENT.test(document.title ?? '')) return null;
   if (document.type === 'Coggins') return 'Coggins';
   if (document.type === 'Insurance') return 'Insurance';
   if (document.type === 'Breeding Contract') return 'Contract';
@@ -332,6 +347,7 @@ export function expiryKindOf(
   // With no name, the body must say what the paper IS, not what it mentions:
   // its heading, or a phrase only that kind of paper prints.
   const heading = headingOf(text);
+  if (REFERENCE_DOCUMENT.test(heading)) return null;
   return (
     onlyKind([
       ['Health certificate', HEALTH_CERTIFICATE_TEXT.test(heading) || CVI_TITLE_LINE.test(text)],
