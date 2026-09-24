@@ -160,9 +160,27 @@ const CERTIFICATE_DATE = new RegExp(
   'gi',
 );
 
+/*
+ * A bare "certificate" is the paper's own only where it opens a field — at
+ * the start of the text, a new line, after punctuation, or after the wider gap
+ * OCR leaves between columns ("Certificate expiration date: …"). Mid-sentence
+ * it names something else: "Rabies vaccination certificate valid through
+ * 05/01/2027" is the vaccination's certificate, not the CVI's. "This
+ * certificate", "health certificate", the formal name and "CVI" say whose it
+ * is, so they need no such check. Refusing a doubtful bare label costs only
+ * the fallback to the 30-day inspection window.
+ */
+const BARE_CERTIFICATE_LABEL = /^certificate(?!\s+of\s+veterinary\s+inspection)/i;
+const FIELD_START = /(?:^|[\n\r.:;|•(]\s*|\s{2,})$/;
+
+function namesThisCertificate(match: RegExpMatchArray, text: string): boolean {
+  if (!BARE_CERTIFICATE_LABEL.test(match[0])) return true;
+  return FIELD_START.test(text.slice(0, match.index ?? 0));
+}
+
 /** The date a health certificate prints for its own expiry, or null. Disagreeing dates return null. */
 export function findCertificateExpiryDate(text: string | undefined): string | null {
-  const day = singleLabelledDay(text, CERTIFICATE_DATE);
+  const day = singleLabelledDay(text, CERTIFICATE_DATE, namesThisCertificate);
   return day === null ? null : isoDay(day);
 }
 
@@ -180,9 +198,15 @@ const INSPECTION_DATE = new RegExp(
 );
 
 /** Every date the pattern labels, as one day number; null when there is none or they disagree. */
-function singleLabelledDay(text: string | undefined, pattern: RegExp): number | null {
+function singleLabelledDay(
+  text: string | undefined,
+  pattern: RegExp,
+  accept: (match: RegExpMatchArray, text: string) => boolean = () => true,
+): number | null {
+  const source = String(text ?? '');
   const found = new Set<number>();
-  for (const match of String(text ?? '').matchAll(pattern)) {
+  for (const match of source.matchAll(pattern)) {
+    if (!accept(match, source)) continue;
     const day = parsePrintedDate(match[1] ?? '');
     if (day !== null) found.add(day);
   }
@@ -206,6 +230,13 @@ const CONTRACT_TEXT = /\b(?:breeding|stallion\s+service|service|lease|boarding)\
  * the paper's own name and text decide whether it is a certificate, a policy
  * or an agreement. A type the intake did recognise is never second-guessed.
  *
+ * The name is the paper's identity and decides first. The body is read only
+ * when the name says nothing, because bodies mention other papers: a service
+ * agreement requires "a current health certificate", a policy requires a CVI.
+ * When the name, or else the body, points to more than one kind, nothing is
+ * claimed — a paper left off the radar is better than one listed as the wrong
+ * kind with the wrong date.
+ *
  * Recognising the paper is not dating it: a policy or agreement still gets a
  * date only from a labelled date printed on it, and an expiry label alone
  * does not make an unplaced paper expire.
@@ -225,10 +256,26 @@ export function expiryKindOf(
     return HEALTH_CERTIFICATE_TEXT.test(`${title} ${text}`) ? 'Health certificate' : null;
   }
   if (!UNPLACED_TYPES.has(document.type)) return null;
-  if (HEALTH_CERTIFICATE_TEXT.test(`${title} ${text}`)) return 'Health certificate';
-  if (INSURANCE_NAME.test(title) || INSURANCE_TEXT.test(text)) return 'Insurance';
-  if (CONTRACT_NAME.test(title) || CONTRACT_TEXT.test(text)) return 'Contract';
-  return null;
+  const byName = onlyKind([
+    ['Health certificate', HEALTH_CERTIFICATE_TEXT.test(title)],
+    ['Insurance', INSURANCE_NAME.test(title)],
+    ['Contract', CONTRACT_NAME.test(title)],
+  ]);
+  if (byName !== undefined) return byName;
+  return (
+    onlyKind([
+      ['Health certificate', HEALTH_CERTIFICATE_TEXT.test(text)],
+      ['Insurance', INSURANCE_TEXT.test(text)],
+      ['Contract', CONTRACT_TEXT.test(text)],
+    ]) ?? null
+  );
+}
+
+/** The one kind that matched; null when several did; undefined when none did. */
+function onlyKind(signals: Array<[ExpiryKind, boolean]>): ExpiryKind | null | undefined {
+  const kinds = signals.filter(([, matched]) => matched).map(([kind]) => kind);
+  if (!kinds.length) return undefined;
+  return kinds.length === 1 ? kinds[0]! : null;
 }
 
 function localDay(now: Date): number {

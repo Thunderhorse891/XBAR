@@ -835,3 +835,107 @@ test('a CVI recovered from a Registration upload is dated by the inspection date
   });
   assert.equal(buildExpiryRadar([stored], horses, NOW).items[0]?.expiresOn, '2026-07-10');
 });
+
+test('a vaccination or test certificate printed on a CVI is never read as the CVI’s own expiry', () => {
+  const cvi = (text: string) => doc({ type: 'Vet Record', horseId: 'h1', title: 'CVI', extractedTextPreview: text });
+  // The reviewer's case: nothing on the paper dates the certificate itself.
+  const radar = buildExpiryRadar(
+    [cvi('Health certificate\nInspection Date: 2026-05-01\nRabies vaccination certificate valid through 05/01/2027')],
+    horses,
+    NOW,
+  );
+  assert.equal(radar.items[0]?.expiresOn, '2026-05-31', 'the inspection window, not the rabies date');
+  assert.equal(radar.items[0]?.urgency, 'expired');
+  assert.equal(radar.currentCount, 0);
+  assert.equal(radar.attentionCount, 1);
+  assert.equal(
+    buildExpiryRadar(
+      [cvi('Health certificate\nInspection Date: 2026-05-01\nCoggins test certificate valid through 04/20/2027')],
+      horses,
+      NOW,
+    ).items[0]?.expiresOn,
+    '2026-05-31',
+  );
+
+  // Beside the certificate's own date, the component certificate neither wins nor makes the dates "disagree".
+  assert.equal(
+    buildExpiryRadar(
+      [
+        cvi(
+          'Health certificate\nThis certificate is valid through 07/15/2026\nRabies vaccination certificate valid through 05/01/2027',
+        ),
+      ],
+      horses,
+      NOW,
+    ).items[0]?.expiresOn,
+    '2026-07-15',
+  );
+  // A bare "Certificate …" label that starts its own field is still the certificate's.
+  for (const text of [
+    'Certificate of Veterinary Inspection\nCertificate expiration date: 07/15/2026',
+    'Health certificate  Certificate expiration date: 07/15/2026',
+  ]) {
+    assert.equal(
+      buildExpiryRadar(
+        [doc({ type: 'Vet Record', horseId: 'h1', extractedTextPreview: text, entities: { examDate: '2026-05-01' } })],
+        horses,
+        NOW,
+      ).items[0]?.expiresOn,
+      '2026-07-15',
+      text,
+    );
+  }
+});
+
+test('a policy or agreement that mentions a health certificate keeps its own identity', () => {
+  // The reviewer's case: the paper's name says what it is; a line in its body
+  // about bringing a health certificate does not make it one.
+  const agreement = doc({
+    type: 'Registration',
+    horseId: 'h2',
+    title: 'Stallion Service Agreement',
+    extractedTextPreview:
+      'Stallion service agreement. A current health certificate is required before arrival. Agreement ends 06/10/2026',
+  });
+  const policy = doc({
+    type: 'Registration',
+    horseId: 'h1',
+    title: 'Farm Liability Policy',
+    extractedTextPreview:
+      'Coverage requires a current CVI for every horse on the premises. Expiration Date: 06/15/2026',
+  });
+  const certificate = doc({
+    type: 'Registration',
+    horseId: 'h3',
+    title: 'CVI',
+    extractedTextPreview: 'Certificate of Veterinary Inspection  Owner carries mortality insurance policy number EQ-1',
+    entities: { examDate: '2026-06-10' },
+  });
+  assert.equal(expiryKindOf(agreement), 'Contract');
+  assert.equal(expiryKindOf(policy), 'Insurance');
+  assert.equal(expiryKindOf(certificate), 'Health certificate');
+
+  const radar = buildExpiryRadar([agreement, policy], horses, NOW);
+  assert.deepEqual(
+    radar.expired.map((item) => [item.documentId, item.kind]).sort(),
+    [
+      [agreement.id, 'Contract'],
+      [policy.id, 'Insurance'],
+    ].sort(),
+  );
+  assert.equal(expiryReminderItems(radar, []).length, 2, 'both stay in the attention set');
+
+  // With no name to go on and a body that points two ways, the radar refuses
+  // rather than presenting the paper as the wrong kind.
+  assert.equal(expiryKindOf({ ...agreement, title: 'scan0046' }), null);
+  assert.equal(
+    expiryKindOf({
+      ...policy,
+      title: 'scan0047',
+      extractedTextPreview: `Insurance policy number EQ-2. ${policy.extractedTextPreview}`,
+    }),
+    null,
+  );
+  // A name that itself points two ways is refused too.
+  assert.equal(expiryKindOf({ ...agreement, title: 'CVI and Lease Agreement' }), null);
+});
