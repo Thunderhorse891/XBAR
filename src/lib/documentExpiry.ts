@@ -147,8 +147,51 @@ export function findPrintedExpiryDate(text: string | undefined): string | null {
   return found.size === 1 ? isoDay([...found][0]!) : null;
 }
 
+/*
+ * A health certificate carries other dates with expiry labels on it — a
+ * rabies vaccination, an EIA test "valid through" next spring. Those say
+ * nothing about when the certificate itself lapses, so only a date the
+ * certificate gives for ITSELF counts ("This certificate is valid through",
+ * "Certificate expiration date", "CVI valid until"). Anything else falls back
+ * to the inspection window.
+ */
+const CERTIFICATE_DATE = new RegExp(
+  `(?:(?:this\\s+)?(?:health\\s+)?certificate|\\bCVI)\\s+(?:is\\s+)?(?:expir(?:es|ation)(?:\\s+date)?|valid\\s+(?:through|thru|until|to)|good\\s+(?:through|thru|until))(?:\\s+on)?\\s*[:\\-–]?\\s*${DATE_PATTERN}`,
+  'gi',
+);
+
+/** The date a health certificate prints for its own expiry, or null. Disagreeing dates return null. */
+export function findCertificateExpiryDate(text: string | undefined): string | null {
+  const found = new Set<number>();
+  for (const match of String(text ?? '').matchAll(CERTIFICATE_DATE)) {
+    const day = parsePrintedDate(match[1] ?? '');
+    if (day !== null) found.add(day);
+  }
+  return found.size === 1 ? isoDay([...found][0]!) : null;
+}
+
 const HEALTH_CERTIFICATE_TEXT =
   /health\s+certificate|certificate\s+of\s+veterinary\s+inspection|\bCVI\b|interstate\s+health/i;
+const INSURANCE_NAME = /\b(?:insurance|policy)\b/i;
+const INSURANCE_TEXT =
+  /\binsurance\s+(?:policy|certificate|binder)\b|\bcertificate\s+of\s+(?:liability\s+)?insurance\b|\bpolicy\s+(?:number|no\.?|#)|\bnamed\s+insured\b|\bdeclarations\s+page\b/i;
+const CONTRACT_NAME = /\b(?:contract|agreement|lease)\b/i;
+const CONTRACT_TEXT = /\b(?:breeding|stallion\s+service|service|lease|boarding)\s+(?:contract|agreement)\b/i;
+
+/*
+ * The types an intake gives a paper it could not place. Local intake types a
+ * file by its name alone and files anything it doesn't recognise as
+ * Registration — "CVI.pdf", "Farm Liability Policy.pdf" and "Stallion
+ * Service Agreement.pdf" among them. The server's classifier files what it
+ * can't place as Ownership Memo. Review can't change a type, so for these two
+ * the paper's own name and text decide whether it is a certificate, a policy
+ * or an agreement. A type the intake did recognise is never second-guessed.
+ *
+ * Recognising the paper is not dating it: a policy or agreement still gets a
+ * date only from a labelled date printed on it, and an expiry label alone
+ * does not make an unplaced paper expire.
+ */
+const UNPLACED_TYPES: ReadonlySet<DocumentRecord['type']> = new Set(['Registration', 'Ownership Memo']);
 
 /** Which time-sensitive paper a document is, or null when it does not expire. */
 export function expiryKindOf(
@@ -157,12 +200,15 @@ export function expiryKindOf(
   if (document.type === 'Coggins') return 'Coggins';
   if (document.type === 'Insurance') return 'Insurance';
   if (document.type === 'Breeding Contract') return 'Contract';
-  if (
-    document.type === 'Vet Record' &&
-    HEALTH_CERTIFICATE_TEXT.test(`${document.title ?? ''} ${document.extractedTextPreview ?? ''}`)
-  ) {
-    return 'Health certificate';
+  const title = document.title ?? '';
+  const text = document.extractedTextPreview ?? '';
+  if (document.type === 'Vet Record') {
+    return HEALTH_CERTIFICATE_TEXT.test(`${title} ${text}`) ? 'Health certificate' : null;
   }
+  if (!UNPLACED_TYPES.has(document.type)) return null;
+  if (HEALTH_CERTIFICATE_TEXT.test(`${title} ${text}`)) return 'Health certificate';
+  if (INSURANCE_NAME.test(title) || INSURANCE_TEXT.test(text)) return 'Insurance';
+  if (CONTRACT_NAME.test(title) || CONTRACT_TEXT.test(text)) return 'Contract';
   return null;
 }
 
@@ -205,7 +251,10 @@ function resolveExpiry(
       ? { day: null, basis: 'No exam date on this Coggins, so XBAR can’t tell when it runs out.' }
       : { day: exam + CURRENT_COGGINS_DAYS, basis: `12 months from the ${readableDay(exam)} test.` };
   }
-  const printed = findPrintedExpiryDate(document.extractedTextPreview);
+  const printed =
+    kind === 'Health certificate'
+      ? findCertificateExpiryDate(document.extractedTextPreview)
+      : findPrintedExpiryDate(document.extractedTextPreview);
   if (printed) {
     return {
       day: parsePrintedDate(printed),
@@ -457,19 +506,31 @@ export function expiryBellCount(
 /**
  * Radar entries for the Reminders queue and its alert digest.
  *
- * A Coggins for a horse on the roster is left out on purpose: the care board
- * already raises a Coggins reminder for every such horse, and a second one
- * for the same paper would be noise. A Coggins not linked to a known horse has
- * no care row, so it stays in. A paper still in review is left out too: the
- * queue already carries a review reminder for it, and its date is not
- * confirmed. Only what needs attention now goes in — expired or under 30 days.
+ * A Coggins is left out only when the care board already raises a Coggins
+ * reminder for that horse (its Coggins signal is due or watch): a second one
+ * for the same horse would be noise. The care board reads a single paper per
+ * horse — the newest Ready Coggins, dated by upload when it has no exam date —
+ * so a newer paper with no exam date, or a mistyped future one, can read as
+ * clear there while the radar still holds last year's expired Coggins. That
+ * one stays in, as does a Coggins with no horse on the roster, which has no
+ * care row at all. A paper still in review is left out too: the queue already
+ * carries a review reminder for it, and its date is not confirmed. Only what
+ * needs attention now goes in — expired or under 30 days.
  */
-export function expiryReminderItems(radar: ExpiryRadar): ReminderItem[] {
+export function expiryReminderItems(
+  radar: ExpiryRadar,
+  careBoard: ReadonlyArray<Pick<CareBoardRow, 'horseId' | 'signals'>>,
+): ReminderItem[] {
+  const cogginsOnCareBoard = new Set(
+    careBoard
+      .filter((row) => row.signals.some((signal) => signal.key === 'coggins' && signal.status !== 'clear'))
+      .map((row) => row.horseId),
+  );
   return (
     [...radar.expired, ...radar.under30]
       // A paper still in review already has a review reminder of its own.
       .filter((item) => item.reviewed)
-      .filter((item) => !(item.kind === 'Coggins' && item.horseId))
+      .filter((item) => !(item.kind === 'Coggins' && item.horseId && cogginsOnCareBoard.has(item.horseId)))
       .map((item): ReminderItem => ({
         id: `expiry-${item.documentId}`,
         kind: 'Documents',

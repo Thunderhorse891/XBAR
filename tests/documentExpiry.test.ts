@@ -14,6 +14,7 @@ import {
 import { CURRENT_COGGINS_DAYS, isCurrentDatedDocument } from '../src/lib/documentCurrency.js';
 import { buildAlertDigest } from '../src/lib/alertCenter.js';
 import { buildOperationsPriorities } from '../src/lib/operationsPriority.js';
+import { buildCareBoardRows } from '../src/lib/dashboardOps.js';
 import type { DocumentRecord, HorseRecord } from '../src/types/xbar.js';
 
 // The expiry radar tells a rancher which papers run out and what that puts at
@@ -51,6 +52,9 @@ const horses = [
 
 const coggins = (horseId: string, examDate: string | undefined, extra: Partial<DocumentRecord> = {}) =>
   doc({ type: 'Coggins', horseId, entities: examDate ? { examDate } : {}, ...extra });
+
+// The care board built from the same documents, the way the Reminders page builds it.
+const careBoardFor = (documents: DocumentRecord[]) => buildCareBoardRows(horses, documents, [], NOW);
 
 test('a Coggins runs out twelve months after the test, sorted into the right bucket', () => {
   const radar = buildExpiryRadar(
@@ -229,17 +233,14 @@ test('money at risk is said in plain words, with dollars only from the horse rec
 });
 
 test('expired and 30-day papers reach the Reminders queue and its alert digest, Coggins excepted', () => {
-  const radar = buildExpiryRadar(
-    [
-      coggins('h1', '2025-05-01'),
-      doc({ id: 'ins-1', type: 'Insurance', horseId: 'h1', extractedTextPreview: 'Expiration Date: 06/15/2026' }),
-      doc({ id: 'ins-2', type: 'Insurance', horseId: 'h2', extractedTextPreview: 'Expiration Date: 07/20/2026' }),
-      doc({ id: 'ins-3', type: 'Insurance', horseId: 'h3', extractedTextPreview: 'Expiration Date: 09/01/2026' }),
-    ],
-    horses,
-    NOW,
-  );
-  const reminders = expiryReminderItems(radar);
+  const documents = [
+    coggins('h1', '2025-05-01'),
+    doc({ id: 'ins-1', type: 'Insurance', horseId: 'h1', extractedTextPreview: 'Expiration Date: 06/15/2026' }),
+    doc({ id: 'ins-2', type: 'Insurance', horseId: 'h2', extractedTextPreview: 'Expiration Date: 07/20/2026' }),
+    doc({ id: 'ins-3', type: 'Insurance', horseId: 'h3', extractedTextPreview: 'Expiration Date: 09/01/2026' }),
+  ];
+  const radar = buildExpiryRadar(documents, horses, NOW);
+  const reminders = expiryReminderItems(radar, careBoardFor(documents));
 
   // The care board already raises Coggins; a second reminder for it is noise.
   assert.deepEqual(
@@ -283,7 +284,7 @@ test('the radar never modifies a document it reads', () => {
 
   const radar = buildExpiryRadar(documents, horses, NOW);
   describeExpiryRisk(radar, horses);
-  expiryReminderItems(radar);
+  expiryReminderItems(radar, careBoardFor(documents));
 
   assert.deepEqual(documents, before);
   assert.equal(documents.length, 4, 'archived documents are skipped, not removed');
@@ -326,7 +327,7 @@ test('separate insurance policies stay separate, so a current one cannot hide on
     'both lapsed policies are listed beside the current ones',
   );
   assert.equal(radar.currentCount, 2);
-  assert.equal(expiryReminderItems(radar).length, 2);
+  assert.equal(expiryReminderItems(radar, []).length, 2);
 });
 
 test('an exam date after today is a typo to check, not a current Coggins, and hides nothing', () => {
@@ -363,7 +364,7 @@ test('a paper inside its 30-day window reaches the emailed digest, not just the 
       documents: [],
       salesLeads: [],
       horseNames: {},
-      expiringDocuments: expiryReminderItems(radar),
+      expiringDocuments: expiryReminderItems(radar, []),
     },
     NOW,
   );
@@ -412,7 +413,7 @@ test('a Coggins with no horse on the roster still reaches the Reminders queue', 
   const radar = buildExpiryRadar([loose, orphaned, linked], horses, NOW);
 
   assert.deepEqual(
-    expiryReminderItems(radar)
+    expiryReminderItems(radar, careBoardFor([loose, orphaned, linked]))
       .map((item) => item.id)
       .sort(),
     [`expiry-${loose.id}`, `expiry-${orphaned.id}`].sort(),
@@ -433,7 +434,7 @@ test('a digest counts every alert it lists, including ones due within 30 days', 
       documents: [],
       salesLeads: [],
       horseNames: {},
-      expiringDocuments: expiryReminderItems(radar),
+      expiringDocuments: expiryReminderItems(radar, []),
     },
     NOW,
   );
@@ -561,7 +562,7 @@ test('a date read off a paper still in review makes no claim and no second remin
   assert.equal(radar.expired.length, 1, 'it is listed on the page, flagged as not reviewed');
 
   // The queue already carries a review reminder for it.
-  assert.deepEqual(expiryReminderItems(radar), []);
+  assert.deepEqual(expiryReminderItems(radar, []), []);
 
   // An OCR slip must not become "$40,000 of insured horse value has no current policy".
   const risk = describeExpiryRisk(radar, horses);
@@ -574,6 +575,192 @@ test('a date read off a paper still in review makes no claim and no second remin
   ]);
 
   const approved = buildExpiryRadar([{ ...pendingLapse, state: 'Ready' }], horses, NOW);
-  assert.equal(expiryReminderItems(approved).length, 1);
+  assert.equal(expiryReminderItems(approved, []).length, 1);
   assert.match(describeExpiryRisk(approved, horses).join(' '), /\$40,000/);
+});
+
+test('a CVI filed as Registration is still read as a health certificate', () => {
+  // Local intake types a file by its name alone, and anything it doesn't
+  // recognise becomes Registration — "CVI.pdf" and "Health Certificate.pdf"
+  // included. The review screen can't change a type, so the radar must
+  // recognise the paper itself or it silently reports nothing due.
+  const byName = doc({ type: 'Registration', horseId: 'h1', title: 'CVI', entities: { examDate: '2026-05-01' } });
+  const byTitle = doc({
+    type: 'Registration',
+    horseId: 'h2',
+    title: 'Health Certificate',
+    entities: { examDate: '2026-06-10' },
+  });
+  const byText = doc({
+    type: 'Registration',
+    horseId: 'h3',
+    title: 'scan0042',
+    extractedTextPreview: 'CERTIFICATE OF VETERINARY INSPECTION  Origin: Texas',
+    entities: { examDate: '2026-06-10' },
+  });
+  // The server's classifier files what it can't place as Ownership Memo.
+  const serverUnknown = doc({
+    type: 'Ownership Memo',
+    horseId: 'h3',
+    title: 'upload',
+    extractedTextPreview: 'Certificate of Veterinary Inspection',
+    entities: { examDate: '2026-06-12' },
+  });
+  for (const paper of [byName, byTitle, byText, serverUnknown]) {
+    assert.equal(expiryKindOf(paper), 'Health certificate', paper.title);
+  }
+  const radar = buildExpiryRadar([byName, byTitle], horses, NOW);
+  assert.deepEqual(
+    radar.items.map((item) => [item.documentId, item.expiresOn, item.urgency]),
+    [
+      [byName.id, '2026-05-31', 'expired'],
+      [byTitle.id, '2026-07-10', 'under30'],
+    ],
+  );
+
+  // A registration paper stays a registration paper.
+  const registration = doc({
+    type: 'Registration',
+    horseId: 'h1',
+    title: 'AQHA Registration',
+    extractedTextPreview:
+      'American Quarter Horse Association  Certificate of Registration  Registration Number 5512345',
+  });
+  assert.equal(expiryKindOf(registration), null);
+  // A type the intake did recognise is never second-guessed.
+  assert.equal(
+    expiryKindOf(doc({ type: 'Bill of Sale', title: 'Bill of Sale', extractedTextPreview: 'CVI attached' })),
+    null,
+  );
+});
+
+test('a policy or agreement filed as Registration is still read, and still dated only from the paper', () => {
+  const liability = doc({
+    type: 'Registration',
+    title: 'Farm Liability Policy',
+    extractedTextPreview: 'Expiration Date: 06/15/2026',
+  });
+  const service = doc({
+    type: 'Registration',
+    horseId: 'h2',
+    title: 'Stallion Service Agreement',
+    extractedTextPreview: 'Agreement ends 07/20/2026',
+  });
+  const policyByText = doc({
+    type: 'Registration',
+    horseId: 'h1',
+    title: 'scan0043',
+    extractedTextPreview: 'Equine Mortality Insurance Policy  Policy Number EQ-4471  Expiration Date: 09/01/2026',
+  });
+  const leaseByText = doc({
+    type: 'Ownership Memo',
+    horseId: 'h3',
+    title: 'upload',
+    extractedTextPreview: 'Mare Lease Agreement  Term ends 12/31/2026',
+  });
+  assert.equal(expiryKindOf(liability), 'Insurance');
+  assert.equal(expiryKindOf(service), 'Contract');
+  assert.equal(expiryKindOf(policyByText), 'Insurance');
+  assert.equal(expiryKindOf(leaseByText), 'Contract');
+
+  const radar = buildExpiryRadar([liability, service, policyByText, leaseByText], horses, NOW);
+  assert.deepEqual(
+    radar.expired.map((item) => item.documentId),
+    [liability.id],
+  );
+  assert.deepEqual(
+    radar.under30.map((item) => item.documentId),
+    [service.id],
+  );
+  assert.deepEqual(
+    radar.under90.map((item) => item.documentId),
+    [policyByText.id],
+  );
+  assert.equal(expiryReminderItems(radar, []).length, 2, 'both reach the Reminders queue');
+
+  // An expiry label alone does not make a paper expire: with nothing saying
+  // what the paper is, it is left alone rather than guessed at.
+  assert.equal(
+    expiryKindOf(doc({ type: 'Registration', title: 'scan0044', extractedTextPreview: 'Expiration Date: 06/15/2026' })),
+    null,
+  );
+});
+
+test('a health certificate is dated by the certificate, never by a vaccination printed on it', () => {
+  const inspected = { type: 'Vet Record' as const, horseId: 'h1', entities: { examDate: '2026-05-01' } };
+  const withRabies = doc({
+    ...inspected,
+    extractedTextPreview: 'Certificate of Veterinary Inspection  Rabies vaccination expires 05/01/2027',
+  });
+  const withCoggins = doc({
+    ...inspected,
+    horseId: 'h2',
+    extractedTextPreview: 'Health certificate  EIA test valid through 04/20/2027',
+  });
+  const radar = buildExpiryRadar([withRabies, withCoggins], horses, NOW);
+  assert.deepEqual(
+    radar.items.map((item) => [item.documentId, item.expiresOn, item.urgency]),
+    [
+      [withRabies.id, '2026-05-31', 'expired'],
+      [withCoggins.id, '2026-05-31', 'expired'],
+    ],
+    'the 30-day inspection window, not the vaccine or test date',
+  );
+
+  // A date the certificate gives for itself is used.
+  for (const text of [
+    'Certificate of Veterinary Inspection  This certificate is valid through 07/15/2026',
+    'Health certificate  Certificate expiration date: 07/15/2026',
+    'CVI valid until July 15, 2026  Rabies vaccination expires 05/01/2027',
+  ]) {
+    const item = buildExpiryRadar([doc({ ...inspected, extractedTextPreview: text })], horses, NOW).items[0];
+    assert.equal(item?.expiresOn, '2026-07-15', text);
+    assert.match(item?.basis ?? '', /read from the document/);
+  }
+  // Two certificate dates that disagree are a guess; the window is used.
+  const conflicting = doc({
+    ...inspected,
+    extractedTextPreview:
+      'Health certificate  Certificate valid through 07/15/2026  Certificate valid through 08/15/2026',
+  });
+  assert.equal(buildExpiryRadar([conflicting], horses, NOW).items[0]?.expiresOn, '2026-05-31');
+});
+
+test('a Coggins is left out of reminders only when the care board raises one for that horse', () => {
+  // The care board reads the newest Ready Coggins by exam date, falling back
+  // to the upload date. A newer paper with no exam date (or a mistyped future
+  // one) reads as current there, while the radar still holds last year's
+  // expired Coggins. Dropping it then would leave the horse with no Coggins
+  // reminder at all.
+  const expired = coggins('h1', '2025-05-01');
+  const undatedNewer = coggins('h1', undefined, { uploadedAt: '2026-06-01T00:00:00Z' });
+  const documents = [expired, undatedNewer];
+  const careBoard = careBoardFor(documents);
+  const cogginsSignal = careBoard
+    .find((row) => row.horseId === 'h1')
+    ?.signals.find((signal) => signal.key === 'coggins');
+  assert.equal(cogginsSignal?.status, 'clear', 'the care board raises nothing for this Coggins');
+
+  const radar = buildExpiryRadar(documents, horses, NOW);
+  assert.deepEqual(
+    expiryReminderItems(radar, careBoard).map((item) => item.id),
+    [`expiry-${expired.id}`],
+  );
+
+  const typo = coggins('h1', '2062-05-01');
+  const withTypo = [expired, typo];
+  assert.deepEqual(
+    expiryReminderItems(buildExpiryRadar(withTypo, horses, NOW), careBoardFor(withTypo)).map((item) => item.id),
+    [`expiry-${expired.id}`],
+    'a mistyped future exam does not silence the real expiry either',
+  );
+
+  // When the care board does raise it, one reminder is enough.
+  assert.deepEqual(expiryReminderItems(buildExpiryRadar([expired], horses, NOW), careBoardFor([expired])), []);
+});
+
+test('the Reminders page passes its care board to the radar reminders', async () => {
+  const page = await readFile('src/routes/Reminders.tsx', 'utf8');
+  assert.match(page, /expiryReminderItems\(buildExpiryRadar\(documents, horses\), careRows\)/);
+  assert.match(page, /careRows,\n/);
 });
