@@ -8,6 +8,7 @@ import {
 } from '../_lib/subscription-status.js';
 import { collectStripePages } from '../_lib/checkout-session.js';
 import { getSupabaseAdmin } from '../_lib/supabase-admin.js';
+import { handleInvoicePaymentFailed } from '../_lib/lifecycleTriggers.js';
 
 export const config = {
   api: {
@@ -335,6 +336,34 @@ export default async function handler(req, res) {
           payload,
           entitlementFromSibling,
         });
+      }
+    }
+
+    /*
+     * Dunning: a payment failed. One notice per INVOICE (Stripe fires this
+     * event on every failed attempt, each with its own event id; the claim
+     * inside handleInvoicePaymentFailed dedupes on the invoice id so the
+     * customer is not emailed on every retry).
+     *
+     * A failed send returns a non-2xx so Stripe retries the delivery; the
+     * billing replay guard above already dedupes by event id, and the dunning
+     * claim is released on failure, so a retry re-sends rather than
+     * double-sends.
+     */
+    if (event.type === 'invoice.payment_failed') {
+      const supabaseForDunning = getSupabaseAdmin();
+      if (!supabaseForDunning) {
+        return sendJson(res, 503, { ok: false, message: 'Supabase admin credentials are not configured.' });
+      }
+      const dunning = await handleInvoicePaymentFailed({
+        supabase: supabaseForDunning,
+        stripe,
+        invoice: payload,
+        eventId: event.id,
+        billingPortalUrl: process.env.VITE_STRIPE_BILLING_PORTAL_URL || process.env.STRIPE_BILLING_PORTAL_URL || '',
+      });
+      if (!dunning.ok && !dunning.skipped) {
+        return sendJson(res, 502, { ok: false, message: dunning.message });
       }
     }
 
