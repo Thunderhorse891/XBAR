@@ -4,12 +4,16 @@ test('public pricing keeps canonical monthly prices and honest billing terms at 
   await page.setViewportSize({ width: 360, height: 800 });
   await page.goto('/pricing');
   await expect(page.getByRole('heading', { name: 'A plan for your horses. Room for your ranch.' })).toBeVisible();
-  await expect(page.getByText('Prices in USD, billed monthly. Annual billing is not offered yet.')).toBeVisible();
+  await expect(
+    page.getByText(
+      'Prices in USD. Monthly rates are shown on the cards; annual rates are listed below. Confirm your billing period and total at checkout.',
+    ),
+  ).toBeVisible();
   for (const [tier, price] of [
-    ['Starter', '29'],
-    ['Professional', '79'],
-    ['Ranch Ops', '199'],
-    ['Enterprise', '499'],
+    ['Starter', '12'],
+    ['Professional', '29'],
+    ['Ranch Ops', '79'],
+    ['Enterprise', '199'],
   ]) {
     const card = page.locator('.plan').filter({ has: page.getByRole('heading', { name: tier, exact: true }) });
     await expect(card.locator('.plan__price')).toHaveText(`$${price}/month`);
@@ -29,8 +33,16 @@ test('public pricing keeps canonical monthly prices and honest billing terms at 
     await page.getByText(question, { exact: true }).click();
   }
   await expect(
-    page.getByText('Only monthly billing is offered here. Annual prices and discounts have not been set.'),
+    page.getByText(
+      'The table lists annual prices alongside monthly rates. Checkout confirms availability and the final amount before you pay.',
+    ),
   ).toBeVisible();
+  await expect(page.getByRole('row').filter({ hasText: 'Annual price (2 months free)' }).getByRole('cell')).toHaveText([
+    '$120',
+    '$290',
+    '$790',
+    '$1990',
+  ]);
   await expect(page.getByText(/Canceling a plan does not delete your ranch records/)).toBeVisible();
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
 });

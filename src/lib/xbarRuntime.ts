@@ -23,6 +23,7 @@ const BASE36_ALPHABET = 'abcdefghijklmnopqrstuvwxyz0123456789';
 export const subscriptionTierConfig: Record<
   SubscriptionTier,
   Pick<SubscriptionProfile, 'monthlyRate' | 'sharedAccessEnabled' | 'featureFlags'> & {
+    annualRate: number;
     limits: Pick<
       SubscriptionProfile['usage'],
       'horseLimit' | 'seatLimit' | 'documentLimit' | 'salePacketLimit' | 'storageLimitGb' | 'sharedAccessSeatLimit'
@@ -30,12 +31,13 @@ export const subscriptionTierConfig: Record<
   }
 > = {
   Starter: {
-    monthlyRate: 29,
+    monthlyRate: 12,
+    annualRate: 120,
     sharedAccessEnabled: false,
     featureFlags: [
       'Keep clean records — horses, care, documents, expenses, reminders',
       'Documents with OCR intake and review',
-      '1 team seat',
+      '1 seat — just you',
       '250 documents and 25 GB storage',
     ],
     limits: {
@@ -48,7 +50,8 @@ export const subscriptionTierConfig: Record<
     },
   },
   Professional: {
-    monthlyRate: 79,
+    monthlyRate: 29,
+    annualRate: 290,
     sharedAccessEnabled: true,
     featureFlags: [
       'Everything in Starter',
@@ -67,7 +70,8 @@ export const subscriptionTierConfig: Record<
     },
   },
   'Ranch Ops': {
-    monthlyRate: 199,
+    monthlyRate: 79,
+    annualRate: 790,
     sharedAccessEnabled: true,
     featureFlags: [
       'Everything in Professional',
@@ -85,7 +89,8 @@ export const subscriptionTierConfig: Record<
     },
   },
   Enterprise: {
-    monthlyRate: 499,
+    monthlyRate: 199,
+    annualRate: 1990,
     sharedAccessEnabled: true,
     featureFlags: [
       'Everything in Ranch Ops',

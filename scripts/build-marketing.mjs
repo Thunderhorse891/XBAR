@@ -19,6 +19,7 @@ import { fileURLToPath } from 'node:url';
 import { renderPage, SITE_ORIGIN } from './marketing/render.mjs';
 import { marketingPages, legalPage, notFoundPage, CONTENT_UPDATED } from './marketing/pages.mjs';
 import { renderSamplePacket } from './marketing/sample-packet.mjs';
+import { build } from 'vite';
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 const repoRoot = path.resolve(here, '..');
@@ -65,13 +66,34 @@ function outputFileFor(pagePath) {
   return path.join(dist, pagePath.slice(1), 'index.html');
 }
 
+// Separate, homepage-only motion bundle. It neither changes the app bundle
+// graph nor runs at all in the skipped Capacitor/GitHub Pages builds.
+const landingBuild = await build({
+  configFile: false,
+  publicDir: false,
+  // Vite library mode intentionally preserves process.env for consumers;
+  // this entry runs directly in the browser, with no consumer bundler.
+  define: { 'process.env.NODE_ENV': JSON.stringify('production') },
+  build: {
+    outDir: path.join(dist, 'landing'),
+    emptyOutDir: false,
+    target: ['es2021', 'chrome100', 'safari13'],
+    lib: { entry: path.join(repoRoot, 'src/marketing/landingMotion.ts'), formats: ['es'], fileName: 'motion' },
+    rollupOptions: { output: { entryFileNames: 'motion-[hash].js' } },
+  },
+});
+const output = (Array.isArray(landingBuild) ? landingBuild[0] : landingBuild).output;
+const motionEntry = output.find((chunk) => chunk.type === 'chunk' && chunk.isEntry);
+if (!motionEntry) throw new Error('Landing motion entry missing from build output');
+
 for (const page of [...pages, notFoundPage]) {
   const file = outputFileFor(page.path);
   mkdirSync(path.dirname(file), { recursive: true });
-  writeFileSync(file, renderPage(page));
+  writeFileSync(file, renderPage(page, { landingScript: `/landing/${motionEntry.fileName}` }));
 }
 copyFileSync(path.join(here, 'marketing', 'site.css'), path.join(dist, 'site.css'));
 copyFileSync(path.join(here, 'marketing', 'site.js'), path.join(dist, 'site.js'));
+copyFileSync(path.join(here, 'marketing', 'landing.css'), path.join(dist, 'landing.css'));
 
 /* 4 — sample sale packet (fictional data, clearly labeled). */
 const samplesDir = path.join(dist, 'samples');

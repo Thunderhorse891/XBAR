@@ -5,6 +5,7 @@
 
 import { esc, APP_LOGIN, APP_SIGNUP, SITE_ORIGIN } from './render.mjs';
 import { marketingPlans } from './pricing-data.mjs';
+import { cinematicHome } from './home.mjs';
 
 export const CONTENT_UPDATED = '2026-07-13';
 
@@ -95,117 +96,7 @@ function breadcrumbJsonLd(items) {
 
 /* ----------------------------------------------------------------- home */
 
-const home = {
-  path: '/',
-  title: 'XBAR — Horse Records, Ownership Integrity & Sale-Ready Buyer Packets',
-  description:
-    'XBAR turns scattered horse paperwork into trusted digital records: OCR-assisted document intake, verified ownership and transfer status, compliance deadlines, and watermarked sale packets buyers can rely on.',
-  changefreq: 'weekly',
-  priority: '1.0',
-  jsonLd: [
-    {
-      '@context': 'https://schema.org',
-      '@type': 'SoftwareApplication',
-      name: 'XBAR',
-      applicationCategory: 'BusinessApplication',
-      operatingSystem: 'Web, iOS, Android',
-      description:
-        'Turn scattered horse paperwork into trusted, buyer-ready digital records with OCR-assisted intake, ownership integrity, compliance deadlines, and watermarked sale packets.',
-      url: `${SITE_ORIGIN}/`,
-      publisher: { '@id': `${SITE_ORIGIN}/#organization` },
-      offers: marketingPlans.map((plan) => ({
-        '@type': 'Offer',
-        name: plan.tier,
-        price: String(plan.monthlyRate),
-        priceCurrency: 'USD',
-        category: 'subscription',
-        url: `${SITE_ORIGIN}/pricing`,
-      })),
-    },
-  ],
-  body: `
-<section class="hero wrap section--flush">
-  <div>
-    <p class="kicker">Horse records, ownership &amp; sale readiness</p>
-    <h1>Give every horse a <span class="grad">record buyers can trust.</span></h1>
-    <p class="lead">Turn scattered paperwork into one verified, sale-ready record per horse — documents, ownership, and buyer packets your team can operate from.</p>
-    <div class="hero-actions">
-      <a class="btn btn--primary" href="${signup('Professional')}" rel="nofollow">Create your workspace</a>
-      <a class="btn" href="/demo">See how it works</a>
-    </div>
-    <ul class="proof-line">
-      <li>Ownership chain per horse</li>
-      <li>Watermarked sale packets</li>
-      <li>Human-verified records</li>
-    </ul>
-  </div>
-  ${recordShot(true)}
-</section>
-
-<section class="section">
-  <div class="wrap">
-    <p class="kicker">One path for every document</p>
-    <h2>From loose paperwork to ready records, in five steps.</h2>
-    <p class="intro">One pipeline, no untracked copies: upload, on-device OCR, human review, ownership link, watermarked sharing.</p>
-    ${pipelineSteps()}
-  </div>
-</section>
-
-<section class="section">
-  <div class="wrap">
-    <p class="kicker">What operations get</p>
-    <h2>Built around the workflows that cost horse businesses time and money.</h2>
-    <div class="grid grid--2" style="margin-top:26px">
-      <div class="card"><h3>Records you can trust</h3><p>One clean record per horse — identity, care, documents, history — instead of scattered files and spreadsheets.</p><ul><li>Source documents stay attached</li><li>Gaps are visible, not hidden</li><li>Usable years later</li></ul></div>
-      <div class="card"><h3>Ownership integrity</h3><p>Legal owner, co-owners, transfer status, and deadlines — surfaced before a missing document blocks a sale.</p><ul><li>Ownership documents per horse</li><li>Transfer status and deadlines</li><li>Every change audit-logged</li></ul></div>
-      <div class="card"><h3>Faster sale readiness</h3><p>Bundle approved documents into a watermarked sale packet; share buyer profiles built only from verified records.</p><ul><li>Watermarked buyer packets</li><li>Approved records only</li><li>Internal notes stay internal</li></ul></div>
-      <div class="card"><h3>OCR-assisted intake</h3><p>Move large archives in through on-device OCR and a review queue — volume without sacrificing accuracy.</p><ul><li>On-device OCR extraction</li><li>Review before anything is final</li><li>Matched to the right horse</li></ul></div>
-    </div>
-  </div>
-</section>
-
-<section class="section">
-  <div class="wrap">
-    <p class="kicker">Trust is a product feature</p>
-    <h2>Designed for records people rely on.</h2>
-    <div class="grid grid--3" style="margin-top:26px">
-      <div class="card"><h3>Source-record discipline</h3><p>Unknown data stays unknown until a person verifies it. We support decisions, not invent certainty.</p></div>
-      <div class="card"><h3>Audit-logged operations</h3><p>Links, verifications, and status changes are recorded — always who changed what, and when.</p></div>
-      <div class="card"><h3>Controlled buyer access</h3><p>Shared profiles come from approved records, so the public view is never your internal workspace.</p></div>
-    </div>
-  </div>
-</section>
-
-<section class="section">
-  <div class="wrap">
-    <p class="kicker">Who it’s for</p>
-    <h2>Built for operations where documents decide the deal.</h2>
-    <div class="grid grid--4" style="margin-top:26px">
-      <div class="card"><h3><a href="/solutions/breeding-programs">Breeding programs</a></h3><p>Registration papers, foaling history, and ownership structure attached to every horse.</p></div>
-      <div class="card"><h3><a href="/solutions/sale-barns">Sale barns &amp; consignors</a></h3><p>Watermarked, buyer-ready packets and shared profiles from approved records.</p></div>
-      <div class="card"><h3><a href="/solutions/trainers">Trainers &amp; show barns</a></h3><p>Care status, documents, and owner communication for every horse in the barn.</p></div>
-      <div class="card"><h3><a href="/solutions/ranch-operations">Ranch operations</a></h3><p>Herd groups, pastures, feed, equipment, and expenses beside the horse records.</p></div>
-    </div>
-  </div>
-</section>
-
-<section class="section">
-  <div class="wrap">
-    <p class="kicker">Pricing</p>
-    <h2>Plans that match the operation, from first horse to full remuda.</h2>
-    <p class="intro">Every plan protects the core record; higher tiers add collaboration, buyer sharing, and capacity. <a href="/pricing">See full pricing →</a></p>
-    <div class="grid grid--4">
-      ${marketingPlans
-        .map(
-          (plan) =>
-            `<div class="card"><h3>${esc(plan.tier)}</h3><p class="plan__price">$${plan.monthlyRate}<small>/month</small></p><p>${esc(plan.fit)}</p></div>`,
-        )
-        .join('\n      ')}
-    </div>
-  </div>
-</section>
-${ctaBlock('Start with the records you already have.', 'See what’s complete, what needs verification, and what’s ready to share — from your first upload.')}`,
-};
+const home = cinematicHome(marketingPlans);
 
 /* ------------------------------------------------------------- features */
 
@@ -311,7 +202,7 @@ const pricingQuestions = [
   ],
   [
     'Do you offer annual billing?',
-    'Only monthly billing is offered here. Annual prices and discounts have not been set.',
+    'The table lists annual prices alongside monthly rates. Checkout confirms availability and the final amount before you pay.',
   ],
   [
     'How do I choose or change a plan?',
@@ -321,9 +212,9 @@ const pricingQuestions = [
 
 const pricing = {
   path: '/pricing',
-  title: 'XBAR Pricing — Starter $29, Professional $79, Ranch Ops $199, Enterprise $499',
+  title: 'XBAR Pricing — Starter $12, Professional $29, Ranch Ops $79, Enterprise $199',
   description:
-    'Transparent XBAR pricing. Starter $29/mo, Professional $79/mo, Ranch Ops $199/mo, Enterprise $499/mo — with published horse, seat, document, sale-packet, and storage limits for every plan.',
+    'Transparent XBAR pricing. Starter $12/mo, Professional $29/mo, Ranch Ops $79/mo, Enterprise $199/mo — with published horse, seat, document, sale-packet, and storage limits for every plan.',
   changefreq: 'monthly',
   priority: '0.9',
   jsonLd: [
@@ -359,7 +250,7 @@ const pricing = {
     <p class="kicker">Pricing</p>
     <h1>A plan for your horses.<br />Room for your ranch.</h1>
     <p class="lead">Start with horse records, care, papers, and expenses. Add buyer sharing, team tools, and room for more horses when you need them.</p>
-    <p class="pricing-terms">Prices in USD, billed monthly. Annual billing is not offered yet.</p>
+    <p class="pricing-terms">Prices in USD. Monthly rates are shown on the cards; annual rates are listed below. Confirm your billing period and total at checkout.</p>
   </div>
 </section>
 
@@ -392,6 +283,7 @@ const pricing = {
         <thead><tr><th scope="col">Capacity</th>${marketingPlans.map((plan) => `<th scope="col">${esc(plan.tier)}</th>`).join('')}</tr></thead>
         <tbody>
           <tr><th scope="row">Monthly price</th>${marketingPlans.map((plan) => `<td>$${plan.monthlyRate}</td>`).join('')}</tr>
+          <tr><th scope="row">Annual price (2 months free)</th>${marketingPlans.map((plan) => `<td>$${plan.annualRate}</td>`).join('')}</tr>
           <tr><th scope="row">Horses</th>${marketingPlans.map((plan) => `<td>${plan.limits.horseLimit.toLocaleString('en-US')}</td>`).join('')}</tr>
           <tr><th scope="row">Team members, including you</th>${marketingPlans.map((plan) => `<td>${plan.limits.seatLimit}</td>`).join('')}</tr>
           <tr><th scope="row">Client seats</th>${marketingPlans.map((plan) => `<td>${plan.limits.sharedAccessSeatLimit}</td>`).join('')}</tr>

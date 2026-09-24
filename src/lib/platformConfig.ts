@@ -86,6 +86,15 @@ export const stripeConfig = {
     'Ranch Ops': readEnv(env.VITE_STRIPE_PAYMENT_LINK_RANCH_OPS),
     Enterprise: readEnv(env.VITE_STRIPE_PAYMENT_LINK_ENTERPRISE),
   } satisfies Record<SubscriptionTier, string>,
+  // Annual payment links are optional. When a tier has no annual link, annual
+  // checkout for that tier reports "not configured" instead of silently
+  // selling the monthly link — a static link cannot change its own interval.
+  annualPaymentLinks: {
+    Starter: readEnv(env.VITE_STRIPE_PAYMENT_LINK_STARTER_ANNUAL),
+    Professional: readEnv(env.VITE_STRIPE_PAYMENT_LINK_PROFESSIONAL_ANNUAL),
+    'Ranch Ops': readEnv(env.VITE_STRIPE_PAYMENT_LINK_RANCH_OPS_ANNUAL),
+    Enterprise: readEnv(env.VITE_STRIPE_PAYMENT_LINK_ENTERPRISE_ANNUAL),
+  } satisfies Record<SubscriptionTier, string>,
   billingPortalUrl: readEnv(env.VITE_STRIPE_BILLING_PORTAL_URL),
 };
 
@@ -146,6 +155,6 @@ export function isPublicShareLocalPreviewEnabled() {
   return publicShareConfig.localPreviewEnabled;
 }
 
-export function getStripePaymentLink(tier: SubscriptionTier) {
-  return stripeConfig.paymentLinks[tier];
+export function getStripePaymentLink(tier: SubscriptionTier, billingPeriod: 'monthly' | 'annual' = 'monthly') {
+  return billingPeriod === 'annual' ? stripeConfig.annualPaymentLinks[tier] : stripeConfig.paymentLinks[tier];
 }

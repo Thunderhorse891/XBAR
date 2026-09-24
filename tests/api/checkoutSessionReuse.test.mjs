@@ -1,5 +1,7 @@
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
+import { spawnSync } from 'node:child_process';
+import { fileURLToPath } from 'node:url';
 import test from 'node:test';
 import {
   CHECKOUT_EXPIRE_BUDGET,
@@ -34,12 +36,37 @@ function session(overrides = {}) {
     status: 'open',
     mode: 'subscription',
     url: 'https://checkout.stripe.com/c/pay/cs_1',
-    metadata: { workspace_id: 'ws-1', workspace_tier: 'Professional', workspace_seats: '3' },
+    metadata: {
+      workspace_id: 'ws-1',
+      workspace_tier: 'Professional',
+      workspace_seats: '3',
+      workspace_billing_period: 'monthly',
+      workspace_price_id: 'price_professional_monthly',
+    },
     ...overrides,
   };
 }
 
-const intent = { workspaceId: 'ws-1', tier: 'Professional', seatCount: 3 };
+const intent = {
+  workspaceId: 'ws-1',
+  tier: 'Professional',
+  seatCount: 3,
+  billingPeriod: 'monthly',
+  priceId: 'price_professional_monthly',
+};
+
+test('the actual checkout handler preserves the selected purchase through switching and retries', () => {
+  const result = spawnSync(
+    process.execPath,
+    [
+      '--experimental-vm-modules',
+      '--test',
+      fileURLToPath(new URL('./fixtures/checkoutCadence.cases.mjs', import.meta.url)),
+    ],
+    { encoding: 'utf8', timeout: 30_000 },
+  );
+  assert.equal(result.status, 0, `${result.stdout}\n${result.stderr}`);
+});
 
 test('an open session for the same purchase is reused, not duplicated', () => {
   const open = session();
@@ -48,6 +75,84 @@ test('an open session for the same purchase is reused, not duplicated', () => {
   assert.equal(plan.action, 'reuse');
   assert.equal(plan.session, open);
   assert.deepEqual(plan.expire, [], 'nothing to clean up when the only session is the right one');
+});
+
+test('monthly and annual sessions are never reused across billing periods', () => {
+  const monthly = session();
+  const annualIntent = {
+    ...intent,
+    billingPeriod: 'annual',
+    priceId: 'price_professional_annual',
+  };
+
+  assert.equal(planCheckoutSession([monthly], annualIntent).action, 'create', 'monthly -> annual must create');
+  assert.deepEqual(planCheckoutSession([monthly], annualIntent).expire, [monthly]);
+
+  const annual = session({
+    metadata: {
+      ...session().metadata,
+      workspace_billing_period: 'annual',
+      workspace_price_id: 'price_professional_annual',
+    },
+  });
+  assert.equal(planCheckoutSession([annual], intent).action, 'create', 'annual -> monthly must create');
+  assert.deepEqual(planCheckoutSession([annual], intent).expire, [annual]);
+});
+
+test('same-period sessions are reusable only for the exact configured price', () => {
+  const monthly = session();
+  assert.equal(planCheckoutSession([monthly], intent).action, 'reuse');
+
+  const oldPrice = session({
+    metadata: { ...session().metadata, workspace_price_id: 'price_professional_monthly_retired' },
+  });
+  assert.equal(planCheckoutSession([oldPrice], intent).action, 'create');
+  assert.deepEqual(planCheckoutSession([oldPrice], intent).expire, [oldPrice]);
+});
+
+test('legacy sessions without period and price metadata are expired rather than guessed reusable', () => {
+  const legacy = session({
+    metadata: { workspace_id: 'ws-1', workspace_tier: 'Professional', workspace_seats: '3' },
+  });
+
+  assert.equal(planCheckoutSession([legacy], intent).action, 'create');
+  assert.deepEqual(planCheckoutSession([legacy], intent).expire, [legacy]);
+});
+
+test('each tier reuses exact monthly and annual purchases, but never a changed or unknown dimension', () => {
+  for (const tier of ['Starter', 'Professional', 'Ranch Ops', 'Enterprise']) {
+    for (const billingPeriod of ['monthly', 'annual']) {
+      const priceId = `price_${tier.replaceAll(' ', '_')}_${billingPeriod}`;
+      const purchase = { ...intent, tier, billingPeriod, priceId };
+      const open = session({
+        metadata: {
+          ...session().metadata,
+          workspace_tier: tier,
+          workspace_billing_period: billingPeriod,
+          workspace_price_id: priceId,
+        },
+      });
+      assert.equal(planCheckoutSession([open], purchase).session, open);
+      for (const delta of [
+        { billingPeriod: billingPeriod === 'monthly' ? 'annual' : 'monthly' },
+        { priceId: `${priceId}_replacement` },
+        { billingPeriod: undefined },
+        { priceId: undefined },
+      ]) {
+        const plan = planCheckoutSession([open], { ...purchase, ...delta });
+        assert.equal(plan.action, 'create', `${tier}/${billingPeriod}: ${JSON.stringify(delta)}`);
+        assert.deepEqual(plan.expire, [open]);
+      }
+      for (const field of ['workspace_billing_period', 'workspace_price_id']) {
+        const legacy = session({ metadata: { ...open.metadata, [field]: undefined } });
+        assert.equal(planCheckoutSession([legacy], purchase).action, 'create');
+      }
+    }
+  }
+  const unknown = session({
+    metadata: { ...session().metadata, workspace_billing_period: '', workspace_price_id: '' },
+  });
+  assert.equal(planCheckoutSession([unknown], { ...intent, billingPeriod: '', priceId: '' }).action, 'create');
 });
 
 test('an open session for a different tier is expired, not left completable', () => {
@@ -122,6 +227,12 @@ test('the endpoint expires stale sessions before it creates another', () => {
   assert.ok(expire < create, 'a stale session left completable beside a new one is the duplicate charge');
 
   assert.match(source, /workspace_seats: String\(seatCount\)/, 'seats must be recorded for the next comparison');
+  assert.match(
+    source,
+    /workspace_billing_period: billingPeriod/,
+    'billing cadence must be recorded for the next comparison',
+  );
+  assert.match(source, /workspace_price_id: priceId/, 'the exact Stripe price must be recorded for reuse');
 });
 
 test('a session that expired under us does not fail the purchase', () => {

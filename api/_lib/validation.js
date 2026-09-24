@@ -21,6 +21,10 @@ export const checkoutSchema = z.object({
   tier: z.enum(SUBSCRIPTION_TIERS),
   workspaceId: z.string().trim().min(1, 'Workspace id is required.'),
   returnUrl: z.string().trim().optional().default(''),
+  // Unknown periods fall back to monthly rather than failing: a client on an
+  // older build sends no period at all, and refusing it would break checkout
+  // for anyone who hasn't refreshed.
+  billingPeriod: z.enum(['monthly', 'annual']).optional().default('monthly'),
   // seatCount is clamped in the handler (1..100) to preserve over-max clamping.
   seatCount: z.unknown().optional(),
 });

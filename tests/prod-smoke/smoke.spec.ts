@@ -50,14 +50,14 @@ function assertClean(c: Collected) {
 test('marketing homepage at / is complete static HTML (no app bundle)', async ({ page, request }) => {
   const c = collect(page);
   await page.goto('/', { waitUntil: 'load' });
-  await expect(page.getByRole('heading', { name: 'Give every horse a record buyers can trust.' })).toBeVisible();
+  await expect(page.getByRole('heading', { name: 'Every horse. One clear picture.' })).toBeVisible();
 
   // View-source completeness: the raw HTML carries the content, its own
   // canonical, and no reference to the application bundle.
   const source = await (await request.get('/')).text();
-  // The headline carries a gradient <span> mid-sentence, so assert both halves.
-  expect(source).toContain('Give every horse a');
-  expect(source).toContain('record buyers can trust.');
+  // The static headline carries separate lines for its optional entrance.
+  expect(source).toContain('Every horse.');
+  expect(source).toContain('One clear picture.');
   expect(source).toMatch(/<link rel="canonical" href="https:\/\/[^"]+\/" \/>/);
   expect(source).not.toContain('/assets/');
   assertClean(c);

@@ -19,15 +19,21 @@ checkout pipeline to start selling.
 2. **Be on Supabase Pro.** This is the single cheapest thing that separates a
    product from a demo. A paying rancher whose records are on a database that
    sleeps is a refund and a bad word in a small community.
-3. **Create one Stripe Payment Link per tier**, in the Stripe dashboard. No code.
-   Set each to a recurring monthly price:
+3. **Create two Stripe Payment Links per tier** — one monthly and one
+   annual — in the Stripe dashboard. No code. Annual is 10× the monthly
+   price (2 months free):
 
-   | Tier         | Price   | Notes                                                |
-   | ------------ | ------- | ---------------------------------------------------- |
-   | Starter      | $29/mo  | 5 horses, 1 seat                                     |
-   | Professional | $79/mo  | sale packets and buyer folders — the tier that sells |
-   | Ranch Ops    | $199/mo | teams, breeding, equipment at scale                  |
-   | Enterprise   | $499/mo | large rosters                                        |
+   | Tier         | Monthly | Annual    | Notes                                                |
+   | ------------ | ------- | --------- | ---------------------------------------------------- |
+   | Starter      | $12/mo  | $120/yr   | 5 horses, 1 seat                                     |
+   | Professional | $29/mo  | $290/yr   | sale packets and buyer folders — the tier that sells |
+   | Ranch Ops    | $79/mo  | $790/yr   | teams, breeding, equipment at scale                  |
+   | Enterprise   | $199/mo | $1,990/yr | large rosters                                        |
+
+   Paste the monthly links into `VITE_STRIPE_PAYMENT_LINK_*` and the annual
+   links into `VITE_STRIPE_PAYMENT_LINK_*_ANNUAL` in Vercel. A tier without
+   its annual link cannot be bought annually in the app — it reports "not
+   configured" rather than selling the monthly link.
 
    In each link's settings, turn on **collect customer email**. That email is
    how you find their workspace in step 2 below.

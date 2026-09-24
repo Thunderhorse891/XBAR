@@ -10,11 +10,13 @@ import { DotsIcon } from '@/components/icons';
 import { buildPublicShareUrl } from '@/lib/facebookSharing';
 import { formatCompactCurrency, formatPercent } from '@/lib/format';
 import { useUiStore } from '@/store/useUiStore';
-import { buildHorsePacketCompleteness } from '@/lib/xbarPhaseTwo';
+import { buildHorsePacketCompleteness, scoreTone } from '@/lib/xbarPhaseTwo';
 import { useCurrentRoleCapability, useXbarStore } from '@/store/useXbarStore';
 import type { HorseSegment, HorseSex, HorseStatus } from '@/types/xbar';
 import { canSubmitHorseCreate, horseCreateFieldErrors } from '@/lib/horseCreateGate';
 import { proposeHorseNameRepairs } from '@/lib/horseNameRepair';
+import { buildSaleReadinessScore } from '@/lib/saleReadinessScore';
+import { buildBuyerPacketReleaseGate } from '@/lib/buyerPacketReleaseGate';
 import './horsesCommand.css';
 
 function createHorseFormDefaults(params: {
@@ -77,6 +79,7 @@ export default function Horses() {
   const horses = useXbarStore((state) => state.horses);
   const documents = useXbarStore((state) => state.documents);
   const ownershipRecords = useXbarStore((state) => state.ownershipRecords);
+  const expenseReceipts = useXbarStore((state) => state.expenseReceipts);
   const sharedListings = useXbarStore((state) => state.sharedListings);
   const toggleSharedListing = useXbarStore((state) => state.toggleSharedListing);
   const recordSharedChannel = useXbarStore((state) => state.recordSharedChannel);
@@ -124,6 +127,27 @@ export default function Horses() {
     setSearchParams(nextParams);
   };
 
+  // The same computed score the horse profile shows, so the list and the
+  // record can never disagree.
+  const saleReadinessById = useMemo(
+    () =>
+      new Map(
+        horses.map((horse) => {
+          const ownershipRecord = ownershipRecords.find((record) => record.horseId === horse.id);
+          const releaseGate = buildBuyerPacketReleaseGate({
+            horse,
+            documents: documents.filter((document) => document.horseId === horse.id),
+            ownershipRecord,
+          });
+          return [
+            horse.id,
+            buildSaleReadinessScore({ horse, documents, receipts: expenseReceipts, ownershipRecord, releaseGate })
+              .score,
+          ] as const;
+        }),
+      ),
+    [horses, documents, expenseReceipts, ownershipRecords],
+  );
   const filtered = horses.filter((horse) => {
     const matchesSearch =
       !search.trim() ||
@@ -218,11 +242,6 @@ export default function Horses() {
   const openHorseMenu = (horseId: string, x: number, y: number) => setMenuState({ horseId, x, y });
 
   const openHorseDetails = (horse: (typeof horses)[number]) => {
-    const packet = buildHorsePacketCompleteness(
-      horse,
-      documents.filter((document) => document.horseId === horse.id),
-      ownershipRecords.find((record) => record.horseId === horse.id),
-    );
     openRightDrawer({
       id: `horse-${horse.id}`,
       eyebrow: 'Horse Record',
@@ -233,7 +252,7 @@ export default function Horses() {
         { label: 'Legal owner', value: horse.owner },
         { label: 'Location', value: `${horse.location.barn} | ${horse.location.pasture}` },
         { label: 'Registration', value: horse.aqhaNumber || horse.registrationNumber || 'Pending' },
-        { label: 'Readiness', value: formatPercent(packet.score) },
+        { label: 'Sale readiness', value: formatPercent(saleReadinessById.get(horse.id) ?? 0) },
       ],
       actions: [{ label: 'Open horse record', path: `/horses/${horse.id}` }],
     });
@@ -746,6 +765,7 @@ export default function Horses() {
                   const accessLabel = saved ? 'Released' : 'Private';
                   const showSaleSignals = horse.segment === 'Sale Prospect' || horse.status === 'Sale Prep';
                   const openProofSlots = packet.saleSlots.filter((slot) => slot.status !== 'ready').length;
+                  const readiness = saleReadinessById.get(horse.id) ?? 0;
                   return (
                     <div
                       key={horse.id}
@@ -793,8 +813,8 @@ export default function Horses() {
                       <div className="horse-card__body">
                         <div className="horse-card__metric-band">
                           <div className="horse-card__metric">
-                            <span>Readiness</span>
-                            <strong>{formatPercent(packet.score)}</strong>
+                            <span>Sale readiness</span>
+                            <strong>{formatPercent(readiness)}</strong>
                           </div>
                           <div className="horse-card__metric">
                             <span>{valueLabel}</span>
@@ -824,10 +844,10 @@ export default function Horses() {
                         {showSaleSignals ? (
                           <div className="horse-card__readiness">
                             <div className="horse-card__readiness-head">
-                              <span>Buyer readiness</span>
-                              <strong>{formatPercent(packet.score)}</strong>
+                              <span>Sale readiness</span>
+                              <strong>{formatPercent(readiness)}</strong>
                             </div>
-                            <ProgressBar value={packet.score} tone={packet.tone} />
+                            <ProgressBar value={readiness} tone={scoreTone(readiness)} />
                           </div>
                         ) : (
                           <div className="horse-card__readiness horse-card__readiness--meta">
@@ -970,7 +990,7 @@ export default function Horses() {
                         {horse.location.barn} · {horse.location.pasture}
                       </td>
                       <td>{horse.documents.length}</td>
-                      <td>{formatPercent(horse.readiness.score)}</td>
+                      <td>{saleReadinessById.get(horse.id) ?? '—'}</td>
                       <td>
                         <Pill tone={statusTone[horse.status]}>
                           {horse.status === 'Sale Prep' ? 'Buyer Prep' : horse.status}

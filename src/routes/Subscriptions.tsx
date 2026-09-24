@@ -53,6 +53,11 @@ export default function Subscriptions() {
   const workspaceId = useCloudStore((state) => state.workspaceId);
   const pushToast = useUiStore((state) => state.pushToast);
   const [checkoutTier, setCheckoutTier] = useState<SubscriptionTier | null>(null);
+  // Billing period for plan display and checkout. Annual is 10x monthly (2
+  // months free). The server fails closed when an annual price id is not
+  // configured, so selecting annual before Stripe is set up cannot sell the
+  // wrong period — checkout refuses instead.
+  const [billingPeriod, setBillingPeriod] = useState<'monthly' | 'annual'>('monthly');
   // After a lapse, `tier` is the baseline the workspace fell back to, so
   // recommending from it offers Professional to someone who just lost
   // Enterprise. purchasedTier is what they had.
@@ -75,7 +80,10 @@ export default function Subscriptions() {
   const decisionProfile = revenuePlanMatrix[decisionTier];
   const hasManagedIdentity = Boolean(session?.access_token && workspaceId);
   const billingEnabled = stripeConfig.managedBillingEnabled;
-  const selectedPaymentLink = Boolean(getStripePaymentLink(decisionTier));
+  const selectedPaymentLink = Boolean(getStripePaymentLink(decisionTier, billingPeriod));
+  // The annual toggle is only useful when annual can actually be bought:
+  // managed billing (server price ids) or at least one annual payment link.
+  const annualAvailable = billingEnabled || tiers.some((tier) => Boolean(getStripePaymentLink(tier, 'annual')));
   /*
    * Read once per render and passed to every billing decision below.
    *
@@ -299,7 +307,7 @@ export default function Subscriptions() {
       billingEnabled,
       canManageBilling,
       hasManagedIdentity,
-      hasPaymentLink: Boolean(getStripePaymentLink(tier)),
+      hasPaymentLink: Boolean(getStripePaymentLink(tier, billingPeriod)),
       checkoutInProgress: false,
       subscriptionRecoverable,
       subscriptionActive,
@@ -339,13 +347,18 @@ export default function Subscriptions() {
      * one checkout route such a deployment has. See `checkoutRouteFor` for why
      * skipping the request costs no protection.
      */
-    const hostedOnlyLink = getStripePaymentLink(tier);
+    const hostedOnlyLink = getStripePaymentLink(tier, billingPeriod);
     if (checkoutRouteFor({ managedBillingEnabled: billingEnabled, paymentLink: hostedOnlyLink }) === 'payment_link') {
       await followPaymentLink(tier, hostedOnlyLink);
       return;
     }
 
-    const managed = await startManagedCheckout({ tier, workspaceId, accessToken: session?.access_token ?? '' });
+    const managed = await startManagedCheckout({
+      tier,
+      workspaceId,
+      accessToken: session?.access_token ?? '',
+      billingPeriod,
+    });
     if (managed.ok) {
       emit(productEventNames.checkoutRedirected, { tier, method: 'managed' });
       window.location.assign(managed.url);
@@ -368,7 +381,10 @@ export default function Subscriptions() {
      * no access token, therefore no billing row that could hold a subscription —
      * falls back, which is how a local-only workspace legitimately buys a plan.
      */
-    const fallback = canUsePaymentLinkFallback(managed.code) ? getStripePaymentLink(tier) : '';
+    // The fallback honors the selected billing period: with no annual link
+    // configured there is no fallback, which is what keeps an annual
+    // selection from silently buying the monthly link.
+    const fallback = canUsePaymentLinkFallback(managed.code) ? getStripePaymentLink(tier, billingPeriod) : '';
     if (fallback) {
       /*
        * The same guard as the hosted-only route, because this is the same act.
@@ -406,7 +422,7 @@ export default function Subscriptions() {
       billingEnabled,
       canManageBilling,
       hasManagedIdentity,
-      hasPaymentLink: Boolean(getStripePaymentLink(tier)),
+      hasPaymentLink: Boolean(getStripePaymentLink(tier, billingPeriod)),
       checkoutInProgress: checkoutTier !== null,
       subscriptionRecoverable,
       subscriptionActive,
@@ -438,8 +454,8 @@ export default function Subscriptions() {
           <p>{profile.fit}</p>
         </div>
         <div className="checkout-plan__price">
-          <strong>{formatCurrency(config.monthlyRate)}</strong>
-          <small>/ month</small>
+          <strong>{formatCurrency(billingPeriod === 'annual' ? config.annualRate : config.monthlyRate)}</strong>
+          <small>{billingPeriod === 'annual' ? '/ year · 2 months free' : '/ month'}</small>
         </div>
         <ul>
           <li>{formatLimit(config.limits.horseLimit, 'horses')}</li>
@@ -517,6 +533,27 @@ export default function Subscriptions() {
             </small>
           </div>
 
+          {annualAvailable && (
+            <div className="checkout-billing-toggle" role="group" aria-label="Billing period">
+              <button
+                type="button"
+                aria-pressed={billingPeriod === 'monthly'}
+                className={billingPeriod === 'monthly' ? 'checkout-billing-toggle--active' : ''}
+                onClick={() => setBillingPeriod('monthly')}
+              >
+                Monthly
+              </button>
+              <button
+                type="button"
+                aria-pressed={billingPeriod === 'annual'}
+                className={billingPeriod === 'annual' ? 'checkout-billing-toggle--active' : ''}
+                onClick={() => setBillingPeriod('annual')}
+              >
+                Annual <small>2 months free</small>
+              </button>
+            </div>
+          )}
+
           <div className="checkout-plan-list" aria-label="Paid plans">
             {tiers.map(renderPaidPlan)}
           </div>
@@ -530,9 +567,23 @@ export default function Subscriptions() {
           </div>
 
           <div className="checkout-total">
-            <span>{selectedCheckoutConfigured ? 'Due at checkout' : 'Monthly price'}</span>
-            <strong>{formatCurrency(decisionConfig.monthlyRate)}</strong>
-            <small>{selectedCheckoutConfigured ? 'then monthly' : 'not charged in app'}</small>
+            <span>
+              {selectedCheckoutConfigured
+                ? 'Due at checkout'
+                : billingPeriod === 'annual'
+                  ? 'Annual price'
+                  : 'Monthly price'}
+            </span>
+            <strong>
+              {formatCurrency(billingPeriod === 'annual' ? decisionConfig.annualRate : decisionConfig.monthlyRate)}
+            </strong>
+            <small>
+              {selectedCheckoutConfigured
+                ? billingPeriod === 'annual'
+                  ? 'then annually'
+                  : 'then monthly'
+                : 'not charged in app'}
+            </small>
           </div>
 
           {selectedReadiness.mode === 'manual' ? (

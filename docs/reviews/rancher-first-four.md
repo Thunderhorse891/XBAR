@@ -1,6 +1,6 @@
 # First four rancher improvements
 
-Baseline: `main` at `59205e98d5a2b396551a6ed147e3027ee56a307d`.
+Original baseline: `main` at `59205e98d5a2b396551a6ed147e3027ee56a307d`. Reconciled with `main` at `90c3cd1fa7e9ffba7e5438ac2b427941c3670421` on September 24, preserving the approved light homepage, checkout fix and new Expiring soon navigation.
 
 This implements Erin's ordered first batch: plain language, public pricing, shorter setup, and mobile field controls. Later backlog items are outside this PR. No migrations, new services, payment rules, or production configuration changes.
 
@@ -8,7 +8,7 @@ This implements Erin's ordered first batch: plain language, public pricing, shor
 
 [Review every wording change](rancher-language-changes.md) before approving the copy. Existing routes and stored state keys stay intact. Technical support diagnostics and legal text retain their precise meaning.
 
-Public `/pricing` uses the existing plan definitions: Starter $29, Professional $79, Ranch Ops $199, Enterprise $499 per month. Annual prices and discounts remain unset and the page says so. Its signup links preserve the selected plan into Billing and the existing authenticated Stripe checkout. Existing subscribers use Manage billing to avoid a second subscription. Actual Stripe purchase, cancellation, portal options, and webhook settlement are not established by the UI tests; Stripe connector access needs reconnection to finish that audit. PR #245 separately owns the Starter bullet clarification; this PR clarifies that table seat counts include the owner.
+Public `/pricing` uses the existing plan definitions: Starter $12, Professional $29, Ranch Ops $79, Enterprise $199 per month. The comparison table retains the annual reference rates now on main ($120/$290/$790/$1,990); the copy directs customers to confirm billing availability and the final total at checkout. These displayed amounts are not evidence of live Stripe Price configuration or successful payment. Its signup links preserve the selected plan into Billing and the existing authenticated Stripe checkout. Existing subscribers use Manage billing to avoid a second subscription. Actual Stripe purchase, cancellation, portal options, and webhook settlement are not established by the UI tests; Stripe connector access needs reconnection to finish that audit. PR #245 shipped the Starter bullet clarification; this PR clarifies that table seat counts include the owner.
 
 ## Setup and records
 
@@ -49,6 +49,8 @@ Visual review used fictional Canyon Ranch / Blue records only, with desktop 1440
 ![Mobile home and field actions](rancher-first-four/home-360.png)
 ![Desktop home](rancher-first-four/home-1440.png)
 
-### Public pricing
+### Public pricing — original draft capture
+
+This historical capture predates the lower prices now on main. Use the refreshed Vercel preview to review current pricing. The separate pricing page still uses the existing dark marketing style; the approved light homepage is preserved.
 
 ![Desktop pricing](rancher-first-four/pricing-1440.png)

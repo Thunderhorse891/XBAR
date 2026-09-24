@@ -9,12 +9,13 @@
 export const marketingPlans = [
   {
     tier: 'Starter',
-    monthlyRate: 29,
+    monthlyRate: 12,
+    annualRate: 120,
     fit: 'For smaller records-driven operations getting out of spreadsheets.',
     features: [
       'Keep clean records — horses, care, documents, expenses, reminders',
       'Documents with OCR intake and review',
-      '1 team seat',
+      '1 seat — just you',
       '250 documents and 25 GB storage',
     ],
     limits: {
@@ -28,7 +29,8 @@ export const marketingPlans = [
   },
   {
     tier: 'Professional',
-    monthlyRate: 79,
+    monthlyRate: 29,
+    annualRate: 290,
     featured: true,
     fit: 'For active breeding and sale businesses that need stronger workflows.',
     features: [
@@ -49,7 +51,8 @@ export const marketingPlans = [
   },
   {
     tier: 'Ranch Ops',
-    monthlyRate: 199,
+    monthlyRate: 79,
+    annualRate: 790,
     fit: 'For multi-user operations with significant record volume.',
     features: [
       'Everything in Professional',
@@ -68,7 +71,8 @@ export const marketingPlans = [
   },
   {
     tier: 'Enterprise',
-    monthlyRate: 499,
+    monthlyRate: 199,
+    annualRate: 1990,
     fit: 'For larger businesses that need the highest operating capacity.',
     features: [
       'Everything in Ranch Ops',
