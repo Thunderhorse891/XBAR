@@ -9,6 +9,7 @@ import { Field, FieldGroup, FieldLabel } from '@/components/ui/field';
 import { Input } from '@/components/ui/input';
 import { buildPublicShareUrl, openFacebookShareDialog } from '@/lib/facebookSharing';
 import { formatCompactCurrency, formatPercent } from '@/lib/format';
+import { SUPPORT_CONTACT } from '@/lib/legalDocuments';
 import { apiConfig, isPublicShareLocalPreviewEnabled } from '@/lib/platformConfig';
 import { buildPublicBuyerPacketArtifact, downloadPublicBuyerPacketArtifact } from '@/lib/publicBuyerPacket';
 import {
@@ -18,6 +19,7 @@ import {
   sanitizeSharedListingForBuyerView,
   trackPublicBuyerProfileView,
   type PublicBuyerProfilePayload,
+  type PublicSharedListingDTO,
 } from '@/lib/publicShare';
 import { hasBuyerShareAccess } from '@/lib/workspaceAccess';
 import { buildDocumentTrustProfile, buildHorsePacketCompleteness } from '@/lib/xbarPhaseTwo';
@@ -215,7 +217,7 @@ function BuyerActionPanel({
               id="buyer-contact"
               value={buyerEmail}
               onChange={(event) => setBuyerEmail(event.target.value)}
-              placeholder="you@example.com"
+              placeholder="Your email address"
             />
           </Field>
           {mode === 'offer' && (
@@ -279,6 +281,71 @@ function BuyerActionPanel({
           {statusText}
         </p>
       )}
+    </Panel>
+  );
+}
+
+// Optional seller contact for the public profile. The public listing payload
+// carries no seller contact fields today (the share RPC and its sanitizer
+// expose only listing metadata), so this renders nothing unless the listing
+// carries an opt-in `sellerContact` object. When present, only the provided
+// fields are shown — contact details are never invented.
+type SellerContactInfo = {
+  name: string;
+  ranch: string;
+  phone: string;
+  email: string;
+};
+
+function readSellerContact(sharedListing: unknown): SellerContactInfo | null {
+  if (!sharedListing || typeof sharedListing !== 'object') {
+    return null;
+  }
+  const contact = (sharedListing as { sellerContact?: unknown }).sellerContact;
+  if (!contact || typeof contact !== 'object') {
+    return null;
+  }
+  const fields = contact as Record<string, unknown>;
+  const clean = (value: unknown) => (typeof value === 'string' ? value.trim() : '');
+  const info: SellerContactInfo = {
+    name: clean(fields.name),
+    ranch: clean(fields.ranch),
+    phone: clean(fields.phone),
+    email: clean(fields.email),
+  };
+  return info.name || info.ranch || info.phone || info.email ? info : null;
+}
+
+function SellerContactBlock({ sharedListing }: { sharedListing: PublicSharedListingDTO | undefined }) {
+  const contact = readSellerContact(sharedListing);
+  if (!contact) {
+    return null;
+  }
+  return (
+    <Panel eyebrow="Seller contact" title={contact.name || contact.ranch || 'Seller'}>
+      <div className="key-grid">
+        {contact.ranch && contact.name ? <KeyValue label="Ranch" value={contact.ranch} /> : null}
+        {contact.phone ? (
+          <KeyValue
+            label="Phone"
+            value={
+              <a className="inline-link" href={`tel:${contact.phone.replace(/\s+/g, '')}`}>
+                {contact.phone}
+              </a>
+            }
+          />
+        ) : null}
+        {contact.email ? (
+          <KeyValue
+            label="Email"
+            value={
+              <a className="inline-link" href={`mailto:${contact.email}`}>
+                {contact.email}
+              </a>
+            }
+          />
+        ) : null}
+      </div>
     </Panel>
   );
 }
@@ -527,8 +594,7 @@ export default function BuyerProfile() {
             <div className="eyebrow">Sale profile</div>
             <h1 className="page-title">{horse.name}</h1>
             <div className="status-inline">
-              <Pill tone={packet.buyerProfileTone}>{packet.buyerProfileStatus}</Pill>
-              <Pill tone={packet.tone}>{formatPercent(packet.score)} record complete</Pill>
+              <Pill tone={packet.tone}>{formatPercent(packet.score)} record coverage</Pill>
               <Pill tone="blue">{horse.sale.listingState}</Pill>
               <Pill tone={sharedListing?.accessMode === 'Public Link' ? 'emerald' : 'slate'}>
                 {sharedListing?.accessMode ?? 'Private Token'}
@@ -559,27 +625,20 @@ export default function BuyerProfile() {
               </button>
             </div>
 
-            {/* Contact / inquiry CTA — visible to buyers on the public profile */}
-            <div style={{ marginTop: '4px' }}>
-              <a
-                className="button button--primary"
-                style={{ width: '100%', justifyContent: 'center' }}
-                href={`mailto:?subject=Inquiry: ${encodeURIComponent(horse.name)}&body=${encodeURIComponent(`Hi,\n\nI am interested in ${horse.name}. Please contact me to discuss availability and pricing.\n\nProfile: ${publicShareUrl}`)}`}
-              >
-                Contact seller about {horse.name}
-              </a>
-            </div>
+            {/* Seller contact — renders only when the listing carries opt-in
+                seller contact details. The inquiry panel below is the contact
+                path when the seller has not shared direct details. */}
+            <SellerContactBlock sharedListing={sharedListing} />
           </div>
         </section>
 
         <div className="metric-grid">
           <MetricCard
-            label="Record Complete"
+            label="Record coverage"
             value={formatPercent(packet.score)}
             detail={packet.trustSummary}
             tone={packet.tone}
           />
-          <MetricCard label="Inquiry count" value="—" detail="Buyer posture not disclosed" tone="slate" />
           <MetricCard
             label="Verified documents"
             value={`${visibleDocuments.length}`}
@@ -589,7 +648,7 @@ export default function BuyerProfile() {
           <MetricCard
             label="Asking price"
             value={horse.sale.askPrice ? formatCompactCurrency(horse.sale.askPrice) : 'Contact seller'}
-            detail="Contact ranch for financing options"
+            detail="Contact seller for payment terms"
             tone="slate"
           />
         </div>
@@ -667,7 +726,7 @@ export default function BuyerProfile() {
             </div>
           </Panel>
 
-          <Panel eyebrow="AQHA photos" title="Photo set">
+          <Panel eyebrow="Sale photos" title="Photo set">
             {salePhotoAssets.length ? (
               <div className="media-strip">
                 {salePhotoAssets.map((asset) => (
@@ -686,7 +745,7 @@ export default function BuyerProfile() {
             ) : (
               <EmptyState
                 compact
-                title="No AQHA photos"
+                title="No sale photos"
                 description="Add approved hero and conformation photos before sharing."
               />
             )}
@@ -712,6 +771,13 @@ export default function BuyerProfile() {
             ·{' '}
             <a href={publicSiteHref('/privacy')} style={{ color: 'rgba(100,140,180,0.45)', textDecoration: 'none' }}>
               Privacy
+            </a>{' '}
+            ·{' '}
+            <a
+              href={`mailto:${SUPPORT_CONTACT.email}`}
+              style={{ color: 'rgba(100,140,180,0.45)', textDecoration: 'none' }}
+            >
+              Support
             </a>
           </p>
         </footer>
