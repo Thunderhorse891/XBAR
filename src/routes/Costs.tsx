@@ -206,7 +206,7 @@ export default function Costs() {
 
       <Card
         title="Supplier price watch"
-        subtitle="Each supplier's price per unit against its own last three deliveries of the same product."
+        subtitle="Each delivery's price per unit against the same supplier's last three deliveries of that product."
       >
         {costs.priceRises.length ? (
           <div className="fin-insights motion-stagger">
@@ -224,18 +224,26 @@ export default function Costs() {
                   </div>
                   <div className="fin-insight__detail">
                     {rise.category}: {formatCurrencyCents(rise.baselineUnitPrice)} →{' '}
-                    {formatCurrencyCents(rise.latestUnitPrice)} per {rise.unit} on {receiptDayLabel(rise.latestDate)}.
-                    That delivery cost {formatCurrencyCents(rise.extraCost)} more than this supplier&apos;s own recent
-                    price — worth raising before the next order, or getting a second quote.
+                    {formatCurrencyCents(rise.latestUnitPrice)} per {rise.unit}
+                    {rise.deliveriesSinceRise > 1
+                      ? ` since ${receiptDayLabel(rise.risingSince)}. The ${rise.deliveriesSinceRise} deliveries since cost `
+                      : ` on ${receiptDayLabel(rise.latestDate)}. That delivery cost `}
+                    {formatCurrencyCents(rise.extraCost)} more than this supplier&apos;s price before the rise — worth
+                    raising before the next order, or getting a second quote.
                   </div>
                 </div>
                 <span />
               </div>
             ))}
           </div>
-        ) : costs.feedSuppliers.some((supplier) => supplier.latestUnitPrice !== null) ? (
+        ) : costs.priceComparisons > 0 ? (
           <p className="fin-insight__detail" style={{ marginTop: 0 }}>
             No supplier has raised a price per unit in the last 90 days.
+          </p>
+        ) : costs.feedSuppliers.some((supplier) => supplier.latestUnitPrice !== null) ? (
+          <p className="fin-insight__detail" style={{ marginTop: 0 }}>
+            Not enough history to compare yet. XBAR needs two priced deliveries of the same product, from the same
+            supplier and in the same unit, before it can spot a price rise.
           </p>
         ) : null}
 

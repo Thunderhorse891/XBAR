@@ -86,11 +86,15 @@ export type SupplierPriceRise = {
   baselineUnitPrice: number;
   /** Whole percent above the baseline. */
   risePercent: number;
-  /** What the latest delivery cost above the supplier's own baseline price. */
+  /** What the deliveries since the rise cost above the supplier's price before it. */
   extraCost: number;
   latestDate: string;
   latestQuantity: number;
   comparedPurchases: number;
+  /** The first delivery that came in above the earlier price: when the rise began. */
+  risingSince: string;
+  /** Deliveries at or since the rise, the latest included. */
+  deliveriesSinceRise: number;
 };
 
 export type FeedSupplierSummary = {
@@ -123,6 +127,12 @@ export type CostPerHorseSummary = {
   /** Whole percent change of the last 30 days against the rest of the window; null without enough history. */
   trendChangePercent: number | null;
   priceRises: SupplierPriceRise[];
+  /**
+   * Products with a delivery in the window that had an earlier delivery to
+   * compare with. Zero means "not enough history", which is not the same as
+   * "no supplier raised prices".
+   */
+  priceComparisons: number;
   feedSuppliers: FeedSupplierSummary[];
   /** Feed, supplement and bedding receipts in the window logged without a quantity and unit. */
   unpricedFeedPurchases: number;
@@ -245,7 +255,7 @@ function soldHorseIds(leads: SalesLead[]): Set<string> {
 
 type DatedReceipt = { receipt: ExpenseReceipt; day: number; amount: number };
 
-function buildPriceRises(dated: DatedReceipt[], today: number): SupplierPriceRise[] {
+function buildPriceRises(dated: DatedReceipt[], today: number): { rises: SupplierPriceRise[]; comparisons: number } {
   const series = new Map<string, Array<DatedReceipt & { unitPrice: number }>>();
   for (const entry of dated) {
     if (costGroupFor(entry.receipt.category) !== 'Feed') continue;
@@ -263,21 +273,44 @@ function buildPriceRises(dated: DatedReceipt[], today: number): SupplierPriceRis
   }
 
   const rises: SupplierPriceRise[] = [];
+  let comparisons = 0;
   for (const purchases of series.values()) {
     if (purchases.length < 2) continue;
     purchases.sort(
       (left, right) =>
         left.day - right.day || String(left.receipt.uploadedAt).localeCompare(String(right.receipt.uploadedAt)),
     );
+    const inWindow = (index: number) => today - purchases[index]!.day < COST_WINDOW_DAYS;
+    // The supplier's own price before a delivery: its last few deliveries.
+    const priceBefore = (index: number) => {
+      const prior = purchases.slice(Math.max(0, index - PRICE_BASELINE_PURCHASES), index);
+      return prior.reduce((sum, entry) => sum + entry.unitPrice, 0) / prior.length;
+    };
+    if (purchases.some((_, index) => index > 0 && inWindow(index))) comparisons += 1;
+
+    /*
+     * Every delivery in the window is checked against the deliveries before
+     * it, and the first one that came in higher is where the rise began. A
+     * price that went up and stayed up is still flagged after the dearer
+     * deliveries have become the recent history. A rise last spring is not
+     * something to act on today, and a rise that has since come back down is
+     * not flagged.
+     */
+    const start = purchases.findIndex((entry, index) => {
+      if (index === 0 || !inWindow(index)) return false;
+      const before = priceBefore(index);
+      return before > 0 && (entry.unitPrice - before) / before >= PRICE_RISE_THRESHOLD;
+    });
+    if (start < 0) continue;
+    const baseline = priceBefore(start);
     const latest = purchases[purchases.length - 1]!;
-    // A rise last spring is not something to act on today.
-    if (today - latest.day >= COST_WINDOW_DAYS) continue;
-    const compared = purchases.slice(-1 - PRICE_BASELINE_PURCHASES, -1);
-    const baseline = compared.reduce((sum, entry) => sum + entry.unitPrice, 0) / compared.length;
-    if (baseline <= 0) continue;
     const rise = (latest.unitPrice - baseline) / baseline;
     if (rise < PRICE_RISE_THRESHOLD) continue;
-    const quantity = Number(latest.receipt.quantity);
+    const sinceRise = purchases.slice(start);
+    const extraCost = sinceRise.reduce(
+      (sum, entry) => sum + Math.max(0, entry.unitPrice - baseline) * Number(entry.receipt.quantity),
+      0,
+    );
     rises.push({
       vendor: latest.receipt.vendor.trim(),
       product: String(latest.receipt.title ?? '').trim(),
@@ -286,13 +319,15 @@ function buildPriceRises(dated: DatedReceipt[], today: number): SupplierPriceRis
       latestUnitPrice: latest.unitPrice,
       baselineUnitPrice: baseline,
       risePercent: Math.round(rise * 100),
-      extraCost: Math.round((latest.unitPrice - baseline) * quantity * 100) / 100,
+      extraCost: Math.round(extraCost * 100) / 100,
       latestDate: latest.receipt.receiptDate,
-      latestQuantity: quantity,
-      comparedPurchases: compared.length,
+      latestQuantity: Number(latest.receipt.quantity),
+      comparedPurchases: Math.min(PRICE_BASELINE_PURCHASES, start),
+      risingSince: purchases[start]!.receipt.receiptDate,
+      deliveriesSinceRise: sinceRise.length,
     });
   }
-  return rises.sort((left, right) => right.extraCost - left.extraCost);
+  return { rises: rises.sort((left, right) => right.extraCost - left.extraCost), comparisons };
 }
 
 function buildFeedSuppliers(windowReceipts: DatedReceipt[]): FeedSupplierSummary[] {
@@ -449,6 +484,8 @@ export function buildCostPerHorse(input: {
     if (earlierDaily > 0) trendChangePercent = Math.round(((recentDaily - earlierDaily) / earlierDaily) * 100);
   }
 
+  const priceWatch = buildPriceRises(dated, today);
+
   return {
     horsesInCare: headcount,
     trackedDays,
@@ -460,7 +497,8 @@ export function buildCostPerHorse(input: {
     horses,
     trend,
     trendChangePercent,
-    priceRises: buildPriceRises(dated, today),
+    priceRises: priceWatch.rises,
+    priceComparisons: priceWatch.comparisons,
     feedSuppliers: buildFeedSuppliers(windowReceipts),
     unpricedFeedPurchases,
   };

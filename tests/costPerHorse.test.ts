@@ -237,10 +237,12 @@ test('a supplier price rise is flagged against that supplier’s own last delive
   const summary = buildCostPerHorse({
     horses: [horse('a')],
     receipts: [
-      receipt({ amount: 800, quantity: 100, unit: 'bale', receiptDate: daysAgo(120) }), // $8.00, outside baseline
-      receipt({ amount: 360, quantity: 40, unit: 'bale', receiptDate: daysAgo(80) }), // $9.00
-      receipt({ amount: 360, quantity: 40, unit: 'bale', receiptDate: daysAgo(50) }), // $9.00
-      receipt({ amount: 360, quantity: 40, unit: 'bale', receiptDate: daysAgo(20), vendor: ' valley  FEED ' }), // $9.00
+      // Last year's history: $8 once, then $9 three times. Only the last three
+      // set the price before the rise.
+      receipt({ amount: 800, quantity: 100, unit: 'bale', receiptDate: daysAgo(250) }), // $8.00, outside baseline
+      receipt({ amount: 360, quantity: 40, unit: 'bale', receiptDate: daysAgo(200) }), // $9.00
+      receipt({ amount: 360, quantity: 40, unit: 'bale', receiptDate: daysAgo(150) }), // $9.00
+      receipt({ amount: 360, quantity: 40, unit: 'bale', receiptDate: daysAgo(100), vendor: ' valley  FEED ' }), // $9.00
       receipt({ amount: 400, quantity: 40, unit: 'Bale', receiptDate: daysAgo(2) }), // $10.00
     ],
     now: NOW,
@@ -253,6 +255,80 @@ test('a supplier price rise is flagged against that supplier’s own last delive
   assert.equal(rise.risePercent, 11);
   assert.equal(rise.extraCost, 40, '$1 over baseline on 40 bales');
   assert.equal(rise.comparedPurchases, 3);
+  assert.equal(rise.deliveriesSinceRise, 1);
+  assert.equal(rise.risingSince, daysAgo(2));
+});
+
+test('a price that went up and stayed up is still flagged once the dearer deliveries are the recent history', () => {
+  const summary = buildCostPerHorse({
+    horses: [horse('a')],
+    receipts: [
+      receipt({ amount: 100, quantity: 10, unit: 'bale', receiptDate: daysAgo(80) }), // $10
+      receipt({ amount: 200, quantity: 10, unit: 'bale', receiptDate: daysAgo(60) }), // $20 — the rise
+      receipt({ amount: 200, quantity: 10, unit: 'bale', receiptDate: daysAgo(40) }),
+      receipt({ amount: 200, quantity: 10, unit: 'bale', receiptDate: daysAgo(20) }),
+      receipt({ amount: 200, quantity: 10, unit: 'bale', receiptDate: daysAgo(2) }),
+    ],
+    now: NOW,
+  });
+
+  assert.equal(summary.priceRises.length, 1, 'the newest delivery matches the last three, but the rise is real');
+  const rise = summary.priceRises[0]!;
+  assert.equal(rise.baselineUnitPrice, 10, 'measured against the price before the rise');
+  assert.equal(rise.risePercent, 100);
+  assert.equal(rise.risingSince, daysAgo(60));
+  assert.equal(rise.deliveriesSinceRise, 4);
+  assert.equal(rise.extraCost, 400, '$10 over on 10 bales, four times');
+
+  // A rise that has since come back down is not a rise to act on.
+  const settled = buildCostPerHorse({
+    horses: [horse('a')],
+    receipts: [
+      receipt({ amount: 100, quantity: 10, unit: 'bale', receiptDate: daysAgo(60) }),
+      receipt({ amount: 150, quantity: 10, unit: 'bale', receiptDate: daysAgo(30) }),
+      receipt({ amount: 100, quantity: 10, unit: 'bale', receiptDate: daysAgo(2) }),
+    ],
+    now: NOW,
+  });
+  assert.deepEqual(settled.priceRises, []);
+});
+
+test('"no rises" is only said when there was something to compare', async () => {
+  const single = buildCostPerHorse({
+    horses: [horse('a')],
+    receipts: [receipt({ amount: 360, quantity: 40, unit: 'bale', receiptDate: daysAgo(3) })],
+    now: NOW,
+  });
+  assert.deepEqual(single.priceRises, []);
+  assert.equal(single.priceComparisons, 0, 'one delivery is not enough history');
+
+  const stale = buildCostPerHorse({
+    horses: [horse('a')],
+    receipts: [
+      receipt({ amount: 360, quantity: 40, unit: 'bale', receiptDate: daysAgo(200) }),
+      receipt({ amount: 360, quantity: 40, unit: 'bale', receiptDate: daysAgo(150) }),
+    ],
+    now: NOW,
+  });
+  assert.equal(stale.priceComparisons, 0, 'nothing delivered in the window to compare');
+
+  const steady = buildCostPerHorse({
+    horses: [horse('a')],
+    receipts: [
+      receipt({ amount: 360, quantity: 40, unit: 'bale', receiptDate: daysAgo(30) }),
+      receipt({ amount: 360, quantity: 40, unit: 'bale', receiptDate: daysAgo(3) }),
+    ],
+    now: NOW,
+  });
+  assert.equal(steady.priceComparisons, 1);
+
+  const screen = await readFile('src/routes/Costs.tsx', 'utf8');
+  assert.match(
+    screen,
+    /costs\.priceComparisons > 0 \? \(\s*<p[^>]*>\s*No supplier has raised/,
+    'the reassurance is gated on a real comparison',
+  );
+  assert.match(screen, /Not enough history to compare yet/);
 });
 
 test('price rises are not invented from unlike purchases, stale deliveries or small moves', () => {
