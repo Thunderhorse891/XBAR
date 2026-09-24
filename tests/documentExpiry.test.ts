@@ -1038,3 +1038,31 @@ test('a validity field counts only in the certificate’s own header, never insi
   });
   assert.equal(buildExpiryRadar([withCover], horses, NOW).items[0]?.expiresOn, '2026-07-15');
 });
+
+test('with no name to go on, a paper is what its heading says, not what its body mentions', () => {
+  const unnamed = (text: string) =>
+    doc({ type: 'Registration', horseId: 'h2', title: 'scan0046', extractedTextPreview: text });
+  // The reviewers' case: a CVI mentioned in the body of a purchase agreement.
+  const purchase = unnamed(
+    'Horse Purchase Agreement\nA current CVI is required before delivery.\nExpiration Date: 07/15/2026',
+  );
+  assert.notEqual(expiryKindOf(purchase), 'Health certificate');
+  assert.equal(expiryKindOf(purchase), 'Contract', 'its heading says what it is');
+  const item = buildExpiryRadar([purchase], horses, NOW).items[0];
+  assert.equal(item?.kind, 'Contract');
+  assert.equal(item?.expiresOn, '2026-07-15');
+  // A health certificate mentioned in the body of a paper with no identifying heading is not a certificate.
+  assert.equal(
+    expiryKindOf(unnamed('Buyer: J. Smith\nA current health certificate is required before delivery.')),
+    null,
+  );
+  // A real CVI under an agency heading is still recognised by its formal name.
+  assert.equal(
+    expiryKindOf(
+      unnamed('TEXAS ANIMAL HEALTH COMMISSION\nCertificate of Veterinary Inspection\nInspection Date: 06/10/2026'),
+    ),
+    'Health certificate',
+  );
+  // A heading that names one kind, and a body that proves another, is refused.
+  assert.equal(expiryKindOf(unnamed('Horse Purchase Agreement\nCertificate of Veterinary Inspection attached')), null);
+});

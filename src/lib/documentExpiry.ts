@@ -280,11 +280,12 @@ const CONTRACT_TEXT = /\b(?:breeding|stallion\s+service|service|lease|boarding)\
  * or an agreement. A type the intake did recognise is never second-guessed.
  *
  * The name is the paper's identity and decides first. The body is read only
- * when the name says nothing, because bodies mention other papers: a service
- * agreement requires "a current health certificate", a policy requires a CVI.
- * When the name, or else the body, points to more than one kind, nothing is
- * claimed — a paper left off the radar is better than one listed as the wrong
- * kind with the wrong date.
+ * when the name says nothing, and then only for identity — its heading, or a
+ * phrase only that kind of paper prints — because bodies mention other papers:
+ * a service agreement requires "a current health certificate", a policy
+ * requires a CVI. When the name, or else the body, points to more than one
+ * kind, nothing is claimed — a paper left off the radar is better than one
+ * listed as the wrong kind with the wrong date.
  *
  * Recognising the paper is not dating it: a policy or agreement still gets a
  * date only from a labelled date printed on it, and an expiry label alone
@@ -311,13 +312,30 @@ export function expiryKindOf(
     ['Contract', CONTRACT_NAME.test(title)],
   ]);
   if (byName !== undefined) return byName;
+  // With no name, the body must say what the paper IS, not what it mentions:
+  // its heading, or a phrase only that kind of paper prints.
+  const heading = headingOf(text);
   return (
     onlyKind([
-      ['Health certificate', HEALTH_CERTIFICATE_TEXT.test(text)],
-      ['Insurance', INSURANCE_TEXT.test(text)],
-      ['Contract', CONTRACT_TEXT.test(text)],
+      ['Health certificate', HEALTH_CERTIFICATE_TEXT.test(heading) || FORMAL_CVI_NAME.test(text)],
+      ['Insurance', INSURANCE_NAME.test(heading) || INSURANCE_TEXT.test(text)],
+      ['Contract', CONTRACT_NAME.test(heading) || CONTRACT_TEXT.test(text)],
     ]) ?? null
   );
+}
+
+/*
+ * A paper's own heading: its first non-empty line, as far as a title runs.
+ * "Horse Purchase Agreement" heads an agreement whose body asks for "a current
+ * CVI"; the mention says nothing about what the paper is. The formal "Certificate
+ * of Veterinary Inspection" is the form's own title, so it identifies a CVI
+ * even under an agency heading.
+ */
+const HEADING_LENGTH = 120;
+const FORMAL_CVI_NAME = /certificate\s+of\s+veterinary\s+inspection/i;
+
+function headingOf(text: string): string {
+  return (text.split(/[\r\n]+/).find((line) => line.trim()) ?? '').slice(0, HEADING_LENGTH);
 }
 
 /** The one kind that matched; null when several did; undefined when none did. */
