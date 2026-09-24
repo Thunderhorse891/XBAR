@@ -153,7 +153,11 @@ export function SalePacketWizard({
   // never an appraisal.
   const shareVerification = async (verifyUrl: string, sealCode?: string) => {
     if (!verifyUrl) return;
-    const text = buildShareText(horse?.name ?? '', sealCode);
+    const text = buildShareText(
+      horse?.name ?? '',
+      sealCode,
+      workspaceProfile.businessName || workspaceProfile.ranchName,
+    );
     const nav =
       typeof navigator !== 'undefined'
         ? (navigator as Navigator & { share?: (data: ShareData) => Promise<void> })
