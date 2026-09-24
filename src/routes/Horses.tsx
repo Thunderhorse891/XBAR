@@ -10,7 +10,7 @@ import { DotsIcon } from '@/components/icons';
 import { buildPublicShareUrl } from '@/lib/facebookSharing';
 import { formatCompactCurrency, formatPercent } from '@/lib/format';
 import { useUiStore } from '@/store/useUiStore';
-import { buildHorsePacketCompleteness } from '@/lib/xbarPhaseTwo';
+import { buildHorsePacketCompleteness, scoreTone } from '@/lib/xbarPhaseTwo';
 import { useCurrentRoleCapability, useXbarStore } from '@/store/useXbarStore';
 import type { HorseSegment, HorseSex, HorseStatus } from '@/types/xbar';
 import { canSubmitHorseCreate, horseCreateFieldErrors } from '@/lib/horseCreateGate';
@@ -232,11 +232,6 @@ export default function Horses() {
   const openHorseMenu = (horseId: string, x: number, y: number) => setMenuState({ horseId, x, y });
 
   const openHorseDetails = (horse: (typeof horses)[number]) => {
-    const packet = buildHorsePacketCompleteness(
-      horse,
-      documents.filter((document) => document.horseId === horse.id),
-      ownershipRecords.find((record) => record.horseId === horse.id),
-    );
     openRightDrawer({
       id: `horse-${horse.id}`,
       eyebrow: 'Horse Record',
@@ -247,7 +242,7 @@ export default function Horses() {
         { label: 'Legal owner', value: horse.owner },
         { label: 'Location', value: `${horse.location.barn} | ${horse.location.pasture}` },
         { label: 'Registration', value: horse.aqhaNumber || horse.registrationNumber || 'Pending' },
-        { label: 'Readiness', value: formatPercent(packet.score) },
+        { label: 'Sale readiness', value: formatPercent(saleReadinessById.get(horse.id) ?? 0) },
       ],
       actions: [{ label: 'Open horse record', path: `/horses/${horse.id}` }],
     });
@@ -760,6 +755,7 @@ export default function Horses() {
                   const accessLabel = saved ? 'Released' : 'Private';
                   const showSaleSignals = horse.segment === 'Sale Prospect' || horse.status === 'Sale Prep';
                   const openProofSlots = packet.saleSlots.filter((slot) => slot.status !== 'ready').length;
+                  const readiness = saleReadinessById.get(horse.id) ?? 0;
                   return (
                     <div
                       key={horse.id}
@@ -807,8 +803,8 @@ export default function Horses() {
                       <div className="horse-card__body">
                         <div className="horse-card__metric-band">
                           <div className="horse-card__metric">
-                            <span>Readiness</span>
-                            <strong>{formatPercent(packet.score)}</strong>
+                            <span>Sale readiness</span>
+                            <strong>{formatPercent(readiness)}</strong>
                           </div>
                           <div className="horse-card__metric">
                             <span>{valueLabel}</span>
@@ -838,10 +834,10 @@ export default function Horses() {
                         {showSaleSignals ? (
                           <div className="horse-card__readiness">
                             <div className="horse-card__readiness-head">
-                              <span>Buyer readiness</span>
-                              <strong>{formatPercent(packet.score)}</strong>
+                              <span>Sale readiness</span>
+                              <strong>{formatPercent(readiness)}</strong>
                             </div>
-                            <ProgressBar value={packet.score} tone={packet.tone} />
+                            <ProgressBar value={readiness} tone={scoreTone(readiness)} />
                           </div>
                         ) : (
                           <div className="horse-card__readiness horse-card__readiness--meta">

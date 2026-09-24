@@ -88,7 +88,7 @@ export type PacketCompleteness = {
   saleSlots: SalePacketSlot[];
 };
 
-function scoreTone(score: number): Tone {
+export function scoreTone(score: number): Tone {
   if (score >= 85) return 'emerald';
   if (score >= 70) return 'blue';
   if (score >= 55) return 'amber';

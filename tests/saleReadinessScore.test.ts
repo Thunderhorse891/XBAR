@@ -1,5 +1,6 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
+import { readFile } from 'node:fs/promises';
 import { PROOF_PACKET_THRESHOLD, buildSaleReadinessScore } from '../src/lib/saleReadinessScore.js';
 import type {
   DocumentRecord,
@@ -182,7 +183,10 @@ test('the ownership chain earns full credit only when every proof is verified an
     complete({ ownershipRecord: record }).components.find((c) => c.key === 'ownership')?.earned;
 
   assert.equal(earned(undefined), 0);
-  assert.equal(complete({ ownershipRecord: undefined }).actions[0]?.label, 'Start the ownership record');
+  assert.equal(
+    complete({ ownershipRecord: undefined }).actions[0]?.label,
+    'Record ownership, verify its proofs and clear the transfer',
+  );
   assert.equal(earned(ownership(2, 'Pending Signatures')), 7.5);
   assert.equal(
     complete({ ownershipRecord: ownership(2, 'Pending Signatures') }).actions[0]?.label,
@@ -276,4 +280,55 @@ test('an annual renewal waiting in review asks for approval, not another upload'
     documents: [doc('Coggins', { state: 'Needs Review', entities: {} }), transferFile()],
   });
   assert.equal(undated.actions[0]?.label, 'Add a current Coggins');
+});
+
+test('each ownership action claims only what its own step earns', () => {
+  const ownershipAction = (record?: OwnershipRecord) => {
+    const readiness = complete({ ownershipRecord: record });
+    const action = readiness.actions.find((entry) => entry.key === 'ownership');
+    const earned = readiness.components.find((c) => c.key === 'ownership')?.earned ?? 0;
+    return { action, earned };
+  };
+
+  // Verifying proofs on a transfer that is not Clear stops at the uncleared cap.
+  const pending = ownershipAction(ownership(2, 'Pending Signatures'));
+  assert.equal(pending.action?.label, 'Verify 2 ownership proofs');
+  assert.equal(pending.action?.gain, 4.5, '7.5 → the 12 cap, not → 15');
+  assert.equal(
+    ownershipAction(ownership(4, 'Pending Signatures')).earned,
+    pending.earned + (pending.action?.gain ?? 0),
+    'doing exactly what the action says lands on the score it promised',
+  );
+
+  // On a Clear transfer, verifying the rest earns everything left.
+  assert.equal(ownershipAction(ownership(2, 'Clear')).action?.gain, 7.5);
+  assert.equal(ownershipAction(ownership(4, 'AQHA Review')).action?.gain, 3);
+
+  // With no record, the action names the whole path to the full 15.
+  const missing = ownershipAction(undefined).action;
+  assert.equal(missing?.gain, 15);
+  assert.match(missing?.label ?? '', /verify its proofs and clear the transfer/);
+
+  // When verifying alone would earn nothing more, the action includes clearing.
+  const five = ownership(4, 'Pending Signatures');
+  five.proofRequirements = [
+    ...five.proofRequirements!,
+    { id: 'proof-extra', kind: 'supporting', label: 'Brand inspection', status: 'missing' },
+  ] as OwnershipProofRequirement[];
+  const capped = ownershipAction(five);
+  assert.equal(capped.earned, 12);
+  assert.equal(capped.action?.label, 'Verify 1 ownership proof and mark the transfer Clear');
+  assert.equal(capped.action?.gain, 3);
+});
+
+test('every roster readiness figure is the computed score, and a private listing says what to set', async () => {
+  // Horses.tsx and the release gate sit behind the Vite alias, so their call
+  // sites are pinned from source.
+  const horses = await readFile('src/routes/Horses.tsx', 'utf8');
+  assert.doesNotMatch(horses, /packet\.score/, 'no roster view reads the older packet-completeness score');
+  assert.ok((horses.match(/saleReadinessById\.get\(horse\.id\)/g) ?? []).length >= 3, 'table, cards and quick review');
+
+  const gate = await readFile('src/lib/buyerPacketReleaseGate.ts', 'utf8');
+  assert.match(gate, /buyerProfileStatus === 'Private'\) \{\s*blockers\.push\(PRIVATE_LISTING_BLOCKER\)/);
+  assert.match(gate, /PRIVATE_LISTING_BLOCKER =\s*'Listing: [^']*asking price[^']*'/);
 });

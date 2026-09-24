@@ -275,16 +275,26 @@ export function buildSaleReadinessScore(params: {
         : `${verified} of ${proofs.length} ownership proofs verified · transfer ${ownership.transferStatus}.`,
   });
   if (ownershipEarned < WEIGHTS.ownership) {
-    actions.push({
-      key: 'ownership',
-      label: !ownership
-        ? 'Start the ownership record'
-        : allVerified
-          ? 'Mark the transfer Clear'
-          : `Verify ${proofs.length - verified} ownership proof${proofs.length - verified === 1 ? '' : 's'}`,
-      target: 'ownership',
-      gain: WEIGHTS.ownership - ownershipEarned,
-    });
+    /*
+     * Each action claims only what its own step earns. Verifying proofs on a
+     * transfer that is not Clear stops at the uncleared cap, so clearing it is
+     * a separate step; when verifying alone would earn nothing more, or there
+     * is no record yet, the action names the whole path to the full 15.
+     */
+    const unverified = proofs.length - verified;
+    const proofsLabel = `${unverified} ownership proof${unverified === 1 ? '' : 's'}`;
+    const verifyGain = (transferClear ? WEIGHTS.ownership : OWNERSHIP_UNCLEARED_CAP) - ownershipEarned;
+    const step = !ownership
+      ? { label: 'Record ownership, verify its proofs and clear the transfer', gain: WEIGHTS.ownership }
+      : allVerified
+        ? { label: 'Mark the transfer Clear', gain: WEIGHTS.ownership - ownershipEarned }
+        : verifyGain > 0
+          ? { label: `Verify ${proofsLabel}`, gain: verifyGain }
+          : {
+              label: `Verify ${proofsLabel} and mark the transfer Clear`,
+              gain: WEIGHTS.ownership - ownershipEarned,
+            };
+    actions.push({ key: 'ownership', target: 'ownership', ...step });
   }
 
   const raw = components.reduce((sum, component) => sum + component.earned, 0);
