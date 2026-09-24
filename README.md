@@ -404,8 +404,12 @@ Then apply `supabase/production-schema.generated.sql` in the Supabase SQL editor
 
 ### Stripe Go-Live
 
-1. Create recurring Stripe prices for Starter `$29`, Professional `$79`, Ranch Ops `$199`, and Enterprise `$499`.
-2. Set each corresponding `STRIPE_PRICE_ID_*` variable in Vercel Preview and Production.
+1. Create recurring Stripe prices for each tier — **eight prices total**: one monthly and one annual per tier (annual = 10× monthly = 2 months free). Amounts:
+   - Starter: `$12`/mo and `$120`/yr
+   - Professional: `$29`/mo and `$290`/yr
+   - Ranch Ops: `$79`/mo and `$790`/yr
+   - Enterprise: `$199`/mo and `$1,990`/yr
+2. Set each corresponding `STRIPE_PRICE_ID_*` variable in Vercel Preview and Production, plus `STRIPE_PRICE_ID_*_ANNUAL` for the annual prices (see `.env.example` for the full list).
 3. Configure `/api/stripe/webhook` for `checkout.session.completed`, `customer.subscription.updated`, and `customer.subscription.deleted`.
 4. Set `STRIPE_WEBHOOK_SECRET` and verify a test-mode checkout before enabling live mode.
 
