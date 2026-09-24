@@ -331,6 +331,39 @@ test('the sealed seller block is the contact block the packet renders', () => {
   assert.ok(packet.html.includes('src="https://photos.test/bella-hero.jpg"'), 'rendered hero photo');
 });
 
+/* The quick-start placeholders are not seller contact details.
+ *
+ * handleQuickStart invents `owner@ranch.local` and `Operations Lead` so a
+ * skipped setup yields a working ranch. Resolving them as real contact
+ * details would seal — and print on the buyer packet — a mailbox and a
+ * person that do not exist, as though the customer had supplied them. The
+ * seller block degrades to an honest absence instead.
+ */
+test('quick-start placeholder contact is excluded from the sealed seller block', () => {
+  const quickStartProfile = {
+    ...sealTestWorkspace,
+    defaultOwnerName: '',
+    ranchManagerName: 'Operations Lead',
+    operationsEmail: 'owner@ranch.local',
+  } as unknown as WorkspaceProfile;
+
+  const packet = buildLocalSalePacket({
+    horse: sealTestHorse(),
+    workspaceProfile: quickStartProfile,
+    documents: [],
+    ownershipRecord: sealTestOwnership(),
+    selectedDocumentIds: [],
+    generatedBy: 'Ranch Manager',
+    now: new Date('2026-09-24T12:00:00Z'),
+  });
+
+  const sealed = JSON.parse(packet.credential.payload).seller as { name: string; email: string };
+  assert.equal(sealed.name, '', 'the invented manager name must not be sealed');
+  assert.equal(sealed.email, '', 'the invented mailbox must not be sealed');
+  assert.ok(!packet.html.includes('owner@ranch.local'), 'the invented mailbox must not be printed');
+  assert.ok(!packet.html.includes('Operations Lead'), 'the invented manager name must not be printed');
+});
+
 /*
  * M14: the by-hand verification steps used to print a literal example,
  * `SEAL-XXXX-XXXX-XXXX`, as the seal code. A buyer following the steps would

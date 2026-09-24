@@ -114,8 +114,23 @@ function row(label: string, value: unknown) {
  * seller; it is not a byline. When no name or ranch is on file the byline is
  * omitted rather than filled with a role.
  */
+/**
+ * Quick-start sentinel values that must never be treated as real seller
+ * contact details. handleQuickStart (src/routes/SetupWorkspace.tsx) invents
+ * `owner@ranch.local` and `Operations Lead` so a skipped setup still yields a
+ * working ranch — the workspaceSetupDefaults comment documents why the shared
+ * path deliberately invents nothing. Sealing or printing a sentinel publishes
+ * contact details for a mailbox/person that does not exist, as though the
+ * customer had supplied them.
+ */
+const QUICK_START_EMAIL_SENTINEL = 'owner@ranch.local';
+const QUICK_START_NAME_SENTINEL = 'Operations Lead';
+
 export function resolveSellerByline(workspaceProfile?: WorkspaceProfile): string {
-  const name = (workspaceProfile?.defaultOwnerName || workspaceProfile?.ranchManagerName || '').trim();
+  const rawName = (workspaceProfile?.defaultOwnerName || workspaceProfile?.ranchManagerName || '').trim();
+  // A sentinel is a job title, not a person — printing it as the byline
+  // would present an invented contact as the seller.
+  const name = rawName === QUICK_START_NAME_SENTINEL ? '' : rawName;
   const ranch = (workspaceProfile?.ranchName || '').trim();
   return [name, ranch].filter(Boolean).join(' · ');
 }
@@ -227,9 +242,10 @@ function resolveSealedSeller(workspaceProfile: WorkspaceProfile | undefined, hor
   const email = (workspaceProfile?.operationsEmail || '').trim();
   const heroPhotoUrl = toPublicPassport(horse).photoUrl;
   return {
-    name,
+    // Quick-start placeholders are not contact details (see above).
+    name: name === QUICK_START_NAME_SENTINEL ? '' : name,
     ranch,
-    email,
+    email: email.toLowerCase() === QUICK_START_EMAIL_SENTINEL ? '' : email,
     heroPhotoUrl,
     heroPhotoDigest: photoContentDigest(heroPhotoUrl),
   };

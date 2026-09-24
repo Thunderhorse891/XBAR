@@ -681,7 +681,16 @@ export const PACKET_VERIFIER_SCRIPT = `
             var tag = String(node.tagName || 'element').toLowerCase();
             var from =
               node.getAttribute('src') || node.getAttribute('href') || node.getAttribute('data') || '';
-            if (tag === 'img' && sealedPhoto && from === sealedPhoto) {
+            /*
+             * The generator emits the hero photo as a bare <img src> — no
+             * srcset, no sizes, no <picture> wrapper. An altered packet can
+             * keep src equal to the sealed URL and add
+             * srcset="https://attacker.example/replacement.jpg 1x": the
+             * browser displays the srcset candidate, while a src-only check
+             * still passes. So the exemption requires the bare img; a
+             * "matching" img with a srcset is not the sealed photo.
+             */
+            if (tag === 'img' && sealedPhoto && from === sealedPhoto && !node.getAttribute('srcset')) {
               sealedPhotoSeen += 1;
               if (sealedPhotoSeen > 1) {
                 problems.push(
