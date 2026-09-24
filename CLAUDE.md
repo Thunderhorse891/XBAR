@@ -1,5 +1,9 @@
 # XBAR — working agreement
 
+## Governing production engineering contract
+
+Read and follow [Erin's XBAR Production Engineering Contract](docs/PRODUCTION-ENGINEERING-CONTRACT.md) before modifying XBAR. It governs implementation, review, delivery, and status reporting. If older guidance below conflicts with the contract, follow the contract. Green checks never replace final-head review or verification of the affected workflow.
+
 ## Shipping a change: the full loop, every time
 
 A change is not done when the code is written. It is done when it is **live and verified green in all three places**. Owner's standing instruction: commit, push, merge to `main`, then confirm green in Vercel and Supabase — for every premium change, upgrade or fix, no exceptions.
