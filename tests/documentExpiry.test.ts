@@ -1208,6 +1208,12 @@ const UNPLACED_IDENTITY_CORPUS: Array<[string, string, string, string | null]> =
   // [case, title, text, expected kind]
   ['CVI by name', 'CVI', '', 'Health certificate'],
   ['health certificate by name', 'Health Certificate', '', 'Health certificate'],
+  ['mortality policy by name', 'Equine Mortality Policy', '', 'Insurance'],
+  ['major medical policy by name', 'Major Medical Policy', '', 'Insurance'],
+  ['insurance by name', 'Horse Insurance', '', 'Insurance'],
+  ['a policy that is not insurance', 'Stable Biosecurity Policy', 'Expiration Date: 06/15/2026', null],
+  ['a vaccination policy', 'Barn Vaccination Policy', '', null],
+  ['a non-insurance policy heading', 'scan0048', 'Stable Biosecurity Policy\nExpiration Date: 06/15/2026', null],
   [
     'policy by name',
     'Farm Liability Policy',

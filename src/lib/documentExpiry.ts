@@ -274,7 +274,14 @@ function singleLabelledDay(text: string | undefined, pattern: RegExp): number | 
 
 const HEALTH_CERTIFICATE_TEXT =
   /health\s+certificate|certificate\s+of\s+veterinary\s+inspection|\bCVI\b|interstate\s+health/i;
-const INSURANCE_NAME = /\b(?:insurance|policy)\b/i;
+/*
+ * "Policy" alone is not insurance: a stable's biosecurity or vaccination
+ * policy can carry a date too, and reading it as a lapsed insurance policy
+ * would claim the horse's insured value is uncovered. A name or heading says
+ * insurance when it says so, or names the cover a policy gives.
+ */
+const INSURANCE_NAME =
+  /\binsurance\b|\b(?:liability|mortality|major\s+medical|medical|surgical|property|loss\s+of\s+use|equine|farm)\s+(?:policy|coverage|cover)\b/i;
 const INSURANCE_TEXT =
   /\binsurance\s+(?:policy|certificate|binder)\b|\bcertificate\s+of\s+(?:liability\s+)?insurance\b|\bpolicy\s+(?:number|no\.?|#)|\bnamed\s+insured\b|\bdeclarations\s+page\b/i;
 const CONTRACT_NAME = /\b(?:contract|agreement|lease)\b/i;
