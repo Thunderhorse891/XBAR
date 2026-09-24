@@ -1000,3 +1000,41 @@ test('a line naming a policy, contract or term is never a CVI’s own expiry', (
     assert.equal(dated(line).items[0]?.expiresOn, '2026-07-15', line);
   }
 });
+
+test('a validity field counts only in the certificate’s own header, never inside a vaccine, test or lab section', () => {
+  const dated = (body: string) =>
+    buildExpiryRadar(
+      [
+        doc({
+          type: 'Vet Record',
+          horseId: 'h1',
+          title: 'CVI',
+          extractedTextPreview: `Certificate of Veterinary Inspection\nInspection Date: 05/01/2026\n${body}`,
+        }),
+      ],
+      horses,
+      NOW,
+    ).items[0]?.expiresOn;
+  // Codex's case: the component is named on the line above its own expiry field.
+  assert.equal(dated('Rabies Vaccination\nExpiration Date: 05/01/2027'), '2026-05-31');
+  // A component section a few fields long, and one whose disease XBAR doesn't know, named only by its fields.
+  assert.equal(
+    dated('Rabies Vaccination\nVaccine: Imrab 3\nDate Given: 05/01/2026\nExpiration Date: 05/01/2027'),
+    '2026-05-31',
+  );
+  assert.equal(dated('Potomac Horse Fever\nLot No. 12345\nExpiration Date: 05/01/2027'), '2026-05-31');
+  assert.equal(dated('EIA Test Date: 01/01/2026\nExpiration Date: 01/01/2027'), '2026-05-31');
+  // The certificate's own field, before any component section, still counts — and the one inside the section doesn't.
+  assert.equal(dated('Expiration Date: 07/15/2026\nRabies Vaccination\nExpiration Date: 05/01/2027'), '2026-07-15');
+  assert.equal(dated('Expiration Date: 07/15/2026'), '2026-07-15');
+  // The header starts at the certificate's name: a test named above it, on a cover line, doesn't disqualify it.
+  const withCover = doc({
+    type: 'Vet Record',
+    horseId: 'h1',
+    title: 'CVI',
+    extractedTextPreview:
+      'EIA test attached\nCertificate of Veterinary Inspection\nInspection Date: 05/01/2026\nExpiration Date: 07/15/2026',
+    entities: { examDate: '2026-05-01' },
+  });
+  assert.equal(buildExpiryRadar([withCover], horses, NOW).items[0]?.expiresOn, '2026-07-15');
+});

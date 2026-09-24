@@ -196,15 +196,31 @@ const VALIDITY_DATE = new RegExp(
   'gi',
 );
 
-function opensALine(match: RegExpMatchArray, text: string): boolean {
-  return LINE_START.test(text.slice(0, match.index ?? 0));
+/*
+ * A line to itself is not enough: a CVI lists vaccines and tests as sections
+ * of their own ("Rabies Vaccination" / "Expiration Date: 05/01/2027"), and
+ * their fields look exactly like the certificate's. So a validity field counts
+ * only in the certificate's own header — after the certificate's name and
+ * before anything names a vaccine, test, lab or batch. A field XBAR can't place
+ * falls back to the 30-day inspection window, which flags a certificate early
+ * rather than showing a lapsed one as current.
+ */
+const COMPONENT_SECTION =
+  /vaccin|immuniz|rabies|coggins|\bEIA\b|\bELISA\b|\bAGID\b|\btest|influenza|rhino|strangles|west\s+nile|tetanus|encephal|\bEEE\b|\bWEE\b|potomac|\bPHF\b|booster|\bdose|\blot\s*(?:no|#|number)|\bserial|administered|\bgiven\b|laborator|\blab\b|sample|accession/i;
+
+function inCertificateHeader(match: RegExpMatchArray, text: string): boolean {
+  const before = text.slice(0, match.index ?? 0);
+  if (!LINE_START.test(before)) return false;
+  let headerStart = 0;
+  for (const name of before.matchAll(CERTIFICATE_NAME)) headerStart = name.index ?? headerStart;
+  return !COMPONENT_SECTION.test(before.slice(headerStart));
 }
 
 /** The date a health certificate prints for its own expiry, or null. Disagreeing dates return null. */
 export function findCertificateExpiryDate(text: string | undefined): string | null {
   const found = new Set([
     ...labelledDays(text, CERTIFICATE_DATE, namesThisCertificate),
-    ...labelledDays(text, VALIDITY_DATE, opensALine),
+    ...labelledDays(text, VALIDITY_DATE, inCertificateHeader),
   ]);
   return found.size === 1 ? isoDay([...found][0]!) : null;
 }
@@ -246,6 +262,8 @@ function singleLabelledDay(text: string | undefined, pattern: RegExp): number | 
 
 const HEALTH_CERTIFICATE_TEXT =
   /health\s+certificate|certificate\s+of\s+veterinary\s+inspection|\bCVI\b|interstate\s+health/i;
+/** Every mention of the certificate's name, to find where its own header starts. */
+const CERTIFICATE_NAME = new RegExp(HEALTH_CERTIFICATE_TEXT.source, 'gi');
 const INSURANCE_NAME = /\b(?:insurance|policy)\b/i;
 const INSURANCE_TEXT =
   /\binsurance\s+(?:policy|certificate|binder)\b|\bcertificate\s+of\s+(?:liability\s+)?insurance\b|\bpolicy\s+(?:number|no\.?|#)|\bnamed\s+insured\b|\bdeclarations\s+page\b/i;
