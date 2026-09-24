@@ -294,28 +294,67 @@ export function sealCodeFromDigest(digest: string): string {
   return `SEAL-${head.slice(0, 4)}-${head.slice(4, 8)}-${head.slice(8, 12)}`;
 }
 
+/** Buyer-facing registration line. A registered flag with no registry name on
+ * file must never render the literal word "registry" — a placeholder-looking
+ * fallback inside sealed facts a buyer reads as the document's own words. */
+function registrationLine(identity: CredentialIdentity): string {
+  if (!identity.registered) return 'Registration: not registered';
+  const registry = (identity.registry || '').trim();
+  const number = (identity.registrationNumber || '').trim();
+  if (registry && number) return `Registration: ${registry} ${number}`;
+  if (number) return `Registration: ${number}`;
+  if (registry) return `Registration: ${registry} (number not on file)`;
+  return 'Registration: registration number on file';
+}
+
+/** Buyer-facing care line. The sealed care facts are the status and the last
+ * vet visit, so the manifest names them instead of saying nothing. */
+function careLine(care: CredentialCare): string {
+  const status = (care.status || '').trim() || 'not on file';
+  const lastVetVisit = (care.lastVetVisit || '').trim() || 'not on file';
+  return `Care summary: ${status} · last vet visit ${lastVetVisit}`;
+}
+
+/** Buyer-facing ownership-proof line. When nothing was verified at seal time
+ * the manifest says what the buyer should do instead of reading as a negative. */
+function verifiedProofsLine(verifiedProofs: string[]): string {
+  if (verifiedProofs.length) {
+    return `Verified proofs: ${[...verifiedProofs].sort().join(', ')}`;
+  }
+  return 'Ownership proofs: none verified at seal time — confirm the underlying documents with the seller';
+}
+
+/**
+ * Buyer-facing attribution line. The sealed watermark is required, and its
+ * resolver falls back to the platform name when no buyer is named — which
+ * traces to nobody. The manifest reads "General copy" in that case rather than
+ * printing an attribution to a buyer who does not exist, and never
+ * "(watermark)" implementation jargon.
+ */
+function issuedToLine(watermark: string): string {
+  const named = (watermark || '').trim();
+  const issuedTo = named === '' || named === 'XBAR' ? 'General copy' : named;
+  return `Issued to: ${issuedTo}`;
+}
+
 function buildManifest(input: SaleCredentialInput): string[] {
   return [
     `Identity: ${input.identity.name || 'unnamed'} (${input.passportId})`,
-    input.identity.registered
-      ? `Registration: ${input.identity.registry || 'registry'} ${input.identity.registrationNumber || ''}`.trim()
-      : 'Registration: not registered',
+    registrationLine(input.identity),
     `Sale terms: ${input.sale.askPrice > 0 ? `$${input.sale.askPrice.toLocaleString()}` : 'no ask price'} · ${
       input.sale.listingState || 'unlisted'
     }`,
     `Ownership: ${input.ownership.legalOwner || 'unknown'} · transfer ${input.ownership.transferStatus || 'unknown'}`,
-    `Care & disclosure summary sealed`,
+    careLine(input.care),
     `Proof documents sealed: ${input.documents.length}`,
     input.attachments.length
       ? `Embedded files sealed by content: ${input.attachments.length}`
       : 'Embedded files: none in this packet',
-    input.verifiedProofs.length
-      ? `Verified proofs: ${[...input.verifiedProofs].sort().join(', ')}`
-      : 'Verified proofs: none verified at seal time',
+    verifiedProofsLine(input.verifiedProofs),
     // Displayed beside the seal so the buyer can read who this copy was issued
     // to out of the SEALED record, rather than off the watermark on the page —
     // which is the copy an altered packet would have changed.
-    `Issued to (watermark): ${input.watermark}`,
+    issuedToLine(input.watermark),
   ];
 }
 

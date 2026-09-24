@@ -6,8 +6,31 @@ export function isEmailConfigured() {
   return Boolean(process.env.RESEND_API_KEY || process.env.SENDGRID_API_KEY);
 }
 
-export async function sendEmail({ to, subject, html, text }) {
-  const from = process.env.EMAIL_FROM_ADDRESS || 'XBAR <no-reply@xbar.app>';
+/** Extract the bare address from a From value that may be in "Name <addr>" form. */
+function extractAddress(value) {
+  const match = /<([^<>]+)>/.exec(value || '');
+  return (match ? match[1] : String(value || '')).trim();
+}
+
+/**
+ * Build the From header. When the caller supplies a display name (e.g. the
+ * ranch's business name on a buyer-facing sale-packet email), it replaces the
+ * default display name while keeping the configured sending address — the
+ * buyer sees the email as coming from the ranch, not the platform.
+ */
+function buildFrom(defaultFrom, fromName, fromEmail) {
+  const name = String(fromName || '')
+    .trim()
+    .replace(/["\r\n]/g, '');
+  if (!name) return defaultFrom;
+  const address = String(fromEmail || '').trim() || extractAddress(defaultFrom) || 'no-reply@xbar.app';
+  return `"${name}" <${address}>`;
+}
+
+export async function sendEmail({ to, subject, html, text, fromName, fromEmail, replyTo }) {
+  const defaultFrom = process.env.EMAIL_FROM_ADDRESS || 'XBAR <no-reply@xbar.app>';
+  const from = buildFrom(defaultFrom, fromName, fromEmail);
+  const replyToAddress = String(replyTo || '').trim();
   if (!to) {
     return { ok: false, skipped: true, message: 'No recipient email available.' };
   }
@@ -19,7 +42,14 @@ export async function sendEmail({ to, subject, html, text }) {
         Authorization: `Bearer ${process.env.RESEND_API_KEY}`,
         'Content-Type': 'application/json',
       },
-      body: JSON.stringify({ from, to: [to], subject, html, text }),
+      body: JSON.stringify({
+        from,
+        to: [to],
+        subject,
+        html,
+        text,
+        ...(replyToAddress ? { reply_to: replyToAddress } : {}),
+      }),
     });
     if (!response.ok) {
       const detail = await response.text().catch(() => '');
@@ -37,7 +67,8 @@ export async function sendEmail({ to, subject, html, text }) {
       },
       body: JSON.stringify({
         personalizations: [{ to: [{ email: to }] }],
-        from: { email: from.replace(/^.*<|>$/g, '') || from },
+        from: { email: extractAddress(from) || extractAddress(defaultFrom) },
+        ...(replyToAddress ? { replyTo: { email: replyToAddress } } : {}),
         subject,
         content: [
           { type: 'text/plain', value: text || '' },

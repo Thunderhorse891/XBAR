@@ -51,3 +51,20 @@ test('share text falls back gracefully without a name or seal', () => {
   assert.ok(text.startsWith('This horse'));
   assert.ok(!text.includes('(seal'));
 });
+
+test('share text names the ranch and the seal code without double-prefixing', () => {
+  const text = buildShareText('Bella', 'SEAL-AB12-CD34-EF56', 'Rocking R Ranch');
+  assert.equal(
+    text,
+    'Rocking R Ranch: sale packet for Bella verified by XBAR (seal code SEAL-AB12-CD34-EF56). ' +
+      "Confirm it's unaltered before you buy:",
+  );
+  assert.ok(!text.includes('SEAL-SEAL-'), 'seal code must not be double-prefixed');
+  assert.ok(!/apprais|guarantee/i.test(text));
+});
+
+test('share text without a ranch still reads honestly', () => {
+  const text = buildShareText('Bella', 'SEAL-AB12-CD34-EF56');
+  assert.ok(text.startsWith('Bella: sale packet verified by XBAR (seal code SEAL-AB12-CD34-EF56).'));
+  assert.ok(/unaltered/i.test(text));
+});

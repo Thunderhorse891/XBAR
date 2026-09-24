@@ -77,6 +77,12 @@ test('no private field value leaks into the serialized passport', () => {
   }
 });
 
+test('unknown age is null, never 0 — a buyer must not read "Age: 0"', () => {
+  assert.equal(toPublicPassport(loadedHorse()).age, 6, 'a known age passes through');
+  assert.equal(toPublicPassport(loadedHorse({ age: 0 })).age, null, 'zero is not an age');
+  assert.equal(toPublicPassport(loadedHorse({ age: undefined })).age, null, 'missing is not an age');
+});
+
 test('safe identity fields are present and correct', () => {
   const dto = toPublicPassport(loadedHorse());
   assert.equal(dto.name, 'Smart Little Pepto');

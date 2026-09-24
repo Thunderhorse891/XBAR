@@ -317,6 +317,64 @@ test('the seal tells the buyer which copy this is', () => {
   );
 });
 
+test('a registered horse with no registry name on file never prints the word "registry" as a fallback', () => {
+  const credential = buildSaleCredential(
+    input({ identity: { ...input().identity, registered: true, registry: '', registrationNumber: 'X0099887' } }),
+  );
+
+  const line = credential.manifest.find((l) => l.startsWith('Registration:'));
+  assert.ok(line, 'a registration line must still be present');
+  assert.ok(!/^Registration: registry\b/.test(line), `filler fallback leaked into sealed facts: ${line}`);
+  assert.ok(line.includes('X0099887'), 'the known registration number must survive');
+});
+
+test('a registered horse with neither registry nor number says the number is on file', () => {
+  const credential = buildSaleCredential(
+    input({ identity: { ...input().identity, registered: true, registry: '', registrationNumber: '' } }),
+  );
+
+  assert.ok(credential.manifest.some((line) => line === 'Registration: registration number on file'));
+});
+
+test('the manifest names the care facts instead of saying nothing', () => {
+  const credential = buildSaleCredential(input());
+
+  assert.ok(
+    credential.manifest.some((line) => line === 'Care summary: Sale Prep · last vet visit 2026-06-01'),
+    `care facts missing from manifest: ${JSON.stringify(credential.manifest)}`,
+  );
+  assert.ok(!credential.manifest.some((line) => line.includes('Care & disclosure summary sealed')));
+});
+
+test('no verified proofs reads as guidance, not a negative', () => {
+  const credential = buildSaleCredential(input({ verifiedProofs: [] }));
+
+  assert.ok(
+    credential.manifest.some(
+      (line) =>
+        line === 'Ownership proofs: none verified at seal time — confirm the underlying documents with the seller',
+    ),
+    `proof line missing from manifest: ${JSON.stringify(credential.manifest)}`,
+  );
+  assert.ok(!credential.manifest.some((line) => line === 'Verified proofs: none verified at seal time'));
+});
+
+test('an unnamed copy is issued to "General copy", never to the platform name', () => {
+  const credential = buildSaleCredential(input({ watermark: 'XBAR' }));
+
+  assert.ok(
+    credential.manifest.some((line) => line === 'Issued to: General copy'),
+    `attribution line missing from manifest: ${JSON.stringify(credential.manifest)}`,
+  );
+  assert.ok(!credential.manifest.some((line) => /Issued to.*watermark/.test(line)), 'implementation jargon leaked');
+});
+
+test('a named copy is issued to the watermark with no jargon', () => {
+  const credential = buildSaleCredential(input({ watermark: 'Jordan Reyes · 2026-02-14' }));
+
+  assert.ok(credential.manifest.some((line) => line === 'Issued to: Jordan Reyes · 2026-02-14'));
+});
+
 /*
  * Two packets identical but for the watermark must still agree on everything
  * else. Sealing the attribution must not disturb the facts around it — a change

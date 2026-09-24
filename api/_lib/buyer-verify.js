@@ -156,7 +156,7 @@ export default async function handler(req, res) {
       ok: true,
       found: true,
       anchored: false,
-      message: 'This packet exists but has no server-anchored seal on record. Ask the seller to regenerate it.',
+      message: 'This packet exists but has no verified seal on record. Ask the seller to regenerate it.',
     });
   }
 
