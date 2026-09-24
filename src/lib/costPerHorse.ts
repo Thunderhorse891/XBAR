@@ -299,22 +299,25 @@ function buildPriceRises(dated: DatedReceipt[], today: number): { rises: Supplie
 
     /*
      * Every delivery in the window is checked against the deliveries before
-     * it, and the first one that came in higher is where the rise began. A
+     * it. The rise is the earliest one that has held since: every delivery
+     * from it to the latest still at least 5% above the price before it. So a
      * price that went up and stayed up is still flagged after the dearer
-     * deliveries have become the recent history. A rise last spring is not
-     * something to act on today, and a rise that has since come back down is
-     * not flagged.
+     * deliveries have become the recent history, a spike that came back down
+     * neither counts nor hides a newer rise, and a rise last spring is not
+     * something to act on today.
      */
-    const start = purchases.findIndex((entry, index) => {
-      if (index === 0 || !inWindow(index)) return false;
+    const heldFrom = (index: number) => {
       const before = priceBefore(index);
-      return before > 0 && (entry.unitPrice - before) / before >= PRICE_RISE_THRESHOLD;
-    });
+      return (
+        before > 0 &&
+        purchases.slice(index).every((entry) => (entry.unitPrice - before) / before >= PRICE_RISE_THRESHOLD)
+      );
+    };
+    const start = purchases.findIndex((_, index) => index > 0 && inWindow(index) && heldFrom(index));
     if (start < 0) continue;
     const baseline = priceBefore(start);
     const latest = purchases[purchases.length - 1]!;
     const rise = (latest.unitPrice - baseline) / baseline;
-    if (rise < PRICE_RISE_THRESHOLD) continue;
     const sinceRise = purchases.slice(start);
     const extraCost = sinceRise.reduce(
       (sum, entry) => sum + Math.max(0, entry.unitPrice - baseline) * Number(entry.receipt.quantity),
@@ -371,7 +374,7 @@ function buildFeedSuppliers(windowReceipts: DatedReceipt[]): FeedSupplierSummary
       existing.latestPricedDay = entry.day;
       existing.latestUploadedAt = uploadedAt;
       existing.summary.latestUnitPrice = unitPrice;
-      existing.summary.unit = String(entry.receipt.unit).trim();
+      existing.summary.unit = unitKeyOf(entry.receipt.unit);
     }
     suppliers.set(key, existing);
   }

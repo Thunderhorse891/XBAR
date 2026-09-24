@@ -9,6 +9,7 @@ import { buildProfitPortfolio } from '@/lib/profitIntelligence';
 import { profitIntelligenceGate } from '@/lib/subscriptionGates';
 import { useUiStore } from '@/store/useUiStore';
 import { useCurrentRoleCapability, useCurrentRoleWorkspace, useXbarStore } from '@/store/useXbarStore';
+import { PRICED_BY_UNIT_CATEGORIES, parseReceiptQuantity } from '@/store/xbarStoreLogic';
 import type { ExpenseCategory, ExpenseReceipt } from '@/types/xbar';
 import { EXPENSE_CATEGORIES } from '@/features/expenses/constants';
 import { matchesSearch } from '@/features/expenses/helpers';
@@ -74,6 +75,8 @@ export default function Expenses() {
     vendor: '',
     amount: '',
     receiptDate: localIsoDate(),
+    quantity: '',
+    unit: '',
     notes: '',
     uploadedBy: roleWorkspace.label,
   });
@@ -236,6 +239,10 @@ export default function Expenses() {
       vendor: draft.vendor,
       amount: Number(draft.amount),
       receiptDate: draft.receiptDate,
+      // Only receipts bought by the unit carry a quantity; the store refuses half a pair.
+      ...(PRICED_BY_UNIT_CATEGORIES.has(draft.category)
+        ? { quantity: parseReceiptQuantity(draft.quantity), unit: draft.unit.trim() || undefined }
+        : {}),
       notes: draft.notes,
       uploadedBy: draft.uploadedBy,
       file: receiptFile,
@@ -246,7 +253,16 @@ export default function Expenses() {
       tone: result.ok ? 'success' : 'error',
     });
     if (result.ok) {
-      setDraft((current) => ({ ...current, horseId: '', title: '', vendor: '', amount: '', notes: '' }));
+      setDraft((current) => ({
+        ...current,
+        horseId: '',
+        title: '',
+        vendor: '',
+        amount: '',
+        quantity: '',
+        unit: '',
+        notes: '',
+      }));
       setReceiptFile(null);
       firstFieldRef.current?.focus();
     }
@@ -502,6 +518,31 @@ export default function Expenses() {
                 disabled={!canManageBudget || savingReceipt}
               />
             </label>
+            {PRICED_BY_UNIT_CATEGORIES.has(draft.category) ? (
+              <>
+                <label className="field-stack">
+                  <span className="field-label">Quantity (optional)</span>
+                  <input
+                    className="field-input"
+                    inputMode="decimal"
+                    value={draft.quantity}
+                    onChange={(event) => setDraft((current) => ({ ...current, quantity: event.target.value }))}
+                    placeholder="40"
+                    disabled={!canManageBudget || savingReceipt}
+                  />
+                </label>
+                <label className="field-stack">
+                  <span className="field-label">Unit</span>
+                  <input
+                    className="field-input"
+                    value={draft.unit}
+                    onChange={(event) => setDraft((current) => ({ ...current, unit: event.target.value }))}
+                    placeholder="bale, bag, ton"
+                    disabled={!canManageBudget || savingReceipt}
+                  />
+                </label>
+              </>
+            ) : null}
             <label className="field-stack">
               <span className="field-label">Receipt date</span>
               <input

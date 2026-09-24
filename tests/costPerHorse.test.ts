@@ -17,6 +17,7 @@ import {
 } from '../src/lib/costPerHorse.js';
 import { localIsoDate } from '../src/lib/format.js';
 import {
+  PRICED_BY_UNIT_CATEGORIES,
   parseReceiptQuantity,
   validateExpenseReceiptInput,
   type ExpenseReceiptInput,
@@ -514,6 +515,7 @@ test('singular and plural spellings of a unit are one unit', () => {
   });
   assert.equal(summary.priceRises.length, 1, 'bales then bale is the same hay rising');
   assert.equal(summary.priceRises[0]?.unit, 'bale');
+  assert.equal(summary.feedSuppliers[0]?.unit, 'bale', 'the supplier card reads "per bale" too');
   assert.equal(unitKeyOf(' 50 LBS  Bags '), '50 lb bag');
   assert.equal(unitKeyOf('boxes'), 'box');
   assert.equal(unitKeyOf('ton'), 'ton');
@@ -633,4 +635,34 @@ test('a thousands separator is accepted only where it belongs', () => {
   for (const malformed of ['1234,567', '1,2345', ',500', '1,,200', '12,50']) {
     assert.ok(Number.isNaN(parseReceiptQuantity(malformed)), `${malformed} is refused, not stripped`);
   }
+});
+
+test('a spike that came back down neither counts nor hides a newer rise', () => {
+  const summary = buildCostPerHorse({
+    horses: [horse('a')],
+    receipts: [
+      receipt({ amount: 100, quantity: 10, unit: 'bale', receiptDate: daysAgo(80) }), // $10
+      receipt({ amount: 200, quantity: 10, unit: 'bale', receiptDate: daysAgo(70) }), // $20 spike
+      receipt({ amount: 50, quantity: 10, unit: 'bale', receiptDate: daysAgo(60) }), // $5
+      receipt({ amount: 50, quantity: 10, unit: 'bale', receiptDate: daysAgo(40) }),
+      receipt({ amount: 50, quantity: 10, unit: 'bale', receiptDate: daysAgo(20) }),
+      receipt({ amount: 60, quantity: 10, unit: 'bale', receiptDate: daysAgo(2) }), // $6
+    ],
+    now: NOW,
+  });
+  assert.equal(summary.priceRises.length, 1);
+  const rise = summary.priceRises[0]!;
+  assert.equal(rise.baselineUnitPrice, 5, 'the $6 is measured against the three $5 deliveries before it');
+  assert.equal(rise.risePercent, 20);
+  assert.equal(rise.risingSince, daysAgo(2));
+  assert.equal(rise.extraCost, 10);
+});
+
+test('the Expenses intake records quantity and unit like the quick-create drawer', async () => {
+  assert.deepEqual([...PRICED_BY_UNIT_CATEGORIES].sort(), ['Bedding', 'Feed', 'Supplements']);
+  const intake = await readFile('src/routes/Expenses.tsx', 'utf8');
+  assert.match(intake, /PRICED_BY_UNIT_CATEGORIES\.has\(draft\.category\)/);
+  assert.match(intake, /quantity: parseReceiptQuantity\(draft\.quantity\)/);
+  const drawer = await readFile('src/components/saas/flows.tsx', 'utf8');
+  assert.match(drawer, /PRICED_BY_UNIT_CATEGORIES\.has\(category\)/, 'one list of priced categories, not two');
 });
