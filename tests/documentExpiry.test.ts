@@ -939,3 +939,28 @@ test('a policy or agreement that mentions a health certificate keeps its own ide
   // A name that itself points two ways is refused too.
   assert.equal(expiryKindOf({ ...agreement, title: 'CVI and Lease Agreement' }), null);
 });
+
+test('a CVI’s own expiry field on its own line counts; a component’s expiry never does', () => {
+  const cvi = (text: string) => doc({ type: 'Vet Record', horseId: 'h1', title: 'CVI', extractedTextPreview: text });
+  const dated = (text: string) => buildExpiryRadar([cvi(text)], horses, NOW).items[0]?.expiresOn;
+  // An eCVI prints its own validity as a field of its own, not beside the certificate's name.
+  assert.equal(
+    dated('Certificate of Veterinary Inspection\nInspection Date: 05/01/2026\nExpiration Date: 07/15/2026'),
+    '2026-07-15',
+  );
+  assert.equal(dated('Health certificate\nInspection Date: 2026-05-01\nValid Through: 07/15/2026'), '2026-07-15');
+  // Still refused: a label that follows a vaccine or test on its line, including across a table's column gap.
+  assert.equal(
+    dated('Health certificate\nInspection Date: 2026-05-01\nRabies vaccination expires 05/01/2027'),
+    '2026-05-31',
+  );
+  assert.equal(
+    dated('Health certificate\nInspection Date: 2026-05-01\nRabies  05/01/2026  Expires 05/01/2027'),
+    '2026-05-31',
+  );
+  // Two expiry fields that disagree are a guess; the inspection window is used.
+  assert.equal(
+    dated('Health certificate\nInspection Date: 2026-05-01\nExpiration Date: 07/15/2026\nExpires: 05/01/2027'),
+    '2026-05-31',
+  );
+});

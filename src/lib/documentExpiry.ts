@@ -178,10 +178,26 @@ function namesThisCertificate(match: RegExpMatchArray, text: string): boolean {
   return FIELD_START.test(text.slice(0, match.index ?? 0));
 }
 
+/*
+ * An eCVI also prints its validity as a field of its own — "Expiration Date:"
+ * or "Valid Through:" on a line of its own, below the heading rather than
+ * beside the certificate's name. A generic expiry label counts only there, at
+ * the start of a line: after a vaccine or test on the same line, or across a
+ * table's column gap, it belongs to that component.
+ */
+const LINE_START = /(?:^|[\n\r])[ \t]*$/;
+
+function opensALine(match: RegExpMatchArray, text: string): boolean {
+  return LINE_START.test(text.slice(0, match.index ?? 0));
+}
+
 /** The date a health certificate prints for its own expiry, or null. Disagreeing dates return null. */
 export function findCertificateExpiryDate(text: string | undefined): string | null {
-  const day = singleLabelledDay(text, CERTIFICATE_DATE, namesThisCertificate);
-  return day === null ? null : isoDay(day);
+  const found = new Set([
+    ...labelledDays(text, CERTIFICATE_DATE, namesThisCertificate),
+    ...labelledDays(text, LABELLED_DATE, opensALine),
+  ]);
+  return found.size === 1 ? isoDay([...found][0]!) : null;
 }
 
 /*
@@ -197,12 +213,12 @@ const INSPECTION_DATE = new RegExp(
   'gi',
 );
 
-/** Every date the pattern labels, as one day number; null when there is none or they disagree. */
-function singleLabelledDay(
+/** Every distinct day the pattern labels in the text, keeping only the matches `accept` allows. */
+function labelledDays(
   text: string | undefined,
   pattern: RegExp,
   accept: (match: RegExpMatchArray, text: string) => boolean = () => true,
-): number | null {
+): Set<number> {
   const source = String(text ?? '');
   const found = new Set<number>();
   for (const match of source.matchAll(pattern)) {
@@ -210,6 +226,12 @@ function singleLabelledDay(
     const day = parsePrintedDate(match[1] ?? '');
     if (day !== null) found.add(day);
   }
+  return found;
+}
+
+/** Every date the pattern labels, as one day number; null when there is none or they disagree. */
+function singleLabelledDay(text: string | undefined, pattern: RegExp): number | null {
+  const found = labelledDays(text, pattern);
   return found.size === 1 ? [...found][0]! : null;
 }
 
