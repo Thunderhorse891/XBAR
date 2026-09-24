@@ -10,6 +10,7 @@ import { formatCurrency, formatPercent } from '@/lib/format';
 import { billingPath } from '@/lib/billingRoutes';
 import { buyerFollowUpPath } from '@/lib/buyerRoutes';
 import { hasRoleCapability } from '@/lib/permissions';
+import { hasActiveListing } from '@/lib/xbarPhaseTwo';
 import { animalPassportId, identityCompleteness } from '@/lib/animalPassport';
 import { type AnimalFinancialStatus, buildRanchFinancials } from '@/lib/profitIntelligence';
 import { profitIntelligenceGate } from '@/lib/subscriptionGates';
@@ -174,7 +175,6 @@ export default function AnimalProfile() {
     );
   }
 
-  const readiness = animal.readiness?.score ?? 0;
   const packetReady = saleReadiness?.proofPacketReady ?? false;
   const identity = identityCompleteness(animal);
   const identityTone: Tone = identity.percent >= 90 ? 'success' : identity.percent >= 60 ? 'info' : 'warning';
@@ -191,7 +191,10 @@ export default function AnimalProfile() {
     '';
   const location =
     [animal.location.barn, animal.location.pasture].filter(Boolean).join(' · ') || animal.location.ranch || '—';
-  const forSale = animal.sale?.listingState !== 'Hold' && (animal.segment === 'Sale Prospect' || readiness > 0);
+  // From the listing itself, not the stored readiness score, which is seeded at
+  // creation and can sit at 0 on a listed horse with complete records.
+  const forSale =
+    animal.sale?.listingState !== 'Hold' && (animal.segment === 'Sale Prospect' || hasActiveListing(animal));
 
   return (
     <>

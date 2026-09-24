@@ -1,4 +1,11 @@
-import type { DocumentRecord, ExpenseCategory, ExpenseReceipt, HorseRecord, OwnershipRecord } from '../types/xbar.js';
+import type {
+  DocumentRecord,
+  ExpenseCategory,
+  ExpenseReceipt,
+  HorseRecord,
+  OwnershipRecord,
+  RoleCapability,
+} from '../types/xbar.js';
 import { hasHorsePhoto, identityCompleteness } from './animalPassport.js';
 import { buildCareBoardRows } from './dashboardOps.js';
 import {
@@ -35,6 +42,22 @@ export type ReadinessComponentKey = 'identity' | 'coggins' | 'transfer' | 'media
 
 export type ReadinessActionTarget =
   'edit-horse' | 'upload-document' | 'review-documents' | 'add-photo' | 'care' | 'ownership';
+
+/**
+ * The capability each action's destination enforces, so a step the current
+ * role cannot finish is shown as such instead of leading to a read-only form:
+ * edits check editHorse, uploads uploadDocuments, approvals reviewDocuments,
+ * photos uploadMedia, a care receipt is addExpenseReceipt (manageAssets), and
+ * ownership proofs manageOwnership.
+ */
+export const READINESS_ACTION_CAPABILITY: Record<ReadinessActionTarget, RoleCapability> = {
+  'edit-horse': 'editHorse',
+  'upload-document': 'uploadDocuments',
+  'review-documents': 'reviewDocuments',
+  'add-photo': 'uploadMedia',
+  care: 'manageAssets',
+  ownership: 'manageOwnership',
+};
 
 export type ReadinessComponent = {
   key: ReadinessComponentKey;

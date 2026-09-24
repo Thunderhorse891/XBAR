@@ -3,10 +3,13 @@ import test from 'node:test';
 import { readFile } from 'node:fs/promises';
 import {
   PROOF_PACKET_THRESHOLD,
+  READINESS_ACTION_CAPABILITY,
   buildSaleReadinessScore,
   readinessHeadline,
   readinessNextStep,
 } from '../src/lib/saleReadinessScore.js';
+import { hasRoleCapability } from '../src/lib/permissions.js';
+import { hasActiveListing } from '../src/lib/xbarPhaseTwo.js';
 import type {
   DocumentRecord,
   ExpenseReceipt,
@@ -374,4 +377,43 @@ test('"every record is in place" is said only when every record is', async () =>
   const card = await readFile('src/components/SaleReadinessCard.tsx', 'utf8');
   assert.match(card, /const headline = readinessHeadline\(readiness\);/);
   assert.doesNotMatch(card, /Every record a buyer checks/);
+});
+
+test('a readiness step the current role cannot finish is shown as such', async () => {
+  // Each target carries the capability its destination enforces.
+  assert.deepEqual(READINESS_ACTION_CAPABILITY, {
+    'edit-horse': 'editHorse',
+    'upload-document': 'uploadDocuments',
+    'review-documents': 'reviewDocuments',
+    'add-photo': 'uploadMedia',
+    care: 'manageAssets',
+    ownership: 'manageOwnership',
+  });
+  const can = (role: Parameters<typeof hasRoleCapability>[0], target: keyof typeof READINESS_ACTION_CAPABILITY) =>
+    hasRoleCapability(role, READINESS_ACTION_CAPABILITY[target]);
+  assert.equal(can('Owner', 'care'), false, 'an Owner cannot log the care receipt');
+  assert.equal(can('Ranch Manager', 'review-documents'), false, 'a Ranch Manager cannot approve documents');
+  assert.equal(can('Ranch Manager', 'care'), true);
+  for (const target of Object.keys(READINESS_ACTION_CAPABILITY) as Array<keyof typeof READINESS_ACTION_CAPABILITY>) {
+    assert.equal(can('Admin', target), true, `Admin can ${target}`);
+  }
+
+  const card = await readFile('src/components/SaleReadinessCard.tsx', 'utf8');
+  assert.match(card, /hasRoleCapability\(currentRole, READINESS_ACTION_CAPABILITY\[action\.target\]\)/);
+  assert.match(card, /disabled=\{!allowed\(action\)/);
+});
+
+test('the profile header says "for sale" from the listing, not the stored score', async () => {
+  const sale = (fields: Partial<HorseRecord['sale']>) =>
+    ({
+      sale: { askPrice: 0, listingState: 'Private', watchlistCount: 0, inquiryCount: 0, ...fields },
+    }) as Pick<HorseRecord, 'sale'>;
+  assert.equal(hasActiveListing(sale({})), false);
+  assert.equal(hasActiveListing(sale({ askPrice: 18500 })), true);
+  assert.equal(hasActiveListing(sale({ listingState: 'Market Ready' })), true);
+  assert.equal(hasActiveListing(sale({ inquiryCount: 2 })), true);
+
+  const profile = await readFile('src/routes/AnimalProfile.tsx', 'utf8');
+  assert.match(profile, /const forSale =[^;]*hasActiveListing\(animal\)/);
+  assert.doesNotMatch(profile, /animal\.readiness\?\.score/, 'the stored score decides nothing on this page');
 });

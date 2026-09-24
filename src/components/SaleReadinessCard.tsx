@@ -4,11 +4,14 @@ import { ActionButton, Card, ProgressRing, StatusChip } from '@/components/saas'
 import { ProgressBar } from '@/components/app-ui';
 import {
   PROOF_PACKET_THRESHOLD,
+  READINESS_ACTION_CAPABILITY,
   type ReadinessAction,
   type SaleReadinessScore,
   readinessHeadline,
 } from '@/lib/saleReadinessScore';
+import { getCapabilityDeniedMessage, hasRoleCapability } from '@/lib/permissions';
 import { useUiStore } from '@/store/useUiStore';
+import { useXbarStore } from '@/store/useXbarStore';
 
 /**
  * The computed sale readiness score on a horse profile: the score, the three
@@ -55,6 +58,18 @@ export function SaleReadinessCard({
   };
 
   const headline = readinessHeadline(readiness);
+  // A step the current role cannot finish is greyed out and says why, rather
+  // than opening a form this role can only read.
+  const currentRole = useXbarStore((state) => state.currentRole);
+  const allowed = (action: ReadinessAction) =>
+    hasRoleCapability(currentRole, READINESS_ACTION_CAPABILITY[action.target]);
+  const deniedMessages = [
+    ...new Set(
+      readiness.topActions
+        .filter((action) => !allowed(action))
+        .map((action) => getCapabilityDeniedMessage(READINESS_ACTION_CAPABILITY[action.target])),
+    ),
+  ];
 
   return (
     <Card
@@ -85,13 +100,18 @@ export function SaleReadinessCard({
                   key={action.key}
                   size="sm"
                   icon={<ArrowUpRight size={14} />}
-                  disabled={action.target === 'add-photo' && !onAddPhoto}
+                  disabled={!allowed(action) || (action.target === 'add-photo' && !onAddPhoto)}
                   onClick={() => run(action)}
                 >
                   {action.label} to reach {action.reach}
                 </ActionButton>
               ))}
             </div>
+          ) : null}
+          {deniedMessages.length ? (
+            <p className="xs-field-hint" style={{ margin: '8px 0 0' }}>
+              {deniedMessages.join(' ')} Ask an Admin to take the greyed-out steps.
+            </p>
           ) : null}
           <div className="xs-toolbar" style={{ marginTop: 12, alignItems: 'center', flexWrap: 'wrap' }}>
             <ActionButton
