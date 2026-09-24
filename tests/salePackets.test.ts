@@ -404,13 +404,14 @@ test("the by-hand seal check prints this packet's seal code, not an example", ()
  * The share sheet caption travels under the seller's name, not just the
  * platform's: "{Ranch}: sale packet for Bella verified by XBAR…".
  * `buildShareText` grew an optional ranch param for this; the wizard must
- * pass it.
+ * pass it — filtered through realWorkspaceName, so a quick-start
+ * placeholder (My Ranch LLC, Main Ranch) is never presented as the seller.
  */
 test('the wizard share caption names the ranch', async () => {
   const source = await readFile('src/components/SalePacketWizard.tsx', 'utf8');
   assert.match(
     source,
-    /buildShareText\(\s*horse\?\.name \?\? '',\s*sealCode,\s*workspaceProfile\.businessName \|\| workspaceProfile\.ranchName,?\s*\)/,
-    'the wizard must pass the ranch name as the share text\u2019s third argument',
+    /buildShareText\(\s*horse\?\.name \?\? '',\s*sealCode,\s*realWorkspaceName\(workspaceProfile\.businessName\) \|\| realWorkspaceName\(workspaceProfile\.ranchName\),?\s*\)/,
+    'the wizard must pass the sentinel-filtered ranch name as the share text’s third argument',
   );
 });

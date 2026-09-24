@@ -1,5 +1,6 @@
 import type { RanchReport } from './ranchReport.js';
 import { saveBlobAsFile, saveTextAsFile, type FileSaveResult } from './fileDownload.js';
+import { realWorkspaceName } from './workspaceIdentity.js';
 
 /*
  * Getting the report off the screen.
@@ -73,8 +74,10 @@ export function ranchReportToCsv(report: RanchReport, ranchName = ''): string {
 
   // The first lines identify the operation and disclaim the figures: an
   // accountant opens this in Excel, and the old header identified nobody and
-  // carried none of the unaudited-estimates note the PDF prints.
-  const operationName = ranchName.trim() || 'Your ranch name';
+  // carried none of the unaudited-estimates note the PDF prints. A
+  // quick-start placeholder (Main Ranch) is not the operation's name — the
+  // neutral header is the honest fallback.
+  const operationName = realWorkspaceName(ranchName) || 'Your ranch name';
   lines.push(csvRow([`${operationName} — ranch report`]));
   lines.push(csvRow(['Generated', report.generatedOn]));
   lines.push(csvRow(['Data source', 'Ranch records']));
@@ -185,6 +188,8 @@ export function downloadRanchReportCsv(report: RanchReport, ranchName = ''): Pro
  */
 export async function downloadRanchReportPdf(report: RanchReport, ranchName: string): Promise<FileSaveResult> {
   const { renderReportPdf } = await import('./ranchReportPdf.js');
-  const bytes = await renderReportPdf(report, ranchName);
+  // The PDF prints the name in its header and document title — filter the
+  // quick-start placeholder the same way the CSV header does.
+  const bytes = await renderReportPdf(report, realWorkspaceName(ranchName));
   return saveBlobAsFile(ranchReportFileName(report, 'pdf'), new Blob([bytes as BlobPart], { type: 'application/pdf' }));
 }

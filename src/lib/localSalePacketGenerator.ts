@@ -5,6 +5,7 @@ import { sha256Bytes } from './sha256.js';
 import { base64ToBytes } from './localFileVault.js';
 import { type PacketDisclosure, toPacketDisclosure } from './salePacketDisclosure.js';
 import { PACKET_VERIFIER_SCRIPT } from './packetVerifierScript.js';
+import { isQuickStartSentinel } from './workspaceIdentity.js';
 import type { LocalPacketAttachment, UnattachedDocument } from './localPacketAttachments.js';
 import type { DocumentRecord, HorseRecord, OwnershipRecord, WorkspaceProfile } from '../types/xbar.js';
 
@@ -114,26 +115,6 @@ function row(label: string, value: unknown) {
  * seller; it is not a byline. When no name or ranch is on file the byline is
  * omitted rather than filled with a role.
  */
-/**
- * Quick-start sentinel values that must never be treated as real seller
- * contact details. handleQuickStart (src/routes/SetupWorkspace.tsx) invents
- * `Main Ranch` as the ranch name — applyWorkspaceProfileDefaults then
- * derives defaultOwnerName from it, so it also arrives as the seller name —
- * plus `Operations Lead` (ranch manager) and `owner@ranch.local`
- * (operations email), so a skipped setup still yields a working ranch. The
- * workspaceSetupDefaults comment documents why the shared path deliberately
- * invents nothing. Sealing or printing a sentinel publishes contact details
- * for a person, mailbox or ranch that does not exist, as though the
- * customer had supplied them. A real customer who actually named their
- * ranch "Main Ranch" loses the printed name — an honest absence, and the
- * safer direction.
- */
-const QUICK_START_IDENTITY_SENTINELS = ['main ranch', 'operations lead', 'owner@ranch.local'];
-
-function isQuickStartSentinel(value: string): boolean {
-  return QUICK_START_IDENTITY_SENTINELS.includes(value.trim().toLowerCase());
-}
-
 export function resolveSellerByline(workspaceProfile?: WorkspaceProfile): string {
   const rawName = (workspaceProfile?.defaultOwnerName || workspaceProfile?.ranchManagerName || '').trim();
   const rawRanch = (workspaceProfile?.ranchName || '').trim();

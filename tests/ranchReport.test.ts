@@ -350,6 +350,14 @@ test('the spreadsheet header names the operation, dates itself and disclaims the
   // An unset ranch name is a missing name, not someone else's business name.
   const unnamed = ranchReportToCsv(report);
   assert.ok(unnamed.includes('"Your ranch name — ranch report"'), 'the placeholder says the name is missing');
+
+  // A quick-start placeholder is an invented name, not the operation's.
+  const quickStart = ranchReportToCsv(report, 'Main Ranch');
+  assert.ok(
+    quickStart.includes('"Your ranch name — ranch report"'),
+    'an invented operation name must not head the accountant-facing export',
+  );
+  assert.ok(!quickStart.includes('Main Ranch'), 'the placeholder leaves no trace');
 });
 
 test('the spreadsheet and the PDF use one label for the discount floor', () => {
