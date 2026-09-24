@@ -216,7 +216,7 @@ test('money at risk is said in plain words, with dollars only from the horse rec
   assert.deepEqual(describeExpiryRisk(radar, horses), [
     '2 horses can’t legally travel or sell until Coggins is renewed — $15,000 in asking prices is on hold.',
     '1 horse loses travel and sale clearance within 30 days unless Coggins is redrawn.',
-    '1 insurance policy has lapsed — $40,000 of insured horse value is uncovered.',
+    '1 insurance policy has lapsed — $40,000 of insured horse value has no current policy on file.',
     '1 contract has passed its end date — renew or close it before relying on the terms.',
   ]);
 
@@ -285,6 +285,22 @@ test('the radar never modifies a document it reads', () => {
 
   assert.deepEqual(documents, before);
   assert.equal(documents.length, 4, 'archived documents are skipped, not removed');
+});
+
+test('a lapsed policy beside a current one does not claim the horse is uncovered', () => {
+  const mortality = doc({ type: 'Insurance', horseId: 'h1', extractedTextPreview: 'Expiration Date: 03/01/2027' });
+  const majorMedical = doc({ type: 'Insurance', horseId: 'h1', extractedTextPreview: 'Expiration Date: 06/10/2026' });
+  const radar = buildExpiryRadar([mortality, majorMedical], horses, NOW);
+
+  assert.deepEqual(
+    describeExpiryRisk(radar, horses),
+    ['1 insurance policy has lapsed.'],
+    'no policy is tied to the $40,000, and one is still current',
+  );
+  assert.deepEqual(
+    radar.current.map((item) => item.documentId),
+    [mortality.id],
+  );
 });
 
 test('separate insurance policies stay separate, so a current one cannot hide one that lapsed', () => {
@@ -397,6 +413,20 @@ test('the bell counts each attention paper once, including a Coggins that is onl
     NOW,
   );
 
-  assert.equal(expiryBellCount(radar, new Set(['h1'])), 2, 'h2’s Coggins and the policy');
-  assert.equal(expiryBellCount(radar, new Set()), 3);
+  type Board = Parameters<typeof expiryBellCount>[1];
+  const row = (horseId: string, ...signals: Array<['wormer' | 'dental' | 'coggins', 'due' | 'watch' | 'clear']>) =>
+    ({ horseId, signals: signals.map(([key, status]) => ({ key, status })) }) as unknown as Board[number];
+
+  assert.equal(
+    expiryBellCount(radar, [row('h1', ['coggins', 'due']), row('h2', ['coggins', 'watch'])]),
+    2,
+    'h2’s Coggins and the policy',
+  );
+  assert.equal(expiryBellCount(radar, []), 3);
+  // h2 is on the care count for a due wormer, but its Coggins is only a watch:
+  // the care count holds the wormer, not the Coggins, so the bell still adds it.
+  assert.equal(
+    expiryBellCount(radar, [row('h1', ['coggins', 'due']), row('h2', ['wormer', 'due'], ['coggins', 'watch'])]),
+    2,
+  );
 });

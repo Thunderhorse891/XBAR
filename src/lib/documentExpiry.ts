@@ -1,5 +1,6 @@
 import type { DocumentRecord, HorseRecord } from '../types/xbar.js';
 import type { ReminderItem } from '../features/reminders/types.js';
+import type { CareBoardRow } from './dashboardOps.js';
 import { CURRENT_COGGINS_DAYS, documentExamTime } from './documentCurrency.js';
 import { formatCurrency } from './format.js';
 
@@ -62,6 +63,8 @@ export type ExpiryRadar = {
   under30: DocumentExpiryItem[];
   under90: DocumentExpiryItem[];
   undated: DocumentExpiryItem[];
+  /** Papers good for more than 90 days. Not listed on the radar, but they still count as on file. */
+  current: DocumentExpiryItem[];
   currentCount: number;
   /** Expired plus under 30 days — what the nav badge counts. */
   attentionCount: number;
@@ -304,6 +307,7 @@ export function buildExpiryRadar(
   const expired = items.filter((item) => item.urgency === 'expired').sort(byDays);
   const under30 = items.filter((item) => item.urgency === 'under30').sort(byDays);
   const under90 = items.filter((item) => item.urgency === 'under90').sort(byDays);
+  const current = items.filter((item) => item.urgency === 'current').sort(byDays);
   const undated = items
     .filter((item) => item.urgency === 'undated')
     .sort((left, right) => left.title.localeCompare(right.title));
@@ -314,7 +318,8 @@ export function buildExpiryRadar(
     under30,
     under90,
     undated,
-    currentCount: items.filter((item) => item.urgency === 'current').length,
+    current,
+    currentCount: current.length,
     attentionCount: expired.length + under30.length,
   };
 }
@@ -363,13 +368,23 @@ export function describeExpiryRisk(
   }
   const expiredInsurance = radar.expired.filter((item) => item.kind === 'Insurance');
   if (expiredInsurance.length) {
-    const insured = distinctHorses(expiredInsurance).reduce(
-      (sum, id) => sum + Math.max(0, byId.get(id)?.insuredValue ?? 0),
-      0,
+    /*
+     * Nothing on file ties a horse's insured value to one policy, so a lapsed
+     * major-medical beside a current mortality policy leaves that value
+     * covered. The value is counted only for horses with no other policy on
+     * file at all — current, running low, or undated.
+     */
+    const stillOnFile = new Set(
+      [...radar.under30, ...radar.under90, ...radar.undated, ...radar.current]
+        .filter((item) => item.kind === 'Insurance' && item.horseId)
+        .map((item) => item.horseId),
     );
+    const insured = distinctHorses(expiredInsurance)
+      .filter((id) => !stillOnFile.has(id))
+      .reduce((sum, id) => sum + Math.max(0, byId.get(id)?.insuredValue ?? 0), 0);
     lines.push(
       `${plural(expiredInsurance.length, 'insurance policy has', 'insurance policies have')} lapsed${
-        insured > 0 ? ` — ${formatCurrency(insured)} of insured horse value is uncovered` : ''
+        insured > 0 ? ` — ${formatCurrency(insured)} of insured horse value has no current policy on file` : ''
       }.`,
     );
   }
@@ -389,14 +404,23 @@ export function describeExpiryRisk(
 /**
  * How many radar papers the notification bell adds.
  *
- * Everything expired or under 30 days, less a Coggins whose horse the bell
- * already counts through a due care signal (an expired Coggins is one). A
- * Coggins that is only running low is a care watch, which the care count
- * never included, so the radar counts it.
+ * Everything expired or under 30 days, less a Coggins the care count already
+ * holds: one whose own care signal is due (an expired Coggins is). A Coggins
+ * that is only running low is a care watch, which the care count never
+ * includes — even when the same horse is on it for a due wormer — so the
+ * radar counts it.
  */
-export function expiryBellCount(radar: ExpiryRadar, careDueHorseIds: ReadonlySet<string>): number {
+export function expiryBellCount(
+  radar: ExpiryRadar,
+  careBoard: ReadonlyArray<Pick<CareBoardRow, 'horseId' | 'signals'>>,
+): number {
+  const dueCoggins = new Set(
+    careBoard
+      .filter((row) => row.signals.some((signal) => signal.key === 'coggins' && signal.status === 'due'))
+      .map((row) => row.horseId),
+  );
   return [...radar.expired, ...radar.under30].filter(
-    (item) => !(item.kind === 'Coggins' && item.horseId && careDueHorseIds.has(item.horseId)),
+    (item) => !(item.kind === 'Coggins' && item.horseId && dueCoggins.has(item.horseId)),
   ).length;
 }
 

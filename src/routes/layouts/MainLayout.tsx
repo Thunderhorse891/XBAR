@@ -131,19 +131,17 @@ export default function MainLayout() {
 
   const pendingReview = documents.filter((d) => d.state === 'Needs Review' || d.state === 'Matched').length;
   const pendingTransfers = ownershipRecords.filter((r) => r.transferStatus !== 'Clear').length;
-  // Horses with a due care signal — the care badge, and the set whose Coggins
-  // the bell already counts.
-  const careDueHorseIds = useMemo(() => {
-    const board = buildCareBoardRows(horses, documents, expenseReceipts);
-    return new Set(board.filter((row) => row.signals.some((s) => s.status === 'due')).map((row) => row.horseId));
-  }, [horses, documents, expenseReceipts]);
-  const careDueCount = careDueHorseIds.size;
+  const careBoard = useMemo(
+    () => buildCareBoardRows(horses, documents, expenseReceipts),
+    [horses, documents, expenseReceipts],
+  );
+  const careDueCount = careBoard.filter((row) => row.signals.some((s) => s.status === 'due')).length;
 
   // The nav badge counts every paper expired or under 30 days; the bell adds
-  // the ones it does not already count through careDueCount.
+  // the ones careDueCount does not already hold.
   const expiryRadar = useMemo(() => buildExpiryRadar(documents, horses), [documents, horses]);
   const expiringCount = expiryRadar.attentionCount;
-  const expiringForBell = expiryBellCount(expiryRadar, careDueHorseIds);
+  const expiringForBell = expiryBellCount(expiryRadar, careBoard);
 
   const badges: Record<string, number> = {
     docs: pendingReview,
