@@ -1,10 +1,44 @@
 # XBAR brand assets
 
-This directory contains the artwork used by XBAR's application shell, marketing pages, and exported reports. Treat the supplied artwork as source material: preserve the originals, keep their proportions, and do not silently redraw the horse, X mark, or wordmark.
+This directory contains the artwork used by XBAR's application shell, marketing pages, and exported reports.
 
-## Current consumers
+## The Crossbar (current identity)
 
-| Asset                                                                                               | Current use                                   |
+Erin's Field Command brand kit (September 2026) specifies the logo: **the Crossbar**, a solid geometric X above a detached horizontal bar, with a custom uppercase XBAR wordmark. Everything in `crossbar/` is that identity. The React component `src/components/BrandMark.tsx` draws the same outlines inline in `currentColor`; `tests/crossbarMark.test.ts` fails if the two ever differ, or if the construction below drifts.
+
+### Construction
+
+- **Grid:** 32 units. The X is a 24 × 24 square, centred with 4 units either side.
+- **X:** two equal 45° bands, 4 units thick measured across the band, with square terminals (cut at right angles to the band). Each band's corners touch the square's edges, so the square is the X's outermost extent.
+- **Bar:** 4 units tall, 4 units below the X, exactly as wide as the X. Detached: no shield, circle or badge around either.
+- **Wordmark:** XBAR in Barlow Condensed Bold, converted to vector outlines. Cap height 24 units, matching the X, on the X's baseline. The font's rounded corners (every curve under 0.6 units at this size) are rebuilt as square corners where their straight edges meet; the bowls of B and R are left as drawn. Tracking is opened by 0.06 × cap height, then each pair is optically spaced (XB −0.35, BA −0.25, AR −0.2 units) after the font's own kerning.
+- **Lockup:** the mark, an 8-unit space, then the wordmark. 98.6132 × 32 units.
+- **Colour:** a monochrome master. Default limestone `#EEF0E8` on carbon `#0C0F0D`; reverse carbon on limestone. Chartreuse is reserved for interaction and never appears in the logo.
+
+Barlow Condensed is licensed under the SIL Open Font License 1.1, which permits its glyphs to be converted to outlines for a logo. The generator is a one-off script (opentype.js reading `@fontsource/barlow-condensed`, rasterized in Chromium); it is not a project dependency. The outlines in `BrandMark.tsx` are the master.
+
+### Inventory and consumers
+
+| File in `crossbar/`                                     | Size                    | Used by                                                                  |
+| ------------------------------------------------------- | ----------------------- | ------------------------------------------------------------------------ |
+| `xbar-crossbar-mark.svg` / `-reverse.svg`               | 32 × 32 units           | Standalone mark, limestone / carbon                                      |
+| `xbar-crossbar-lockup.svg` / `-reverse.svg`             | 98.6 × 32 units         | Marketing header and footer (limestone on the dark site)                 |
+| `xbar-crossbar-favicon.svg`, `favicon-32.png`           | 32 × 32                 | Browser tab, app and marketing                                           |
+| `apple-touch-icon.png`                                  | 180 × 180               | iOS home screen, app and marketing                                       |
+| `icon-192.png`, `icon-512.png`, `icon-512-maskable.png` | 192, 512, 512           | PWA manifest (`site.webmanifest`), JSON-LD logo                          |
+| `xbar-crossbar-icon.svg`, `-icon-maskable.svg`          | 512 × 512               | Sources for the icon PNGs (maskable keeps the mark in the central 60%)   |
+| `og-card.png`                                           | 1200 × 630              | Social share card, with "Every horse. Every record. One command."        |
+| `report-logo.png`                                       | 1672 × 941, transparent | PDF masthead: carbon lockup in the 16:9 canvas the report layout expects |
+| `report-mark.png`                                       | 512 × 512, transparent  | PDF footer mark                                                          |
+| `report-watermark.png`                                  | 1672 × 941, transparent | PDF watermark                                                            |
+
+In the app, the sidebar, sign-in, workspace setup and password reset render `XbarWordmark` inline; the sidebar and dashboard watermarks render `XbarMark`. None of them load an image.
+
+## Legacy artwork
+
+The files below are the previous identity. Nothing in the product renders them any more; they stay deployed for rollback and because `tests/prod-smoke/smoke.spec.ts` still checks they resolve. The one exception is `xbar-report-horse.png`, which the sign-in screen's illustration and the cinematic preview still use until the Field Command skin replaces them.
+
+| Asset                                                                                               | Former use                                    |
 | --------------------------------------------------------------------------------------------------- | --------------------------------------------- |
 | `apple-touch-icon.png`, `icon-192.png`, `icon-512.png`, `icon-512-maskable.png`, `xbar-favicon.png` | Browser, PWA, navigation, and dashboard icons |
 | `og-card.jpg`                                                                                       | Social preview card                           |
@@ -13,7 +47,7 @@ This directory contains the artwork used by XBAR's application shell, marketing 
 
 Other files are retained as supplied or historical aliases. Do not infer a supported treatment from a filename alone; check this inventory and the actual pixels first.
 
-`favicon.ico` has no consumer at all. Nothing references it, and a browser's implicit request goes to `/favicon.ico` while this file sits at `/brand/favicon.ico`, so it is never fetched either. `index.html` declares `brand/xbar-favicon.png` instead.
+`favicon.ico` has no consumer at all. Nothing references it, and a browser's implicit request goes to `/favicon.ico` while this file sits at `/brand/favicon.ico`, so it is never fetched either.
 
 ## Known aliases
 
@@ -32,14 +66,14 @@ Keep existing aliases while code still references them. New consumers should use
 
 ## Governance
 
-- Preserve Erin's supplied master artwork unchanged. Resize it proportionally and render it at or below its intrinsic dimensions.
-- Smaller encodings of the same composition may be produced for performance, but keep the original beside them and document the derivative and its consumer.
-- Tracing, simplifying, recolouring, re-lettering, recomposing, or creating a new small-size mark is a new visual derivative and requires Erin's review before release.
-- Do not approximate the official wordmark with a font and present it as the master.
+- The Crossbar is the master. Do not redraw, trace, simplify, recolour, re-letter or recompose it, and never set the wordmark as live text: use `XbarMark` / `XbarWordmark` or the files in `crossbar/`.
+- New sizes are rendered from the same outlines, not redrawn. Record the file, its size and its consumer in the inventory above.
+- A new visual derivative — a small-size variant, a different lockup, a coloured version — is Erin's decision. Ask.
+- Keep legacy files unchanged while anything (including the smoke test) references them. Any future deletion must update those references first.
 - Do not add registered-mark symbols, certification claims, or company-registration claims without supporting evidence and explicit approval.
 - Keep decorative artwork out of working data surfaces when it reduces contrast or readability. Brand decoration must not carry instructions or state.
 
-When adding an asset, record its provenance, intended surfaces, canonical filename, intrinsic dimensions, and whether it is an approved master or a derived export.
+When adding an asset, record its provenance, intended surfaces, canonical filename, intrinsic dimensions, and whether it is a master or a derived export.
 
 ## Cinematic identity study (updated September 14)
 

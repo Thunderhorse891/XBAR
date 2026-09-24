@@ -26,6 +26,7 @@ import {
   Users,
   Wheat,
 } from 'lucide-react';
+import { XbarMark, XbarWordmark } from '@/components/BrandMark';
 import { ProgressRing, QuickCreateMenu } from '@/components/saas';
 import { GlobalCreateDrawer, createActions } from '@/components/saas/flows';
 import { billingPath } from '@/lib/billingRoutes';
@@ -40,8 +41,6 @@ import { useEffectiveSubscription } from '@/hooks/useOwnerPreview';
 // 40KB touch icon for the 38px brand tile; the faded sidebar watermark
 // renders at 250px, so it uses the 512px source to avoid upscaling. Both
 // beat the 1.53MB app icon this replaced.
-const XBAR_ICON = '/brand/apple-touch-icon.png';
-const XBAR_WATERMARK = '/brand/icon-512.png';
 
 type NavItem = { label: string; path: string; icon: LucideIcon; badgeKey?: 'docs' | 'transfers' | 'care' };
 type NavGroup = { heading: string; items: NavItem[] };
@@ -173,11 +172,8 @@ export default function MainLayout() {
       {/* ---------------------------------------------------------- Sidebar */}
       <aside className="xs-sidebar">
         <div className="xs-brand">
-          <img className="xs-brand__tile" src={XBAR_ICON} alt="XBAR" />
-          <span>
-            <span className="xs-brand__word">XBAR</span>
-            <span className="xs-brand__sub">Ranch records</span>
-          </span>
+          <XbarWordmark className="xs-brand__lockup" />
+          <span className="xs-brand__sub">Ranch records</span>
         </div>
 
         <button type="button" className="xs-workspace" onClick={() => navigate('/settings')}>
@@ -224,7 +220,7 @@ export default function MainLayout() {
         </nav>
 
         <div className="xs-sidebar__footer">
-          <img className="xs-sidebar__wm" src={XBAR_WATERMARK} alt="" aria-hidden="true" />
+          <XbarMark className="xs-sidebar__wm" />
           <div className="xs-ranchcard">
             <span className="xs-ranchcard__avatar">{ranchInitials}</span>
             <span>

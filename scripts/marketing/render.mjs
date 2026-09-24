@@ -92,8 +92,8 @@ function header(currentPath) {
   return `<header class="site-header">
   <div class="wrap">
     <a class="brand" href="/" aria-label="XBAR home">
-      <img src="/brand/apple-touch-icon.png" alt="" width="30" height="30" />
-      <span>XBAR<small>Horse records &amp; sales</small></span>
+      <img src="/brand/crossbar/xbar-crossbar-lockup.svg" alt="" width="80" height="26" />
+      <small>Horse records &amp; sales</small>
     </a>
     <nav class="site-nav" aria-label="Primary">
       ${NAV_LINKS.map((item) => navLink(item, currentPath)).join('\n      ')}
@@ -114,7 +114,7 @@ function footer() {
   return `<footer class="site-footer">
   <div class="wrap">
     <div>
-      <a class="brand" href="/"><img src="/brand/apple-touch-icon.png" alt="" width="30" height="30" /><span>XBAR</span></a>
+      <a class="brand" href="/" aria-label="XBAR home"><img src="/brand/crossbar/xbar-crossbar-lockup.svg" alt="" width="80" height="26" /></a>
       <p>One trusted operational record for every horse — documents, ownership, care, and sale-ready buyer packets.</p>
     </div>
     <div>
@@ -175,7 +175,7 @@ export function renderPage(page) {
       '@id': `${SITE_ORIGIN}/#organization`,
       name: 'XBAR',
       url: `${SITE_ORIGIN}/`,
-      logo: `${SITE_ORIGIN}/brand/icon-512.png`,
+      logo: `${SITE_ORIGIN}/brand/crossbar/icon-512.png`,
       description: 'Records, ownership, and sale-readiness software for performance horse and ranch operations.',
     },
     {
@@ -194,7 +194,7 @@ export function renderPage(page) {
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <meta name="theme-color" content="#05070A" />
+    <meta name="theme-color" content="#0C0F0D" />
     <title>${esc(page.title)}</title>
     <meta name="description" content="${esc(page.description)}" />
     ${page.noindex ? '<meta name="robots" content="noindex, nofollow" />' : '<meta name="robots" content="index, follow, max-image-preview:large, max-snippet:-1" />'}
@@ -205,17 +205,17 @@ export function renderPage(page) {
     <meta property="og:url" content="${canonical}" />
     <meta property="og:title" content="${esc(page.title)}" />
     <meta property="og:description" content="${esc(page.description)}" />
-    <meta property="og:image" content="${SITE_ORIGIN}/brand/og-card.jpg" />
-    <meta property="og:image:type" content="image/jpeg" />
+    <meta property="og:image" content="${SITE_ORIGIN}/brand/crossbar/og-card.png" />
+    <meta property="og:image:type" content="image/png" />
     <meta property="og:image:width" content="1200" />
     <meta property="og:image:height" content="630" />
-    <meta property="og:image:alt" content="XBAR — one verified, sale-ready record per horse" />
+    <meta property="og:image:alt" content="XBAR — Every horse. Every record. One command." />
     <meta property="og:locale" content="en_US" />
     <meta name="twitter:card" content="summary_large_image" />
     <meta name="twitter:title" content="${esc(page.title)}" />
     <meta name="twitter:description" content="${esc(page.description)}" />
-    <meta name="twitter:image" content="${SITE_ORIGIN}/brand/og-card.jpg" />
-    <meta name="twitter:image:alt" content="XBAR — one verified, sale-ready record per horse" />
+    <meta name="twitter:image" content="${SITE_ORIGIN}/brand/crossbar/og-card.png" />
+    <meta name="twitter:image:alt" content="XBAR — Every horse. Every record. One command." />
 
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
@@ -224,8 +224,9 @@ export function renderPage(page) {
       rel="stylesheet"
     />
     <link rel="stylesheet" href="/site.css" />
-    <link rel="icon" type="image/png" href="/brand/xbar-favicon.png" />
-    <link rel="apple-touch-icon" href="/brand/apple-touch-icon.png" />
+    <link rel="icon" type="image/svg+xml" href="/brand/crossbar/xbar-crossbar-favicon.svg" />
+    <link rel="icon" type="image/png" sizes="32x32" href="/brand/crossbar/favicon-32.png" />
+    <link rel="apple-touch-icon" href="/brand/crossbar/apple-touch-icon.png" />
     <script type="application/ld+json">${JSON.stringify(baseJsonLd)}</script>
     <script defer src="/site.js"></script>
   </head>

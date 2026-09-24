@@ -180,6 +180,19 @@ test('critical brand assets return 200 with non-empty body', async ({ request })
     '/brand/xbar-horse-outline-safe.png',
     '/brand/xbar-x-watermark-main.png',
     '/brand/xbar-app-icon.png',
+    // The Crossbar set that the favicon, manifest, marketing pages, share
+    // card and PDF exports now point at.
+    '/brand/crossbar/xbar-crossbar-favicon.svg',
+    '/brand/crossbar/favicon-32.png',
+    '/brand/crossbar/apple-touch-icon.png',
+    '/brand/crossbar/icon-192.png',
+    '/brand/crossbar/icon-512.png',
+    '/brand/crossbar/icon-512-maskable.png',
+    '/brand/crossbar/xbar-crossbar-lockup.svg',
+    '/brand/crossbar/og-card.png',
+    '/brand/crossbar/report-logo.png',
+    '/brand/crossbar/report-mark.png',
+    '/brand/crossbar/report-watermark.png',
   ];
   for (const asset of assets) {
     const res = await request.get(asset);
