@@ -964,3 +964,39 @@ test('a CVI’s own expiry field on its own line counts; a component’s expiry 
     '2026-05-31',
   );
 });
+
+test('a line naming a policy, contract or term is never a CVI’s own expiry', () => {
+  // The standalone-field rule takes validity labels a certificate uses for
+  // itself ("Expiration Date", "Valid Through"), not labels that name another
+  // paper. A line break doesn't make a policy's expiry the certificate's.
+  const dated = (line: string) =>
+    buildExpiryRadar(
+      [
+        doc({
+          type: 'Vet Record',
+          horseId: 'h1',
+          title: 'CVI',
+          extractedTextPreview: `Certificate of Veterinary Inspection\nInspection Date: 05/01/2026\n${line}`,
+        }),
+      ],
+      horses,
+      NOW,
+    );
+  for (const line of [
+    'Policy expires 05/01/2027',
+    'Contract ends 05/01/2027',
+    'Agreement ends 05/01/2027',
+    'Coverage expires 05/01/2027',
+    'Term ends 05/01/2027',
+    'End date: 05/01/2027',
+    'Termination date: 05/01/2027',
+  ]) {
+    const radar = dated(line);
+    assert.equal(radar.items[0]?.expiresOn, '2026-05-31', line);
+    assert.equal(radar.attentionCount, 1, line);
+  }
+  // The control beside them: the certificate's own validity field still counts.
+  for (const line of ['Expiration Date: 07/15/2026', 'Valid Through: 07/15/2026', 'Exp. Date: 07/15/2026']) {
+    assert.equal(dated(line).items[0]?.expiresOn, '2026-07-15', line);
+  }
+});

@@ -186,6 +186,15 @@ function namesThisCertificate(match: RegExpMatchArray, text: string): boolean {
  * table's column gap, it belongs to that component.
  */
 const LINE_START = /(?:^|[\n\r])[ \t]*$/;
+/*
+ * Only the validity labels a certificate uses for itself. LABELLED_DATE also
+ * knows "Policy expires", "Contract ends", "Term ends" and "End date" — labels
+ * that name another paper, which a line break does not make the certificate's.
+ */
+const VALIDITY_DATE = new RegExp(
+  `(?:expir(?:es|ation|y)(?:\\s+date)?|exp\\.?\\s+date|valid\\s+(?:through|thru|until|to)|good\\s+(?:through|thru|until))(?:\\s+on)?\\s*[:\\-–]?\\s*${DATE_PATTERN}`,
+  'gi',
+);
 
 function opensALine(match: RegExpMatchArray, text: string): boolean {
   return LINE_START.test(text.slice(0, match.index ?? 0));
@@ -195,7 +204,7 @@ function opensALine(match: RegExpMatchArray, text: string): boolean {
 export function findCertificateExpiryDate(text: string | undefined): string | null {
   const found = new Set([
     ...labelledDays(text, CERTIFICATE_DATE, namesThisCertificate),
-    ...labelledDays(text, LABELLED_DATE, opensALine),
+    ...labelledDays(text, VALIDITY_DATE, opensALine),
   ]);
   return found.size === 1 ? isoDay([...found][0]!) : null;
 }
