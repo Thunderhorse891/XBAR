@@ -4,9 +4,8 @@ import { ArrowUpRight, Receipt, Wheat } from 'lucide-react';
 import { ActionButton, Card, PageHead, StatusChip } from '@/components/saas';
 import { ProgressBar } from '@/components/app-ui';
 import { Sparkline } from '@/components/dataviz/Charts';
-import { type CostGroup, buildCostPerHorse, buildSubscriptionPayback } from '@/lib/costPerHorse';
+import { type CostGroup, buildCostPerHorse, buildSubscriptionPayback, paybackPlan } from '@/lib/costPerHorse';
 import { formatCurrency, formatCurrencyCents, formatDateLabel, formatPercent } from '@/lib/format';
-import { subscriptionPlans } from '@/lib/subscriptionPlans';
 import { useUiStore } from '@/store/useUiStore';
 import { useXbarStore } from '@/store/useXbarStore';
 import './moneyIntelligence.css';
@@ -46,11 +45,11 @@ export default function Costs() {
     () => buildCostPerHorse({ horses, receipts: expenseReceipts, salesLeads }),
     [horses, expenseReceipts, salesLeads],
   );
-  // A workspace that has not bought a plan yet is measured against the list
-  // price of the plan it is on, so the answer holds once it does.
-  const planRate =
-    subscription.monthlyRate > 0 ? subscription.monthlyRate : subscriptionPlans[subscription.tier].monthlyRate;
-  const payback = useMemo(() => buildSubscriptionPayback(costs, planRate), [costs, planRate]);
+  // The rate being paid now, or the list price of the plan the workspace is
+  // on when nothing is being paid — never a lapsed plan's stored rate.
+  const plan = paybackPlan(subscription);
+  const planPrice = plan.paying ? `your ${plan.tier} plan's monthly price` : `the ${plan.tier} plan's list price`;
+  const payback = useMemo(() => buildSubscriptionPayback(costs, plan.monthlyRate), [costs, plan.monthlyRate]);
   const trendValues = costs.trend.flatMap((point) => (point.perHorsePerDay === null ? [] : [point.perHorsePerDay]));
   const logFeed = () => openQuickCreate({ action: 'Add Expense' });
 
@@ -160,11 +159,11 @@ export default function Costs() {
             {payback.priceRiseOverpay > 0
               ? `in supplier price rises flagged in the last 90 days${
                   payback.planMonthsCovered !== null
-                    ? ` — ${payback.planMonthsCovered >= 1 ? `${payback.planMonthsCovered.toFixed(1)}×` : `${shareLabel(payback.planMonthsCovered)} of`} your ${subscription.tier} plan's monthly price`
+                    ? ` — ${payback.planMonthsCovered >= 1 ? `${payback.planMonthsCovered.toFixed(1)}×` : `${shareLabel(payback.planMonthsCovered)} of`} ${planPrice}`
                     : ''
                 }.`
               : payback.planPerHorsePerDay !== null && payback.shareOfDailyCost !== null
-                ? `XBAR ${subscription.tier} per horse per day — ${shareLabel(payback.shareOfDailyCost)} of what each horse already costs you.`
+                ? `XBAR ${plan.tier}${plan.paying ? '' : ' at list price'} per horse per day — ${shareLabel(payback.shareOfDailyCost)} of what each horse already costs you.`
                 : 'Add your horses and log receipts to measure the plan against what each horse costs.'}
           </span>
         </div>

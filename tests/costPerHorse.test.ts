@@ -9,6 +9,7 @@ import {
   buildCostPerHorse,
   buildSubscriptionPayback,
   costGroupFor,
+  paybackPlan,
   productKeyOf,
   receiptDay,
   unitKeyOf,
@@ -20,7 +21,7 @@ import {
   validateExpenseReceiptInput,
   type ExpenseReceiptInput,
 } from '../src/store/xbarStoreLogic.js';
-import type { ExpenseReceipt, HorseRecord, SalesLead } from '../src/types/xbar.js';
+import type { ExpenseReceipt, HorseRecord, SalesLead, SubscriptionProfile } from '../src/types/xbar.js';
 
 // buildCostPerHorse is the Costs screen: cost per horse per day, monthly burn,
 // the 90-day trend and supplier price rises. Every figure must trace to a
@@ -593,5 +594,43 @@ test('a receipt logged today on the local calendar counts today, west of UTC inc
     const source = await readFile(file, 'utf8');
     assert.doesNotMatch(source, /toISOString\(\)\.slice\(0, 10\)/, `${file} defaults to the local day`);
     assert.match(source, /localIsoDate\(\)/);
+  }
+});
+
+test('payback is measured against what is paid now, never a lapsed plan’s stored rate', async () => {
+  const profile = (fields: Pick<SubscriptionProfile, 'tier' | 'monthlyRate' | 'billingState'>) =>
+    fields as SubscriptionProfile;
+
+  assert.deepEqual(paybackPlan(profile({ tier: 'Ranch Ops', monthlyRate: 199, billingState: 'Active' })), {
+    tier: 'Ranch Ops',
+    monthlyRate: 199,
+    paying: true,
+  });
+  // Canceled: the tier drops to Starter but the purchased rate stays on file.
+  assert.deepEqual(paybackPlan(profile({ tier: 'Starter', monthlyRate: 199, billingState: 'Inactive' })), {
+    tier: 'Starter',
+    monthlyRate: 29,
+    paying: false,
+  });
+  assert.equal(paybackPlan(profile({ tier: 'Ranch Ops', monthlyRate: 199, billingState: 'Past Due' })).paying, false);
+  // A fresh workspace is seeded at rate 0 under Manual Billing: a list price, not a purchase.
+  assert.deepEqual(paybackPlan(profile({ tier: 'Starter', monthlyRate: 0, billingState: 'Manual Billing' })), {
+    tier: 'Starter',
+    monthlyRate: 29,
+    paying: false,
+  });
+
+  const screen = await readFile('src/routes/Costs.tsx', 'utf8');
+  assert.match(screen, /const plan = paybackPlan\(subscription\);/);
+  assert.doesNotMatch(screen, /subscription\.monthlyRate/, 'the stored rate is never read directly');
+  assert.match(screen, /list price/);
+});
+
+test('a thousands separator is accepted only where it belongs', () => {
+  assert.equal(parseReceiptQuantity('1,200'), 1200);
+  assert.equal(parseReceiptQuantity('12,500.5'), 12500.5);
+  assert.equal(parseReceiptQuantity('1,234,567'), 1234567);
+  for (const malformed of ['1234,567', '1,2345', ',500', '1,,200', '12,50']) {
+    assert.ok(Number.isNaN(parseReceiptQuantity(malformed)), `${malformed} is refused, not stripped`);
   }
 });

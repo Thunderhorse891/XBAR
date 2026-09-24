@@ -265,7 +265,10 @@ export function validateExpenseReceiptInput(input: ExpenseReceiptInput) {
 export function parseReceiptQuantity(text: string | undefined): number | undefined {
   const trimmed = String(text ?? '').trim();
   if (!trimmed) return undefined;
-  const plain = trimmed.replace(/(\d),(?=\d{3}\b)/g, '$1');
+  // Thousands separators only where they belong: 1,200 and 12,500.5, never
+  // 1234,567 or 1,2 — a mistyped separator is refused, not stripped.
+  const grouped = /^\d{1,3}(,\d{3})+(\.\d+)?$/.test(trimmed);
+  const plain = grouped ? trimmed.replace(/,/g, '') : trimmed;
   return /^(\d+(\.\d+)?|\.\d+)$/.test(plain) ? Number(plain) : Number.NaN;
 }
 

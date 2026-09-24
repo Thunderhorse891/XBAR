@@ -1,4 +1,13 @@
-import type { ExpenseCategory, ExpenseReceipt, HorseRecord, SalesLead } from '../types/xbar.js';
+import type {
+  ExpenseCategory,
+  ExpenseReceipt,
+  HorseRecord,
+  SalesLead,
+  SubscriptionProfile,
+  SubscriptionTier,
+} from '../types/xbar.js';
+import { hasActivePaidPlan } from './subscriptionDecision.js';
+import { subscriptionTierConfig } from './xbarRuntime.js';
 
 /*
  * Cost per horse per day — the number a rancher can hold a supplier, a sale
@@ -515,6 +524,27 @@ export type SubscriptionPayback = {
   /** How many months of the plan the flagged overpay equals; null without a plan price. */
   planMonthsCovered: number | null;
 };
+
+export type PaybackPlan = {
+  tier: SubscriptionTier;
+  monthlyRate: number;
+  /** True when this is a plan the workspace is paying for now; false means a list price. */
+  paying: boolean;
+};
+
+/**
+ * The price the payback card measures against. A plan being paid for now is
+ * measured at its own rate. Anything else — never subscribed, lapsed,
+ * canceled — is measured at the list price of the plan it is on, and says so:
+ * a canceled workspace keeps its old rate on file while paying nothing, so
+ * the stored rate alone is not what anyone pays.
+ */
+export function paybackPlan(subscription: SubscriptionProfile): PaybackPlan {
+  if (hasActivePaidPlan(subscription)) {
+    return { tier: subscription.tier, monthlyRate: subscription.monthlyRate, paying: true };
+  }
+  return { tier: subscription.tier, monthlyRate: subscriptionTierConfig[subscription.tier].monthlyRate, paying: false };
+}
 
 /**
  * Answers "is this subscription paying for itself?" from the same figures.
