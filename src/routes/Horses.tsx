@@ -16,6 +16,7 @@ import type { HorseSegment, HorseSex, HorseStatus } from '@/types/xbar';
 import { canSubmitHorseCreate, horseCreateFieldErrors } from '@/lib/horseCreateGate';
 import { proposeHorseNameRepairs } from '@/lib/horseNameRepair';
 import { buildSaleReadinessScore } from '@/lib/saleReadinessScore';
+import { buildBuyerPacketReleaseGate } from '@/lib/buyerPacketReleaseGate';
 import './horsesCommand.css';
 
 function createHorseFormDefaults(params: {
@@ -121,15 +122,19 @@ export default function Horses() {
   const saleReadinessById = useMemo(
     () =>
       new Map(
-        horses.map((horse) => [
-          horse.id,
-          buildSaleReadinessScore({
+        horses.map((horse) => {
+          const ownershipRecord = ownershipRecords.find((record) => record.horseId === horse.id);
+          const releaseGate = buildBuyerPacketReleaseGate({
             horse,
-            documents,
-            receipts: expenseReceipts,
-            ownershipRecord: ownershipRecords.find((record) => record.horseId === horse.id),
-          }).score,
-        ]),
+            documents: documents.filter((document) => document.horseId === horse.id),
+            ownershipRecord,
+          });
+          return [
+            horse.id,
+            buildSaleReadinessScore({ horse, documents, receipts: expenseReceipts, ownershipRecord, releaseGate })
+              .score,
+          ] as const;
+        }),
       ),
     [horses, documents, expenseReceipts, ownershipRecords],
   );

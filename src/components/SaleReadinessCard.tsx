@@ -69,14 +69,18 @@ export function SaleReadinessCard({
         <div style={{ flex: '1 1 260px', minWidth: 0 }}>
           <div className="xs-nba">
             <div className="xs-nba__label">
-              {readiness.proofPacketReady ? 'Ready for buyers' : 'Biggest moves first'}
+              {readiness.proofPacketReady
+                ? 'Ready for buyers'
+                : readiness.topActions.length
+                  ? 'Biggest moves first'
+                  : 'Before a buyer sees it'}
             </div>
             <div className="xs-nba__title">
               {readiness.proofPacketReady
                 ? 'Every record a buyer checks is in place.'
                 : readiness.topActions[0]
                   ? `${readiness.topActions[0].label} to reach ${readiness.topActions[0].reach}.`
-                  : 'Keep these records current.'}
+                  : (readiness.proofPacketBlocker ?? 'Keep these records current.')}
             </div>
           </div>
           {readiness.topActions.length ? (
@@ -105,7 +109,7 @@ export function SaleReadinessCard({
             </ActionButton>
             <span className="xs-field-hint" style={{ margin: 0 }}>
               {readiness.proofPacketBlocker ??
-                `Opens the sale packet builder for this horse with its approved documents selected (${PROOF_PACKET_THRESHOLD}+ with a current Coggins and a clear transfer).`}
+                `Opens the sale packet builder for this horse with its approved documents selected (${PROOF_PACKET_THRESHOLD}+ and a clear release gate).`}
             </span>
           </div>
         </div>

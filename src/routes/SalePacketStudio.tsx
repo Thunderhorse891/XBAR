@@ -9,6 +9,7 @@ import { openStoredFileInTab } from '@/lib/openStoredFile';
 import type { DocumentType, SalePacketBuild } from '@/types/xbar';
 import { isNavigableFileUrl } from '@/lib/navigableFileUrl';
 import { buildSaleReadinessScore } from '@/lib/saleReadinessScore';
+import { buildBuyerPacketReleaseGate } from '@/lib/buyerPacketReleaseGate';
 
 const REQUIRED = [
   { id: 'coggins', label: 'Coggins (negative)' },
@@ -69,11 +70,17 @@ export default function SalePacketStudio() {
         // The computed sale readiness score decides "blocked", the same answer
         // the horse profile gives. The stored `readiness.blockers` are set when a
         // horse is created and never cleared, so every horse read as blocked.
+        const ownershipRecord = ownershipRecords.find((record) => record.horseId === horse.id);
         const score = buildSaleReadinessScore({
           horse,
           documents,
           receipts: expenseReceipts,
-          ownershipRecord: ownershipRecords.find((record) => record.horseId === horse.id),
+          ownershipRecord,
+          releaseGate: buildBuyerPacketReleaseGate({
+            horse,
+            documents: documents.filter((document) => document.horseId === horse.id),
+            ownershipRecord,
+          }),
         });
         const blockers = score.proofPacketBlocker ? [score.proofPacketBlocker] : [];
         const state: 'Ready' | 'Needs Review' | 'Blocked' = blockers.length

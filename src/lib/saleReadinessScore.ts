@@ -5,6 +5,7 @@ import {
   CURRENT_COGGINS_DAYS,
   hasCurrentReadyDocument,
   hasResolvedDocumentMissingCurrentDate,
+  isCurrentDatedDocument,
   isDocumentReady,
 } from './documentCurrency.js';
 import { normalizeOwnershipRecord } from '../store/xbarStoreLogic.js';
@@ -67,9 +68,10 @@ export type SaleReadinessScore = {
   transferClear: boolean;
   /**
    * Whether the proof packet can be generated from here: the score has
-   * crossed the threshold AND the two things the packet builder's release gate
-   * holds a packet for — a current Coggins and a clear transfer — are in place.
-   * A score alone could reach 85 with either missing.
+   * crossed the threshold AND the buyer-packet release gate is clear. The gate
+   * is the verdict the generated packet prints for the buyer ("Release Clear"
+   * or "Release Blocked"), so "ready" here can never produce a packet that
+   * says it was not.
    */
   proofPacketReady: boolean;
   /** Why the packet is not ready yet, or null when it is. */
@@ -85,6 +87,15 @@ const WEIGHTS: Record<ReadinessComponentKey, number> = {
   ownership: 15,
 };
 
+/**
+ * The buyer-packet release gate's verdict (lib/buyerPacketReleaseGate.ts).
+ *
+ * Passed in rather than computed here: that module is reached through the
+ * Vite `@/` alias, which the node test runner cannot load, and this one must
+ * stay testable. Every caller passes the real gate for the same horse.
+ */
+export type ReleaseGateVerdict = { allowed: boolean; nextAction: string };
+
 /** Credit for an ownership chain whose proofs are verified but not yet marked Clear. */
 const OWNERSHIP_UNCLEARED_CAP = 12;
 
@@ -97,6 +108,7 @@ export function buildSaleReadinessScore(params: {
   documents: DocumentRecord[];
   receipts: ExpenseReceipt[];
   ownershipRecord?: OwnershipRecord;
+  releaseGate: ReleaseGateVerdict;
   now?: Date;
 }): SaleReadinessScore {
   const { horse } = params;
@@ -136,8 +148,20 @@ export function buildSaleReadinessScore(params: {
   // Coggins — the same currency rule as the sale-packet gate.
   const coggins = documents.filter((document) => document.type === 'Coggins');
   const cogginsCurrent = hasCurrentReadyDocument(coggins, CURRENT_COGGINS_DAYS, now);
-  const cogginsStale = !cogginsCurrent && hasResolvedDocumentMissingCurrentDate(coggins, CURRENT_COGGINS_DAYS, now);
-  const cogginsInReview = !cogginsCurrent && !cogginsStale && coggins.length > 0;
+  /*
+   * The annual renewal: last year's reviewed Coggins is still on the record
+   * and this year's is waiting in review. The pending one decides the action —
+   * approving it is the fix, and asking for another upload creates a
+   * duplicate. Only a pending Coggins whose exam date is itself current
+   * counts; approving one with no date or an old date would not help.
+   */
+  const cogginsInReview =
+    !cogginsCurrent &&
+    coggins.some(
+      (document) => !isDocumentReady(document) && isCurrentDatedDocument(document, CURRENT_COGGINS_DAYS, now),
+    );
+  const cogginsStale =
+    !cogginsCurrent && !cogginsInReview && hasResolvedDocumentMissingCurrentDate(coggins, CURRENT_COGGINS_DAYS, now);
   components.push({
     key: 'coggins',
     label: 'Coggins',
@@ -148,8 +172,10 @@ export function buildSaleReadinessScore(params: {
       : cogginsStale
         ? 'The Coggins on file is past 12 months or has no exam date.'
         : cogginsInReview
-          ? 'A Coggins is on file but still waiting in review.'
-          : 'No Coggins on file.',
+          ? 'A current Coggins is on file but still waiting in review.'
+          : coggins.length
+            ? 'The Coggins on file has no exam date XBAR can use.'
+            : 'No Coggins on file.',
   });
   if (!cogginsCurrent) {
     actions.push({
@@ -267,14 +293,12 @@ export function buildSaleReadinessScore(params: {
     .map((action) => ({ ...action, gain: round1(action.gain), reach: Math.min(100, Math.round(raw + action.gain)) }))
     .sort((left, right) => right.gain - left.gain);
 
-  const proofPacketReady = score >= PROOF_PACKET_THRESHOLD && cogginsCurrent && transferClear;
+  const proofPacketReady = score >= PROOF_PACKET_THRESHOLD && params.releaseGate.allowed;
   const proofPacketBlocker = proofPacketReady
     ? null
     : score < PROOF_PACKET_THRESHOLD
       ? `Reach ${PROOF_PACKET_THRESHOLD} to generate a proof packet.`
-      : !cogginsCurrent
-        ? 'A current Coggins is needed before a proof packet goes to a buyer.'
-        : 'The transfer must be marked Clear before a proof packet goes to a buyer.';
+      : `Release gate: ${params.releaseGate.nextAction}`;
 
   return {
     score,

@@ -18,6 +18,7 @@ import type { ChipTone } from '@/types/saas';
 import type { HorseStatus } from '@/types/xbar';
 import { canPresentPurchaseFlow } from '@/lib/nativePlatform';
 import { buildSaleReadinessScore } from '@/lib/saleReadinessScore';
+import { buildBuyerPacketReleaseGate } from '@/lib/buyerPacketReleaseGate';
 import { SaleReadinessCard } from '@/components/SaleReadinessCard';
 
 // Stagger index for the motion system; the CSS var drives each child's delay.
@@ -84,18 +85,23 @@ export default function AnimalProfile() {
 
   // Computed from the records on file every render, unlike the stored
   // `readiness.score`, which only ever moves up as documents arrive.
-  const saleReadiness = useMemo(
-    () =>
-      animal
-        ? buildSaleReadinessScore({
-            horse: animal,
-            documents,
-            receipts: expenseReceipts,
-            ownershipRecord: ownershipRecords.find((record) => record.horseId === animal.id),
-          })
-        : null,
-    [animal, documents, expenseReceipts, ownershipRecords],
-  );
+  const saleReadiness = useMemo(() => {
+    if (!animal) return null;
+    const ownershipRecord = ownershipRecords.find((record) => record.horseId === animal.id);
+    return buildSaleReadinessScore({
+      horse: animal,
+      documents,
+      receipts: expenseReceipts,
+      ownershipRecord,
+      // This horse's documents only, so the verdict is never looser than the
+      // one the generated packet prints.
+      releaseGate: buildBuyerPacketReleaseGate({
+        horse: animal,
+        documents: documents.filter((document) => document.horseId === animal.id),
+        ownershipRecord,
+      }),
+    });
+  }, [animal, documents, expenseReceipts, ownershipRecords]);
 
   const passportId = animalPassportId(animal?.id);
   const canUploadMedia = hasRoleCapability(currentRole, 'uploadMedia');

@@ -81,12 +81,15 @@ const currentCoggins = () => doc('Coggins', { entities: { examDate: '2026-03-01'
 const transferFile = () => doc('Transfer Packet');
 const careReceipts = () => [receipt('Wormer', '2026-06-01'), receipt('Dental Float', '2026-02-01')];
 
+const gateClear = { allowed: true, nextAction: 'Release buyer packet.' };
+
 function complete(overrides: Partial<Parameters<typeof buildSaleReadinessScore>[0]> = {}) {
   return buildSaleReadinessScore({
     horse: makeHorse(),
     documents: [currentCoggins(), transferFile()],
     receipts: careReceipts(),
     ownershipRecord: ownership(4, 'Clear'),
+    releaseGate: gateClear,
     now: NOW,
     ...overrides,
   });
@@ -190,13 +193,22 @@ test('the ownership chain earns full credit only when every proof is verified an
   assert.equal(earned(ownership(4, 'Clear')), 15);
 });
 
-test('a high score alone does not release a proof packet without a clear transfer', () => {
-  const readiness = complete({ ownershipRecord: ownership(4, 'AQHA Review') });
+test('the proof packet follows the release gate the generated packet prints', () => {
+  // A perfect score is not enough: the packet prints the gate's verdict for the
+  // buyer, so "ready" here must never produce one that says "Release Blocked".
+  const blocked = complete({
+    releaseGate: { allowed: false, nextAction: 'Health cert: No health certification is attached yet.' },
+  });
+  assert.equal(blocked.score, 100);
+  assert.equal(blocked.proofPacketReady, false);
+  assert.equal(blocked.proofPacketBlocker, 'Release gate: Health cert: No health certification is attached yet.');
 
-  assert.equal(readiness.score, 97);
-  assert.ok(readiness.score >= PROOF_PACKET_THRESHOLD);
-  assert.equal(readiness.proofPacketReady, false);
-  assert.match(readiness.proofPacketBlocker ?? '', /transfer must be marked Clear/);
+  // And a clear gate is not enough below the threshold.
+  const low = complete({ horse: makeHorse({ profileImage: '' }), documents: [transferFile()] });
+  assert.equal(low.proofPacketReady, false);
+  assert.match(low.proofPacketBlocker ?? '', /Reach 85/);
+
+  assert.equal(complete().proofPacketReady, true);
 });
 
 test('the score is computed from the records, not the stored readiness number', () => {
@@ -207,6 +219,7 @@ test('the score is computed from the records, not the stored readiness number', 
     }),
     documents: [],
     receipts: [],
+    releaseGate: gateClear,
     now: NOW,
   });
 
@@ -231,6 +244,7 @@ test('actions are ordered by what they are worth and the top three are offered',
     horse: makeHorse({ profileImage: '', microchipId: '' }),
     documents: [],
     receipts: [],
+    releaseGate: gateClear,
     now: NOW,
   });
 
@@ -241,4 +255,25 @@ test('actions are ordered by what they are worth and the top three are offered',
   );
   assert.equal(readiness.topActions.length, 3);
   assert.ok(readiness.actions.every((action) => action.reach <= 100 && action.reach > readiness.score));
+});
+
+test('an annual renewal waiting in review asks for approval, not another upload', () => {
+  const readiness = complete({
+    documents: [
+      doc('Coggins', { entities: { examDate: '2025-05-01' } }), // last year's, reviewed and stale
+      doc('Coggins', { state: 'Needs Review', entities: { examDate: '2026-06-02' } }), // this year's, pending
+      transferFile(),
+    ],
+  });
+
+  assert.equal(readiness.cogginsCurrent, false);
+  assert.equal(readiness.actions[0]?.label, 'Approve the Coggins in review');
+  assert.equal(readiness.actions[0]?.target, 'review-documents');
+  assert.match(readiness.components.find((c) => c.key === 'coggins')?.detail ?? '', /waiting in review/);
+
+  // A pending Coggins with no usable date would not help once approved.
+  const undated = complete({
+    documents: [doc('Coggins', { state: 'Needs Review', entities: {} }), transferFile()],
+  });
+  assert.equal(undated.actions[0]?.label, 'Add a current Coggins');
 });
