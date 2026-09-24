@@ -33,6 +33,19 @@ export const PIPELINE_STAGES: { id: PipelineStage; label: string; hint: string }
   },
 ];
 
+/**
+ * A link that opens Documents on one stage — for a step about a paper that is
+ * only listed there (a Queued upload shows under Processing, not Review).
+ * `stageFromParam` reads it back; an unknown value opens the default stage.
+ */
+export function documentsStageUrl(stage: PipelineStage): string {
+  return `/documents?stage=${encodeURIComponent(stage)}`;
+}
+
+export function stageFromParam(value: string | null): PipelineStage | null {
+  return PIPELINE_STAGES.find((stage) => stage.id === value)?.id ?? null;
+}
+
 export type DocumentStageBuckets = {
   queuedDocuments: DocumentRecord[];
   reviewQueue: DocumentRecord[];

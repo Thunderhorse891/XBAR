@@ -42,7 +42,7 @@ export const PROOF_PACKET_THRESHOLD = 85;
 export type ReadinessComponentKey = 'identity' | 'coggins' | 'transfer' | 'media' | 'care' | 'ownership';
 
 export type ReadinessActionTarget =
-  'edit-horse' | 'upload-document' | 'review-documents' | 'add-photo' | 'care' | 'ownership';
+  'edit-horse' | 'upload-document' | 'review-documents' | 'processing-documents' | 'add-photo' | 'care' | 'ownership';
 
 /**
  * The capability each action's destination enforces, so a step the current
@@ -55,6 +55,8 @@ export const READINESS_ACTION_CAPABILITY: Record<ReadinessActionTarget, RoleCapa
   'edit-horse': 'editHorse',
   'upload-document': 'uploadDocuments',
   'review-documents': 'reviewDocuments',
+  // A file still being read is shown under Processing; the step ends in approving it.
+  'processing-documents': 'reviewDocuments',
   'add-photo': 'uploadMedia',
   care: 'manageAssets',
   ownership: 'manageOwnership',
@@ -239,7 +241,7 @@ export function buildSaleReadinessScore(params: {
         : cogginsReading
           ? 'Let the Coggins finish reading, then approve it'
           : 'Add a current Coggins',
-      target: cogginsInReview || cogginsReading ? 'review-documents' : 'upload-document',
+      target: cogginsInReview ? 'review-documents' : cogginsReading ? 'processing-documents' : 'upload-document',
       gain: WEIGHTS.coggins,
     });
   }
@@ -272,7 +274,7 @@ export function buildSaleReadinessScore(params: {
         : transferReading
           ? 'Let the transfer file finish reading, then approve it'
           : 'Add the transfer file',
-      target: transferInReview || transferReading ? 'review-documents' : 'upload-document',
+      target: transferInReview ? 'review-documents' : transferReading ? 'processing-documents' : 'upload-document',
       gain: WEIGHTS.transfer,
     });
   }

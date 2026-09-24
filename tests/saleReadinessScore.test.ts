@@ -10,7 +10,12 @@ import {
 } from '../src/lib/saleReadinessScore.js';
 import { hasRoleCapability } from '../src/lib/permissions.js';
 import { hasActiveListing } from '../src/lib/xbarPhaseTwo.js';
-import { computeStageBuckets } from '../src/features/documents/pipeline.js';
+import {
+  PIPELINE_STAGES,
+  computeStageBuckets,
+  documentsStageUrl,
+  stageFromParam,
+} from '../src/features/documents/pipeline.js';
 import type {
   DocumentRecord,
   ExpenseReceipt,
@@ -386,6 +391,8 @@ test('a readiness step the current role cannot finish is shown as such', async (
     'edit-horse': 'editHorse',
     'upload-document': 'uploadDocuments',
     'review-documents': 'reviewDocuments',
+    // Waiting on a file still being read ends in approving it.
+    'processing-documents': 'reviewDocuments',
     'add-photo': 'uploadMedia',
     care: 'manageAssets',
     ownership: 'manageOwnership',
@@ -498,4 +505,30 @@ test('the Sale Packets page follows the computed verdict, with no second checkli
   assert.doesNotMatch(studio, /'Needs Review'/, 'a row is ready or blocked, as the gate says');
   assert.match(studio, /const state: 'Ready' \| 'Blocked' = score\.proofPacketReady \? 'Ready' : 'Blocked';/);
   assert.match(studio, /const blockers = score\.proofPacketBlocker \? \[score\.proofPacketBlocker\] : \[\];/);
+});
+
+test('a step waiting on a file still being read opens Documents where that file is shown', async () => {
+  // Documents opens on Review, and a Queued upload is listed only under
+  // Processing, so sending the wait step to plain /documents lands on a
+  // screen without the file.
+  const queuedTransfer = complete({ documents: [currentCoggins(), doc('Transfer Packet', { state: 'Queued' })] });
+  assert.equal(queuedTransfer.actions.find((action) => action.key === 'transfer')?.target, 'processing-documents');
+  const queuedCoggins = complete({ documents: [doc('Coggins', { state: 'Queued', entities: {} }), transferFile()] });
+  assert.equal(queuedCoggins.actions[0]?.target, 'processing-documents');
+  const inReview = complete({ documents: [currentCoggins(), doc('Transfer Packet', { state: 'Needs Review' })] });
+  assert.equal(inReview.actions.find((action) => action.key === 'transfer')?.target, 'review-documents');
+
+  // The link the card builds is the stage the Documents page opens on, for every stage.
+  for (const { id } of PIPELINE_STAGES) {
+    const url = new URL(documentsStageUrl(id), 'https://xbar.test');
+    assert.equal(url.pathname, '/documents');
+    assert.equal(stageFromParam(url.searchParams.get('stage')), id);
+  }
+  assert.equal(stageFromParam(null), null);
+  assert.equal(stageFromParam('Nonsense'), null, 'an unknown stage opens the default, not a blank tab');
+
+  const card = await readFile('src/components/SaleReadinessCard.tsx', 'utf8');
+  assert.match(card, /case 'processing-documents':\s*navigate\(documentsStageUrl\('Processing'\)\);/);
+  const documents = await readFile('src/routes/Documents.tsx', 'utf8');
+  assert.match(documents, /stageFromParam\(searchParams\.get\('stage'\)\)/);
 });
