@@ -15,6 +15,7 @@ import { useCurrentRoleCapability, useXbarStore } from '@/store/useXbarStore';
 import type { HorseSegment, HorseSex, HorseStatus } from '@/types/xbar';
 import { canSubmitHorseCreate, horseCreateFieldErrors } from '@/lib/horseCreateGate';
 import { proposeHorseNameRepairs } from '@/lib/horseNameRepair';
+import { buildSaleReadinessScore } from '@/lib/saleReadinessScore';
 import './horsesCommand.css';
 
 function createHorseFormDefaults(params: {
@@ -67,6 +68,7 @@ export default function Horses() {
   const horses = useXbarStore((state) => state.horses);
   const documents = useXbarStore((state) => state.documents);
   const ownershipRecords = useXbarStore((state) => state.ownershipRecords);
+  const expenseReceipts = useXbarStore((state) => state.expenseReceipts);
   const sharedListings = useXbarStore((state) => state.sharedListings);
   const toggleSharedListing = useXbarStore((state) => state.toggleSharedListing);
   const recordSharedChannel = useXbarStore((state) => state.recordSharedChannel);
@@ -114,6 +116,23 @@ export default function Horses() {
     setSearchParams(nextParams);
   };
 
+  // The same computed score the horse profile shows, so the list and the
+  // record can never disagree.
+  const saleReadinessById = useMemo(
+    () =>
+      new Map(
+        horses.map((horse) => [
+          horse.id,
+          buildSaleReadinessScore({
+            horse,
+            documents,
+            receipts: expenseReceipts,
+            ownershipRecord: ownershipRecords.find((record) => record.horseId === horse.id),
+          }).score,
+        ]),
+      ),
+    [horses, documents, expenseReceipts, ownershipRecords],
+  );
   const filtered = horses.filter((horse) => {
     const matchesSearch =
       !search.trim() ||
@@ -960,7 +979,7 @@ export default function Horses() {
                         {horse.location.barn} · {horse.location.pasture}
                       </td>
                       <td>{horse.documents.length}</td>
-                      <td>{formatPercent(horse.readiness.score)}</td>
+                      <td>{saleReadinessById.get(horse.id) ?? '—'}</td>
                       <td>
                         <Pill tone={statusTone[horse.status]}>
                           {horse.status === 'Sale Prep' ? 'Buyer Prep' : horse.status}

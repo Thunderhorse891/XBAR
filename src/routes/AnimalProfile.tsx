@@ -17,6 +17,8 @@ import { useEffectiveSubscription } from '@/hooks/useOwnerPreview';
 import type { ChipTone } from '@/types/saas';
 import type { HorseStatus } from '@/types/xbar';
 import { canPresentPurchaseFlow } from '@/lib/nativePlatform';
+import { buildSaleReadinessScore } from '@/lib/saleReadinessScore';
+import { SaleReadinessCard } from '@/components/SaleReadinessCard';
 
 // Stagger index for the motion system; the CSS var drives each child's delay.
 const motionIndex = (index: number): CSSProperties => ({ ['--motion-index' as string]: index }) as CSSProperties;
@@ -60,6 +62,8 @@ export default function AnimalProfile() {
   const currentRole = useXbarStore((s) => s.currentRole);
   const expenseReceipts = useXbarStore((s) => s.expenseReceipts);
   const salesLeads = useXbarStore((s) => s.salesLeads);
+  const documents = useXbarStore((s) => s.documents);
+  const ownershipRecords = useXbarStore((s) => s.ownershipRecords);
   const subscription = useEffectiveSubscription();
   // Profit intelligence (projected profit, margin, safe-price) is a Ranch Ops
   // feature; the per-animal money panel below respects the same gate as the Money
@@ -76,6 +80,21 @@ export default function AnimalProfile() {
   const money = useMemo(
     () => (animal ? (buildRanchFinancials([animal], expenseReceipts, salesLeads).perAnimal[0] ?? null) : null),
     [animal, expenseReceipts, salesLeads],
+  );
+
+  // Computed from the records on file every render, unlike the stored
+  // `readiness.score`, which only ever moves up as documents arrive.
+  const saleReadiness = useMemo(
+    () =>
+      animal
+        ? buildSaleReadinessScore({
+            horse: animal,
+            documents,
+            receipts: expenseReceipts,
+            ownershipRecord: ownershipRecords.find((record) => record.horseId === animal.id),
+          })
+        : null,
+    [animal, documents, expenseReceipts, ownershipRecords],
   );
 
   const passportId = animalPassportId(animal?.id);
@@ -150,7 +169,7 @@ export default function AnimalProfile() {
   }
 
   const readiness = animal.readiness?.score ?? 0;
-  const packetReady = animal.readiness?.packetStatus === 'Ready';
+  const packetReady = saleReadiness?.proofPacketReady ?? false;
   const identity = identityCompleteness(animal);
   const identityTone: Tone = identity.percent >= 90 ? 'success' : identity.percent >= 60 ? 'info' : 'warning';
   // Every identity gap except a Photo is filled from the Edit Horse drawer; a
@@ -301,6 +320,13 @@ export default function AnimalProfile() {
 
       {tab === 'Overview' ? (
         <>
+          {saleReadiness ? (
+            <SaleReadinessCard
+              horseId={animal.id}
+              readiness={saleReadiness}
+              onAddPhoto={canUploadMedia ? () => photoInputRef.current?.click() : undefined}
+            />
+          ) : null}
           <div className="xs-grid-2">
             <Card title="Identity">
               <dl className="xs-kv">
@@ -650,47 +676,25 @@ export default function AnimalProfile() {
         </Card>
       ) : null}
 
-      {tab === 'Ready to Sell' ? (
-        <Card title="Ready to Sell" link="Open sale packet" onLink={() => navigate('/sale-packets')}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 14, marginBottom: 12 }}>
-            <span className="xs-finbar__track" style={{ flex: 1 }}>
-              <span
-                className="xs-finbar__fill"
-                style={{
-                  width: `${readiness}%`,
-                  background: readiness >= 95 ? 'var(--xbar-success)' : 'var(--xbar-warning)',
-                }}
-              />
-            </span>
-            <strong>{readiness}%</strong>
-          </div>
-          <div className="xs-mlist">
+      {tab === 'Ready to Sell' && saleReadiness ? (
+        <>
+          <SaleReadinessCard
+            horseId={animal.id}
+            readiness={saleReadiness}
+            onAddPhoto={canUploadMedia ? () => photoInputRef.current?.click() : undefined}
+            detailed
+          />
+          <Card>
             <div className="xs-mrow">
               <span className="xs-mrow__main">
                 <span className="xs-mrow__title">Packet status</span>
               </span>
-              <StatusChip tone={packetReady ? 'success' : 'warning'}>
+              <StatusChip tone={animal.readiness?.packetStatus === 'Ready' ? 'success' : 'warning'}>
                 {animal.readiness?.packetStatus ?? 'Review'}
               </StatusChip>
             </div>
-            <div className="xs-mrow">
-              <span className="xs-mrow__main">
-                <span className="xs-mrow__title">Ready to share with buyers</span>
-              </span>
-              <StatusChip tone={packetReady ? 'success' : 'warning'}>{packetReady ? 'Verified' : 'Pending'}</StatusChip>
-            </div>
-            <div className="xs-mrow">
-              <span className="xs-mrow__main">
-                <span className="xs-mrow__title">Release blockers</span>
-              </span>
-              <StatusChip tone={animal.readiness?.blockers?.length ? 'danger' : 'success'}>
-                {animal.readiness?.blockers?.length
-                  ? `${animal.readiness.blockers.length} blocker${animal.readiness.blockers.length === 1 ? '' : 's'}`
-                  : 'Clear'}
-              </StatusChip>
-            </div>
-          </div>
-        </Card>
+          </Card>
+        </>
       ) : null}
 
       {tab === 'Buyers' ? (
