@@ -1,9 +1,17 @@
 import { PDFDocument, StandardFonts, rgb, type PDFPage, type RGB } from 'pdf-lib';
 import { toDrawableText } from '../../api/_lib/pdf.js';
 import type { RanchReport } from './ranchReport.js';
-import { reportDecisions, reportDollars as dollars, reportException } from './ranchReportDecisions.js';
+import { reportCount, reportDecisions, reportDollars as dollars, reportException } from './ranchReportDecisions.js';
 
 import { loadReportBranding, type ReportBranding } from './reportBranding.js';
+
+/** "2026-09-24" (local calendar date) as "September 24, 2026". Built from the parts, never parsed as an instant. */
+function longDate(isoDate: string): string {
+  const [year, month, day] = isoDate.split('-').map(Number);
+  return new Intl.DateTimeFormat('en-US', { month: 'long', day: 'numeric', year: 'numeric' }).format(
+    new Date(year, month - 1, day),
+  );
+}
 
 /** Decision-oriented US Letter report, with vector charts and searchable tables. */
 export async function renderReportPdf(
@@ -29,6 +37,11 @@ export async function renderReportPdf(
     white = rgb(1, 1, 1);
   const decision = reportDecisions(report),
     money = report.money;
+  // Never fabricate an entity name on a financial document handed to a banker.
+  // Setup requires a ranch name, so an empty one only arrives from a workspace
+  // created before that requirement — and then the document must say the name
+  // is missing, not print someone else's business name.
+  const displayName = ranchName.trim() || 'Your ranch name';
   let page: PDFPage;
   const clean = (s: string) => toDrawableText(s).replace(/[–—]/g, '-');
   const measure = (s: string, size: number, strong = false) =>
@@ -70,16 +83,21 @@ export async function renderReportPdf(
     // Branding is confined to the masthead, never behind operational data.
     page.drawImage(watermark, { x: 445, y: 713, width: 130, height: 73, opacity: 0.018 });
     page.drawImage(logo, { x: 36, y: 724, width: 72, height: 40.5 });
-    text('XBAR™ / RANCH INTELLIGENCE', 120, 29, 8, blue, true);
+    // The rancher's operation is the masthead on the rancher's document — never
+    // the platform's name, and never a name invented for an unset profile.
+    let masthead = displayName;
+    while (masthead.length > 1 && measure(masthead, 8, true) > 440) masthead = masthead.slice(0, -1);
+    if (masthead !== displayName) masthead = `${masthead.slice(0, -3)}...`;
+    text(masthead, 120, 29, 8, blue, true);
     text(title, 120, 43, 21, ink, true);
-    const name = clean(ranchName || 'XBAR Ranch Ledger');
+    const name = clean(displayName);
     const nameSize = Math.max(7, Math.min(9, (9 * 540) / Math.max(540, measure(name, 9))));
     // The full entity name is retained in PDF metadata; masthead is at most two lines.
     const nameLines = wrap(name, 540, nameSize);
     nameLines
       .slice(0, 2)
       .forEach((s, i) => text(i === 1 && nameLines.length > 2 ? `${s.slice(0, -3)}...` : s, 36, 77 + i * 10, nameSize));
-    text(`${report.generatedOn}  /  USD  /  ${subtitle}`, 36, 101, 8, muted);
+    text(`Generated ${longDate(report.generatedOn)} · USD · ${subtitle}`, 36, 101, 8, muted);
     rect(36, 115, 540, 1, line);
   }
   function heading(s: string, x: number, y: number) {
@@ -111,7 +129,10 @@ export async function renderReportPdf(
     if (value > 0 && max > 0) rect(x, top + 15, width * Math.min(1, value / max), 7, color);
   }
 
-  newPage('Executive dashboard', `${report.horseCount} horses / ${report.listedCount} in sale inventory`);
+  newPage(
+    'Executive dashboard',
+    `${reportCount(report.horseCount, 'horse')} · ${reportCount(report.listedCount, 'horse')} in sale inventory`,
+  );
   const firstCards = [
     ['Invested', dollars(money.investedToDate), 'Acquisition + all receipts', ink],
     ['Listed value', dollars(money.listedValue), 'Asking, not appraisal', blue],
@@ -136,7 +157,7 @@ export async function renderReportPdf(
   card(
     'Blocked value',
     dollars(money.valueAtRisk),
-    `${decision.blocked.length} horses need action`,
+    `${decision.blocked.length} ${decision.blocked.length === 1 ? 'horse needs' : 'horses need'} action`,
     220,
     209,
     172,
@@ -181,14 +202,14 @@ export async function renderReportPdf(
   bar('Sale-ready*', money.readyValue, Math.max(1, money.listedValue), 318, 426, 258, green);
   heading('What matters now', 36, 464);
   paragraph(
-    `${dollars(money.valueAtRisk)} of listed asking value is held behind recorded sale requirements. Current-month receipts total ${dollars(money.investedThisMonth)}; ${dollars(money.unallocatedThisMonth)} is unallocated overhead. No prior report snapshot is available, so changes in portfolio value are not asserted.`,
+    `${dollars(money.valueAtRisk)} of listed asking value is held behind recorded sale requirements. Current-month receipts total ${dollars(money.investedThisMonth)}; ${dollars(money.unallocatedThisMonth)} is unallocated overhead. This is the first report snapshot, so period-over-period change is not shown yet.`,
     36,
     484,
     540,
     9,
     ink,
   );
-  heading('TOP ACTIONS / FROM WORKSPACE RECORDS', 36, 541);
+  heading('TOP ACTIONS / FROM RANCH RECORDS', 36, 541);
   let actionY = 563;
   let extendedActions = false;
   for (const [i, action] of decision.actions.slice(0, 3).entries()) {
@@ -196,7 +217,7 @@ export async function renderReportPdf(
     text(String(i + 1), 42, actionY + 4, 9, white, true);
     const lines = wrap(action, 505, 9);
     extendedActions ||= lines.length > 3;
-    const shown = lines.length > 3 ? [...lines.slice(0, 2), 'See action detail for the full recommendation.'] : lines;
+    const shown = lines.length > 3 ? [...lines.slice(0, 2), '(continued on next page)'] : lines;
     shown.forEach((s, j) => text(s, 67, actionY + j * 12, 9, ink));
     actionY += Math.max(28, shown.length * 12 + 10);
   }
@@ -217,6 +238,7 @@ export async function renderReportPdf(
     bottom: number,
     title: string,
     subtitle: string,
+    emptyMessage: string,
   ) {
     let y = start;
     function tableHeader() {
@@ -234,7 +256,7 @@ export async function renderReportPdf(
     }
     tableHeader();
     if (!rows.length) {
-      paragraph('No records in this section.', 42, y + 10, 525);
+      paragraph(emptyMessage, 42, y + 10, 525);
       return y + 38;
     }
     rows.forEach((row, index) => {
@@ -279,7 +301,7 @@ export async function renderReportPdf(
   newPage('Sale readiness & blockers', 'Exception management / blocked first, then asking value');
   rect(36, 130, 540, 42, pale);
   text(
-    `${decision.blocked.length} horses blocked  /  ${dollars(money.valueAtRisk)} blocked asking value`,
+    `${reportCount(decision.blocked.length, 'horse')} blocked  /  ${dollars(money.valueAtRisk)} blocked asking value`,
     47,
     138,
     11,
@@ -287,7 +309,7 @@ export async function renderReportPdf(
     true,
   );
   text(
-    `${decision.missingOwnership.length} missing ownership records  /  ${decision.missingCoggins.length} missing Coggins  /  ${report.documentsToReview} files awaiting review`,
+    `${reportCount(decision.missingOwnership.length, 'missing ownership record')}  /  ${reportCount(decision.missingCoggins.length, 'missing Coggins')}  /  ${reportCount(report.documentsToReview, 'file')} awaiting review`,
     47,
     157,
     8,
@@ -333,6 +355,7 @@ export async function renderReportPdf(
     687,
     'Sale readiness & blockers',
     'Exception register / continued',
+    'No horses in sale inventory.',
   );
   paragraph(
     'Missing = no file recorded. Not started = no ownership record. Awaiting review = an existing file in Queued, Matched or Needs Review. Counts overlap across horses; do not add blocked dollars twice. Ready* means no recorded sale blockers, not a guaranteed sale.',
@@ -343,10 +366,16 @@ export async function renderReportPdf(
   );
   newPage('Horse-level economics', 'Ranked by projected profit / priced sale inventory first');
   if (decision.listed.some((h) => h.projectedMargin < 0)) {
-    text('ACTION / Review negative projected profits before discounting. Resolve blocked sale gates.', 36, 119, 7, red);
+    text(
+      'Action needed: Review negative projected profits before discounting. Clear blocked sale requirements first.',
+      36,
+      119,
+      7,
+      red,
+    );
   } else if (decision.listed.some((h) => h.projectedMargin > 0)) {
     text(
-      'ACTION / Prioritize the highest projected profits below; resolve blocked sale gates before closing.',
+      'Action needed: Prioritize the highest projected profits below; clear blocked sale requirements before closing.',
       36,
       119,
       7,
@@ -355,11 +384,14 @@ export async function renderReportPdf(
   }
   const economicRows = decision.ranked.map((h) => {
     const priced = h.saleInventory && h.askPrice > 0;
-    const band = h.marginPercent >= 30 ? 'H' : h.marginPercent >= 15 ? 'M' : 'L';
+    // Spelled out for a lender: single letters with a footnote legend are not
+    // how a banker reads a margin band or a sale status.
+    const bandLabel = h.marginPercent >= 30 ? 'High' : h.marginPercent >= 15 ? 'Medium' : 'Low';
     const color = h.marginPercent >= 30 ? green : h.marginPercent >= 15 ? amber : red;
+    const saleStatus = h.saleInventory ? (h.blockers.length ? 'Blocked' : 'Ready to sell') : 'Not for sale';
     return [
       {
-        value: `${h.horseName} / ${h.saleInventory ? (h.blockers.length ? 'B' : 'R') : 'N'}`,
+        value: `${h.horseName} - ${saleStatus}`,
         strong: true,
         color: h.saleInventory ? (h.blockers.length ? red : green) : muted,
       },
@@ -368,18 +400,28 @@ export async function renderReportPdf(
       { value: priced ? dollars(h.askPrice) : h.saleInventory ? 'Not set' : 'N/A' },
       { value: dollars(h.breakEvenPrice) },
       { value: priced ? dollars(h.projectedMargin) : 'N/A', color: priced ? color : muted, strong: true },
-      { value: priced ? `${h.marginPercent}% ${band}` : 'N/A', color: priced ? color : muted },
+      { value: priced ? `${h.marginPercent}% ${bandLabel}` : 'N/A', color: priced ? color : muted },
       { value: dollars(h.safeDiscountFloor) },
     ];
   });
   end = table(
-    ['Horse / gate', 'Invested', 'Monthly cost', 'Asking', 'Break-even', 'Projected profit', 'Margin %', 'Floor'],
-    [116, 59, 51, 56, 60, 65, 55, 78],
+    [
+      'Horse / sale status',
+      'Invested',
+      'Monthly cost',
+      'Asking',
+      'Break-even',
+      'Projected profit',
+      'Margin %',
+      'Floor',
+    ],
+    [136, 54, 51, 56, 56, 58, 60, 69],
     economicRows,
     130,
     540,
     'Horse-level economics',
     'Ranked financial register / continued',
+    'No horses on record.',
   );
   const analysisY = end + 16;
   heading('Margin distribution / sale horses', 36, analysisY);
@@ -419,7 +461,7 @@ export async function renderReportPdf(
     7.5,
   );
   paragraph(
-    'Break-even = investment + 2 months average cost. Profit = asking - break-even; margin = profit / asking. Floor = break-even + 15% (planning rule). Horse figures exclude unallocated overhead. H >=30%, M 15-29%, L <15%. B = blocked, R = no recorded blockers, N = not sale inventory.',
+    'Break-even = investment + 2 months average cost. Profit = asking - break-even; margin = profit / asking. Floor = break-even + 15% (planning rule). Horse figures exclude unallocated overhead. Margin bands: High 30% or more, Medium 15-29%, Low under 15%.',
     36,
     analysisY + 148,
     540,
@@ -456,6 +498,7 @@ export async function renderReportPdf(
         710,
         'Spending detail',
         'All categories / continued',
+        'No receipts recorded.',
       );
     for (const anomaly of report.anomalies) {
       const message = `${anomaly.category}: current ${dollars(anomaly.monthTotal)} vs prior monthly average ${dollars(anomaly.trailingAverage)} (+${anomaly.deltaPercent}%). ${anomaly.actionLabel}. Current month is partial.`;
@@ -471,10 +514,11 @@ export async function renderReportPdf(
     page = p;
     rect(36, 746, 540, 0.5, line);
     page.drawImage(mark, { x: 36, y: 29, width: 12, height: 12 });
-    text('XBAR™ / Workspace records / Unaudited management estimates', 55, 754, 7, muted);
+    // The rancher's name is the masthead; the platform gets small footer type.
+    text('Unaudited management estimates from ranch records · Prepared with XBAR', 55, 754, 7, muted);
     text(`${index + 1} / ${pdf.getPageCount()}`, 550, 754, 7, muted);
   });
-  pdf.setTitle(`${ranchName || 'XBAR'} - Ranch management report`);
-  pdf.setProducer('XBAR Ranch Ledger');
+  pdf.setTitle(ranchName.trim() ? `${ranchName.trim()} - Ranch management report` : 'Ranch management report');
+  pdf.setProducer('XBAR');
   return pdf.save();
 }

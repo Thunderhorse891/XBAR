@@ -277,7 +277,7 @@ test('the reports screen refreshes when the day changes, and exports are built f
   );
   assert.match(
     source,
-    /downloadRanchReportCsv\(buildRanchReport\(reportInput\)\)/,
+    /downloadRanchReportCsv\(buildRanchReport\(reportInput\), workspaceProfile\.ranchName\)/,
     'the CSV export must build a report at the moment of export',
   );
 });
