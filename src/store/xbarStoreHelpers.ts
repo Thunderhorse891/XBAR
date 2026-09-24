@@ -361,6 +361,10 @@ export function createExpenseReceiptRecord(
     vendor: input.vendor.trim(),
     amount: Number(input.amount),
     receiptDate: input.receiptDate,
+    // Validation refuses half a pair, so both are present or neither is.
+    ...(input.quantity !== undefined && input.unit?.trim()
+      ? { quantity: Number(input.quantity), unit: input.unit.trim() }
+      : {}),
     notes: input.notes?.trim() || '',
     uploadedAt: nowStamp(),
     uploadedBy: input.uploadedBy.trim(),

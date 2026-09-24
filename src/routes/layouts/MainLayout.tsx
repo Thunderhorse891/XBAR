@@ -3,6 +3,7 @@ import { NavLink, Outlet, useLocation, useNavigate } from 'react-router-dom';
 import {
   Bell,
   Boxes,
+  Calculator,
   ChevronDown,
   CircleHelp,
   ClipboardList,
@@ -69,6 +70,7 @@ const navGroups: NavGroup[] = [
     heading: 'Selling',
     items: [
       { label: 'Money', path: '/financials', icon: TrendingUp },
+      { label: 'Costs', path: '/costs', icon: Calculator },
       { label: 'Sales', path: '/sales', icon: Gauge },
       { label: 'Buyer follow-up', path: buyerFollowUpPath(), icon: Users },
       { label: 'Sale Packets', path: '/sale-packets', icon: FileText },

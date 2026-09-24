@@ -4,7 +4,7 @@ import { CommandBrief } from '@/components/CommandBrief';
 import { EmptyState } from '@/components/EmptyState';
 import { MetricCard, Panel, Pill, ProgressBar } from '@/components/app-ui';
 import { billingPath } from '@/lib/billingRoutes';
-import { formatCompactCurrency, formatCurrency, formatDateLabel } from '@/lib/format';
+import { formatCompactCurrency, formatCurrency, formatDateLabel, localIsoDate } from '@/lib/format';
 import { buildProfitPortfolio } from '@/lib/profitIntelligence';
 import { profitIntelligenceGate } from '@/lib/subscriptionGates';
 import { useUiStore } from '@/store/useUiStore';
@@ -67,7 +67,7 @@ export default function Expenses() {
     category: 'Feed' as ExpenseCategory,
     vendor: '',
     amount: '',
-    receiptDate: new Date().toISOString().slice(0, 10),
+    receiptDate: localIsoDate(),
     notes: '',
     uploadedBy: roleWorkspace.label,
   });

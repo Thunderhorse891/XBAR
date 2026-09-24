@@ -4,6 +4,15 @@ const currencyFormatter = new Intl.NumberFormat('en-US', {
   maximumFractionDigits: 0,
 });
 
+// For figures that live below a dollar's precision — cost per horse per day,
+// price per bale — where rounding to whole dollars would erase the number.
+const centsCurrencyFormatter = new Intl.NumberFormat('en-US', {
+  style: 'currency',
+  currency: 'USD',
+  minimumFractionDigits: 2,
+  maximumFractionDigits: 2,
+});
+
 const compactCurrencyFormatter = new Intl.NumberFormat('en-US', {
   style: 'currency',
   currency: 'USD',
@@ -25,8 +34,21 @@ function parseDateValue(value: string) {
   return Number.isNaN(parsed.getTime()) ? null : parsed;
 }
 
+/**
+ * A day as YYYY-MM-DD on the viewer's own calendar. Date inputs and receipt
+ * dates mean the local day; toISOString() gives the UTC one, which west of
+ * UTC turns into tomorrow every evening.
+ */
+export function localIsoDate(date: Date = new Date()): string {
+  return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`;
+}
+
 export function formatCurrency(value: number) {
   return currencyFormatter.format(value);
+}
+
+export function formatCurrencyCents(value: number) {
+  return centsCurrencyFormatter.format(value);
 }
 
 export function formatCompactCurrency(value: number) {

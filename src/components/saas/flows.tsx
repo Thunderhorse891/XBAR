@@ -4,8 +4,10 @@ import { useNavigate } from 'react-router-dom';
 import { FileUp } from 'lucide-react';
 import { ActionButton, SlideOverDrawer } from '@/components/saas';
 import { buyerFollowUpPath } from '@/lib/buyerRoutes';
+import { localIsoDate } from '@/lib/format';
 import { useUiStore } from '@/store/useUiStore';
 import { useXbarStore } from '@/store/useXbarStore';
+import { parseReceiptQuantity } from '@/store/xbarStoreLogic';
 import { events, track } from '@/lib/telemetry';
 import type {
   AssetCategory,
@@ -170,6 +172,8 @@ const EXPENSE_CATEGORIES: ExpenseCategory[] = [
   'Bedding',
   'Travel',
 ];
+// Receipts bought by the unit, whose price per unit Costs tracks per supplier.
+const FEED_PRICED_CATEGORIES: ReadonlySet<ExpenseCategory> = new Set(['Feed', 'Supplements', 'Bedding']);
 const MEDICAL_EVENT_TYPES: MedicalEventType[] = [
   'Vet visit',
   'Vaccine',
@@ -185,7 +189,7 @@ const LEAD_CHANNELS: SalesLead['channel'][] = ['Site Inquiry', 'Referral', 'Face
 const DOCUMENT_ACCEPT = '.pdf,.png,.jpg,.jpeg,.webp,.heic';
 
 function todayIso() {
-  return new Date().toISOString().slice(0, 10);
+  return localIsoDate();
 }
 
 export function GlobalCreateDrawer() {
@@ -313,13 +317,19 @@ export function GlobalCreateDrawer() {
       pushToast({ title: 'Add Expense', message: 'Enter a description and a valid amount.', tone: 'warning' });
       return;
     }
+    const category = (f.cat as ExpenseCategory) ?? 'Feed';
+    // Only feed-type receipts carry a quantity; the store refuses half a pair.
+    const qtyText = FEED_PRICED_CATEGORIES.has(category) ? (f.qty ?? '').trim() : '';
+    const unit = FEED_PRICED_CATEGORIES.has(category) ? (f.unit ?? '').trim() : '';
     setBusy(true);
     const result = await addExpenseReceipt({
       title: desc,
-      category: (f.cat as ExpenseCategory) ?? 'Feed',
+      category,
       vendor: (f.vendor ?? '').trim() || 'General',
       amount,
-      receiptDate: todayIso(),
+      receiptDate: (f.date ?? '').trim() || todayIso(),
+      quantity: parseReceiptQuantity(qtyText),
+      unit: unit || undefined,
       uploadedBy: actor,
     });
     setBusy(false);
@@ -640,6 +650,19 @@ export function GlobalCreateDrawer() {
           <Text label="Vendor" placeholder="e.g. Tractor Supply" value={f.vendor ?? ''} onChange={set('vendor')} />
           <Text label="Amount" placeholder="$" value={f.amt ?? ''} onChange={set('amt')} />
           <Pick label="Category" value={f.cat ?? 'Feed'} onChange={set('cat')} options={EXPENSE_CATEGORIES} />
+          <Text label="Purchase date" type="date" value={f.date ?? todayIso()} onChange={set('date')} />
+          {FEED_PRICED_CATEGORIES.has((f.cat as ExpenseCategory) ?? 'Feed') ? (
+            <>
+              <Text label="Quantity (optional)" placeholder="e.g. 40" value={f.qty ?? ''} onChange={set('qty')} />
+              <Text
+                label="Unit"
+                placeholder="bale, ton, 50 lb bag"
+                value={f.unit ?? ''}
+                onChange={set('unit')}
+                hint="Add quantity and unit to see this supplier's price per unit on Costs — and get flagged when it rises."
+              />
+            </>
+          ) : null}
         </div>
       );
       footer = (

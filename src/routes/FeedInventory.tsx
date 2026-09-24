@@ -4,14 +4,24 @@ import { Wheat } from 'lucide-react';
 import { useUiStore } from '@/store/useUiStore';
 import { useXbarStore } from '@/store/useXbarStore';
 import { ActionButton, Card, PageHead } from '@/components/saas';
-
-const usd = (n: number) => `$${n.toLocaleString('en-US', { maximumFractionDigits: 2 })}`;
+import { buildCostPerHorse } from '@/lib/costPerHorse';
+import { formatCurrency, formatCurrencyCents } from '@/lib/format';
 
 export default function FeedInventory() {
   const navigate = useNavigate();
   const openQuickCreate = useUiStore((state) => state.openQuickCreate);
   const horses = useXbarStore((s) => s.horses);
   const expenseReceipts = useXbarStore((s) => s.expenseReceipts);
+  const salesLeads = useXbarStore((s) => s.salesLeads);
+  // The same engine as Costs, so the two screens never disagree about what feed
+  // costs per horse per day.
+  const feedDaily = useMemo(
+    () =>
+      buildCostPerHorse({ horses, receipts: expenseReceipts, salesLeads }).groups.find(
+        (group) => group.group === 'Feed',
+      ),
+    [horses, expenseReceipts, salesLeads],
+  );
 
   const model = useMemo(() => {
     const feed = expenseReceipts.filter(
@@ -22,11 +32,9 @@ export default function FeedInventory() {
     const monthKey = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
     const monthFeed = feed.filter((r) => (r.receiptDate ?? '').startsWith(monthKey));
     const monthTotal = monthFeed.reduce((sum, r) => sum + r.amount, 0);
-    const daysElapsed = now.getDate(); // days so far this month
-    const perHorseDay = horses.length && daysElapsed ? monthTotal / (horses.length * daysElapsed) : 0;
     const recent = [...feed].sort((a, b) => b.receiptDate.localeCompare(a.receiptDate)).slice(0, 8);
-    return { monthTotal, perHorseDay, recent, purchases: feed.length };
-  }, [expenseReceipts, horses.length]);
+    return { monthTotal, recent, purchases: feed.length };
+  }, [expenseReceipts]);
 
   return (
     <>
@@ -51,14 +59,17 @@ export default function FeedInventory() {
         <Card>
           <div className="xs-card__sub">Feed &amp; supply spend (this month)</div>
           <div style={{ fontFamily: 'var(--xbar-font-display)', fontSize: 30, fontWeight: 700 }}>
-            {usd(model.monthTotal)}
+            {formatCurrency(model.monthTotal)}
           </div>
         </Card>
         <Card>
-          <div className="xs-card__sub">Roughly per horse / day (this month)</div>
+          <div className="xs-card__sub">Feed per horse / day (last 90 days)</div>
           <div style={{ fontFamily: 'var(--xbar-font-display)', fontSize: 30, fontWeight: 700 }}>
-            {horses.length ? usd(model.perHorseDay) : '—'}
+            {feedDaily && feedDaily.perHorsePerDay !== null ? formatCurrencyCents(feedDaily.perHorsePerDay) : '—'}
           </div>
+          <ActionButton size="sm" onClick={() => navigate('/costs')}>
+            See every cost per horse
+          </ActionButton>
         </Card>
         <Card>
           <div className="xs-card__sub">Purchases logged</div>
@@ -77,7 +88,7 @@ export default function FeedInventory() {
                     {r.vendor} · {r.receiptDate}
                   </span>
                 </span>
-                <span style={{ fontWeight: 700 }}>{usd(r.amount)}</span>
+                <span style={{ fontWeight: 700 }}>{formatCurrencyCents(r.amount)}</span>
               </div>
             ))}
           </div>
