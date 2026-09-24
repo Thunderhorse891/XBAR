@@ -12,6 +12,7 @@ import {
   Upload,
   Users,
 } from 'lucide-react';
+import { XbarMark } from '@/components/BrandMark';
 import { HorsesIcon } from '@/components/icons';
 import { ActionButton } from '@/components/saas';
 import { buyerFollowUpPath } from '@/lib/buyerRoutes';
@@ -24,7 +25,6 @@ import { useXbarStore } from '@/store/useXbarStore';
 // Used only for the large faded hero watermark (300x300), so it needs a
 // source bigger than the 180px touch icon — icon-512 stays crisp while still
 // being ~4x lighter than the 1.53MB app icon.
-const XBAR_ICON = '/brand/icon-512.png';
 
 // Stagger index for the motion system; the CSS var drives each child's delay.
 const motionIndex = (index: number): CSSProperties => ({ ['--motion-index' as string]: index }) as CSSProperties;
@@ -157,7 +157,7 @@ export default function Dashboard() {
     return (
       <div className="xs-home">
         <section className="xs-hero">
-          <img className="xs-hero__wm" src={XBAR_ICON} alt="" aria-hidden="true" />
+          <XbarMark className="xs-hero__wm" />
           <div className="xs-hero__body">
             <div className="xs-hero__eyebrow">
               <Sparkles size={13} /> {ranchName} · Getting started
@@ -392,7 +392,7 @@ export default function Dashboard() {
   return (
     <div className="xs-home">
       <section className="xs-hero">
-        <img className="xs-hero__wm" src={XBAR_ICON} alt="" aria-hidden="true" />
+        <XbarMark className="xs-hero__wm" />
         <div className="xs-hero__body">
           <div className="xs-hero__eyebrow">
             <Sparkles size={13} /> {ranchName} · Dashboard

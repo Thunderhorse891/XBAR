@@ -227,13 +227,11 @@ a:focus-visible {
 .brand:hover {
   text-decoration: none;
 }
+/* The Crossbar lockup: outlines, no tile or shadow. */
 .brand img {
-  width: 32px;
-  height: 32px;
-  border-radius: 8px;
-  box-shadow:
-    0 0 0 1px rgba(255, 255, 255, 0.1),
-    0 4px 14px rgba(0, 0, 0, 0.5);
+  display: block;
+  width: auto;
+  height: 26px;
 }
 .brand small {
   display: block;

@@ -2,8 +2,10 @@ export type ReportBranding = { logo: Uint8Array; mark: Uint8Array; watermark: Ui
 
 export function reportBrandAssetPaths(base = '/') {
   const prefix = base.endsWith('/') ? base : `${base}/`;
-  return ['xbar-report-horse.png', 'xbar-report-mark.png', 'xbar-report-watermark.png'].map(
-    (name) => `${prefix}brand/${name}`,
+  // The Crossbar in carbon on transparent, in the canvases the PDF layouts
+  // already expect: a 16:9 logo and watermark, and a square mark.
+  return ['report-logo.png', 'report-mark.png', 'report-watermark.png'].map(
+    (name) => `${prefix}brand/crossbar/${name}`,
   );
 }
 

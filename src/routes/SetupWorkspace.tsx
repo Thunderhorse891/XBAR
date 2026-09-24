@@ -1,6 +1,6 @@
 import { type FormEvent, useMemo, useState } from 'react';
 import { Navigate, useLocation, useNavigate, useSearchParams } from 'react-router-dom';
-import { XbarMark } from '@/components/BrandMark';
+import { XbarWordmark } from '@/components/BrandMark';
 import { billingPathForTier } from '@/lib/billingRoutes';
 import { applyWorkspaceProfileDefaults } from '@/lib/workspaceSetupDefaults';
 import { saveWorkspaceBackupToCloud } from '@/lib/cloudWorkspace';
@@ -209,11 +209,8 @@ export default function SetupWorkspace() {
       <div className="clean-setup-layout">
         <section className="clean-auth-card clean-auth-card--intro" aria-labelledby="setup-title">
           <div className="clean-brand">
-            <span className="clean-brand__mark" aria-hidden="true">
-              <XbarMark tone="mono" />
-            </span>
             <span>
-              <strong>XBAR</strong>
+              <XbarWordmark className="clean-brand__lockup" />
               <small>{accessLabel}</small>
             </span>
           </div>

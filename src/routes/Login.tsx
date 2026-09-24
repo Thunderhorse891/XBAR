@@ -1,6 +1,6 @@
 import { type FormEvent, useEffect, useId, useMemo, useRef, useState } from 'react';
 import { useLocation, useNavigate, useSearchParams } from 'react-router-dom';
-import { XbarMark } from '@/components/BrandMark';
+import { XbarWordmark } from '@/components/BrandMark';
 import { billingPath, billingPathForTier } from '@/lib/billingRoutes';
 import { isSupabaseConfigured } from '@/lib/platformConfig';
 import { productEvent, productEventNames } from '@/lib/productEvents';
@@ -393,11 +393,8 @@ export default function Login() {
 
         <section className="clean-auth-card clean-auth-card--login">
           <a className="clean-brand clean-brand--login" href="/" aria-label="XBAR home">
-            <span className="clean-brand__mark" aria-hidden="true">
-              <XbarMark tone="mono" />
-            </span>
             <span>
-              <strong>XBAR</strong>
+              <XbarWordmark className="clean-brand__lockup" title="" />
               <small>Horse records</small>
             </span>
           </a>

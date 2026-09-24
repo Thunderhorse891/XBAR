@@ -387,8 +387,9 @@ export async function createSectionedPdf(input) {
 
   if (brandLogo) {
     const size = brandLogo.scaleToFit(120, 55);
+    // The logo is the Crossbar lockup, which already spells XBAR; drawing the
+    // name again beside it would print it twice.
     page.drawImage(brandLogo, { x: MARGIN, y: y - size.height, ...size });
-    page.drawText('XBAR™', { x: MARGIN + size.width + 14, y: y - 20, size: 13, font: bold, color: ACCENT });
     y -= size.height + 8;
   }
 

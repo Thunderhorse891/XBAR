@@ -280,22 +280,13 @@
   gap: 12px;
 }
 
-.clean-brand__mark {
-  display: inline-flex;
-  width: 42px;
-  height: 42px;
-  align-items: center;
-  justify-content: center;
-  overflow: hidden;
-  border: 1px solid var(--entry-line);
-  border-radius: 8px;
-  background: #101418;
-}
-
-.clean-brand--login .clean-brand__mark {
-  border-color: rgba(0, 120, 215, 0.24);
-  background: radial-gradient(circle at 65% 70%, rgba(0, 120, 215, 0.24), transparent 48%), #0d1116;
-  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.06);
+/* The Crossbar lockup as outlines, in the card's ink: no tile, no badge. */
+.clean-brand__lockup {
+  display: block;
+  height: 26px;
+  width: auto;
+  aspect-ratio: 98.6132 / 32;
+  color: var(--entry-ink);
 }
 
 .clean-brand strong,

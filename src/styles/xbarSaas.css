@@ -1956,27 +1956,20 @@ aside.xs-drawer .xs-drawer__sub {
 
 .xs-brand {
   display: flex;
-  align-items: center;
-  gap: 11px;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 7px;
   padding: 4px 8px 4px 6px;
 }
 
-.xs-brand__tile {
-  height: 38px;
-  width: 38px;
+/* The Crossbar lockup, as outlines in the sidebar's text colour. */
+.xs-brand__lockup {
+  display: block;
   flex: none;
-  border-radius: 10px;
-  object-fit: contain;
-  box-shadow: 0 2px 10px rgba(16, 19, 20, 0.22);
-}
-
-.xs-brand__word {
-  font-family: var(--xbar-font-display);
-  font-weight: 800;
-  font-size: 19px;
-  letter-spacing: 0.1em;
+  height: 24px;
+  width: auto;
+  aspect-ratio: 98.6132 / 32;
   color: var(--xbar-text);
-  line-height: 1;
 }
 
 .xs-brand__sub {
@@ -1984,7 +1977,6 @@ aside.xs-drawer .xs-drawer__sub {
   letter-spacing: 0.22em;
   text-transform: uppercase;
   color: var(--xbar-text-muted);
-  margin-top: 4px;
 }
 
 /* Subtle brand motif — oversized faded X behind the sidebar lower field */
@@ -2002,7 +1994,7 @@ aside.xs-drawer .xs-drawer__sub {
   transform: translateX(-50%);
   opacity: 0.05;
   pointer-events: none;
-  filter: grayscale(1) contrast(1.05);
+  color: var(--xbar-text);
   -webkit-mask-image: radial-gradient(circle at center, #000 34%, transparent 70%);
   mask-image: radial-gradient(circle at center, #000 34%, transparent 70%);
   z-index: 0;
@@ -2467,7 +2459,7 @@ aside.xs-drawer .xs-drawer__sub {
   height: 300px;
   opacity: 0.05;
   pointer-events: none;
-  filter: grayscale(1);
+  color: var(--xbar-text);
   -webkit-mask-image: radial-gradient(circle at center, #000 40%, transparent 72%);
   mask-image: radial-gradient(circle at center, #000 40%, transparent 72%);
 }

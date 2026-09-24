@@ -32,9 +32,9 @@ function fixture(count = 18): RanchReportInput {
   } as unknown as RanchReportInput;
 }
 const branding = async () => ({
-  logo: await readFile('public/brand/xbar-report-horse.png'),
-  mark: await readFile('public/brand/xbar-report-mark.png'),
-  watermark: await readFile('public/brand/xbar-report-watermark.png'),
+  logo: await readFile('public/brand/crossbar/report-logo.png'),
+  mark: await readFile('public/brand/crossbar/report-mark.png'),
+  watermark: await readFile('public/brand/crossbar/report-watermark.png'),
 });
 
 // Inspect actual PDF operators: no external rasterizer needed in CI.
@@ -225,9 +225,9 @@ test('ready horses, losses and unpriced inventory produce honest labels and rank
 test('report artwork honors the deployment base and survives offline after caching', async () => {
   const { reportBrandAssetPaths, loadReportBranding } = await import('../src/lib/reportBranding.js');
   assert.deepEqual(reportBrandAssetPaths('/XBAR/'), [
-    '/XBAR/brand/xbar-report-horse.png',
-    '/XBAR/brand/xbar-report-mark.png',
-    '/XBAR/brand/xbar-report-watermark.png',
+    '/XBAR/brand/crossbar/report-logo.png',
+    '/XBAR/brand/crossbar/report-mark.png',
+    '/XBAR/brand/crossbar/report-watermark.png',
   ]);
   const originals = await branding();
   const values = [originals.logo, originals.mark, originals.watermark];
