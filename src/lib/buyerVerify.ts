@@ -24,6 +24,9 @@ export interface VerifiedFacts {
   color: string;
   legalOwner: string;
   transferStatus: string;
+  /** The sealed seller identity the PDF's "Presented By" line must match. */
+  sellerBusinessName: string;
+  sellerRanchName: string;
   documents: Array<{ type: string; title: string }>;
   sealedAt: string;
 }

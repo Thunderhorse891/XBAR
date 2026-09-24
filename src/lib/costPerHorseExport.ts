@@ -1,6 +1,7 @@
 import type { CostPerHorseSummary } from './costPerHorse.js';
 import { localIsoDate } from './format.js';
 import { saveTextAsFile, type FileSaveResult } from './fileDownload.js';
+import { csvRow } from './csv.js';
 
 /*
  * Getting the per-horse cost figures off the screen.
@@ -13,25 +14,9 @@ import { saveTextAsFile, type FileSaveResult } from './fileDownload.js';
  *
  * The CSV field rules mirror src/lib/ranchReportExport.ts (quoted fields,
  * BOM on download, formula-injection guard) so both exports open identically
- * in Excel.
+ * in Excel. Both import the field escaping from src/lib/csv.ts — one copy,
+ * so a hardening change cannot leave one exporter vulnerable.
  */
-
-// Mirrors ranchReportExport.ts: the formula character only counts when it is
-// the first thing that is not whitespace/control, so `Docs Best` stays
-// untouched while `=HYPERLINK(...)` gets the text-prefix.
-// eslint-disable-next-line no-control-regex
-const FORMULA_LEAD = /^[\s\u0000-\u001f]*[=+\-@]/;
-
-function csvField(value: string | number): string {
-  if (typeof value === 'number') return `"${value}"`;
-  const text = String(value);
-  const guarded = FORMULA_LEAD.test(text) ? `'${text}` : text;
-  return `"${guarded.replace(/"/g, '""')}"`;
-}
-
-function csvRow(cells: (string | number)[]): string {
-  return cells.map(csvField).join(',');
-}
 
 /** Money to two decimals: a raw float like 10.0000000001 breaks sums and trust alike. */
 function money(value: number): number {
