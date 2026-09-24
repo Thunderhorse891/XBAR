@@ -58,6 +58,16 @@ test('cost CSV doubles quotes in names', () => {
   assert.ok(csv.includes('"Say ""Howdy""","0","0","0"'));
 });
 
+test('cost CSV prints the per-horse day basis beside the daily figures', () => {
+  // When an older receipt belongs to a sold horse, trackedDays and
+  // perHorseDays intentionally differ: monthly burn uses the former while
+  // every per-horse daily figure uses the latter. Printing only trackedDays
+  // beside those figures lets an accountant infer the wrong denominator.
+  const csv = costPerHorseToCsv(summaryWith({ trackedDays: 120, perHorseDays: 90 }));
+  assert.ok(csv.includes('"Days of receipts","120"'), 'monthly-burn denominator');
+  assert.ok(csv.includes('"Days used for per-horse figures","90"'), 'per-horse denominator');
+});
+
 test('cost CSV guards formula-looking horse names', () => {
   const csv = costPerHorseToCsv(
     summaryWith({

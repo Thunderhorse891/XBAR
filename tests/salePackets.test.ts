@@ -285,6 +285,52 @@ const sealTestWorkspace = {
   operationsEmail: 'ranch@example.com',
 } as unknown as WorkspaceProfile;
 
+/* The seal and the page resolve the seller contact block from ONE profile.
+ *
+ * `buildLocalSalePacket` once called `buildPacketCredential` without
+ * `workspaceProfile`, so the seal covered blank name/ranch/email while the
+ * page printed the real contact block — a buyer could edit the visible seller
+ * details without changing the digest. Direct `buildSaleCredential` tests
+ * cannot catch that wiring gap: only an end-to-end packet can, so this test
+ * compares the rendered contact block with the sealed record.
+ */
+test('the sealed seller block is the contact block the packet renders', () => {
+  const horse = {
+    ...sealTestHorse(),
+    profileImage: 'https://photos.test/bella-hero.jpg',
+    gallery: [
+      { id: 'g-hero', label: 'Hero', kind: 'Hero', url: 'https://photos.test/bella-hero.jpg', status: 'Approved' },
+    ],
+  } as unknown as HorseRecord;
+
+  const packet = buildLocalSalePacket({
+    horse,
+    workspaceProfile: sealTestWorkspace,
+    documents: [],
+    ownershipRecord: sealTestOwnership(),
+    selectedDocumentIds: [],
+    generatedBy: 'Ranch Manager',
+    now: new Date('2026-09-24T12:00:00Z'),
+  });
+
+  const sealed = JSON.parse(packet.credential.payload).seller as {
+    name: string;
+    ranch: string;
+    email: string;
+    heroPhotoUrl: string;
+  };
+  // The profile values the page prints are the ones the seal covers.
+  assert.equal(sealed.name, 'Erin Wyrick');
+  assert.equal(sealed.ranch, 'Rocking R Ranch');
+  assert.equal(sealed.email, 'ranch@example.com');
+  assert.equal(sealed.heroPhotoUrl, 'https://photos.test/bella-hero.jpg');
+  // ...and the page prints exactly those values, including the sealed photo.
+  assert.ok(packet.html.includes('Erin Wyrick'), 'rendered seller name');
+  assert.ok(packet.html.includes('Rocking R Ranch'), 'rendered ranch');
+  assert.ok(packet.html.includes('ranch@example.com'), 'rendered email');
+  assert.ok(packet.html.includes('src="https://photos.test/bella-hero.jpg"'), 'rendered hero photo');
+});
+
 /*
  * M14: the by-hand verification steps used to print a literal example,
  * `SEAL-XXXX-XXXX-XXXX`, as the seal code. A buyer following the steps would

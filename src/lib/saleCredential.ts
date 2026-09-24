@@ -137,7 +137,10 @@ export interface CredentialCare {
 }
 
 /** Seller contact block the packet renders, sealed so the visible seller name,
- * ranch, email and hero photo cannot be swapped without breaking the digest.
+ * ranch and email cannot be swapped without breaking the digest. The hero
+ * photo is sealed by URL — or by content digest when the bytes were in hand
+ * at seal time (see heroPhotoDigest): a remote photo's bytes can change at
+ * that address without breaking the seal, and the packet says so.
  *
  * Everything here is buyer-facing by design: it is exactly what the packet's
  * "Contact the seller" section shows. Sealing it closes the hole where the

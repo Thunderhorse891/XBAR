@@ -24,7 +24,7 @@ export type LegalDocument = {
   sections: LegalDocumentSection[];
 };
 
-export const legalLastUpdated = 'June 10, 2026';
+export const legalLastUpdated = 'September 24, 2026';
 
 /**
  * Single source of truth for the support contact block printed on every legal

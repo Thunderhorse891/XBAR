@@ -53,6 +53,10 @@ export function costPerHorseToCsv(summary: CostPerHorseSummary): string {
   lines.push(csvRow(['Summary']));
   lines.push(csvRow(['Horses in care', summary.horsesInCare]));
   lines.push(csvRow(['Days of receipts', summary.trackedDays]));
+  // The per-horse daily figures use a different denominator (perHorseDays)
+  // when older receipts belong to sold horses — print it beside them, the
+  // way the Costs screen does, or the export cannot be reconciled.
+  lines.push(csvRow(['Days used for per-horse figures', summary.perHorseDays]));
   lines.push(csvRow(['Cost per horse per day', summary.perHorsePerDay === null ? '—' : money(summary.perHorsePerDay)]));
   lines.push(csvRow(['Monthly burn', money(summary.monthlyBurn)]));
   lines.push('');

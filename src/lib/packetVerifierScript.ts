@@ -660,25 +660,51 @@ export const PACKET_VERIFIER_SCRIPT = `
            * file opened from disk, where the deployment's CSP does not apply
            * and an added element loads from anywhere.
            *
-           * A sealed packet embeds nothing but its own attachments — the
-           * generator emits no img, iframe, embed, object, video, audio,
-           * source, link or svg at all, which is what makes "any of these is an
-           * alteration" a fact about this format rather than a guess. The
-           * packetVerifierCsp test fails if the generator ever grows one.
+           * The one legitimate img is the sealed hero photo in the seller
+           * contact block: the payload's seller.heroPhotoUrl names the exact
+           * src the generator emitted, so an img whose src matches it
+           * character-for-character is the photo the seal covers, not an
+           * addition. (For a data: URL the src IS the bytes, so an exact
+           * match proves the photo content is untouched.) Anything else —
+           * a second copy, a replaced src, a missing photo — is an
+           * alteration, because the generator emits exactly one img and
+           * only when the sealed record names a hero photo.
            */
+          var sealedPhoto =
+            parsed && parsed.seller && typeof parsed.seller.heroPhotoUrl === 'string'
+              ? parsed.seller.heroPhotoUrl
+              : '';
+          var sealedPhotoSeen = 0;
           var EMBEDS =
             'img,iframe,embed,object,video,audio,source,track,link,base,svg,frame,frameset,applet,portal,form';
           [].slice.call(document.querySelectorAll(EMBEDS)).forEach(function (node) {
+            var tag = String(node.tagName || 'element').toLowerCase();
             var from =
               node.getAttribute('src') || node.getAttribute('href') || node.getAttribute('data') || '';
+            if (tag === 'img' && sealedPhoto && from === sealedPhoto) {
+              sealedPhotoSeen += 1;
+              if (sealedPhotoSeen > 1) {
+                problems.push(
+                  'This packet shows the sealed hero photo more than once. The generator emits it exactly once, so the extra copy was added after sealing.',
+                );
+              }
+              return;
+            }
             problems.push(
               'This packet contains an added ' +
-                String(node.tagName || 'element').toLowerCase() +
+                tag +
                 ' element' +
                 (from ? ' loading "' + from + '"' : '') +
-                ', which the seal does not cover. A sealed packet embeds nothing but its own attachments, so this was put here after it was sealed. Do not trust what it shows you.',
+                ', which the seal does not cover. A sealed packet embeds nothing but its own attachments and its one sealed hero photo, so this was put here after it was sealed. Do not trust what it shows you.',
             );
           });
+          if (sealedPhoto && sealedPhotoSeen === 0) {
+            problems.push(
+              'The hero photo the seal covers is missing from this packet. It was sealed as "' +
+                sealedPhoto +
+                '", so removing it is an alteration.',
+            );
+          }
 
           /*
            * Exactly one script: the checker being run. More than one means
