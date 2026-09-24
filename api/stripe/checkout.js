@@ -252,7 +252,7 @@ export default async function handler(req, res) {
      *
      * Stripe knows what is open, so ask it rather than tracking it in a column.
      */
-    const intent = { workspaceId, tier, seatCount };
+    const intent = { workspaceId, tier, seatCount, billingPeriod, priceId };
 
     let openSessions = [];
     if (stripeCustomerId) {
@@ -438,10 +438,11 @@ export default async function handler(req, res) {
         metadata: {
           workspace_id: workspaceId,
           workspace_tier: tier,
-          // Recorded so a later request can tell whether an open session is
-          // the SAME purchase. Reusing one for a different seat count would
-          // charge the wrong amount.
+          // Match the complete purchase on a retry, including a switch in
+          // billing period or a changed server-configured Stripe Price.
           workspace_seats: String(seatCount),
+          workspace_billing_period: billingPeriod,
+          workspace_price_id: priceId,
           owner_user_id: user.id,
         },
         subscription_data: {
