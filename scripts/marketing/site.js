@@ -134,7 +134,9 @@
   }
 
   try {
-    setUpMotion();
+    // The homepage pilot owns its motion and pause/reduced-motion lifecycle.
+    // Navigation and analytics below still run unchanged on every page.
+    if (!doc.body.classList.contains('landing-page')) setUpMotion();
     setUpNavDropdowns();
   } catch {
     /* motion must never break the page */

@@ -163,7 +163,8 @@ function footer() {
  * @param {string} [page.ogType]    Open Graph type (default "website")
  * @param {boolean} [page.noindex]  Emit a robots noindex meta (404 page)
  */
-export function renderPage(page) {
+export function renderPage(page, { landingScript = '/landing/motion.js' } = {}) {
+  const isLanding = page.path === '/';
   const canonical = `${SITE_ORIGIN}${page.path === '/' ? '/' : page.path}`;
   const verification = process.env.GOOGLE_SITE_VERIFICATION
     ? `\n    <meta name="google-site-verification" content="${esc(process.env.GOOGLE_SITE_VERIFICATION)}" />`
@@ -223,13 +224,13 @@ export function renderPage(page) {
       href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,400;9..144,500;9..144,600;9..144,700&family=Outfit:wght@400;500;600;700;800;900&display=swap"
       rel="stylesheet"
     />
-    <link rel="stylesheet" href="/site.css" />
+    <link rel="stylesheet" href="/site.css" />${isLanding ? '\n    <link rel="stylesheet" href="/brand/xbar-brand-tokens.css" /><link rel="stylesheet" href="/landing.css" />' : ''}
     <link rel="icon" type="image/png" href="/brand/xbar-favicon.png" />
     <link rel="apple-touch-icon" href="/brand/apple-touch-icon.png" />
     <script type="application/ld+json">${JSON.stringify(baseJsonLd)}</script>
-    <script defer src="/site.js"></script>
+    <script defer src="/site.js"></script>${isLanding ? `\n    <script type="module" src="${esc(landingScript)}"></script>` : ''}
   </head>
-  <body>
+  <body${isLanding ? ' class="landing-page"' : ''}>
     <div class="bg-fx" aria-hidden="true"><i class="bg-fx__grid"></i><i class="bg-fx__aurora"></i><i class="bg-fx__aurora bg-fx__aurora--warm"></i></div>
     <a class="skip-link" href="#main">Skip to content</a>
     ${header(page.path)}

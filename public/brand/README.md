@@ -32,6 +32,16 @@ Keep existing aliases while code still references them. New consumers should use
 
 ## Governance
 
+### Homepage pilot encodings
+
+`xbar-report-horse-landing.webp` (1672 × 941) and `xbar-report-mark-landing.webp`
+(1254 × 1254) are lossless WebP encodings of Erin's original
+`xbar-report-horse.png` and `xbar-report-mark.png`. They keep the same composition,
+colours, dimensions, and decoded pixels; the PNG masters remain unchanged.
+Only the public homepage pilot uses these encodings, through `<picture>` with
+the original PNG fallback. The below-fold X image loads lazily. These files
+reduce transfer size without creating a new mark, tracing or re-lettering it.
+
 - Preserve Erin's supplied master artwork unchanged. Resize it proportionally and render it at or below its intrinsic dimensions.
 - Smaller encodings of the same composition may be produced for performance, but keep the original beside them and document the derivative and its consumer.
 - Tracing, simplifying, recolouring, re-lettering, recomposing, or creating a new small-size mark is a new visual derivative and requires Erin's review before release.

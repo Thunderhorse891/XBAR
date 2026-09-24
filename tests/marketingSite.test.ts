@@ -115,3 +115,34 @@ test('marketing claims stay within evidence: no fabricated social proof', async 
     assert.doesNotMatch(page.body, forbidden, `${page.path}: unverifiable social-proof claim`);
   }
 });
+
+test('the cinematic pilot is homepage-only and keeps real prices and static actions', async () => {
+  const { marketingPages } = (await load('scripts/marketing/pages.mjs')) as { marketingPages: MarketingPage[] };
+  const { marketingPlans } = (await load('scripts/marketing/pricing-data.mjs')) as { marketingPlans: MarketingPlan[] };
+  const { renderPage } = (await load('scripts/marketing/render.mjs')) as {
+    renderPage: (page: MarketingPage) => string;
+  };
+  for (const page of marketingPages) {
+    const html = renderPage(page);
+    if (page.path !== '/') {
+      assert.doesNotMatch(html, /landing-page|\/landing.css|\/landing\/motion/);
+      continue;
+    }
+    assert.match(html, /class="landing-page"/);
+    assert.match(html, /href="\/app\/login\?mode=signup"/);
+    assert.match(html, /href="\/samples\/sample-sale-packet.html"/);
+    assert.match(html, /\/brand\/xbar-report-horse.png/);
+    assert.match(html, /\/brand\/xbar-report-mark.png/);
+    assert.match(html, /example data/);
+    for (const plan of marketingPlans) {
+      assert.ok(html.includes(`$${plan.monthlyRate}<span>/month</span>`), `${plan.tier} price must remain accurate`);
+    }
+    const counter = html.match(/data-landing-count="(\d+)"/);
+    const stages = page.body.match(/class="landing-stage-index"/g) ?? [];
+    assert.equal(
+      Number(counter?.[1]),
+      stages.length,
+      'counter describes the rendered workflow, not invented usage stats',
+    );
+  }
+});
