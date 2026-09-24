@@ -76,7 +76,8 @@
 .checkout-plan span,
 .checkout-card-box__top span,
 .checkout-status-list span,
-.checkout-total span {
+.checkout-total span,
+.checkout-return-banner span {
   margin: 0;
   color: var(--checkout-blue);
   font-family: var(--font-ui);
@@ -447,4 +448,46 @@
   color: inherit;
   text-decoration: underline;
   cursor: pointer;
+}
+
+/*
+ * The checkout-return banner: what the billing screen says when Stripe sends
+ * the customer back. Green accent like the trial callout — this is the same
+ * "something good happened" register, not an error state. The cancelled
+ * variant is quiet on purpose: muting, not alarming.
+ */
+.checkout-return-banner {
+  display: grid;
+  gap: 6px;
+  border: 1px solid rgba(5, 150, 105, 0.24);
+  border-radius: 8px;
+  background: rgba(5, 150, 105, 0.06);
+  padding: 16px 18px;
+  box-shadow: inset 3px 0 0 var(--checkout-success);
+}
+
+.checkout-return-banner--quiet {
+  border-color: var(--checkout-line);
+  background: rgba(255, 255, 255, 0.6);
+  box-shadow: inset 3px 0 0 var(--checkout-muted);
+}
+
+.checkout-return-banner strong {
+  margin: 0;
+  color: var(--checkout-ink);
+  font-size: 1.05rem;
+  font-weight: 790;
+}
+
+.checkout-return-banner p {
+  margin: 0;
+  color: var(--checkout-muted);
+  font-size: 14px;
+  line-height: 1.55;
+}
+
+.checkout-return-banner .checkout-inline-action {
+  justify-self: start;
+  color: var(--checkout-muted);
+  font-size: 13px;
 }

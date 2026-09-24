@@ -297,6 +297,45 @@ export async function loadWorkspaceAccessProfile(sessionOverride?: Session | nul
   };
 }
 
+/*
+ * Re-read just the subscription profile for one workspace.
+ *
+ * The billing screen polls this after a completed Stripe checkout: the page
+ * comes back to /billing via a full navigation, and the only thing that can
+ * tell it the payment landed is the row the webhook writes on
+ * `checkout.session.completed`. It reads the same canonical columns as the
+ * workspace backup load and maps through the same `subscriptionFromCloudRow`,
+ * so a polled profile and a hydrated one can never disagree.
+ *
+ * A failed read is `ok: false`, never a stale profile: the poll treats unknown
+ * as "not yet", and confirming from a read that errored would report a payment
+ * the deployment cannot see.
+ */
+export async function refreshWorkspaceSubscriptionProfile(
+  workspaceId: string,
+): Promise<{ ok: true; profile: SubscriptionProfile | null } | { ok: false; message: string }> {
+  const client = getSupabaseClient();
+  if (!client) {
+    return { ok: false, message: 'Supabase is not configured for this build.' };
+  }
+  if (!workspaceId) {
+    return { ok: false, message: 'No cloud workspace is connected for this session.' };
+  }
+
+  const { data, error } = await client
+    .from('workspace_subscription_profiles')
+    .select('tier, billing_state, monthly_rate, payload, updated_at')
+    .eq('workspace_id', workspaceId)
+    .maybeSingle();
+
+  if (error) {
+    return { ok: false, message: error.message };
+  }
+
+  // A row that has never been written is not an error; it is "not yet".
+  return { ok: true, profile: data ? (subscriptionFromCloudRow(data) ?? null) : null };
+}
+
 export async function loadPublicBuyerRoomEventsFromCloud(): Promise<
   { ok: true; events: BuyerRoomEvent[] } | { ok: false; message: string }
 > {
@@ -1124,11 +1163,57 @@ export async function uploadMediaAssetToCloud(params: { file: File; horseId: str
     throw error;
   }
 
-  const { data } = client.storage.from(supabaseConfig.mediaBucket).getPublicUrl(path);
+  // The horse-media bucket is private, so there is deliberately no public URL
+  // here. Callers persist `storagePath` and every render resolves a
+  // short-lived signed URL via getHorseMediaSignedUrl (workspace members) or
+  // the token-gated buyer media endpoint (shared listings).
   return {
     storagePath: path,
-    publicUrl: data.publicUrl,
   };
+}
+
+/**
+ * How long a signed horse-media URL stays valid, in seconds.
+ *
+ * Fifteen minutes covers an in-app browsing session; the URL is re-resolved on
+ * every render, so a stale link never lingers. Buyer-facing links minted by
+ * the server for shared listings use their own (longer) TTL defined next to
+ * that endpoint.
+ */
+export const HORSE_MEDIA_SIGNED_URL_TTL_SECONDS = 15 * 60;
+
+/**
+ * Mint a short-lived signed URL for a horse-media object.
+ *
+ * The caller must be signed in and entitled to read the object under the
+ * bucket's storage policies (the uploader, or a member of the workspace whose
+ * horse references it). Returns null when the client is unavailable, the
+ * session is missing, or storage refuses -- the render layer treats null as
+ * "no image" and shows its fallback, never a broken link.
+ */
+export async function getHorseMediaSignedUrl(
+  storagePath: string,
+  expiresInSeconds: number = HORSE_MEDIA_SIGNED_URL_TTL_SECONDS,
+): Promise<string | null> {
+  const client = getSupabaseClient();
+  if (!client) {
+    return null;
+  }
+
+  const session = await getActiveSession();
+  if (!session?.user) {
+    return null;
+  }
+
+  const { data, error } = await client.storage
+    .from(supabaseConfig.mediaBucket)
+    .createSignedUrl(storagePath, expiresInSeconds);
+
+  if (error || !data?.signedUrl) {
+    return null;
+  }
+
+  return data.signedUrl;
 }
 
 /**

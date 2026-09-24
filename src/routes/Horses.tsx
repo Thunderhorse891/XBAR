@@ -4,6 +4,7 @@ import { ContextMenu } from '@/components/ContextMenu';
 import { ActionMenuButton } from '@/components/InteractionSystem';
 import { EmptyState } from '@/components/EmptyState';
 import { HorseMediaPreview } from '@/components/HorseMediaPreview';
+import { primaryHorseMedia } from '@/lib/horseMedia';
 import { SalePacketSlots } from '@/components/SalePacketSlots';
 import { Pill, ProgressBar, SurfaceTabs } from '@/components/app-ui';
 import { DotsIcon } from '@/components/icons';
@@ -756,6 +757,7 @@ export default function Horses() {
                   const showSaleSignals = horse.segment === 'Sale Prospect' || horse.status === 'Sale Prep';
                   const openProofSlots = packet.saleSlots.filter((slot) => slot.status !== 'ready').length;
                   const readiness = saleReadinessById.get(horse.id) ?? 0;
+                  const primaryMedia = primaryHorseMedia(horse);
                   return (
                     <div
                       key={horse.id}
@@ -771,7 +773,8 @@ export default function Horses() {
                     >
                       <div className="horse-card__media">
                         <HorseMediaPreview
-                          src={horse.profileImage || horse.gallery[0]?.url}
+                          src={primaryMedia.src}
+                          storagePath={primaryMedia.storagePath}
                           name={horse.name}
                           imageClassName="horse-card__image"
                           fallbackClassName="horse-card__image-fallback"

@@ -7,6 +7,7 @@ import { CommandBrief } from '@/components/CommandBrief';
 import { ContextMenu } from '@/components/ContextMenu';
 import { EmptyState } from '@/components/EmptyState';
 import { HorseMediaPreview } from '@/components/HorseMediaPreview';
+import { primaryHorseMedia } from '@/lib/horseMedia';
 import { ActionMenuButton } from '@/components/InteractionSystem';
 import { OfferDecisionPanel } from '@/components/OfferDecisionPanel';
 import { MetricCard, Panel, Pill } from '@/components/app-ui';
@@ -361,12 +362,14 @@ export default function Sales() {
                         packet.sharePath,
                         sharedListing?.accessMode === 'Private Token' ? sharedListing.shareToken : undefined,
                       );
+                      const primaryMedia = primaryHorseMedia(horse);
 
                       return (
                         <>
                           <div className="horse-card__media">
                             <HorseMediaPreview
-                              src={horse.profileImage || horse.gallery[0]?.url}
+                              src={primaryMedia.src}
+                              storagePath={primaryMedia.storagePath}
                               name={horse.name}
                               imageClassName="horse-card__image"
                               fallbackClassName="horse-card__image-fallback"

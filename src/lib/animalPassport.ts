@@ -59,13 +59,14 @@ const HORSE_PHOTO_KINDS: ReadonlySet<GalleryAsset['kind']> = new Set(['Hero', 'C
 
 /**
  * True when the record has a real photograph of the animal — a profile image
- * or a gallery asset of a horse-photo kind with a usable URL. Pedigree scans
- * and document covers do not count. Exported so the passport can both score
- * completeness and decide whether a newly uploaded photo becomes the primary.
+ * or a gallery asset of a horse-photo kind with a resolvable location.
+ * Pedigree scans and document covers do not count. Exported so the passport
+ * can both score completeness and decide whether a newly uploaded photo
+ * becomes the primary.
  */
-/** A gallery asset that is a real horse photograph (not a pedigree/doc scan) with a usable URL. */
-export function isHorsePhotoAsset(asset: Pick<GalleryAsset, 'kind' | 'url'>): boolean {
-  return HORSE_PHOTO_KINDS.has(asset.kind) && filled(asset.url);
+/** A gallery asset that is a real horse photograph (not a pedigree/doc scan) with a resolvable location: a durable URL or a private-bucket storagePath that renders resolve through signed URLs. */
+export function isHorsePhotoAsset(asset: Pick<GalleryAsset, 'kind' | 'url' | 'storagePath'>): boolean {
+  return HORSE_PHOTO_KINDS.has(asset.kind) && (filled(asset.url) || filled(asset.storagePath));
 }
 
 export function hasHorsePhoto(horse: Pick<HorseRecord, 'profileImage' | 'gallery'>): boolean {

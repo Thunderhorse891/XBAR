@@ -130,6 +130,28 @@ export function findTierByPriceId(priceId) {
   );
 }
 
+/**
+ * Resolve a Stripe price id to its billing period, or null when it matches none.
+ *
+ * A Stripe Price pins its own billing interval, so the period is a property of
+ * the price id, not of the tier — and the price ids this deployment sells live
+ * in the same STRIPE_PRICE_ID_*(_ANNUAL) table that findTierByPriceId already
+ * reads, so this extends that mapping rather than duplicating it.
+ *
+ * Null is not a guess: it means no env var this deployment knows matches, so
+ * the period is genuinely unknown (a legacy row, or a price id from another
+ * configuration). Callers must not default it to 'monthly'.
+ */
+export function findBillingPeriodByPriceId(priceId) {
+  const normalized = String(priceId ?? '').trim();
+  if (!normalized) return null;
+  for (const tier of Object.keys(subscriptionPlans)) {
+    if (getStripePriceIdByTier(tier, 'monthly') === normalized) return 'monthly';
+    if (getStripePriceIdByTier(tier, 'annual') === normalized) return 'annual';
+  }
+  return null;
+}
+
 /** Retained name; the decision itself lives in subscription-status.js. */
 export function normalizeBillingState(status) {
   return billingStateForStripeStatus(status);
@@ -148,11 +170,19 @@ export function isKnownTier(tier) {
  * Starter, which made a bad tier string indistinguishable from a real Starter
  * subscription — the profile looked correct and nothing recorded that a value
  * had been discarded.
+ *
+ * `params.priceId` is the Stripe price id the purchase was billed on. The
+ * profile's `billingPeriod` is derived from it ('monthly' | 'annual'), or null
+ * when the price id is absent or matches no configured price.
  */
 export function buildSubscriptionProfile(params) {
   const tierRecognized = isKnownTier(params.tier);
   const purchasedTier = tierRecognized ? params.tier : BASELINE_TIER;
   const billingState = billingStateForStripeStatus(params.billingStatus);
+  // The period the purchase was billed on, derived from the Stripe price id
+  // that created it — null when the price id is absent or unrecognized, which
+  // callers must treat as "unknown", never as "monthly".
+  const billingPeriod = findBillingPeriodByPriceId(params.priceId);
 
   // Every entitlement field below comes from the tier the workspace is actually
   // entitled to right now, not the one it bought.
@@ -175,11 +205,22 @@ export function buildSubscriptionProfile(params) {
     tier,
     purchasedTier,
     tierRecognized,
-    // The price of the plan that was bought, not of the fallback entitlement.
-    // Quoting Starter's rate to a canceled Enterprise workspace would imply a
-    // charge that is not happening; billingState is what says whether anything
-    // is being billed at all.
+    // The MONTHLY list rate of the plan that was bought — not the amount
+    // charged. The amount charged is monthlyRate when billingPeriod is
+    // 'monthly' and annualRate when billingPeriod is 'annual'. Recording the
+    // period next to the rate is what keeps an annual purchase ($290/yr) from
+    // reading as a $29/mo one; quoting Starter's rate to a canceled Enterprise
+    // workspace would imply a charge that is not happening, and billingState
+    // is what says whether anything is being billed at all.
     monthlyRate: subscriptionPlans[purchasedTier].monthlyRate,
+    // The amount charged when billingPeriod is 'annual', carried alongside
+    // monthlyRate so a billing screen never has to re-derive the price from
+    // the tier and the period.
+    annualRate: subscriptionPlans[purchasedTier].annualRate,
+    // 'monthly' | 'annual' for a purchase whose Stripe price id this
+    // deployment recognizes; null when the period is not known (a row written
+    // before the period was recorded, or an unrecognized price id).
+    billingPeriod,
     renewalDate,
     billingState,
     // Whether a Stripe subscription still exists that could bill again.

@@ -142,3 +142,69 @@ export async function startManagedCheckout(params: {
     };
   }
 }
+
+export type TrialRecord = {
+  startedAt: string;
+  endsAt: string;
+  plan: string;
+};
+
+export type TrialStartResult =
+  | {
+      ok: true;
+      trial: TrialRecord;
+    }
+  | {
+      ok: false;
+      message: string;
+      /** The server's refusal code, when the server is what refused. */
+      code?: string;
+    };
+
+/**
+ * Start the workspace's 14-day Professional trial.
+ *
+ * No card, no Stripe: the server records the trial on the subscription
+ * profile and returns the window it wrote. The caller applies the returned
+ * start time to the local subscription so Professional is visible
+ * immediately; the next cloud load reads the same record back.
+ */
+export async function requestTrialStart(params: {
+  workspaceId: string;
+  accessToken: string;
+}): Promise<TrialStartResult> {
+  if (!params.workspaceId || !params.accessToken) {
+    return {
+      ok: false,
+      code: NO_MANAGED_IDENTITY,
+      message: 'Sign in to this workspace before starting the trial.',
+    };
+  }
+
+  try {
+    const response = await fetch(buildApiUrl('/api/trial/start'), {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${params.accessToken}`,
+      },
+      body: JSON.stringify({ workspaceId: params.workspaceId }),
+    });
+
+    const payload = (await response.json()) as { ok?: boolean; message?: string; trial?: TrialRecord; code?: string };
+    if (!response.ok || !payload.ok || !payload.trial) {
+      return {
+        ok: false,
+        message: payload.message ?? 'The trial could not be started.',
+        code: payload.code,
+      };
+    }
+
+    return { ok: true, trial: payload.trial };
+  } catch {
+    return {
+      ok: false,
+      message: 'The trial could not be started. Check your connection and try again.',
+    };
+  }
+}

@@ -477,6 +477,11 @@ export interface SubscriptionProfile {
   // read as "no live subscription" — the same answer as a workspace that never
   // had one.
   subscriptionRecoverable?: boolean;
+  // ISO timestamp of when this workspace started its 14-day Professional trial,
+  // if it ever did. Written by the server on trial start and kept forever —
+  // an expired trial cannot be restarted. Gates never read the raw string;
+  // they go through getTrialState / applyTrialToProfile in trialSubscription.
+  trialStart?: string;
   sharedAccessEnabled: boolean;
   featureFlags: string[];
   usage: SubscriptionUsage;

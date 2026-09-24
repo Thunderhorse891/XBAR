@@ -31,11 +31,23 @@ function pruneMemory(now) {
 export function getClientIp(req) {
   const headers = req.headers || {};
   const forwarded = headers['x-forwarded-for'];
-  if (typeof forwarded === 'string' && forwarded.length > 0) {
-    return forwarded.split(',')[0].trim();
+  // Node may hand repeated headers over as an array; the last header wins.
+  const forwardedValue = Array.isArray(forwarded) ? forwarded[forwarded.length - 1] : forwarded;
+  if (typeof forwardedValue === 'string' && forwardedValue.trim().length > 0) {
+    // Trust the RIGHTMOST entry. Vercel appends the real client IP last, so
+    // every entry to its left is client-controlled and freely spoofable. The
+    // old code took the leftmost entry, which let any caller pick the IP the
+    // rate limiter counted against and dodge the limit entirely.
+    const entries = forwardedValue
+      .split(',')
+      .map((entry) => entry.trim())
+      .filter(Boolean);
+    if (entries.length > 0) {
+      return entries[entries.length - 1];
+    }
   }
   const realIp = headers['x-real-ip'];
-  if (typeof realIp === 'string' && realIp.length > 0) {
+  if (typeof realIp === 'string' && realIp.trim().length > 0) {
     return realIp.trim();
   }
   return req.socket?.remoteAddress || 'unknown';
