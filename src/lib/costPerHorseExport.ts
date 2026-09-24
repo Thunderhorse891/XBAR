@@ -58,6 +58,12 @@ export function costPerHorseToCsv(summary: CostPerHorseSummary): string {
   // way the Costs screen does, or the export cannot be reconciled.
   lines.push(csvRow(['Days used for per-horse figures', summary.perHorseDays]));
   lines.push(csvRow(['Cost per horse per day', summary.perHorsePerDay === null ? '—' : money(summary.perHorsePerDay)]));
+  // Monthly burn is computed from windowTotal — every receipt in the window,
+  // including ones tagged to sold or deleted horses that the horse and
+  // category rows intentionally exclude. Print the total beside it, the way
+  // the Costs screen does, or an accountant cannot reproduce the burn
+  // figure from anything else in the file.
+  lines.push(csvRow(['Receipts in window (total)', money(summary.windowTotal)]));
   lines.push(csvRow(['Monthly burn', money(summary.monthlyBurn)]));
   lines.push('');
 

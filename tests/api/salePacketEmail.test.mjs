@@ -45,8 +45,8 @@ test('the email is sent as the ranch with replies routed to the seller', () => {
   assert.ok(/fromName:\s*sellerDisplayName/.test(handlerSrc), 'From display name must be the ranch');
   assert.ok(/replyTo,/.test(handlerSrc), 'Reply-To must be passed through');
   assert.ok(
-    /replyTo\s*=\s*context\.workspace\.operationsEmail/.test(handlerSrc),
-    "Reply-To must be the seller's ops email",
+    /replyTo\s*=\s*identity\.email\s*\|\|\s*user\?\.email/.test(handlerSrc),
+    "Reply-To must be the seller's ops email with the quick-start sentinel filtered",
   );
   assert.ok(/reply_to:\s*replyToAddress/.test(emailLibSrc), 'the email module must forward Reply-To to Resend');
   assert.ok(
@@ -70,6 +70,48 @@ test('the support email matches the legal track single source of truth', () => {
   const fallback = /const SUPPORT_EMAIL\s*=\s*process\.env\.SUPPORT_EMAIL\s*\|\|\s*'([^']+)'/.exec(handlerSrc);
   assert.ok(fallback, 'SUPPORT_EMAIL fallback not found in api/sale-packets.js');
   assert.equal(fallback[1], canonical, 'the api fallback must mirror SUPPORT_CONTACT.email — update both or neither');
+});
+
+test('quick-start placeholders never become the cloud packet sender identity', async () => {
+  // Behavioral: the invented quick-start identity must not reach a buyer as
+  // the sender. A fresh quick-start workspace stores 'My Ranch LLC' /
+  // 'Main Ranch' / 'owner@ranch.local' — the packet email and its Presented
+  // By block must degrade to an honest absence, not a false identity.
+  const { isQuickStartSentinel, sellerIdentity } = await import('../../api/_lib/workspace-identity.js');
+
+  assert.ok(isQuickStartSentinel('My Ranch LLC'));
+  assert.ok(isQuickStartSentinel('Main Ranch'));
+  assert.ok(isQuickStartSentinel('Operations Lead'));
+  assert.ok(isQuickStartSentinel('OWNER@RANCH.LOCAL'), 'email match is case-insensitive');
+  assert.ok(!isQuickStartSentinel('Rocking R Ranch'), 'a real ranch name is not a sentinel');
+
+  const quickStart = sellerIdentity({
+    businessName: 'My Ranch LLC',
+    ranchName: 'Main Ranch',
+    operationsEmail: 'owner@ranch.local',
+  });
+  assert.equal(quickStart.business, '', 'invented business name is not sender identity');
+  assert.equal(quickStart.ranch, '', 'invented ranch name is not sender identity');
+  assert.equal(quickStart.email, '', 'invented mailbox is not the reply-to');
+
+  const real = sellerIdentity({
+    businessName: 'Rocking R Ranch LLC',
+    ranchName: 'Rocking R Ranch',
+    operationsEmail: 'ranch@example.com',
+  });
+  assert.equal(real.business, 'Rocking R Ranch LLC');
+  assert.equal(real.ranch, 'Rocking R Ranch');
+  assert.equal(real.email, 'ranch@example.com');
+
+  // The handler must build its sender identity through this helper.
+  assert.ok(
+    /sellerIdentity\(context\.workspace\)/.test(handlerSrc),
+    'api/sale-packets.js must filter sender identity through sellerIdentity',
+  );
+  assert.ok(
+    !/businessName \|\| context\.workspace\.ranchName/.test(handlerSrc),
+    'no unfiltered businessName/ranchName may remain in sender construction',
+  );
 });
 
 test('no buyer-facing fallback names the platform when the ranch name is unset', () => {

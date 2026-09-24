@@ -202,7 +202,7 @@ export async function renderReportPdf(
   bar('Sale-ready*', money.readyValue, Math.max(1, money.listedValue), 318, 426, 258, green);
   heading('What matters now', 36, 464);
   paragraph(
-    `${dollars(money.valueAtRisk)} of listed asking value is held behind recorded sale requirements. Current-month receipts total ${dollars(money.investedThisMonth)}; ${dollars(money.unallocatedThisMonth)} is unallocated overhead. This is the first report snapshot, so period-over-period change is not shown yet.`,
+    `${dollars(money.valueAtRisk)} of listed asking value is held behind recorded sale requirements. Current-month receipts total ${dollars(money.investedThisMonth)}; ${dollars(money.unallocatedThisMonth)} is unallocated overhead. No comparison baseline is on file, so period-over-period change is not shown.`,
     36,
     484,
     540,

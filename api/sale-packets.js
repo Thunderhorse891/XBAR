@@ -15,6 +15,7 @@ import { buildServerSaleCredential } from './_lib/sale-credential.js';
 import { enforceRateLimit } from './_lib/rate-limit.js';
 import { applyCors } from './_lib/cors.js';
 import { packetOmissionSection, selectPacketDocuments } from './_lib/packet-selection.js';
+import { sellerIdentity } from './_lib/workspace-identity.js';
 
 const DOCUMENT_BUCKET =
   process.env.SUPABASE_DOCUMENT_BUCKET || process.env.VITE_SUPABASE_DOCUMENT_BUCKET || 'horse-documents';
@@ -196,6 +197,10 @@ export default async function handler(req, res) {
     // on a bare-path redirect resolving first.
     const verifyUrl = `${appOrigin}/app/verify/${packetId}`;
 
+    // The buyer-facing seller identity with quick-start placeholders removed —
+    // a packet must never present an invented company/ranch as the seller.
+    const identity = sellerIdentity(context.workspace);
+
     const coverBytes = await createSectionedPdf({
       title: `Sale Packet: ${context.horse.name}`,
       sections: [
@@ -214,11 +219,13 @@ export default async function handler(req, res) {
         {
           heading: 'Presented By',
           // Neutral when the workspace never set a business/ranch name: a
-          // buyer-facing packet must not fall back to naming the platform.
+          // buyer-facing packet must not fall back to naming the platform —
+          // and quick-start placeholders (My Ranch LLC, Main Ranch) are not
+          // the seller's identity.
           lines: [
             [
-              context.workspace.businessName || context.workspace.ranchName || 'A horse seller',
-              context.workspace.businessName && context.workspace.ranchName ? `(${context.workspace.ranchName})` : '',
+              identity.business || identity.ranch || 'A horse seller',
+              identity.business && identity.ranch ? `(${identity.ranch})` : '',
             ]
               .filter(Boolean)
               .join(' '),
@@ -317,9 +324,11 @@ export default async function handler(req, res) {
       // email, and the signature names the ranch with the support contact. No
       // phone or postal address is on file, so the signature carries neither —
       // invented contact details on a legal-adjacent document are worse than none.
-      const sellerDisplayName = context.workspace.businessName || context.workspace.ranchName || '';
-      const replyTo = context.workspace.operationsEmail || user?.email || '';
-      const senderName = context.workspace.businessName || 'A horse seller';
+      // Quick-start placeholders are filtered by sellerIdentity above: the
+      // email must not present an invented company/ranch/mailbox as the seller.
+      const sellerDisplayName = identity.business || identity.ranch;
+      const replyTo = identity.email || user?.email || '';
+      const senderName = identity.display || 'A horse seller';
       const esc = (value) =>
         String(value ?? '')
           .replace(/&/g, '&amp;')

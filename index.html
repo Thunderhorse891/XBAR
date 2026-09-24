@@ -28,22 +28,21 @@
     />
 
     <!--
-      Static social-unfurl fallback. The buyer profile route injects per-horse
-      OG tags at runtime (BuyerProfile.tsx), but link scrapers (Facebook,
-      iMessage, X) do not execute JavaScript, so a shared /profiles/* link —
-      redirected to /app/profiles/* and served this shell — unfurls with these
-      generic XBAR tags instead of an empty card. Per-horse tags cannot be
-      server-rendered: profiles are dynamic, token-gated, and resolved by an
-      authenticated RPC at runtime. Mirrors the marketing renderer's asset and
-      origin conventions (scripts/marketing/render.mjs).
+      Static social-unfurl fallback. This shell is rewritten for every
+      /app/* route (login, reports, verify, profiles) and link scrapers
+      (Facebook, iMessage, X) do not execute JavaScript, so the tags here
+      must stay route-neutral: a shared /app/login link unfurling as a
+      "horse sale profile" would be a false card. The buyer profile route
+      injects per-horse OG tags at runtime (BuyerProfile.tsx) for
+      JavaScript-capable readers; per-horse tags cannot be server-rendered
+      because profiles are dynamic, token-gated, and resolved by an
+      authenticated RPC at runtime. Mirrors the marketing renderer's asset
+      and origin conventions (scripts/marketing/render.mjs).
     -->
     <meta property="og:type" content="website" />
     <meta property="og:site_name" content="XBAR" />
-    <meta property="og:title" content="XBAR — Horse sale profile" />
-    <meta
-      property="og:description"
-      content="A horse sale profile on XBAR. Open the link to view the sale profile, approved documents, and photos."
-    />
+    <meta property="og:title" content="XBAR" />
+    <meta property="og:description" content="XBAR — one record per horse." />
     <meta property="og:image" content="https://xbar-horse-management-app.vercel.app/brand/og-card.jpg" />
     <meta property="og:image:type" content="image/jpeg" />
     <meta property="og:image:width" content="1200" />
@@ -51,11 +50,8 @@
     <meta property="og:image:alt" content="XBAR — one record per horse" />
     <meta property="og:locale" content="en_US" />
     <meta name="twitter:card" content="summary_large_image" />
-    <meta name="twitter:title" content="XBAR — Horse sale profile" />
-    <meta
-      name="twitter:description"
-      content="A horse sale profile on XBAR. Open the link to view the sale profile, approved documents, and photos."
-    />
+    <meta name="twitter:title" content="XBAR" />
+    <meta name="twitter:description" content="XBAR — one record per horse." />
     <meta name="twitter:image" content="https://xbar-horse-management-app.vercel.app/brand/og-card.jpg" />
     <meta name="twitter:image:alt" content="XBAR — one record per horse" />
 

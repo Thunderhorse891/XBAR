@@ -77,8 +77,12 @@ test('no dead seller-contact block promises contact it cannot render', () => {
   assert.match(buyerProfile, /The inquiry panel below is the contact path/, 'the contact path must be stated');
 });
 
-test('the app shell carries static social-unfurl fallback tags', () => {
-  assert.match(indexHtml, /<meta property="og:title" content="XBAR — Horse sale profile" \/>/);
+test('the app shell carries route-neutral social-unfurl fallback tags', () => {
+  // This shell is served for every /app/* route and scrapers do not run
+  // JavaScript, so the tags must not promise a horse sale profile on the
+  // login, reports or verify routes.
+  assert.match(indexHtml, /<meta property="og:title" content="XBAR" \/>/);
+  assert.doesNotMatch(indexHtml, /Horse sale profile/, 'no route-specific card copy in the shell');
   assert.match(indexHtml, /<meta property="og:image" content="[^"]+\/brand\/og-card\.jpg" \/>/);
   assert.match(indexHtml, /<meta name="twitter:card" content="summary_large_image" \/>/);
 });

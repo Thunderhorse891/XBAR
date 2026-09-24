@@ -40,6 +40,7 @@ test('cost CSV carries the headline figures and one row per horse', () => {
 
   assert.ok(lines.includes('"XBAR Cost Per Horse"'));
   assert.ok(lines.includes('"Cost per horse per day","10"'), 'headline per-horse-per-day figure');
+  assert.ok(lines.includes('"Receipts in window (total)","1800"'), 'the total the monthly burn is computed from');
   assert.ok(lines.includes('"Monthly burn","610"'));
   assert.ok(
     lines.includes('"Horse","Tagged to horse ($)","Ranch-wide share ($)","Per day ($)"'),
