@@ -1177,6 +1177,16 @@ const CVI_EXPIRY_CORPUS: Array<[string, string, string]> = [
     '2026-05-31',
   ],
   [
+    '"this certificate" under a vaccine certificate heading, as reviewed',
+    'Certificate of Veterinary Inspection\nRabies Vaccination Certificate\nThis certificate is valid through 05/01/2027',
+    '2026-05-31',
+  ],
+  [
+    'the same line without "This"',
+    'Certificate of Veterinary Inspection\nRabies Vaccination Certificate\ncertificate is valid through 05/01/2027',
+    '2026-05-31',
+  ],
+  [
     'certificate-prefixed field in a vaccine section',
     'Health certificate\nRabies Vaccination\nCertificate Expiration Date: 05/01/2027',
     '2026-05-31',
@@ -1308,6 +1318,19 @@ const UNPLACED_IDENTITY_CORPUS: Array<[string, string, string, string | null]> =
     null,
   ],
   [
+    'CVI requirements over a travel body, as reviewed',
+    'CVI Requirements.pdf',
+    'Travel requirements\nExpiration Date: 07/15/2026',
+    null,
+  ],
+  [
+    'CVI instructions over a travel body, as reviewed',
+    'CVI Instructions.pdf',
+    'Travel requirements\nExpiration Date: 07/15/2026',
+    null,
+  ],
+  ['a genuine CVI title beside them', 'CVI 2026.pdf', 'Certificate of Veterinary Inspection', 'Health certificate'],
+  [
     'a registration paper',
     'AQHA Registration',
     'American Quarter Horse Association  Certificate of Registration',
@@ -1316,10 +1339,13 @@ const UNPLACED_IDENTITY_CORPUS: Array<[string, string, string, string | null]> =
 ];
 
 test('the unplaced-paper identity corpus: a paper is what its name or heading says, never what it mentions', () => {
-  const failures = UNPLACED_IDENTITY_CORPUS.flatMap(([name, title, text, expected]) => {
-    const actual = expiryKindOf({ type: 'Registration', title, extractedTextPreview: text });
-    return actual === expected ? [] : [`${name}: expected ${expected}, got ${actual}`];
-  });
+  // Both intake fallbacks: Registration (local, by filename) and Ownership Memo (the server's).
+  const failures = (['Registration', 'Ownership Memo'] as const).flatMap((type) =>
+    UNPLACED_IDENTITY_CORPUS.flatMap(([name, title, text, expected]) => {
+      const actual = expiryKindOf({ type, title, extractedTextPreview: text });
+      return actual === expected ? [] : [`${type} — ${name}: expected ${expected}, got ${actual}`];
+    }),
+  );
   assert.deepEqual(failures, [], `${failures.length} of ${UNPLACED_IDENTITY_CORPUS.length} rows wrong`);
 });
 
