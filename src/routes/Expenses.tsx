@@ -40,7 +40,6 @@ export default function Expenses() {
   const [categoryFilter, setCategoryFilter] = useState<ExpenseFilter>('All');
   const [receiptFile, setReceiptFile] = useState<File | null>(null);
   const [savingReceipt, setSavingReceipt] = useState(false);
-  const [intakeOpen, setIntakeOpen] = useState(false);
   const [openingReceiptId, setOpeningReceiptId] = useState('');
   const profitPortfolio = useMemo(
     () => buildProfitPortfolio(horses, expenseReceipts, salesLeads),
@@ -51,6 +50,13 @@ export default function Expenses() {
   // accident. Falls back to the first horse when the param is missing/unknown.
   const [searchParams] = useSearchParams();
   const requestedHorseId = searchParams.get('horse');
+  // Deep link: /expenses?log=Wormer&horse=<id> opens the receipt form ready to
+  // log that care for that horse — how a sale-readiness care gap is closed,
+  // since the care board reads horse-tagged Wormer and Dental Float receipts.
+  const requestedLog = searchParams.get('log');
+  const logCategory = EXPENSE_CATEGORIES.find((category) => category === requestedLog);
+  const logHorseId = requestedHorseId && horses.some((horse) => horse.id === requestedHorseId) ? requestedHorseId : '';
+  const [intakeOpen, setIntakeOpen] = useState(Boolean(logCategory));
   const [profitHorseId, setProfitHorseId] = useState(
     (requestedHorseId && horses.some((horse) => horse.id === requestedHorseId) ? requestedHorseId : horses[0]?.id) ??
       '',
@@ -62,9 +68,9 @@ export default function Expenses() {
   const profitGate = profitIntelligenceGate(subscription);
   const firstFieldRef = useRef<HTMLSelectElement | null>(null);
   const [draft, setDraft] = useState({
-    horseId: '',
+    horseId: logCategory ? logHorseId : '',
     title: '',
-    category: 'Feed' as ExpenseCategory,
+    category: logCategory ?? ('Feed' as ExpenseCategory),
     vendor: '',
     amount: '',
     receiptDate: localIsoDate(),

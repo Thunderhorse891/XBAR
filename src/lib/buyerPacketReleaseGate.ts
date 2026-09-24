@@ -13,6 +13,9 @@ export type BuyerPacketReleaseGate = {
   nextAction: string;
 };
 
+export const PRIVATE_LISTING_BLOCKER =
+  'Listing: Not listed for sale — set an asking price before releasing a buyer packet.';
+
 const CORE_RELEASE_SLOT_KEYS = new Set(['aqha-papers', 'transfer-papers', 'coggins', 'health-cert']);
 
 export function buildBuyerPacketReleaseGate(params: {
@@ -47,6 +50,12 @@ export function buildBuyerPacketReleaseGate(params: {
 
   if (packet.score < 84) {
     blockers.push(`Buyer packet score is ${packet.score}; release requires 84 or higher.`);
+  }
+
+  // A horse that is not listed for sale is never released. Say so, rather than
+  // blocking with no blocker and a next action of "Release buyer packet."
+  if (packet.buyerProfileStatus === 'Private') {
+    blockers.push(PRIVATE_LISTING_BLOCKER);
   }
 
   const uniqueBlockers = [...new Set(blockers)];

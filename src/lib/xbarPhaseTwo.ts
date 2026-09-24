@@ -88,7 +88,22 @@ export type PacketCompleteness = {
   saleSlots: SalePacketSlot[];
 };
 
-function scoreTone(score: number): Tone {
+/**
+ * The horse is on the market: an asking price, a listing state buyers can
+ * see, or buyers already watching or asking. What the buyer profile and the
+ * release gate read as a listing, and what the profile header reads as "for sale".
+ */
+export function hasActiveListing(horse: Pick<HorseRecord, 'sale'>): boolean {
+  return (
+    horse.sale.askPrice > 0 ||
+    horse.sale.listingState === 'Buyer Review' ||
+    horse.sale.listingState === 'Market Ready' ||
+    horse.sale.watchlistCount > 0 ||
+    horse.sale.inquiryCount > 0
+  );
+}
+
+export function scoreTone(score: number): Tone {
   if (score >= 85) return 'emerald';
   if (score >= 70) return 'blue';
   if (score >= 55) return 'amber';
@@ -226,12 +241,7 @@ export function buildHorsePacketCompleteness(
       alert.severity === 'high' &&
       (alert.module === 'Ownership' || alert.module === 'Medical' || alert.module === 'Documents'),
   );
-  const activeListing =
-    horse.sale.askPrice > 0 ||
-    horse.sale.listingState === 'Buyer Review' ||
-    horse.sale.listingState === 'Market Ready' ||
-    horse.sale.watchlistCount > 0 ||
-    horse.sale.inquiryCount > 0;
+  const activeListing = hasActiveListing(horse);
 
   const cogginsDocs = collectDocuments(documents, ['Coggins']);
   const vetDocs = collectDocuments(documents, ['Vet Record']);

@@ -8,6 +8,8 @@ import { useUiStore } from '@/store/useUiStore';
 import { openStoredFileInTab } from '@/lib/openStoredFile';
 import type { DocumentType, SalePacketBuild } from '@/types/xbar';
 import { isNavigableFileUrl } from '@/lib/navigableFileUrl';
+import { buildSaleReadinessScore } from '@/lib/saleReadinessScore';
+import { buildBuyerPacketReleaseGate } from '@/lib/buyerPacketReleaseGate';
 
 const REQUIRED = [
   { id: 'coggins', label: 'Coggins (negative)' },
@@ -39,6 +41,8 @@ export default function SalePacketStudio() {
   const horses = useXbarStore((s) => s.horses);
   const documents = useXbarStore((s) => s.documents);
   const salePacketBuilds = useXbarStore((s) => s.salePacketBuilds);
+  const expenseReceipts = useXbarStore((s) => s.expenseReceipts);
+  const ownershipRecords = useXbarStore((s) => s.ownershipRecords);
   // ?horse= lets Buyer Follow-up (and horse records) open the builder with
   // that horse preselected so the packet flow keeps its buyer context.
   const requestedHorseId = params.get('horse');
@@ -63,7 +67,22 @@ export default function SalePacketStudio() {
         const readyDocs = documents.filter((d) => d.horseId === horse.id && d.state === 'Ready');
         const presentSlots = new Set(readyDocs.map((d) => DOC_TYPE_TO_REQ[d.type]).filter(Boolean));
         const missing = REQUIRED.filter((slot) => !presentSlots.has(slot.id));
-        const blockers = horse.readiness?.blockers ?? [];
+        // The computed sale readiness score decides "blocked", the same answer
+        // the horse profile gives. The stored `readiness.blockers` are set when a
+        // horse is created and never cleared, so every horse read as blocked.
+        const ownershipRecord = ownershipRecords.find((record) => record.horseId === horse.id);
+        const score = buildSaleReadinessScore({
+          horse,
+          documents,
+          receipts: expenseReceipts,
+          ownershipRecord,
+          releaseGate: buildBuyerPacketReleaseGate({
+            horse,
+            documents: documents.filter((document) => document.horseId === horse.id),
+            ownershipRecord,
+          }),
+        });
+        const blockers = score.proofPacketBlocker ? [score.proofPacketBlocker] : [];
         const state: 'Ready' | 'Needs Review' | 'Blocked' = blockers.length
           ? 'Blocked'
           : missing.length
@@ -71,7 +90,7 @@ export default function SalePacketStudio() {
             : 'Ready';
         return { horse, readyDocs, missing, blockers, state };
       }),
-    [horses, documents],
+    [horses, documents, expenseReceipts, ownershipRecords],
   );
 
   const readyCount = readiness.filter((r) => r.state === 'Ready').length;

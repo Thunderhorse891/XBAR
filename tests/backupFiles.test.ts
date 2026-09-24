@@ -1384,8 +1384,9 @@ test('a record that installs but crashes the route it lands on is refused', asyn
     'location.pasture',
     'location.stall',
     'sale.listingState',
-    // `{animal.readiness?.packetStatus ?? 'Review'}` — AnimalProfile.tsx:670.
-    // `??` catches absence, never type.
+    // Printed into buyer-facing HTML — publicBuyerPacket.ts `row('Packet
+    // status', …)` and documentTemplateLibrary.ts `fieldRow` — through
+    // String(), so an object reaches the buyer as "[object Object]".
     'readiness.packetStatus',
   ]) {
     assert.match(shapeTable, new RegExp(`'${nested.replace('.', '\\.')}'`), `${nested} is read without a type check`);
@@ -1453,10 +1454,13 @@ test('a record that installs but crashes the route it lands on is refused', asyn
       /\{horse\.aqhaNumber \|\| horse\.registrationNumber \|\| 'Pending'\}/,
       'a bare React child, not a template string',
     );
+    // The profile's `{animal.readiness?.packetStatus ?? 'Review'}` row was
+    // replaced by the computed sale readiness card, so the reads that keep
+    // `readiness.packetStatus` required are the buyer-packet renders.
     assert.match(
-      await readFile('src/routes/AnimalProfile.tsx', 'utf8'),
-      /\{animal\.readiness\?\.packetStatus \?\? 'Review'\}/,
-      'the one read of packetStatus that is neither a comparison nor a template string',
+      await readFile('src/lib/publicBuyerPacket.ts', 'utf8'),
+      /row\('Packet status', params\.horse\.readiness\.packetStatus\)/,
+      'printed into the buyer packet through String()',
     );
   }
 
@@ -1816,10 +1820,14 @@ test('a record that installs but crashes the route it lands on is refused', asyn
    * is already stored, which is the same too-late ordering as the rest of these.
    */
   /*
-   * The ENTRIES, not just the container. `{animal.readiness?.blockers?.[0] ??
-   * …}` at AnimalProfile.tsx:353 indexes safely and then renders whatever it
-   * found; `??` does not catch an object. `stringItems` asserts the array as
-   * well as its contents, so it is not repeated under `lists`.
+   * The ENTRIES, not just the container. The profile used to render
+   * `{animal.readiness?.blockers?.[0] ?? …}`, where `??` does not catch an
+   * object. That suggestion now comes from the computed sale readiness score
+   * (the stored blockers are seeded at creation and never cleared), so no
+   * route renders an entry today; the guard is kept so a restored archive
+   * cannot put a non-string back into a field every writer treats as text.
+   * `stringItems` asserts the array as well as its contents, so it is not
+   * repeated under `lists`.
    */
   assert.match(shapeTable, /stringItems: \['readiness\.blockers'\]/);
 
@@ -2209,7 +2217,6 @@ test('a record that installs but crashes the route it lands on is refused', asyn
     ['src/routes/Ownership.tsx', /<strong>\{requirement\.label\}<\/strong>/],
     ['src/routes/SharedAccess.tsx', /\{sharedListing\?\.state \?\? horse\.sale\.listingState\}/],
     ['src/routes/SharedAccess.tsx', /\{sharedListing\?\.accessMode \?\? 'Private Token'\}/],
-    ['src/routes/AnimalProfile.tsx', /\{animal\.readiness\?\.blockers\?\.\[0\] \?\?/],
     ['src/routes/Ownership.tsx', /<span>\{formatDateTimeLabel\(event\.at\)\}<\/span>/],
     ['src/routes/Ownership.tsx', /<strong>\{event\.actor\}<\/strong>/],
     ['src/routes/AnimalProfile.tsx', /\{o\.role\} · \{o\.share\}%/],
