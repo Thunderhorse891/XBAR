@@ -820,11 +820,15 @@ export function canRestorePersistedState(raw: unknown): boolean {
          *                 template-literal site at AnimalProfile.tsx:323 and
          *                 stopped there.
          *   readiness.packetStatus
-         *                 `{animal.readiness?.packetStatus ?? 'Review'}` —
-         *                 AnimalProfile.tsx:670, inside a StatusChip. Excluded
-         *                 as "every read is a comparison or a template string",
-         *                 which describes Breeding.tsx:100 and Sales.tsx:61 and
-         *                 not this one.
+         *                 Printed into the buyer packet — publicBuyerPacket.ts
+         *                 `row('Packet status', …)` and the document template
+         *                 `fieldRow` — through String(), so an object reaches a
+         *                 buyer as "[object Object]". (The profile used to
+         *                 render it as a bare React child; that row now comes
+         *                 from the computed sale readiness score.) Excluded
+         *                 once as "every read is a comparison or a template
+         *                 string", which describes Breeding.tsx:100 and
+         *                 Sales.tsx:61 and not these.
          *
          * Deliberately absent, and this time checked by looking for what
          * actually breaks — a value reaching JSX as a bare child — rather than
@@ -885,7 +889,7 @@ export function canRestorePersistedState(raw: unknown): boolean {
         'location.stall',
         // `{horse.sale.listingState}` — Sales.tsx:380, SharedAccess.tsx:269.
         'sale.listingState',
-        // `{animal.readiness?.packetStatus ?? 'Review'}` — AnimalProfile.tsx:670.
+        // Printed into the buyer packet through String() — publicBuyerPacket.ts.
         'readiness.packetStatus',
       ],
       /*

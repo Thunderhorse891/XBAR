@@ -416,4 +416,8 @@ test('the profile header says "for sale" from the listing, not the stored score'
   const profile = await readFile('src/routes/AnimalProfile.tsx', 'utf8');
   assert.match(profile, /const forSale =[^;]*hasActiveListing\(animal\)/);
   assert.doesNotMatch(profile, /animal\.readiness\?\.score/, 'the stored score decides nothing on this page');
+  // Nor the stored packet status: it is seeded at creation and not kept in
+  // step, so a row reading it could say "Needs Transfer Docs" beside a card
+  // saying the packet is ready.
+  assert.doesNotMatch(profile, /readiness\?\.packetStatus/, 'packet status comes from the computed score');
 });

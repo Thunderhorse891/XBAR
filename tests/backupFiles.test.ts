@@ -1384,8 +1384,9 @@ test('a record that installs but crashes the route it lands on is refused', asyn
     'location.pasture',
     'location.stall',
     'sale.listingState',
-    // `{animal.readiness?.packetStatus ?? 'Review'}` — AnimalProfile.tsx:670.
-    // `??` catches absence, never type.
+    // Printed into buyer-facing HTML — publicBuyerPacket.ts `row('Packet
+    // status', …)` and documentTemplateLibrary.ts `fieldRow` — through
+    // String(), so an object reaches the buyer as "[object Object]".
     'readiness.packetStatus',
   ]) {
     assert.match(shapeTable, new RegExp(`'${nested.replace('.', '\\.')}'`), `${nested} is read without a type check`);
@@ -1453,10 +1454,13 @@ test('a record that installs but crashes the route it lands on is refused', asyn
       /\{horse\.aqhaNumber \|\| horse\.registrationNumber \|\| 'Pending'\}/,
       'a bare React child, not a template string',
     );
+    // The profile's `{animal.readiness?.packetStatus ?? 'Review'}` row was
+    // replaced by the computed sale readiness card, so the reads that keep
+    // `readiness.packetStatus` required are the buyer-packet renders.
     assert.match(
-      await readFile('src/routes/AnimalProfile.tsx', 'utf8'),
-      /\{animal\.readiness\?\.packetStatus \?\? 'Review'\}/,
-      'the one read of packetStatus that is neither a comparison nor a template string',
+      await readFile('src/lib/publicBuyerPacket.ts', 'utf8'),
+      /row\('Packet status', params\.horse\.readiness\.packetStatus\)/,
+      'printed into the buyer packet through String()',
     );
   }
 

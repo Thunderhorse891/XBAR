@@ -695,16 +695,6 @@ export default function AnimalProfile() {
             onAddPhoto={canUploadMedia ? () => photoInputRef.current?.click() : undefined}
             detailed
           />
-          <Card>
-            <div className="xs-mrow">
-              <span className="xs-mrow__main">
-                <span className="xs-mrow__title">Packet status</span>
-              </span>
-              <StatusChip tone={animal.readiness?.packetStatus === 'Ready' ? 'success' : 'warning'}>
-                {animal.readiness?.packetStatus ?? 'Review'}
-              </StatusChip>
-            </div>
-          </Card>
         </>
       ) : null}
 
