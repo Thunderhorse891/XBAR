@@ -66,9 +66,10 @@ export type ExpiryRadar = {
   /** Papers good for more than 90 days. They still count as on file. */
   current: DocumentExpiryItem[];
   /**
-   * Current papers nobody has approved yet — usually this year's renewal
-   * waiting beside last year's expired one. Listed, so the renewal the
-   * expired row points to can be seen; they need review, not renewal.
+   * Current papers nobody has approved yet, linked to a horse — usually this
+   * year's renewal waiting beside last year's expired one. Listed, so the
+   * renewal the expired row points to can be seen; they need review, not
+   * renewal.
    */
   inReview: DocumentExpiryItem[];
   /** Current papers that are reviewed, and so not listed. */
@@ -315,7 +316,9 @@ export function buildExpiryRadar(
   const under30 = items.filter((item) => item.urgency === 'under30').sort(byDays);
   const under90 = items.filter((item) => item.urgency === 'under90').sort(byDays);
   const current = items.filter((item) => item.urgency === 'current').sort(byDays);
-  const inReview = current.filter((item) => !item.reviewed);
+  // Approval needs a horse (reviewDocument refuses one without), so only a
+  // paper linked to a horse can leave this group by being approved.
+  const inReview = current.filter((item) => !item.reviewed && item.horseId);
   const undated = items
     .filter((item) => item.urgency === 'undated')
     .sort((left, right) => left.title.localeCompare(right.title));
@@ -413,8 +416,10 @@ export function describeExpiryRisk(
 /**
  * How many radar papers the notification bell adds.
  *
- * Everything expired or under 30 days, less a Coggins the care count already
- * holds: one whose own care signal is due (an expired Coggins is). A Coggins
+ * Everything expired or under 30 days, less what the bell already counts: a
+ * paper still in review (the review count holds every Needs Review and
+ * Matched document), and a Coggins the care count holds — one whose own care
+ * signal is due (an expired Coggins is). A Coggins
  * that is only running low is a care watch, which the care count never
  * includes — even when the same horse is on it for a due wormer — so the
  * radar counts it.
@@ -429,7 +434,9 @@ export function expiryBellCount(
       .map((row) => row.horseId),
   );
   return [...radar.expired, ...radar.under30].filter(
-    (item) => !(item.kind === 'Coggins' && item.horseId && dueCoggins.has(item.horseId)),
+    (item) =>
+      // A paper still in review is already in the bell's review count.
+      item.reviewed && !(item.kind === 'Coggins' && item.horseId && dueCoggins.has(item.horseId)),
   ).length;
 }
 
@@ -456,4 +463,18 @@ export function expiryReminderItems(radar: ExpiryRadar): ReminderItem[] {
       detail: item.basis,
       route: '/expiring',
     }));
+}
+
+export type ExpiryRowAction = 'review-renewal' | 'review' | 'open-documents' | 'upload-renewal';
+
+/**
+ * What a radar row offers. A paper still in review has unconfirmed dates, so
+ * it is reviewed before anyone uploads a duplicate — when it can be: approval
+ * needs a horse, so a ranch-wide paper goes by its date instead.
+ */
+export function expiryRowAction(item: DocumentExpiryItem): ExpiryRowAction {
+  if (item.renewalInReview) return 'review-renewal';
+  if (!item.reviewed && item.horseId) return 'review';
+  if (item.urgency === 'undated') return 'open-documents';
+  return 'upload-renewal';
 }

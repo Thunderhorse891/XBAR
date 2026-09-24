@@ -7,6 +7,7 @@ import {
   type ExpiryUrgency,
   buildExpiryRadar,
   describeExpiryRisk,
+  expiryRowAction,
 } from '@/lib/documentExpiry';
 import { formatDateLabel } from '@/lib/format';
 import type { ChipTone } from '@/types/saas';
@@ -177,6 +178,7 @@ export default function ExpiringSoon() {
             <div className="xs-mlist">
               {group.items.map((item) => {
                 const chip = URGENCY_CHIP[item.urgency];
+                const action = expiryRowAction(item);
                 return (
                   <div key={item.documentId} className="xs-mrow">
                     <div className="xs-mrow__main">
@@ -205,15 +207,15 @@ export default function ExpiringSoon() {
                         </div>
                       ) : null}
                     </div>
-                    {item.renewalInReview ? (
+                    {action === 'review-renewal' ? (
                       <ActionButton size="sm" variant="primary" onClick={() => navigate('/documents')}>
                         Review renewal
                       </ActionButton>
-                    ) : item.urgency === 'current' ? (
+                    ) : action === 'review' ? (
                       <ActionButton size="sm" onClick={() => navigate('/documents')}>
                         Review in Documents
                       </ActionButton>
-                    ) : item.urgency === 'undated' ? (
+                    ) : action === 'open-documents' ? (
                       <ActionButton size="sm" onClick={() => navigate('/documents')}>
                         Open documents
                       </ActionButton>

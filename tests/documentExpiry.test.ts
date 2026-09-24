@@ -1,10 +1,12 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
+import { readFile } from 'node:fs/promises';
 import {
   HEALTH_CERTIFICATE_DAYS,
   buildExpiryRadar,
   describeExpiryRisk,
   expiryBellCount,
+  expiryRowAction,
   expiryKindOf,
   expiryReminderItems,
   findPrintedExpiryDate,
@@ -481,4 +483,69 @@ test('the bell counts each attention paper once, including a Coggins that is onl
     expiryBellCount(radar, [row('h1', ['coggins', 'due']), row('h2', ['wormer', 'due'], ['coggins', 'watch'])]),
     2,
   );
+});
+
+test('a paper still in review is counted once in the bell, by the review count', () => {
+  const pending = doc({
+    type: 'Insurance',
+    horseId: 'h1',
+    state: 'Needs Review',
+    extractedTextPreview: 'Expiration Date: 06/15/2026',
+  });
+  const confirmed = doc({ type: 'Insurance', horseId: 'h2', extractedTextPreview: 'Expiration Date: 06/15/2026' });
+  const radar = buildExpiryRadar([pending, confirmed], horses, NOW);
+
+  assert.equal(radar.expired.length, 2, 'both are listed on the page');
+  assert.equal(expiryBellCount(radar, []), 1, 'the pending one is already in the bell as a document to review');
+});
+
+test('only a paper that can be approved waits in review, and each row offers what can actually be done', async () => {
+  const ranchWide = doc({
+    type: 'Insurance',
+    state: 'Needs Review',
+    extractedTextPreview: 'Expiration Date: 03/01/2027',
+  });
+  const linked = doc({
+    type: 'Insurance',
+    horseId: 'h1',
+    state: 'Matched',
+    extractedTextPreview: 'Expiration Date: 03/01/2027',
+  });
+  const radar = buildExpiryRadar([ranchWide, linked], horses, NOW);
+  // Approval needs a horse; a ranch-wide paper here could never leave the group.
+  assert.deepEqual(
+    radar.inReview.map((item) => item.documentId),
+    [linked.id],
+  );
+
+  const row = (fields: Partial<DocumentRecord> & Pick<DocumentRecord, 'type'>) =>
+    buildExpiryRadar([doc(fields)], horses, NOW).items[0]!;
+  const expiredText = 'Expiration Date: 06/15/2026';
+  assert.equal(
+    expiryRowAction(
+      row({ type: 'Insurance', horseId: 'h1', state: 'Needs Review', extractedTextPreview: expiredText }),
+    ),
+    'review',
+    'its date is unconfirmed: review it before uploading a duplicate',
+  );
+  assert.equal(
+    expiryRowAction(row({ type: 'Insurance', state: 'Needs Review', extractedTextPreview: expiredText })),
+    'upload-renewal',
+    'a ranch-wide paper cannot be approved, so it goes by its date',
+  );
+  assert.equal(
+    expiryRowAction(row({ type: 'Insurance', horseId: 'h1', extractedTextPreview: expiredText })),
+    'upload-renewal',
+  );
+  assert.equal(expiryRowAction(row({ type: 'Insurance', horseId: 'h1' })), 'open-documents');
+
+  const renewal = buildExpiryRadar(
+    [coggins('h1', '2025-05-01'), coggins('h1', '2026-06-01', { state: 'Needs Review' })],
+    horses,
+    NOW,
+  );
+  assert.equal(expiryRowAction(renewal.expired[0]!), 'review-renewal');
+
+  const page = await readFile('src/routes/ExpiringSoon.tsx', 'utf8');
+  assert.match(page, /const action = expiryRowAction\(item\);/);
 });
