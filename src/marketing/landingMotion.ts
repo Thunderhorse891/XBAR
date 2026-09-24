@@ -1,12 +1,14 @@
 // Progressive enhancement for the static homepage only. No React/app runtime,
 // session, account, or workspace code is imported into this entry point.
 import { animate } from 'framer-motion/dom';
+import { animate as animateElements } from 'framer-motion/dom/mini';
 
 const page = document.body;
 const toggle = document.querySelector<HTMLButtonElement>('.landing-motion-toggle');
 const reduced = window.matchMedia('(prefers-reduced-motion: reduce)');
 const finePointer = window.matchMedia('(hover: hover) and (pointer: fine) and (min-width: 1024px)');
 const saveData = (navigator as Navigator & { connection?: { saveData?: boolean } }).connection?.saveData === true;
+const supportsAnimation = typeof Element.prototype.animate === 'function';
 let paused = saveData;
 let firstEntrance = true;
 let cleanup: (() => void) | undefined;
@@ -22,7 +24,7 @@ function startMotion() {
 
   function reveal(el: HTMLElement, delay = 0) {
     animated.add(el);
-    const entrance = animate(
+    const entrance = animateElements(
       el,
       { opacity: [0, 1], transform: ['translateY(14px)', 'translateY(0)'] },
       {
@@ -39,7 +41,11 @@ function startMotion() {
     if (sweep) {
       animated.add(sweep);
       controls.push(
-        animate(sweep, { opacity: [0, 0.8, 0], transform: ['translateX(-60%)', 'translateX(65%)'] }, { duration: 1.2 }),
+        animateElements(
+          sweep,
+          { opacity: [0, 0.8, 0], transform: ['translateX(-60%)', 'translateX(65%)'] },
+          { duration: 1.2 },
+        ),
       );
     }
     document.querySelectorAll<HTMLElement>('[data-hero-reveal]').forEach((el, i) => reveal(el, 0.25 + i * 0.09));
@@ -161,10 +167,10 @@ function startMotion() {
 function syncMotion() {
   cleanup?.();
   cleanup = undefined;
-  const off = reduced.matches || paused || document.hidden;
+  const off = reduced.matches || paused || document.hidden || !supportsAnimation;
   page.dataset.landingMotion = off ? 'off' : 'running';
   if (toggle) {
-    toggle.hidden = false;
+    toggle.hidden = !supportsAnimation;
     toggle.disabled = reduced.matches;
     toggle.textContent = reduced.matches ? 'Reduced motion on' : paused ? 'Play motion' : 'Pause motion';
     toggle.setAttribute('aria-pressed', String(paused || reduced.matches));
@@ -177,8 +183,11 @@ if (page.classList.contains('landing-page')) {
     paused = !paused;
     syncMotion();
   });
-  reduced.addEventListener('change', syncMotion);
-  finePointer.addEventListener('change', syncMotion);
+  for (const query of [reduced, finePointer]) {
+    if (typeof query.addEventListener === 'function') query.addEventListener('change', syncMotion);
+    // Safari 13 exposes MediaQueryList's legacy listener API.
+    else query.addListener(syncMotion);
+  }
   document.addEventListener('visibilitychange', syncMotion);
   window.addEventListener('pagehide', () => {
     cleanup?.();

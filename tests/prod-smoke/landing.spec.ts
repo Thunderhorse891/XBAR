@@ -141,3 +141,45 @@ test('homepage motion executes under the production content security policy', as
   await expect(page.getByRole('heading', { name: 'The whole story. Right where you need it.' })).toBeVisible();
   expect(errors).toEqual([]);
 });
+
+test('legacy media-query listeners can initialize and react to reduced motion', async ({ page }) => {
+  const errors: string[] = [];
+  page.on('pageerror', (error) => errors.push(error.message));
+  await page.addInitScript(() => {
+    const matchMedia = window.matchMedia.bind(window);
+    window.matchMedia = (query) => {
+      const original = matchMedia(query);
+      return {
+        get matches() {
+          return original.matches;
+        },
+        media: original.media,
+        onchange: null,
+        addListener: original.addListener.bind(original),
+        removeListener: original.removeListener.bind(original),
+        dispatchEvent: original.dispatchEvent.bind(original),
+      } as MediaQueryList;
+    };
+  });
+  await page.goto('/');
+  await expect(page.getByRole('button', { name: 'Pause motion' })).toBeVisible();
+  await page.emulateMedia({ reducedMotion: 'reduce' });
+  await expect(page.getByRole('button', { name: 'Reduced motion on' })).toBeDisabled();
+  expect(await page.evaluate(() => document.getAnimations().filter((a) => a.playState === 'running').length)).toBe(0);
+  expect(errors).toEqual([]);
+});
+
+test('a browser without native animation support keeps the complete static page', async ({ page }) => {
+  const errors: string[] = [];
+  page.on('pageerror', (error) => errors.push(error.message));
+  await page.addInitScript(() => {
+    Object.defineProperty(Element.prototype, 'animate', { value: undefined });
+  });
+  await page.goto('/');
+  await expect(page.locator('body')).toHaveAttribute('data-landing-motion', 'off');
+  await expect(page.getByRole('heading', { name: headline })).toBeVisible();
+  await expect(page.locator('.landing-motion-toggle')).toBeHidden();
+  await page.getByRole('link', { name: 'Open a sample packet' }).click();
+  await expect(page).toHaveURL(/\/samples\/sample-sale-packet\.html$/);
+  expect(errors).toEqual([]);
+});
