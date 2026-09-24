@@ -48,6 +48,12 @@ export type DocumentExpiryItem = {
   basis: string;
   /** False while the document still waits in review — its dates are unconfirmed. */
   reviewed: boolean;
+  /**
+   * A newer paper of the same kind for the same horse is waiting in review.
+   * Set on a confirmed paper that is still listed because an unreviewed one
+   * cannot replace it until someone approves it.
+   */
+  renewalInReview?: boolean;
 };
 
 export type ExpiryRadar = {
@@ -259,21 +265,37 @@ export function buildExpiryRadar(
    * merging them let a current policy hide one that had lapsed. A renewed
    * policy is archived in Documents, which is what removes the old one here.
    *
+   * Only a REVIEWED paper replaces another. An upload still in review has
+   * unconfirmed dates, so it cannot hide a confirmed expiry: the confirmed
+   * paper stays listed (marked "renewal in review") and the pending one is
+   * listed beside it with its own "Not reviewed yet" flag. A pending paper
+   * older than the confirmed one is superseded like any other.
+   *
+   * A paper not yet assigned to a horse is its own group: which horse it
+   * renews is not known, so it cannot replace anything.
+   *
    * A paper with no usable date always stays listed: it needs a person to look
    * at it, and a dated renewal beside it says nothing about what it is.
    */
   const groups = new Map<string, DocumentExpiryItem[]>();
   for (const item of candidates) {
-    const renews = item.kind === 'Coggins' || item.kind === 'Health certificate';
-    const key = renews ? `${item.kind}:${item.horseId ?? 'ranch'}` : `doc:${item.documentId}`;
+    const renews = (item.kind === 'Coggins' || item.kind === 'Health certificate') && Boolean(item.horseId);
+    const key = renews ? `${item.kind}:${item.horseId}` : `doc:${item.documentId}`;
     groups.set(key, [...(groups.get(key) ?? []), item]);
   }
+  const byExpiry = (best: DocumentExpiryItem, item: DocumentExpiryItem) =>
+    (item.daysLeft ?? 0) > (best.daysLeft ?? 0) ? item : best;
   const items: DocumentExpiryItem[] = [];
   for (const group of groups.values()) {
-    const dated = group.filter((item) => item.daysLeft !== null);
-    if (dated.length) {
-      items.push(dated.reduce((best, item) => ((item.daysLeft ?? 0) > (best.daysLeft ?? 0) ? item : best)));
-    }
+    const confirmed = group.filter((item) => item.daysLeft !== null && item.reviewed);
+    const best = confirmed.length ? confirmed.reduce(byExpiry) : undefined;
+    const pending = group.filter(
+      (item) => item.daysLeft !== null && !item.reviewed && (!best || (item.daysLeft ?? 0) > (best.daysLeft ?? 0)),
+    );
+    if (best) items.push(pending.length ? { ...best, renewalInReview: true } : best);
+    // With nothing confirmed, the pending papers keep the ordinary renewal rule among themselves.
+    if (best) items.push(...pending);
+    else if (pending.length) items.push(pending.reduce(byExpiry));
     items.push(...group.filter((item) => item.daysLeft === null));
   }
 
@@ -362,6 +384,20 @@ export function describeExpiryRisk(
     );
   }
   return lines;
+}
+
+/**
+ * How many radar papers the notification bell adds.
+ *
+ * Everything expired or under 30 days, less a Coggins whose horse the bell
+ * already counts through a due care signal (an expired Coggins is one). A
+ * Coggins that is only running low is a care watch, which the care count
+ * never included, so the radar counts it.
+ */
+export function expiryBellCount(radar: ExpiryRadar, careDueHorseIds: ReadonlySet<string>): number {
+  return [...radar.expired, ...radar.under30].filter(
+    (item) => !(item.kind === 'Coggins' && item.horseId && careDueHorseIds.has(item.horseId)),
+  ).length;
 }
 
 /**

@@ -4,6 +4,7 @@ import {
   HEALTH_CERTIFICATE_DAYS,
   buildExpiryRadar,
   describeExpiryRisk,
+  expiryBellCount,
   expiryKindOf,
   expiryReminderItems,
   findPrintedExpiryDate,
@@ -351,4 +352,51 @@ test('a paper inside its 30-day window reaches the emailed digest, not just the 
 
   assert.equal(priorities.items[0]?.timing, 'This month');
   assert.ok(buildAlertDigest(priorities.items, NOW).alerts.some((alert) => alert.id === 'expiry-ins-20'));
+});
+
+test('an unreviewed renewal cannot hide a confirmed expiry, and both stay visible', () => {
+  const confirmedExpired = coggins('h1', '2025-05-01');
+  const pendingRenewal = coggins('h1', '2026-06-01', { state: 'Needs Review' });
+  const pendingOlder = coggins('h1', '2025-01-01', { state: 'Needs Review' });
+  const radar = buildExpiryRadar([confirmedExpired, pendingRenewal, pendingOlder], horses, NOW);
+
+  const expired = radar.expired.find((item) => item.documentId === confirmedExpired.id);
+  assert.ok(expired, 'the confirmed expired Coggins is still listed');
+  assert.equal(expired?.renewalInReview, true);
+  // The pending renewal runs to 2027, so it is kept and counted as current.
+  assert.equal(radar.currentCount, 1);
+  assert.ok(
+    !radar.items.some((item) => item.documentId === pendingOlder.id),
+    'a pending paper older than the confirmed one is superseded',
+  );
+
+  // Once approved, the renewal replaces it as before.
+  const approved = buildExpiryRadar([confirmedExpired, { ...pendingRenewal, state: 'Ready' }], horses, NOW);
+  assert.equal(approved.expired.length, 0);
+});
+
+test('papers not yet assigned to a horse cannot replace each other', () => {
+  const expiredLoose = coggins('', '2025-05-01', { horseId: undefined });
+  const currentLoose = coggins('', '2026-05-01', { horseId: undefined });
+  const radar = buildExpiryRadar([expiredLoose, currentLoose], horses, NOW);
+
+  assert.deepEqual(
+    radar.expired.map((item) => item.documentId),
+    [expiredLoose.id],
+  );
+});
+
+test('the bell counts each attention paper once, including a Coggins that is only running low', () => {
+  const radar = buildExpiryRadar(
+    [
+      coggins('h1', '2025-05-01'), // expired — h1 is also a due care row
+      coggins('h2', '2025-07-15'), // 15 days left — only a care watch
+      doc({ type: 'Insurance', horseId: 'h3', extractedTextPreview: 'Expiration Date: 06/15/2026' }),
+    ],
+    horses,
+    NOW,
+  );
+
+  assert.equal(expiryBellCount(radar, new Set(['h1'])), 2, 'h2’s Coggins and the policy');
+  assert.equal(expiryBellCount(radar, new Set()), 3);
 });

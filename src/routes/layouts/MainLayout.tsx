@@ -33,7 +33,7 @@ import { GlobalCreateDrawer, createActions } from '@/components/saas/flows';
 import { billingPath } from '@/lib/billingRoutes';
 import { buyerFollowUpPath } from '@/lib/buyerRoutes';
 import { buildCareBoardRows } from '@/lib/dashboardOps';
-import { buildExpiryRadar, expiryReminderItems } from '@/lib/documentExpiry';
+import { buildExpiryRadar, expiryBellCount } from '@/lib/documentExpiry';
 import { isSupabaseConfigured } from '@/lib/platformConfig';
 import { useCloudStore } from '@/store/useCloudStore';
 import { useUiStore } from '@/store/useUiStore';
@@ -131,17 +131,19 @@ export default function MainLayout() {
 
   const pendingReview = documents.filter((d) => d.state === 'Needs Review' || d.state === 'Matched').length;
   const pendingTransfers = ownershipRecords.filter((r) => r.transferStatus !== 'Clear').length;
-  const careDueCount = useMemo(() => {
+  // Horses with a due care signal — the care badge, and the set whose Coggins
+  // the bell already counts.
+  const careDueHorseIds = useMemo(() => {
     const board = buildCareBoardRows(horses, documents, expenseReceipts);
-    return board.filter((row) => row.signals.some((s) => s.status === 'due')).length;
+    return new Set(board.filter((row) => row.signals.some((s) => s.status === 'due')).map((row) => row.horseId));
   }, [horses, documents, expenseReceipts]);
+  const careDueCount = careDueHorseIds.size;
 
-  // The nav badge counts every paper expired or under 30 days. The bell counts
-  // what the Reminders queue lists — Coggins is already in careDueCount, so it
-  // does not ring twice for one Coggins.
+  // The nav badge counts every paper expired or under 30 days; the bell adds
+  // the ones it does not already count through careDueCount.
   const expiryRadar = useMemo(() => buildExpiryRadar(documents, horses), [documents, horses]);
   const expiringCount = expiryRadar.attentionCount;
-  const expiringNonCoggins = expiryReminderItems(expiryRadar).length;
+  const expiringForBell = expiryBellCount(expiryRadar, careDueHorseIds);
 
   const badges: Record<string, number> = {
     docs: pendingReview,
@@ -149,7 +151,7 @@ export default function MainLayout() {
     care: careDueCount,
     expiring: expiringCount,
   };
-  const notifications = pendingReview + pendingTransfers + careDueCount + expiringNonCoggins;
+  const notifications = pendingReview + pendingTransfers + careDueCount + expiringForBell;
 
   const ranchName = workspaceProfile.ranchName || workspaceProfile.businessName || 'Your ranch';
   const planTier = subscription?.tier || 'Starter';

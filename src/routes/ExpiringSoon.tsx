@@ -193,8 +193,17 @@ export default function ExpiringSoon() {
                         · {whenLabel(item)}
                       </div>
                       <div className="xs-mrow__detail">{item.basis}</div>
+                      {item.renewalInReview ? (
+                        <div className="xs-mrow__detail">
+                          A newer one is waiting in review — approve it in Documents to replace this.
+                        </div>
+                      ) : null}
                     </div>
-                    {item.urgency === 'undated' ? (
+                    {item.renewalInReview ? (
+                      <ActionButton size="sm" variant="primary" onClick={() => navigate('/documents')}>
+                        Review renewal
+                      </ActionButton>
+                    ) : item.urgency === 'undated' ? (
                       <ActionButton size="sm" onClick={() => navigate('/documents')}>
                         Open documents
                       </ActionButton>
