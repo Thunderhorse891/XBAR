@@ -255,6 +255,20 @@ export function validateExpenseReceiptInput(input: ExpenseReceiptInput) {
   );
 }
 
+/**
+ * A typed quantity as a number: undefined when blank, NaN when it is not a
+ * plain positive amount. Thousands separators are the only formatting
+ * accepted. Stripping everything that is not a digit turned "-5" into 5 and
+ * "1/2" into 12 — a different, valid-looking quantity that would then price
+ * every bale wrong.
+ */
+export function parseReceiptQuantity(text: string | undefined): number | undefined {
+  const trimmed = String(text ?? '').trim();
+  if (!trimmed) return undefined;
+  const plain = trimmed.replace(/(\d),(?=\d{3}\b)/g, '$1');
+  return /^(\d+(\.\d+)?|\.\d+)$/.test(plain) ? Number(plain) : Number.NaN;
+}
+
 /*
  * Quantity and unit are what turn a receipt into a price per unit. Half of the
  * pair is refused rather than dropped: saving "12" with no unit, or "bale" with

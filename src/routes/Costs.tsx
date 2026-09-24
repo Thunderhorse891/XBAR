@@ -7,7 +7,6 @@ import { Sparkline } from '@/components/dataviz/Charts';
 import { type CostGroup, buildCostPerHorse, buildSubscriptionPayback } from '@/lib/costPerHorse';
 import { formatCurrency, formatCurrencyCents, formatDateLabel, formatPercent } from '@/lib/format';
 import { subscriptionPlans } from '@/lib/subscriptionPlans';
-import { useEffectiveSubscription } from '@/hooks/useOwnerPreview';
 import { useUiStore } from '@/store/useUiStore';
 import { useXbarStore } from '@/store/useXbarStore';
 import './moneyIntelligence.css';
@@ -39,7 +38,9 @@ export default function Costs() {
   const horses = useXbarStore((state) => state.horses);
   const expenseReceipts = useXbarStore((state) => state.expenseReceipts);
   const salesLeads = useXbarStore((state) => state.salesLeads);
-  const subscription = useEffectiveSubscription();
+  // The real subscription, not the owner-preview overlay: this screen reports
+  // what the workspace pays, and a previewed tier is not a price anyone paid.
+  const subscription = useXbarStore((state) => state.subscription);
 
   const costs = useMemo(
     () => buildCostPerHorse({ horses, receipts: expenseReceipts, salesLeads }),
@@ -132,7 +133,7 @@ export default function Costs() {
           ) : null}
           <span className="fin-stat__sub">
             {costs.horsesInCare
-              ? `${costs.horsesInCare} horse${costs.horsesInCare === 1 ? '' : 's'} in care · last ${costs.trackedDays} day${costs.trackedDays === 1 ? '' : 's'} of receipts${trendDirection ? ` · ${trendDirection}` : ''}`
+              ? `${costs.horsesInCare} horse${costs.horsesInCare === 1 ? '' : 's'} in care · last ${costs.perHorseDays} day${costs.perHorseDays === 1 ? '' : 's'} of receipts${trendDirection ? ` · ${trendDirection}` : ''}`
               : 'Add the horses in your care to split these costs per head.'}
           </span>
         </div>
@@ -173,7 +174,7 @@ export default function Costs() {
         title="Where each day's cost goes"
         subtitle={
           costs.horsesInCare
-            ? `Per horse per day over the last ${costs.trackedDays} days.`
+            ? `Per horse per day over the last ${costs.perHorseDays} days.`
             : `Totals over the last ${costs.trackedDays} days — add horses to see the per-head figure.`
         }
       >
@@ -205,7 +206,7 @@ export default function Costs() {
 
       <Card
         title="Supplier price watch"
-        subtitle="Each supplier's price per unit against its own last three deliveries."
+        subtitle="Each supplier's price per unit against its own last three deliveries of the same product."
       >
         {costs.priceRises.length ? (
           <div className="fin-insights motion-stagger">
@@ -218,7 +219,7 @@ export default function Costs() {
                 <span className="fin-insight__rail" aria-hidden="true" />
                 <div>
                   <div className="fin-insight__title">
-                    {rise.vendor} raised its price per {rise.unit} {rise.risePercent}%{' '}
+                    {rise.vendor}: {rise.product || rise.category} up {rise.risePercent}% per {rise.unit}{' '}
                     <StatusChip tone="danger">Price up</StatusChip>
                   </div>
                   <div className="fin-insight__detail">

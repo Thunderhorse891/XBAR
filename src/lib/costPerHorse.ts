@@ -78,6 +78,8 @@ export type CostTrendPoint = {
 
 export type SupplierPriceRise = {
   vendor: string;
+  /** The receipt description of the latest delivery — what was bought. */
+  product: string;
   category: string;
   unit: string;
   latestUnitPrice: number;
@@ -101,8 +103,15 @@ export type FeedSupplierSummary = {
 
 export type CostPerHorseSummary = {
   horsesInCare: number;
-  /** Days of records the window covers: 0 with no receipts, never more than COST_WINDOW_DAYS. */
+  /** Days of records the burn window covers: 0 with no receipts, never more than COST_WINDOW_DAYS. */
   trackedDays: number;
+  /**
+   * Days the per-horse figures cover — measured from the first receipt that is
+   * actually split across the herd, so an old receipt for a sold horse cannot
+   * stretch today's spend over months it was not part of. Never more than
+   * trackedDays.
+   */
+  perHorseDays: number;
   /** Every receipt in the window, including ones tagged to horses no longer in care. */
   windowTotal: number;
   /** Window spend normalised to an average month. */
@@ -170,6 +179,24 @@ export function unitPriceOf(receipt: Pick<ExpenseReceipt, 'amount' | 'quantity' 
   return amount / quantity;
 }
 
+/*
+ * What was bought, from the receipt description, so grass hay and alfalfa by
+ * the bale from one supplier are two prices, not one that "rose". Digits,
+ * punctuation and the receipt's own unit words are dropped, so "Grass hay - 40
+ * bales" and "grass hay" are the same product. Different wording is treated as
+ * a different product: a missed comparison is better than a false alarm.
+ */
+export function productKeyOf(receipt: Pick<ExpenseReceipt, 'title' | 'unit'>): string {
+  let text = ` ${String(receipt.title ?? '')
+    .toLowerCase()
+    .replace(/[^a-z]+/g, ' ')} `;
+  for (const word of normalizeKey(receipt.unit).split(' ')) {
+    const letters = word.replace(/[^a-z]/g, '');
+    if (letters.length > 1) text = text.replace(new RegExp(` ${letters}s? `, 'g'), ' ');
+  }
+  return text.replace(/\s+/g, ' ').trim();
+}
+
 /** Horses with a won sale are no longer eating the ranch's feed. */
 function soldHorseIds(leads: SalesLead[]): Set<string> {
   return new Set(leads.filter((lead) => lead.outcome === 'Won').map((lead) => lead.horseId));
@@ -183,9 +210,12 @@ function buildPriceRises(dated: DatedReceipt[], today: number): SupplierPriceRis
     if (costGroupFor(entry.receipt.category) !== 'Feed') continue;
     const unitPrice = unitPriceOf(entry.receipt);
     if (unitPrice === null || !normalizeKey(entry.receipt.vendor)) continue;
-    const key = [normalizeKey(entry.receipt.vendor), entry.receipt.category, normalizeKey(entry.receipt.unit)].join(
-      '|',
-    );
+    const key = [
+      normalizeKey(entry.receipt.vendor),
+      entry.receipt.category,
+      productKeyOf(entry.receipt),
+      normalizeKey(entry.receipt.unit),
+    ].join('|');
     const list = series.get(key) ?? [];
     list.push({ ...entry, unitPrice });
     series.set(key, list);
@@ -209,6 +239,7 @@ function buildPriceRises(dated: DatedReceipt[], today: number): SupplierPriceRis
     const quantity = Number(latest.receipt.quantity);
     rises.push({
       vendor: latest.receipt.vendor.trim(),
+      product: String(latest.receipt.title ?? '').trim(),
       category: latest.receipt.category,
       unit: String(latest.receipt.unit).trim(),
       latestUnitPrice: latest.unitPrice,
@@ -271,11 +302,6 @@ export function buildCostPerHorse(input: {
     return day !== null && amount !== null && day <= today ? [{ receipt, day, amount }] : [];
   });
 
-  const firstDay = dated.reduce((min, entry) => Math.min(min, entry.day), Infinity);
-  const trackedDays = Number.isFinite(firstDay) ? Math.min(COST_WINDOW_DAYS, today - firstDay + 1) : 0;
-  const windowStart = today - trackedDays + 1;
-  const windowReceipts = dated.filter((entry) => entry.day >= windowStart);
-
   /*
    * Per-horse figures count receipts for horses in care plus ranch-wide ones.
    * A receipt tagged to a sold (or deleted) horse was real money and stays in
@@ -283,6 +309,18 @@ export function buildCostPerHorse(input: {
    * each of them costs.
    */
   const isAllocated = (receipt: ExpenseReceipt) => !receipt.horseId || inCareIds.has(receipt.horseId);
+  const allocatedDated = dated.filter((entry) => isAllocated(entry.receipt));
+
+  // Two windows. The burn runs from the first receipt of any kind; the
+  // per-horse figures from the first receipt they actually count, or an old
+  // sold-horse receipt would divide today's herd spend by months of nothing.
+  const windowDays = (first: number) => (Number.isFinite(first) ? Math.min(COST_WINDOW_DAYS, today - first + 1) : 0);
+  const firstDay = dated.reduce((min, entry) => Math.min(min, entry.day), Infinity);
+  const trackedDays = windowDays(firstDay);
+  const windowReceipts = dated.filter((entry) => entry.day >= today - trackedDays + 1);
+  const allocatedFirstDay = allocatedDated.reduce((min, entry) => Math.min(min, entry.day), Infinity);
+  const perHorseDays = windowDays(allocatedFirstDay);
+  const allocatedWindow = allocatedDated.filter((entry) => entry.day >= today - perHorseDays + 1);
 
   let windowTotal = 0;
   let shared = 0;
@@ -294,7 +332,8 @@ export function buildCostPerHorse(input: {
     if (costGroupFor(entry.receipt.category) === 'Feed' && unitPriceOf(entry.receipt) === null) {
       unpricedFeedPurchases += 1;
     }
-    if (!isAllocated(entry.receipt)) continue;
+  }
+  for (const entry of allocatedWindow) {
     const group = costGroupFor(entry.receipt.category);
     groupAllocated.set(group, (groupAllocated.get(group) ?? 0) + entry.amount);
     if (entry.receipt.horseId) {
@@ -304,7 +343,7 @@ export function buildCostPerHorse(input: {
     }
   }
   const allocated = [...groupAllocated.values()].reduce((sum, value) => sum + value, 0);
-  const perDayDivisor = trackedDays > 0 && headcount > 0 ? trackedDays * headcount : 0;
+  const perDayDivisor = perHorseDays > 0 && headcount > 0 ? perHorseDays * headcount : 0;
 
   const groups: CostGroupDaily[] = COST_GROUPS.map((group) => {
     const total = groupAllocated.get(group) ?? 0;
@@ -317,7 +356,7 @@ export function buildCostPerHorse(input: {
   });
 
   const horses: HorseDailyCost[] =
-    trackedDays > 0
+    perHorseDays > 0
       ? inCare
           .map((horse) => {
             const own = direct.get(horse.id) ?? 0;
@@ -327,7 +366,7 @@ export function buildCostPerHorse(input: {
               horseName: horse.name,
               direct: own,
               sharedShare,
-              perDay: (own + sharedShare) / trackedDays,
+              perDay: (own + sharedShare) / perHorseDays,
             };
           })
           .sort((left, right) => right.perDay - left.perDay || left.horseName.localeCompare(right.horseName))
@@ -336,30 +375,30 @@ export function buildCostPerHorse(input: {
   const trend: CostTrendPoint[] = Array.from({ length: TREND_WEEKS }, (_, index) => {
     const start = today - (TREND_WEEKS - index) * 7 + 1;
     const end = start + 6;
-    const total = dated
-      .filter((entry) => entry.day >= start && entry.day <= end && isAllocated(entry.receipt))
+    const total = allocatedDated
+      .filter((entry) => entry.day >= start && entry.day <= end)
       .reduce((sum, entry) => sum + entry.amount, 0);
     // A week that ended before anything was logged is missing history, not a $0
     // week; the week records began in is divided by the days it actually covers.
-    const known = Number.isFinite(firstDay) && end >= firstDay && headcount > 0;
-    const daysCovered = end - Math.max(start, firstDay) + 1;
+    const known = Number.isFinite(allocatedFirstDay) && end >= allocatedFirstDay && headcount > 0;
+    const daysCovered = end - Math.max(start, allocatedFirstDay) + 1;
     return { weekStart: isoDay(start), total, perHorsePerDay: known ? total / daysCovered / headcount : null };
   });
 
   let trendChangePercent: number | null = null;
-  if (trackedDays >= TREND_MIN_DAYS && headcount > 0) {
+  if (perHorseDays >= TREND_MIN_DAYS && headcount > 0) {
     const recentStart = today - TREND_RECENT_DAYS + 1;
-    const allocatedWindow = windowReceipts.filter((entry) => isAllocated(entry.receipt));
     const recent = allocatedWindow.filter((entry) => entry.day >= recentStart).reduce((s, e) => s + e.amount, 0);
     const earlier = allocatedWindow.filter((entry) => entry.day < recentStart).reduce((s, e) => s + e.amount, 0);
     const recentDaily = recent / TREND_RECENT_DAYS;
-    const earlierDaily = earlier / (trackedDays - TREND_RECENT_DAYS);
+    const earlierDaily = earlier / (perHorseDays - TREND_RECENT_DAYS);
     if (earlierDaily > 0) trendChangePercent = Math.round(((recentDaily - earlierDaily) / earlierDaily) * 100);
   }
 
   return {
     horsesInCare: headcount,
     trackedDays,
+    perHorseDays,
     windowTotal,
     monthlyBurn: trackedDays > 0 ? (windowTotal / trackedDays) * DAYS_PER_MONTH : 0,
     perHorsePerDay: perDayDivisor ? allocated / perDayDivisor : null,

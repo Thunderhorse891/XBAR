@@ -8,10 +8,15 @@ import {
   buildCostPerHorse,
   buildSubscriptionPayback,
   costGroupFor,
+  productKeyOf,
   receiptDay,
   unitPriceOf,
 } from '../src/lib/costPerHorse.js';
-import { validateExpenseReceiptInput, type ExpenseReceiptInput } from '../src/store/xbarStoreLogic.js';
+import {
+  parseReceiptQuantity,
+  validateExpenseReceiptInput,
+  type ExpenseReceiptInput,
+} from '../src/store/xbarStoreLogic.js';
 import type { ExpenseReceipt, HorseRecord, SalesLead } from '../src/types/xbar.js';
 
 // buildCostPerHorse is the Costs screen: cost per horse per day, monthly burn,
@@ -356,4 +361,73 @@ test('a receipt quantity is saved only with its unit', () => {
   assert.match(validateExpenseReceiptInput({ ...base, unit: 'bale' }) ?? '', /Quantity/);
   assert.match(validateExpenseReceiptInput({ ...base, quantity: 0, unit: 'bale' }) ?? '', /Quantity/);
   assert.match(validateExpenseReceiptInput({ ...base, quantity: Number.NaN, unit: 'bale' }) ?? '', /Quantity/);
+});
+
+test('an old receipt for a sold horse does not stretch the per-horse window', () => {
+  const sold = { id: 'lead-1', horseId: 'gone', outcome: 'Won' } as SalesLead;
+  const summary = buildCostPerHorse({
+    horses: [horse('a'), horse('gone')],
+    receipts: [
+      receipt({ amount: 900, receiptDate: daysAgo(89), horseId: 'gone' }),
+      receipt({ amount: 100, receiptDate: daysAgo(0) }),
+    ],
+    salesLeads: [sold],
+    now: NOW,
+  });
+
+  assert.equal(summary.trackedDays, 90, 'the burn still spans every receipt');
+  assert.equal(summary.monthlyBurn, (1000 / 90) * DAYS_PER_MONTH);
+  assert.equal(summary.perHorseDays, 1, 'the herd’s own history started today');
+  assert.equal(summary.perHorsePerDay, 100, 'today’s $100 over one day, not over 90');
+  assert.ok(
+    summary.trend.slice(0, TREND_WEEKS - 1).every((point) => point.perHorsePerDay === null),
+    'no zero-history weeks before the herd’s first receipt',
+  );
+});
+
+test('two products from one supplier are two prices, not a rise', () => {
+  const summary = buildCostPerHorse({
+    horses: [horse('a')],
+    receipts: [
+      receipt({ title: 'Grass hay', amount: 360, quantity: 40, unit: 'bale', receiptDate: daysAgo(30) }),
+      receipt({ title: 'Alfalfa', amount: 560, quantity: 40, unit: 'bale', receiptDate: daysAgo(2) }),
+    ],
+    now: NOW,
+  });
+  assert.deepEqual(summary.priceRises, [], 'buying the dearer hay is not a price rise');
+
+  const same = buildCostPerHorse({
+    horses: [horse('a')],
+    receipts: [
+      receipt({ title: 'Grass hay', amount: 360, quantity: 40, unit: 'bale', receiptDate: daysAgo(30) }),
+      receipt({ title: 'Grass hay - 40 bales', amount: 400, quantity: 40, unit: 'bale', receiptDate: daysAgo(2) }),
+    ],
+    now: NOW,
+  });
+  assert.equal(same.priceRises.length, 1, 'counts and unit words do not make a new product');
+  assert.equal(same.priceRises[0]?.product, 'Grass hay - 40 bales');
+  assert.equal(productKeyOf({ title: 'Senior feed, 4 x 50 lb bags', unit: '50 lb bag' }), 'senior feed x');
+});
+
+test('a typed quantity is read as written or refused, never rewritten', () => {
+  assert.equal(parseReceiptQuantity(''), undefined);
+  assert.equal(parseReceiptQuantity('  '), undefined);
+  assert.equal(parseReceiptQuantity('40'), 40);
+  assert.equal(parseReceiptQuantity('2.5'), 2.5);
+  assert.equal(parseReceiptQuantity('.5'), 0.5);
+  assert.equal(parseReceiptQuantity('1,200'), 1200);
+  for (const malformed of ['-5', '1/2', '12 bales', '1,2', 'forty', '4e2']) {
+    assert.ok(Number.isNaN(parseReceiptQuantity(malformed)), `${malformed} is refused`);
+  }
+  // And the store refuses what the parser refused.
+  const base = {
+    title: 'Hay',
+    category: 'Feed' as const,
+    vendor: 'Valley Feed',
+    amount: 400,
+    receiptDate: '2026-06-28',
+    uploadedBy: 'Ranch manager',
+    unit: 'bale',
+  };
+  assert.match(validateExpenseReceiptInput({ ...base, quantity: parseReceiptQuantity('-5') }) ?? '', /Quantity/);
 });

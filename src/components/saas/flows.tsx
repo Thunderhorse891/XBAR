@@ -6,6 +6,7 @@ import { ActionButton, SlideOverDrawer } from '@/components/saas';
 import { buyerFollowUpPath } from '@/lib/buyerRoutes';
 import { useUiStore } from '@/store/useUiStore';
 import { useXbarStore } from '@/store/useXbarStore';
+import { parseReceiptQuantity } from '@/store/xbarStoreLogic';
 import { events, track } from '@/lib/telemetry';
 import type {
   AssetCategory,
@@ -326,7 +327,7 @@ export function GlobalCreateDrawer() {
       vendor: (f.vendor ?? '').trim() || 'General',
       amount,
       receiptDate: (f.date ?? '').trim() || todayIso(),
-      quantity: qtyText ? Number.parseFloat(qtyText.replace(/[^0-9.]/g, '')) : undefined,
+      quantity: parseReceiptQuantity(qtyText),
       unit: unit || undefined,
       uploadedBy: actor,
     });
