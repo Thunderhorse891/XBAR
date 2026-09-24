@@ -293,7 +293,7 @@ export default function SetupWorkspace() {
                   type="email"
                   value={form.operationsEmail}
                   onChange={(event) => setForm((current) => ({ ...current, operationsEmail: event.target.value }))}
-                  placeholder="ops@xbar.com"
+                  placeholder="ops@yourranch.com"
                 />
               </label>
               <label className="clean-field">
