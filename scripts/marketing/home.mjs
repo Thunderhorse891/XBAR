@@ -52,6 +52,8 @@ export function cinematicHome(plans) {
     <div class="landing-art" data-parallax>
       <div class="landing-art-plane">
         <picture><source srcset="/brand/xbar-report-horse-landing.webp" type="image/webp" /><img class="landing-horse" src="/brand/xbar-report-horse.png" width="1672" height="941" alt="XBAR's metallic horse and wordmark, edged in electric blue" fetchpriority="high" decoding="async" /></picture>
+        <i class="landing-horse-light landing-horse-light--mane" aria-hidden="true"></i>
+        <i class="landing-horse-light landing-horse-light--face" aria-hidden="true"></i>
         <i class="landing-light-sweep" aria-hidden="true"></i>
       </div>
       <div class="landing-art-caption"><span class="landing-rim" aria-hidden="true"></span><span>A record worth standing behind.</span></div>

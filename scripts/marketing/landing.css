@@ -208,6 +208,28 @@
     transparent 60%
   );
 }
+/* Light falls over the original artwork; no traced or replacement logo.
+   Fixed gradients paint once, with only their opacity animated. */
+.landing-horse-light {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  mix-blend-mode: screen;
+  opacity: 0.3;
+}
+.landing-horse-light--mane {
+  background:
+    radial-gradient(ellipse 2.4% 0.8% at 61% 18%, var(--xbar-silver), transparent),
+    radial-gradient(ellipse 11% 6% at 61% 19%, var(--xbar-blue), transparent),
+    radial-gradient(ellipse 12% 5% at 45% 28%, color-mix(in srgb, var(--xbar-blue) 65%, transparent), transparent);
+}
+.landing-horse-light--face {
+  background:
+    radial-gradient(ellipse 1% 1.8% at 79% 14%, var(--xbar-silver), transparent),
+    radial-gradient(ellipse 6% 9% at 79% 17%, color-mix(in srgb, var(--xbar-blue) 75%, transparent), transparent),
+    radial-gradient(ellipse 5% 15% at 85% 57%, color-mix(in srgb, var(--xbar-blue) 60%, transparent), transparent),
+    radial-gradient(ellipse 2% 1% at 86% 73%, var(--xbar-blue), transparent);
+}
 .landing-art-caption {
   display: flex;
   align-items: center;
@@ -527,6 +549,12 @@
   .landing-page[data-landing-motion='running'][data-landing-ambient='running'] .landing-grain {
     animation: landing-grain 8s ease-in-out infinite alternate;
   }
+  .landing-page[data-landing-motion='running'][data-landing-ambient='running'] .landing-horse-light--mane {
+    animation: landing-mane-light 10s ease-in-out infinite;
+  }
+  .landing-page[data-landing-motion='running'][data-landing-ambient='running'] .landing-horse-light--face {
+    animation: landing-face-light 12s ease-in-out infinite;
+  }
   .landing-page .btn {
     transition:
       box-shadow 0.25s,
@@ -560,6 +588,40 @@
   to {
     opacity: 0.2;
     transform: translate3d(1%, -1%, 0);
+  }
+}
+/* Slow, uneven light pulses rather than a rapid, full-image flash. */
+@keyframes landing-mane-light {
+  0%,
+  100% {
+    opacity: 0.3;
+  }
+  18%,
+  55% {
+    opacity: 0.65;
+  }
+  30%,
+  72% {
+    opacity: 0.2;
+  }
+  40% {
+    opacity: 0.45;
+  }
+}
+@keyframes landing-face-light {
+  0%,
+  100% {
+    opacity: 0.3;
+  }
+  20%,
+  65% {
+    opacity: 0.15;
+  }
+  38% {
+    opacity: 0.6;
+  }
+  80% {
+    opacity: 0.5;
   }
 }
 @media (max-width: 1050px) {
