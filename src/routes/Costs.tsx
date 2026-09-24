@@ -212,7 +212,7 @@ export default function Costs() {
           <div className="fin-insights motion-stagger">
             {costs.priceRises.map((rise, index) => (
               <div
-                key={`${rise.vendor}-${rise.category}-${rise.unit}`}
+                key={`${rise.vendor}-${rise.category}-${rise.product}-${rise.unit}`}
                 className="fin-insight fin-insight--risk"
                 style={motionIndex(index)}
               >

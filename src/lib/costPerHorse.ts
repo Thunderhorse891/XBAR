@@ -180,21 +180,62 @@ export function unitPriceOf(receipt: Pick<ExpenseReceipt, 'amount' | 'quantity' 
 }
 
 /*
+ * A unit as a comparison key. The Unit field is free text, so "bale", "Bales"
+ * and "bales" are one unit; each word is lowered and made singular. Anything
+ * else ("lb" and "pound") stays distinct: a missed comparison beats a false alarm.
+ */
+function singularUnitWord(word: string): string {
+  if (/^\d/.test(word) || word.length <= 2) return word;
+  if (word.endsWith('ies')) return `${word.slice(0, -3)}y`;
+  if (/(x|ch|sh|ss)es$/.test(word)) return word.slice(0, -2);
+  if (word.endsWith('s') && !word.endsWith('ss')) return word.slice(0, -1);
+  return word;
+}
+
+function receiptTokens(text: string | undefined): string[] {
+  return (
+    String(text ?? '')
+      .toLowerCase()
+      .match(/\d+(?:[.,]\d+)*|[a-z]+/g) ?? []
+  ).map((token) => (/^\d/.test(token) ? token.replace(/,/g, '') : token));
+}
+
+export function unitKeyOf(unit: string | undefined): string {
+  return receiptTokens(unit).map(singularUnitWord).join(' ');
+}
+
+/*
  * What was bought, from the receipt description, so grass hay and alfalfa by
- * the bale from one supplier are two prices, not one that "rose". Digits,
- * punctuation and the receipt's own unit words are dropped, so "Grass hay - 40
- * bales" and "grass hay" are the same product. Different wording is treated as
- * a different product: a missed comparison is better than a false alarm.
+ * the bale from one supplier are two prices, not one that "rose". Only the
+ * quantity phrase is dropped: the receipt's own unit words, with the count in
+ * front of them ("40 bales", "4 x 50 lb bags"). Every other number stays,
+ * because it can name the product: 10% and 12% sweet feed are two feeds.
+ * Different wording is a different product: a missed comparison beats a false
+ * alarm.
  */
 export function productKeyOf(receipt: Pick<ExpenseReceipt, 'title' | 'unit'>): string {
-  let text = ` ${String(receipt.title ?? '')
-    .toLowerCase()
-    .replace(/[^a-z]+/g, ' ')} `;
-  for (const word of normalizeKey(receipt.unit).split(' ')) {
-    const letters = word.replace(/[^a-z]/g, '');
-    if (letters.length > 1) text = text.replace(new RegExp(` ${letters}s? `, 'g'), ' ');
+  const unitWords = new Set(unitKeyOf(receipt.unit).split(' ').filter(Boolean));
+  const isUnit = (token: string | undefined) => token !== undefined && unitWords.has(singularUnitWord(token));
+  const isNumber = (token: string | undefined) => token !== undefined && /^\d/.test(token);
+  const tokens = receiptTokens(receipt.title);
+  const kept: string[] = [];
+  for (let index = 0; index < tokens.length; index += 1) {
+    const token = tokens[index]!;
+    if (isNumber(token)) {
+      // A count, an optional "x", then unit words: the whole phrase is quantity.
+      let next = index + 1;
+      if (tokens[next] === 'x') next += 1;
+      if (isUnit(tokens[next])) {
+        while (isUnit(tokens[next])) next += 1;
+        index = next - 1;
+        continue;
+      }
+      kept.push(token);
+    } else if (!isUnit(token)) {
+      kept.push(token);
+    }
   }
-  return text.replace(/\s+/g, ' ').trim();
+  return kept.join(' ');
 }
 
 /** Horses with a won sale are no longer eating the ranch's feed. */
@@ -214,7 +255,7 @@ function buildPriceRises(dated: DatedReceipt[], today: number): SupplierPriceRis
       normalizeKey(entry.receipt.vendor),
       entry.receipt.category,
       productKeyOf(entry.receipt),
-      normalizeKey(entry.receipt.unit),
+      unitKeyOf(entry.receipt.unit),
     ].join('|');
     const list = series.get(key) ?? [];
     list.push({ ...entry, unitPrice });
@@ -241,7 +282,7 @@ function buildPriceRises(dated: DatedReceipt[], today: number): SupplierPriceRis
       vendor: latest.receipt.vendor.trim(),
       product: String(latest.receipt.title ?? '').trim(),
       category: latest.receipt.category,
-      unit: String(latest.receipt.unit).trim(),
+      unit: unitKeyOf(latest.receipt.unit),
       latestUnitPrice: latest.unitPrice,
       baselineUnitPrice: baseline,
       risePercent: Math.round(rise * 100),
@@ -373,8 +414,10 @@ export function buildCostPerHorse(input: {
       : [];
 
   const trend: CostTrendPoint[] = Array.from({ length: TREND_WEEKS }, (_, index) => {
-    const start = today - (TREND_WEEKS - index) * 7 + 1;
-    const end = start + 6;
+    // Thirteen weeks are 91 days; the first is trimmed to the 90-day window so
+    // the line never shows a receipt the headline figures leave out.
+    const end = today - (TREND_WEEKS - index - 1) * 7;
+    const start = Math.max(end - 6, today - COST_WINDOW_DAYS + 1);
     const total = allocatedDated
       .filter((entry) => entry.day >= start && entry.day <= end)
       .reduce((sum, entry) => sum + entry.amount, 0);

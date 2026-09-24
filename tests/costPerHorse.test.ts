@@ -10,6 +10,7 @@ import {
   costGroupFor,
   productKeyOf,
   receiptDay,
+  unitKeyOf,
   unitPriceOf,
 } from '../src/lib/costPerHorse.js';
 import {
@@ -406,7 +407,54 @@ test('two products from one supplier are two prices, not a rise', () => {
   });
   assert.equal(same.priceRises.length, 1, 'counts and unit words do not make a new product');
   assert.equal(same.priceRises[0]?.product, 'Grass hay - 40 bales');
-  assert.equal(productKeyOf({ title: 'Senior feed, 4 x 50 lb bags', unit: '50 lb bag' }), 'senior feed x');
+  assert.equal(productKeyOf({ title: 'Senior feed, 4 x 50 lb bags', unit: '50 lb bag' }), 'senior feed');
+});
+
+test('a number that names the product keeps it a separate product', () => {
+  const summary = buildCostPerHorse({
+    horses: [horse('a')],
+    receipts: [
+      receipt({ title: 'Sweet Feed 10%', amount: 180, quantity: 10, unit: 'bag', receiptDate: daysAgo(30) }),
+      receipt({ title: 'Sweet Feed 12% - 10 bags', amount: 220, quantity: 10, unit: 'bag', receiptDate: daysAgo(2) }),
+    ],
+    now: NOW,
+  });
+  assert.deepEqual(summary.priceRises, [], 'switching to 12% feed is not the supplier raising the 10%');
+  assert.equal(productKeyOf({ title: 'Sweet Feed 12% - 10 bags', unit: 'bag' }), 'sweet feed 12');
+  assert.equal(productKeyOf({ title: '2.5 tons alfalfa', unit: 'ton' }), 'alfalfa');
+});
+
+test('singular and plural spellings of a unit are one unit', () => {
+  const summary = buildCostPerHorse({
+    horses: [horse('a')],
+    receipts: [
+      receipt({ title: 'Grass hay', amount: 360, quantity: 40, unit: 'bales', receiptDate: daysAgo(30) }),
+      receipt({ title: 'Grass hay', amount: 400, quantity: 40, unit: 'Bale', receiptDate: daysAgo(2) }),
+    ],
+    now: NOW,
+  });
+  assert.equal(summary.priceRises.length, 1, 'bales then bale is the same hay rising');
+  assert.equal(summary.priceRises[0]?.unit, 'bale');
+  assert.equal(unitKeyOf(' 50 LBS  Bags '), '50 lb bag');
+  assert.equal(unitKeyOf('boxes'), 'box');
+  assert.equal(unitKeyOf('ton'), 'ton');
+});
+
+test('the trend never shows a receipt the 90-day figures leave out', () => {
+  const summary = buildCostPerHorse({
+    horses: [horse('a')],
+    receipts: [
+      receipt({ amount: 500, receiptDate: daysAgo(COST_WINDOW_DAYS) }), // one day before the window
+      receipt({ amount: 70, receiptDate: daysAgo(3) }),
+    ],
+    now: NOW,
+  });
+  assert.equal(summary.windowTotal, 70);
+  assert.equal(
+    summary.trend.reduce((sum, point) => sum + point.total, 0),
+    70,
+  );
+  assert.equal(summary.trend[0]?.weekStart, daysAgo(COST_WINDOW_DAYS - 1));
 });
 
 test('a typed quantity is read as written or refused, never rewritten', () => {
