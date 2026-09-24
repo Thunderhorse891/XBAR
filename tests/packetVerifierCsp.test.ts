@@ -150,17 +150,14 @@ test('the verifier exempts the one sealed hero photo, not every img', async () =
   assert.match(code, /sealedPhotoSeen > 1/, 'duplicate sealed photos must be flagged');
   // Removing the photo must not read as agreement.
   assert.match(code, /sealedPhotoSeen === 0/, 'a deleted sealed photo is a tampered packet, not a missing check');
-  // The generator emits a bare <img src alt width> — an altered packet can
-  // keep the sealed src and add a srcset pointing at a replacement photo
-  // (which the browser displays) or a hidden attribute (which removes the
-  // photo from the buyer-visible packet). The exemption must require the
-  // generated attribute set, not just a matching src.
-  assert.match(code, /isUnmodifiedHeroImg/, 'the exemption must check the generated attributes');
-  assert.match(
-    code,
-    /attrName !== 'src' && attrName !== 'alt' && attrName !== 'width'/,
-    'only src/alt/width are allowed',
-  );
+  // The generator emits exactly <img src alt width> with the sealed horse
+  // name as alt and the literal width '100%'. Checking only attribute NAMES
+  // lets <img src="<sealed>" alt="different horse" width="0"> pass while the
+  // buyer sees no photo and altered alt text — the exemption must seal the
+  // complete expected element, values included.
+  assert.match(code, /isUnmodifiedHeroImg/, 'the exemption must check the generated element');
+  assert.match(code, /seen\.width === '100%'/, "width must equal the generated '100%'");
+  assert.match(code, /expectedAlt/, 'alt must be compared to the sealed horse name');
   // The old blanket rule is gone: every other embed type is still flagged.
   assert.match(code, /which the seal does not cover/, 'non-photo embeds are still reported');
 });

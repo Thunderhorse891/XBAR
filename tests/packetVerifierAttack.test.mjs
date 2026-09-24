@@ -832,6 +832,7 @@ const PHOTO_URL = 'https://photos.test/hero.jpg';
 function photoPacket(imgAttrs) {
   const credential = {
     watermark: 'WATERMARK',
+    identity: { name: 'Bella' },
     seller: {
       name: 'Erin',
       ranch: 'Rocking R Ranch',
@@ -878,6 +879,23 @@ test('a second copy of the sealed photo is reported ALTERED', async () => {
   const packet = photoPacket({ src: PHOTO_URL, alt: 'Bella', width: '100%' });
   packet.extras.push(element({ src: PHOTO_URL, alt: 'Bella', width: '100%' }, 'IMG'));
   const result = await verify(packet);
+  assert.equal(result.state, 'fail', `expected ALTERED, got: ${result.text}`);
+  assert.match(result.text, /ALTERED/);
+});
+
+test('an altered alt on the sealed photo is reported ALTERED', async () => {
+  // The attack: src matches and only allowed attribute names are present,
+  // but the alt text names a different horse — a names-only exemption
+  // would still count this as the sealed photo.
+  const result = await verify(photoPacket({ src: PHOTO_URL, alt: 'different horse', width: '100%' }));
+  assert.equal(result.state, 'fail', `expected ALTERED, got: ${result.text}`);
+  assert.match(result.text, /ALTERED/);
+});
+
+test('a zeroed width on the sealed photo is reported ALTERED', async () => {
+  // The attack: the img still matches the sealed src, but width="0" means
+  // the buyer sees no photo at all.
+  const result = await verify(photoPacket({ src: PHOTO_URL, alt: 'Bella', width: '0' }));
   assert.equal(result.state, 'fail', `expected ALTERED, got: ${result.text}`);
   assert.match(result.text, /ALTERED/);
 });

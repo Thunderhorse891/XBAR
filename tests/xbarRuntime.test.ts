@@ -40,15 +40,29 @@ test('nowStamp round-trips through the display formatters as viewer-local time',
 /*
  * The nowStamp() format transition: new writes are absolute ISO UTC instants,
  * but records written before the transition — or synced from a stale PWA tab
- * that still writes the old form — are local `YYYY-MM-DD HH:mm` wall-clock.
- * Raw lexicographic order mis-sorts a later legacy value behind an earlier
- * ISO one (`'2026-09-24 20:00' < '2026-09-24T19:40:00.000Z'` as strings, later
- * as instants), which is exactly the offerUpdatedAt ordering
- * profitIntelligence.ts depends on. The comparator parses both to instants.
+ * that still writes the old form — are local `YYYY-MM-DD HH:mm` wall-clock
+ * with no recorded offset. Raw lexicographic order mis-sorts a later legacy
+ * value behind an earlier ISO one (`'2026-09-24 20:00'` <
+ * `'2026-09-24T19:40:00.000Z'` as strings, later as instants), which is
+ * exactly the offerUpdatedAt ordering profitIntelligence.ts depends on. The
+ * comparator interprets the legacy form AS UTC: deterministic and identical
+ * on every client, where a viewer-local parse made Chicago and Los Angeles
+ * order the same synced data differently. These assertions hold under any
+ * TZ because they pin the UTC interpretation, not the viewer's clock.
  */
-test('compareTimestampDesc orders mixed-format stamps chronologically', () => {
-  // Legacy local wall-clock 20:00 is LATER than ISO 19:40Z the same day —
-  // lexicographic order gets this backwards.
+test('compareTimestampDesc interprets legacy wall-clock as UTC', () => {
+  // Legacy 20:00 interpreted as UTC is EARLIER than ISO 21:00Z the same day.
+  // A viewer-local parse west of UTC would order them the other way — which
+  // is the cross-client disagreement this pins down.
+  const legacy = '2026-09-24 20:00';
+  const iso = '2026-09-24T21:00:00.000Z';
+  const sorted = [legacy, iso].sort(compareTimestampDesc);
+  assert.deepEqual(sorted, [iso, legacy], 'legacy wall-clock orders as its UTC instant');
+});
+
+test('compareTimestampDesc orders a later legacy stamp ahead of an earlier ISO one', () => {
+  // The original lexicographic bug: '2026-09-24 20:00' < '2026-09-24T19:40'
+  // as strings, but the legacy instant is later.
   const legacyLater = '2026-09-24 20:00';
   const isoEarlier = '2026-09-24T19:40:00.000Z';
   assert.ok(legacyLater < isoEarlier, 'the fixture must actually invert under lexicographic order');

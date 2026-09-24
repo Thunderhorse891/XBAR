@@ -661,16 +661,18 @@ export const PACKET_VERIFIER_SCRIPT = `
            * and an added element loads from anywhere.
            *
            * The one legitimate img is the sealed hero photo in the seller
-           * contact block: the payload's seller.heroPhotoUrl names the exact
-           * src the generator emitted. An img whose src matches it
-           * character-for-character AND carries exactly the generated
-           * attributes (src, alt, width — see isUnmodifiedHeroImg below) is
-           * the photo the seal covers, not an addition. (For a data: URL the
-           * src IS the bytes, so an exact match proves the photo content is
-           * untouched.) Anything else — a second copy, a replaced src, an
-           * img with extra attributes, a missing photo — is an alteration,
-           * because the generator emits exactly one bare img and only when
-           * the sealed record names a hero photo.
+           * contact block: the generator emits exactly
+           * <img src="…" alt="…" width="100%">, where the src is the
+           * payload's seller.heroPhotoUrl, the alt is the sealed horse name
+           * (or 'Unnamed horse'), and the width is the literal '100%'. An
+           * img that matches all three values and carries no other
+           * attributes is the photo the seal covers, not an addition.
+           * (For a data: URL the src IS the bytes, so an exact match proves
+           * the photo content is untouched.) Anything else — a second copy,
+           * a replaced src, an altered alt or width, an extra attribute, a
+           * missing photo — is an alteration, because the generator emits
+           * exactly one such img and only when the sealed record names a
+           * hero photo.
            */
           var sealedPhoto =
             parsed && parsed.seller && typeof parsed.seller.heroPhotoUrl === 'string'
@@ -684,29 +686,27 @@ export const PACKET_VERIFIER_SCRIPT = `
             var from =
               node.getAttribute('src') || node.getAttribute('href') || node.getAttribute('data') || '';
             /*
-             * The generator emits the hero photo as a bare <img src alt width>
-             * — no srcset, no hidden, no style, no <picture> wrapper. An
-             * altered packet can keep src equal to the sealed URL and add
-             * srcset="https://attacker.example/replacement.jpg 1x" (the
-             * browser displays the srcset candidate while a src-only check
-             * still passes) or add hidden (the photo vanishes from the
-             * buyer-visible packet while the exemption still counts it as
-             * present). So the exemption requires the img to carry exactly
-             * the generated attributes; any other attribute means this is
-             * not the photo the seal covers.
+             * The generator emits the hero photo as exactly
+             * <img src="…" alt="…" width="100%"> — the alt is the sealed
+             * horse name (or 'Unnamed horse'), the width is the literal
+             * '100%'. Checking only attribute NAMES lets
+             * <img src="<sealed>" alt="different horse" width="0"> pass
+             * while the buyer sees no photo and altered alt text. So the
+             * exemption seals the complete expected element: exact src,
+             * exact alt, exact width, and nothing else.
              */
-            function isUnmodifiedHeroImg(node) {
+            function isUnmodifiedHeroImg(node, parsed) {
               var attrs = node.attributes;
-              if (!attrs) return false;
+              if (!attrs || attrs.length !== 3) return false;
+              var identity = parsed && parsed.identity ? parsed.identity : {};
+              var expectedAlt = identity.name || 'Unnamed horse';
               var seen = {};
               for (var a = 0; a < attrs.length; a += 1) {
-                var attrName = String(attrs[a].name || '').toLowerCase();
-                if (attrName !== 'src' && attrName !== 'alt' && attrName !== 'width') return false;
-                seen[attrName] = 1;
+                seen[String(attrs[a].name || '').toLowerCase()] = attrs[a].value;
               }
-              return !!seen.src;
+              return seen.src === sealedPhoto && seen.alt === expectedAlt && seen.width === '100%';
             }
-            if (tag === 'img' && sealedPhoto && from === sealedPhoto && isUnmodifiedHeroImg(node)) {
+            if (tag === 'img' && sealedPhoto && from === sealedPhoto && isUnmodifiedHeroImg(node, parsed)) {
               sealedPhotoSeen += 1;
               if (sealedPhotoSeen > 1) {
                 problems.push(
