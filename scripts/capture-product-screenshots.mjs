@@ -56,7 +56,7 @@ try {
   await page.getByPlaceholder('XBAR LLC').fill('Example Ranch LLC');
   await page.getByPlaceholder('Primary Ranch').fill('Example Ranch');
   await page.getByPlaceholder('Ranch manager').fill('Demo Manager');
-  await page.getByPlaceholder('ops@xbar.com').fill('demo@example.com');
+  await page.getByPlaceholder('ops@yourranch.com').fill('demo@example.com');
   await page.getByPlaceholder('Legal owner').fill('Example Ranch LLC');
   await page.getByPlaceholder('Owner entity').fill('Example Ranch LLC');
   await page.getByPlaceholder('Barn A').fill('Main Barn');
