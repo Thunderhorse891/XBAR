@@ -8,6 +8,12 @@ const stages = [
   ['Prepare to share', 'Build a watermarked buyer packet from the records you approve.'],
 ];
 
+// Inert templates keep full-size artwork out of the legacy preload scanner.
+// The first-party site script hydrates near the viewport; no-JS gets the same art.
+function deferredImage(markup, width, height) {
+  return `<div class="landing-deferred-image" data-landing-image style="--image-ratio:${(height / width) * 100}%"><template>${markup}</template><noscript>${markup}</noscript></div>`;
+}
+
 export function cinematicHome(plans) {
   return {
     path: '/',
@@ -72,7 +78,7 @@ export function cinematicHome(plans) {
   </div>
   <figure class="landing-product" data-landing-reveal>
     <div class="landing-product-bar"><span><i aria-hidden="true"></i> Your horse’s record</span><a href="/demo">View the product tour</a></div>
-    <img src="/brand/screenshots/app-horse-record.jpg" width="1440" height="900" loading="lazy" alt="XBAR horse profile with identity, ownership, care details, and next steps" />
+    ${deferredImage('<img src="/brand/screenshots/app-horse-record.jpg" width="1440" height="900" loading="lazy" alt="XBAR horse profile with identity, ownership, care details, and next steps" />', 1440, 900)}
     <figcaption>Actual XBAR interface, shown with example data.</figcaption>
   </figure>
   <div class="landing-capabilities">
@@ -90,7 +96,7 @@ export function cinematicHome(plans) {
 </section>
 
 <section class="landing-section wrap landing-sharing" aria-labelledby="sharing-title">
-  <div class="landing-x-art" data-landing-reveal><picture><source srcset="/brand/xbar-report-mark-landing.webp" type="image/webp" /><img src="/brand/xbar-report-mark.png" width="1254" height="1254" loading="lazy" alt="XBAR's original metallic X mark" /></picture></div>
+  <div class="landing-x-art" data-landing-reveal>${deferredImage(`<picture><source srcset="/brand/xbar-report-mark-landing.webp" type="image/webp" /><img src="/brand/xbar-report-mark.png" width="1254" height="1254" loading="lazy" alt="XBAR's original metallic X mark" /></picture>`, 1254, 1254)}</div>
   <div data-landing-reveal><p class="landing-eyebrow">Put your records to work</p><h2 id="sharing-title">Make the next<br />handoff count.</h2><p class="landing-lead">Give a buyer a clearer view of the horse. Bring identity, source documents, and ownership details together in a watermarked sale packet.</p><a class="btn" href="/samples/sample-sale-packet.html">Open a sample packet <span aria-hidden="true">↗</span></a><p class="landing-note">Sample packet uses fictional data.</p></div>
 </section>
 

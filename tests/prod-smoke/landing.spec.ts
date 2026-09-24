@@ -3,6 +3,81 @@ import { readFileSync } from 'node:fs';
 
 const headline = 'Every horse. One clear picture.';
 
+test('short-screen menu can reach signup without dynamic viewport units', async ({ page }) => {
+  await page.route('**/landing.css', async (route) => {
+    const response = await route.fetch();
+    await route.fulfill({ response, body: (await response.text()).replace(/max-height:[^;]*dvh[^;]*;/g, '') });
+  });
+  await page.setViewportSize({ width: 740, height: 320 });
+  await page.goto('/');
+  await page.locator('.landing-mobile-nav > summary').click();
+  const menu = page.locator('.landing-mobile-nav nav');
+  const bounds = await menu.boundingBox();
+  expect(bounds!.y + bounds!.height).toBeLessThanOrEqual(320);
+  const signup = menu.getByRole('link', { name: 'Create your workspace' });
+  await signup.scrollIntoViewIfNeeded();
+  await signup.click();
+  await expect(page).toHaveURL(/\/app\/login\?mode=signup$/);
+});
+
+test('workflow spacing survives browsers without flex gap', async ({ page }) => {
+  await page.emulateMedia({ reducedMotion: 'reduce' });
+  await page.goto('/');
+  await page.evaluate(() => {
+    for (const element of document.querySelectorAll<HTMLElement>('.landing-page *')) {
+      if (['flex', 'inline-flex'].includes(getComputedStyle(element).display)) element.style.gap = '0px';
+    }
+  });
+  const spacing = await page
+    .locator('.landing-stages li')
+    .first()
+    .evaluate((row) => {
+      const number = row.children[0].getBoundingClientRect();
+      const copy = row.children[1].getBoundingClientRect();
+      return copy.left - number.right;
+    });
+  expect(spacing).toBeGreaterThanOrEqual(25);
+});
+
+test('below-fold artwork waits for the viewport without native image lazy loading', async ({ page }) => {
+  await page.addInitScript(() => {
+    Reflect.deleteProperty(HTMLImageElement.prototype, 'loading');
+  });
+  await page.route('**/', async (route) => {
+    const response = await route.fetch();
+    const html = (await response.text())
+      .replace(/loading="lazy"/g, '')
+      .replace(/<source[^>]+type="image\/webp"[^>]*>/g, '');
+    await route.fulfill({ response, body: html });
+  });
+  await page.emulateMedia({ reducedMotion: 'reduce' });
+  await page.route('**/landing/*.js', (route) => route.abort());
+  const images: string[] = [];
+  page.on('request', (request) => {
+    if (request.resourceType() === 'image') images.push(request.url());
+  });
+  await page.setViewportSize({ width: 1440, height: 900 });
+  await page.goto('/');
+  await page.locator('.landing-horse').evaluate((img: HTMLImageElement) => img.decode());
+  expect(images.some((url) => url.includes('xbar-report-mark') || url.includes('app-horse-record.jpg'))).toBe(false);
+  await page.locator('.landing-x-art').scrollIntoViewIfNeeded();
+  await expect.poll(() => images.some((url) => url.endsWith('xbar-report-mark.png'))).toBe(true);
+  await expect
+    .poll(() => page.locator('.landing-x-art img').evaluate((img: HTMLImageElement) => img.naturalWidth))
+    .toBeGreaterThan(0);
+});
+
+test('artwork stays available without IntersectionObserver', async ({ page }) => {
+  await page.addInitScript(() => {
+    delete (window as unknown as Record<string, unknown>).IntersectionObserver;
+  });
+  await page.goto('/');
+  await page.locator('.landing-x-art').scrollIntoViewIfNeeded();
+  await expect
+    .poll(() => page.locator('.landing-x-art img').evaluate((img: HTMLImageElement) => img.naturalWidth))
+    .toBeGreaterThan(0);
+});
+
 test('light navigation remains readable when CSS color mixing is unsupported', async ({ page }) => {
   // Emulate discarded unsupported declarations in the served stylesheet,
   // preserving earlier fallback declarations as an older CSS parser would.
@@ -48,6 +123,10 @@ test('no JavaScript still provides the full homepage and working signup', async 
   await page.goto('/');
   await expect(page.getByRole('heading', { name: headline })).toBeVisible();
   await expect(page.getByRole('heading', { name: 'Bring the papers' })).toBeVisible();
+  await page.locator('.landing-x-art').scrollIntoViewIfNeeded();
+  await expect
+    .poll(() => page.locator('.landing-x-art img').evaluate((img: HTMLImageElement) => img.naturalWidth))
+    .toBeGreaterThan(0);
   await page.getByRole('link', { name: 'Create your workspace', exact: true }).first().click();
   await expect(page).toHaveURL(/\/app\/login\?mode=signup$/);
   await context.close();

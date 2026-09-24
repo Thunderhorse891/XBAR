@@ -140,7 +140,6 @@
   font-size: 14px;
   line-height: 1.5;
   display: flex;
-  gap: 12px;
   align-items: center;
 }
 .landing-eyebrow::before {
@@ -148,6 +147,7 @@
   display: block;
   width: 24px;
   height: 1px;
+  margin-right: 12px;
   flex-shrink: 0;
   background: var(--xbar-blue);
   box-shadow: 0 0 8px var(--landing-glint);
@@ -170,13 +170,17 @@
 }
 .landing-actions {
   display: flex;
-  gap: 25px;
+  --action-space: 25px;
   align-items: center;
   flex-wrap: wrap;
-  margin-top: 32px;
+  margin: calc(32px - var(--action-space) / 2) calc(var(--action-space) / -2) calc(var(--action-space) / -2);
+}
+.landing-actions > * {
+  margin: calc(var(--action-space) / 2);
 }
 .landing-text-link {
-  display: inline-flex;
+  display: inline-grid;
+  grid-auto-flow: column;
   align-items: center;
   gap: 16px;
   min-height: 44px;
@@ -242,7 +246,8 @@
     radial-gradient(ellipse 2% 1% at 86% 73%, var(--xbar-blue), transparent);
 }
 .landing-art-caption {
-  display: flex;
+  display: grid;
+  grid-auto-flow: column;
   align-items: center;
   justify-content: center;
   gap: 12px;
@@ -258,7 +263,8 @@
   box-shadow: 0 0 10px var(--xbar-blue);
 }
 .landing-hero-foot {
-  display: flex;
+  display: grid;
+  grid-template-columns: max-content max-content;
   justify-content: space-between;
   align-items: center;
   border-top: 1px solid var(--landing-edge);
@@ -267,7 +273,8 @@
   gap: 20px;
 }
 .landing-hero-foot > a {
-  display: inline-flex;
+  display: inline-grid;
+  grid-auto-flow: column;
   align-items: center;
   gap: 20px;
   min-height: 44px;
@@ -315,7 +322,8 @@
   overflow: hidden;
 }
 .landing-product-bar {
-  display: flex;
+  display: grid;
+  grid-template-columns: 1fr max-content;
   justify-content: space-between;
   gap: 16px;
   padding: 17px 24px;
@@ -323,7 +331,8 @@
   border-bottom: 1px solid var(--landing-edge);
 }
 .landing-product-bar > span {
-  display: inline-flex;
+  display: inline-grid;
+  grid-template-columns: max-content max-content;
   align-items: center;
   gap: 10px;
 }
@@ -333,10 +342,26 @@
   border-radius: 50%;
   background: var(--xbar-blue);
 }
-.landing-product > img {
+.landing-product img {
   display: block;
   width: 100%;
   height: auto;
+}
+.landing-deferred-image {
+  position: relative;
+}
+.landing-deferred-image::before {
+  content: '';
+  display: block;
+  padding-top: var(--image-ratio);
+}
+.landing-deferred-image img {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
 }
 .landing-product figcaption {
   margin: 0;
@@ -395,7 +420,8 @@
   color: var(--ink-soft);
 }
 .landing-stage-count {
-  display: flex;
+  display: grid;
+  grid-template-columns: max-content 1fr;
   align-items: center;
   gap: 25px;
   margin-top: 35px;
@@ -419,7 +445,8 @@
   padding: 0;
 }
 .landing-stages li {
-  display: flex;
+  display: grid;
+  grid-template-columns: max-content 1fr;
   gap: 26px;
   padding: 23px 0;
   border-bottom: 1px solid var(--landing-edge);
@@ -525,7 +552,8 @@
 }
 .landing-close {
   padding-block: 150px;
-  display: flex;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) max-content;
   align-items: center;
   justify-content: space-between;
   gap: 50px;
@@ -655,7 +683,8 @@
   }
   .landing-mobile-nav > summary {
     list-style: none;
-    display: flex;
+    display: grid;
+    grid-auto-flow: column;
     align-items: center;
     gap: 14px;
     padding: 10px 14px;
@@ -676,6 +705,7 @@
     right: 0;
     top: calc(100% + 12px);
     width: min(330px, calc(100vw - 40px));
+    max-height: calc(100vh - 100px);
     max-height: calc(100dvh - 100px);
     overflow-y: auto;
     padding: 8px;
@@ -801,8 +831,8 @@
     max-width: 46ch;
   }
   .landing-close {
-    flex-direction: column;
-    align-items: flex-start;
+    grid-template-columns: 1fr;
+    align-items: start;
     padding-block: 96px;
     gap: 30px;
   }
@@ -815,11 +845,11 @@
     padding-inline: 20px;
   }
   .landing-actions {
-    gap: 14px;
-    margin-top: 24px;
+    --action-space: 14px;
+    margin-top: calc(24px - var(--action-space) / 2);
   }
   .landing-actions .btn {
-    width: 100%;
+    width: calc(100% - var(--action-space));
   }
   .landing-plans {
     grid-template-columns: 1fr;
