@@ -165,6 +165,15 @@ async function syncWorkspaceSubscription({
    * bought, then canceled would then read as never-trialed and get a second
    * free trial. Carry the stored record forward, the same way the billing
    * period is carried above.
+   *
+   * This carry covers the sequential case, including databases that predate
+   * the RPC-side merge. It is NOT sufficient on its own: it reads the trial
+   * from a SELECT taken before xbar_apply_subscription_event takes its
+   * advisory lock, so a trial that starts in that window would still be
+   * erased by the full payload replace. The authoritative merge happens
+   * inside the RPC, under the lock, against the current row
+   * (supabase/migrations/20260924223000_preserve_trial_in_event_rpc.sql) —
+   * this copy is the pre-migration fallback, not the guarantee.
    */
   const storedPayload = existingProfile?.payload;
   const storedTrial = storedPayload && typeof storedPayload === 'object' ? storedPayload.trial : undefined;

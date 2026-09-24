@@ -244,6 +244,16 @@ own:
    in a single transaction, no backfill. Must run AFTER step 5, whose function
    it replaces; the filename date keeps that order. **Not applied by the change
    that wrote it — needs the owner's explicit approval (contract rule 15).**
+10. `20260924223000_preserve_trial_in_event_rpc.sql` — billing correctness.
+    Replaces `xbar_apply_subscription_event` with the same 15-argument
+    signature, merging `payload -> 'trial'` from the locked current row into
+    the incoming profile when the incoming profile carries none. A trial that
+    starts between the webhook's pre-lock SELECT and the RPC write would
+    otherwise be erased by the full payload replace, reopening a second free
+    trial after a later cancellation. Function replace in a single
+    transaction, no schema change. Must run AFTER step 9, whose function it
+    replaces; the filename date keeps that order. **Not applied by the change
+    that wrote it — needs the owner's explicit approval (contract rule 15).**
 
 For migrations still missing from the target project, apply them **one at a time**, not with a single `supabase db push`. That command
 applies every pending migration in one go, which would run the data
@@ -334,6 +344,17 @@ psql -v ON_ERROR_STOP=1 "$DATABASE_URL" -f supabase/checks/workspace-access-live
 #    until this is applied. Needs the owner's explicit approval (contract
 #    rule 15); it is NOT applied by the change that wrote it.
 psql "$DATABASE_URL" -f supabase/migrations/20260924120000_billing_period.sql
+
+# 10. Preserve the trial record inside the locked RPC — function replace in a
+#     single transaction, safe to apply directly. MUST run after #9 (the
+#     filename date keeps that order): it replaces xbar_apply_subscription_event
+#     with the same 15-argument signature, merging payload.trial from the
+#     locked current row so a trial starting between the webhook's pre-lock
+#     SELECT and the RPC write is not erased. Until this is applied, the
+#     webhook's own carry-forward covers only the sequential case. Needs the
+#     owner's explicit approval (contract rule 15); it is NOT applied by the
+#     change that wrote it.
+psql "$DATABASE_URL" -f supabase/migrations/20260924223000_preserve_trial_in_event_rpc.sql
 
 # 10. EXPAND before deploying the workspace-path client. Retains uploader paths
 #    for older app versions. Includes authenticated RLS checks with rolled-back

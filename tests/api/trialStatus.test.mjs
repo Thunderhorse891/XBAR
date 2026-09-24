@@ -148,6 +148,20 @@ test('decideTrialStart refuses a workspace already entitled to paid features', (
   assert.equal(comped.code, 'already_entitled');
 });
 
+test('decideTrialStart refuses a paying Starter workspace: entitlement is the billing state, not the tier', () => {
+  // ('Starter', 'Active') resolves to the baseline tier, so a tier-keyed
+  // guard would grant this workspace a Professional trial while the SQL
+  // predicates keep enforcing Starter limits.
+  const payingStarter = decideTrialStart({ tier: 'Starter', billing_state: 'Active', payload: {} });
+  assert.equal(payingStarter.ok, false);
+  assert.equal(payingStarter.code, 'already_entitled');
+  assert.equal(payingStarter.status, 409);
+
+  const manualStarter = decideTrialStart({ tier: 'Starter', billing_state: 'Manual Billing', payload: {} });
+  assert.equal(manualStarter.ok, false);
+  assert.equal(manualStarter.code, 'already_entitled');
+});
+
 test('decideTrialStart allows a lapsed subscription to trial', () => {
   // Past Due / Inactive resolve to the baseline, so a former customer may trial.
   assert.deepEqual(decideTrialStart({ tier: 'Ranch Ops', billing_state: 'Past Due', payload: {} }), { ok: true });

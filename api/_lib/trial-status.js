@@ -20,7 +20,7 @@
  * record must block a restart without granting anything.
  */
 
-import { BASELINE_TIER, entitledTierForBillingState } from './subscription-status.js';
+import { isEntitledBillingState } from './subscription-status.js';
 
 /** The only plan a trial may grant. Fixed — the endpoint never takes a tier. */
 export const TRIAL_PLAN_TIER = 'Professional';
@@ -125,13 +125,24 @@ export function decideTrialStart(row) {
     };
   }
 
-  const effectiveTier = entitledTierForBillingState(row?.tier, row?.billing_state);
-  if (effectiveTier !== BASELINE_TIER) {
+  /*
+   * A workspace already entitled to paid features has nothing to trial — and
+   * "entitled" is a property of the billing state, not the tier.
+   * entitledTierForBillingState maps ('Starter', 'Active') back to the
+   * baseline tier, so keying this on the tier alone would grant a paying
+   * Starter workspace a Professional trial while the SQL entitlement
+   * predicates keep enforcing Starter limits: paid actions gated by a
+   * divergent client decision. Reject the paid row explicitly.
+   *
+   * Lapsed states ('Past Due', 'Inactive', unknown) still fall through to
+   * ok:true — a former customer may trial, per the contract above.
+   */
+  if (isEntitledBillingState(row?.billing_state)) {
     return {
       ok: false,
       code: 'already_entitled',
       status: 409,
-      message: 'This workspace already has paid plan features, so there is no trial to start.',
+      message: 'This workspace already has an active paid subscription, so there is no trial to start.',
     };
   }
 

@@ -230,6 +230,65 @@ test('a purchase preserves the stored trial record so the one-trial rule survive
   );
 });
 
+test('a trial that starts between the profile read and the billing RPC is not erased', async () => {
+  stripeScenario.calls = [];
+  stripeScenario.retrieveSubscription = async () => activeSubscription(PRICE_PRO_MONTHLY);
+
+  const trial = {
+    startedAt: '2026-09-01T00:00:00.000Z',
+    endsAt: '2026-09-15T00:00:00.000Z',
+    plan: 'Professional',
+  };
+  // The stored row as the database sees it. The handler's read snapshots it
+  // BEFORE the concurrent trial start lands.
+  const dbRow = { tier: 'Starter', billing_state: 'Inactive', payload: {} };
+  const rpcParams = [];
+  let writtenPayload = null;
+
+  const client = makeClient({
+    tables: {
+      workspace_subscription_events: async () => ({ data: [], error: null }),
+      workspace_subscription_profiles: async (mode) => {
+        if (mode !== 'maybeSingle') return { data: [], error: null };
+        // Snapshot the row for the handler, then land the concurrent trial
+        // start: startWorkspaceTrial's conditional write commits between the
+        // handler's SELECT and the RPC's locked write.
+        const snapshot = JSON.parse(JSON.stringify(dbRow));
+        dbRow.payload = { trial };
+        return { data: snapshot, error: null };
+      },
+    },
+    rpcImpl: async (name, params) => {
+      assert.equal(name, 'xbar_apply_subscription_event');
+      rpcParams.push(params);
+      // The real RPC merges payload.trial from the row it holds the advisory
+      // lock on — not from the handler's pre-lock snapshot. This mock encodes
+      // that contract; supabase/migrations/20260924223000 is the authoritative
+      // implementation.
+      const lockedTrial = dbRow.payload ? dbRow.payload.trial : undefined;
+      const merged = { ...params.p_profile };
+      if (lockedTrial && merged.trial == null) merged.trial = lockedTrial;
+      writtenPayload = merged;
+      return { data: true, error: null };
+    },
+  });
+  __setBillingSupabase(client);
+
+  const response = await deliver(completedEvent({ eventId: 'evt_test_trial_race' }));
+
+  assert.equal(response.statusCode, 200);
+  assert.equal(
+    rpcParams[0].p_profile.trial,
+    undefined,
+    'the handler snapshot genuinely predates the trial: only the under-lock merge can save it',
+  );
+  assert.deepEqual(
+    writtenPayload.trial,
+    trial,
+    'the trial that landed between the read and the RPC must survive the payload replace',
+  );
+});
+
 test('a duplicate delivery is acknowledged without re-granting', async () => {
   stripeScenario.calls = [];
   stripeScenario.retrieveSubscription = async () => activeSubscription(PRICE_PRO_MONTHLY);
