@@ -1,7 +1,12 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import { readFile } from 'node:fs/promises';
-import { PROOF_PACKET_THRESHOLD, buildSaleReadinessScore, readinessNextStep } from '../src/lib/saleReadinessScore.js';
+import {
+  PROOF_PACKET_THRESHOLD,
+  buildSaleReadinessScore,
+  readinessHeadline,
+  readinessNextStep,
+} from '../src/lib/saleReadinessScore.js';
 import type {
   DocumentRecord,
   ExpenseReceipt,
@@ -349,4 +354,24 @@ test('the profile suggests the next step from the computed score, never the stor
   const profile = await readFile('src/routes/AnimalProfile.tsx', 'utf8');
   assert.match(profile, /readinessNextStep\(saleReadiness, animal\.name\)/);
   assert.doesNotMatch(profile, /animal\.readiness\?\.blockers/);
+});
+
+test('"every record is in place" is said only when every record is', async () => {
+  // At 85 the packet can go out, but Care records at 0 of 15 is not "every record".
+  const noCare = complete({ receipts: [] });
+  assert.equal(noCare.score, 85);
+  assert.equal(noCare.proofPacketReady, true);
+  const headline = readinessHeadline(noCare);
+  assert.doesNotMatch(headline.title, /Every record/);
+  assert.equal(headline.label, 'Ready for a proof packet');
+  assert.match(headline.title, /Log a deworming and a dental float to reach 100/);
+
+  assert.deepEqual(readinessHeadline(complete()), {
+    label: 'Ready for buyers',
+    title: 'Every record a buyer checks is in place.',
+  });
+
+  const card = await readFile('src/components/SaleReadinessCard.tsx', 'utf8');
+  assert.match(card, /const headline = readinessHeadline\(readiness\);/);
+  assert.doesNotMatch(card, /Every record a buyer checks/);
 });

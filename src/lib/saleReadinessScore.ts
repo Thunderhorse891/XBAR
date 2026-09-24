@@ -334,3 +334,25 @@ export function readinessNextStep(readiness: SaleReadinessScore, horseName: stri
   if (readiness.proofPacketBlocker) return readiness.proofPacketBlocker;
   return `Generate ${horseName}'s proof packet`;
 }
+
+/**
+ * The card's headline. "Every record is in place" only when every component
+ * is full: the packet can go out at 85, and saying everything is complete
+ * beside a Care records row at 0 of 15 would contradict the breakdown below.
+ */
+export function readinessHeadline(readiness: SaleReadinessScore): { label: string; title: string } {
+  const top = readiness.topActions[0];
+  if (readiness.proofPacketReady) {
+    return top
+      ? {
+          label: 'Ready for a proof packet',
+          title: `The packet can go out now. ${top.label} to reach ${top.reach}.`,
+        }
+      : { label: 'Ready for buyers', title: 'Every record a buyer checks is in place.' };
+  }
+  if (top) return { label: 'Biggest moves first', title: `${top.label} to reach ${top.reach}.` };
+  return {
+    label: 'Before a buyer sees it',
+    title: readiness.proofPacketBlocker ?? 'Keep these records current.',
+  };
+}

@@ -2,7 +2,12 @@ import { useNavigate } from 'react-router-dom';
 import { ArrowUpRight, FileText } from 'lucide-react';
 import { ActionButton, Card, ProgressRing, StatusChip } from '@/components/saas';
 import { ProgressBar } from '@/components/app-ui';
-import { PROOF_PACKET_THRESHOLD, type ReadinessAction, type SaleReadinessScore } from '@/lib/saleReadinessScore';
+import {
+  PROOF_PACKET_THRESHOLD,
+  type ReadinessAction,
+  type SaleReadinessScore,
+  readinessHeadline,
+} from '@/lib/saleReadinessScore';
 import { useUiStore } from '@/store/useUiStore';
 
 /**
@@ -49,6 +54,8 @@ export function SaleReadinessCard({
     }
   };
 
+  const headline = readinessHeadline(readiness);
+
   return (
     <Card
       title="Sale readiness"
@@ -68,20 +75,8 @@ export function SaleReadinessCard({
         </div>
         <div style={{ flex: '1 1 260px', minWidth: 0 }}>
           <div className="xs-nba">
-            <div className="xs-nba__label">
-              {readiness.proofPacketReady
-                ? 'Ready for buyers'
-                : readiness.topActions.length
-                  ? 'Biggest moves first'
-                  : 'Before a buyer sees it'}
-            </div>
-            <div className="xs-nba__title">
-              {readiness.proofPacketReady
-                ? 'Every record a buyer checks is in place.'
-                : readiness.topActions[0]
-                  ? `${readiness.topActions[0].label} to reach ${readiness.topActions[0].reach}.`
-                  : (readiness.proofPacketBlocker ?? 'Keep these records current.')}
-            </div>
+            <div className="xs-nba__label">{headline.label}</div>
+            <div className="xs-nba__title">{headline.title}</div>
           </div>
           {readiness.topActions.length ? (
             <div className="xs-toolbar" style={{ marginTop: 12, flexWrap: 'wrap' }}>
