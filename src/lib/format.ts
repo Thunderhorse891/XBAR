@@ -4,6 +4,15 @@ const currencyFormatter = new Intl.NumberFormat('en-US', {
   maximumFractionDigits: 0,
 });
 
+// For figures that live below a dollar's precision — cost per horse per day,
+// price per bale — where rounding to whole dollars would erase the number.
+const centsCurrencyFormatter = new Intl.NumberFormat('en-US', {
+  style: 'currency',
+  currency: 'USD',
+  minimumFractionDigits: 2,
+  maximumFractionDigits: 2,
+});
+
 const compactCurrencyFormatter = new Intl.NumberFormat('en-US', {
   style: 'currency',
   currency: 'USD',
@@ -27,6 +36,10 @@ function parseDateValue(value: string) {
 
 export function formatCurrency(value: number) {
   return currencyFormatter.format(value);
+}
+
+export function formatCurrencyCents(value: number) {
+  return centsCurrencyFormatter.format(value);
 }
 
 export function formatCompactCurrency(value: number) {

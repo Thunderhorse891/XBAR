@@ -87,6 +87,9 @@ export type ExpenseReceiptInput = {
   vendor: string;
   amount: number;
   receiptDate: string;
+  /** Optional, but only together with `unit`: a quantity with no unit prices nothing. */
+  quantity?: number;
+  unit?: string;
   notes?: string;
   uploadedBy: string;
   file?: File | null;
@@ -247,8 +250,24 @@ export function validateExpenseReceiptInput(input: ExpenseReceiptInput) {
     requireValue(input.vendor, 'Vendor', 2) ??
     requireValue(input.uploadedBy, 'Uploaded by', 2) ??
     (!Number.isFinite(input.amount) || input.amount <= 0 ? 'Amount must be greater than zero.' : null) ??
-    (!input.receiptDate?.trim() ? 'Receipt date is required.' : null)
+    (!input.receiptDate?.trim() ? 'Receipt date is required.' : null) ??
+    validateExpenseQuantity(input)
   );
+}
+
+/*
+ * Quantity and unit are what turn a receipt into a price per unit. Half of the
+ * pair is refused rather than dropped: saving "12" with no unit, or "bale" with
+ * no count, would store a receipt that looks priced and silently is not.
+ */
+function validateExpenseQuantity(input: Pick<ExpenseReceiptInput, 'quantity' | 'unit'>) {
+  const hasQuantity = input.quantity !== undefined && input.quantity !== null;
+  const hasUnit = Boolean(input.unit?.trim());
+  if (!hasQuantity && !hasUnit) return null;
+  if (!hasQuantity || !Number.isFinite(input.quantity) || (input.quantity ?? 0) <= 0) {
+    return 'Quantity must be greater than zero when a unit is entered.';
+  }
+  return hasUnit ? null : 'Enter a unit (bale, ton, bag) with the quantity.';
 }
 
 export function summarizeBatch(batch: IntakeBatch, documents: DocumentRecord[]): IntakeBatch {

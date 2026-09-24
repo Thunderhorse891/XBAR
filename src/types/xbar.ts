@@ -418,6 +418,13 @@ export interface ExpenseReceipt {
   vendor: string;
   amount: number;
   receiptDate: string;
+  /**
+   * Units bought, with `unit` — set together or not at all. What makes one
+   * supplier's feed price comparable from delivery to delivery.
+   */
+  quantity?: number;
+  /** What one unit is: "bale", "ton", "50 lb bag". */
+  unit?: string;
   notes?: string;
   uploadedAt: string;
   uploadedBy: string;
