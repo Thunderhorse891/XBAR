@@ -20,6 +20,7 @@ import { buildBankedHeadline, buildRanchFinancials } from '@/lib/profitIntellige
 import { formatCompactCurrency } from '@/lib/format';
 import { events, track } from '@/lib/telemetry';
 import { useXbarStore } from '@/store/useXbarStore';
+import { useUiStore } from '@/store/useUiStore';
 
 // Used only for the large faded hero watermark (300x300), so it needs a
 // source bigger than the 180px touch icon — icon-512 stays crisp while still
@@ -42,6 +43,7 @@ type Signal = {
 
 export default function Dashboard() {
   const navigate = useNavigate();
+  const openQuickCreate = useUiStore((state) => state.openQuickCreate);
   const horses = useXbarStore((s) => s.horses);
   const documents = useXbarStore((s) => s.documents);
   const ownershipRecords = useXbarStore((s) => s.ownershipRecords);
@@ -335,22 +337,24 @@ export default function Dashboard() {
   }
 
   const primary = signals[0];
-  const heroLine =
-    primary.tone === 'danger' ? (
-      <>
-        Missing documents are holding up a sale — <em>{transferGaps.length} to finish</em>.
-      </>
-    ) : primary.tone === 'warning' ? (
-      <>
-        {careDue.length} horse{careDue.length === 1 ? '' : 's'} need care today.
-      </>
-    ) : primary.tone === 'info' ? (
-      <>
-        {reviewQueue.length} document{reviewQueue.length === 1 ? '' : 's'} need review.
-      </>
-    ) : (
-      <>Everything looks good across {horses.length} horses.</>
-    );
+  const firstHorse = horses.find((horse) => horse.tags?.includes('first-horse-setup') && horse.documents.length === 0);
+  const heroLine = firstHorse ? (
+    <>{firstHorse.barnName || firstHorse.name} has a place in your ranch.</>
+  ) : primary.tone === 'danger' ? (
+    <>
+      Missing documents are holding up a sale — <em>{transferGaps.length} to finish</em>.
+    </>
+  ) : primary.tone === 'warning' ? (
+    <>
+      {careDue.length} horse{careDue.length === 1 ? '' : 's'} need care today.
+    </>
+  ) : primary.tone === 'info' ? (
+    <>
+      {reviewQueue.length} document{reviewQueue.length === 1 ? '' : 's'} need review.
+    </>
+  ) : (
+    <>Everything looks good across {horses.length} horses.</>
+  );
 
   const workItems = [
     ...transferGaps.map((g) => ({
@@ -399,18 +403,32 @@ export default function Dashboard() {
           </div>
           <h1 className="xs-hero__headline">{heroLine}</h1>
           <p className="xs-hero__sub">
-            {openItems > 0
-              ? `${openItems} thing${openItems === 1 ? '' : 's'} need attention. Start with what's most likely to hold up a sale or a horse's care.`
-              : `Nothing needs attention right now. ${activeSales.length} buyer${activeSales.length === 1 ? '' : 's'} in progress.`}
+            {firstHorse
+              ? 'Next, add a registration paper, Coggins, or care record. Check the details before saving them to your horse.'
+              : openItems > 0
+                ? `${openItems} thing${openItems === 1 ? '' : 's'} need attention. Start with what's most likely to hold up a sale or a horse's care.`
+                : `Nothing needs attention right now. ${activeSales.length} buyer${activeSales.length === 1 ? '' : 's'} in progress.`}
           </p>
           <div className="xs-hero__actions">
-            <ActionButton variant="primary" icon={<ArrowRight size={15} />} onClick={() => navigate(primary.to)}>
-              Start here
+            <ActionButton
+              variant="primary"
+              icon={<ArrowRight size={15} />}
+              onClick={() =>
+                firstHorse
+                  ? openQuickCreate({ action: 'Upload Document', horseId: firstHorse.id })
+                  : navigate(primary.to)
+              }
+            >
+              {firstHorse ? 'Add this horse’s papers' : 'Start here'}
             </ActionButton>
-            <ActionButton onClick={() => navigate('/horses')}>Horses</ActionButton>
-            <ActionButton variant="ghost" onClick={() => navigate('/reports')}>
-              Ready-to-sell report
+            <ActionButton onClick={() => navigate(firstHorse ? `/horses/${firstHorse.id}` : '/horses')}>
+              {firstHorse ? 'View horse' : 'Horses'}
             </ActionButton>
+            {!firstHorse ? (
+              <ActionButton variant="ghost" onClick={() => navigate('/reports')}>
+                Ready-to-sell report
+              </ActionButton>
+            ) : null}
           </div>
         </div>
       </section>

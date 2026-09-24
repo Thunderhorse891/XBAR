@@ -267,7 +267,7 @@ export default function Ownership() {
         { id: 'quick-view', label: 'Quick view', onSelect: () => openOwnershipDetails(menuRecord.id) },
         {
           id: 'open-workspace',
-          label: 'Open transfer workspace',
+          label: 'View transfer',
           onSelect: () => selectRecordAndScroll(menuRecord.id),
         },
         ...(menuHorse
@@ -483,10 +483,10 @@ export default function Ownership() {
         nextAction={
           worstRecord
             ? {
-                label: `Open transfer workspace for ${worstName}`,
+                label: `View transfer for ${worstName}`,
                 onClick: () => selectRecordAndScroll(worstRecord.id),
               }
-            : { label: 'Open transfer workspace', disabledReason: 'No ownership records yet — add a horse first.' }
+            : { label: 'View transfer', disabledReason: 'No ownership records yet — add a horse first.' }
         }
         secondaryActions={[
           ...(worstRecord && heroRisks.length
@@ -658,7 +658,7 @@ export default function Ownership() {
             <>
               <div className="ownership-section-heading ownership-section-heading--compact">
                 <div>
-                  <span className="section-eyebrow">Transfer workspace</span>
+                  <span className="section-eyebrow">Transfer details</span>
                   <h2>{selectedHorseName}</h2>
                 </div>
                 <Pill tone={statusPillTone(selectedRecord.transferStatus)}>{selectedRecord.transferStatus}</Pill>
@@ -797,10 +797,7 @@ export default function Ownership() {
               </div>
             </>
           ) : (
-            <EmptyState
-              title="No ownership record loaded"
-              description="Select a registry row to open its transfer workspace."
-            />
+            <EmptyState title="No ownership record loaded" description="Choose a horse to see its transfer details." />
           )}
         </section>
       </div>

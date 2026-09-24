@@ -15,11 +15,13 @@ export type RoleCapability =
   | 'manageBilling'
   | 'syncCloud';
 
-export type HorseSegment = 'Broodmare' | 'Stud' | 'Show String' | 'Sale Prospect' | 'Young Stock' | 'Retired';
+export type HorseSegment =
+  'Broodmare' | 'Stud' | 'Show String' | 'Sale Prospect' | 'Young Stock' | 'Retired' | 'Unassigned';
 
-export type HorseStatus = 'In Training' | 'Broodmare Program' | 'Sale Prep' | 'Medical Review' | 'Pasture' | 'Retired';
+export type HorseStatus =
+  'In Training' | 'Broodmare Program' | 'Sale Prep' | 'Medical Review' | 'Pasture' | 'Retired' | 'New record';
 
-export type HorseSex = 'Mare' | 'Stud' | 'Gelding' | 'Filly' | 'Colt';
+export type HorseSex = 'Mare' | 'Stud' | 'Gelding' | 'Filly' | 'Colt' | 'Not recorded';
 
 export type DocumentType =
   | 'Registration'

@@ -352,13 +352,13 @@ export default function Login() {
     </p>
   );
 
-  const label = authMode === 'signin' ? 'System access' : selectedPlan ? `${selectedPlan} tier` : 'New workspace';
+  const label = authMode === 'signin' ? 'System access' : selectedPlan ? `${selectedPlan} tier` : 'New ranch';
   const title = authMode === 'signin' ? 'Sign In' : 'Create Account';
   const description = selectedPlan
-    ? `Create credentials, set up your workspace, then continue to the ${selectedPlan} plan.`
+    ? `Create your account, set up your ranch, then continue to the ${selectedPlan} plan.`
     : authMode === 'signin'
-      ? 'Sign in to your workspace.'
-      : 'Create a sign-in for your XBAR workspace.';
+      ? 'Sign in to your ranch.'
+      : 'Create your XBAR account.';
 
   return (
     <main className="clean-entry-shell clean-entry-shell--brand-auth">
@@ -384,7 +384,7 @@ export default function Login() {
             </h2>
             <p>Bring your horses, records, and next decisions together.</p>
           </div>
-          <ul className="clean-login-capabilities" aria-label="Workspace tools">
+          <ul className="clean-login-capabilities" aria-label="Ranch tools">
             <li>Horse records</li>
             <li>Documents</li>
             <li>Sale reports</li>
@@ -609,7 +609,7 @@ export default function Login() {
               <div>
                 <span>Starting fresh?</span>
                 <button type="button" onClick={openWorkspaceSetup}>
-                  Create workspace
+                  Create ranch
                 </button>
               </div>
             )}

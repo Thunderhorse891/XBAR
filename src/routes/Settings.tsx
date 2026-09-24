@@ -602,27 +602,26 @@ export default function Settings() {
       <PageHeader eyebrow="Settings" title="Settings" />
 
       <div className="dashboard-grid dashboard-grid--primary">
-        <Panel eyebrow="Access model" title="Commercial barn permissions">
+        <Panel eyebrow="Your team" title="Who can see and change records">
           <div className="stack-list">
             <div className="stack-item">
               <div className="stack-item__top">
-                <div className="stack-item__title">Role-based access protects the business model</div>
-                <Pill tone="blue">Multi-user</Pill>
+                <div className="stack-item__title">Give each person the access they need</div>
+                <Pill tone="blue">Team access</Pill>
               </div>
               <div className="stack-item__copy">
-                Owners, vets, medical leads, sales leads, and staff should never need full admin access. XBAR separates
-                workspace control from horse/client-facing access so commercial barns can invite people without exposing
-                the whole operation.
+                Choose a role for each person helping with your ranch. Roles control which records they can see and
+                which tasks they can do, without giving everyone full control of the ranch.
               </div>
             </div>
             <div className="stack-item">
               <div className="stack-item__top">
-                <div className="stack-item__title">Offline-capable browser workspace</div>
+                <div className="stack-item__title">Records on this device</div>
                 <Pill tone={online ? 'emerald' : 'amber'}>{online ? 'Online' : 'Offline'}</Pill>
               </div>
               <div className="stack-item__copy">
-                The app registers an offline shell and keeps local workspace data available in the browser. Barn staff
-                can keep working through poor signal, then use cloud sync when service is available.
+                Saved ranch records can remain available on this device with poor signal. Online actions and files that
+                have not been saved here still need a connection. Check the sync status before changing devices.
               </div>
             </div>
           </div>

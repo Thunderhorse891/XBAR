@@ -300,6 +300,25 @@ ${ctaBlock('See the workflow end to end.', 'The product tour walks the document 
 
 /* -------------------------------------------------------------- pricing */
 
+const pricingQuestions = [
+  [
+    'Can I cancel anytime?',
+    'Manage your subscription through Stripe from Billing in XBAR. Stripe shows the cancellation options and the date your paid access ends. If those controls are unavailable, contact XBAR support before buying another plan.',
+  ],
+  [
+    'What happens to my records if I cancel?',
+    'Canceling a plan does not delete your ranch records. When paid access ends, higher-plan tools and limits are no longer available. Export important records before changing your plan. Deleting your account is a separate action.',
+  ],
+  [
+    'Do you offer annual billing?',
+    'Only monthly billing is offered here. Annual prices and discounts have not been set.',
+  ],
+  [
+    'How do I choose or change a plan?',
+    'Choose a plan below, sign in or create your account, and review it in Billing. A new subscription uses secure Stripe checkout. To change an existing subscription, use Manage billing so you do not start a second subscription.',
+  ],
+];
+
 const pricing = {
   path: '/pricing',
   title: 'XBAR Pricing — Starter $29, Professional $79, Ranch Ops $199, Enterprise $499',
@@ -326,40 +345,21 @@ const pricing = {
     {
       '@context': 'https://schema.org',
       '@type': 'FAQPage',
-      mainEntity: [
-        {
-          '@type': 'Question',
-          name: 'Can I start before cloud sync is configured?',
-          acceptedAnswer: {
-            '@type': 'Answer',
-            text: 'Yes. XBAR has a local-first workspace, so you can evaluate the system and begin organizing records before enabling cloud services.',
-          },
-        },
-        {
-          '@type': 'Question',
-          name: 'What happens to my records if I change plans?',
-          acceptedAnswer: {
-            '@type': 'Answer',
-            text: 'Your records stay intact. Plans change capacity and collaboration access; they do not erase the operating history you built.',
-          },
-        },
-        {
-          '@type': 'Question',
-          name: 'How does checkout work?',
-          acceptedAnswer: {
-            '@type': 'Answer',
-            text: 'A workspace owner reviews the plan inside XBAR and completes the plan change through secure Stripe checkout.',
-          },
-        },
-      ],
+      mainEntity: pricingQuestions.map(([question, answer]) => ({
+        '@type': 'Question',
+        name: question,
+        acceptedAnswer: { '@type': 'Answer', text: answer },
+      })),
     },
   ],
   body: `
+<div class="pricing-page">
 <section class="hero hero--solo wrap section--flush">
   <div>
     <p class="kicker">Pricing</p>
-    <h1>Simple plans. Published limits. No hidden capacity math.</h1>
-    <p class="lead">Every plan protects the core horse record. Higher tiers add collaboration, buyer sharing, and more document and storage capacity — and the limits below are the same ones the application enforces.</p>
+    <h1>A plan for your horses.<br />Room for your ranch.</h1>
+    <p class="lead">Start with horse records, care, papers, and expenses. Add buyer sharing, team tools, and room for more horses when you need them.</p>
+    <p class="pricing-terms">Prices in USD, billed monthly. Annual billing is not offered yet.</p>
   </div>
 </section>
 
@@ -369,10 +369,11 @@ const pricing = {
       ${marketingPlans
         .map(
           (plan) => `<article class="plan${plan.featured ? ' plan--featured' : ''}">
-        ${plan.featured ? '<span class="plan__badge">Most chosen</span>' : ''}
+        ${plan.featured ? '<span class="plan__badge">For selling horses</span>' : ''}
         <h2 style="font-family:var(--font-ui);font-size:20px">${esc(plan.tier)}</h2>
         <p class="plan__fit">${esc(plan.fit)}</p>
         <p class="plan__price">$${plan.monthlyRate}<small>/month</small></p>
+        <p class="pricing-horses">Up to ${plan.limits.horseLimit.toLocaleString('en-US')} horses</p>
         <ul>${plan.features.map((feature) => `<li>${esc(feature)}</li>`).join('')}</ul>
         <a class="btn${plan.featured ? ' btn--primary' : ''}" href="${signup(plan.tier)}" rel="nofollow">Choose ${esc(plan.tier)}</a>
       </article>`,
@@ -387,12 +388,12 @@ const pricing = {
     <h2>Plan limits, side by side</h2>
     <div class="table-scroll">
       <table class="limits">
-        <caption>These limits are enforced by the application — the same numbers appear in your workspace usage meter.</caption>
+        <caption>Compare what is included. You can check your remaining space in Billing.</caption>
         <thead><tr><th scope="col">Capacity</th>${marketingPlans.map((plan) => `<th scope="col">${esc(plan.tier)}</th>`).join('')}</tr></thead>
         <tbody>
           <tr><th scope="row">Monthly price</th>${marketingPlans.map((plan) => `<td>$${plan.monthlyRate}</td>`).join('')}</tr>
           <tr><th scope="row">Horses</th>${marketingPlans.map((plan) => `<td>${plan.limits.horseLimit.toLocaleString('en-US')}</td>`).join('')}</tr>
-          <tr><th scope="row">Team seats</th>${marketingPlans.map((plan) => `<td>${plan.limits.seatLimit}</td>`).join('')}</tr>
+          <tr><th scope="row">Team members, including you</th>${marketingPlans.map((plan) => `<td>${plan.limits.seatLimit}</td>`).join('')}</tr>
           <tr><th scope="row">Client seats</th>${marketingPlans.map((plan) => `<td>${plan.limits.sharedAccessSeatLimit}</td>`).join('')}</tr>
           <tr><th scope="row">Documents</th>${marketingPlans.map((plan) => `<td>${plan.limits.documentLimit.toLocaleString('en-US')}</td>`).join('')}</tr>
           <tr><th scope="row">Sale packets</th>${marketingPlans.map((plan) => `<td>${plan.limits.salePacketLimit.toLocaleString('en-US')}</td>`).join('')}</tr>
@@ -407,14 +408,12 @@ const pricing = {
   <div class="wrap">
     <h2>Pricing questions</h2>
     <div class="faq" style="margin-top:22px">
-      <details><summary>Can I start before cloud sync is configured?</summary><p>Yes. XBAR has a local-first workspace, so you can evaluate the system and begin organizing records before enabling cloud services.</p></details>
-      <details><summary>What happens to my records if I change plans?</summary><p>Your records stay intact. Plans change capacity and collaboration access; they do not erase the operating history you built.</p></details>
-      <details><summary>Is XBAR only for large operations?</summary><p>No. Starter is designed for a smaller records-driven operation. Professional and Ranch Ops add the collaboration, sale-readiness, and capacity larger programs need.</p></details>
-      <details><summary>How does checkout work?</summary><p>A workspace owner reviews the plan inside XBAR and completes the plan change through secure Stripe checkout.</p></details>
+      ${pricingQuestions.map(([question, answer]) => `<details><summary>${esc(question)}</summary><p>${esc(answer)}</p></details>`).join('\n')}
     </div>
   </div>
 </section>
-${ctaBlock('Try it with your own records.', 'Create a workspace, upload a few documents, and see the review pipeline work before you pick a plan.')}`,
+${ctaBlock('Start with your own records.', 'Add your ranch, your first horse, and its papers. Review your plan before paying.')}
+</div>`,
 };
 
 /* ------------------------------------------------------------ solutions */

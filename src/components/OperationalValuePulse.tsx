@@ -13,7 +13,7 @@ export function OperationalValuePulse({ pulse }: OperationalValuePulseProps) {
       aria-labelledby="operational-value-title"
     >
       <div className="operational-value-pulse__summary">
-        <div className="operational-value-pulse__eyebrow">Operational value pulse</div>
+        <div className="operational-value-pulse__eyebrow">Ranch overview</div>
         <div className="operational-value-pulse__heading-row">
           <div>
             <h2 id="operational-value-title" className="operational-value-pulse__title">
@@ -21,17 +21,14 @@ export function OperationalValuePulse({ pulse }: OperationalValuePulseProps) {
             </h2>
             <p className="operational-value-pulse__copy">{pulse.summary}</p>
           </div>
-          <div
-            className="operational-value-pulse__score"
-            aria-label={`Operational control score ${pulse.score} out of 100`}
-          >
+          <div className="operational-value-pulse__score" aria-label={`Records score ${pulse.score} out of 100`}>
             <strong>{pulse.score}</strong>
-            <span>control score</span>
+            <span>records score</span>
           </div>
         </div>
         <div className="operational-value-pulse__next">
           <div>
-            <span className="operational-value-pulse__next-label">Highest-value next move</span>
+            <span className="operational-value-pulse__next-label">What to do next</span>
             <strong>{pulse.nextAction.label}</strong>
             <span>{pulse.nextAction.detail}</span>
           </div>
@@ -41,7 +38,7 @@ export function OperationalValuePulse({ pulse }: OperationalValuePulseProps) {
         </div>
       </div>
 
-      <div className="operational-value-pulse__signals" aria-label="Operational value signals">
+      <div className="operational-value-pulse__signals" aria-label="Ranch details">
         {pulse.signals.map((signal) => (
           <Link
             key={signal.label}

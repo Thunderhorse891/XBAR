@@ -441,7 +441,7 @@ export default function BuyerProfile() {
         ? 'Loading listing and packet data.'
         : localPreviewAllowed && localHorse && localSharedListing && !localAccessAllowed
           ? 'This sale packet requires a valid access link from the ranch.'
-          : (remoteState.message ?? 'Record not found in this workspace.');
+          : (remoteState.message ?? 'Record not found for this ranch.');
 
     return (
       <main className="buyer-shell">
@@ -509,7 +509,7 @@ export default function BuyerProfile() {
       <div className="buyer-shell__inner">
         {localPreviewAllowed && localHorse ? (
           <Link className="inline-link" to={`/horses/${horse.id}`}>
-            Back to horse workspace
+            Back to horses
           </Link>
         ) : null}
 

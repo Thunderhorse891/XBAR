@@ -29,7 +29,7 @@ export function buildActivationSteps(input: ActivationInput): ActivationStep[] {
     {
       id: 'horse',
       title: 'Add the first horse',
-      description: 'Create the horse record the rest of the operation can organize around.',
+      description: 'Start a record for one of your horses.',
       action: 'Add Horse',
       path: '/horses?new=1',
       complete: input.horses > 0,
@@ -38,7 +38,7 @@ export function buildActivationSteps(input: ActivationInput): ActivationStep[] {
     {
       id: 'documents',
       title: 'Attach the first document',
-      description: 'Connect registration, Coggins, health, or ownership documents to the operation.',
+      description: 'Keep registration, Coggins, care, or ownership papers with your horse.',
       action: 'Upload Documents',
       path: '/documents?upload=1',
       complete: input.documents > 0,
@@ -46,8 +46,8 @@ export function buildActivationSteps(input: ActivationInput): ActivationStep[] {
     },
     {
       id: 'receipt',
-      title: 'Capture one real operating cost',
-      description: 'Add a receipt so the record begins connecting decisions to spend.',
+      title: 'Add your first expense',
+      description: 'Save a receipt to start tracking what you spend.',
       action: 'Log a cost',
       path: '/expenses',
       complete: input.receipts > 0,
@@ -55,9 +55,9 @@ export function buildActivationSteps(input: ActivationInput): ActivationStep[] {
     },
     {
       id: 'team',
-      title: 'Put a workflow in motion',
-      description: 'Invite a teammate or prepare a controlled listing for a real next step.',
-      action: 'Open access controls',
+      title: 'Invite your team or share a listing',
+      description: 'Invite someone to help, or choose what a buyer can see.',
+      action: 'Manage sharing',
       path: '/settings',
       complete: teamCount > 0 || input.sharedListings > 0,
       value:
@@ -67,8 +67,8 @@ export function buildActivationSteps(input: ActivationInput): ActivationStep[] {
     },
     {
       id: 'plan',
-      title: 'Confirm operating capacity',
-      description: 'Review billing before capacity becomes a blocker.',
+      title: 'Check your plan',
+      description: 'Check that your plan has room for your horses and records.',
       action: 'Review billing',
       path: billingPath,
       complete: planActive,
@@ -90,7 +90,7 @@ export function summarizeActivation(input: ActivationInput) {
     complete: completed === steps.length,
     firstValueAchieved,
     valueStatement: firstValueAchieved
-      ? 'A horse and its first source record now live in the same workspace.'
-      : 'The first useful outcome arrives when one horse and one source document are connected.',
+      ? 'Your first horse and its papers are together.'
+      : 'Add a horse, then attach its first paper.',
   };
 }

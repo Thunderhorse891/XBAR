@@ -22,7 +22,7 @@
   .field-input,
   .field-select,
   .field-textarea {
-    min-height: 44px;
+    min-height: 48px;
   }
 
   .metric-grid,
@@ -44,5 +44,75 @@
 
   .data-table {
     min-width: 680px;
+  }
+}
+
+.xs-field-actions {
+  display: none;
+}
+
+/* Field controls only. Desktop layout and typography remain unchanged. */
+@media (max-width: 760px) {
+  .xs-shell {
+    --xbar-text-muted: var(--xbar-text);
+    --muted: var(--text);
+    --muted-strong: var(--text);
+  }
+  .xs-shell .xs-btn,
+  .xs-shell .xs-iconbtn,
+  .xs-shell .xs-toggle__btn,
+  .xs-shell .xs-tab,
+  .xs-shell .xs-mobilebar__btn,
+  .xs-shell .xs-menu__item,
+  .xs-shell .xs-input,
+  .xs-shell .xs-select,
+  .xs-shell .xs-textarea,
+  .clean-primary-button,
+  .clean-secondary-button,
+  .clean-field input {
+    min-height: 48px;
+  }
+  .xs-shell .xs-iconbtn,
+  .xs-shell .icon-button {
+    min-width: 48px;
+    min-height: 48px;
+  }
+  .xs-shell .xs-textarea {
+    min-height: 120px;
+  }
+  .xs-shell input:not([type='checkbox']):not([type='radio']),
+  .xs-shell select,
+  .xs-shell textarea,
+  .clean-field input {
+    font-size: 16px;
+  }
+  .xs-field-actions {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 8px;
+    margin-bottom: 20px;
+  }
+  .xs-field-actions button {
+    min-height: 64px;
+    padding: 10px 5px;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 6px;
+    border: 1px solid var(--xbar-border-strong);
+    border-radius: var(--xbar-radius-sm);
+    background: var(--xbar-surface);
+    color: var(--xbar-text);
+    font: inherit;
+    font-size: 13px;
+    font-weight: 600;
+    cursor: pointer;
+  }
+  .xs-field-actions button:focus-visible {
+    outline: 2px solid var(--accent-ink);
+    outline-offset: 2px;
+  }
+  .xs-shell .xs-drawer__foot {
+    padding-bottom: max(16px, env(safe-area-inset-bottom));
   }
 }

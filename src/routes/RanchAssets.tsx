@@ -95,7 +95,7 @@ export default function RanchAssets() {
           ? [
               {
                 id: 'open-medical',
-                label: 'Open medical workspace',
+                label: 'View health records',
                 onSelect: () => navigate('/medical'),
               },
             ]

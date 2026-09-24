@@ -182,7 +182,7 @@ export const useXbarStore = create<XbarStore>()(
     (set, get) => ({
       ...initialState,
       setCurrentRole: (role) => set({ currentRole: role }),
-      initializeWorkspace: (profile) => {
+      initializeWorkspace: (profile, firstHorseName) => {
         const businessName = profile.businessName?.trim() ?? '';
         const ranchName = profile.ranchName?.trim() ?? '';
         if (!businessName || !ranchName) {
@@ -199,6 +199,36 @@ export const useXbarStore = create<XbarStore>()(
         });
         const resetLegacyDemo = looksLikeLegacyDemoWorkspace(selectPersistedState(current));
         const seedState = resetLegacyDemo ? createEmptyWorkspaceState() : selectPersistedState(current);
+        // A name-only first record has no verified sex, ownership or location.
+        // Create it together with the ranch in one update. A cloud-save retry
+        // keeps the existing horse, rather than creating another one.
+        const firstName = firstHorseName?.trim() ?? '';
+        if (firstHorseName !== undefined && seedState.horses.length === 0 && (!firstName || firstName.length > 120)) {
+          return { ok: false, message: 'Enter a horse name of 1 to 120 characters.' };
+        }
+        if (firstName && seedState.horses.length === 0) {
+          const horse = createHorseRecord(
+            {
+              name: firstName,
+              barnName: firstName,
+              sex: 'Not recorded',
+              segment: 'Unassigned',
+              status: 'New record',
+              owner: '',
+              ownerEntity: '',
+              barn: '',
+              pasture: '',
+            },
+            nextProfile,
+          );
+          horse.ownership = [];
+          horse.tags = [...horse.tags, 'first-horse-setup'];
+          seedState.horses = [horse];
+          seedState.ownershipRecords = [
+            { ...createOwnershipRecord(horse), complianceDeadline: '' },
+            ...seedState.ownershipRecords,
+          ];
+        }
         const createdInitialAdmin = seedState.workspaceMembers.length === 0;
         const workspaceMembers = createdInitialAdmin
           ? [createInitialWorkspaceMember(nextProfile)]

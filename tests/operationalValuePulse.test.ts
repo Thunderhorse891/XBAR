@@ -13,7 +13,7 @@ test('operational value pulse prioritizes source coverage before lower-risk work
     activeLeadCount: 1,
   });
 
-  assert.equal(pulse.nextAction.label, 'Complete source coverage');
+  assert.equal(pulse.nextAction.label, 'Add missing papers');
   assert.equal(pulse.nextAction.path, '/documents?upload=1');
   assert.equal(pulse.signals[0]?.value, '50%');
 });
@@ -31,7 +31,7 @@ test('operational value pulse shows clear control only when core records and que
 
   assert.equal(pulse.score, 100);
   assert.equal(pulse.tone, 'clear');
-  assert.equal(pulse.headline, 'The operation is under control.');
+  assert.equal(pulse.headline, 'Your record keeping is on track.');
 });
 
 test('operational value pulse recommends the largest operating gap without inventing value claims', () => {
@@ -46,8 +46,8 @@ test('operational value pulse recommends the largest operating gap without inven
   });
 
   assert.equal(pulse.tone, 'watch');
-  assert.equal(pulse.nextAction.label, 'Resolve transfer gaps');
-  assert.match(pulse.summary, /operating record/i);
+  assert.equal(pulse.nextAction.label, 'Finish ownership papers');
+  assert.equal(pulse.summary, 'Some records still need attention. Start with the next step below.');
   assert.doesNotMatch(JSON.stringify(pulse), /hours saved|money saved/i);
 });
 

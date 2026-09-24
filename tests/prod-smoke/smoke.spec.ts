@@ -130,9 +130,9 @@ test('a build with no cloud auth says so before a password is typed', async ({ p
 test('local workspace setup is reachable without cloud sign-in', async ({ page }) => {
   const c = collect(page);
   await page.goto('/login', { waitUntil: 'load' });
-  await page.getByRole('button', { name: 'Create workspace' }).click();
+  await page.getByRole('button', { name: 'Create ranch' }).click();
   await expect(page).toHaveURL(/\/setup/, { timeout: 15_000 });
-  await expect(page.getByRole('heading', { name: 'Configure Workspace' })).toBeVisible({ timeout: 15_000 });
+  await expect(page.getByRole('heading', { name: 'Set up your ranch' })).toBeVisible({ timeout: 15_000 });
   const rootChildren = await page.evaluate(() => document.getElementById('root')?.childElementCount ?? 0);
   expect(rootChildren, 'workspace setup rendered blank').toBeGreaterThan(0);
   assertClean(c);
@@ -160,10 +160,10 @@ test('local workspace setup survives a browser that refuses to store the entry m
   });
 
   await page.goto('/login', { waitUntil: 'load' });
-  await page.getByRole('button', { name: 'Create workspace' }).click();
+  await page.getByRole('button', { name: 'Create ranch' }).click();
 
   await expect(page).toHaveURL(/\/setup/, { timeout: 15_000 });
-  await expect(page.getByRole('heading', { name: 'Configure Workspace' })).toBeVisible({ timeout: 15_000 });
+  await expect(page.getByRole('heading', { name: 'Set up your ranch' })).toBeVisible({ timeout: 15_000 });
   // And it stays: the guard must not bounce them back a moment later.
   await page.waitForTimeout(2000);
   await expect(page).toHaveURL(/\/setup/);
@@ -214,11 +214,11 @@ test('legacy routes redirect to canonical product routes', async ({ page }) => {
   // Complete local-first onboarding so the app shell (where legacy redirects
   // live) is reachable.
   await page.goto('/login', { waitUntil: 'load' });
-  await page.getByRole('button', { name: 'Create workspace' }).click();
+  await page.getByRole('button', { name: 'Create ranch' }).click();
   await expect(page).toHaveURL(/\/setup/, { timeout: 15_000 });
-  await page.getByLabel('Business name').fill('XBAR LLC');
   await page.getByLabel('Ranch name').fill('Primary Ranch');
-  await page.getByRole('button', { name: 'Create workspace' }).click();
+  await page.getByRole('button', { name: 'Continue', exact: true }).click();
+  await page.getByRole('button', { name: 'Add a horse later', exact: true }).click();
   await page.waitForURL((url) => !url.pathname.includes('/setup'), { timeout: 20_000 });
 
   const redirects: Array<[string, string]> = [

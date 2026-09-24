@@ -40,7 +40,7 @@ export default function GettingStarted() {
       id: 'horse',
       title: 'Add your first horse',
       detail: horses.length
-        ? `${horses.length} horse${horses.length === 1 ? '' : 's'} in this workspace.`
+        ? `${horses.length} horse${horses.length === 1 ? '' : 's'} for your ranch.`
         : 'Start with the horse you work with most.',
       done: horses.length > 0,
       action: horses.length ? 'View horses' : 'Add horse',
@@ -96,7 +96,7 @@ export default function GettingStarted() {
           {
             id: 'plan',
             title: 'Review billing',
-            detail: `${subscription.tier} billing is set for this workspace.`,
+            detail: `${subscription.tier} billing is set for this ranch.`,
             // Not just an entitled state: a new workspace is seeded as
             // 'Manual Billing' at rate 0, which is a setup state rather than a
             // purchase, so entitlement alone would tick this off before anyone had
@@ -114,11 +114,7 @@ export default function GettingStarted() {
 
   return (
     <>
-      <PageHead
-        eyebrow="Setup"
-        title="Getting started"
-        subtitle="Use real workspace activity to see what is ready and what still needs attention."
-      />
+      <PageHead eyebrow="Setup" title="Getting started" subtitle="See what you have added and what to do next." />
 
       <Card>
         <div style={{ display: 'flex', alignItems: 'center', gap: 18 }}>

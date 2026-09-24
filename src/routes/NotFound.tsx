@@ -4,11 +4,7 @@ import { PageHeader, Panel } from '@/components/app-ui';
 export default function NotFound() {
   return (
     <>
-      <PageHeader
-        eyebrow="404"
-        title="Page not found"
-        description="The route you opened does not exist in this workspace."
-      />
+      <PageHeader eyebrow="404" title="Page not found" description="This page could not be found." />
 
       <Panel
         title="Return to a live module"

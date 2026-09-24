@@ -309,7 +309,7 @@ export default function Documents() {
             ? [
                 {
                   id: 'open-shared',
-                  label: 'Open Shared Access workspace (Sale Listings)',
+                  label: 'View shared sale listings',
                   onSelect: () => navigate(SHARED_ACCESS_PATH),
                 },
                 {
@@ -521,17 +521,12 @@ export default function Documents() {
             ? { label: `Open review queue (${reviewQueue.length})`, onClick: () => goToStage('Review') }
             : { label: 'Upload documents', onClick: () => goToStage('Upload') }
         }
-        secondaryActions={[{ label: 'Open Shared Access workspace', to: SHARED_ACCESS_PATH }]}
+        secondaryActions={[{ label: 'View shared listings', to: SHARED_ACCESS_PATH }]}
         variant="wide"
       />
 
       <section className="surface-panel">
-        <div
-          className="surface-tabs"
-          role="tablist"
-          aria-orientation="horizontal"
-          aria-label="Document pipeline stages"
-        >
+        <div className="surface-tabs" role="tablist" aria-orientation="horizontal" aria-label="Document review steps">
           {PIPELINE_STAGES.map((stage, index) => (
             <button
               key={stage.id}
@@ -554,7 +549,7 @@ export default function Documents() {
         <>
           <Panel
             title="Stage 1 · Upload"
-            description="New files enter the pipeline here, then move to local OCR automatically."
+            description="Add your papers here. XBAR reads them on this device, then you check the details."
             action={
               <Pill tone={uploadOpen ? 'blue' : 'slate'}>
                 {uploadOpen
@@ -703,7 +698,7 @@ export default function Documents() {
               <EmptyState
                 compact
                 title="No document uploads yet"
-                description="Add files above to start the pipeline — OCR picks them up automatically."
+                description="Add papers above. XBAR will read them so you can check the details."
               />
             )}
           </Panel>
@@ -1012,7 +1007,7 @@ export default function Documents() {
             ) : (
               <EmptyState
                 title="Review queue is clear"
-                description="Approved documents continue to the Ownership stage; upload more files to keep the pipeline moving."
+                description="Approved papers are ready for the ownership check. Add more papers when you need to."
                 action={
                   <button
                     className="button button--ghost button--compact"
@@ -1173,7 +1168,7 @@ export default function Documents() {
                 type="button"
                 onClick={() => navigate(SHARED_ACCESS_PATH)}
               >
-                Open Shared Access workspace
+                View shared listings
               </button>
             }
             className="cursor-context-menu"
@@ -1241,7 +1236,7 @@ export default function Documents() {
             ) : null}
           </Panel>
 
-          <Panel title="Generated sale packets" description="Watermarked builds already created from this pipeline.">
+          <Panel title="Generated sale packets" description="Watermarked sale packets you have already created.">
             {salePacketBuilds.length ? (
               <div className="stack-list">
                 {salePacketBuilds.map((packet) => {

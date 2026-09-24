@@ -43,6 +43,7 @@ const TABS = [
 
 type Tone = 'success' | 'warning' | 'danger' | 'info' | 'neutral';
 const STATUS_TONE: Record<HorseStatus, Tone> = {
+  'New record': 'neutral',
   'In Training': 'info',
   'Broodmare Program': 'neutral',
   'Sale Prep': 'info',

@@ -154,7 +154,7 @@ export default function Financials() {
 
       {locked ? (
         <Card
-          title="Unlock full financial intelligence"
+          title="Unlock detailed profit reports"
           subtitle={
             banked.state === 'complete'
               ? 'Your banked profit above is real. Ranch Ops turns it into a forward-looking playbook.'

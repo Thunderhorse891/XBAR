@@ -99,7 +99,7 @@ export type XbarStore = {
   /** Reset every workspace data slice back to the empty initial state (used on
    *  account deletion so no data lingers in memory or gets re-persisted). */
   resetWorkspace: () => void;
-  initializeWorkspace: (profile: Partial<WorkspaceProfile>) => ActionResult;
+  initializeWorkspace: (profile: Partial<WorkspaceProfile>, firstHorseName?: string) => ActionResult;
   updateWorkspaceProfile: (patch: Partial<WorkspaceProfile>) => ActionResult;
   applySubscriptionTier: (
     tier: SubscriptionTier,

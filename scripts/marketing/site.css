@@ -1,3 +1,5 @@
+@import url('/brand/xbar-brand-tokens.css');
+
 /* XBAR public marketing site — single stylesheet, no application code.
    Design system: deep-graphite atmosphere with layered auroras and a faint
    engineering grid, glass surfaces with gradient hairline borders, electric
@@ -41,6 +43,51 @@
     rgba(224, 178, 92, 0.35)
   );
   --ease-out: cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+/* Pricing extends the supplied charcoal/chrome identity. Scope keeps the
+   existing desktop product and other marketing layouts unchanged. */
+.pricing-page {
+  --ink: var(--xbar-warm-white);
+  --ink-soft: var(--xbar-silver);
+  --ink-faint: var(--xbar-silver);
+  --accent: var(--xbar-silver);
+  --accent-strong: var(--xbar-blue);
+  --font-display: var(--font-ui);
+  background: radial-gradient(ellipse at 80% 0%, var(--xbar-gunmetal), transparent 45%), var(--xbar-black);
+}
+.pricing-page h1 {
+  font-weight: 500;
+  letter-spacing: -0.045em;
+}
+.pricing-page .plan {
+  background: linear-gradient(150deg, var(--xbar-gunmetal), var(--xbar-graphite));
+}
+.pricing-terms {
+  color: var(--xbar-silver);
+  font-size: 16px;
+}
+.pricing-horses {
+  color: var(--xbar-warm-white);
+  font-size: 18px;
+  font-weight: 600;
+}
+.pricing-page .btn,
+.pricing-page summary {
+  min-height: 48px;
+}
+@media (max-width: 600px) {
+  .pricing-page .plan {
+    padding: 26px 22px;
+  }
+  .pricing-page .plan__price {
+    font-size: 44px;
+  }
+  .pricing-page .plan li,
+  .pricing-page .plan__fit,
+  .pricing-page .faq p {
+    font-size: 16px;
+  }
 }
 
 * {

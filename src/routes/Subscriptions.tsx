@@ -433,7 +433,7 @@ export default function Subscriptions() {
         key={tier}
       >
         <div>
-          <span>{highlighted ? 'Selected tier' : 'Operational tier'}</span>
+          <span>{highlighted ? 'Selected plan' : 'Monthly plan'}</span>
           <h3>{tier}</h3>
           <p>{profile.fit}</p>
         </div>
@@ -498,10 +498,7 @@ export default function Subscriptions() {
           <div className="checkout-heading">
             <p>Billing</p>
             <h1 id="checkout-title">Review Billing</h1>
-            <span>
-              Choose the tier that fits your workflow. Plans change only after checkout succeeds — nothing here changes
-              your workspace on its own.
-            </span>
+            <span>Choose a plan for your ranch. Your plan changes only after payment is confirmed.</span>
           </div>
 
           <div className="checkout-trial">
@@ -616,7 +613,7 @@ export default function Subscriptions() {
                   <strong>Not configured</strong>
                 </div>
                 <div>
-                  <span>Activation</span>
+                  <span>Plan status</span>
                   <strong>Not available in app</strong>
                 </div>
                 <div>

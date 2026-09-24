@@ -12,10 +12,8 @@ import './cleanEntryExperience.css';
 import { canPresentPurchaseFlow } from '@/lib/nativePlatform';
 
 const setupStages = [
-  { label: 'Ranch identity', value: 'Business and ranch name' },
-  { label: 'Primary contact', value: 'Manager and ops email' },
-  { label: 'Ownership defaults', value: 'Owner and entity' },
-  { label: 'Home location', value: 'Barn and pasture' },
+  { label: 'Your ranch', value: 'Give it a name' },
+  { label: 'Your first horse', value: 'Start with its name' },
 ] as const;
 
 export default function SetupWorkspace() {
@@ -25,6 +23,7 @@ export default function SetupWorkspace() {
   const workspaceHydrated = useWorkspaceHydrated();
   const workspaceReady = useWorkspaceReady();
   const workspaceProfile = useXbarStore((state) => state.workspaceProfile);
+  const horses = useXbarStore((state) => state.horses);
   const initializeWorkspace = useXbarStore((state) => state.initializeWorkspace);
   const exportWorkspaceBackup = useXbarStore((state) => state.exportWorkspaceBackup);
   const status = useCloudStore((state) => state.status);
@@ -40,6 +39,8 @@ export default function SetupWorkspace() {
   const [signOutError, setSignOutError] = useState('');
   const [formError, setFormError] = useState('');
   const [cloudSetupBlocked, setCloudSetupBlocked] = useState(false);
+  const [step, setStep] = useState(1);
+  const [firstHorseName, setFirstHorseName] = useState(horses[0]?.barnName || horses[0]?.name || '');
   const [form, setForm] = useState({
     businessName: workspaceProfile.businessName,
     ranchName: workspaceProfile.ranchName,
@@ -86,7 +87,7 @@ export default function SetupWorkspace() {
   }, [status, supabaseReady]);
 
   if (!workspaceHydrated) {
-    return <div className="app-loading-shell">Loading ranch workspace...</div>;
+    return <div className="app-loading-shell">Loading your ranch...</div>;
   }
 
   if (workspaceReady && !saving && !cloudSetupBlocked && !cloudWorkspaceRequired) {
@@ -118,13 +119,15 @@ export default function SetupWorkspace() {
     return saved;
   };
 
-  const handleSubmit = async (event: FormEvent<HTMLFormElement>) => {
-    event.preventDefault();
+  const finishSetup = async (includeHorse = true) => {
     if (signingOut || saving) return;
     setSaving(true);
     setCloudSetupBlocked(false);
 
-    const result = initializeWorkspace(applyWorkspaceProfileDefaults(form));
+    const result = initializeWorkspace(
+      applyWorkspaceProfileDefaults({ ...form, businessName: form.businessName.trim() || form.ranchName }),
+      includeHorse ? firstHorseName : undefined,
+    );
     pushToast({
       title: result.ok ? 'Ranch created' : 'Setup blocked',
       message: result.message,
@@ -150,6 +153,20 @@ export default function SetupWorkspace() {
     setFormError('');
     setSaving(false);
     navigate(postSetupPath, { replace: true });
+  };
+
+  const handleSubmit = async (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    if (step === 1) {
+      if (!form.ranchName.trim()) {
+        setFormError('Enter your ranch name.');
+        return;
+      }
+      setFormError('');
+      setStep(2);
+      return;
+    }
+    await finishSetup();
   };
 
   const handleQuickStart = () => {
@@ -238,9 +255,10 @@ export default function SetupWorkspace() {
           ) : null}
 
           <div className="clean-auth-card__header">
-            <p>Workspace setup</p>
-            <h1 id="setup-title">Configure Workspace</h1>
-            <span>Set up your ranch details before adding horses, documents, owners, care, and sale packets.</span>
+            <p>Ranch setup</p>
+            <h1 id="setup-title">Set up your ranch</h1>
+            <span>A ranch name and a horse name are enough to start. Add the rest when you need it.</span>
+            {canPresentPurchaseFlow() ? <a href="/pricing">Compare plans and prices</a> : null}
           </div>
 
           <ol className="clean-step-list" aria-label="Setup steps">
@@ -254,88 +272,85 @@ export default function SetupWorkspace() {
           </ol>
         </section>
 
-        <section className="clean-auth-card clean-auth-card--wide" aria-label="Create workspace">
+        <section className="clean-auth-card clean-auth-card--wide" aria-label="Create ranch">
           <form className="clean-form clean-setup-form" onSubmit={handleSubmit}>
             <div className="clean-auth-card__header">
-              <p>Required first</p>
-              <h2>Your ranch details.</h2>
-              <span>Everything else can be edited later in Account Settings.</span>
+              <p>Step {step} of 2</p>
+              <h2>{step === 1 ? 'What is your ranch called?' : 'Which horse comes first?'}</h2>
+              <span>
+                {step === 1
+                  ? 'Use the name you want on your ranch records. Business, contact, and location details are in Settings.'
+                  : 'A barn name is fine. Papers, ownership, sex, and birth date can be added to the horse record later.'}
+              </span>
             </div>
 
             <div className="clean-form-grid">
-              <label className="clean-field">
-                <span>Business name</span>
-                <input
-                  value={form.businessName}
-                  onChange={(event) => setForm((current) => ({ ...current, businessName: event.target.value }))}
-                  placeholder="XBAR LLC"
-                />
-              </label>
-              <label className="clean-field">
-                <span>Ranch name</span>
-                <input
-                  value={form.ranchName}
-                  onChange={(event) => setForm((current) => ({ ...current, ranchName: event.target.value }))}
-                  placeholder="Primary Ranch"
-                />
-              </label>
-              <label className="clean-field">
-                <span>Ranch manager</span>
-                <input
-                  value={form.ranchManagerName}
-                  onChange={(event) => setForm((current) => ({ ...current, ranchManagerName: event.target.value }))}
-                  placeholder="Ranch manager"
-                />
-              </label>
-              <label className="clean-field">
-                <span>Ops email</span>
-                <input
-                  type="email"
-                  value={form.operationsEmail}
-                  onChange={(event) => setForm((current) => ({ ...current, operationsEmail: event.target.value }))}
-                  placeholder="ops@xbar.com"
-                />
-              </label>
-              <label className="clean-field">
-                <span>Default owner</span>
-                <input
-                  value={form.defaultOwnerName}
-                  onChange={(event) => setForm((current) => ({ ...current, defaultOwnerName: event.target.value }))}
-                  placeholder="Legal owner"
-                />
-              </label>
-              <label className="clean-field">
-                <span>Owner entity</span>
-                <input
-                  value={form.defaultOwnerEntity}
-                  onChange={(event) => setForm((current) => ({ ...current, defaultOwnerEntity: event.target.value }))}
-                  placeholder="Owner entity"
-                />
-              </label>
-              <label className="clean-field">
-                <span>Home barn</span>
-                <input
-                  value={form.defaultBarn}
-                  onChange={(event) => setForm((current) => ({ ...current, defaultBarn: event.target.value }))}
-                  placeholder="Barn A"
-                />
-              </label>
-              <label className="clean-field">
-                <span>Default pasture</span>
-                <input
-                  value={form.defaultPasture}
-                  onChange={(event) => setForm((current) => ({ ...current, defaultPasture: event.target.value }))}
-                  placeholder="Pasture 1"
-                />
-              </label>
+              {step === 1 ? (
+                <label className="clean-field">
+                  <span>Ranch name</span>
+                  <input
+                    value={form.ranchName}
+                    onChange={(event) => setForm((current) => ({ ...current, ranchName: event.target.value }))}
+                    placeholder="Primary Ranch"
+                    required
+                    maxLength={120}
+                    readOnly={workspaceReady}
+                    autoComplete="organization"
+                  />
+                </label>
+              ) : (
+                <label className="clean-field">
+                  <span>Horse name</span>
+                  <input
+                    value={firstHorseName}
+                    onChange={(event) => setFirstHorseName(event.target.value)}
+                    placeholder="Your first horse"
+                    required
+                    maxLength={120}
+                    readOnly={horses.length > 0}
+                  />
+                </label>
+              )}
             </div>
 
-            {formError ? <div className="clean-form-error">{formError}</div> : null}
+            {formError ? (
+              <div className="clean-form-error" role="alert">
+                {formError}
+              </div>
+            ) : null}
 
             <div className="clean-action-stack">
               <button className="clean-primary-button" type="submit" disabled={saving || signingOut}>
-                {saving ? 'Creating workspace...' : 'Create workspace'}
+                {saving
+                  ? 'Saving your ranch...'
+                  : step === 1
+                    ? 'Continue'
+                    : cloudSetupBlocked
+                      ? 'Retry saving'
+                      : 'Open my ranch'}
               </button>
+              {step === 2 ? (
+                <>
+                  <button
+                    className="clean-secondary-button"
+                    type="button"
+                    disabled={saving || signingOut}
+                    onClick={() => void finishSetup(false)}
+                  >
+                    Add a horse later
+                  </button>
+                  {!workspaceReady ? (
+                    <button
+                      className="clean-secondary-button"
+                      type="button"
+                      disabled={saving || signingOut}
+                      onClick={() => setStep(1)}
+                    >
+                      Back
+                    </button>
+                  ) : null}
+                </>
+              ) : null}
               {canQuickStart ? (
                 <button
                   className="clean-secondary-button"

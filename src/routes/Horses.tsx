@@ -42,6 +42,7 @@ type ViewMode = 'Cards' | 'Table';
 type SegmentFilter = 'All' | HorseSegment;
 
 const statusTone: Record<HorseStatus, 'blue' | 'slate' | 'amber' | 'rose' | 'emerald'> = {
+  'New record': 'slate',
   'In Training': 'blue',
   'Broodmare Program': 'emerald',
   'Sale Prep': 'amber',
@@ -51,8 +52,17 @@ const statusTone: Record<HorseStatus, 'blue' | 'slate' | 'amber' | 'rose' | 'eme
 };
 
 const segments: SegmentFilter[] = ['All', 'Sale Prospect', 'Broodmare', 'Stud', 'Show String', 'Retired'];
-const horseSegments: HorseSegment[] = ['Broodmare', 'Stud', 'Show String', 'Sale Prospect', 'Young Stock', 'Retired'];
+const horseSegments: HorseSegment[] = [
+  'Unassigned',
+  'Broodmare',
+  'Stud',
+  'Show String',
+  'Sale Prospect',
+  'Young Stock',
+  'Retired',
+];
 const horseStatuses: HorseStatus[] = [
+  'New record',
   'In Training',
   'Broodmare Program',
   'Sale Prep',
@@ -60,7 +70,7 @@ const horseStatuses: HorseStatus[] = [
   'Pasture',
   'Retired',
 ];
-const horseSexes: HorseSex[] = ['Mare', 'Stud', 'Gelding', 'Filly', 'Colt'];
+const horseSexes: HorseSex[] = ['Not recorded', 'Mare', 'Stud', 'Gelding', 'Filly', 'Colt'];
 
 export default function Horses() {
   const navigate = useNavigate();
@@ -523,7 +533,7 @@ export default function Horses() {
               </select>
             </label>
             <label className="field-stack">
-              <span className="field-label">Operational status</span>
+              <span className="field-label">Current status</span>
               <select
                 className="field-input"
                 value={form.status}
