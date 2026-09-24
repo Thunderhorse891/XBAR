@@ -7,6 +7,7 @@ import type {
   SubscriptionTier,
 } from '../types/xbar.js';
 import { hasActivePaidPlan } from './subscriptionDecision.js';
+import { compareTimestampDesc } from './format.js';
 import { subscriptionTierConfig } from './xbarRuntime.js';
 
 /*
@@ -287,7 +288,10 @@ function buildPriceRises(dated: DatedReceipt[], today: number): { rises: Supplie
     if (purchases.length < 2) continue;
     purchases.sort(
       (left, right) =>
-        left.day - right.day || String(left.receipt.uploadedAt).localeCompare(String(right.receipt.uploadedAt)),
+        left.day - right.day ||
+        // Same parsed-instant ordering as offerUpdatedAt: a later legacy
+        // 'YYYY-MM-DD HH:mm' upload must not sort behind an earlier ISO one.
+        -compareTimestampDesc(String(left.receipt.uploadedAt), String(right.receipt.uploadedAt)),
     );
     const inWindow = (index: number) => today - purchases[index]!.day < COST_WINDOW_DAYS;
     // The supplier's own price before a delivery: its last few deliveries.
@@ -363,10 +367,11 @@ function buildFeedSuppliers(windowReceipts: DatedReceipt[]): FeedSupplierSummary
     const unitPrice = unitPriceOf(entry.receipt);
     // Same-day purchases are ordered by upload time, as the price watch does;
     // the store lists newest first, so arrival order alone would pick the older.
+    // Parsed-instant comparison, not lexicographic: see the sort above.
     const uploadedAt = String(entry.receipt.uploadedAt ?? '');
     const newer =
       entry.day > existing.latestPricedDay ||
-      (entry.day === existing.latestPricedDay && uploadedAt.localeCompare(existing.latestUploadedAt) > 0);
+      (entry.day === existing.latestPricedDay && compareTimestampDesc(uploadedAt, existing.latestUploadedAt) < 0);
     if (unitPrice !== null && newer) {
       existing.latestPricedDay = entry.day;
       existing.latestUploadedAt = uploadedAt;

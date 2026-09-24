@@ -114,3 +114,53 @@ test('handler fails safe with 503 when the service is not configured', async () 
   assert.equal(status, 503);
   assert.equal(body.ok, false);
 });
+
+/*
+ * The verification facts must expose the sealed seller identity, so a buyer
+ * can compare the PDF's "Presented By" line against what XBAR actually
+ * sealed: editing the presenter while keeping the packet code keeps the
+ * packet "unaltered", but the mismatch is now visible on the verify page.
+ */
+test('summarizeSealedPacket exposes the sealed seller identity', async () => {
+  const { sellerIdentity } = await import('../../api/_lib/workspace-identity.js');
+  const workspace = { businessName: 'Rocking R', ranchName: 'Rocking R Ranch' };
+  const seal = buildServerSaleCredential({
+    packetId: 'packet-xyz',
+    horseId: 'horse-1',
+    context: {
+      horse: { name: 'Docs Smokin Gun' },
+      owner: { name: 'Rocking R Ranch LLC' },
+      health: {},
+      workspace,
+    },
+    ownershipRecord: { transfer_status: 'Clear' },
+    documents: [],
+    sealedAt: '2026-08-06T12:00:00.000Z',
+    sellerIdentity: sellerIdentity(workspace),
+  });
+  const summary = summarizeSealedPacket({ payload: { seal } });
+  assert.equal(summary.facts.sellerBusinessName, 'Rocking R');
+  assert.equal(summary.facts.sellerRanchName, 'Rocking R Ranch');
+});
+
+test('a quick-start workspace seals and exposes no invented presenter', async () => {
+  const { sellerIdentity } = await import('../../api/_lib/workspace-identity.js');
+  const workspace = { businessName: 'My Ranch LLC', ranchName: 'Main Ranch' };
+  const seal = buildServerSaleCredential({
+    packetId: 'packet-xyz',
+    horseId: 'horse-1',
+    context: {
+      horse: { name: 'Docs Smokin Gun' },
+      owner: { name: 'Rocking R Ranch LLC' },
+      health: {},
+      workspace,
+    },
+    ownershipRecord: { transfer_status: 'Clear' },
+    documents: [],
+    sealedAt: '2026-08-06T12:00:00.000Z',
+    sellerIdentity: sellerIdentity(workspace),
+  });
+  const summary = summarizeSealedPacket({ payload: { seal } });
+  assert.equal(summary.facts.sellerBusinessName, '');
+  assert.equal(summary.facts.sellerRanchName, '');
+});

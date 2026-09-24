@@ -178,8 +178,28 @@ export function todayStamp() {
   return new Date().toISOString().slice(0, 10);
 }
 
+/**
+ * An absolute UTC instant, ISO 8601 (`2026-09-24T18:55:00.000Z`).
+ *
+ * These stamps are synced across workspace members and compared as instants —
+ * `offerUpdatedAt` is ordered with `compareTimestampDesc` in
+ * profitIntelligence.ts. That comparator parses the new ISO form directly
+ * and interprets the legacy local `YYYY-MM-DD HH:mm` form a stale PWA tab
+ * can still sync AS UTC — deterministic and identical on every client, where
+ * a viewer-local parse made Chicago and Los Angeles order the same synced
+ * data differently. An offset-free local wall clock is not globally
+ * comparable on its own: during a DST fallback the same wall time happens
+ * twice, and a later update from a western time zone sorts before an
+ * earlier eastern one. UTC keeps lexicographic order identical to
+ * chronological order everywhere.
+ *
+ * Display still reads the viewer's clock: every reader parses the stamp with
+ * `new Date(...)` (see `parseDateValue` in format.ts) and formats it in local
+ * time, so screens never show the raw UTC the way the old unlabeled-UTC
+ * version did. Never slice these strings for display — parse them.
+ */
 export function nowStamp() {
-  return new Date().toISOString().replace('T', ' ').slice(0, 16);
+  return new Date().toISOString();
 }
 
 export function normalizeStorage(value: number) {

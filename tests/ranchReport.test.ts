@@ -3,7 +3,8 @@ import { readFile } from 'node:fs/promises';
 import test from 'node:test';
 
 import { buildRanchReport, type RanchReportInput } from '../src/lib/ranchReport.js';
-import { ranchReportFileName, ranchReportSections, ranchReportToCsv } from '../src/lib/ranchReportExport.js';
+import { ranchReportFileName, ranchReportToCsv } from '../src/lib/ranchReportExport.js';
+import { reportCount, reportDecisions, reportException } from '../src/lib/ranchReportDecisions.js';
 import { monthKeyOf, trailingMonthKeys } from '../src/lib/receiptMonths.js';
 import type { ExpenseReceipt, HorseRecord, SalesLead } from '../src/types/xbar.js';
 
@@ -325,106 +326,82 @@ test('the file name sorts chronologically', () => {
 });
 
 /*
- * The PDF renders `Label: value` lines as aligned rows, and treats a label with
- * an empty value as a blank to fill in. A zero that arrived as an empty string
- * would therefore print as a ruled line — reading as "unknown" on a document
- * where it means "none".
+ * The spreadsheet goes to accountants, so its header must identify the
+ * operation and disclaim the figures — the old "XBAR Ranch Report" named
+ * nobody and carried none of the unaudited-estimates note the PDF prints.
  */
-test('every PDF line carries a value, including zeros', () => {
+test('the spreadsheet header names the operation, dates itself and disclaims the figures', () => {
   const report = buildRanchReport(input({ horses: [horse({ id: 'h1', name: 'Docs Best' })] }), NOW);
-  const sections = ranchReportSections(report);
 
-  assert.ok(sections.length > 0);
-  for (const section of sections) {
-    assert.ok(section.heading, 'every section is titled');
-    for (const line of section.lines) {
-      const [label, ...rest] = line.split(':');
-      assert.ok(label.trim(), `"${line}" has no label`);
-      assert.ok(rest.join(':').trim(), `"${line}" has an empty value and would render as a blank line`);
-    }
-  }
-
-  // Specifically: an operation with no receipts still prints $0, not nothing.
-  const money = sections.find((section) => section.heading === 'Where the money is');
-  assert.ok(money);
+  const csv = ranchReportToCsv(report, 'Thunder Ranch');
+  assert.ok(csv.includes('"Thunder Ranch — ranch report"'), 'the operation is named, not the platform');
+  assert.match(csv, /"Generated","2026-08-21"/, 'the generation date is printed');
+  assert.ok(csv.includes('"Data source","Ranch records"'), 'the data source is stated');
   assert.ok(
-    money.lines.some((line) => line.includes('$0')),
-    'a zero total must be written as $0',
+    csv.includes('Unaudited management estimates based on recorded data. Not an appraisal or an audit.'),
+    'the spreadsheet carries the disclaimer the PDF prints',
   );
+  assert.ok(
+    csv.includes('Figures keep cents here; the PDF report rounds money to whole dollars.'),
+    'the cents-vs-whole-dollars convention between the two artifacts is documented',
+  );
+  assert.ok(!csv.includes('XBAR Ranch Report'), 'the old platform header is gone');
+
+  // An unset ranch name is a missing name, not someone else's business name.
+  const unnamed = ranchReportToCsv(report);
+  assert.ok(unnamed.includes('"Your ranch name — ranch report"'), 'the placeholder says the name is missing');
+
+  // A quick-start placeholder is an invented name, not the operation's.
+  const quickStart = ranchReportToCsv(report, 'Main Ranch');
+  assert.ok(
+    quickStart.includes('"Your ranch name — ranch report"'),
+    'an invented operation name must not head the accountant-facing export',
+  );
+  assert.ok(!quickStart.includes('Main Ranch'), 'the placeholder leaves no trace');
 });
 
-test('sections that have no rows are left out rather than printed empty', () => {
-  const quiet = ranchReportSections(buildRanchReport(input({ horses: [horse({ id: 'h1', name: 'A' })] }), NOW));
-  const headings = quiet.map((section) => section.heading);
+test('the spreadsheet and the PDF use one label for the discount floor', () => {
+  const csv = ranchReportToCsv(buildRanchReport(input(), NOW));
+  assert.ok(csv.includes('"Floor"'), 'the spreadsheet column is Floor');
+  assert.ok(!csv.includes('Do not go below'), 'the old spreadsheet label is gone');
+});
 
-  // No receipts and nothing blocked, so neither section belongs on the page.
-  assert.ok(!headings.includes('Spend by category'));
-  assert.ok(!headings.includes('What is holding up a sale'));
-  assert.ok(!headings.includes('Running above trend'));
-
-  // The two that are always meaningful stay.
-  assert.ok(headings.includes('Where the money is'));
-  assert.ok(headings.includes('Sale readiness'));
+test('report counts use the singular for one', () => {
+  assert.equal(reportCount(1, 'horse'), '1 horse');
+  assert.equal(reportCount(2, 'horse'), '2 horses');
+  assert.equal(reportCount(0, 'horse'), '0 horses');
+  assert.equal(reportCount(1, 'existing file'), '1 existing file');
+  assert.equal(reportCount(2, 'existing file'), '2 existing files');
 });
 
 /*
- * No report line may rely on indentation to group anything.
- *
- * `fieldsInLine` splits a line on runs of two or more spaces and treats each
- * piece as its own label/value column, so leading indent is consumed as a
- * column break and never drawn. The horse section was written as four indented
- * rows per horse and rendered as one flat list — a reader could not tell where
- * one horse's figures ended and the next began, on the page whose entire job is
- * to say what each animal costs.
- *
- * Asserted across every section rather than on the one that was wrong: any
- * future section written with indentation fails the same way, silently.
+ * The singular case is the common case on a small ranch, and "1 horses" on a
+ * document handed to a banker reads as careless — asserted on the rendered
+ * actions, not just on the pluralizer.
  */
-test('no PDF line uses indentation or multi-space runs to group values', () => {
+test('one blocked horse produces singular action lines', () => {
   const report = buildRanchReport(
-    input({
-      horses: [
-        horse({ id: 'h1', name: 'Docs Best Chex', sale: { askPrice: 42_000 } } as never),
-        horse({ id: 'h2', name: 'Smart Little Kitty' }),
-      ],
-      expenseReceipts: [receipt({ id: 'r1', amount: 4_000, horseId: 'h1' })],
-      salesLeads: [lead({ id: 'l1', offerAmount: 39_000, depositAmount: 5_000, depositStatus: 'Paid' })],
-    }),
+    input({ horses: [horse({ id: 'h1', name: 'Solo', sale: sale({ askPrice: 30_000 }) })] }),
     NOW,
   );
-
-  for (const section of ranchReportSections(report)) {
-    for (const line of section.lines) {
-      assert.equal(line, line.trimStart(), `"${line}" is indented, which the renderer discards`);
-      assert.ok(!/\s{2,}/.test(line), `"${line}" contains a multi-space run, which splits it into columns`);
-    }
-  }
+  const actions = reportDecisions(report).actions;
+  assert.ok(
+    actions.some((a) => a.includes('Start ownership records for 1 horse covering $30,000')),
+    'ownership action is singular',
+  );
+  assert.ok(
+    actions.some((a) => a.includes('for 1 horse; verify the exam date')),
+    'Coggins action is singular',
+  );
+  assert.ok(!actions.some((a) => /1 horses|1 files/.test(a)), 'no "1 horses" or "1 files" anywhere');
 });
 
-test('each horse is one row, so two horses cannot be read as one', () => {
-  const report = buildRanchReport(
-    input({
-      horses: [horse({ id: 'h1', name: 'First Horse' }), horse({ id: 'h2', name: 'Second Horse' })],
-      expenseReceipts: [receipt({ id: 'r1', amount: 100, horseId: 'h1' })],
-    }),
-    NOW,
-  );
-
-  const section = ranchReportSections(report).find((entry) => entry.heading === 'Cost and margin by horse');
-  assert.ok(section);
-  assert.equal(section.lines.length, 2, 'one line per horse, not one per figure');
-
-  // Every line starts with a horse name, so the label column reads as a list of
-  // horses rather than a list of unattributed figures.
-  const names = report.horses.map((row) => row.horseName);
-  for (const line of section.lines) {
-    const label = line.slice(0, line.indexOf(':'));
-    assert.ok(names.includes(label), `"${label}" is not a horse name`);
-  }
-
-  // A horse with no asking price says so rather than showing a $0 margin.
-  const unlisted = section.lines.find((line) => line.startsWith('Second Horse'));
-  assert.match(unlisted ?? '', /not listed for sale/);
+test('exception actions mirror the blocker language, not internal jargon', () => {
+  const e = reportException({
+    horseName: 'Solo',
+    blockers: ['Active medical review — buyer disclosure required'],
+  } as never);
+  assert.ok(e.action.includes('Resolve active medical review'), 'mirrors the blocker, not "care hold"');
 });
 
 /*
@@ -776,21 +753,21 @@ test('a horse the report counts as listed is never labelled unlisted', async () 
   assert.equal(mixed.listedCount, 2, 'the priced horse and the Sale Prep one, not the sold or unlisted ones');
 });
 
-test('the exported report agrees with the screen about what is for sale', async () => {
-  const exporter = await readFile('src/lib/ranchReportExport.ts', 'utf8');
-
-  // This export is what goes to a banker, so a page saying "not listed for
-  // sale" beneath its own listed count is the version that does real damage.
-  assert.match(
-    exporter,
-    /horse\.saleInventory \? 'asking price not set' : 'not listed for sale'/,
-    'the export must make the same distinction the screen does, from the same predicate',
-  );
-});
+/*
+ * NOTE (2026-09-24, report-professionalism): the `ranchReportSections` builder
+ * this test pinned was deleted. It was the best-written copy in the export
+ * module, but it was tested and uncalled in production — a second source of
+ * truth for the PDF's layout, kept in sync only by the tests above. The PDF
+ * keeps its own inline layout; the export module now owns only the CSV.
+ * The "not listed for sale" distinction still exists on the Reports screen
+ * (pinned by 'a horse the report counts as listed is never labelled unlisted')
+ * and in the PDF economics table ('Not set' vs 'N/A' from the same
+ * `saleInventory` predicate).
+ */
 
 test('the blocked-value figure is not labelled after one of its causes', async () => {
   const reports = await readFile('src/routes/Reports.tsx', 'utf8');
-  const exporter = await readFile('src/lib/ranchReportExport.ts', 'utf8');
+  const pdf = await readFile('src/lib/ranchReportPdf.ts', 'utf8');
   const intelligence = await readFile('src/lib/businessIntelligence.ts', 'utf8');
 
   /*
@@ -811,7 +788,7 @@ test('the blocked-value figure is not labelled after one of its causes', async (
   // only the screen leaves it in front of the banker.
   for (const [name, source] of [
     ['the Reports card', reports],
-    ['the PDF', exporter],
+    ['the PDF', pdf],
   ] as const) {
     assert.doesNotMatch(
       source.replace(/\/\*[\s\S]*?\*\//g, '').replace(/\/\/[^\n]*/g, ''),
@@ -821,7 +798,13 @@ test('the blocked-value figure is not labelled after one of its causes', async (
   }
 
   assert.match(reports, /label="Held up"/, 'the card and the hero must use one word for one number');
-  assert.match(exporter, /Held up by blockers: \$\{money\(report\.money\.valueAtRisk\)\}/);
+
+  // The spreadsheet is the other banker-facing surface. Its label is asserted
+  // on the output, not on a template string: the neutral "Value at risk" must
+  // survive, and "Waiting on documents" must never reach an accountant's copy.
+  const csv = ranchReportToCsv(buildRanchReport(input(), NOW));
+  assert.ok(csv.includes('"Value at risk"'), 'the spreadsheet keeps the neutral label');
+  assert.ok(!csv.includes('Waiting on documents'), 'the spreadsheet must not name the total after one of its causes');
 });
 
 test('a horse sold on a won lead leaves the sale inventory', () => {

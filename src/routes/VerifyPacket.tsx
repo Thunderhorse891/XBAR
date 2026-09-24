@@ -116,6 +116,22 @@ export default function VerifyPacket() {
               />
               <Row label="Legal owner" value={result.facts.legalOwner} />
               <Row label="Transfer status" value={result.facts.transferStatus} />
+              {/*
+               * The sealed presenter, rendered the same way the packet's
+               * "Presented By" line renders it: the buyer compares this
+               * against the copy they were sent.
+               */}
+              <Row
+                label="Presented by"
+                value={[
+                  result.facts.sellerBusinessName || result.facts.sellerRanchName || 'A horse seller',
+                  result.facts.sellerBusinessName && result.facts.sellerRanchName
+                    ? `(${result.facts.sellerRanchName})`
+                    : '',
+                ]
+                  .filter(Boolean)
+                  .join(' ')}
+              />
               <Row label="Documents sealed" value={String(result.facts.documents.length)} />
             </div>
             {result.facts.documents.length > 0 && (

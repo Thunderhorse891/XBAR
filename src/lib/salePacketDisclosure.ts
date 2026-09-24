@@ -145,7 +145,7 @@ export function toPacketDisclosure(
     ownership: {
       legalOwner: str(ownershipRecord?.legalOwner) || str(horse.owner),
       ownerEntity: str(horse.ownerEntity) || str(workspaceProfile?.defaultOwnerEntity),
-      transferStatus: str(ownershipRecord?.transferStatus) || 'Attention Required',
+      transferStatus: str(ownershipRecord?.transferStatus) || 'Not provided',
       pendingDocuments: ownershipRecord?.pendingDocuments ?? [],
       complianceDeadline: str(ownershipRecord?.complianceDeadline),
     },
