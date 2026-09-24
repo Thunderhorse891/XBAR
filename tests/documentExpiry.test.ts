@@ -1172,6 +1172,11 @@ const CVI_EXPIRY_CORPUS: Array<[string, string, string]> = [
     '2026-05-31',
   ],
   [
+    'certificate-prefixed field in a vaccine section',
+    'Health certificate\nRabies Vaccination\nCertificate Expiration Date: 05/01/2027',
+    '2026-05-31',
+  ],
+  [
     'two header fields that disagree',
     'Health certificate\nExpiration Date: 07/15/2026\nExpires: 05/01/2027',
     '2026-05-31',
@@ -1191,4 +1196,107 @@ test('the CVI expiry corpus: every case raised reads the way a person reading th
     return actual === expected ? [] : [`${name}: expected ${expected}, got ${actual}`];
   });
   assert.deepEqual(failures, [], `${failures.length} of ${CVI_EXPIRY_CORPUS.length} rows wrong`);
+});
+
+/*
+ * Every identity case raised for papers intake couldn't place (filed as
+ * Registration or Ownership Memo), in one table. The paper's name decides; with
+ * no name, only its heading or an identity phrase that opens a line — a title
+ * or a field — says what it is. A phrase inside a sentence is a mention.
+ */
+const UNPLACED_IDENTITY_CORPUS: Array<[string, string, string, string | null]> = [
+  // [case, title, text, expected kind]
+  ['CVI by name', 'CVI', '', 'Health certificate'],
+  ['health certificate by name', 'Health Certificate', '', 'Health certificate'],
+  [
+    'policy by name',
+    'Farm Liability Policy',
+    'Coverage requires a current CVI. Expiration Date: 06/15/2026',
+    'Insurance',
+  ],
+  [
+    'agreement by name',
+    'Stallion Service Agreement',
+    'A current health certificate is required before arrival.',
+    'Contract',
+  ],
+  [
+    'CVI by name whose body mentions insurance',
+    'CVI',
+    'Owner carries mortality insurance policy number EQ-1',
+    'Health certificate',
+  ],
+  ['a name pointing two ways', 'CVI and Lease Agreement', '', null],
+  ['CVI by heading', 'scan0042', 'CERTIFICATE OF VETERINARY INSPECTION  Origin: Texas', 'Health certificate'],
+  [
+    'CVI under an agency heading',
+    'scan0042',
+    'TEXAS ANIMAL HEALTH COMMISSION\nCertificate of Veterinary Inspection\nInspection Date: 06/10/2026',
+    'Health certificate',
+  ],
+  ['policy by heading', 'scan0043', 'Equine Mortality Insurance Policy  Policy Number EQ-4471', 'Insurance'],
+  [
+    'policy by its number field',
+    'scan0043',
+    'Blue River Mutual\nPolicy Number: EQ-4471\nExpiration Date: 09/01/2026',
+    'Insurance',
+  ],
+  ['lease by heading', 'upload', 'Mare Lease Agreement  Term ends 12/31/2026', 'Contract'],
+  [
+    'purchase agreement mentioning a CVI',
+    'scan0046',
+    'Horse Purchase Agreement\nA current CVI is required before delivery.',
+    'Contract',
+  ],
+  [
+    'a mention of a health certificate only',
+    'scan0046',
+    'Buyer: J. Smith\nA current health certificate is required before delivery.',
+    null,
+  ],
+  [
+    'a mention of the formal name only',
+    'scan0046',
+    'Buyer: J. Smith\nA current Certificate of Veterinary Inspection is required before delivery.\nExpiration Date: 07/15/2026',
+    null,
+  ],
+  [
+    'a mention of a lease only',
+    'scan0046',
+    'Buyer: J. Smith\nThis sale is subject to the existing lease agreement.',
+    null,
+  ],
+  [
+    'a mention of a policy number only',
+    'scan0046',
+    'Buyer: J. Smith\nBuyer will provide the policy number before delivery.',
+    null,
+  ],
+  [
+    'heading and a CVI title line disagree',
+    'scan0046',
+    'Horse Purchase Agreement\nCertificate of Veterinary Inspection attached',
+    null,
+  ],
+  [
+    'a heading pointing two ways',
+    'scan0046',
+    'Stallion service agreement. A current health certificate is required before arrival.',
+    null,
+  ],
+  ['an expiry label with nothing to say what it is', 'scan0044', 'Expiration Date: 06/15/2026', null],
+  [
+    'a registration paper',
+    'AQHA Registration',
+    'American Quarter Horse Association  Certificate of Registration',
+    null,
+  ],
+];
+
+test('the unplaced-paper identity corpus: a paper is what its name or heading says, never what it mentions', () => {
+  const failures = UNPLACED_IDENTITY_CORPUS.flatMap(([name, title, text, expected]) => {
+    const actual = expiryKindOf({ type: 'Registration', title, extractedTextPreview: text });
+    return actual === expected ? [] : [`${name}: expected ${expected}, got ${actual}`];
+  });
+  assert.deepEqual(failures, [], `${failures.length} of ${UNPLACED_IDENTITY_CORPUS.length} rows wrong`);
 });

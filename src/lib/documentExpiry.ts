@@ -327,9 +327,9 @@ export function expiryKindOf(
   const heading = headingOf(text);
   return (
     onlyKind([
-      ['Health certificate', HEALTH_CERTIFICATE_TEXT.test(heading) || FORMAL_CVI_NAME.test(text)],
-      ['Insurance', INSURANCE_NAME.test(heading) || INSURANCE_TEXT.test(text)],
-      ['Contract', CONTRACT_NAME.test(heading) || CONTRACT_TEXT.test(text)],
+      ['Health certificate', HEALTH_CERTIFICATE_TEXT.test(heading) || CVI_TITLE_LINE.test(text)],
+      ['Insurance', INSURANCE_NAME.test(heading) || INSURANCE_FIELD_LINE.test(text)],
+      ['Contract', CONTRACT_NAME.test(heading) || CONTRACT_TITLE_LINE.test(text)],
     ]) ?? null
   );
 }
@@ -337,12 +337,19 @@ export function expiryKindOf(
 /*
  * A paper's own heading: its first non-empty line, as far as a title runs.
  * "Horse Purchase Agreement" heads an agreement whose body asks for "a current
- * CVI"; the mention says nothing about what the paper is. The formal "Certificate
- * of Veterinary Inspection" is the form's own title, so it identifies a CVI
- * even under an agency heading.
+ * CVI"; the mention says nothing about what the paper is. Past the heading, an
+ * identity phrase counts only where it opens a line — a title or a field: the
+ * formal "Certificate of Veterinary Inspection" under an agency heading,
+ * "Policy Number:", "Named Insured:", "Stallion Service Agreement". Inside a
+ * sentence ("A current Certificate of Veterinary Inspection is required",
+ * "subject to the existing lease agreement") it is a mention.
  */
 const HEADING_LENGTH = 120;
 const FORMAL_CVI_NAME = /certificate\s+of\s+veterinary\s+inspection/i;
+const opensALineWith = (pattern: RegExp) => new RegExp(`(?:^|[\\r\\n])[ \\t]*(?:${pattern.source})`, 'i');
+const CVI_TITLE_LINE = opensALineWith(FORMAL_CVI_NAME);
+const INSURANCE_FIELD_LINE = opensALineWith(INSURANCE_TEXT);
+const CONTRACT_TITLE_LINE = opensALineWith(CONTRACT_TEXT);
 
 function headingOf(text: string): string {
   return (text.split(/[\r\n]+/).find((line) => line.trim()) ?? '').slice(0, HEADING_LENGTH);
