@@ -478,6 +478,9 @@ export default async function handler(req, res) {
         entitlement_payload: buildSubscriptionProfile({
           tier,
           billingStatus: 'incomplete',
+          // The price id pins the billing period; passing it records which one
+          // this checkout is selling before the webhook writes the live profile.
+          priceId,
           existingUsage: billingCustomer?.entitlement_payload?.usage || {},
         }),
         updated_at: new Date().toISOString(),
