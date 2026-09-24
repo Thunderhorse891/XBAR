@@ -49,7 +49,14 @@ test('the email is sent as the ranch with replies routed to the seller', () => {
     "Reply-To must be the seller's ops email",
   );
   assert.ok(/reply_to:\s*replyToAddress/.test(emailLibSrc), 'the email module must forward Reply-To to Resend');
-  assert.ok(/replyTo:\s*\{\s*email:\s*replyToAddress\s*\}/.test(emailLibSrc), 'and to SendGrid');
+  assert.ok(
+    /reply_to:\s*\{\s*email:\s*replyToAddress\s*\}/.test(emailLibSrc),
+    'SendGrid v3 wants reply_to (object) — the SDK-style replyTo field is ignored by the raw API',
+  );
+  assert.ok(
+    /from:\s*\{\s*email:\s*fromAddress[\s\S]*?name:\s*fromNameValue/.test(emailLibSrc),
+    'SendGrid from must carry the ranch display name as a separate name field, not drop it',
+  );
 });
 
 test('the email signature carries the support contact, never a fake phone or address', () => {
@@ -76,4 +83,44 @@ test('the verify link always prints an absolute URL', () => {
     /const appOrigin =[\s\S]*?'https:\/\/xbar\.app'/.test(handlerSrc),
     'appOrigin must fall back to the canonical domain so the packet never prints a dead relative path',
   );
+});
+
+test('the SendGrid request body uses the v3 API field names (behavioral)', async () => {
+  // Source assertions above pin the shape; this one serializes the actual
+  // provider payload through a stubbed fetch, because a wrong field name in
+  // the JSON body is exactly the failure a regex cannot feel.
+  const email = await import('../../api/_lib/email.js');
+  const prevSendgrid = process.env.SENDGRID_API_KEY;
+  const prevResend = process.env.RESEND_API_KEY;
+  const prevFetch = globalThis.fetch;
+  let captured;
+  process.env.SENDGRID_API_KEY = 'test-key';
+  delete process.env.RESEND_API_KEY;
+  globalThis.fetch = async (url, init) => {
+    captured = { url, body: JSON.parse(init.body) };
+    return { ok: true, status: 202, text: async () => '' };
+  };
+  try {
+    const result = await email.sendEmail({
+      to: 'buyer@example.com',
+      subject: 'Sale packet',
+      text: 'hello',
+      html: '<p>hello</p>',
+      fromName: 'Rocking R Ranch',
+      replyTo: 'seller@ranch.test',
+    });
+    assert.equal(result.ok, true);
+    assert.equal(result.provider, 'sendgrid');
+    assert.equal(captured.url, 'https://api.sendgrid.com/v3/mail/send');
+    assert.equal(captured.body.reply_to.email, 'seller@ranch.test');
+    assert.equal(captured.body.from.email, 'no-reply@xbar.app');
+    assert.equal(captured.body.from.name, 'Rocking R Ranch');
+    assert.ok(!('replyTo' in captured.body), 'SDK-style replyTo must never reach the raw v3 API');
+  } finally {
+    if (prevSendgrid === undefined) delete process.env.SENDGRID_API_KEY;
+    else process.env.SENDGRID_API_KEY = prevSendgrid;
+    if (prevResend === undefined) delete process.env.RESEND_API_KEY;
+    else process.env.RESEND_API_KEY = prevResend;
+    globalThis.fetch = prevFetch;
+  }
 });

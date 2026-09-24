@@ -95,8 +95,8 @@ test('the packet still embeds the verifier inline', async () => {
 test('the readout is the whole sealed record, not a chosen subset', () => {
   /*
    * The curated version printed nine facts. So an attacker could edit the
-   * displayed breed, colour, owner entity, compliance deadline, a release
-   * blocker or a document title, leave the payload untouched, and the digest
+   * displayed breed, colour, owner entity, compliance deadline, seller email
+   * or a document title, leave the payload untouched, and the digest
    * still matched — while none of those edits appeared in the readout. The
    * check reported `pass` over a page that lied.
    *
@@ -108,7 +108,7 @@ test('the readout is the whole sealed record, not a chosen subset', () => {
   assert.match(PACKET_VERIFIER_SCRIPT, /function describe\(out, value, indent, key\)/);
 
   // Arrays and nested objects are part of the sealed record too: documents,
-  // attachments, pending documents, blockers and warnings all live in them.
+  // attachments, pending documents and the seller block all live in them.
   assert.match(PACKET_VERIFIER_SCRIPT, /Array\.isArray\(value\)/, 'lists must be rendered, not skipped');
   assert.match(PACKET_VERIFIER_SCRIPT, /typeof value === 'object'/, 'nested sections must be rendered');
 

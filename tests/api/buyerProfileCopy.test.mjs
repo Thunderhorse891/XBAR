@@ -67,9 +67,14 @@ test('the footer links XBAR support through the shared support-contact constant'
   assert.match(buyerProfile, />\s*Support\s*</, 'the footer support link is missing');
 });
 
-test('seller contact renders only from opt-in listing data, never invented', () => {
-  assert.match(buyerProfile, /SellerContactBlock/, 'the seller contact block is gone from the buyer profile');
-  assert.match(buyerProfile, /contact details are never invented/, 'the no-invented-contact guard comment is missing');
+test('no dead seller-contact block promises contact it cannot render', () => {
+  // The public listing payload carries no seller contact fields (the share RPC
+  // and its sanitizer expose only listing metadata), so a SellerContactBlock
+  // rendered from it always returned null — a contact promise the page could
+  // never keep. It is gone; the inquiry panel is the documented contact path.
+  assert.doesNotMatch(buyerProfile, /SellerContactBlock/, 'dead seller contact block is back');
+  assert.doesNotMatch(buyerProfile, /readSellerContact/, 'dead contact reader is back');
+  assert.match(buyerProfile, /The inquiry panel below is the contact path/, 'the contact path must be stated');
 });
 
 test('the app shell carries static social-unfurl fallback tags', () => {

@@ -12,6 +12,15 @@ function extractAddress(value) {
   return (match ? match[1] : String(value || '')).trim();
 }
 
+/** Extract the display name from a From value in "Name <addr>" form, if any. */
+function extractName(value) {
+  const text = String(value || '').trim();
+  const quoted = /^"((?:[^"\\]|\\.)*)"\s*<[^<>]+>\s*$/.exec(text);
+  if (quoted) return quoted[1].trim();
+  const unquoted = /^([^<>"]+?)\s*<[^<>]+>\s*$/.exec(text);
+  return unquoted ? unquoted[1].trim() : '';
+}
+
 /**
  * Build the From header. When the caller supplies a display name (e.g. the
  * ranch's business name on a buyer-facing sale-packet email), it replaces the
@@ -59,6 +68,8 @@ export async function sendEmail({ to, subject, html, text, fromName, fromEmail, 
   }
 
   if (process.env.SENDGRID_API_KEY) {
+    const fromAddress = extractAddress(from) || extractAddress(defaultFrom);
+    const fromNameValue = extractName(from);
     const response = await fetch('https://api.sendgrid.com/v3/mail/send', {
       method: 'POST',
       headers: {
@@ -67,8 +78,12 @@ export async function sendEmail({ to, subject, html, text, fromName, fromEmail, 
       },
       body: JSON.stringify({
         personalizations: [{ to: [{ email: to }] }],
-        from: { email: extractAddress(from) || extractAddress(defaultFrom) },
-        ...(replyToAddress ? { replyTo: { email: replyToAddress } } : {}),
+        // Raw v3 API field names: `reply_to` (object) and `from` with a
+        // separate `name`. The `replyTo` spelling belongs to the SendGrid
+        // JS helper, not the API — sending it raw means SendGrid ignores
+        // the field and replies fall back to the no-reply sender.
+        from: { email: fromAddress, ...(fromNameValue ? { name: fromNameValue } : {}) },
+        ...(replyToAddress ? { reply_to: { email: replyToAddress } } : {}),
         subject,
         content: [
           { type: 'text/plain', value: text || '' },

@@ -66,7 +66,13 @@ function input(overrides: Partial<SaleCredentialInput> = {}): SaleCredentialInpu
       lastVetVisit: '2026-06-01',
     },
     documents: docs(),
-    release: { status: 'Ready to release', allowed: true, blockers: [], warnings: [] },
+    seller: {
+      name: 'Erin',
+      ranch: 'Rocking R Ranch',
+      email: 'erin@rockingr.test',
+      heroPhotoUrl: 'https://storage.test/photos/hero.jpg',
+      heroPhotoDigest: '',
+    },
     verifiedProofs: ['Registration certificate', 'Bill of sale'],
     sealedAt: '2026-08-04T12:00:00.000Z',
     sealedBy: 'erin@rockingr.test',
@@ -180,12 +186,73 @@ test('transfer status is bound into the seal', () => {
   assert.notEqual(clear.digest, pending.digest);
 });
 
-test('a release blocker is bound into the seal', () => {
+test('the seller-side release verdict is not part of the buyer payload', () => {
+  // The sealed payload is printed inside the buyer packet for hand-verification,
+  // so everything sealed is everything disclosed. The release verdict was
+  // stripped from the buyer artifact deliberately; sealing it would publish it
+  // again through the "Check it by hand" record.
+  const payload = buildCredentialPayload(input());
+  const parsed = JSON.parse(payload) as Record<string, unknown>;
+  assert.ok(!('release' in parsed), 'release must not be a sealed field');
+  assert.ok(!payload.includes('Ready to release'), 'release status text must not leak into the payload');
+});
+
+test('the sealed payload carries the seller contact block the packet renders', () => {
+  const parsed = JSON.parse(buildCredentialPayload(input())) as {
+    seller: { name: string; ranch: string; email: string; heroPhotoUrl: string };
+  };
+  assert.equal(parsed.seller.name, 'Erin');
+  assert.equal(parsed.seller.ranch, 'Rocking R Ranch');
+  assert.equal(parsed.seller.email, 'erin@rockingr.test');
+  assert.equal(parsed.seller.heroPhotoUrl, 'https://storage.test/photos/hero.jpg');
+});
+
+test('changing the sealed seller email breaks the seal (tamper regression)', () => {
   const base = buildSaleCredential(input());
-  const blocked = buildSaleCredential(
-    input({ release: { status: 'On hold', allowed: false, blockers: ['Coggins missing'], warnings: [] } }),
+  const tampered = buildSaleCredential(input({ seller: { ...input().seller, email: 'attacker@example.com' } }));
+  assert.notEqual(base.digest, tampered.digest, 'a swapped seller email must not verify against the original digest');
+  const check = verifySaleCredential(tampered.payload, base.digest);
+  assert.equal(check.valid, false);
+});
+
+test('changing the sealed seller name breaks the seal (tamper regression)', () => {
+  const base = buildSaleCredential(input());
+  const tampered = buildSaleCredential(input({ seller: { ...input().seller, name: 'Someone Else' } }));
+  assert.notEqual(base.digest, tampered.digest);
+});
+
+test('swapping the sealed hero photo URL breaks the seal (tamper regression)', () => {
+  const base = buildSaleCredential(input());
+  const tampered = buildSaleCredential(
+    input({ seller: { ...input().seller, heroPhotoUrl: 'https://storage.test/photos/other.jpg' } }),
   );
-  assert.notEqual(base.digest, blocked.digest);
+  assert.notEqual(base.digest, tampered.digest, 'a swapped hero photo must not verify against the original digest');
+});
+
+test('a data-URL hero photo is sealed by content digest', () => {
+  const credential = buildSaleCredential(
+    input({
+      seller: {
+        ...input().seller,
+        heroPhotoUrl: 'data:image/jpeg;base64,/9j/4AAQ',
+        heroPhotoDigest: 'abc123',
+      },
+    }),
+  );
+  const parsed = JSON.parse(credential.payload) as { seller: { heroPhotoDigest: string } };
+  assert.equal(parsed.seller.heroPhotoDigest, 'abc123');
+  assert.ok(
+    credential.manifest.some((line) => line.includes('photo sealed by content digest')),
+    `manifest must say how the photo is sealed: ${JSON.stringify(credential.manifest)}`,
+  );
+});
+
+test('the manifest names the sealed seller contact', () => {
+  const credential = buildSaleCredential(input());
+  assert.ok(
+    credential.manifest.some((line) => line.includes('Seller contact: Erin · Rocking R Ranch · erin@rockingr.test')),
+    `seller contact missing from manifest: ${JSON.stringify(credential.manifest)}`,
+  );
 });
 
 test('verifySaleCredential accepts the untouched payload and rejects an edited one', () => {
@@ -328,12 +395,15 @@ test('a registered horse with no registry name on file never prints the word "re
   assert.ok(line.includes('X0099887'), 'the known registration number must survive');
 });
 
-test('a registered horse with neither registry nor number says the number is on file', () => {
+test('a registered horse with neither registry nor number says the number is not on file', () => {
   const credential = buildSaleCredential(
     input({ identity: { ...input().identity, registered: true, registry: '', registrationNumber: '' } }),
   );
 
-  assert.ok(credential.manifest.some((line) => line === 'Registration: registration number on file'));
+  assert.ok(
+    credential.manifest.some((line) => line === 'Registration: registered (number not on file)'),
+    `uncertain identity must stay uncertain: ${JSON.stringify(credential.manifest)}`,
+  );
 });
 
 test('the manifest names the care facts instead of saying nothing', () => {

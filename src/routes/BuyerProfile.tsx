@@ -19,7 +19,6 @@ import {
   sanitizeSharedListingForBuyerView,
   trackPublicBuyerProfileView,
   type PublicBuyerProfilePayload,
-  type PublicSharedListingDTO,
 } from '@/lib/publicShare';
 import { hasBuyerShareAccess } from '@/lib/workspaceAccess';
 import { buildDocumentTrustProfile, buildHorsePacketCompleteness } from '@/lib/xbarPhaseTwo';
@@ -281,71 +280,6 @@ function BuyerActionPanel({
           {statusText}
         </p>
       )}
-    </Panel>
-  );
-}
-
-// Optional seller contact for the public profile. The public listing payload
-// carries no seller contact fields today (the share RPC and its sanitizer
-// expose only listing metadata), so this renders nothing unless the listing
-// carries an opt-in `sellerContact` object. When present, only the provided
-// fields are shown — contact details are never invented.
-type SellerContactInfo = {
-  name: string;
-  ranch: string;
-  phone: string;
-  email: string;
-};
-
-function readSellerContact(sharedListing: unknown): SellerContactInfo | null {
-  if (!sharedListing || typeof sharedListing !== 'object') {
-    return null;
-  }
-  const contact = (sharedListing as { sellerContact?: unknown }).sellerContact;
-  if (!contact || typeof contact !== 'object') {
-    return null;
-  }
-  const fields = contact as Record<string, unknown>;
-  const clean = (value: unknown) => (typeof value === 'string' ? value.trim() : '');
-  const info: SellerContactInfo = {
-    name: clean(fields.name),
-    ranch: clean(fields.ranch),
-    phone: clean(fields.phone),
-    email: clean(fields.email),
-  };
-  return info.name || info.ranch || info.phone || info.email ? info : null;
-}
-
-function SellerContactBlock({ sharedListing }: { sharedListing: PublicSharedListingDTO | undefined }) {
-  const contact = readSellerContact(sharedListing);
-  if (!contact) {
-    return null;
-  }
-  return (
-    <Panel eyebrow="Seller contact" title={contact.name || contact.ranch || 'Seller'}>
-      <div className="key-grid">
-        {contact.ranch && contact.name ? <KeyValue label="Ranch" value={contact.ranch} /> : null}
-        {contact.phone ? (
-          <KeyValue
-            label="Phone"
-            value={
-              <a className="inline-link" href={`tel:${contact.phone.replace(/\s+/g, '')}`}>
-                {contact.phone}
-              </a>
-            }
-          />
-        ) : null}
-        {contact.email ? (
-          <KeyValue
-            label="Email"
-            value={
-              <a className="inline-link" href={`mailto:${contact.email}`}>
-                {contact.email}
-              </a>
-            }
-          />
-        ) : null}
-      </div>
     </Panel>
   );
 }
@@ -625,10 +559,10 @@ export default function BuyerProfile() {
               </button>
             </div>
 
-            {/* Seller contact — renders only when the listing carries opt-in
-                seller contact details. The inquiry panel below is the contact
-                path when the seller has not shared direct details. */}
-            <SellerContactBlock sharedListing={sharedListing} />
+            {/* Seller contact: the public listing payload carries no seller
+                contact fields (the share RPC and its sanitizer expose only
+                listing metadata), so there is no direct-contact block to
+                render. The inquiry panel below is the contact path. */}
           </div>
         </section>
 

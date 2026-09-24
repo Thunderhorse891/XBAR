@@ -16,7 +16,6 @@ import type {
 } from '../types/xbar.js';
 import { describeDocumentCoverage, fullCoverage, readDocumentWithCoverage } from './documentIntelligence.js';
 import { extractRegistrationFields } from './registrationExtraction.js';
-import { localIsoDate } from './format.js';
 
 const GIGABYTE = 1024 * 1024 * 1024;
 const BASE36_ALPHABET = 'abcdefghijklmnopqrstuvwxyz0123456789';
@@ -180,19 +179,22 @@ export function todayStamp() {
 }
 
 /**
- * 'YYYY-MM-DD HH:MM' on the viewer's own clock.
+ * An absolute UTC instant, ISO 8601 (`2026-09-24T18:55:00.000Z`).
  *
- * Every reader of these stamps — formatDateLabel, formatDateTimeLabel, and
- * the `.toLocaleDateString()` calls — parses them as LOCAL time, and the
- * day-count comparisons sort them lexicographically, so a stamp must be
- * local to be read correctly. The previous version stamped UTC without a
- * label, which arrived up to 14 hours off on every screen that showed it
- * (and could display the wrong day). Keep the shape; change the clock.
+ * These stamps are synced across workspace members and compared as strings —
+ * `offerUpdatedAt` is sorted with `localeCompare` in profitIntelligence.ts —
+ * so they must be globally comparable. An offset-free local wall clock is not:
+ * during a DST fallback the same wall time happens twice, and a later update
+ * from a western time zone sorts before an earlier eastern one. UTC keeps
+ * lexicographic order identical to chronological order everywhere.
+ *
+ * Display still reads the viewer's clock: every reader parses the stamp with
+ * `new Date(...)` (see `parseDateValue` in format.ts) and formats it in local
+ * time, so screens never show the raw UTC the way the old unlabeled-UTC
+ * version did. Never slice these strings for display — parse them.
  */
 export function nowStamp() {
-  const now = new Date();
-  const pad = (value: number) => String(value).padStart(2, '0');
-  return `${localIsoDate(now)} ${pad(now.getHours())}:${pad(now.getMinutes())}`;
+  return new Date().toISOString();
 }
 
 export function normalizeStorage(value: number) {
