@@ -5,7 +5,7 @@ import type { ReminderItem, ReminderUrgency } from '../features/reminders/types.
 
 export type OperationsPriorityItem = ReminderItem & {
   score: number;
-  timing: 'Overdue' | 'Today' | 'This week' | 'Later' | 'Unscheduled';
+  timing: 'Overdue' | 'Today' | 'This week' | 'This month' | 'Later' | 'Unscheduled';
 };
 export type OperationsPrioritySummary = {
   items: OperationsPriorityItem[];
@@ -142,8 +142,14 @@ export function buildOperationsPriorities(input: PriorityInput, now = new Date()
         );
       }),
     // An expired paper outranks one merely running low, the same weighting the
-    // care board gives a due signal over a watch one.
-    ...(input.expiringDocuments ?? []).map((item) => withPriority(item, now, item.urgency === 'Due' ? 8 : 0)),
+    // care board gives a due signal over a watch one. A renewal is booked weeks
+    // ahead, so a paper inside its 30-day window reads 'This month' rather than
+    // 'Later' — the alert digest drops 'Later', and would otherwise only mention
+    // it in the final seven days.
+    ...(input.expiringDocuments ?? []).map((item) => {
+      const prioritized = withPriority(item, now, item.urgency === 'Due' ? 8 : 0);
+      return prioritized.timing === 'Later' ? { ...prioritized, timing: 'This month' as const } : prioritized;
+    }),
   ].sort(
     (left, right) =>
       urgencyRank[left.urgency] - urgencyRank[right.urgency] ||

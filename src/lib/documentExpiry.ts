@@ -166,9 +166,24 @@ function readableDay(day: number): string {
   );
 }
 
-function resolveExpiry(document: DocumentRecord, kind: ExpiryKind): { day: number | null; basis: string } {
+/*
+ * An exam that has not happened yet is a mistyped date, not a fresh paper.
+ * isCurrentDatedDocument refuses it for the sale-packet gate; adding a window
+ * to it here would call it current — and let it stand in for a Coggins that
+ * has really expired. So it is listed as undated, for a person to correct.
+ */
+function futureExam(noun: string) {
+  return { day: null, basis: `The ${noun} date on this document is after today — check it against the paper.` };
+}
+
+function resolveExpiry(
+  document: DocumentRecord,
+  kind: ExpiryKind,
+  today: number,
+): { day: number | null; basis: string } {
   if (kind === 'Coggins') {
     const exam = examDay(document);
+    if (exam !== null && exam > today) return futureExam('exam');
     return exam === null
       ? { day: null, basis: 'No exam date on this Coggins, so XBAR can’t tell when it runs out.' }
       : { day: exam + CURRENT_COGGINS_DAYS, basis: `12 months from the ${readableDay(exam)} test.` };
@@ -182,6 +197,7 @@ function resolveExpiry(document: DocumentRecord, kind: ExpiryKind): { day: numbe
   }
   if (kind === 'Health certificate') {
     const exam = examDay(document);
+    if (exam !== null && exam > today) return futureExam('inspection');
     return exam === null
       ? { day: null, basis: 'No inspection date on this certificate, so XBAR can’t tell when it runs out.' }
       : {
@@ -213,7 +229,7 @@ export function buildExpiryRadar(
     if (document.state === 'Archived' || document.state === 'Queued') return [];
     const kind = expiryKindOf(document);
     if (!kind) return [];
-    const { day, basis } = resolveExpiry(document, kind);
+    const { day, basis } = resolveExpiry(document, kind, today);
     const daysLeft = day === null ? null : day - today;
     const linked = document.horseId && horseNames.has(document.horseId) ? document.horseId : undefined;
     return [
@@ -233,14 +249,23 @@ export function buildExpiryRadar(
   });
 
   /*
-   * A renewed paper replaces the old one. For each horse (or the ranch) and
-   * kind, only the dated document that runs longest counts, so last year's
-   * Coggins does not read as expired beside this year's. Contracts are the
-   * exception: two breeding contracts are two agreements, not a renewal.
+   * A renewal replaces the paper it renews — but only where one paper per
+   * horse is the rule. A horse has one Coggins and one health certificate at a
+   * time, so the dated one that runs longest counts and last year's does not
+   * read as expired beside this year's.
+   *
+   * Insurance and contracts are never merged. A horse can carry mortality and
+   * major-medical cover, and a ranch liability and property policies, at once;
+   * merging them let a current policy hide one that had lapsed. A renewed
+   * policy is archived in Documents, which is what removes the old one here.
+   *
+   * A paper with no usable date always stays listed: it needs a person to look
+   * at it, and a dated renewal beside it says nothing about what it is.
    */
   const groups = new Map<string, DocumentExpiryItem[]>();
   for (const item of candidates) {
-    const key = item.kind === 'Contract' ? `doc:${item.documentId}` : `${item.kind}:${item.horseId ?? 'ranch'}`;
+    const renews = item.kind === 'Coggins' || item.kind === 'Health certificate';
+    const key = renews ? `${item.kind}:${item.horseId ?? 'ranch'}` : `doc:${item.documentId}`;
     groups.set(key, [...(groups.get(key) ?? []), item]);
   }
   const items: DocumentExpiryItem[] = [];
@@ -248,9 +273,8 @@ export function buildExpiryRadar(
     const dated = group.filter((item) => item.daysLeft !== null);
     if (dated.length) {
       items.push(dated.reduce((best, item) => ((item.daysLeft ?? 0) > (best.daysLeft ?? 0) ? item : best)));
-    } else {
-      items.push(...group);
     }
+    items.push(...group.filter((item) => item.daysLeft === null));
   }
 
   const byDays = (left: DocumentExpiryItem, right: DocumentExpiryItem) =>

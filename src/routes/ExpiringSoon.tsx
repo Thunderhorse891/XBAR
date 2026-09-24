@@ -92,7 +92,7 @@ export default function ExpiringSoon() {
     {
       key: 'expired',
       title: 'Expired',
-      subtitle: 'Past their last good day. Renew these first.',
+      subtitle: 'Past their last good day. Renew these first — already renewed? Archive the old paper in Documents.',
       items: radar.expired,
     },
     {

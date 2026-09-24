@@ -285,3 +285,70 @@ test('the radar never modifies a document it reads', () => {
   assert.deepEqual(documents, before);
   assert.equal(documents.length, 4, 'archived documents are skipped, not removed');
 });
+
+test('separate insurance policies stay separate, so a current one cannot hide one that lapsed', () => {
+  const liability = doc({
+    type: 'Insurance',
+    title: 'Farm liability',
+    extractedTextPreview: 'Expiration Date: 06/01/2026',
+  });
+  const property = doc({
+    type: 'Insurance',
+    title: 'Barn property',
+    extractedTextPreview: 'Expiration Date: 12/01/2026',
+  });
+  const mortality = doc({ type: 'Insurance', horseId: 'h1', extractedTextPreview: 'Expiration Date: 06/10/2026' });
+  const majorMedical = doc({ type: 'Insurance', horseId: 'h1', extractedTextPreview: 'Expiration Date: 03/01/2027' });
+  const radar = buildExpiryRadar([liability, property, mortality, majorMedical], horses, NOW);
+
+  assert.deepEqual(
+    radar.expired.map((item) => item.documentId).sort(),
+    [liability.id, mortality.id].sort(),
+    'both lapsed policies are listed beside the current ones',
+  );
+  assert.equal(radar.currentCount, 2);
+  assert.equal(expiryReminderItems(radar).length, 2);
+});
+
+test('an exam date after today is a typo to check, not a current Coggins, and hides nothing', () => {
+  const expired = coggins('h1', '2025-05-01');
+  const typo = coggins('h1', '2062-05-01');
+  const certificate = doc({
+    type: 'Vet Record',
+    horseId: 'h2',
+    extractedTextPreview: 'Health certificate',
+    entities: { examDate: '2026-12-01' },
+  });
+  const radar = buildExpiryRadar([expired, typo, certificate], horses, NOW);
+
+  assert.deepEqual(
+    radar.expired.map((item) => item.documentId),
+    [expired.id],
+    'the real expired Coggins is still listed',
+  );
+  assert.deepEqual(radar.undated.map((item) => item.documentId).sort(), [typo.id, certificate.id].sort());
+  assert.match(radar.undated.find((item) => item.documentId === typo.id)?.basis ?? '', /after today/);
+  assert.equal(isCurrentDatedDocument(typo, CURRENT_COGGINS_DAYS, NOW), false, 'the sale-packet gate agrees');
+});
+
+test('a paper inside its 30-day window reaches the emailed digest, not just the last seven days', () => {
+  const radar = buildExpiryRadar(
+    [doc({ id: 'ins-20', type: 'Insurance', horseId: 'h1', extractedTextPreview: 'Expiration Date: 07/20/2026' })],
+    horses,
+    NOW,
+  );
+  const priorities = buildOperationsPriorities(
+    {
+      careRows: [],
+      transferRows: [],
+      documents: [],
+      salesLeads: [],
+      horseNames: {},
+      expiringDocuments: expiryReminderItems(radar),
+    },
+    NOW,
+  );
+
+  assert.equal(priorities.items[0]?.timing, 'This month');
+  assert.ok(buildAlertDigest(priorities.items, NOW).alerts.some((alert) => alert.id === 'expiry-ins-20'));
+});
