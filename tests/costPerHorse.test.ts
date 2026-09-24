@@ -666,3 +666,26 @@ test('the Expenses intake records quantity and unit like the quick-create drawer
   const drawer = await readFile('src/components/saas/flows.tsx', 'utf8');
   assert.match(drawer, /PRICED_BY_UNIT_CATEGORIES\.has\(category\)/, 'one list of priced categories, not two');
 });
+
+test('a one-off spike or discount in the last three deliveries does not move the price they are compared with', () => {
+  const series = (...prices: number[]) =>
+    buildCostPerHorse({
+      horses: [horse('a')],
+      receipts: prices.map((price, index) =>
+        receipt({ amount: price * 10, quantity: 10, unit: 'bale', receiptDate: daysAgo(80 - index * 10) }),
+      ),
+      now: NOW,
+    }).priceRises;
+
+  // The reviewer's case: a $20 spike that came back to $10, then a lasting rise to $12.
+  const rises = series(10, 20, 10, 12, 12);
+  assert.equal(rises.length, 1, 'averaging the spike into the baseline hid a real 20% rise');
+  assert.equal(rises[0]!.baselineUnitPrice, 10);
+  assert.equal(rises[0]!.risePercent, 20);
+  assert.equal(rises[0]!.risingSince, daysAgo(50));
+  assert.equal(rises[0]!.extraCost, 40, '$2 over on each of two 10-bale deliveries');
+
+  // The mirror image: a one-off discount is not the price the next delivery is measured against.
+  assert.deepEqual(series(10, 10, 5, 10), [], 'back to $10 after a $5 sale is not a 20% rise');
+  assert.deepEqual(series(10, 5, 10), [], 'with two deliveries of history, the discounted one is not the baseline');
+});

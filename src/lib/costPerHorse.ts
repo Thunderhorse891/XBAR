@@ -290,10 +290,20 @@ function buildPriceRises(dated: DatedReceipt[], today: number): { rises: Supplie
         left.day - right.day || String(left.receipt.uploadedAt).localeCompare(String(right.receipt.uploadedAt)),
     );
     const inWindow = (index: number) => today - purchases[index]!.day < COST_WINDOW_DAYS;
-    // The supplier's own price before a delivery: its last few deliveries.
+    /*
+     * The supplier's own price before a delivery: the middle of its last three
+     * deliveries, not their average. An average carries a one-off excursion
+     * forward: a $20 spike between $10s held a later $12 under the baseline,
+     * and a $5 sale made the next ordinary $10 read as a 20% rise. With two
+     * deliveries of history the higher one is used, so a rise is never claimed
+     * on the strength of a price that may have been a discount.
+     */
     const priceBefore = (index: number) => {
-      const prior = purchases.slice(Math.max(0, index - PRICE_BASELINE_PURCHASES), index);
-      return prior.reduce((sum, entry) => sum + entry.unitPrice, 0) / prior.length;
+      const prior = purchases
+        .slice(Math.max(0, index - PRICE_BASELINE_PURCHASES), index)
+        .map((entry) => entry.unitPrice)
+        .sort((left, right) => left - right);
+      return prior[Math.floor(prior.length / 2)]!;
     };
     if (purchases.some((_, index) => index > 0 && inWindow(index))) comparisons += 1;
 
