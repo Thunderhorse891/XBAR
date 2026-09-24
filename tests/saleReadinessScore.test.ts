@@ -484,3 +484,18 @@ test('the card offers approval for exactly the papers the Documents review queue
     assert.equal(approvable('coggins'), buckets.reviewQueue.includes(coggins), `Coggins, ${state}`);
   }
 });
+
+test('the Sale Packets page follows the computed verdict, with no second checklist overriding it', async () => {
+  // SalePacketStudio sits behind the Vite alias, so it is pinned from source.
+  // Its old five-slot list (bill of sale, sale photos, …) is not the release
+  // gate: the gate clears a horse with approved registration and transfer
+  // papers and no bill of sale, which the packet wizard can draft itself. Left
+  // in, that list labelled a gate-cleared horse "Needs Review" and asked for an
+  // upload while its profile offered "Generate proof packet".
+  const studio = await readFile('src/routes/SalePacketStudio.tsx', 'utf8');
+  assert.doesNotMatch(studio, /const REQUIRED = \[/, 'no second requirements list');
+  assert.doesNotMatch(studio, /missing\.length/, 'nothing overrides the verdict with missing slots');
+  assert.doesNotMatch(studio, /'Needs Review'/, 'a row is ready or blocked, as the gate says');
+  assert.match(studio, /const state: 'Ready' \| 'Blocked' = score\.proofPacketReady \? 'Ready' : 'Blocked';/);
+  assert.match(studio, /const blockers = score\.proofPacketBlocker \? \[score\.proofPacketBlocker\] : \[\];/);
+});
