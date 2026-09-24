@@ -2,7 +2,7 @@
    The original artwork is rendered proportionally, never redrawn. */
 .landing-page {
   --bg: var(--xbar-warm-white);
-  --bg-raised: color-mix(in srgb, var(--xbar-warm-white) 94%, var(--xbar-silver));
+  --bg-raised: var(--xbar-warm-white);
   --ink: var(--xbar-black);
   --ink-soft: var(--xbar-steel);
   --ink-faint: var(--xbar-steel);
@@ -10,8 +10,8 @@
   --accent-strong: var(--xbar-blue);
   --accent-ink: var(--xbar-black);
   --max: 1240px;
-  --landing-edge: color-mix(in srgb, var(--xbar-steel) 24%, transparent);
-  --landing-glint: color-mix(in srgb, var(--xbar-blue) 18%, transparent);
+  --landing-edge: var(--xbar-silver);
+  --landing-glint: var(--xbar-blue);
   --font-display: var(--font-ui);
   background: var(--bg);
 }
@@ -34,8 +34,20 @@
   letter-spacing: -0.015em;
 }
 .landing-page .site-header {
-  background: color-mix(in srgb, var(--xbar-warm-white) 96%, transparent);
+  background: var(--bg);
   backdrop-filter: blur(12px);
+}
+/* Custom properties accept unsupported colour syntax as raw tokens. Gate
+   enhancements so older browsers retain usable backgrounds and borders. */
+@supports (color: color-mix(in srgb, white, black)) {
+  .landing-page {
+    --bg-raised: color-mix(in srgb, var(--xbar-warm-white) 94%, var(--xbar-silver));
+    --landing-edge: color-mix(in srgb, var(--xbar-steel) 24%, transparent);
+    --landing-glint: color-mix(in srgb, var(--xbar-blue) 18%, transparent);
+  }
+  .landing-page .site-header {
+    background: color-mix(in srgb, var(--xbar-warm-white) 96%, transparent);
+  }
 }
 .landing-page .site-header::after {
   background: linear-gradient(90deg, transparent, var(--landing-edge), var(--landing-glint), transparent);

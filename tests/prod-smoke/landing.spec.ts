@@ -2,6 +2,33 @@ import { expect, test } from '@playwright/test';
 import { readFileSync } from 'node:fs';
 
 const headline = 'Every horse. One clear picture.';
+
+test('light navigation remains readable when CSS color mixing is unsupported', async ({ page }) => {
+  // Emulate discarded unsupported declarations in the served stylesheet,
+  // preserving earlier fallback declarations as an older CSS parser would.
+  await page.route('**/landing.css', async (route) => {
+    const response = await route.fetch();
+    const css = (await response.text()).replace(/[\w-]+\s*:\s*[^;{}]*color-mix\([^;{}]*;/g, '');
+    await route.fulfill({ response, body: css });
+  });
+  for (const width of [1440, 360]) {
+    await page.setViewportSize({ width, height: 900 });
+    await page.goto('/');
+    const colors = await page.locator('.site-header').evaluate((header) => ({
+      background: getComputedStyle(header).backgroundColor,
+      page: getComputedStyle(document.body).backgroundColor,
+    }));
+    expect(colors.background).toBe(colors.page);
+    expect(colors.background).not.toBe('rgba(0, 0, 0, 0)');
+    if (width === 360) {
+      await page.locator('.landing-mobile-nav > summary').click();
+      await expect(
+        page.locator('.landing-mobile-nav').getByRole('link', { name: 'Create your workspace' }),
+      ).toBeVisible();
+    }
+  }
+});
+
 test.beforeEach(async ({ page }) => {
   await page.route('**/api/metrics', (route) => route.fulfill({ status: 204 }));
 });
