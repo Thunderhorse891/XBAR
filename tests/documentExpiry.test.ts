@@ -549,3 +549,31 @@ test('only a paper that can be approved waits in review, and each row offers wha
   const page = await readFile('src/routes/ExpiringSoon.tsx', 'utf8');
   assert.match(page, /const action = expiryRowAction\(item\);/);
 });
+
+test('a date read off a paper still in review makes no claim and no second reminder', () => {
+  const pendingLapse = doc({
+    type: 'Insurance',
+    horseId: 'h1',
+    state: 'Needs Review',
+    extractedTextPreview: 'Expiration Date: 06/15/2026',
+  });
+  const radar = buildExpiryRadar([pendingLapse], horses, NOW);
+  assert.equal(radar.expired.length, 1, 'it is listed on the page, flagged as not reviewed');
+
+  // The queue already carries a review reminder for it.
+  assert.deepEqual(expiryReminderItems(radar), []);
+
+  // An OCR slip must not become "$40,000 of insured horse value has no current policy".
+  const risk = describeExpiryRisk(radar, horses);
+  assert.ok(
+    risk.every((line) => !/\$|lapsed/.test(line)),
+    risk.join(' | '),
+  );
+  assert.deepEqual(risk, [
+    '1 paper waiting in review reads as expired or due within 30 days — confirm its date in Documents before relying on it.',
+  ]);
+
+  const approved = buildExpiryRadar([{ ...pendingLapse, state: 'Ready' }], horses, NOW);
+  assert.equal(expiryReminderItems(approved).length, 1);
+  assert.match(describeExpiryRisk(approved, horses).join(' '), /\$40,000/);
+});

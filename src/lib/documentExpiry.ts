@@ -356,8 +356,16 @@ export function describeExpiryRisk(
 ): string[] {
   const byId = new Map(horses.map((horse) => [horse.id, horse]));
   const lines: string[] = [];
+  /*
+   * Claims are made only from reviewed papers. A date read off a paper still
+   * in review is unconfirmed — an OCR slip on a policy would otherwise say a
+   * horse's insured value is uncovered. Those papers get one line of their own
+   * asking for review, and no dollar figure.
+   */
+  const expired = radar.expired.filter((item) => item.reviewed);
+  const under30 = radar.under30.filter((item) => item.reviewed);
 
-  const expiredCoggins = distinctHorses(radar.expired.filter((item) => item.kind === 'Coggins'));
+  const expiredCoggins = distinctHorses(expired.filter((item) => item.kind === 'Coggins'));
   if (expiredCoggins.length) {
     const asking = expiredCoggins.reduce((sum, id) => sum + Math.max(0, byId.get(id)?.sale?.askPrice ?? 0), 0);
     lines.push(
@@ -366,19 +374,19 @@ export function describeExpiryRisk(
       }.`,
     );
   }
-  const soonCoggins = distinctHorses(radar.under30.filter((item) => item.kind === 'Coggins'));
+  const soonCoggins = distinctHorses(under30.filter((item) => item.kind === 'Coggins'));
   if (soonCoggins.length) {
     lines.push(
       `${plural(soonCoggins.length, 'horse loses', 'horses lose')} travel and sale clearance within 30 days unless Coggins is redrawn.`,
     );
   }
-  const expiredCertificates = distinctHorses(radar.expired.filter((item) => item.kind === 'Health certificate'));
+  const expiredCertificates = distinctHorses(expired.filter((item) => item.kind === 'Health certificate'));
   if (expiredCertificates.length) {
     lines.push(
       `${plural(expiredCertificates.length, 'horse needs', 'horses need')} a new health certificate before crossing state lines.`,
     );
   }
-  const expiredInsurance = radar.expired.filter((item) => item.kind === 'Insurance');
+  const expiredInsurance = expired.filter((item) => item.kind === 'Insurance');
   if (expiredInsurance.length) {
     /*
      * Nothing on file ties a horse's insured value to one policy, so a lapsed
@@ -400,14 +408,20 @@ export function describeExpiryRisk(
       }.`,
     );
   }
-  const soonInsurance = radar.under30.filter((item) => item.kind === 'Insurance');
+  const soonInsurance = under30.filter((item) => item.kind === 'Insurance');
   if (soonInsurance.length) {
     lines.push(`${plural(soonInsurance.length, 'insurance policy ends', 'insurance policies end')} within 30 days.`);
   }
-  const expiredContracts = radar.expired.filter((item) => item.kind === 'Contract');
+  const expiredContracts = expired.filter((item) => item.kind === 'Contract');
   if (expiredContracts.length) {
     lines.push(
       `${plural(expiredContracts.length, 'contract has', 'contracts have')} passed ${expiredContracts.length === 1 ? 'its' : 'their'} end date — renew or close ${expiredContracts.length === 1 ? 'it' : 'them'} before relying on the terms.`,
+    );
+  }
+  const pending = [...radar.expired, ...radar.under30].filter((item) => !item.reviewed).length;
+  if (pending) {
+    lines.push(
+      `${plural(pending, 'paper waiting in review reads', 'papers waiting in review read')} as expired or due within 30 days — confirm ${pending === 1 ? 'its date' : 'their dates'} in Documents before relying on ${pending === 1 ? 'it' : 'them'}.`,
     );
   }
   return lines;
@@ -446,23 +460,28 @@ export function expiryBellCount(
  * A Coggins for a horse on the roster is left out on purpose: the care board
  * already raises a Coggins reminder for every such horse, and a second one
  * for the same paper would be noise. A Coggins not linked to a known horse has
- * no care row, so it stays in. Only what needs attention now goes in —
- * expired or under 30 days.
+ * no care row, so it stays in. A paper still in review is left out too: the
+ * queue already carries a review reminder for it, and its date is not
+ * confirmed. Only what needs attention now goes in — expired or under 30 days.
  */
 export function expiryReminderItems(radar: ExpiryRadar): ReminderItem[] {
-  return [...radar.expired, ...radar.under30]
-    .filter((item) => !(item.kind === 'Coggins' && item.horseId))
-    .map((item): ReminderItem => ({
-      id: `expiry-${item.documentId}`,
-      kind: 'Documents',
-      urgency: item.urgency === 'expired' ? 'Due' : 'Watch',
-      title: `${item.kind} ${item.urgency === 'expired' ? 'expired' : 'expiring'}: ${item.title}`,
-      horseId: item.horseId,
-      horseName: item.horseName ?? undefined,
-      dueDate: item.expiresOn ?? undefined,
-      detail: item.basis,
-      route: '/expiring',
-    }));
+  return (
+    [...radar.expired, ...radar.under30]
+      // A paper still in review already has a review reminder of its own.
+      .filter((item) => item.reviewed)
+      .filter((item) => !(item.kind === 'Coggins' && item.horseId))
+      .map((item): ReminderItem => ({
+        id: `expiry-${item.documentId}`,
+        kind: 'Documents',
+        urgency: item.urgency === 'expired' ? 'Due' : 'Watch',
+        title: `${item.kind} ${item.urgency === 'expired' ? 'expired' : 'expiring'}: ${item.title}`,
+        horseId: item.horseId,
+        horseName: item.horseName ?? undefined,
+        dueDate: item.expiresOn ?? undefined,
+        detail: item.basis,
+        route: '/expiring',
+      }))
+  );
 }
 
 export type ExpiryRowAction = 'review-renewal' | 'review' | 'open-documents' | 'upload-renewal';
