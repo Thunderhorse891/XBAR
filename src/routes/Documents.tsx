@@ -1304,7 +1304,7 @@ export default function Documents() {
 
           <Panel
             title="Legal & commerce documents"
-            description="XBAR LLC(TM) terms, policies, and the equine records disclaimer — include them with buyer hand-offs."
+            description="XBAR LLC™ terms, policies, and the equine records disclaimer — include them with buyer hand-offs."
           >
             <div className="stack-list">
               {legalDocuments.map((legalDoc) => (

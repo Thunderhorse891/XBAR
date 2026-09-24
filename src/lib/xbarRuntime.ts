@@ -16,6 +16,7 @@ import type {
 } from '../types/xbar.js';
 import { describeDocumentCoverage, fullCoverage, readDocumentWithCoverage } from './documentIntelligence.js';
 import { extractRegistrationFields } from './registrationExtraction.js';
+import { localIsoDate } from './format.js';
 
 const GIGABYTE = 1024 * 1024 * 1024;
 const BASE36_ALPHABET = 'abcdefghijklmnopqrstuvwxyz0123456789';
@@ -178,8 +179,20 @@ export function todayStamp() {
   return new Date().toISOString().slice(0, 10);
 }
 
+/**
+ * 'YYYY-MM-DD HH:MM' on the viewer's own clock.
+ *
+ * Every reader of these stamps — formatDateLabel, formatDateTimeLabel, and
+ * the `.toLocaleDateString()` calls — parses them as LOCAL time, and the
+ * day-count comparisons sort them lexicographically, so a stamp must be
+ * local to be read correctly. The previous version stamped UTC without a
+ * label, which arrived up to 14 hours off on every screen that showed it
+ * (and could display the wrong day). Keep the shape; change the clock.
+ */
 export function nowStamp() {
-  return new Date().toISOString().replace('T', ' ').slice(0, 16);
+  const now = new Date();
+  const pad = (value: number) => String(value).padStart(2, '0');
+  return `${localIsoDate(now)} ${pad(now.getHours())}:${pad(now.getMinutes())}`;
 }
 
 export function normalizeStorage(value: number) {

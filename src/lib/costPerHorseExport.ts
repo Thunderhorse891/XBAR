@@ -1,0 +1,111 @@
+import type { CostPerHorseSummary } from './costPerHorse.js';
+import { localIsoDate } from './format.js';
+import { saveTextAsFile, type FileSaveResult } from './fileDownload.js';
+
+/*
+ * Getting the per-horse cost figures off the screen.
+ *
+ * The flagship number on the Costs screen — what each horse costs per day —
+ * is the figure a rancher hands to a partner, an accountant, or a buyer
+ * asking what a horse costs to keep. A dashboard that cannot leave the app is
+ * decoration, so this produces a CSV from the same summary the screen
+ * renders: per-horse daily cost, the category split, and supplier price rises.
+ *
+ * The CSV field rules mirror src/lib/ranchReportExport.ts (quoted fields,
+ * BOM on download, formula-injection guard) so both exports open identically
+ * in Excel.
+ */
+
+// Mirrors ranchReportExport.ts: the formula character only counts when it is
+// the first thing that is not whitespace/control, so `Docs Best` stays
+// untouched while `=HYPERLINK(...)` gets the text-prefix.
+// eslint-disable-next-line no-control-regex
+const FORMULA_LEAD = /^[\s\u0000-\u001f]*[=+\-@]/;
+
+function csvField(value: string | number): string {
+  if (typeof value === 'number') return `"${value}"`;
+  const text = String(value);
+  const guarded = FORMULA_LEAD.test(text) ? `'${text}` : text;
+  return `"${guarded.replace(/"/g, '""')}"`;
+}
+
+function csvRow(cells: (string | number)[]): string {
+  return cells.map(csvField).join(',');
+}
+
+/** Money to two decimals: a raw float like 10.0000000001 breaks sums and trust alike. */
+function money(value: number): number {
+  return Math.round(value * 100) / 100;
+}
+
+/**
+ * The Costs screen as rows. All figures are dollars — the summary keeps money
+ * in dollars, the screen just formats the per-day figures with cents
+ * precision.
+ */
+export function costPerHorseToCsv(summary: CostPerHorseSummary): string {
+  const lines: string[] = [];
+
+  lines.push(csvRow(['XBAR Cost Per Horse']));
+  lines.push(csvRow(['Generated', localIsoDate()]));
+  lines.push('');
+
+  lines.push(csvRow(['Summary']));
+  lines.push(csvRow(['Horses in care', summary.horsesInCare]));
+  lines.push(csvRow(['Days of receipts', summary.trackedDays]));
+  lines.push(csvRow(['Cost per horse per day', summary.perHorsePerDay === null ? '—' : money(summary.perHorsePerDay)]));
+  lines.push(csvRow(['Monthly burn', money(summary.monthlyBurn)]));
+  lines.push('');
+
+  lines.push(csvRow(['Cost per horse per day']));
+  lines.push(csvRow(['Horse', 'Tagged to horse ($)', 'Ranch-wide share ($)', 'Per day ($)']));
+  for (const horse of summary.horses) {
+    lines.push(csvRow([horse.horseName, money(horse.direct), money(horse.sharedShare), money(horse.perDay)]));
+  }
+  lines.push('');
+
+  lines.push(csvRow(["Where each day's cost goes"]));
+  lines.push(csvRow(['Category', 'Total ($)', 'Per horse per day ($)', 'Share (%)']));
+  for (const group of summary.groups) {
+    lines.push(
+      csvRow([
+        group.group,
+        money(group.total),
+        group.perHorsePerDay === null ? '—' : money(group.perHorsePerDay),
+        Math.round(group.share * 1000) / 10,
+      ]),
+    );
+  }
+
+  if (summary.priceRises.length) {
+    lines.push('');
+    lines.push(csvRow(['Supplier price rises']));
+    lines.push(
+      csvRow(['Supplier', 'Product', 'Rise (%)', 'Was ($/unit)', 'Now ($/unit)', 'Extra cost since rise ($)']),
+    );
+    for (const rise of summary.priceRises) {
+      lines.push(
+        csvRow([
+          rise.vendor,
+          rise.product || rise.category,
+          rise.risePercent,
+          money(rise.baselineUnitPrice),
+          money(rise.latestUnitPrice),
+          money(rise.extraCost),
+        ]),
+      );
+    }
+  }
+
+  return lines.join('\n');
+}
+
+export function costPerHorseFileName(generatedOn: string = localIsoDate()): string {
+  return `xbar-cost-per-horse-${generatedOn}.csv`;
+}
+
+export function downloadCostPerHorseCsv(summary: CostPerHorseSummary): Promise<FileSaveResult> {
+  // The BOM is what makes Excel read this as UTF-8 — same reason as the ranch
+  // report export.
+  return saveTextAsFile(costPerHorseFileName(), '﻿' + costPerHorseToCsv(summary), 'text/csv;charset=utf-8');
+}
