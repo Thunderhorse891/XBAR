@@ -22,6 +22,13 @@ const GROUP_LABEL: Record<CostGroup, string> = {
 // Stagger index for the motion system; the CSS var drives each child's delay.
 const motionIndex = (index: number): CSSProperties => ({ ['--motion-index' as string]: index }) as CSSProperties;
 
+// A receipt date is a calendar day. formatDateLabel reads a bare 'YYYY-MM-DD'
+// as UTC midnight, which shows the day before anywhere west of UTC — so it is
+// read at local noon instead.
+function receiptDayLabel(date: string) {
+  return formatDateLabel(/^\d{4}-\d{2}-\d{2}$/.test(date) ? `${date}T12:00:00` : date);
+}
+
 function shareLabel(fraction: number) {
   return fraction > 0 && fraction < 0.01 ? 'under 1%' : formatPercent(fraction * 100);
 }
@@ -216,7 +223,7 @@ export default function Costs() {
                   </div>
                   <div className="fin-insight__detail">
                     {rise.category}: {formatCurrencyCents(rise.baselineUnitPrice)} →{' '}
-                    {formatCurrencyCents(rise.latestUnitPrice)} per {rise.unit} on {formatDateLabel(rise.latestDate)}.
+                    {formatCurrencyCents(rise.latestUnitPrice)} per {rise.unit} on {receiptDayLabel(rise.latestDate)}.
                     That delivery cost {formatCurrencyCents(rise.extraCost)} more than this supplier&apos;s own recent
                     price — worth raising before the next order, or getting a second quote.
                   </div>
