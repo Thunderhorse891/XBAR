@@ -56,6 +56,7 @@ const Breeding = lazy(() => import('./routes/Breeding'));
 const BuyerProfile = lazy(() => import('./routes/BuyerProfile'));
 const VerifyPacket = lazy(() => import('./routes/VerifyPacket'));
 const Documents = lazy(() => import('./routes/Documents'));
+const ExpiringSoon = lazy(() => import('./routes/ExpiringSoon'));
 const Expenses = lazy(() => import('./routes/Expenses'));
 const Horses = lazy(() => import('./routes/Horses'));
 const Login = lazy(() => import('./routes/Login'));
@@ -95,6 +96,7 @@ const ROUTE_LABELS: Record<string, string> = {
   '/assets': 'Ranch Assets',
   '/breeding': 'Breeding Records',
   '/documents': 'Documents',
+  '/expiring': 'Expiring soon',
   '/expenses': 'Expenses',
   '/horses': 'Horses',
   '/login': 'Login',
@@ -330,6 +332,7 @@ export default function App() {
                 <Route path="horses" element={<Horses />} />
                 <Route path="horses/:id" element={<AnimalProfile />} />
                 <Route path="documents" element={<Documents />} />
+                <Route path="expiring" element={<ExpiringSoon />} />
                 <Route path="document-library" element={<Navigate to="/documents" replace />} />
                 <Route path="weather" element={<Weather />} />
                 <Route path="ownership" element={<Ownership />} />

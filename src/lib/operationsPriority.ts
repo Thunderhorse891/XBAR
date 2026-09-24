@@ -5,7 +5,7 @@ import type { ReminderItem, ReminderUrgency } from '../features/reminders/types.
 
 export type OperationsPriorityItem = ReminderItem & {
   score: number;
-  timing: 'Overdue' | 'Today' | 'This week' | 'Later' | 'Unscheduled';
+  timing: 'Overdue' | 'Today' | 'This week' | 'This month' | 'Later' | 'Unscheduled';
 };
 export type OperationsPrioritySummary = {
   items: OperationsPriorityItem[];
@@ -21,6 +21,8 @@ type PriorityInput = {
   documents: DocumentRecord[];
   salesLeads: SalesLead[];
   horseNames: Record<string, string>;
+  /** Expired or soon-expiring papers from the expiry radar (lib/documentExpiry.ts). */
+  expiringDocuments?: ReminderItem[];
 };
 const dayMs = 24 * 60 * 60 * 1000;
 const urgencyRank: Record<ReminderUrgency, number> = { Due: 0, Watch: 1, Clear: 2 };
@@ -139,6 +141,15 @@ export function buildOperationsPriorities(input: PriorityInput, now = new Date()
           lead.stage === 'Offer' ? 12 : 0,
         );
       }),
+    // An expired paper outranks one merely running low, the same weighting the
+    // care board gives a due signal over a watch one. A renewal is booked weeks
+    // ahead, so a paper inside its 30-day window reads 'This month' rather than
+    // 'Later' — the alert digest drops 'Later', and would otherwise only mention
+    // it in the final seven days.
+    ...(input.expiringDocuments ?? []).map((item) => {
+      const prioritized = withPriority(item, now, item.urgency === 'Due' ? 8 : 0);
+      return prioritized.timing === 'Later' ? { ...prioritized, timing: 'This month' as const } : prioritized;
+    }),
   ].sort(
     (left, right) =>
       urgencyRank[left.urgency] - urgencyRank[right.urgency] ||
