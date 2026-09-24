@@ -297,6 +297,45 @@ export async function loadWorkspaceAccessProfile(sessionOverride?: Session | nul
   };
 }
 
+/*
+ * Re-read just the subscription profile for one workspace.
+ *
+ * The billing screen polls this after a completed Stripe checkout: the page
+ * comes back to /billing via a full navigation, and the only thing that can
+ * tell it the payment landed is the row the webhook writes on
+ * `checkout.session.completed`. It reads the same canonical columns as the
+ * workspace backup load and maps through the same `subscriptionFromCloudRow`,
+ * so a polled profile and a hydrated one can never disagree.
+ *
+ * A failed read is `ok: false`, never a stale profile: the poll treats unknown
+ * as "not yet", and confirming from a read that errored would report a payment
+ * the deployment cannot see.
+ */
+export async function refreshWorkspaceSubscriptionProfile(
+  workspaceId: string,
+): Promise<{ ok: true; profile: SubscriptionProfile | null } | { ok: false; message: string }> {
+  const client = getSupabaseClient();
+  if (!client) {
+    return { ok: false, message: 'Supabase is not configured for this build.' };
+  }
+  if (!workspaceId) {
+    return { ok: false, message: 'No cloud workspace is connected for this session.' };
+  }
+
+  const { data, error } = await client
+    .from('workspace_subscription_profiles')
+    .select('tier, billing_state, monthly_rate, payload, updated_at')
+    .eq('workspace_id', workspaceId)
+    .maybeSingle();
+
+  if (error) {
+    return { ok: false, message: error.message };
+  }
+
+  // A row that has never been written is not an error; it is "not yet".
+  return { ok: true, profile: data ? (subscriptionFromCloudRow(data) ?? null) : null };
+}
+
 export async function loadPublicBuyerRoomEventsFromCloud(): Promise<
   { ok: true; events: BuyerRoomEvent[] } | { ok: false; message: string }
 > {

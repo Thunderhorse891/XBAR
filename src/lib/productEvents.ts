@@ -5,6 +5,8 @@ export const productEventNames = {
   checkoutStarted: 'billing.checkout_started',
   checkoutRedirected: 'billing.checkout_redirected',
   checkoutFailed: 'billing.checkout_failed',
+  checkoutConfirmed: 'billing.checkout_confirmed',
+  checkoutConfirmationStale: 'billing.checkout_confirmation_stale',
   planApplied: 'billing.plan_applied',
   landingCtaClicked: 'acquisition.landing_cta_clicked',
   landingPlanSelected: 'acquisition.landing_plan_selected',

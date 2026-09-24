@@ -1,6 +1,14 @@
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { canUsePaymentLinkFallback, checkoutRouteFor, startManagedCheckout } from '@/lib/billingApi';
+import {
+  CHECKOUT_CONFIRMATION_POLL_INTERVAL_MS,
+  CHECKOUT_CONFIRMATION_TIMEOUT_MS,
+  isCheckoutConfirmationComplete,
+  parseCheckoutReturn,
+  stripCheckoutReturnParam,
+} from '@/lib/checkoutReturn';
+import { refreshWorkspaceSubscriptionProfile } from '@/lib/cloudWorkspace';
 import { formatCurrency } from '@/lib/format';
 import { isNativeApp } from '@/lib/nativePlatform';
 import {
@@ -181,13 +189,16 @@ export default function Subscriptions() {
   // checkout the customer needed to resubscribe.
   const selectedPaidCurrent = isCurrentPaidPlan(subscription, decisionTier);
 
-  const emit = (
-    eventName: Parameters<typeof productEvent>[0],
-    payload: Record<string, unknown>,
-    severity: 'info' | 'warning' = 'info',
-  ) => {
-    void trackRuntimeEvent({ workspaceId, severity, ...productEvent(eventName, payload) });
-  };
+  const emit = useCallback(
+    (
+      eventName: Parameters<typeof productEvent>[0],
+      payload: Record<string, unknown>,
+      severity: 'info' | 'warning' = 'info',
+    ) => {
+      void trackRuntimeEvent({ workspaceId, severity, ...productEvent(eventName, payload) });
+    },
+    [workspaceId],
+  );
 
   useEffect(() => {
     setSelectedTier(defaultDecisionTier);
@@ -227,6 +238,99 @@ export default function Subscriptions() {
     clearPendingHostedPurchase(workspaceId);
     setPendingPurchase(null);
   };
+
+  /*
+   * A return from Stripe's hosted checkout.
+   *
+   * `api/stripe/checkout.js` sends the customer back to this page with
+   * `?checkout=success` or `?checkout=cancelled`, and nothing read the
+   * parameter: the page reloaded showing Starter with the plan buttons still
+   * enabled, and the customer concluded the payment had failed. The success
+   * case says so up front and then polls the subscription profile until the
+   * webhook lands — the row the webhook writes is the only thing that can
+   * prove the payment, so the "confirming" state is not cleared until that row
+   * says the workspace pays. See `checkoutReturn` for the pure half.
+   */
+  const [checkoutReturnState, setCheckoutReturnState] = useState<
+    'confirming' | 'confirmed' | 'stale' | 'cancelled' | null
+  >(null);
+  const checkoutReturnHandled = useRef(false);
+
+  /*
+   * Read the return once and clean the URL immediately, so a refresh or a
+   * back-navigation cannot re-run the handling. `plan=` is kept: it only
+   * preselects the tier card and is not part of the return.
+   */
+  useEffect(() => {
+    if (checkoutReturnHandled.current) return;
+    checkoutReturnHandled.current = true;
+    const kind = parseCheckoutReturn(window.location.search);
+    if (!kind) return;
+    const cleaned = stripCheckoutReturnParam(window.location.search);
+    window.history.replaceState(null, '', `${window.location.pathname}${cleaned}${window.location.hash}`);
+    if (kind === 'cancelled') {
+      setCheckoutReturnState('cancelled');
+      return;
+    }
+    pushToast({
+      title: 'Payment completed',
+      message: 'Your payment went through. Confirming your plan now.',
+      tone: 'success',
+    });
+    /*
+     * Managed checkout always has a workspace id; without one there is no
+     * profile to poll, so the toast is the whole story.
+     */
+    if (workspaceId) {
+      setCheckoutReturnState('confirming');
+    }
+  }, [pushToast, workspaceId]);
+
+  /*
+   * Confirm the completed checkout against the cloud profile.
+   *
+   * The webhook writes the profile on `checkout.session.completed`; until then
+   * the screen still shows the pre-payment plan. Each poll re-reads the row
+   * and activates the paid plan the moment the row says the workspace pays —
+   * which is also what flips the plan cards, because both read
+   * `hasActivePaidPlan`. A poll that cannot read the row keeps going: unknown
+   * is not failure, and the timeout says "still confirming", never that the
+   * payment failed.
+   */
+  useEffect(() => {
+    if (checkoutReturnState !== 'confirming') return;
+    let cancelled = false;
+    let timer: number | undefined;
+    const startedAt = Date.now();
+    const poll = async () => {
+      if (cancelled) return;
+      const refreshed = await refreshWorkspaceSubscriptionProfile(workspaceId);
+      if (cancelled) return;
+      const profile = refreshed.ok ? refreshed.profile : null;
+      if (profile && isCheckoutConfirmationComplete(profile)) {
+        useXbarStore.setState({ subscription: profile });
+        emit(productEventNames.checkoutConfirmed, { tier: profile.tier });
+        pushToast({
+          title: 'Your plan is active',
+          message: `${profile.tier} is now active on this workspace.`,
+          tone: 'success',
+        });
+        setCheckoutReturnState('confirmed');
+        return;
+      }
+      if (Date.now() - startedAt >= CHECKOUT_CONFIRMATION_TIMEOUT_MS) {
+        emit(productEventNames.checkoutConfirmationStale, {}, 'warning');
+        setCheckoutReturnState('stale');
+        return;
+      }
+      timer = window.setTimeout(poll, CHECKOUT_CONFIRMATION_POLL_INTERVAL_MS);
+    };
+    void poll();
+    return () => {
+      cancelled = true;
+      if (timer !== undefined) window.clearTimeout(timer);
+    };
+  }, [checkoutReturnState, workspaceId, emit, pushToast]);
 
   /*
    * THE only way this screen follows a payment link.
@@ -519,6 +623,44 @@ export default function Subscriptions() {
               your workspace on its own.
             </span>
           </div>
+
+          {checkoutReturnState === 'confirming' && (
+            <div className="checkout-return-banner" role="status">
+              <span>Payment received</span>
+              <strong>Confirming your payment…</strong>
+              <p>Your plan activates here as soon as the payment is confirmed — usually within a few seconds.</p>
+            </div>
+          )}
+          {checkoutReturnState === 'confirmed' && (
+            <div className="checkout-return-banner" role="status">
+              <span>Payment confirmed</span>
+              <strong>Your plan is active.</strong>
+              <button type="button" className="checkout-inline-action" onClick={() => setCheckoutReturnState(null)}>
+                Dismiss
+              </button>
+            </div>
+          )}
+          {checkoutReturnState === 'stale' && (
+            <div className="checkout-return-banner" role="status">
+              <span>Payment received</span>
+              <strong>We&apos;re still confirming your payment.</strong>
+              <p>
+                Check back shortly — your plan will appear here once confirmation lands. Your receipt from the payment
+                processor is proof the payment went through.
+              </p>
+              <button type="button" className="checkout-inline-action" onClick={() => setCheckoutReturnState(null)}>
+                Dismiss
+              </button>
+            </div>
+          )}
+          {checkoutReturnState === 'cancelled' && (
+            <div className="checkout-return-banner checkout-return-banner--quiet" role="status">
+              <p>Checkout cancelled — no charge was made.</p>
+              <button type="button" className="checkout-inline-action" onClick={() => setCheckoutReturnState(null)}>
+                Dismiss
+              </button>
+            </div>
+          )}
 
           <div className="checkout-trial">
             <div>
