@@ -35,7 +35,7 @@ export const subscriptionTierConfig: Record<
     featureFlags: [
       'Keep clean records — horses, care, documents, expenses, reminders',
       'Documents with OCR intake and review',
-      '1 team seat',
+      '1 seat — just you',
       '250 documents and 25 GB storage',
     ],
     limits: {

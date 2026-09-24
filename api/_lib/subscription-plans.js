@@ -12,7 +12,7 @@ export const subscriptionPlans = {
     featureFlags: [
       'Keep clean records — horses, care, documents, expenses, reminders',
       'Proof vault with OCR intake and review',
-      '1 team seat',
+      '1 seat — just you',
       '250 document capacity · 25 GB storage',
     ],
     limits: {
