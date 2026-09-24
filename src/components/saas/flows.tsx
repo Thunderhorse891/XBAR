@@ -153,8 +153,9 @@ function isCreateKey(value: string): value is CreateKey {
 }
 
 const SEGMENT_OPTIONS: HorseSegment[] = ['Sale Prospect', 'Broodmare', 'Stud', 'Show String', 'Young Stock', 'Retired'];
-const SEX_OPTIONS: HorseSex[] = ['Mare', 'Stud', 'Gelding', 'Filly', 'Colt'];
+const SEX_OPTIONS: HorseSex[] = ['Not recorded', 'Mare', 'Stud', 'Gelding', 'Filly', 'Colt'];
 const SEGMENT_STATUS: Record<HorseSegment, HorseStatus> = {
+  Unassigned: 'New record',
   'Sale Prospect': 'Sale Prep',
   Broodmare: 'Broodmare Program',
   Stud: 'In Training',
@@ -465,9 +466,7 @@ export function GlobalCreateDrawer() {
           </>
         }
       >
-        <p className="xs-field-hint">
-          {action} attaches to a horse record, and this workspace doesn’t have any horses yet.
-        </p>
+        <p className="xs-field-hint">{action} needs a horse record. Add your first horse to continue.</p>
       </SlideOverDrawer>
     );
   }
@@ -492,7 +491,7 @@ export function GlobalCreateDrawer() {
             placeholder={workspaceProfile.defaultOwnerName || 'Legal owner'}
             value={f.owner ?? ''}
             onChange={set('owner')}
-            hint="Defaults to the workspace owner if left blank."
+            hint="Uses your usual owner if left blank."
           />
           <Text label="Location" placeholder={defaultBarn} value={f.loc ?? ''} onChange={set('loc')} />
         </div>

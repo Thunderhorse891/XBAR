@@ -28,18 +28,12 @@ async function bootstrapWorkspace(page: Page) {
     }
   });
   await page.goto('/app/setup');
-  const setupHeading = page.getByRole('heading', { name: 'Configure Workspace' });
+  const setupHeading = page.getByRole('heading', { name: 'Set up your ranch' });
   if (!(await setupHeading.isVisible({ timeout: 5_000 }).catch(() => false))) await page.goto('/app/setup');
   await expect(setupHeading).toBeVisible({ timeout: 10_000 });
-  await page.getByPlaceholder('XBAR LLC').fill('XBAR Holdings');
-  await page.getByPlaceholder('Primary Ranch').fill('Thunder Horse Ranch');
-  await page.getByPlaceholder('Ranch manager').fill('Erin Wyrick');
-  await page.getByPlaceholder('ops@yourranch.com').fill('ops@xbar.test');
-  await page.getByPlaceholder('Legal owner').fill('Thunder Horse Ranch');
-  await page.getByPlaceholder('Owner entity').fill('Thunder Horse Ranch LLC');
-  await page.getByPlaceholder('Barn A').fill('Barn A');
-  await page.getByPlaceholder('Pasture 1').fill('North Pasture');
-  await page.getByRole('button', { name: 'Create workspace' }).click();
+  await page.getByLabel('Ranch name').fill('Thunder Horse Ranch');
+  await page.getByRole('button', { name: 'Continue', exact: true }).click();
+  await page.getByRole('button', { name: 'Add a horse later', exact: true }).click();
   await expect(page).toHaveURL(/\/app$/, { timeout: 15_000 });
 }
 

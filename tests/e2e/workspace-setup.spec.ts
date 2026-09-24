@@ -29,7 +29,7 @@ async function bootstrapWorkspace(page: Page) {
   // The application router lives under /app (marketing owns the site root).
   await page.goto('/app/setup');
 
-  const setupHeading = page.getByRole('heading', { name: 'Configure Workspace' });
+  const setupHeading = page.getByRole('heading', { name: 'Set up your ranch' });
   const setupVisible = await setupHeading.isVisible({ timeout: 5_000 }).catch(() => false);
   if (!setupVisible) {
     await page.goto('/app/setup');
@@ -37,15 +37,9 @@ async function bootstrapWorkspace(page: Page) {
   await expect(setupHeading).toBeVisible({ timeout: 10_000 });
 
   // Fill by placeholder — stable against label theming.
-  await page.getByPlaceholder('XBAR LLC').fill('XBAR Holdings');
-  await page.getByPlaceholder('Primary Ranch').fill('Thunder Horse Ranch');
-  await page.getByPlaceholder('Ranch manager').fill('Erin Wyrick');
-  await page.getByPlaceholder('ops@yourranch.com').fill('ops@xbar.test');
-  await page.getByPlaceholder('Legal owner').fill('Thunder Horse Ranch');
-  await page.getByPlaceholder('Owner entity').fill('Thunder Horse Ranch LLC');
-  await page.getByPlaceholder('Barn A').fill('Barn A');
-  await page.getByPlaceholder('Pasture 1').fill('North Pasture');
-  await page.getByRole('button', { name: 'Create workspace' }).click();
+  await page.getByLabel('Ranch name').fill('Thunder Horse Ranch');
+  await page.getByRole('button', { name: 'Continue', exact: true }).click();
+  await page.getByRole('button', { name: 'Add a horse later', exact: true }).click();
 
   await expect(page).toHaveURL(/\/app$/, { timeout: 15_000 });
   // Fresh workspace lands on the plain-language getting-started dashboard (no seeded records).
@@ -144,6 +138,12 @@ test('documents shows an empty state on a fresh workspace', async ({ page }) => 
 test('pasture location opens a detail drawer', async ({ page }) => {
   await bootstrapWorkspace(page);
   await page.getByRole('link', { name: 'Pastures', exact: true }).click();
+  // Location entry is deferred from setup; the empty view offers it when needed.
+  await page.getByRole('button', { name: 'Add barn or pasture' }).click();
+  await page.getByLabel('Default pasture', { exact: true }).fill('North Pasture');
+  await page.getByRole('button', { name: 'Save profile', exact: true }).click();
+  await page.getByRole('link', { name: 'Pastures', exact: true }).click();
+  await expect(page.getByRole('heading', { name: 'North Pasture' })).toBeVisible();
   await page.locator('.xs-grid-2 .xs-card').first().click();
   const drawer = page.getByRole('dialog');
   await expect(drawer).toBeVisible();

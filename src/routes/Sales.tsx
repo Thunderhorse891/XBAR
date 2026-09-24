@@ -471,7 +471,7 @@ export default function Sales() {
           )}
         </Panel>
 
-        <Panel eyebrow="Leads" title="Pipeline">
+        <Panel eyebrow="Leads" title="Buyer progress">
           {salesLeads.length ? (
             <div className="stack-list">
               {salesLeads.map((lead) => {
@@ -530,11 +530,7 @@ export default function Sales() {
               })}
             </div>
           ) : (
-            <EmptyState
-              compact
-              title="No leads yet"
-              description="Create a lead from a horse record to start the pipeline."
-            />
+            <EmptyState compact title="No leads yet" description="Open a horse record to add an interested buyer." />
           )}
         </Panel>
       </div>
@@ -789,7 +785,7 @@ export default function Sales() {
             <EmptyState
               compact
               title="No lead selected"
-              description="Pick a lead from the pipeline to edit its lifecycle and notes."
+              description="Choose a buyer to update their progress and notes."
             />
           )}
         </Panel>

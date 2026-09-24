@@ -6,10 +6,10 @@ import { useEffectiveSubscription } from '@/hooks/useOwnerPreview';
 import { canPresentPurchaseFlow } from '@/lib/nativePlatform';
 
 function pressureCopy(level: UsagePressure) {
-  if (level === 'blocked') return 'Hard gate';
-  if (level === 'upgrade') return 'Upgrade now';
-  if (level === 'warning') return 'Watch capacity';
-  return 'Healthy';
+  if (level === 'blocked') return 'Limit reached';
+  if (level === 'upgrade') return 'Nearly full';
+  if (level === 'warning') return 'Getting close';
+  return 'Room available';
 }
 
 function pressureTone(level: UsagePressure) {
@@ -27,12 +27,12 @@ export function UsageMeterPanel({ compact = false }: { compact?: boolean }) {
 
   return (
     <Panel
-      eyebrow="Plan pressure"
-      title="Usage meters"
+      eyebrow="Your plan"
+      title="Space remaining"
       description={
         compact
           ? undefined
-          : 'Operational limits that drive upgrade timing. Warnings start at 80%, upgrade pressure at 90%, and hard gates at 100%.'
+          : 'See how much of your plan you have used. Notices appear at 80% and 90%; new records stop at the limit.'
       }
       meta={
         <Pill tone={pressureTone(pressure?.pressure ?? 'clear')}>{pressureCopy(pressure?.pressure ?? 'clear')}</Pill>
@@ -55,7 +55,7 @@ export function UsageMeterPanel({ compact = false }: { compact?: boolean }) {
             <div>
               <div className="stack-item__title">
                 {!pressure || pressure.pressure === 'clear'
-                  ? 'Plan capacity is healthy.'
+                  ? 'Your plan has room.'
                   : `${pressure.label} needs attention.`}
               </div>
               <div className="stack-item__copy">

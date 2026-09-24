@@ -23,11 +23,11 @@ function collectPageErrors(page: Page) {
 
 async function completeLocalOnboarding(page: Page) {
   await page.goto('/login', { waitUntil: 'load' });
-  await page.getByRole('button', { name: 'Create workspace' }).click();
+  await page.getByRole('button', { name: 'Create ranch' }).click();
   await expect(page).toHaveURL(/\/setup/, { timeout: 15_000 });
-  await page.getByLabel('Business name').fill('XBAR LLC');
   await page.getByLabel('Ranch name').fill('Primary Ranch');
-  await page.getByRole('button', { name: 'Create workspace' }).click();
+  await page.getByRole('button', { name: 'Continue', exact: true }).click();
+  await page.getByRole('button', { name: 'Add a horse later', exact: true }).click();
   await page.waitForURL((url) => !url.pathname.includes('/setup'), { timeout: 20_000 });
 }
 
@@ -48,7 +48,7 @@ test('documents pipeline renders all five workflow stages', async ({ page }) => 
   await goToRoute(page, '/app/documents');
 
   await expect(page.getByText('Your Documents')).toBeVisible({ timeout: 15_000 });
-  const tabs = page.getByRole('tablist', { name: 'Document pipeline stages' }).getByRole('tab');
+  const tabs = page.getByRole('tablist', { name: 'Document review steps' }).getByRole('tab');
   await expect(tabs).toHaveCount(5);
   for (const label of ['Upload', 'OCR / Processing', 'Review', 'Ownership', 'Share']) {
     await expect(tabs.filter({ hasText: label }).first()).toBeVisible();

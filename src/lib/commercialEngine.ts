@@ -44,7 +44,7 @@ export function featureLabel(feature: CommercialFeature) {
   if (feature === 'buyerDealRoom') return 'buyer follow-up';
   if (feature === 'packetExport') return 'sale document export';
   if (feature === 'teamInvites') return 'team invitations';
-  if (feature === 'profitIntelligence') return 'profit intelligence';
+  if (feature === 'profitIntelligence') return 'profit reports';
   if (feature === 'breedingRevenue') return 'breeding revenue workflows';
   return 'Ranch Ops workflows';
 }

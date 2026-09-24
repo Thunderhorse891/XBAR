@@ -30,7 +30,7 @@ test('connecting a horse and source document reaches first customer value', () =
     billingState: 'Manual Billing',
   });
   assert.equal(result.firstValueAchieved, true);
-  assert.match(result.valueStatement, /same workspace/);
+  assert.equal(result.valueStatement, 'Your first horse and its papers are together.');
   assert.equal(result.next?.id, 'receipt');
 });
 test('activation advances from real workspace data', () => {

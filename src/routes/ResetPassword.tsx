@@ -166,7 +166,7 @@ export default function ResetPassword() {
           <div className="clean-auth-card__header">
             <p>Account recovery</p>
             <h1>New Password</h1>
-            <span>Choose a new password for your workspace. Until you do, the old one still applies.</span>
+            <span>Choose a new password for your account. Until you do, the old one still applies.</span>
           </div>
 
           {screen === 'unavailable' && (
@@ -239,7 +239,7 @@ export default function ResetPassword() {
             </p>
           )}
 
-          {screen === 'done' && <p className="clean-auth-hint">Taking you to your workspace...</p>}
+          {screen === 'done' && <p className="clean-auth-hint">Opening your ranch...</p>}
 
           {(screen === 'refused' || unexpectedFailure) && (
             <div className="clean-auth-footer">

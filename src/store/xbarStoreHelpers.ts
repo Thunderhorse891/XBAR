@@ -283,10 +283,13 @@ export function createSharedListingRecord(horseId: string, patch?: Partial<Share
   };
 }
 
-export function createInitialWorkspaceMember(profile: WorkspaceProfile): WorkspaceMemberRecord {
+export function createInitialWorkspaceMember(profile: WorkspaceProfile, accountEmail = ''): WorkspaceMemberRecord {
   return {
     id: createId('member'),
-    email: normalizeWorkspaceEmail(profile.operationsEmail) || 'workspace-admin@xbar.local',
+    // Preserve an unknown local creator instead of inventing a deliverable
+    // address. Cloud creation uses the authenticated account, not a ranch
+    // contact address that may belong to someone else.
+    email: normalizeWorkspaceEmail(accountEmail) || normalizeWorkspaceEmail(profile.operationsEmail),
     role: 'Admin',
     status: 'Active',
     invitedAt: profile.setupCompleteAt,
@@ -317,7 +320,7 @@ export function restoreWorkspaceMembers(raw: unknown): WorkspaceMemberRecord[] {
         source,
       };
     })
-    .filter((member) => Boolean(member.email));
+    .filter((member) => Boolean(member.email) || (member.source === 'Owner' && member.role === 'Admin'));
 }
 
 export function restoreWorkspaceInvitations(raw: unknown): WorkspaceInvitationRecord[] {

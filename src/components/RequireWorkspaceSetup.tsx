@@ -18,7 +18,7 @@ export function RequireWorkspaceSetup({ children }: { children: ReactNode }) {
   const decision = decideWorkspaceSetupGate({ workspaceHydrated, workspaceReady, cloudStatus, cloudSettled });
 
   if (decision === 'loading') {
-    return <div className="app-loading-shell">Loading ranch workspace...</div>;
+    return <div className="app-loading-shell">Loading your ranch...</div>;
   }
 
   if (decision === 'setup') {

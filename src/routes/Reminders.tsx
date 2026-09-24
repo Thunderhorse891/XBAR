@@ -221,7 +221,7 @@ export default function Reminders() {
           </div>
           <p>
             {briefing.top.length
-              ? 'These actions carry the most immediate operational risk or value.'
+              ? 'Start with the work that needs attention soonest.'
               : 'No urgent work is waiting. The ranch is clear for today.'}
           </p>
         </div>
@@ -284,7 +284,7 @@ export default function Reminders() {
         <div className="ops-section-heading">
           <div>
             <span className="section-eyebrow">Full work queue</span>
-            <h2>Every open operational item</h2>
+            <h2>All unfinished work</h2>
           </div>
           <Pill tone="blue">{filteredReminders.length} shown</Pill>
         </div>

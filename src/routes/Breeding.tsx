@@ -142,7 +142,7 @@ export default function Breeding() {
       </div>
 
       <Panel
-        eyebrow="Breeding intelligence"
+        eyebrow="Breeding overview"
         title="Foaling forecast & program value"
         description="Gestation, pregnancy checks, and live-foal guarantees computed from each mare's breeding timeline. Every mare carries her next action."
         edge={programEdge}

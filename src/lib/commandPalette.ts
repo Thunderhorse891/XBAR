@@ -79,18 +79,18 @@ export interface CommandSearchGroup {
 // Static navigation targets — always available, even in an empty workspace.
 export const ROUTE_COMMANDS: readonly CommandEntry[] = (
   [
-    ['dashboard', 'Home', 'Daily ranch operations', '/'],
-    ['horses', 'Horse registry', 'All horse records', '/horses'],
-    ['documents', 'Documents', 'Source records and review', '/documents'],
+    ['dashboard', 'Home', 'Today at the ranch', '/'],
+    ['horses', 'Horses', 'All horse records', '/horses'],
+    ['documents', 'Documents', 'Upload and review papers', '/documents'],
     ['expiring', 'Expiring soon', 'Coggins, health certificates, insurance and contracts', '/expiring'],
     ['ownership', 'Ownership', 'Transfers and documents', '/ownership'],
     ['medical', 'Health', 'Care records and due work', '/medical'],
-    ['breeding', 'Breeding pipeline', 'Pairings and milestones', '/breeding'],
-    ['sales', 'Sales', 'Buyer pipeline and listings', '/sales'],
-    ['financials', 'Money', 'Profit per animal and ranch P&L', '/financials'],
+    ['breeding', 'Breeding', 'Pairings and foaling dates', '/breeding'],
+    ['sales', 'Sales', 'Buyers, offers, and listings', '/sales'],
+    ['financials', 'Money', 'Horse profit and ranch income', '/financials'],
     ['costs', 'Costs', 'Cost per horse per day and supplier prices', '/costs'],
     ['expenses', 'Expenses', 'Receipts and cost tracking', '/expenses'],
-    ['reminders', 'Tasks and reminders', 'Daily work queue', '/reminders'],
+    ['reminders', 'Tasks and reminders', 'Work to do', '/reminders'],
     ['assets', 'Property and equipment', 'Ranch assets and supplies', '/assets'],
   ] as const
 ).map(([id, label, detail, path]) => ({ id, label, detail, path, group: 'Navigate' as const, keywords: '' }));

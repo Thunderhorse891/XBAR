@@ -33,6 +33,7 @@ import { GlobalCreateDrawer, createActions } from '@/components/saas/flows';
 import { billingPath } from '@/lib/billingRoutes';
 import { buyerFollowUpPath } from '@/lib/buyerRoutes';
 import { buildCareBoardRows } from '@/lib/dashboardOps';
+import { hasRoleCapability } from '@/lib/permissions';
 import { buildExpiryRadar, expiryBellCount } from '@/lib/documentExpiry';
 import { isSupabaseConfigured } from '@/lib/platformConfig';
 import { useCloudStore } from '@/store/useCloudStore';
@@ -58,7 +59,7 @@ const navGroups: NavGroup[] = [
   {
     heading: 'Ranch',
     items: [
-      { label: 'Dashboard', path: '/', icon: LayoutDashboard },
+      { label: 'Home', path: '/', icon: LayoutDashboard },
       { label: 'Care Tasks', path: '/today', icon: ClipboardList },
       { label: 'Horses', path: '/horses', icon: Home },
       { label: 'Groups', path: '/herd-groups', icon: Users },
@@ -290,7 +291,7 @@ export default function MainLayout() {
           <div className="xs-topbar__spacer" />
 
           <div className="xs-topbar__right">
-            <div className="xs-toggle" role="tablist" aria-label="Workspace mode">
+            <div className="xs-toggle" role="tablist" aria-label="Ranch view">
               <button
                 type="button"
                 className={`xs-toggle__btn${mode === 'ops' ? ' xs-toggle__btn--active' : ''}`}
@@ -372,6 +373,38 @@ export default function MainLayout() {
             page's flex-column/gap still applies to the route's sections.
             Respects prefers-reduced-motion. */}
         <main key={location.pathname} className="xs-page motion-in">
+          {location.pathname === '/' ? (
+            <nav className="xs-field-actions" aria-label="Quick ranch actions">
+              <button type="button" onClick={() => navigate('/horses')}>
+                <Home size={20} />
+                Find a horse
+              </button>
+              {hasRoleCapability(currentRole, 'manageMedical') ? (
+                <button type="button" onClick={() => openQuickCreate({ action: 'Add Health Record' })}>
+                  <Stethoscope size={20} />
+                  Log care
+                </button>
+              ) : null}
+              {hasRoleCapability(currentRole, 'uploadDocuments') ? (
+                <button type="button" onClick={() => openQuickCreate({ action: 'Upload Document' })}>
+                  <FolderOpen size={20} />
+                  Add papers
+                </button>
+              ) : null}
+              {hasRoleCapability(currentRole, 'editHorse') ? (
+                <button type="button" onClick={() => openQuickCreate({ action: 'Move Horse' })}>
+                  <Map size={20} />
+                  Move a horse
+                </button>
+              ) : null}
+              {hasRoleCapability(currentRole, 'manageAssets') ? (
+                <button type="button" onClick={() => openQuickCreate({ action: 'Add Expense' })}>
+                  <Coins size={20} />
+                  Log expense
+                </button>
+              ) : null}
+            </nav>
+          ) : null}
           <Outlet />
         </main>
 
