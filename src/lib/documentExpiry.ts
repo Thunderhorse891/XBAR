@@ -63,8 +63,15 @@ export type ExpiryRadar = {
   under30: DocumentExpiryItem[];
   under90: DocumentExpiryItem[];
   undated: DocumentExpiryItem[];
-  /** Papers good for more than 90 days. Not listed on the radar, but they still count as on file. */
+  /** Papers good for more than 90 days. They still count as on file. */
   current: DocumentExpiryItem[];
+  /**
+   * Current papers nobody has approved yet — usually this year's renewal
+   * waiting beside last year's expired one. Listed, so the renewal the
+   * expired row points to can be seen; they need review, not renewal.
+   */
+  inReview: DocumentExpiryItem[];
+  /** Current papers that are reviewed, and so not listed. */
   currentCount: number;
   /** Expired plus under 30 days — what the nav badge counts. */
   attentionCount: number;
@@ -308,18 +315,20 @@ export function buildExpiryRadar(
   const under30 = items.filter((item) => item.urgency === 'under30').sort(byDays);
   const under90 = items.filter((item) => item.urgency === 'under90').sort(byDays);
   const current = items.filter((item) => item.urgency === 'current').sort(byDays);
+  const inReview = current.filter((item) => !item.reviewed);
   const undated = items
     .filter((item) => item.urgency === 'undated')
     .sort((left, right) => left.title.localeCompare(right.title));
 
   return {
-    items: [...expired, ...under30, ...under90, ...undated],
+    items: [...expired, ...under30, ...under90, ...inReview, ...undated],
     expired,
     under30,
     under90,
     undated,
     current,
-    currentCount: current.length,
+    inReview,
+    currentCount: current.length - inReview.length,
     attentionCount: expired.length + under30.length,
   };
 }
@@ -427,13 +436,15 @@ export function expiryBellCount(
 /**
  * Radar entries for the Reminders queue and its alert digest.
  *
- * Coggins is left out on purpose: the care board already raises a Coggins
- * reminder for every horse, and a second one for the same paper would be
- * noise. Only what needs attention now goes in — expired or under 30 days.
+ * A Coggins for a horse on the roster is left out on purpose: the care board
+ * already raises a Coggins reminder for every such horse, and a second one
+ * for the same paper would be noise. A Coggins not linked to a known horse has
+ * no care row, so it stays in. Only what needs attention now goes in —
+ * expired or under 30 days.
  */
 export function expiryReminderItems(radar: ExpiryRadar): ReminderItem[] {
   return [...radar.expired, ...radar.under30]
-    .filter((item) => item.kind !== 'Coggins')
+    .filter((item) => !(item.kind === 'Coggins' && item.horseId))
     .map((item): ReminderItem => ({
       id: `expiry-${item.documentId}`,
       kind: 'Documents',

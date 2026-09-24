@@ -120,7 +120,9 @@ export default function Reminders() {
           </div>
           <p>
             {digest.alerts.length
-              ? `${digest.overdueCount} overdue and ${digest.dueSoonCount} due today or this week.`
+              ? `${digest.overdueCount} overdue and ${digest.dueSoonCount} due today or this week${
+                  digest.dueThisMonthCount ? `, plus ${digest.dueThisMonthCount} within 30 days` : ''
+                }.`
               : 'No expiration alerts are open right now.'}
           </p>
         </div>

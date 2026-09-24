@@ -379,8 +379,18 @@ test('an unreviewed renewal cannot hide a confirmed expiry, and both stay visibl
   const expired = radar.expired.find((item) => item.documentId === confirmedExpired.id);
   assert.ok(expired, 'the confirmed expired Coggins is still listed');
   assert.equal(expired?.renewalInReview, true);
-  // The pending renewal runs to 2027, so it is kept and counted as current.
-  assert.equal(radar.currentCount, 1);
+  // The pending renewal runs to 2027. It is current, but nobody has approved
+  // it, so it is listed — with its "Not reviewed yet" flag — rather than
+  // folded into the unlisted current count.
+  assert.deepEqual(
+    radar.inReview.map((item) => [item.documentId, item.reviewed]),
+    [[pendingRenewal.id, false]],
+  );
+  assert.ok(
+    radar.items.some((item) => item.documentId === pendingRenewal.id),
+    'the renewal is on the page',
+  );
+  assert.equal(radar.currentCount, 0, 'and not counted twice');
   assert.ok(
     !radar.items.some((item) => item.documentId === pendingOlder.id),
     'a pending paper older than the confirmed one is superseded',
@@ -389,6 +399,48 @@ test('an unreviewed renewal cannot hide a confirmed expiry, and both stay visibl
   // Once approved, the renewal replaces it as before.
   const approved = buildExpiryRadar([confirmedExpired, { ...pendingRenewal, state: 'Ready' }], horses, NOW);
   assert.equal(approved.expired.length, 0);
+});
+
+test('a Coggins with no horse on the roster still reaches the Reminders queue', () => {
+  // The care board raises Coggins only for horses it knows. A loose paper has
+  // no care row, so leaving it out would drop it from reminders and the digest.
+  const loose = coggins('', '2025-05-01', { horseId: undefined });
+  const orphaned = coggins('gone', '2025-05-01');
+  const linked = coggins('h1', '2025-05-01');
+  const radar = buildExpiryRadar([loose, orphaned, linked], horses, NOW);
+
+  assert.deepEqual(
+    expiryReminderItems(radar)
+      .map((item) => item.id)
+      .sort(),
+    [`expiry-${loose.id}`, `expiry-${orphaned.id}`].sort(),
+    'the linked Coggins is on the care board already',
+  );
+});
+
+test('a digest counts every alert it lists, including ones due within 30 days', () => {
+  const radar = buildExpiryRadar(
+    [doc({ id: 'ins-21', type: 'Insurance', horseId: 'h1', extractedTextPreview: 'Expiration Date: 07/20/2026' })],
+    horses,
+    NOW,
+  );
+  const priorities = buildOperationsPriorities(
+    {
+      careRows: [],
+      transferRows: [],
+      documents: [],
+      salesLeads: [],
+      horseNames: {},
+      expiringDocuments: expiryReminderItems(radar),
+    },
+    NOW,
+  );
+  const digest = buildAlertDigest(priorities.items, NOW);
+
+  assert.equal(digest.alerts.length, 1);
+  assert.equal(digest.dueThisMonthCount, 1);
+  assert.match(digest.emailSubject, /0 overdue, 0 due soon, 1 within 30 days/);
+  assert.match(digest.browserBody, /1 within 30 days/);
 });
 
 test('papers not yet assigned to a horse cannot replace each other', () => {

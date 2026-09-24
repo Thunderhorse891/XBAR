@@ -103,6 +103,12 @@ export default function ExpiringSoon() {
     },
     { key: 'under90', title: 'Under 90 days', subtitle: 'On the calendar, not urgent yet.', items: radar.under90 },
     {
+      key: 'inReview',
+      title: 'Waiting in review',
+      subtitle: 'Current, but not approved yet. Approve them in Documents so they count.',
+      items: radar.inReview,
+    },
+    {
       key: 'undated',
       title: 'No expiry date on file',
       subtitle: 'XBAR could not find a date on these, so it will not guess one. Check the paper.',
@@ -202,6 +208,10 @@ export default function ExpiringSoon() {
                     {item.renewalInReview ? (
                       <ActionButton size="sm" variant="primary" onClick={() => navigate('/documents')}>
                         Review renewal
+                      </ActionButton>
+                    ) : item.urgency === 'current' ? (
+                      <ActionButton size="sm" onClick={() => navigate('/documents')}>
+                        Review in Documents
                       </ActionButton>
                     ) : item.urgency === 'undated' ? (
                       <ActionButton size="sm" onClick={() => navigate('/documents')}>
