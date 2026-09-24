@@ -77,6 +77,34 @@ test('plan hover remains available after its entrance animation finishes', async
   await expect.poll(async () => (await plan.boundingBox())!.y).toBeLessThan(resting!.y);
 });
 
+test('pause and play do not fade previously read content again', async ({ page }) => {
+  await page.goto('/');
+  await expect(page.getByRole('button', { name: 'Pause motion' })).toBeVisible();
+  const heading = page.locator('.landing-section-heading').first();
+  await heading.scrollIntoViewIfNeeded();
+  await expect.poll(() => heading.evaluate((el) => el.getAnimations().length)).toBeGreaterThan(0);
+  await expect.poll(() => heading.evaluate((el) => el.getAnimations().length)).toBe(0);
+  const opacitySamples = await heading.evaluate(async (el) => {
+    // Trigger the real toggle handlers without scrolling back to the hero;
+    // Playwright's auto-scroll/stability wait otherwise hides the replay.
+    const toggle = document.querySelector<HTMLButtonElement>('.landing-motion-toggle')!;
+    toggle.click();
+    toggle.click();
+    const samples: string[] = [];
+    const started = performance.now();
+    await new Promise<void>((resolve) => {
+      const sample = () => {
+        samples.push(getComputedStyle(el).opacity);
+        if (performance.now() - started < 250) requestAnimationFrame(sample);
+        else resolve();
+      };
+      requestAnimationFrame(sample);
+    });
+    return samples;
+  });
+  expect(opacitySamples.every((opacity) => opacity === '1')).toBe(true);
+});
+
 test('phone navigation exposes sign-in and signup without JavaScript', async ({ browser, baseURL }) => {
   const context = await browser.newContext({
     javaScriptEnabled: false,

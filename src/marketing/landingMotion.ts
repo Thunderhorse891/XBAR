@@ -10,12 +10,14 @@ const saveData = (navigator as Navigator & { connection?: { saveData?: boolean }
 let paused = saveData;
 let firstEntrance = true;
 let cleanup: (() => void) | undefined;
+// Persist for this document: pause/resume, visibility and preference changes
+// must not hide already-read content. Interrupted reveals become static in cleanup.
+const seen = new Set<Element>();
 
 function startMotion() {
   const controls: { cancel: () => void }[] = [];
   const disposals: (() => void)[] = [];
   const animated = new Set<HTMLElement>();
-  const seen = new Set<Element>();
   const hero = document.querySelector<HTMLElement>('.landing-hero');
 
   function reveal(el: HTMLElement, delay = 0) {
