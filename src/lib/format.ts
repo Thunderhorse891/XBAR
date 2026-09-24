@@ -35,6 +35,24 @@ function parseDateValue(value: string) {
 }
 
 /**
+ * Timestamp comparison that survives the nowStamp() format transition.
+ *
+ * New writes are absolute ISO UTC instants; records written before the
+ * transition — or synced from a stale PWA tab that still writes the old
+ * form — are local `YYYY-MM-DD HH:mm` wall-clock. Raw lexicographic order
+ * mis-sorts a later legacy value behind an earlier ISO one
+ * (`'2026-09-24 20:00' < '2026-09-24T19:40:00.000Z'` as strings, later as
+ * instants), so both sides are parsed to instants before comparing.
+ * Missing or unparseable values sort last, matching the old behavior for
+ * empty strings.
+ */
+export function compareTimestampDesc(a: string | null | undefined, b: string | null | undefined): number {
+  const timeA = parseDateValue(a ?? '')?.getTime() ?? Number.NEGATIVE_INFINITY;
+  const timeB = parseDateValue(b ?? '')?.getTime() ?? Number.NEGATIVE_INFINITY;
+  return timeB - timeA;
+}
+
+/**
  * A day as YYYY-MM-DD on the viewer's own calendar. Date inputs and receipt
  * dates mean the local day; toISOString() gives the UTC one, which west of
  * UTC turns into tomorrow every evening.

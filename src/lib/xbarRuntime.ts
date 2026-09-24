@@ -181,11 +181,13 @@ export function todayStamp() {
 /**
  * An absolute UTC instant, ISO 8601 (`2026-09-24T18:55:00.000Z`).
  *
- * These stamps are synced across workspace members and compared as strings —
- * `offerUpdatedAt` is sorted with `localeCompare` in profitIntelligence.ts —
- * so they must be globally comparable. An offset-free local wall clock is not:
- * during a DST fallback the same wall time happens twice, and a later update
- * from a western time zone sorts before an earlier eastern one. UTC keeps
+ * These stamps are synced across workspace members and compared as instants —
+ * `offerUpdatedAt` is ordered with `compareTimestampDesc` in
+ * profitIntelligence.ts, which parses both the new ISO form and the legacy
+ * local `YYYY-MM-DD HH:mm` form a stale PWA tab can still sync — so they must
+ * be globally comparable. An offset-free local wall clock is not: during a
+ * DST fallback the same wall time happens twice, and a later update from a
+ * western time zone sorts before an earlier eastern one. UTC keeps
  * lexicographic order identical to chronological order everywhere.
  *
  * Display still reads the viewer's clock: every reader parses the stamp with

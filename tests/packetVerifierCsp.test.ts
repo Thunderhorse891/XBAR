@@ -150,10 +150,17 @@ test('the verifier exempts the one sealed hero photo, not every img', async () =
   assert.match(code, /sealedPhotoSeen > 1/, 'duplicate sealed photos must be flagged');
   // Removing the photo must not read as agreement.
   assert.match(code, /sealedPhotoSeen === 0/, 'a deleted sealed photo is a tampered packet, not a missing check');
-  // The generator emits a bare <img src> — an altered packet can keep the
-  // sealed src and add a srcset pointing at a replacement photo, which the
-  // browser displays while a src-only check still passes.
-  assert.match(code, /getAttribute\('srcset'\)/, 'a srcset on the "same" photo must not be exempt');
+  // The generator emits a bare <img src alt width> — an altered packet can
+  // keep the sealed src and add a srcset pointing at a replacement photo
+  // (which the browser displays) or a hidden attribute (which removes the
+  // photo from the buyer-visible packet). The exemption must require the
+  // generated attribute set, not just a matching src.
+  assert.match(code, /isUnmodifiedHeroImg/, 'the exemption must check the generated attributes');
+  assert.match(
+    code,
+    /attrName !== 'src' && attrName !== 'alt' && attrName !== 'width'/,
+    'only src/alt/width are allowed',
+  );
   // The old blanket rule is gone: every other embed type is still flagged.
   assert.match(code, /which the seal does not cover/, 'non-photo embeds are still reported');
 });
