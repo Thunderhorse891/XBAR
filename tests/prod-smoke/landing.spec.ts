@@ -64,6 +64,36 @@ test('mobile has no horizontal overflow and app routes load no landing code', as
   expect(landingRequests).toEqual([]);
 });
 
+test('plan hover remains available after its entrance animation finishes', async ({ page }) => {
+  await page.goto('/');
+  await expect(page.getByRole('button', { name: 'Pause motion' })).toBeVisible();
+  const plan = page.locator('.landing-plan').first();
+  await plan.scrollIntoViewIfNeeded();
+  await expect.poll(() => plan.evaluate((el) => el.getAnimations().length)).toBeGreaterThan(0);
+  await expect.poll(() => plan.evaluate((el) => el.getAnimations().length)).toBe(0);
+  const resting = await plan.boundingBox();
+  expect(resting).not.toBeNull();
+  await plan.hover();
+  await expect.poll(async () => (await plan.boundingBox())!.y).toBeLessThan(resting!.y);
+});
+
+test('phone navigation exposes sign-in and signup without JavaScript', async ({ browser, baseURL }) => {
+  const context = await browser.newContext({
+    javaScriptEnabled: false,
+    viewport: { width: 390, height: 844 },
+    baseURL,
+  });
+  const page = await context.newPage();
+  await page.goto('/');
+  await page.locator('.landing-mobile-nav > summary').click();
+  const nav = page.getByRole('navigation', { name: 'Mobile primary', exact: true });
+  await expect(nav.getByRole('link', { name: 'Create your workspace' })).toBeVisible();
+  await expect(nav.getByRole('link', { name: 'Pricing', exact: true })).toBeVisible();
+  await nav.getByRole('link', { name: 'Sign in', exact: true }).click();
+  await expect(page).toHaveURL(/\/app\/login$/);
+  await context.close();
+});
+
 test('homepage motion executes under the production content security policy', async ({ page }) => {
   const config = JSON.parse(readFileSync('vercel.json', 'utf8'));
   const csp = config.headers[0].headers.find((h: { key: string }) => h.key === 'Content-Security-Policy').value;

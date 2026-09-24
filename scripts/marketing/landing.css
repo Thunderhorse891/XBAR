@@ -40,6 +40,9 @@
 .landing-page .site-header::after {
   background: linear-gradient(90deg, transparent, var(--landing-edge), var(--landing-glint), transparent);
 }
+.landing-mobile-nav {
+  display: none;
+}
 .landing-page .brand small {
   text-transform: none;
   letter-spacing: 0.025em;
@@ -453,6 +456,9 @@
 .landing-plan:hover {
   text-decoration: none;
 }
+.landing-page .landing-plan:focus-visible {
+  outline-offset: -4px;
+}
 .landing-plan h3 {
   font-size: 17px;
   margin: 0 0 22px;
@@ -536,11 +542,12 @@
 @media (hover: hover) and (pointer: fine) and (prefers-reduced-motion: no-preference) {
   .landing-page[data-landing-motion='running'] .landing-plan {
     transition:
-      transform 0.25s,
+      translate 0.25s,
       box-shadow 0.25s;
   }
   .landing-page[data-landing-motion='running'] .landing-plan:hover {
-    transform: translateY(-3px);
+    /* Entrance owns transform; independent translate preserves hover lift. */
+    translate: 0 -3px;
     box-shadow: inset 0 2px var(--xbar-blue);
   }
 }
@@ -556,6 +563,61 @@
   }
 }
 @media (max-width: 1050px) {
+  .landing-page .site-header .wrap {
+    flex-wrap: nowrap;
+    min-height: 72px;
+    padding-block: 10px;
+  }
+  .landing-page .site-header .site-nav,
+  .landing-page .site-header > .wrap > .btn {
+    display: none;
+  }
+  .landing-mobile-nav {
+    display: block;
+    position: relative;
+    margin-left: auto;
+  }
+  .landing-mobile-nav > summary {
+    list-style: none;
+    display: flex;
+    align-items: center;
+    gap: 14px;
+    padding: 10px 14px;
+    min-height: 44px;
+    border: 1px solid var(--landing-edge);
+    border-radius: 5px;
+    cursor: pointer;
+    font-size: 14px;
+  }
+  .landing-mobile-nav > summary::-webkit-details-marker {
+    display: none;
+  }
+  .landing-mobile-nav[open] .nav-caret {
+    transform: rotate(225deg);
+  }
+  .landing-mobile-nav nav {
+    position: absolute;
+    right: 0;
+    top: calc(100% + 12px);
+    width: min(330px, calc(100vw - 40px));
+    max-height: calc(100dvh - 100px);
+    overflow-y: auto;
+    padding: 8px;
+    border: 1px solid var(--landing-edge);
+    border-radius: 8px;
+    background: var(--xbar-graphite);
+    box-shadow: 0 16px 36px var(--xbar-black);
+  }
+  .landing-mobile-nav nav a {
+    display: block;
+    padding: 12px 14px;
+    min-height: 44px;
+    border-radius: 4px;
+    font-size: 15px;
+  }
+  .landing-mobile-nav nav a:hover {
+    background: var(--xbar-gunmetal);
+  }
   .landing-hero-grid {
     min-height: 560px;
     grid-template-columns: 1fr 1fr;

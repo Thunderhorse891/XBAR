@@ -94,7 +94,19 @@ function header(currentPath) {
     <a class="brand" href="/" aria-label="XBAR home">
       <img src="/brand/apple-touch-icon.png" alt="" width="30" height="30" />
       <span>XBAR<small>Horse records &amp; sales</small></span>
-    </a>
+    </a>${
+      currentPath === '/'
+        ? `
+    <details class="landing-mobile-nav">
+      <summary>Menu <i class="nav-caret" aria-hidden="true"></i></summary>
+      <nav aria-label="Mobile primary">
+        ${[...NAV_LINKS, ...NAV_MENUS.map((menu) => ({ href: menu.root, label: menu.label })), { href: '/demo', label: 'Product tour' }].map((item) => navLink(item, currentPath)).join('\n        ')}
+        <a href="${APP_LOGIN}" rel="nofollow">Sign in</a>
+        <a href="${APP_SIGNUP}" rel="nofollow">Create your workspace</a>
+      </nav>
+    </details>`
+        : ''
+    }
     <nav class="site-nav" aria-label="Primary">
       ${NAV_LINKS.map((item) => navLink(item, currentPath)).join('\n      ')}
       ${NAV_MENUS.map((menu) => navMenu(menu, currentPath)).join('\n      ')}

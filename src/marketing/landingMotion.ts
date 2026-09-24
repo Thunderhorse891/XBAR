@@ -20,17 +20,16 @@ function startMotion() {
 
   function reveal(el: HTMLElement, delay = 0) {
     animated.add(el);
-    controls.push(
-      animate(
-        el,
-        { opacity: [0, 1], transform: ['translateY(14px)', 'translateY(0)'] },
-        {
-          duration: 0.65,
-          delay,
-          ease: [0.22, 1, 0.36, 1],
-        },
-      ),
+    const entrance = animate(
+      el,
+      { opacity: [0, 1], transform: ['translateY(14px)', 'translateY(0)'] },
+      {
+        duration: 0.65,
+        delay,
+        ease: [0.22, 1, 0.36, 1],
+      },
     );
+    controls.push(entrance);
   }
 
   if (firstEntrance && window.scrollY < 80) {
