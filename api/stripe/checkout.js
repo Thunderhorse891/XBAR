@@ -84,10 +84,11 @@ export default async function handler(req, res) {
     return sendJson(res, 400, { ok: false, message: parsed.message });
   }
   const { tier, workspaceId } = parsed.data;
+  const billingPeriod = parsed.data.billingPeriod === 'annual' ? 'annual' : 'monthly';
   const returnUrl = getTrustedReturnUrl(parsed.data.returnUrl);
   const requestedSeatCount = Number(parsed.data.seatCount || 1);
   const seatCount = Number.isInteger(requestedSeatCount) ? Math.min(100, Math.max(1, requestedSeatCount)) : 1;
-  const priceId = getStripePriceIdByTier(tier);
+  const priceId = getStripePriceIdByTier(tier, billingPeriod);
 
   if (!workspaceId || !priceId) {
     return sendJson(res, 400, { ok: false, message: 'Workspace id and a configured Stripe price id are required.' });

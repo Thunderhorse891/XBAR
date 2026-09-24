@@ -302,9 +302,9 @@ ${ctaBlock('See the workflow end to end.', 'The product tour walks the document 
 
 const pricing = {
   path: '/pricing',
-  title: 'XBAR Pricing — Starter $29, Professional $79, Ranch Ops $199, Enterprise $499',
+  title: 'XBAR Pricing — Starter $12, Professional $29, Ranch Ops $79, Enterprise $199',
   description:
-    'Transparent XBAR pricing. Starter $29/mo, Professional $79/mo, Ranch Ops $199/mo, Enterprise $499/mo — with published horse, seat, document, sale-packet, and storage limits for every plan.',
+    'Transparent XBAR pricing. Starter $12/mo, Professional $29/mo, Ranch Ops $79/mo, Enterprise $199/mo — with published horse, seat, document, sale-packet, and storage limits for every plan.',
   changefreq: 'monthly',
   priority: '0.9',
   jsonLd: [
@@ -391,6 +391,7 @@ const pricing = {
         <thead><tr><th scope="col">Capacity</th>${marketingPlans.map((plan) => `<th scope="col">${esc(plan.tier)}</th>`).join('')}</tr></thead>
         <tbody>
           <tr><th scope="row">Monthly price</th>${marketingPlans.map((plan) => `<td>$${plan.monthlyRate}</td>`).join('')}</tr>
+          <tr><th scope="row">Annual price (2 months free)</th>${marketingPlans.map((plan) => `<td>$${plan.annualRate}</td>`).join('')}</tr>
           <tr><th scope="row">Horses</th>${marketingPlans.map((plan) => `<td>${plan.limits.horseLimit.toLocaleString('en-US')}</td>`).join('')}</tr>
           <tr><th scope="row">Team seats</th>${marketingPlans.map((plan) => `<td>${plan.limits.seatLimit}</td>`).join('')}</tr>
           <tr><th scope="row">Client seats</th>${marketingPlans.map((plan) => `<td>${plan.limits.sharedAccessSeatLimit}</td>`).join('')}</tr>

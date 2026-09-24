@@ -38,10 +38,16 @@ test('managed checkout is admin-only and validates return origins', () => {
 });
 
 test('server subscription prices match advertised production tiers', () => {
-  assert.match(plansSource, /Starter:[\s\S]*monthlyRate: 29/);
-  assert.match(plansSource, /Professional:[\s\S]*monthlyRate: 79/);
-  assert.match(plansSource, /'Ranch Ops':[\s\S]*monthlyRate: 199/);
-  assert.match(plansSource, /Enterprise:[\s\S]*monthlyRate: 499/);
+  assert.match(plansSource, /Starter:[\s\S]*monthlyRate: 12/);
+  assert.match(plansSource, /Professional:[\s\S]*monthlyRate: 29/);
+  assert.match(plansSource, /'Ranch Ops':[\s\S]*monthlyRate: 79/);
+  assert.match(plansSource, /Enterprise:[\s\S]*monthlyRate: 199/);
+  // Annual is 10x monthly (2 months free) and must be pinned too — an
+  // unadvertised annual price is a billing dispute waiting to happen.
+  assert.match(plansSource, /Starter:[\s\S]*annualRate: 120/);
+  assert.match(plansSource, /Professional:[\s\S]*annualRate: 290/);
+  assert.match(plansSource, /'Ranch Ops':[\s\S]*annualRate: 790/);
+  assert.match(plansSource, /Enterprise:[\s\S]*annualRate: 1990/);
 });
 
 test('Supabase hardening separates member reads from owner and admin writes', () => {
