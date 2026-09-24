@@ -236,6 +236,14 @@ own:
    restricts membership/invitation management to owner/Admin, and adds atomic
    server-authorized invitation acceptance. Deploy the matching client RPC call.
    No existing rows are rewritten; direct invitee table writes are now denied.
+9. `20260924_billing_period.sql` — schema. Adds `billing_period` to
+   `workspace_subscription_profiles` and replaces `xbar_apply_subscription_event`
+   with a 15-argument signature that records it, so an annual purchase is no
+   longer stored indistinguishably from a monthly one (`monthly_rate: 29` with
+   no period). Additive: one nullable column, one CHECK, one function replace
+   in a single transaction, no backfill. Must run AFTER step 5, whose function
+   it replaces; the filename date keeps that order. **Not applied by the change
+   that wrote it — needs the owner's explicit approval (contract rule 15).**
 
 For migrations still missing from the target project, apply them **one at a time**, not with a single `supabase db push`. That command
 applies every pending migration in one go, which would run the data
@@ -319,7 +327,15 @@ psql -v ON_ERROR_STOP=1 "$DATABASE_URL" -f supabase/checks/share-token-live-roll
 psql "$DATABASE_URL" -f supabase/migrations/20260911005818_workspace_access_policies.sql
 psql -v ON_ERROR_STOP=1 "$DATABASE_URL" -f supabase/checks/workspace-access-live-rollback.sql
 
-# 9. EXPAND before deploying the workspace-path client. Retains uploader paths
+# 9. Billing period on subscription profiles — additive, safe to apply directly.
+#    MUST run after #5 (the filename date keeps that order): it replaces
+#    xbar_apply_subscription_event with the 15-argument signature. The webhook
+#    passes p_billing_period and fails closed — no entitlement is written —
+#    until this is applied. Needs the owner's explicit approval (contract
+#    rule 15); it is NOT applied by the change that wrote it.
+psql "$DATABASE_URL" -f supabase/migrations/20260924_billing_period.sql
+
+# 10. EXPAND before deploying the workspace-path client. Retains uploader paths
 #    for older app versions. Includes authenticated RLS checks with rolled-back
 #    fixtures. Run atomically so a failed assertion rolls back policy changes.
 psql -1 -v ON_ERROR_STOP=1 "$DATABASE_URL" -f supabase/migrations/20260912055000_expand_document_storage_paths.sql
@@ -354,6 +370,13 @@ and pay for a Checkout Session and never have the plan activated, because the
 event that would have granted it errors and Stripe eventually stops retrying.
 Applying (5) without (4) is therefore the worse half-deployment of the two —
 prefer both, and if you must stage them, apply (5) first.
+
+**(9) is a prerequisite for the billing-period webhook change, not an
+optimization to schedule later.** Until it is applied, `api/stripe/webhook.js`
+passes `p_billing_period`, which matches no function signature, so **every
+entitlement webhook fails** — the same fail-closed direction as (5), but now
+the failure is on the way in for the new code rather than the old. Apply (9)
+before deploying the webhook change that passes the period.
 
 `xbar.reconcile_exclude` is how you keep a row the migration would otherwise
 downgrade. A populated `stripe_subscription_id` proves the workspace was billed
