@@ -6,6 +6,7 @@ export const productEventNames = {
   checkoutRedirected: 'billing.checkout_redirected',
   checkoutFailed: 'billing.checkout_failed',
   planApplied: 'billing.plan_applied',
+  trialStarted: 'billing.trial_started',
   landingCtaClicked: 'acquisition.landing_cta_clicked',
   landingPlanSelected: 'acquisition.landing_plan_selected',
   localWorkspaceEntered: 'acquisition.local_workspace_entered',

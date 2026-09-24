@@ -324,6 +324,17 @@ psql -v ON_ERROR_STOP=1 "$DATABASE_URL" -f supabase/checks/workspace-access-live
 #    fixtures. Run atomically so a failed assertion rolls back policy changes.
 psql -1 -v ON_ERROR_STOP=1 "$DATABASE_URL" -f supabase/migrations/20260912055000_expand_document_storage_paths.sql
 
+# 10. Trial entitlement — additive, safe to apply directly, order does not
+#     matter. Replaces the two entitlement helpers so an active 14-day
+#     Professional trial (payload.trial, written by /api/trial/start) resolves
+#     to Professional in the database triggers. A trial only ever raises a
+#     baseline workspace — paid and comped tiers are untouched.
+psql "$DATABASE_URL" -f supabase/migrations/20260924_trial_entitlement.sql
+# Prove it on a throwaway database rather than trusting the diff. Load the
+# migration first, then:
+#   psql "$THROWAWAY_URL" -f supabase/checks/trial-entitlement.sql
+# Expect: the check's notice line and no exception. Apply to production only
+# with the owner's explicit approval (production engineering contract §15).
 ```
 
 **Stop after expansion while older production clients remain.** The live project

@@ -29,6 +29,10 @@ export const checkoutSchema = z.object({
   seatCount: z.unknown().optional(),
 });
 
+export const trialStartSchema = z.object({
+  workspaceId: z.string().trim().min(1, 'Workspace id is required.'),
+});
+
 export const telemetrySchema = z.object({
   workspaceId: z.string().trim().optional().default(''),
   eventName: z.string().trim().max(120).optional().default('runtime.event'),

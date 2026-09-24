@@ -18,6 +18,7 @@ import {
   todayStamp,
 } from '@/lib/xbarRuntime';
 import { clampSubscriptionToEntitlement, normalizeTier } from '@/lib/subscriptionDecision';
+import { applyTrialToProfile } from '@/lib/trialSubscription';
 import {
   countReservedSharedAccessSeats,
   countReservedWorkspaceSeats,
@@ -1854,6 +1855,11 @@ export function restorePersistedState(raw: unknown): PersistedXbarState {
   // Policy lives in subscriptionDecision; this is the ingest point that applies
   // it to the cloud import, the local rehydrate, and a hand-imported backup.
   const entitledSubscription = clampSubscriptionToEntitlement(subscription);
+  // Then the trial: an active one grants Professional on top of the entitled
+  // baseline, and an expired one leaves the clamped profile alone. This is the
+  // same resolution subscriptionFromCloudRow performs, so a reload, a restore,
+  // and a fresh cloud load all agree.
+  const trialSubscription = applyTrialToProfile(entitledSubscription);
   const legacySavedHorseIds = Array.isArray(state.savedHorseIds) ? (state.savedHorseIds as string[]) : [];
   const sharedListings = Array.isArray(state.sharedListings)
     ? (state.sharedListings as SharedListingRecord[]).map((listing) =>
@@ -1883,7 +1889,7 @@ export function restorePersistedState(raw: unknown): PersistedXbarState {
       ? (state.expenseReceipts as ExpenseReceipt[])
       : initialState.expenseReceipts,
     ranchAssets: Array.isArray(state.ranchAssets) ? (state.ranchAssets as RanchAsset[]) : initialState.ranchAssets,
-    subscription: entitledSubscription,
+    subscription: trialSubscription,
     roleWorkspaces: Array.isArray(state.roleWorkspaces)
       ? (state.roleWorkspaces as RoleWorkspace[])
       : initialState.roleWorkspaces,

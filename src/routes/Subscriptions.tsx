@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
-import { canUsePaymentLinkFallback, checkoutRouteFor, startManagedCheckout } from '@/lib/billingApi';
+import { canUsePaymentLinkFallback, checkoutRouteFor, requestTrialStart, startManagedCheckout } from '@/lib/billingApi';
 import { formatCurrency } from '@/lib/format';
 import { isNativeApp } from '@/lib/nativePlatform';
 import {
@@ -25,6 +25,7 @@ import {
   recommendedTier,
 } from '@/lib/subscriptionDecision';
 import { subscriptionPlans } from '@/lib/subscriptionPlans';
+import { getTrialState, trialDaysRemaining, trialStatusCopy } from '@/lib/trialSubscription';
 import { useCloudStore } from '@/store/useCloudStore';
 import { useUiStore } from '@/store/useUiStore';
 import { useCurrentRoleCapability, useWorkspaceReady, useXbarStore } from '@/store/useXbarStore';
@@ -52,7 +53,9 @@ export default function Subscriptions() {
   const session = useCloudStore((state) => state.session);
   const workspaceId = useCloudStore((state) => state.workspaceId);
   const pushToast = useUiStore((state) => state.pushToast);
+  const startTrialSubscription = useXbarStore((state) => state.startTrialSubscription);
   const [checkoutTier, setCheckoutTier] = useState<SubscriptionTier | null>(null);
+  const [trialStarting, setTrialStarting] = useState(false);
   // Billing period for plan display and checkout. Annual is 10x monthly (2
   // months free). The server fails closed when an annual price id is not
   // configured, so selecting annual before Stripe is set up cannot sell the
@@ -131,6 +134,16 @@ export default function Subscriptions() {
   // entirely. api/stripe/checkout.js refuses these server-side; this stops the
   // screen offering a button that would be refused.
   const subscriptionActive = hasActivePaidPlan(subscription);
+  /*
+   * Trial state: 'none' | 'active' | 'expired', computed from the profile's
+   * recorded trial start. Native apps never get the trial CTA — Apple treats
+   * in-app "free trial" offers as digital-goods language under 3.1.1, and the
+   * trial is web-only until the iOS path decision lands.
+   */
+  const trialState = getTrialState(subscription.trialStart);
+  const trialDaysLeft = trialState === 'active' ? trialDaysRemaining(subscription.trialStart) : 0;
+  const trialCopy = trialStatusCopy(trialState, trialDaysLeft);
+  const trialCanStart = trialState === 'none' && !nativeApp && canManageBilling && !subscriptionActive;
   /*
    * Where a workspace that already has a subscription is sent instead.
    *
@@ -407,8 +420,64 @@ export default function Subscriptions() {
     setCheckoutTier(null);
   };
 
-  const startTrial = () => {
-    navigate(continuePath);
+  const startTrial = async () => {
+    // First-run onboarding keeps its own path: this screen doubles as the
+    // setup flow before the workspace is ready.
+    if (!workspaceReady) {
+      navigate('/setup');
+      return;
+    }
+    // An active or expired trial has no action here — the countdown or the
+    // upgrade prompt is the content, and the plan list below is the way up.
+    if (trialState !== 'none') {
+      navigate('/');
+      return;
+    }
+    // Everyone who cannot start a trial (no billing permission, native app,
+    // already on a paid plan) keeps the old behavior: continue on the Starter
+    // path. The button says so; it must not silently do nothing.
+    if (!trialCanStart || trialStarting) {
+      navigate(continuePath);
+      return;
+    }
+
+    setTrialStarting(true);
+    try {
+      // Cloud workspaces record the trial on the server: the client cannot
+      // grant itself one. Local-only workspaces apply it directly — there is
+      // no server to call and the profile persists on this device.
+      const startedAt = hasManagedIdentity
+        ? await requestTrialStart({ workspaceId: workspaceId ?? '', accessToken: session?.access_token ?? '' }).then(
+            (result) => {
+              if (!result.ok) {
+                pushToast({ title: 'Trial could not start', message: result.message, tone: 'error' });
+                return null;
+              }
+              return result.trial.startedAt;
+            },
+          )
+        : new Date().toISOString();
+
+      if (!startedAt) return;
+      const applied = startTrialSubscription(startedAt);
+      if (applied.ok) {
+        emit(productEventNames.trialStarted, { plan: 'Professional' });
+        pushToast({
+          title: 'Professional trial started',
+          message: 'You have 14 days of full Professional access. No card was charged.',
+        });
+      } else {
+        // The server already recorded the trial, so this is a local-view
+        // problem, not a lost trial: the next cloud load reads the record.
+        pushToast({
+          title: 'Trial started',
+          message: `${applied.message} Reload the page to see your Professional access.`,
+          tone: 'warning',
+        });
+      }
+    } finally {
+      setTrialStarting(false);
+    }
   };
 
   const renderPaidPlan = (tier: SubscriptionTier) => {
@@ -522,17 +591,45 @@ export default function Subscriptions() {
 
           <div className="checkout-trial">
             <div>
-              <span>Starter setup</span>
-              <h2>Start with XBAR</h2>
-              <p>No payment is collected in this local setup flow. Paid plans require completed checkout.</p>
+              {!workspaceReady ? (
+                <>
+                  <span>Starter setup</span>
+                  <h2>Start with XBAR</h2>
+                  <p>No payment is collected in this local setup flow. Paid plans require completed checkout.</p>
+                </>
+              ) : (
+                <>
+                  <span>{trialCopy.eyebrow}</span>
+                  <h2>{trialCopy.heading}</h2>
+                  <p>{trialCopy.message}</p>
+                </>
+              )}
             </div>
-            <button type="button" onClick={startTrial}>
-              {workspaceReady ? 'Continue' : 'Continue setup'}
+            <button
+              type="button"
+              onClick={startTrial}
+              disabled={trialState === 'none' && trialCanStart && trialStarting}
+            >
+              {!workspaceReady
+                ? 'Continue setup'
+                : trialState === 'active'
+                  ? 'Continue'
+                  : trialState === 'expired'
+                    ? 'Continue'
+                    : trialCanStart
+                      ? trialStarting
+                        ? 'Starting trial…'
+                        : 'Start 14-day trial'
+                      : 'Continue'}
             </button>
             <small>
               {starterSetup
                 ? 'Setup active'
-                : `${formatLimit(subscriptionPlans.Starter.limits.horseLimit, 'horses')} and ${formatLimit(subscriptionPlans.Starter.limits.documentLimit, 'documents')}`}
+                : trialState === 'active'
+                  ? `${trialDaysLeft} of 14 days left · full Professional access`
+                  : trialState === 'expired'
+                    ? 'Pick a plan below to keep going'
+                    : `${formatLimit(subscriptionPlans.Starter.limits.horseLimit, 'horses')} and ${formatLimit(subscriptionPlans.Starter.limits.documentLimit, 'documents')}`}
             </small>
           </div>
 
@@ -706,8 +803,17 @@ export default function Subscriptions() {
                       : 'Continue to secure checkout'}
             </button>
           )}
-          <button className="checkout-secondary-action" type="button" onClick={startTrial}>
-            Continue with Starter setup
+          <button
+            className="checkout-secondary-action"
+            type="button"
+            onClick={startTrial}
+            disabled={trialCanStart && trialStarting}
+          >
+            {trialCanStart
+              ? trialStarting
+                ? 'Starting trial…'
+                : 'Start 14-day Professional trial instead'
+              : 'Continue with Starter setup'}
           </button>
           {/*
             Said plainly, because the alternative is a customer staring at a
