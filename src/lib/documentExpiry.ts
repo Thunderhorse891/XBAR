@@ -293,14 +293,54 @@ const TITLE_WORDS = 4;
 const SENTENCE_WORD =
   /^(?:a|an|the|this|that|these|those|your|our|their|any|all|each|every|is|are|was|were|be|been|must|will|shall|should|may|can|please|require[sd]?|need|needs|provides?|provided|bring|send|attach(?:ed)?|includes?|included|proof|copy|current|valid|of|for|to|with|without|before|after|per|under|by|from|and|or|if|when)$/i;
 
+/*
+ * Nor is a line whose name is followed by a verb: "CVI is required before
+ * interstate travel", "Insurance is required before arrival", "Lease
+ * Agreement is required before breeding" are instructions. Only the words up
+ * to the line's first break count (a full stop, a colon, a column gap), so
+ * "Stallion service agreement. A current health certificate is required…" is
+ * still titled by its first clause. And only a verb gives it away — a title
+ * goes on with a preposition as often as not ("Certificate of Veterinary
+ * Inspection for Interstate Movement", "CVI valid until July 15").
+ */
+const INSTRUCTION_VERB =
+  /^(?:is|are|was|were|be|been|must|will|shall|should|may|can|require[sd]?|needs?|needed|has|have)$/i;
+const CLAUSE_BREAK = /[.:;|•]|\s{2,}/;
+
 /** Where the name titles this line, or -1 when it is absent or only mentioned. */
 function titleIndex(line: string, name: RegExp): number {
-  const at = line.search(name);
-  if (at < 0) return -1;
-  const words = line.slice(0, at).trim().split(/\s+/).filter(Boolean);
-  const mentioned =
-    words.length > TITLE_WORDS || words.some((word) => SENTENCE_WORD.test(word.replace(/[^\w'-]/g, '')));
-  return mentioned ? -1 : at;
+  const match = line.match(name);
+  if (!match || match.index === undefined) return -1;
+  const at = match.index;
+  const bare = (word: string) => word.replace(/[^\w'-]/g, '');
+  const before = line.slice(0, at).trim().split(/\s+/).filter(Boolean);
+  if (before.length > TITLE_WORDS || before.some((word) => SENTENCE_WORD.test(bare(word)))) return -1;
+  const clause = line.slice(at + match[0].length).split(CLAUSE_BREAK)[0] ?? '';
+  const after = clause.trim().split(/\s+/).filter(Boolean);
+  return after.some((word) => INSTRUCTION_VERB.test(bare(word))) ? -1 : at;
+}
+
+/** A line of the heading, above its first field, that titles the paper with this name. */
+function titledInHeading(text: string, name: RegExp): boolean {
+  return titleLines(text).some((line) => titleIndex(line, name) >= 0);
+}
+
+/*
+ * A reference title counts only ABOVE the paper's own title. A masthead can
+ * sit over "CVI Requirements for Interstate Travel"; but once a line titles
+ * the paper — "Certificate of Veterinary Inspection" — a later "Instructions
+ * for completing this certificate" is part of the form, not what it is.
+ */
+const COGGINS_NAME = /\bcoggins\b|\bEIA\b|equine\s+infectious\s+ana?emia/i;
+function headedAsReference(text: string): boolean {
+  for (const line of headingBlock(text)) {
+    if (REFERENCE_HEADING.test(line)) return true;
+    const titled = [HEALTH_CERTIFICATE_TEXT, INSURANCE_NAME, CONTRACT_NAME, COGGINS_NAME].some(
+      (name) => titleIndex(line, name) >= 0,
+    );
+    if (titled) return false;
+  }
+  return false;
 }
 
 /*
@@ -394,7 +434,7 @@ export function expiryKindOf(
   document: Pick<DocumentRecord, 'type' | 'title' | 'extractedTextPreview'>,
 ): ExpiryKind | null {
   if (REFERENCE_DOCUMENT.test(document.title ?? '')) return null;
-  if (headingBlock(document.extractedTextPreview ?? '').some((line) => REFERENCE_HEADING.test(line))) return null;
+  if (headedAsReference(document.extractedTextPreview ?? '')) return null;
   if (document.type === 'Coggins') return 'Coggins';
   if (document.type === 'Insurance') return 'Insurance';
   if (document.type === 'Breeding Contract') return 'Contract';
@@ -403,8 +443,8 @@ export function expiryKindOf(
   if (document.type === 'Vet Record') {
     // A vet record is a certificate only when it says it is one, never because
     // it mentions one: an exam noting "A current CVI is required" is an exam.
-    const titled = HEALTH_CERTIFICATE_TEXT.test(title) || titleIndex(headingOf(text), HEALTH_CERTIFICATE_TEXT) >= 0;
-    return titled || CVI_TITLE_LINE.test(text) ? 'Health certificate' : null;
+    const titled = HEALTH_CERTIFICATE_TEXT.test(title) || titledInHeading(text, HEALTH_CERTIFICATE_TEXT);
+    return titled || opensATitledLine(text, FORMAL_CVI_NAME) ? 'Health certificate' : null;
   }
   if (!UNPLACED_TYPES.has(document.type)) return null;
   const byName = onlyKind([
@@ -419,40 +459,45 @@ export function expiryKindOf(
   if (REFERENCE_DOCUMENT.test(heading)) return null;
   return (
     onlyKind([
-      ['Health certificate', titleIndex(heading, HEALTH_CERTIFICATE_TEXT) >= 0 || CVI_TITLE_LINE.test(text)],
-      ['Insurance', titleIndex(heading, INSURANCE_NAME) >= 0 || INSURANCE_FIELD_LINE.test(text)],
-      ['Contract', titleIndex(heading, CONTRACT_NAME) >= 0 || CONTRACT_TITLE_LINE.test(text)],
+      ['Health certificate', titledInHeading(text, HEALTH_CERTIFICATE_TEXT) || opensATitledLine(text, FORMAL_CVI_NAME)],
+      ['Insurance', titledInHeading(text, INSURANCE_NAME) || opensATitledLine(text, INSURANCE_TEXT)],
+      ['Contract', titledInHeading(text, CONTRACT_NAME) || opensATitledLine(text, CONTRACT_TEXT)],
     ]) ?? null
   );
 }
 
 /*
- * A paper's own heading: its first non-empty line, as far as a title runs.
+ * A paper's own heading: the lines at its top, as far as a title runs.
  * "Horse Purchase Agreement" heads an agreement whose body asks for "a current
  * CVI"; the mention says nothing about what the paper is. Past the heading, an
- * identity phrase counts only where it opens a line — a title or a field: the
- * formal "Certificate of Veterinary Inspection" under an agency heading,
- * "Policy Number:", "Named Insured:", "Stallion Service Agreement". Inside a
- * sentence ("A current Certificate of Veterinary Inspection is required",
- * "subject to the existing lease agreement") it is a mention.
+ * identity phrase counts only where it opens a line and titles it — a title or
+ * a field: the formal "Certificate of Veterinary Inspection" under an agency
+ * heading, "Policy Number:", "Named Insured:", "Stallion Service Agreement".
+ * Inside a sentence ("A current Certificate of Veterinary Inspection is
+ * required", "subject to the existing lease agreement"), or followed by a verb
+ * ("Lease Agreement is required before breeding"), it is a mention.
  */
 const HEADING_LENGTH = 120;
 const FORMAL_CVI_NAME = /certificate\s+of\s+veterinary\s+inspection/i;
-const opensALineWith = (pattern: RegExp) => new RegExp(`(?:^|[\\r\\n])[ \\t]*(?:${pattern.source})`, 'i');
-const CVI_TITLE_LINE = opensALineWith(FORMAL_CVI_NAME);
-const INSURANCE_FIELD_LINE = opensALineWith(INSURANCE_TEXT);
-const CONTRACT_TITLE_LINE = opensALineWith(CONTRACT_TEXT);
+
+/** Some line of the text opens with the name and titles it. */
+function opensATitledLine(text: string, name: RegExp): boolean {
+  return text.split(/[\r\n]+/).some((line) => {
+    const at = titleIndex(line, name);
+    return at >= 0 && line.slice(0, at).trim() === '';
+  });
+}
 
 function headingOf(text: string): string {
   return headingBlock(text)[0] ?? '';
 }
 
 /*
- * The lines a paper's heading can occupy. A reference sheet's title often sits
- * under an agency or insurer masthead ("USDA APHIS" / "CVI Requirements for
- * Interstate Travel"), so the reference check reads this block, not the first
- * line alone. Identity still comes from the first line: the block is for
- * refusing, where a masthead above a title must not hide it.
+ * The lines a paper's heading can occupy: its first three non-empty lines. A
+ * title often sits under an agency or insurer masthead ("USDA APHIS" / "CVI
+ * Requirements for Interstate Travel", "USDA APHIS" / "Equine Interstate
+ * Health Certificate"), so both the reference check and identity read this
+ * block, not the first line alone.
  */
 const HEADING_LINES = 3;
 function headingBlock(text: string): string[] {
@@ -461,6 +506,24 @@ function headingBlock(text: string): string[] {
     .filter((line) => line.trim())
     .slice(0, HEADING_LINES)
     .map((line) => line.slice(0, HEADING_LENGTH));
+}
+
+/*
+ * Only the block's lines above its first field can title the paper. A masthead
+ * carries no field; a form's body starts with one ("Exam Date: 05/01/2026"),
+ * and a note below it ("Health certificate to follow.") is not a title. A field
+ * is a short label, single-spaced, then a colon and a value — a column gap
+ * ("CERTIFICATE OF VETERINARY INSPECTION  Origin: Texas") keeps a title a
+ * title.
+ */
+const FIELD_LINE = /^\s*[A-Za-z][\w.#/&'()-]*(?: [\w.#/&'()-]+){0,2}:\s*\S/;
+function titleLines(text: string): string[] {
+  const lines: string[] = [];
+  for (const line of headingBlock(text)) {
+    if (FIELD_LINE.test(line)) break;
+    lines.push(line);
+  }
+  return lines;
 }
 
 /** The one kind that matched; null when several did; undefined when none did. */

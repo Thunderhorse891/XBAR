@@ -1355,6 +1355,36 @@ const UNPLACED_IDENTITY_CORPUS: Array<[string, string, string, string | null]> =
     null,
   ],
   [
+    'a first-line instruction naming insurance, as reviewed',
+    'scan0052',
+    'Insurance is required before arrival.\nExpiration Date: 07/15/2026',
+    null,
+  ],
+  [
+    'a first-line instruction naming a lease, as reviewed',
+    'scan0053',
+    'Lease Agreement is required before breeding.',
+    null,
+  ],
+  [
+    'the formal name opening an instruction line',
+    'scan0056',
+    'Buyer: J. Smith\nCertificate of Veterinary Inspection is required before travel.',
+    null,
+  ],
+  [
+    'a title with a preposition after the name',
+    'scan0054',
+    'Certificate of Veterinary Inspection for Interstate Movement',
+    'Health certificate',
+  ],
+  [
+    'a masthead over a qualified title',
+    'scan0055',
+    'USDA APHIS\nEquine Interstate Health Certificate',
+    'Health certificate',
+  ],
+  [
     'a first-line mention of insurance',
     'scan0051',
     'Proof of insurance is required before delivery.\nExpiration Date: 07/15/2026',
@@ -1483,6 +1513,20 @@ const REFERENCE_HEADING_CORPUS: Array<[string, DocumentRecord['type'], string, s
     'Health certificate',
   ],
   [
+    'a genuine CVI with form instructions on line three, as reviewed',
+    'Registration',
+    'CVI.pdf',
+    'Certificate of Veterinary Inspection\nOwner: Jane\nInstructions for completing this certificate',
+    'Health certificate',
+  ],
+  [
+    'a genuine policy with guidelines below its title',
+    'Insurance',
+    'Policy.pdf',
+    'Blue River Mutual\nEquine Mortality Insurance Policy\nInsurance Guidelines for Claims',
+    'Insurance',
+  ],
+  [
     'a reference phrase below the heading block',
     'Coggins',
     'Coggins.pdf',
@@ -1573,6 +1617,15 @@ const VET_RECORD_IDENTITY_CORPUS: Array<[string, string, string, string | null]>
     'Health certificate',
   ],
   ['a lowercase OCR heading', 'scan0042', 'certificate of veterinary inspection\nOrigin: Texas', 'Health certificate'],
+  ['the reviewed instruction with the name first', 'Annual Vet Exam', 'CVI is required before interstate travel', null],
+  [
+    'a masthead over a qualified title, as reviewed',
+    'scan0042',
+    'USDA APHIS\nEquine Interstate Health Certificate',
+    'Health certificate',
+  ],
+  ['a first line giving the CVI its date', 'scan0042', 'CVI valid until July 15, 2026', 'Health certificate'],
+  ['a short heading with a column gap', 'scan0042', 'Health Certificate  Origin: Texas', 'Health certificate'],
 ];
 
 test('a vet record is a health certificate only when it says it is one', () => {
