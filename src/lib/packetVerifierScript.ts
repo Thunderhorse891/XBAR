@@ -982,6 +982,23 @@ export const PACKET_VERIFIER_SCRIPT = `
             }
           }
 
+          /*
+           * The stamp beside the byline is sealed too: it prints the date the
+           * record carries as sealedAt. Left as free text, it could be
+           * rewritten to show a forged contact (Prepared by …) next to the
+           * genuine byline, with every count and placement unchanged.
+           */
+          if (parsed && typeof parsed.sealedAt === 'string') {
+            var stampLines = document.querySelectorAll('#xbar-packet-meta');
+            var stampSpan = stampLines.length === 1 && stampLines[0].children ? stampLines[0].children[0] : null;
+            var wantStamp = 'Generated ' + parsed.sealedAt.slice(0, 10);
+            if (!leaf(stampSpan, 'SPAN', {}) || textOf(stampSpan) !== wantStamp) {
+              problems.push(
+                'The header of this packet says "' + textOf(stampSpan) + '" where it was sealed as "' + wantStamp + '". The page was edited after it was sealed.',
+              );
+            }
+          }
+
           btn.disabled = false;
 
           /*

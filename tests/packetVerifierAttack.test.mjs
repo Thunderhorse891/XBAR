@@ -108,6 +108,7 @@ async function verify({
   tableCaption = false,
   heroMovedTo = null,
   tableSplitOff = false,
+  generatedText = 'Generated 2026-09-24',
 }) {
   const out = element({ class: 'verify__out', 'data-digest': sealedDigest, ...outAttrs }, 'DIV');
   out._collapsed = outCollapsed;
@@ -210,7 +211,7 @@ async function verify({
   const meta = element({ class: 'meta', id: 'xbar-packet-meta' }, 'DIV');
   meta.parentElement = header;
   const generatedSpan = element({}, 'SPAN');
-  generatedSpan.textContent = 'Generated 2026-09-24';
+  generatedSpan.textContent = generatedText;
   generatedSpan.parentElement = meta;
   const bylineNode = byline === null ? null : element({ id: 'xbar-seller-byline', ...bylineAttrs }, 'SPAN');
   if (bylineNode) {
@@ -493,7 +494,13 @@ const SEALED_SELLER = {
 const SEALED_BYLINE = 'Erin Wyrick · Rocking R Ranch';
 
 function sellerPacket({ seller = SEALED_SELLER, sealedBy = SEALED_BYLINE, ...shown } = {}) {
-  const payload = JSON.stringify({ watermark: 'WATERMARK', sealedBy, seller, attachments: [] });
+  const payload = JSON.stringify({
+    watermark: 'WATERMARK',
+    sealedBy,
+    seller,
+    sealedAt: '2026-09-24T12:00:00.000Z',
+    attachments: [],
+  });
   return {
     payload,
     sealedDigest: sha256Hex(Buffer.from(payload, 'utf8')),
@@ -634,6 +641,16 @@ test('a hidden, relocated or unsealed "Prepared by" line is reported, as reviewe
   // Nothing sealed, and an unmarked byline added to the header.
   const added = await verify(sellerPacket({ sealedBy: '', metaExtras: 1 }));
   assert.equal(added.state, 'fail', added.text);
+});
+
+test('the header stamp beside the byline is the sealed date, not free text, as reviewed', async () => {
+  // The attack: the first meta span, "Generated …", rewritten to show a forged
+  // contact beside the genuine byline, every count and placement unchanged.
+  const forged = await verify(sellerPacket({ generatedText: 'Prepared by attacker@example.com' }));
+  assert.equal(forged.state, 'fail', forged.text);
+  assert.match(forged.text, /was sealed as "Generated 2026-09-24"/);
+  const redated = await verify(sellerPacket({ generatedText: 'Generated 2026-10-01' }));
+  assert.equal(redated.state, 'fail', redated.text);
 });
 
 test('an edited or removed "Prepared by" line is reported', async () => {
