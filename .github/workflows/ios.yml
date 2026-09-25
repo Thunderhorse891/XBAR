@@ -1,0 +1,59 @@
+name: iOS native
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ios-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  native:
+    # Standard macOS runners are free for this public repository. No signing,
+    # upload, paid runner, production secret or deployment occurs here.
+    if: github.event.repository.private == false
+    runs-on: macos-15
+    timeout-minutes: 35
+    env:
+      VITE_SUPABASE_URL: https://native-ci.invalid
+      VITE_SUPABASE_ANON_KEY: native-ci-synthetic-key
+      VITE_API_BASE_URL: https://native-ci.invalid
+      VITE_ALLOW_LOCAL_MODE: 'false'
+      VITE_MANAGED_BILLING_ENABLED: 'true'
+      VITE_SENTRY_DSN: ''
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 24
+      - name: Require Xcode 26 and iOS 26 SDK
+        run: |
+          set -euo pipefail
+          xcode_path=$(find /Applications -maxdepth 1 -name 'Xcode_26*.app' | sort -V | tail -1)
+          test -n "$xcode_path"
+          sudo xcode-select -s "$xcode_path/Contents/Developer"
+          xcodebuild -version
+          xcrun --sdk iphoneos --show-sdk-version | grep '^26\.'
+      - run: npm ci
+      - name: Build and synchronize the bundled app
+        run: npm run mobile:sync:ios
+      - name: Compile unsigned iPhone and iPad release
+        run: |
+          xcodebuild -project ios/App/App.xcodeproj -scheme App -configuration Release \
+            -destination 'generic/platform=iOS' -derivedDataPath ios/DerivedData \
+            CODE_SIGNING_ALLOWED=NO build
+          node scripts/check-ios-project.mjs ios/DerivedData/Build/Products/Release-iphoneos/App.app
+      - name: Exercise the real WKWebView in iOS Simulator
+        run: |
+          set -euo pipefail
+          device_id=$(xcrun simctl list devices available -j | python3 -c 'import json,sys; d=json.load(sys.stdin)["devices"]; print(next(v["udid"] for k,vs in d.items() if "iOS-26" in k for v in vs if "iPhone" in v["name"]))')
+          xcodebuild -project ios/App/App.xcodeproj -scheme App -configuration Debug \
+            -destination "platform=iOS Simulator,id=$device_id" -derivedDataPath ios/DerivedData \
+            -parallel-testing-enabled NO -resultBundlePath ios/native-tests.xcresult \
+            CODE_SIGNING_ALLOWED=NO test
