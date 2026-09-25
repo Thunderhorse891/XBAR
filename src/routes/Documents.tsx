@@ -629,7 +629,7 @@ export default function Documents() {
                 <span className="field-label">Horse</span>
                 <button
                   type="button"
-                  className={`button button--ghost button--compact justify-start ${createHorseFromBatch ? 'border-[#3D6B4F] bg-[#EDF4EE] text-[#3D6B4F]' : ''}`}
+                  className={`button button--ghost button--compact justify-start ${createHorseFromBatch ? 'border-[var(--emerald)] bg-[var(--emerald-soft)] text-[var(--emerald)]' : ''}`}
                   onClick={() => setCreateHorseFromBatch((current) => !current)}
                   disabled={!canUploadDocuments || Boolean(horseId)}
                 >

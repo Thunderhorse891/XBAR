@@ -32,7 +32,7 @@
   display: grid;
   place-items: center;
   color: #fff;
-  background: linear-gradient(135deg, #1466d8, #0f9d6a);
+  background: var(--emerald);
 }
 
 .verify-title {

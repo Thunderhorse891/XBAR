@@ -37,7 +37,8 @@ export function XbarWordmark({ title = 'XBAR', tone = 'color', ...props }: Brand
       <text
         x="82"
         y="39"
-        fill={mono ? 'currentColor' : '#f8fbff'}
+        /* --xbar-warm-white: the token warm white, not the stale spec's #f8fbff. */
+        fill={mono ? 'currentColor' : '#f5f2ec'}
         fontFamily="'Outfit', 'Avenir Next', sans-serif"
         fontSize="28"
         fontWeight="800"
@@ -47,7 +48,8 @@ export function XbarWordmark({ title = 'XBAR', tone = 'color', ...props }: Brand
       </text>
       <path
         d="M84 49.5h126"
-        stroke={mono ? 'currentColor' : '#3D8EFF'}
+        /* --accent-edge: the token edge blue, not the stale spec's #3D8EFF. */
+        stroke={mono ? 'currentColor' : '#0078d7'}
         strokeLinecap="round"
         strokeWidth="1.5"
         opacity="0.58"

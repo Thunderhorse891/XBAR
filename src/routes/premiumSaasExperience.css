@@ -45,10 +45,6 @@
 
 /* Premium shell */
 
-.xbar-wordmark__mark svg {
-  filter: none !important;
-}
-
 nav[aria-label='Mobile quick navigation'],
 #mobile-more-menu {
   border-color: rgba(100, 116, 139, 0.24) !important;
@@ -282,7 +278,7 @@ nav[aria-label='Mobile quick navigation'] a[aria-current='page'],
 .xbar-route-surface
   :is(.button--primary, .ops-briefing-action--primary, .public-action--primary, .xbar-home-action--primary) {
   border-color: rgba(30, 115, 232, 0.68) !important;
-  background: linear-gradient(180deg, #2f86ef, #155fc5) !important;
+  background: var(--accent-ink) !important;
   color: #ffffff !important;
   box-shadow: 0 16px 36px rgba(30, 115, 232, 0.22) !important;
 }
@@ -410,17 +406,6 @@ nav[aria-label='Mobile quick navigation'] a[aria-current='page'],
 
 /* Public and auth surfaces */
 
-.xbar-wordmark__mark {
-  padding: 6px !important;
-  color: var(--xbar-ink);
-  letter-spacing: 0 !important;
-}
-
-.xbar-wordmark__mark svg {
-  width: 100%;
-  height: 100%;
-}
-
 @keyframes xbar-kinetic-type {
   from {
     opacity: 0;
@@ -516,20 +501,6 @@ nav[aria-label='Mobile quick navigation'] a[aria-current='page'],
   42% {
     opacity: 0.5;
     transform: translateX(38px) rotate(-8deg);
-  }
-}
-
-@keyframes xbar-horse-contour-breathe {
-  0%,
-  100% {
-    opacity: 0.64;
-    stroke-dashoffset: 0;
-    transform: translate3d(0, 0, 0);
-  }
-  50% {
-    opacity: 0.38;
-    stroke-dashoffset: 36;
-    transform: translate3d(-10px, 6px, 0);
   }
 }
 
@@ -922,23 +893,5 @@ nav[aria-label='Mobile quick navigation'] a[aria-current='page'],
 
 /* Visual QA rescue pass.
    Constrains the previous motion layer so headings, action rows, and profile cards hold a deliberate grid. */
-
-.xbar-wordmark__copy {
-  min-width: 0;
-}
-
-.xbar-wordmark__copy strong {
-  display: block;
-  max-width: 148px;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-@media (max-width: 720px) {
-  .xbar-wordmark__copy strong {
-    max-width: 112px;
-  }
-}
 
 /* Production final pass: keep the Home screen static, clean, and app-like. */
