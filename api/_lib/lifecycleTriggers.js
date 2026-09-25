@@ -143,13 +143,17 @@ export function selectTrialReminders({ rows, nowIso }) {
   for (const row of rows || []) {
     const payload = row?.payload;
     // A trial OBJECT is governed by the strict trial contract — the same one
-    // entitlement evaluation uses (plan, both timestamps, window length). A
-    // record that fails it is not a trial, so it must not schedule reminders
-    // even though its endsAt looks plausible. Rows with no trial object keep
-    // the legacy date-field behavior below; only the strict-contract shape is
-    // gated, so this changes nothing for date-only payloads.
+    // entitlement evaluation uses (plan, both timestamps, window length) — but
+    // only when it claims the modern record shape ({ startedAt, endsAt, plan },
+    // written by the trial mechanics). Legacy trial objects ({ end, trial_end,
+    // start }) predate the mechanics and keep their historical reminder
+    // behavior. A modern-shaped record that fails the contract is not a trial,
+    // so it must not schedule reminders even though its endsAt looks plausible.
+    // Rows with no trial object keep the legacy date-field behavior below.
+    const MODERN_TRIAL_KEYS = ['startedAt', 'endsAt', 'plan'];
     const trialSlot = isRecord(payload) ? payload.trial : undefined;
-    if (isRecord(trialSlot) && !readTrialFromPayload(payload)) continue;
+    const isModernTrial = isRecord(trialSlot) && MODERN_TRIAL_KEYS.some((key) => trialSlot[key] !== undefined);
+    if (isModernTrial && !readTrialFromPayload(payload)) continue;
     const trialEndDate = resolveTrialEndDate(payload);
     if (!trialEndDate) continue;
     // A workspace that is paying is never a trial workspace; never email it.
