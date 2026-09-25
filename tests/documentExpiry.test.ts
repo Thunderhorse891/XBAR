@@ -1384,6 +1384,32 @@ const UNPLACED_IDENTITY_CORPUS: Array<[string, string, string, string | null]> =
     'USDA APHIS\nEquine Interstate Health Certificate',
     'Health certificate',
   ],
+  ['a first line saying it will follow', 'scan0057', 'Health certificate to follow.', null],
+  [
+    'insurance to follow below a long form label, as reviewed',
+    'scan0058',
+    'Owner / Consignor Name: Jane\nInsurance to follow.',
+    null,
+  ],
+  [
+    'a lease to follow below a long form label, as reviewed',
+    'scan0059',
+    'Horse Registered Name and Number: Bella\nLease agreement to follow.',
+    null,
+  ],
+  [
+    'an instruction as the file name, as reviewed',
+    'CVI is Required Before Travel.pdf',
+    'Expiration Date: 07/15/2026',
+    null,
+  ],
+  ['a file name joining two papers', 'Coggins and CVI.pdf', '', 'Health certificate'],
+  [
+    'a title with "to" later in its clause',
+    'scan0060',
+    'Certificate of Veterinary Inspection for Export to Mexico',
+    'Health certificate',
+  ],
   [
     'a first-line mention of insurance',
     'scan0051',
@@ -1626,6 +1652,20 @@ const VET_RECORD_IDENTITY_CORPUS: Array<[string, string, string, string | null]>
   ],
   ['a first line giving the CVI its date', 'scan0042', 'CVI valid until July 15, 2026', 'Health certificate'],
   ['a short heading with a column gap', 'scan0042', 'Health Certificate  Origin: Texas', 'Health certificate'],
+  ['a first line saying it will follow, as reviewed', 'Annual Vet Exam', 'Health certificate to follow.', null],
+  [
+    'a four-word form label above a follow-up note, as reviewed',
+    'Annual Vet Exam',
+    'Veterinarian Name and Address: Jane\nHealth certificate to follow.',
+    null,
+  ],
+  [
+    'a long form label above a note',
+    'Annual Vet Exam',
+    'Owner or Consignor Name: Jane\nHealth certificate on file',
+    null,
+  ],
+  ['an instruction as the file name, as reviewed', 'CVI is Required Before Travel.pdf', '', null],
 ];
 
 test('a vet record is a health certificate only when it says it is one', () => {

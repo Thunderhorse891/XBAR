@@ -306,18 +306,42 @@ const SENTENCE_WORD =
 const INSTRUCTION_VERB =
   /^(?:is|are|was|were|be|been|must|will|shall|should|may|can|require[sd]?|needs?|needed|has|have)$/i;
 const CLAUSE_BREAK = /[.:;|•]|\s{2,}/;
+/*
+ * A note says the paper is not here: "Health certificate to follow",
+ * "Insurance pending", "CVI missing". The word right after the name gives it
+ * away, and only there — "Certificate of Veterinary Inspection for Export to
+ * Mexico" is still a title. "Attached" and "enclosed" are not on the list:
+ * they say the other paper IS in this file, so an agreement with its CVI
+ * attached holds two papers and is refused as pointing two ways.
+ */
+const FOLLOW_UP = /^(?:to|not|pending|due|missing|requested|forthcoming)$/i;
+const bareWord = (word: string) => word.replace(/[^\w'-]/g, '');
+
+/** The name is followed, in its own clause, by an instruction or a follow-up note rather than more title. */
+function instructionAfter(line: string, match: RegExpMatchArray): boolean {
+  const clause = line.slice((match.index ?? 0) + match[0].length).split(CLAUSE_BREAK)[0] ?? '';
+  const after = clause.trim().split(/\s+/).map(bareWord).filter(Boolean);
+  return after.some((word) => INSTRUCTION_VERB.test(word)) || FOLLOW_UP.test(after[0] ?? '');
+}
+
+/*
+ * A file name is the uploader's label, so it is read more loosely than a
+ * heading — "Coggins and CVI.pdf" names both papers it holds — but an
+ * instruction as a name ("CVI is Required Before Travel.pdf") names none.
+ */
+function namesInFilename(title: string, name: RegExp): boolean {
+  const match = title.match(name);
+  return !!match && !instructionAfter(title, match);
+}
 
 /** Where the name titles this line, or -1 when it is absent or only mentioned. */
 function titleIndex(line: string, name: RegExp): number {
   const match = line.match(name);
   if (!match || match.index === undefined) return -1;
   const at = match.index;
-  const bare = (word: string) => word.replace(/[^\w'-]/g, '');
   const before = line.slice(0, at).trim().split(/\s+/).filter(Boolean);
-  if (before.length > TITLE_WORDS || before.some((word) => SENTENCE_WORD.test(bare(word)))) return -1;
-  const clause = line.slice(at + match[0].length).split(CLAUSE_BREAK)[0] ?? '';
-  const after = clause.trim().split(/\s+/).filter(Boolean);
-  return after.some((word) => INSTRUCTION_VERB.test(bare(word))) ? -1 : at;
+  if (before.length > TITLE_WORDS || before.some((word) => SENTENCE_WORD.test(bareWord(word)))) return -1;
+  return instructionAfter(line, match) ? -1 : at;
 }
 
 /** A line of the heading, above its first field, that titles the paper with this name. */
@@ -443,14 +467,14 @@ export function expiryKindOf(
   if (document.type === 'Vet Record') {
     // A vet record is a certificate only when it says it is one, never because
     // it mentions one: an exam noting "A current CVI is required" is an exam.
-    const titled = HEALTH_CERTIFICATE_TEXT.test(title) || titledInHeading(text, HEALTH_CERTIFICATE_TEXT);
+    const titled = namesInFilename(title, HEALTH_CERTIFICATE_TEXT) || titledInHeading(text, HEALTH_CERTIFICATE_TEXT);
     return titled || opensATitledLine(text, FORMAL_CVI_NAME) ? 'Health certificate' : null;
   }
   if (!UNPLACED_TYPES.has(document.type)) return null;
   const byName = onlyKind([
-    ['Health certificate', HEALTH_CERTIFICATE_TEXT.test(title)],
-    ['Insurance', INSURANCE_NAME.test(title)],
-    ['Contract', CONTRACT_NAME.test(title)],
+    ['Health certificate', namesInFilename(title, HEALTH_CERTIFICATE_TEXT)],
+    ['Insurance', namesInFilename(title, INSURANCE_NAME)],
+    ['Contract', namesInFilename(title, CONTRACT_NAME)],
   ]);
   if (byName !== undefined) return byName;
   // With no name, the body must say what the paper IS, not what it mentions:
@@ -512,11 +536,12 @@ function headingBlock(text: string): string[] {
  * Only the block's lines above its first field can title the paper. A masthead
  * carries no field; a form's body starts with one ("Exam Date: 05/01/2026"),
  * and a note below it ("Health certificate to follow.") is not a title. A field
- * is a short label, single-spaced, then a colon and a value — a column gap
+ * is a label of up to six single-spaced words ("Owner or Consignor Name",
+ * "Horse Registered Name and Number"), then a colon and a value — a column gap
  * ("CERTIFICATE OF VETERINARY INSPECTION  Origin: Texas") keeps a title a
  * title.
  */
-const FIELD_LINE = /^\s*[A-Za-z][\w.#/&'()-]*(?: [\w.#/&'()-]+){0,2}:\s*\S/;
+const FIELD_LINE = /^\s*[A-Za-z][\w.#/&'()-]*(?: [\w.#/&'()-]+){0,5}:\s*\S/;
 function titleLines(text: string): string[] {
   const lines: string[] = [];
   for (const line of headingBlock(text)) {
