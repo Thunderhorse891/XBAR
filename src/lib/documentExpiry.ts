@@ -560,14 +560,21 @@ function titleLines(text: string): string[] {
 
 /*
  * A colon can also qualify a title: "Texas Equine Lease Agreement: Bella",
- * "Equine Mortality Insurance Policy: Bella", "Health Certificate No: 12345".
- * A line whose label itself titles a certificate, policy or contract is that
- * title, not a form field — "Owner or Consignor Name:" titles nothing.
+ * "Equine Mortality Insurance Policy: Bella". Such a label titles the paper
+ * and ends in the paper's own noun. A field's label ends in something else,
+ * even when a paper's name describes it: "Insurance Agent Name:", "Insurance
+ * Carrier:", "Lease Contact Name:", "Contract Manager:" are fields, and so is
+ * "Owner or Consignor Name:", which titles nothing at all.
  */
+const DOCUMENT_NOUN = /^(?:agreement|contract|lease|policy|insurance|coverage|binder|certificate|cvi)$/i;
 function isFormField(line: string): boolean {
   if (!FIELD_LINE.test(line)) return false;
   const label = line.slice(0, line.indexOf(':'));
-  return ![HEALTH_CERTIFICATE_TEXT, INSURANCE_NAME, CONTRACT_NAME].some((name) => titleIndex(label, name) >= 0);
+  const lastWord = bareWord(label.trim().split(/\s+/).at(-1) ?? '');
+  const titlesThePaper =
+    DOCUMENT_NOUN.test(lastWord) &&
+    [HEALTH_CERTIFICATE_TEXT, INSURANCE_NAME, CONTRACT_NAME].some((name) => titleIndex(label, name) >= 0);
+  return !titlesThePaper;
 }
 
 /** The one kind that matched; null when several did; undefined when none did. */

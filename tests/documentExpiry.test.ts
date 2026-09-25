@@ -1414,6 +1414,10 @@ const UNPLACED_IDENTITY_CORPUS: Array<[string, string, string, string | null]> =
   ['a colon-qualified lease title, as reviewed', 'scan0061', 'Texas Equine Lease Agreement: Bella', 'Contract'],
   ['a ranch-named lease title, as reviewed', 'scan0062', 'Rocking R Ranch Lease Agreement: Bella', 'Contract'],
   ['a colon-qualified policy title, as reviewed', 'scan0063', 'Equine Mortality Insurance Policy: Bella', 'Insurance'],
+  ['an insurance agent field, as reviewed', 'scan0065', 'Insurance Agent Name: Jane', null],
+  ['an insurance carrier field, as reviewed', 'scan0066', 'Insurance Carrier: Blue River', null],
+  ['a lease contact field, as reviewed', 'scan0067', 'Lease Contact Name: Jane', null],
+  ['a contract manager field, as reviewed', 'scan0068', 'Contract Manager: Jane', null],
   [
     'a four-line masthead over a qualified title',
     'scan0064',
