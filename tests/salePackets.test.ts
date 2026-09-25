@@ -245,6 +245,7 @@ test('the packet no longer claims that reading the seal proves anything', async 
 });
 
 import { buildLocalSalePacket } from '../src/lib/localSalePacketGenerator.js';
+import { PACKET_VERIFIER_SCRIPT } from '../src/lib/packetVerifierScript.js';
 import type { HorseRecord, OwnershipRecord, WorkspaceProfile } from '../src/types/xbar.js';
 
 /* Minimal horse: the seal-code swap must hold on any rendered packet. */
@@ -420,6 +421,61 @@ test('each sealed seller field is printed where the verifier can compare it', ()
   const noEmail = build({ ...sealTestWorkspace, operationsEmail: '' } as WorkspaceProfile);
   assert.equal(JSON.parse(noEmail.credential.payload).seller.email, '');
   assert.ok(!noEmail.html.includes('xbar-seller-email'), 'an unsealed email has no cell');
+});
+
+/*
+ * The verifier counts the content's top-level parts, so a forged header or a
+ * second contact block added at the top of the page is caught. The count it
+ * pins is derived here from real generated packets, not transcribed: a copied
+ * number would rot silently the first time the packet's markup changed, and
+ * every honest packet would start reading as altered.
+ */
+function topLevelOfContent(html: string): string[] {
+  const opening = '<div class="content">';
+  const start = html.indexOf(opening);
+  assert.ok(start > -1, 'the content block must be findable in the packet');
+  const tag = /<(\/?)([a-zA-Z][a-zA-Z0-9]*)([^>]*)>/g;
+  tag.lastIndex = start + opening.length;
+  const voids = new Set(['meta', 'br', 'hr', 'img', 'input', 'link', 'source', 'track']);
+  const items: string[] = [];
+  let depth = 0;
+  let match: RegExpExecArray | null;
+  while ((match = tag.exec(html))) {
+    const [, closing, name, attrs] = match;
+    if (voids.has(name!.toLowerCase()) || attrs!.trim().endsWith('/')) {
+      if (depth === 0) items.push(name!.toUpperCase());
+      continue;
+    }
+    if (closing) {
+      if (depth === 0) break;
+      depth -= 1;
+      continue;
+    }
+    if (depth === 0) items.push(name!.toUpperCase());
+    depth += 1;
+  }
+  return items;
+}
+
+test('the top-level count the verifier pins is the one the generator emits', () => {
+  const build = (workspaceProfile: WorkspaceProfile) =>
+    buildLocalSalePacket({
+      horse: sealTestHorse(),
+      workspaceProfile,
+      documents: [],
+      ownershipRecord: sealTestOwnership(),
+      selectedDocumentIds: [],
+      generatedBy: 'Ranch Manager',
+      now: new Date('2026-09-24T12:00:00Z'),
+    });
+  const bare = topLevelOfContent(build({ ranchName: 'Main Ranch' } as unknown as WorkspaceProfile).html);
+  const withSeller = topLevelOfContent(build(sealTestWorkspace).html);
+  assert.equal(withSeller.length, bare.length + 1, 'the seller section is the one conditional top-level part');
+  assert.equal(bare[0], 'HEADER', 'the header opens the content');
+  assert.ok(
+    PACKET_VERIFIER_SCRIPT.includes(`var CONTENT_ITEMS = ${bare.length};`),
+    `the verifier pins a stale count. Set CONTENT_ITEMS in src/lib/packetVerifierScript.ts to ${bare.length}.`,
+  );
 });
 
 /* The quick-start placeholders are not seller contact details.

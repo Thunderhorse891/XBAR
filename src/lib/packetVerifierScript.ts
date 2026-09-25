@@ -817,6 +817,24 @@ export const PACKET_VERIFIER_SCRIPT = `
           function textOf(node) {
             return node ? (node.textContent || '').trim() : '';
           }
+          /*
+           * A leaf carries its text and nothing else. textContent reads a
+           * hidden child as readily as a visible one, so a cell holding a
+           * visible input over a hidden copy of the sealed text would compare
+           * equal while showing the buyer the input. The generator puts no
+           * element inside any of these, so any child at all is an alteration.
+           */
+          function leaf(node, tag, attrs) {
+            return exactly(node, tag, attrs) && !!node.children && node.children.length === 0;
+          }
+          /*
+           * The content block is the one the verdict box sits in, already
+           * pinned by SEALED_OUT_CHAIN — not any element that merely carries
+           * its class. A second content block built inside the collapsed
+           * section could otherwise host the sealed contact out of sight.
+           */
+          var sealedContent =
+            out.parentElement && out.parentElement.parentElement ? out.parentElement.parentElement.parentElement : null;
           var sealedSeller = parsed && parsed.seller && typeof parsed.seller === 'object' ? parsed.seller : null;
           if (sealedSeller) {
             var wanted = [
@@ -826,8 +844,24 @@ export const PACKET_VERIFIER_SCRIPT = `
             ].filter(function (field) {
               return typeof sealedSeller[field[0]] === 'string' && sealedSeller[field[0]] !== '';
             });
+            /*
+             * The content holds exactly what the generator emits: its header,
+             * seven sections, the seal, the footer, and the seller section when
+             * the seal carries a contact or a photo. Anything added at the top
+             * level (a replacement header with its own Prepared by, a second
+             * contact block) is text the seal never covered.
+             */
+            var CONTENT_ITEMS = 10;
+            var topItems = sealedContent && sealedContent.children ? sealedContent.children.length : -1;
+            var expectedTop = CONTENT_ITEMS + (sealedPhoto || wanted.length ? 1 : 0);
+            if (topItems !== expectedTop) {
+              problems.push(
+                'This packet has ' + topItems + ' top-level part(s), and the seal put ' + expectedTop + ' there, so something was added to the page or taken from it after it was sealed.',
+              );
+            }
             var tables = document.querySelectorAll('#xbar-seller-contact');
             var table = tables.length === 1 ? tables[0] : null;
+            var section = table ? table.parentElement : null;
             if (tables.length !== (wanted.length ? 1 : 0)) {
               problems.push(
                 'This packet shows ' + tables.length + ' seller contact table(s), and the seal covers ' + (wanted.length ? 'one' : 'none') + '. Do not use the contact details shown.',
@@ -835,12 +869,27 @@ export const PACKET_VERIFIER_SCRIPT = `
             } else if (
               table &&
               (!exactly(table, 'TABLE', { id: 'xbar-seller-contact' }) ||
-                !exactly(table.parentElement, 'SECTION', {}) ||
-                !exactly(table.parentElement.parentElement, 'DIV', { class: 'content' }))
+                !table.children ||
+                table.children.length !== 1 ||
+                !exactly(table.children[0], 'TBODY', {}) ||
+                !exactly(section, 'SECTION', {}) ||
+                section.parentElement !== sealedContent)
             ) {
               problems.push(
                 'The seller contact table on this packet is not where the seal put it, or is not shown as it was sealed, so the contact details on it cannot be trusted.',
               );
+            } else if (table) {
+              var sectionItems = section.children || [];
+              var sectionHolds = sealedPhoto ? 3 : 2;
+              if (
+                sectionItems.length !== sectionHolds ||
+                !leaf(sectionItems[0], 'H2', {}) ||
+                sectionItems[sectionItems.length - 1] !== table
+              ) {
+                problems.push(
+                  'The seller contact section on this packet holds ' + sectionItems.length + ' item(s), and the seal put ' + sectionHolds + ' there, so something in it was not sealed.',
+                );
+              }
             }
             var contactRows = document.querySelectorAll('#xbar-seller-contact tr');
             if (contactRows.length !== wanted.length) {
@@ -861,9 +910,9 @@ export const PACKET_VERIFIER_SCRIPT = `
                   holder === table &&
                   exactly(row, 'TR', {}) &&
                   cells.length === 2 &&
-                  exactly(cells[0], 'TH', {}) &&
+                  leaf(cells[0], 'TH', {}) &&
                   textOf(cells[0]) === field[1] &&
-                  exactly(cells[1], 'TD', { id: 'xbar-seller-' + field[0] });
+                  leaf(cells[1], 'TD', { id: 'xbar-seller-' + field[0] });
                 if (!inPlace) {
                   problems.push(
                     'The ' + field[2] + ' row on this packet is not the one the seal put there. It was sealed as "' + want + '". Do not use the one shown.',
@@ -878,10 +927,13 @@ export const PACKET_VERIFIER_SCRIPT = `
           }
           /*
            * The Prepared by line names the seller too, and is pinned the same
-           * way: one named span, as the second and last item of the header meta
-           * line, carrying nothing but its name. With no
-           * byline sealed, the meta line holds its Generated stamp alone, so an
-           * unmarked Prepared by added there is caught too.
+           * way: one named span, as the second and last item of the header's
+           * meta line, carrying nothing but its text; the meta line the last of
+           * the header's three items; the header a direct child of the sealed
+           * content. So the whole header cannot be moved out of sight behind a
+           * forged one. With no byline sealed, the meta line holds its
+           * Generated stamp alone, so an unmarked Prepared by added there is
+           * caught too.
            */
           if (parsed && typeof parsed.sealedBy === 'string') {
             var wantByline = parsed.sealedBy ? 'Prepared by ' + parsed.sealedBy : '';
@@ -889,12 +941,18 @@ export const PACKET_VERIFIER_SCRIPT = `
             var metaLine = metas.length === 1 ? metas[0] : null;
             var metaItems = metaLine && metaLine.children ? metaLine.children : [];
             var byline = wantByline && metaItems.length === 2 ? metaItems[1] : null;
+            var head = metaLine ? metaLine.parentElement : null;
             var bylinePlaced =
               exactly(metaLine, 'DIV', { class: 'meta', id: 'xbar-packet-meta' }) &&
-              exactly(metaLine.parentElement, 'HEADER', {}) &&
+              exactly(head, 'HEADER', {}) &&
+              head.parentElement === sealedContent &&
+              !!head.children &&
+              head.children.length === 3 &&
+              head.children[2] === metaLine &&
               metaItems.length === (wantByline ? 2 : 1) &&
+              leaf(metaItems[0], 'SPAN', {}) &&
               document.querySelectorAll('#xbar-seller-byline').length === (wantByline ? 1 : 0) &&
-              (!wantByline || exactly(byline, 'SPAN', { id: 'xbar-seller-byline' }));
+              (!wantByline || leaf(byline, 'SPAN', { id: 'xbar-seller-byline' }));
             if (!bylinePlaced) {
               problems.push(
                 'The Prepared by line on this packet is not where the seal put it, or is hidden, or was added. It was sealed as "' + (wantByline || 'no Prepared by line') + '".',
