@@ -107,3 +107,66 @@ test('both real cron routes retain method/auth gates; unknown routes cannot writ
     delete process.env.CRON_SECRET;
   }
 });
+
+test('real Sentry SDK emits sanitized server errors and preserves handled responses', async () => {
+  const Sentry = await import('@sentry/node');
+  const previousDsn = process.env.SENTRY_DSN;
+  const previousClient = Sentry.getClient();
+  process.env.SENTRY_DSN = 'https://fixture@example.invalid/1';
+  const envelopes = [];
+  try {
+    const { withErrorTracking } = await import('../../api/_lib/error-tracking.js?transport-regression');
+    const options = Sentry.getClient().getOptions();
+    // Exercise the actual SDK and production privacy hook, substituting only
+    // delivery. This test never contacts Sentry or needs an owner's DSN.
+    Sentry.init({
+      ...options,
+      transport: () => ({
+        send: async (envelope) => {
+          envelopes.push(envelope);
+          return { statusCode: 200 };
+        },
+        flush: async () => true,
+      }),
+    });
+    const response = () => ({
+      setHeader() {},
+      end(body) {
+        this.body = body;
+        this.writableEnded = true;
+      },
+    });
+    const denied = response();
+    await withErrorTracking(async (_req, res) => {
+      res.statusCode = 401;
+      res.end('existing unauthorized response');
+    }, 'fixture')({}, denied);
+    assert.equal(denied.statusCode, 401);
+    assert.equal(denied.body, 'existing unauthorized response');
+    assert.equal(envelopes.length, 0);
+
+    const thrown = response();
+    await withErrorTracking(async () => {
+      throw new Error('secret@example.invalid token=customer-secret');
+    }, 'fixture')({}, thrown);
+    assert.equal(thrown.statusCode, 500);
+    assert.equal(JSON.parse(thrown.body).ok, false);
+    assert.equal(envelopes.length, 1);
+    assert.doesNotMatch(JSON.stringify(envelopes), /customer-secret|secret@example/);
+    assert.match(JSON.stringify(envelopes), /Application error \(details omitted\)/);
+
+    const failed = response();
+    await withErrorTracking(async (_req, res) => {
+      res.statusCode = 503;
+      res.end('existing service unavailable response');
+    }, 'fixture')({}, failed);
+    assert.equal(failed.statusCode, 503);
+    assert.equal(failed.body, 'existing service unavailable response');
+    assert.equal(envelopes.length, 2);
+  } finally {
+    await Sentry.close(1500);
+    Sentry.getCurrentScope().setClient(previousClient);
+    if (previousDsn === undefined) delete process.env.SENTRY_DSN;
+    else process.env.SENTRY_DSN = previousDsn;
+  }
+});
