@@ -19,6 +19,8 @@
  * finds out it did not on the day they need it.
  */
 
+import { assertSavedPacketCompatible } from './savedPacketCompatibility.js';
+
 const DATABASE_NAME = 'xbar-file-vault';
 const DATABASE_VERSION = 1;
 const STORE_NAME = 'files';
@@ -1197,6 +1199,8 @@ export async function openLocalFile(key: string, workspaceId: string): Promise<L
    * someone else's.
    */
   if (!mayReadVaultEntry(entry, workspaceId)) return null;
+
+  if (entry.generated === true) await assertSavedPacketCompatible(entry.blob, entry.type);
 
   hookPageUnload();
   /*
