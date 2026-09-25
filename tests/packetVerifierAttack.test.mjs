@@ -109,6 +109,8 @@ async function verify({
   heroMovedTo = null,
   tableSplitOff = false,
   generatedText = 'Generated 2026-09-24',
+  contactHeading = 'Contact the seller',
+  looseText = null,
 }) {
   const out = element({ class: 'verify__out', 'data-digest': sealedDigest, ...outAttrs }, 'DIV');
   out._collapsed = outCollapsed;
@@ -248,7 +250,7 @@ async function verify({
    */
   contactTable.children = tableCaption ? [tbody, element({}, 'CAPTION')] : [tbody];
   const sectionHeading = element({}, 'H2');
-  sectionHeading.textContent = 'Contact the seller';
+  sectionHeading.textContent = contactHeading;
   // Added between the heading and the table, so the table is still the section's last item.
   /*
    * The table split from its photo: moved into a forged top-level section of
@@ -279,6 +281,22 @@ async function verify({
     footer,
     ...Array.from({ length: contentExtras }, () => element({}, 'HEADER')),
   ];
+  /*
+   * A bare line of text typed between elements. It is a text node, so no
+   * element count or placement sees it, and the page shows it all the same.
+   */
+  if (looseText) {
+    const target = {
+      content,
+      header,
+      meta,
+      section: sellerSection,
+      table: contactTable,
+      tbody,
+      row: sellerRows[0],
+    }[looseText.into];
+    target.childNodes = [...target.children, { nodeType: 3, nodeValue: looseText.text }];
+  }
   const withId = (id) =>
     [...sellerRows.map((row) => row.children[1]), ...decoyNodes, ...(bylineNode ? [bylineNode] : [])].filter(
       (node) => node.getAttribute('id') === id,
@@ -623,6 +641,42 @@ test('anything added at the top of the packet or inside the contact section is r
   const inSection = await verify(sellerPacket({ sectionExtras: 1 }));
   assert.equal(inSection.state, 'fail', inSection.text);
   assert.match(inSection.text, /seller contact section on this packet holds/);
+});
+
+test('a bare line of text added to the contact block, header or page is reported, as reviewed', async () => {
+  const forged = 'UPDATED PAYMENT EMAIL: attacker@example.com';
+  for (const [into, where] of [
+    ['section', /added to the seller contact section of this packet after it was sealed/],
+    ['table', /added to the seller contact table of this packet after it was sealed/],
+    ['tbody', /added to the seller contact table of this packet after it was sealed/],
+    ['row', /added to the seller contact table of this packet after it was sealed/],
+    ['meta', /added to the header of this packet after it was sealed/],
+    ['header', /added to the header of this packet after it was sealed/],
+    ['content', /added between the sections of this packet after it was sealed/],
+  ]) {
+    const result = await verify(sellerPacket({ looseText: { into, text: forged } }));
+    assert.equal(result.state, 'fail', `text added to the ${into} must not verify: ${result.text}`);
+    assert.match(result.text, where);
+    assert.ok(result.text.includes(`"${forged}"`), result.text);
+  }
+});
+
+test('the whitespace between elements is not an alteration', async () => {
+  for (const into of ['section', 'table', 'tbody', 'row', 'meta', 'header', 'content']) {
+    const result = await verify(sellerPacket({ looseText: { into, text: '\n    ' } }));
+    assert.equal(result.state, 'pass', `whitespace in the ${into}: ${result.text}`);
+  }
+});
+
+test('the contact section heading is the one the seal put there', async () => {
+  const result = await verify(sellerPacket({ contactHeading: 'Contact the seller at attacker@example.com' }));
+  assert.equal(result.state, 'fail', result.text);
+  assert.ok(
+    result.text.includes(
+      'is headed "Contact the seller at attacker@example.com" where it was sealed as "Contact the seller"',
+    ),
+    result.text,
+  );
 });
 
 test('a hidden, relocated or unsealed "Prepared by" line is reported, as reviewed', async () => {

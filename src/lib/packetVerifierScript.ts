@@ -830,6 +830,25 @@ export const PACKET_VERIFIER_SCRIPT = `
             return exactly(node, tag, attrs) && !!node.children && node.children.length === 0;
           }
           /*
+           * Every count and placement check here reads elements. A bare line
+           * of text typed between them (UPDATED PAYMENT EMAIL: …) is a text
+           * node: no element count sees it, and the page shows it all the
+           * same. The generator writes no text directly into any container
+           * pinned here, only whitespace at most, so any other text node in
+           * one is an alteration, and it is quoted back so the buyer sees what
+           * was added.
+           */
+          function refuseLooseText(node, where) {
+            var nodes = node && node.childNodes ? node.childNodes : [];
+            for (var t = 0; t < nodes.length; t += 1) {
+              var loose = nodes[t].nodeType === 3 ? String(nodes[t].nodeValue || '').trim() : '';
+              if (loose) {
+                problems.push('Text was added ' + where + ' after it was sealed: "' + loose + '". The seal does not cover it. Do not act on it.');
+                return;
+              }
+            }
+          }
+          /*
            * The content block is the one the verdict box sits in, already
            * pinned by SEALED_OUT_CHAIN — not any element that merely carries
            * its class. A second content block built inside the collapsed
@@ -861,6 +880,7 @@ export const PACKET_VERIFIER_SCRIPT = `
                 'This packet has ' + topItems + ' top-level part(s), and the seal put ' + expectedTop + ' there, so something was added to the page or taken from it after it was sealed.',
               );
             }
+            refuseLooseText(sealedContent, 'between the sections of this packet');
             var tables = document.querySelectorAll('#xbar-seller-contact');
             var table = tables.length === 1 ? tables[0] : null;
             var section = table ? table.parentElement : null;
@@ -909,7 +929,16 @@ export const PACKET_VERIFIER_SCRIPT = `
                 problems.push(
                   'The seller contact section on this packet holds ' + sectionItems.length + ' item(s), and the seal put ' + expectedItems.length + ' there in a fixed order, so something in it was moved or was not sealed.',
                 );
+              } else if (textOf(sectionItems[0]) !== 'Contact the seller') {
+                problems.push(
+                  'The seller contact section on this packet is headed "' + textOf(sectionItems[0]) + '" where it was sealed as "Contact the seller". Do not act on it.',
+                );
               }
+              refuseLooseText(contactSection, 'to the seller contact section of this packet');
+            }
+            if (table) {
+              refuseLooseText(table, 'to the seller contact table of this packet');
+              refuseLooseText(table.children && table.children[0], 'to the seller contact table of this packet');
             }
             var contactRows = document.querySelectorAll('#xbar-seller-contact tr');
             if (contactRows.length !== wanted.length) {
@@ -922,6 +951,7 @@ export const PACKET_VERIFIER_SCRIPT = `
                 var want = sealedSeller[field[0]];
                 var row = contactRows[r];
                 var cells = row.children || [];
+                refuseLooseText(row, 'to the seller contact table of this packet');
                 var holder = row.parentElement;
                 if (holder && String(holder.tagName || '').toUpperCase() === 'TBODY') {
                   holder = exactly(holder, 'TBODY', {}) ? holder.parentElement : null;
@@ -979,6 +1009,10 @@ export const PACKET_VERIFIER_SCRIPT = `
               );
             } else if (wantByline && textOf(byline) !== wantByline) {
               problems.push('This packet says "' + textOf(byline) + '" but was sealed as "' + wantByline + '".');
+            }
+            if (metaLine) {
+              refuseLooseText(head, 'to the header of this packet');
+              refuseLooseText(metaLine, 'to the header of this packet');
             }
           }
 
