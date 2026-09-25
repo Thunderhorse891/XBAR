@@ -49,6 +49,8 @@ export default function Login() {
     entryPanel.current?.scrollIntoView({ block: 'start' });
   }, [confirmationEmail]);
   const authMode: AuthMode = params.get('mode') === 'signup' ? 'signup' : 'signin';
+  // Existing passwords belong to the account service, not today's signup policy.
+  const minimumPasswordLength = authMode === 'signup' ? 8 : 1;
   const selectedPlan = params.get('plan') ?? '';
   const workspaceSetupPath = useMemo(() => {
     const setupParams = new URLSearchParams();
@@ -536,7 +538,7 @@ export default function Login() {
                       if (formMessage?.tone === 'error') setFormMessage(null);
                     }}
                     autoComplete={authMode === 'signin' ? 'current-password' : 'new-password'}
-                    minLength={8}
+                    minLength={minimumPasswordLength}
                     required
                   />
                   <button
@@ -562,7 +564,7 @@ export default function Login() {
               <button
                 className="clean-primary-button"
                 type="submit"
-                disabled={!email || password.length < 8 || busy !== ''}
+                disabled={!email || password.length < minimumPasswordLength || busy !== ''}
               >
                 {busy === 'password' ? 'Authenticating...' : authMode === 'signin' ? 'Sign In' : 'Create Account'}
               </button>
