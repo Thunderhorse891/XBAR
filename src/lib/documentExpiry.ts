@@ -156,7 +156,7 @@ export function findPrintedExpiryDate(text: string | undefined): string | null {
  * to the inspection window.
  */
 const CERTIFICATE_DATE = new RegExp(
-  `(?:(?:this\\s+)?(?:health\\s+)?certificate(?:\\s+of\\s+veterinary\\s+inspection)?(?:\\s*\\(CVI\\))?|\\bCVI)[ \\t]+(?:is[ \\t]+)?(?:expir(?:es|ation)(?:\\s+date)?|valid\\s+(?:through|thru|until|to)|good\\s+(?:through|thru|until))(?:\\s+on)?\\s*[:\\-–]?\\s*${DATE_PATTERN}`,
+  `(?:(?:this\\s+)?(?:health\\s+)?certificate(?:\\s+of\\s+veterinary\\s+inspection)?(?:\\s*\\(CVI\\))?|\\bCVI)[ \\t]+(?:is[ \\t]+)?(?:expir(?:es|ation|y)(?:\\s+date)?|exp\\.?\\s+date|valid\\s+(?:through|thru|until|to)|good\\s+(?:through|thru|until))(?:\\s+on)?\\s*[:\\-–]?\\s*${DATE_PATTERN}`,
   'gi',
 );
 
@@ -362,7 +362,8 @@ function headedAsReference(text: string): boolean {
     const titled = [HEALTH_CERTIFICATE_TEXT, INSURANCE_NAME, CONTRACT_NAME, COGGINS_NAME].some(
       (name) => titleIndex(line, name) >= 0,
     );
-    if (titled) return false;
+    // The paper's own title, or its first field, ends the heading.
+    if (titled || isFormField(line)) return false;
   }
   return false;
 }
@@ -424,7 +425,11 @@ const UNPLACED_TYPES: ReadonlySet<DocumentRecord['type']> = new Set(['Registrati
  * Requirements", "Coggins Instructions", "Insurance Requirements", "Lease
  * Agreement Template". Intake types by filename, so such a sheet can arrive
  * typed Insurance or Coggins; its expiry label would otherwise read as a lapsed
- * policy or a current certificate. Its name or heading saying so is enough.
+ * policy or a current certificate. Its name or heading saying so is enough —
+ * read with REFERENCE_HEADING below, so a specimen word naming the paper's
+ * own content ("Coggins Sample Results", "EIA Blood Sample") is not taken for
+ * a blank. This broader word list is kept only for an unplaced paper's first
+ * line when nothing else identifies it.
  */
 const REFERENCE_DOCUMENT =
   /\b(?:requirements?|checklists?|instructions?|guide(?:lines)?|rules|procedures?|how\s+to|faq|templates?|blank|sample)\b/i;
@@ -457,7 +462,7 @@ const REFERENCE_HEADING = new RegExp(
 export function expiryKindOf(
   document: Pick<DocumentRecord, 'type' | 'title' | 'extractedTextPreview'>,
 ): ExpiryKind | null {
-  if (REFERENCE_DOCUMENT.test(document.title ?? '')) return null;
+  if (REFERENCE_HEADING.test(document.title ?? '')) return null;
   if (headedAsReference(document.extractedTextPreview ?? '')) return null;
   if (document.type === 'Coggins') return 'Coggins';
   if (document.type === 'Insurance') return 'Insurance';
@@ -517,13 +522,15 @@ function headingOf(text: string): string {
 }
 
 /*
- * The lines a paper's heading can occupy: its first three non-empty lines. A
- * title often sits under an agency or insurer masthead ("USDA APHIS" / "CVI
- * Requirements for Interstate Travel", "USDA APHIS" / "Equine Interstate
- * Health Certificate"), so both the reference check and identity read this
- * block, not the first line alone.
+ * The lines a paper's heading can occupy: its first non-empty lines, up to its
+ * first field and never more than six. A title often sits under an agency or
+ * insurer masthead, and a federal one runs to three lines of its own ("United
+ * States Department of Agriculture" / "Animal and Plant Health Inspection
+ * Service" / "Veterinary Services" / "Equine Interstate Health Certificate"),
+ * so both the reference check and identity read this block, not the first
+ * line alone.
  */
-const HEADING_LINES = 3;
+const HEADING_LINES = 6;
 function headingBlock(text: string): string[] {
   return text
     .split(/[\r\n]+/)
@@ -545,10 +552,22 @@ const FIELD_LINE = /^\s*[A-Za-z][\w.#/&'()-]*(?: [\w.#/&'()-]+){0,5}:\s*\S/;
 function titleLines(text: string): string[] {
   const lines: string[] = [];
   for (const line of headingBlock(text)) {
-    if (FIELD_LINE.test(line)) break;
+    if (isFormField(line)) break;
     lines.push(line);
   }
   return lines;
+}
+
+/*
+ * A colon can also qualify a title: "Texas Equine Lease Agreement: Bella",
+ * "Equine Mortality Insurance Policy: Bella", "Health Certificate No: 12345".
+ * A line whose label itself titles a certificate, policy or contract is that
+ * title, not a form field — "Owner or Consignor Name:" titles nothing.
+ */
+function isFormField(line: string): boolean {
+  if (!FIELD_LINE.test(line)) return false;
+  const label = line.slice(0, line.indexOf(':'));
+  return ![HEALTH_CERTIFICATE_TEXT, INSURANCE_NAME, CONTRACT_NAME].some((name) => titleIndex(label, name) >= 0);
 }
 
 /** The one kind that matched; null when several did; undefined when none did. */

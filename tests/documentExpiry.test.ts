@@ -1101,6 +1101,13 @@ const CVI_EXPIRY_CORPUS: Array<[string, string, string]> = [
     '2026-07-15',
   ],
   [
+    'a certificate expiry date label, as reviewed',
+    'Certificate of Veterinary Inspection\nCertificate Expiry Date: 07/15/2026',
+    '2026-07-15',
+  ],
+  ['a CVI expiry date label, as reviewed', 'CVI Expiry Date: 07/15/2026', '2026-07-15'],
+  ['a certificate exp. date label', 'Health certificate\nCertificate Exp. Date: 07/15/2026', '2026-07-15'],
+  [
     'a preamble naming the CVI and a Coggins above the heading, as reviewed',
     'A current CVI and Coggins are required\nCertificate of Veterinary Inspection\nExpiration Date: 07/15/2026',
     '2026-07-15',
@@ -1404,6 +1411,15 @@ const UNPLACED_IDENTITY_CORPUS: Array<[string, string, string, string | null]> =
     null,
   ],
   ['a file name joining two papers', 'Coggins and CVI.pdf', '', 'Health certificate'],
+  ['a colon-qualified lease title, as reviewed', 'scan0061', 'Texas Equine Lease Agreement: Bella', 'Contract'],
+  ['a ranch-named lease title, as reviewed', 'scan0062', 'Rocking R Ranch Lease Agreement: Bella', 'Contract'],
+  ['a colon-qualified policy title, as reviewed', 'scan0063', 'Equine Mortality Insurance Policy: Bella', 'Insurance'],
+  [
+    'a four-line masthead over a qualified title',
+    'scan0064',
+    'UNITED STATES DEPARTMENT OF AGRICULTURE\nANIMAL AND PLANT HEALTH INSPECTION SERVICE\nVETERINARY SERVICES\nEQUINE INTERSTATE HEALTH CERTIFICATE',
+    'Health certificate',
+  ],
   [
     'a title with "to" later in its clause',
     'scan0060',
@@ -1530,7 +1546,24 @@ const REFERENCE_HEADING_CORPUS: Array<[string, DocumentRecord['type'], string, s
     'Blue River Mutual\nClaims Department\nInsurance Requirements\nExpiration Date: 06/15/2026',
     null,
   ],
+  [
+    'a requirements heading under a three-line masthead, as reviewed',
+    'Registration',
+    'CVI.pdf',
+    'USDA\nAPHIS\nVeterinary Services\nCVI Requirements for Interstate Travel\nExpiration Date: 07/15/2026',
+    null,
+  ],
+  ['a specimen title', 'Vet Record', 'Sample CVI.pdf', 'Certificate of Veterinary Inspection', null],
   // Controls: the papers themselves, including first lines that carry the same words.
+  ['a Coggins named for its sample, as reviewed', 'Coggins', 'Coggins Sample Results - 4471.pdf', '', 'Coggins'],
+  ['an EIA blood sample, as reviewed', 'Coggins', 'EIA Blood Sample 4471.pdf', '', 'Coggins'],
+  [
+    'a lab form whose fields come first',
+    'Coggins',
+    'Coggins.pdf',
+    'Accession: 4471\nSample ID: 99\nCoggins Test Instructions on file',
+    'Coggins',
+  ],
   [
     'a genuine CVI under a masthead',
     'Registration',
