@@ -925,14 +925,25 @@ test('a policy or agreement that mentions a health certificate keeps its own ide
   );
   assert.equal(expiryReminderItems(radar, []).length, 2, 'both stay in the attention set');
 
-  // With no name to go on and a body that points two ways, the radar refuses
-  // rather than presenting the paper as the wrong kind.
-  assert.equal(expiryKindOf({ ...agreement, title: 'scan0046' }), null);
+  // With no name to go on, the heading decides: this one titles an agreement
+  // and only mentions the certificate it requires, so it is a contract.
+  assert.equal(expiryKindOf({ ...agreement, title: 'scan0046' }), 'Contract');
+  // Likewise a heading that titles a policy and mentions the CVI it requires.
   assert.equal(
     expiryKindOf({
       ...policy,
       title: 'scan0047',
       extractedTextPreview: `Insurance policy number EQ-2. ${policy.extractedTextPreview}`,
+    }),
+    'Insurance',
+  );
+  // Evidence that titles two kinds is refused rather than presenting the paper
+  // as the wrong kind: an agreement heading over a line titled as a CVI.
+  assert.equal(
+    expiryKindOf({
+      ...agreement,
+      title: 'scan0048',
+      extractedTextPreview: 'Horse Purchase Agreement\nCertificate of Veterinary Inspection attached',
     }),
     null,
   );
@@ -1097,6 +1108,16 @@ const CVI_EXPIRY_CORPUS: Array<[string, string, string]> = [
   [
     'the same preamble in capitals',
     'A CURRENT CVI AND COGGINS ARE REQUIRED\nCertificate of Veterinary Inspection\nExpiration Date: 07/15/2026',
+    '2026-07-15',
+  ],
+  [
+    'a capitalised test line naming the CVI above the heading',
+    'EIA TEST REQUIRED FOR CVI\nCertificate of Veterinary Inspection\nExpiration Date: 07/15/2026',
+    '2026-07-15',
+  ],
+  [
+    'a cover line titling the CVI and naming a Coggins, above the heading',
+    'CVI Travel Packet — Coggins Enclosed\nCertificate of Veterinary Inspection\nExpiration Date: 07/15/2026',
     '2026-07-15',
   ],
   [
@@ -1320,9 +1341,23 @@ const UNPLACED_IDENTITY_CORPUS: Array<[string, string, string, string | null]> =
     null,
   ],
   [
-    'a heading pointing two ways',
+    // Corrected from null: the line is titled by the agreement and only mentions
+    // the certificate, which the heading rule now tells apart (fails with the old rule).
+    'an agreement heading that mentions a health certificate',
     'scan0046',
     'Stallion service agreement. A current health certificate is required before arrival.',
+    'Contract',
+  ],
+  [
+    'a first-line mention of a CVI',
+    'scan0050',
+    'A current CVI is required before delivery.\nExpiration Date: 07/15/2026',
+    null,
+  ],
+  [
+    'a first-line mention of insurance',
+    'scan0051',
+    'Proof of insurance is required before delivery.\nExpiration Date: 07/15/2026',
     null,
   ],
   ['an expiry label with nothing to say what it is', 'scan0044', 'Expiration Date: 06/15/2026', null],
@@ -1425,7 +1460,35 @@ const REFERENCE_HEADING_CORPUS: Array<[string, DocumentRecord['type'], string, s
     'Insurance Requirements:\nExpiration Date: 06/15/2026',
     null,
   ],
+  [
+    'a requirements heading below an agency masthead, as reviewed',
+    'Registration',
+    'CVI.pdf',
+    'USDA APHIS\nCVI Requirements for Interstate Travel\nExpiration Date: 07/15/2026',
+    null,
+  ],
+  [
+    'below a two-line masthead',
+    'Insurance',
+    'Insurance.pdf',
+    'Blue River Mutual\nClaims Department\nInsurance Requirements\nExpiration Date: 06/15/2026',
+    null,
+  ],
   // Controls: the papers themselves, including first lines that carry the same words.
+  [
+    'a genuine CVI under a masthead',
+    'Registration',
+    'CVI.pdf',
+    'USDA APHIS\nCertificate of Veterinary Inspection\nExpiration Date: 07/15/2026',
+    'Health certificate',
+  ],
+  [
+    'a reference phrase below the heading block',
+    'Coggins',
+    'Coggins.pdf',
+    'Equine Infectious Anemia Laboratory Test\nOwner: J. Smith\nHorse: Bella\nSee the Coggins Test Instructions on file',
+    'Coggins',
+  ],
   [
     'a genuine policy',
     'Insurance',
@@ -1472,6 +1535,67 @@ const REFERENCE_HEADING_CORPUS: Array<[string, DocumentRecord['type'], string, s
     'Insurance',
   ],
 ];
+
+/*
+ * A vet record is a health certificate only when it says it is one: its name,
+ * a heading that titles it one, or the formal name opening a line under an
+ * agency masthead. An exam that notes "A current CVI is required before
+ * interstate travel" mentions a certificate; reading it as one listed an
+ * ordinary exam as an expired CVI to replace.
+ */
+const VET_RECORD_IDENTITY_CORPUS: Array<[string, string, string, string | null]> = [
+  // [case, title, text, expected kind]
+  [
+    'an exam that mentions a CVI, as reviewed',
+    'Annual Vet Exam',
+    'A current CVI is required before interstate travel',
+    null,
+  ],
+  ['the same in capitals', 'Annual Vet Exam', 'A CURRENT CVI IS REQUIRED BEFORE INTERSTATE TRAVEL', null],
+  [
+    'a later line mentioning a certificate',
+    'Spring Exam',
+    'Exam Date: 05/01/2026\nHealth certificate to follow.',
+    null,
+  ],
+  ['an exam with a Coggins note', 'Annual Vet Exam', 'Coggins drawn today', null],
+  ['CVI by name', 'CVI 2026', '', 'Health certificate'],
+  [
+    'CVI by heading',
+    'scan0042',
+    'Equine Interstate Health Certificate\nInspection Date: 05/01/2026',
+    'Health certificate',
+  ],
+  [
+    'CVI under an agency heading',
+    'scan0042',
+    'TEXAS ANIMAL HEALTH COMMISSION\nCertificate of Veterinary Inspection',
+    'Health certificate',
+  ],
+  ['a lowercase OCR heading', 'scan0042', 'certificate of veterinary inspection\nOrigin: Texas', 'Health certificate'],
+];
+
+test('a vet record is a health certificate only when it says it is one', () => {
+  const failures = VET_RECORD_IDENTITY_CORPUS.flatMap(([name, title, text, expected]) => {
+    const actual = expiryKindOf({ type: 'Vet Record', title, extractedTextPreview: text });
+    return actual === expected ? [] : [`${name}: expected ${expected}, got ${actual}`];
+  });
+  assert.deepEqual(failures, [], `${failures.length} of ${VET_RECORD_IDENTITY_CORPUS.length} rows wrong`);
+  const radar = buildExpiryRadar(
+    [
+      doc({
+        type: 'Vet Record',
+        horseId: 'h1',
+        title: 'Annual Vet Exam',
+        extractedTextPreview: 'A current CVI is required before interstate travel',
+        entities: { examDate: '2026-05-01' },
+      }),
+    ],
+    horses,
+    NOW,
+  );
+  assert.deepEqual(radar.items, [], 'an ordinary exam is not an expired certificate');
+});
 
 test('a heading that says the paper is about a certificate, policy or contract overrides its type and name', () => {
   const failures = REFERENCE_HEADING_CORPUS.flatMap(([name, type, title, text, expected]) => {

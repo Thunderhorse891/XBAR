@@ -280,22 +280,42 @@ const HEALTH_CERTIFICATE_TEXT =
   /health\s+certificate|certificate\s+of\s+veterinary\s+inspection|\bCVI\b|interstate\s+health/i;
 
 /*
- * The certificate's heading is the first line that names it as a title: the
- * name opens the line, after at most a few capitalised qualifiers ("Equine
- * Interstate Health Certificate", "TEXAS CVI"). A preamble that mentions it
- * in a sentence ("A current CVI and Coggins are required") is not its
- * heading, and neither is a line that also names a vaccine or test, which in
- * capitals would otherwise pass as a title. With no such line the first
- * mention is used, and a component named there ends the header at once, so
- * the certificate falls back to its inspection window.
+ * A line TITLES a paper with a name when the name opens it, after at most a
+ * few title words — "Equine Interstate Health Certificate", "TEXAS CVI",
+ * "Stallion service agreement", "Horse Purchase Agreement". A sentence that
+ * mentions the name is not a title: "A current CVI is required", "Proof of
+ * insurance is required", "This sale is subject to the existing lease
+ * agreement". What gives a sentence away ahead of the name is its grammar —
+ * an article, a determiner, a verb or a preposition — not its capitals, which
+ * OCR and form mastheads use freely and sentence-case titles don't.
  */
-const TITLE_QUALIFIERS = /^[ \t]*(?:[A-Z][\w.&'-]*[ \t]+){0,4}$/;
+const TITLE_WORDS = 4;
+const SENTENCE_WORD =
+  /^(?:a|an|the|this|that|these|those|your|our|their|any|all|each|every|is|are|was|were|be|been|must|will|shall|should|may|can|please|require[sd]?|need|needs|provides?|provided|bring|send|attach(?:ed)?|includes?|included|proof|copy|current|valid|of|for|to|with|without|before|after|per|under|by|from|and|or|if|when)$/i;
 
+/** Where the name titles this line, or -1 when it is absent or only mentioned. */
+function titleIndex(line: string, name: RegExp): number {
+  const at = line.search(name);
+  if (at < 0) return -1;
+  const words = line.slice(0, at).trim().split(/\s+/).filter(Boolean);
+  const mentioned =
+    words.length > TITLE_WORDS || words.some((word) => SENTENCE_WORD.test(word.replace(/[^\w'-]/g, '')));
+  return mentioned ? -1 : at;
+}
+
+/*
+ * The certificate's heading is the first line that titles it. A preamble that
+ * mentions it is not its heading, and neither is a line that also names a
+ * vaccine or test ("CVI Travel Packet — Coggins Enclosed"), whose component
+ * would otherwise close the header before it began. With no such line the
+ * first mention is used, and a component named there ends the header at once,
+ * so the certificate falls back to its inspection window.
+ */
 function certificateHeadingIndex(text: string): number {
   for (const line of text.matchAll(/[^\r\n]+/g)) {
-    const name = line[0].search(HEALTH_CERTIFICATE_TEXT);
-    if (name < 0 || COMPONENT_SECTION.test(line[0])) continue;
-    if (TITLE_QUALIFIERS.test(line[0].slice(0, name))) return (line.index ?? 0) + name;
+    if (COMPONENT_SECTION.test(line[0])) continue;
+    const name = titleIndex(line[0], HEALTH_CERTIFICATE_TEXT);
+    if (name >= 0) return (line.index ?? 0) + name;
   }
   return text.search(HEALTH_CERTIFICATE_TEXT);
 }
@@ -374,14 +394,17 @@ export function expiryKindOf(
   document: Pick<DocumentRecord, 'type' | 'title' | 'extractedTextPreview'>,
 ): ExpiryKind | null {
   if (REFERENCE_DOCUMENT.test(document.title ?? '')) return null;
-  if (REFERENCE_HEADING.test(headingOf(document.extractedTextPreview ?? ''))) return null;
+  if (headingBlock(document.extractedTextPreview ?? '').some((line) => REFERENCE_HEADING.test(line))) return null;
   if (document.type === 'Coggins') return 'Coggins';
   if (document.type === 'Insurance') return 'Insurance';
   if (document.type === 'Breeding Contract') return 'Contract';
   const title = document.title ?? '';
   const text = document.extractedTextPreview ?? '';
   if (document.type === 'Vet Record') {
-    return HEALTH_CERTIFICATE_TEXT.test(`${title} ${text}`) ? 'Health certificate' : null;
+    // A vet record is a certificate only when it says it is one, never because
+    // it mentions one: an exam noting "A current CVI is required" is an exam.
+    const titled = HEALTH_CERTIFICATE_TEXT.test(title) || titleIndex(headingOf(text), HEALTH_CERTIFICATE_TEXT) >= 0;
+    return titled || CVI_TITLE_LINE.test(text) ? 'Health certificate' : null;
   }
   if (!UNPLACED_TYPES.has(document.type)) return null;
   const byName = onlyKind([
@@ -396,9 +419,9 @@ export function expiryKindOf(
   if (REFERENCE_DOCUMENT.test(heading)) return null;
   return (
     onlyKind([
-      ['Health certificate', HEALTH_CERTIFICATE_TEXT.test(heading) || CVI_TITLE_LINE.test(text)],
-      ['Insurance', INSURANCE_NAME.test(heading) || INSURANCE_FIELD_LINE.test(text)],
-      ['Contract', CONTRACT_NAME.test(heading) || CONTRACT_TITLE_LINE.test(text)],
+      ['Health certificate', titleIndex(heading, HEALTH_CERTIFICATE_TEXT) >= 0 || CVI_TITLE_LINE.test(text)],
+      ['Insurance', titleIndex(heading, INSURANCE_NAME) >= 0 || INSURANCE_FIELD_LINE.test(text)],
+      ['Contract', titleIndex(heading, CONTRACT_NAME) >= 0 || CONTRACT_TITLE_LINE.test(text)],
     ]) ?? null
   );
 }
@@ -421,7 +444,23 @@ const INSURANCE_FIELD_LINE = opensALineWith(INSURANCE_TEXT);
 const CONTRACT_TITLE_LINE = opensALineWith(CONTRACT_TEXT);
 
 function headingOf(text: string): string {
-  return (text.split(/[\r\n]+/).find((line) => line.trim()) ?? '').slice(0, HEADING_LENGTH);
+  return headingBlock(text)[0] ?? '';
+}
+
+/*
+ * The lines a paper's heading can occupy. A reference sheet's title often sits
+ * under an agency or insurer masthead ("USDA APHIS" / "CVI Requirements for
+ * Interstate Travel"), so the reference check reads this block, not the first
+ * line alone. Identity still comes from the first line: the block is for
+ * refusing, where a masthead above a title must not hide it.
+ */
+const HEADING_LINES = 3;
+function headingBlock(text: string): string[] {
+  return text
+    .split(/[\r\n]+/)
+    .filter((line) => line.trim())
+    .slice(0, HEADING_LINES)
+    .map((line) => line.slice(0, HEADING_LENGTH));
 }
 
 /** The one kind that matched; null when several did; undefined when none did. */
