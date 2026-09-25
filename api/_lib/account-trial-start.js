@@ -1,9 +1,9 @@
-import { readJsonBody, sendJson } from '../_lib/http.js';
-import { getSupabaseAdmin, requireWorkspaceAccess } from '../_lib/supabase-admin.js';
-import { startWorkspaceTrial } from '../_lib/trial-status.js';
-import { trialStartSchema, parseBody } from '../_lib/validation.js';
-import { enforceRateLimit } from '../_lib/rate-limit.js';
-import { applyCors } from '../_lib/cors.js';
+import { readJsonBody, sendJson } from './http.js';
+import { getSupabaseAdmin, requireWorkspaceAccess } from './supabase-admin.js';
+import { startWorkspaceTrial } from './trial-status.js';
+import { trialStartSchema, parseBody } from './validation.js';
+import { enforceRateLimit } from './rate-limit.js';
+import { applyCors } from './cors.js';
 
 /*
  * Start the workspace's 14-day Professional trial.

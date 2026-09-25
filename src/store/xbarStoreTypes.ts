@@ -109,7 +109,7 @@ export type XbarStore = {
    * Record a 14-day Professional trial start on this workspace.
    *
    * The server is what writes the trial for cloud workspaces
-   * (api/trial/start.js); this applies the returned start time locally so the
+   * (api/account/[action].js, action trial-start); this applies the returned start time locally so the
    * workspace sees Professional immediately, and it is also the whole path
    * for local-only workspaces with no server to call. One trial per
    * workspace: a recorded start can never be restarted.

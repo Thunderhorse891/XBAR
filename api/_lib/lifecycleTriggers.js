@@ -108,7 +108,7 @@ async function sendOrRelease(supabase, { key, to, email, sendEmailFn = realSendE
   };
 }
 
-// WELCOME — called once per user from api/account/send-welcome.js. The
+// WELCOME — called once per user from api/account/[action].js (action `send-welcome`). The
 // workspace may not exist yet (it is created lazily on first save), so the
 // claim is keyed on the USER, not the workspace.
 export async function sendWelcomeForUser({ supabase, user, sendEmailFn = realSendEmail }) {

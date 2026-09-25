@@ -109,7 +109,8 @@ test('browser-called endpoints declare an explicit, allow-listed CORS policy', a
     'api/_lib/buyer-inquiries.js',
     'api/invite.js',
     'api/stripe/checkout.js',
-    'api/account/delete.js',
+    'api/_lib/account-delete.js',
+    'api/_lib/account-trial-start.js',
     'api/sale-packets.js',
     'api/_lib/horses-import.js',
     'api/_lib/horses-export.js',
@@ -139,7 +140,9 @@ test('every request-driven endpoint enforces a per-IP rate limit', async () => {
     'api/_lib/buyer-inquiries.js',
     'api/invite.js',
     'api/stripe/checkout.js',
-    'api/account/delete.js',
+    'api/_lib/account-delete.js',
+    'api/_lib/account-send-welcome.js',
+    'api/_lib/account-trial-start.js',
     'api/sale-packets.js',
     'api/_lib/horses-import.js',
     'api/_lib/horses-export.js',
@@ -154,7 +157,7 @@ test('every request-driven endpoint enforces a per-IP rate limit', async () => {
 });
 
 test('cron secret comparison is constant-time and invite links use server config', async () => {
-  const remindersSource = await readFile(fromRoot('api/reminders/run.js'), 'utf8');
+  const remindersSource = await readFile(fromRoot('api/_lib/reminders-run.js'), 'utf8');
   assert.match(remindersSource, /timingSafeEqual/);
   assert.doesNotMatch(remindersSource, /provided !== cronSecret/);
   // Invite redirect prefers the documented server-side PUBLIC_APP_URL.
