@@ -36,6 +36,30 @@ function buildFrom(defaultFrom, fromName, fromEmail) {
   return `"${name}" <${address}>`;
 }
 
+/**
+ * Wrap outbound HTML in the XBAR brand shell: a dark header with the
+ * letterspaced wordmark, the caller's content on white, and a muted footer.
+ * Token hexes are inlined (email clients cannot rely on the app's CSS
+ * variables): --xbar-black #0b0d0f, --xbar-warm-white #f5f2ec,
+ * --accent-edge #0078d7. No images — remote art is blocked by most inboxes.
+ */
+const EMAIL_FONT_STACK = "'Outfit', -apple-system, 'Segoe UI', Arial, sans-serif";
+
+export function brandEmailHtml(html, text) {
+  const inner =
+    html || (text ? `<pre style="margin:0;white-space:pre-wrap;font-family:${EMAIL_FONT_STACK};">${text}</pre>` : '');
+  return (
+    `<div style="font-family:${EMAIL_FONT_STACK};background:#f5f6f7;padding:24px 16px;">` +
+    `<div style="max-width:560px;margin:0 auto;background:#ffffff;border:1px solid #e0e3e6;border-radius:10px;overflow:hidden;">` +
+    `<div style="background:#0b0d0f;padding:18px 24px;border-bottom:2px solid #0078d7;">` +
+    `<span style="color:#f5f2ec;font-size:15px;font-weight:800;letter-spacing:0.28em;">XBAR</span>` +
+    `</div>` +
+    `<div style="padding:24px;color:#202428;font-size:14px;line-height:1.6;">${inner}</div>` +
+    `<div style="padding:14px 24px;border-top:1px solid #e0e3e6;color:#6b737c;font-size:12px;">Sent from XBAR — the private ranch operating system.</div>` +
+    `</div></div>`
+  );
+}
+
 export async function sendEmail({ to, subject, html, text, fromName, fromEmail, replyTo }) {
   const defaultFrom = process.env.EMAIL_FROM_ADDRESS || 'XBAR <no-reply@xbar.app>';
   const from = buildFrom(defaultFrom, fromName, fromEmail);
@@ -43,6 +67,8 @@ export async function sendEmail({ to, subject, html, text, fromName, fromEmail, 
   if (!to) {
     return { ok: false, skipped: true, message: 'No recipient email available.' };
   }
+
+  const brandedHtml = brandEmailHtml(html, text);
 
   if (process.env.RESEND_API_KEY) {
     const response = await fetch('https://api.resend.com/emails', {
@@ -55,7 +81,7 @@ export async function sendEmail({ to, subject, html, text, fromName, fromEmail, 
         from,
         to: [to],
         subject,
-        html,
+        html: brandedHtml,
         text,
         ...(replyToAddress ? { reply_to: replyToAddress } : {}),
       }),
@@ -87,7 +113,7 @@ export async function sendEmail({ to, subject, html, text, fromName, fromEmail, 
         subject,
         content: [
           { type: 'text/plain', value: text || '' },
-          { type: 'text/html', value: html || `<pre>${text || ''}</pre>` },
+          { type: 'text/html', value: brandedHtml },
         ],
       }),
     });
