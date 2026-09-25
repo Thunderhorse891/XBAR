@@ -74,6 +74,8 @@ its password as part of an automated drill.
 ## Alerting
 
 Enable notifications for failed `database-backup` and `production-monitor` Actions runs.
-The uptime workflow also checks that a successful backup run is recent; a stopped
-backup schedule cannot silently remain green. An absent successful restore receipt
+The uptime workflow also checks that a successful backup run is recent and its
+matching, nonempty encrypted artifact has not been deleted or expired; a stopped
+backup schedule or missing archive cannot silently remain green. Artifact metadata
+does not prove decryption or restoration. An absent successful restore receipt
 keeps go-live preflight blocked even if scheduled dumps succeed.

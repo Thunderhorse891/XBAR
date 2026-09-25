@@ -150,9 +150,13 @@ if (probeUrl) {
   const origin = probeUrl.replace(/\/+$/, '');
   console.log(`\nProbing ${origin}/api/health ...`);
   try {
-    const response = await fetch(`${origin}/api/health`, { headers: { accept: 'application/json' } });
+    const response = await fetch(`${origin}/api/health`, {
+      headers: { accept: 'application/json' },
+      signal: AbortSignal.timeout(15000),
+    });
     if (!response.ok) throw new Error(`Health endpoint returned HTTP ${response.status}`);
     const health = await response.json();
+    if (health?.ok !== true) throw new Error('Health endpoint did not report a successful health verdict.');
     console.log(`  HTTP ${response.status}`);
     for (const [key, value] of Object.entries(health.subsystems ?? health)) {
       if (typeof value === 'boolean') {

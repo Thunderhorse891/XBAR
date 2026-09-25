@@ -74,6 +74,69 @@ test('watchdog refuses missing, stale, future and failed cron records', async ()
     assert.equal(healthyCron(value, now), false);
 });
 
+test('backup watchdog requires a retained archive, not just a successful workflow', async (t) => {
+  const { monitor } = await import('../../scripts/production-monitor.mjs');
+  const originalFetch = globalThis.fetch;
+  const keys = ['GITHUB_REPOSITORY', 'GITHUB_TOKEN', 'UPSTASH_REDIS_REST_URL', 'UPSTASH_REDIS_REST_TOKEN'];
+  const previous = Object.fromEntries(keys.map((key) => [key, process.env[key]]));
+  Object.assign(process.env, {
+    GITHUB_REPOSITORY: 'Thunderhorse891/XBAR',
+    GITHUB_TOKEN: 'fixture',
+    UPSTASH_REDIS_REST_URL: 'https://fixture-redis.invalid',
+    UPSTASH_REDIS_REST_TOKEN: 'fixture',
+  });
+  const run = {
+    id: 123,
+    head_branch: 'main',
+    status: 'completed',
+    conclusion: 'success',
+    created_at: new Date(Date.now() - 1000).toISOString(),
+  };
+  const archive = { name: 'encrypted-database-123', expired: false, size_in_bytes: 4096 };
+  let artifactResponse = { ok: true, artifacts: [archive] };
+  let artifactReads = 0;
+  globalThis.fetch = async (url) => {
+    if (url === 'https://xbar-horse-management-app.vercel.app/api/health')
+      return { ok: true, json: async () => ({ ok: true }) };
+    if (url === 'https://fixture-redis.invalid')
+      return { ok: true, json: async () => ({ result: JSON.stringify({ completedAt: Date.now() - 1000 }) }) };
+    if (url.includes('/actions/workflows/database-backup.yml/runs?'))
+      return { ok: true, json: async () => ({ workflow_runs: [run] }) };
+    if (url === 'https://api.github.com/repos/Thunderhorse891/XBAR/actions/runs/123/artifacts?per_page=100') {
+      artifactReads++;
+      return { ok: artifactResponse.ok, json: async () => ({ artifacts: artifactResponse.artifacts }) };
+    }
+    throw Error('Unexpected monitor request');
+  };
+  try {
+    await t.test('retained archive control', async () => {
+      assert.deepEqual(await monitor(), []);
+      assert.equal(artifactReads, 1, 'the archive must be checked before reporting success');
+    });
+    for (const [label, response] of [
+      ['deleted artifact', { ok: true, artifacts: [] }],
+      ['expired artifact', { ok: true, artifacts: [{ ...archive, expired: true }] }],
+      ['missing expiration metadata', { ok: true, artifacts: [{ ...archive, expired: undefined }] }],
+      ['empty artifact', { ok: true, artifacts: [{ ...archive, size_in_bytes: 0 }] }],
+      ['different artifact', { ok: true, artifacts: [{ ...archive, name: 'test-results' }] }],
+      ['artifact API failure', { ok: false, artifacts: [archive] }],
+      ['malformed artifact list', { ok: true, artifacts: null }],
+    ])
+      await t.test(label, async () => {
+        artifactResponse = response;
+        const failures = await monitor();
+        assert.equal(failures.length, 1, `backup accepted ${label}`);
+        assert.match(failures[0], /backup/i);
+      });
+  } finally {
+    globalThis.fetch = originalFetch;
+    for (const key of keys) {
+      if (previous[key] === undefined) delete process.env[key];
+      else process.env[key] = previous[key];
+    }
+  }
+});
+
 test('both real cron routes retain method/auth gates; unknown routes cannot write a heartbeat', async () => {
   const { default: handler } = await import('../../api/reminders/[action].js');
   process.env.CRON_SECRET = 'fixture-secret';

@@ -70,7 +70,12 @@ DSNs/account configuration and real alert delivery are blocked on Erin.
 
 The independent GitHub Actions watchdog checks `/api/health` every 15 minutes,
 both successful cron completion timestamps (26-hour deadline), and successful
-scheduled backup age (36-hour deadline). GitHub schedules can be delayed and
+backup age (36-hour deadline), including whether that run's encrypted artifact
+is still retained and nonempty. A green run with a deleted or expired artifact
+fails the check. This metadata check does not replace archive decryption or a
+restore drill. Preflight also rejects HTTP 200 health responses whose `ok` verdict
+is missing or false; its optional live probe times out after 15 seconds.
+GitHub schedules can be delayed and
 disabled after repository inactivity; this is best-effort free monitoring, not
 an uptime SLA. Cron records live in shared Redis and expire after three days.
 Missing configuration/records, failed jobs and partial reminder failures cannot
