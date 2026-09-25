@@ -29,6 +29,7 @@ import {
   lifecycleEventKey,
 } from './lifecycleEmails.js';
 import { sendEmail as realSendEmail } from './email.js';
+import { readTrialFromPayload } from './trial-status.js';
 
 const EVENT_TYPE_PREFIX = 'xbar.lifecycle.';
 
@@ -133,10 +134,23 @@ export async function sendWelcomeForUser({ supabase, user, sendEmailFn = realSen
 
 // TRIAL REMINDERS — one pass over trial workspaces. Pure selection logic
 // takes explicit params; the cron wrapper supplies supabase + now.
+function isRecord(value) {
+  return value !== null && typeof value === 'object' && !Array.isArray(value);
+}
+
 export function selectTrialReminders({ rows, nowIso }) {
   const selected = [];
   for (const row of rows || []) {
-    const trialEndDate = resolveTrialEndDate(row?.payload);
+    const payload = row?.payload;
+    // A trial OBJECT is governed by the strict trial contract — the same one
+    // entitlement evaluation uses (plan, both timestamps, window length). A
+    // record that fails it is not a trial, so it must not schedule reminders
+    // even though its endsAt looks plausible. Rows with no trial object keep
+    // the legacy date-field behavior below; only the strict-contract shape is
+    // gated, so this changes nothing for date-only payloads.
+    const trialSlot = isRecord(payload) ? payload.trial : undefined;
+    if (isRecord(trialSlot) && !readTrialFromPayload(payload)) continue;
+    const trialEndDate = resolveTrialEndDate(payload);
     if (!trialEndDate) continue;
     // A workspace that is paying is never a trial workspace; never email it.
     if (row?.billing_state === 'Active') continue;
