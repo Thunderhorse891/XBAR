@@ -477,6 +477,28 @@ test('selectTrialReminders ignores malformed trial records the entitlement contr
     },
     { workspace_id: 'valid', billing_state: 'Inactive', payload: { trial: trial() } },
     { workspace_id: 'legacy', billing_state: 'Inactive', payload: { trial_end: '2026-10-07' } },
+    // Legacy NESTED trial objects predate the trial mechanics and keep their
+    // historical reminder behavior — only modern-shaped records are gated.
+    { workspace_id: 'legacy-nested-end', billing_state: 'Inactive', payload: { trial: { end: '2026-10-07' } } },
+    {
+      workspace_id: 'legacy-nested-start',
+      billing_state: 'Inactive',
+      payload: { trial: { start: '2026-09-23' } },
+    },
+    // A modern-shaped record carrying legacy fields is still judged by the
+    // strict contract: wrong plan means no reminders.
+    {
+      workspace_id: 'modern-bad-plan-legacy-end',
+      billing_state: 'Inactive',
+      payload: {
+        trial: {
+          startedAt: '2026-09-23T00:00:00.000Z',
+          endsAt: '2026-10-07T00:00:00.000Z',
+          plan: 'Enterprise',
+          end: '2026-10-07',
+        },
+      },
+    },
   ];
   const selected = selectTrialReminders({ rows, nowIso });
   const ids = selected.map((s) => s.workspaceId);
@@ -484,8 +506,11 @@ test('selectTrialReminders ignores malformed trial records the entitlement contr
   assert.ok(!ids.includes('bad-start'), 'unparseable startedAt schedules no reminder');
   assert.ok(!ids.includes('long-window'), 'overlong window schedules no reminder');
   assert.ok(!ids.includes('inverted'), 'inverted window schedules no reminder');
+  assert.ok(!ids.includes('modern-bad-plan-legacy-end'), 'modern-shaped record with wrong plan schedules no reminder');
   assert.ok(ids.includes('valid'), 'a valid trial record is still selected');
   assert.ok(ids.includes('legacy'), 'legacy date-only fields keep their behavior when no trial object is present');
+  assert.ok(ids.includes('legacy-nested-end'), 'legacy nested trial.end keeps its reminder behavior');
+  assert.ok(ids.includes('legacy-nested-start'), 'legacy nested trial.start keeps its reminder behavior');
 });
 
 test('processTrialReminders sends once per trial period and never double-sends', async () => {
