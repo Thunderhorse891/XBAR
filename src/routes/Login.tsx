@@ -120,8 +120,34 @@ export default function Login() {
 
   useEffect(() => {
     if (callbackFailed) return;
-    if (cloud.session && cloud.status === 'signed-in') navigate(redirectTarget, { replace: true });
-  }, [callbackFailed, cloud.session, cloud.status, navigate, redirectTarget]);
+    if (cloud.session && cloud.status === 'signed-in') {
+      /*
+       * A session arriving with mode=signup is a completed signup: either the
+       * immediate session from signUpWithPassword or the return from the
+       * email-confirmation link (whose redirect keeps ?mode=signup). That is
+       * the one moment the client knows the account is new, so it is when the
+       * welcome email is requested. The guard lives in sessionStorage so a
+       * failed attempt retries on the next session establishment; the server
+       * records the send per account, so a retry can never double-send.
+       */
+      if (authMode === 'signup') {
+        const userId = cloud.session.user?.id || '';
+        const guardKey = `xbar-welcome-sent:${userId}`;
+        if (userId && !sessionStorage.getItem(guardKey)) {
+          void cloud.requestWelcomeEmail().then((sent) => {
+            if (sent) {
+              try {
+                sessionStorage.setItem(guardKey, '1');
+              } catch {
+                // Storage being unavailable must not break the redirect.
+              }
+            }
+          });
+        }
+      }
+      navigate(redirectTarget, { replace: true });
+    }
+  }, [callbackFailed, cloud.session, cloud.status, navigate, redirectTarget, authMode, cloud]);
 
   /*
    * A callback that failed before it could produce a session.

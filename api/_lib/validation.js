@@ -29,6 +29,10 @@ export const checkoutSchema = z.object({
   seatCount: z.unknown().optional(),
 });
 
+export const trialStartSchema = z.object({
+  workspaceId: z.string().trim().min(1, 'Workspace id is required.'),
+});
+
 export const telemetrySchema = z.object({
   workspaceId: z.string().trim().optional().default(''),
   eventName: z.string().trim().max(120).optional().default('runtime.event'),
@@ -76,6 +80,15 @@ export const buyerResponseSchema = z.object({
     .trim()
     .min(1)
     .transform((value) => value.slice(0, MAX_BUYER_MESSAGE_CHARS)),
+});
+
+// Buyer media signing: the storage path is validated again in the handler
+// (shape + membership in the listing's gallery), so the schema only enforces
+// that a value is present and bounded.
+export const buyerMediaSchema = z.object({
+  sharePath: z.string().trim().optional().default(''),
+  shareToken: z.string().trim().optional().default(''),
+  storagePath: z.string().trim().min(1).max(500),
 });
 
 // CSV imports are bounded so a single request cannot buffer unbounded input

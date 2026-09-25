@@ -168,7 +168,7 @@ test('the real handler refuses failed prerequisites and shared-workspace deletio
     if (url.pathname === '/rest/v1/workspace_memberships' && method === 'DELETE') return failure();
     throw new Error(`Unexpected request: ${method} ${url.pathname}`);
   });
-  const { default: handler } = await import('../../api/account/delete.js');
+  const { default: handler } = await import('../../api/_lib/account-delete.js');
   for (scenario of ['owned', 'members', 'transfer', 'removal']) {
     writes = [];
     const req = {
@@ -248,7 +248,7 @@ test('a malformed plan sweeps nothing rather than the whole bucket', () => {
 test('the deletion endpoint actually uses those prefix lists', () => {
   // A rule nothing calls is not a fix. This pins the wiring, since the sweep
   // itself needs a live Supabase project to exercise end to end.
-  const source = readFileSync(new URL('../../api/account/delete.js', import.meta.url), 'utf8');
+  const source = readFileSync(new URL('../../api/_lib/account-delete.js', import.meta.url), 'utf8');
   assert.ok(source.includes('documentPrefixesToPurge('), 'document prefixes are not used by the endpoint');
   assert.ok(source.includes('mediaPrefixesToPurge('), 'media prefixes are not used by the endpoint');
   assert.ok(!source.includes('removeUserStorage'), 'the uploader-only sweep is still present');

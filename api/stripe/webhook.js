@@ -8,6 +8,7 @@ import {
 } from '../_lib/subscription-status.js';
 import { collectStripePages } from '../_lib/checkout-session.js';
 import { getSupabaseAdmin } from '../_lib/supabase-admin.js';
+import { handleInvoicePaymentFailed } from '../_lib/lifecycleTriggers.js';
 
 export const config = {
   api: {
@@ -137,9 +138,48 @@ async function syncWorkspaceSubscription({
   const nextProfile = buildSubscriptionProfile({
     tier,
     billingStatus: status,
+    // The period is a property of the price id: a Stripe Price pins its own
+    // billing interval, so the line item's price id is what the purchase was
+    // billed on — on the sibling path too, where priceId is the sibling's.
+    priceId,
     renewalDate: currentPeriodEnd ? new Date(currentPeriodEnd * 1000).toISOString().slice(0, 10) : '',
     existingUsage,
   });
+
+  /*
+   * An unrecognized price on a NON-entitling event must not erase the period
+   * the workspace was actually billed on. buildSubscriptionProfile reports
+   * null for an unknown price id rather than guessing, so carry the stored
+   * period forward instead of writing null over it. An entitling status with
+   * an unknown price never reaches here: resolveWebhookTier refuses it above.
+   */
+  if (nextProfile.billingPeriod == null) {
+    const storedPeriod = existingProfile?.payload?.billingPeriod;
+    nextProfile.billingPeriod = storedPeriod === 'monthly' || storedPeriod === 'annual' ? storedPeriod : null;
+  }
+
+  /*
+   * One trial per workspace, ever: the trial record lives in the payload and
+   * buildSubscriptionProfile does not know about it, so writing the fresh
+   * profile over the stored one would erase it. A workspace that trialed,
+   * bought, then canceled would then read as never-trialed and get a second
+   * free trial. Carry the stored record forward, the same way the billing
+   * period is carried above.
+   *
+   * This carry covers the sequential case, including databases that predate
+   * the RPC-side merge. It is NOT sufficient on its own: it reads the trial
+   * from a SELECT taken before xbar_apply_subscription_event takes its
+   * advisory lock, so a trial that starts in that window would still be
+   * erased by the full payload replace. The authoritative merge happens
+   * inside the RPC, under the lock, against the current row
+   * (supabase/migrations/20260924223000_preserve_trial_in_event_rpc.sql) —
+   * this copy is the pre-migration fallback, not the guarantee.
+   */
+  const storedPayload = existingProfile?.payload;
+  const storedTrial = storedPayload && typeof storedPayload === 'object' ? storedPayload.trial : undefined;
+  if (storedTrial && typeof storedTrial === 'object') {
+    nextProfile.trial = storedTrial;
+  }
 
   /*
    * One call, because the ordering check and the three writes have to be
@@ -167,6 +207,11 @@ async function syncWorkspaceSubscription({
     p_tier: tier,
     p_billing_state: nextProfile.billingState,
     p_monthly_rate: nextProfile.monthlyRate,
+    // The period the subscription was bought on. Null when the price id is
+    // unrecognized; the function preserves the stored column on null rather
+    // than wiping it, and the payload above already carried the stored period
+    // forward for the same case.
+    p_billing_period: nextProfile.billingPeriod,
     p_profile: nextProfile,
     p_customer_id: customerId || '',
     p_subscription_id: subscriptionId || '',
@@ -335,6 +380,34 @@ export default async function handler(req, res) {
           payload,
           entitlementFromSibling,
         });
+      }
+    }
+
+    /*
+     * Dunning: a payment failed. One notice per INVOICE (Stripe fires this
+     * event on every failed attempt, each with its own event id; the claim
+     * inside handleInvoicePaymentFailed dedupes on the invoice id so the
+     * customer is not emailed on every retry).
+     *
+     * A failed send returns a non-2xx so Stripe retries the delivery; the
+     * billing replay guard above already dedupes by event id, and the dunning
+     * claim is released on failure, so a retry re-sends rather than
+     * double-sends.
+     */
+    if (event.type === 'invoice.payment_failed') {
+      const supabaseForDunning = getSupabaseAdmin();
+      if (!supabaseForDunning) {
+        return sendJson(res, 503, { ok: false, message: 'Supabase admin credentials are not configured.' });
+      }
+      const dunning = await handleInvoicePaymentFailed({
+        supabase: supabaseForDunning,
+        stripe,
+        invoice: payload,
+        eventId: event.id,
+        billingPortalUrl: process.env.VITE_STRIPE_BILLING_PORTAL_URL || process.env.STRIPE_BILLING_PORTAL_URL || '',
+      });
+      if (!dunning.ok && !dunning.skipped) {
+        return sendJson(res, 502, { ok: false, message: dunning.message });
       }
     }
 

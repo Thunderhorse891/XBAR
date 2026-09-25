@@ -1,5 +1,6 @@
 import { subscriptionPlans, isKnownTier } from './subscription-plans.js';
 import { BASELINE_TIER, entitledTierForBillingState, isKnownBillingState } from './subscription-status.js';
+import { TRIAL_PLAN_TIER, getTrialState, readTrialFromPayload, trialDaysRemaining } from './trial-status.js';
 import { isCompedEmail } from './comp-access.js';
 
 const TIER_ORDER = ['Starter', 'Professional', 'Ranch Ops', 'Enterprise'];
@@ -39,7 +40,7 @@ function usageUnavailable(subject) {
 export async function getWorkspaceEntitlements(supabase, workspaceId, userEmail) {
   const { data, error } = await supabase
     .from('workspace_subscription_profiles')
-    .select('tier, billing_state')
+    .select('tier, billing_state, payload')
     .eq('workspace_id', workspaceId)
     .maybeSingle();
 
@@ -59,6 +60,16 @@ export async function getWorkspaceEntitlements(supabase, workspaceId, userEmail)
 
   let effectiveTier = entitledTierForBillingState(tier, billingState);
 
+  // The 14-day Professional trial. Evaluated from the stored record against
+  // the server clock at read time, so expiry needs no job and no second write.
+  // It only ever raises a baseline workspace — a workspace the billing state
+  // already entitles keeps what it has, and a malformed record grants nothing.
+  const trial = readTrialFromPayload(data?.payload);
+  const trialState = getTrialState(trial);
+  if (trialState === 'active' && effectiveTier === BASELINE_TIER) {
+    effectiveTier = TRIAL_PLAN_TIER;
+  }
+
   // Operator comp: an allowlisted email (env XBAR_COMP_EMAILS) resolves to full
   // entitlements so internal/QA/owner accounts can exercise every feature. Off
   // by default — an empty allowlist changes nothing for real customers.
@@ -74,6 +85,11 @@ export async function getWorkspaceEntitlements(supabase, workspaceId, userEmail)
     effectiveTier,
     billingState,
     comped,
+    trial: {
+      status: trialState,
+      endsAt: trial ? trial.endsAt.toISOString() : null,
+      daysRemaining: trialDaysRemaining(trial),
+    },
     limits: subscriptionPlans[effectiveTier].limits,
   };
 }

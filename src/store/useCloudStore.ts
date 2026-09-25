@@ -165,6 +165,14 @@ type CloudStore = {
   verifyEmailCode: (email: string, code: string) => Promise<CloudActionResult>;
   signUpWithPassword: (email: string, password: string) => Promise<CloudSignUpResult>;
   resendSignUpConfirmation: (email: string) => Promise<CloudActionResult>;
+  /*
+   * Best-effort welcome email after signup. The server verifies the session
+   * token and sends once per account (retries are no-ops). Resolves true when
+   * the server confirmed the send (or that it already went out), false when
+   * the attempt failed — and it never throws, so a failed welcome cannot
+   * break the session that just started.
+   */
+  requestWelcomeEmail: () => Promise<boolean>;
   updatePassword: (password: string) => Promise<CloudActionResult>;
   /*
    * The user id Supabase validated a recovery link FOR, or '' for none.
@@ -1768,6 +1776,27 @@ export const useCloudStore = create<CloudStore>((set, get) => ({
     // Resend is subject to the same anti-enumeration silence as signup, so this
     // says what was asked for rather than what was delivered.
     return { ok: true, message: `Requested another confirmation email for ${trimmedEmail}.` };
+  },
+  requestWelcomeEmail: async () => {
+    /*
+     * Fire-and-forget by contract: the welcome is a nicety, not part of the
+     * auth handshake. The server records the send idempotently per account,
+     * so calling this on every signup return is safe — the second call is a
+     * no-op. Nothing here may throw into the signup flow.
+     */
+    try {
+      const token = get().session?.access_token;
+      if (!token) return false;
+      const response = await fetch('/api/account/send-welcome', {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      return response.ok;
+    } catch {
+      // The server keeps its own idempotency record; a failed attempt simply
+      // means no welcome went out this time.
+      return false;
+    }
   },
   /*
    * The half of "forgot password" that did not exist.

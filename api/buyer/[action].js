@@ -2,6 +2,7 @@ import { sendJson } from '../_lib/http.js';
 import inquiriesHandler from '../_lib/buyer-inquiries.js';
 import responsesHandler from '../_lib/buyer-responses.js';
 import verifyHandler from '../_lib/buyer-verify.js';
+import mediaHandler from '../_lib/buyer-media.js';
 
 /*
  * Single Vercel function serving the buyer routes:
@@ -9,6 +10,8 @@ import verifyHandler from '../_lib/buyer-verify.js';
  *   POST     /api/buyer/responses  -> workspace seller reply to a buyer request
  *   GET/POST /api/buyer/verify     -> anonymous packet verification against the
  *                                     server-anchored seal
+ *   POST     /api/buyer/media      -> token-gated signed URL for one listing
+ *                                     photo (the horse-media bucket is private)
  * Consolidated as a dynamic route so the endpoints share one serverless
  * function (matching api/documents/[action] and api/horses/[action]). Each
  * sub-handler keeps its own CORS, rate limiting, auth, and validation.
@@ -32,6 +35,9 @@ export default async function handler(req, res) {
   }
   if (action === 'verify') {
     return verifyHandler(req, res);
+  }
+  if (action === 'media') {
+    return mediaHandler(req, res);
   }
   return sendJson(res, 404, { ok: false, message: 'Unknown buyer action.' });
 }

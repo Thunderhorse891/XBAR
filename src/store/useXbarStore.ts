@@ -22,7 +22,8 @@ import { toPacketDisclosure } from '@/lib/salePacketDisclosure';
 import { onWorkspaceSettled, vaultOwnerId } from '@/lib/vaultOwner';
 import { readRecordsOwner, rememberRecordsOwner } from '@/lib/recordsOwner';
 import { featureGate } from '@/lib/commercialEngine';
-import { isCurrentPaidPlan } from '@/lib/subscriptionDecision';
+import { hasActivePaidPlan, isCurrentPaidPlan } from '@/lib/subscriptionDecision';
+import { applyTrialToProfile, parseTrialStart } from '@/lib/trialSubscription';
 import { buildOfferDecision } from '@/lib/profitIntelligence';
 import { scheduleBuyerActivityFollowUp } from '@/lib/salesFollowUp';
 import {
@@ -316,6 +317,45 @@ export const useXbarStore = create<XbarStore>()(
           horses: derived.horses,
         });
         return { ok: true, message: `${tier} is now active for this workspace. Limits and features updated.` };
+      },
+      startTrialSubscription: (trialStart) => {
+        const deniedMessage = requireRoleCapability(get().currentRole, 'manageBilling');
+        if (deniedMessage) {
+          return { ok: false, message: deniedMessage };
+        }
+
+        const state = get();
+        if (!parseTrialStart(trialStart)) {
+          return { ok: false, message: 'The trial start time was not recognized, so the trial was not started.' };
+        }
+        // One trial per workspace: a recorded start — active or long expired —
+        // can never be restarted.
+        if (state.subscription.trialStart) {
+          return { ok: false, message: 'This workspace has already used its Professional trial.' };
+        }
+        if (hasActivePaidPlan(state.subscription)) {
+          return {
+            ok: false,
+            message: 'This workspace already has an active paid plan, so there is no trial to start.',
+          };
+        }
+
+        const subscription = applyTrialToProfile({ ...state.subscription, trialStart }, new Date());
+        const derived = syncDerivedValues({
+          horses: state.horses,
+          salesLeads: state.salesLeads,
+          sharedListings: state.sharedListings,
+          sharedAccess: state.sharedAccess,
+          workspaceMembers: state.workspaceMembers,
+          workspaceInvitations: state.workspaceInvitations,
+          subscription,
+        });
+        set({
+          subscription: derived.subscription,
+          sharedAccess: derived.sharedAccess,
+          horses: derived.horses,
+        });
+        return { ok: true, message: 'Professional trial started — 14 days of full Professional access.' };
       },
       toggleSharedListing: async (horseId) => {
         const deniedMessage = requireRoleCapability(get().currentRole, 'manageSharedAccess');
@@ -1405,12 +1445,16 @@ export const useXbarStore = create<XbarStore>()(
               }
               return {
                 file,
-                stored: Boolean(uploadedAsset?.storagePath && uploadedAsset?.publicUrl),
+                stored: Boolean(uploadedAsset?.storagePath),
                 asset: {
                   id: createId('media'),
                   label: file.name.replace(/\.[^.]+$/, ''),
                   kind: kind ?? guessGalleryKind(file.name),
-                  url: uploadedAsset?.publicUrl ?? '',
+                  // The horse-media bucket is private, so there is no durable
+                  // URL to store. Renders resolve a short-lived signed URL
+                  // from `storagePath` (see HorseMediaPreview); `url` keeps
+                  // legacy public URLs and local object URLs working.
+                  url: '',
                   storagePath: uploadedAsset?.storagePath,
                   status: 'Approved' as const,
                 },
@@ -1418,7 +1462,7 @@ export const useXbarStore = create<XbarStore>()(
             }),
           );
 
-          // Only assets that actually stored (real storagePath AND url) are usable
+          // Only assets that actually stored (a real storagePath) are usable
           // photos. A metadata-only "upload" — cloud unavailable, missing session,
           // or a bucket error — has no renderable image, so it must not become a
           // passport photo, advance readiness, or flip socialReady.
