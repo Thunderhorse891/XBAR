@@ -53,22 +53,3 @@ export function buildSaleHold(
     missingTitleProof: [...new Set(missingTitleProof)],
   };
 }
-
-export function applyAutomaticSaleHolds(
-  horses: HorseRecord[],
-  documents: DocumentRecord[],
-  ownershipRecords: OwnershipRecord[],
-) {
-  return horses.map((horse) => {
-    const hold = buildSaleHold(
-      horse,
-      documents,
-      ownershipRecords.find((record) => record.horseId === horse.id),
-    );
-    if (hold.held && horse.sale.listingState !== 'Private')
-      return { ...horse, sale: { ...horse.sale, listingState: 'Hold' as const } };
-    if (!hold.held && horse.sale.listingState === 'Hold')
-      return { ...horse, sale: { ...horse.sale, listingState: 'Buyer Review' as const } };
-    return horse;
-  });
-}

@@ -1,20 +1,6 @@
-import type { DocumentRecord, TransferStatus } from '@/types/xbar';
+import type { DocumentRecord } from '@/types/xbar';
 import { ownershipDocumentTypes } from './constants';
 import type { RelationshipRow } from './types';
-
-export function transferTone(status: TransferStatus): 'emerald' | 'blue' | 'amber' | 'rose' {
-  if (status === 'Clear') return 'emerald';
-  if (status === 'AQHA Review') return 'blue';
-  if (status === 'Pending Signatures') return 'amber';
-  return 'rose';
-}
-
-export function documentTone(document: DocumentRecord): 'emerald' | 'blue' | 'amber' | 'slate' {
-  if (document.state === 'Ready') return 'emerald';
-  if (document.state === 'Matched') return 'blue';
-  if (document.state === 'Needs Review') return 'amber';
-  return 'slate';
-}
 
 export function normalize(value: string): string {
   return value.trim().toLowerCase();

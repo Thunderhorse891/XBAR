@@ -85,8 +85,6 @@ export const subscriptionPlans = {
   },
 };
 
-export const BILLING_PERIODS = ['monthly', 'annual'];
-
 /**
  * Resolve the Stripe price id for a tier and billing period.
  *

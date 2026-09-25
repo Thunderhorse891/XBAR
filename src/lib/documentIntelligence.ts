@@ -470,7 +470,3 @@ export async function readDocumentWithCoverage(file: File): Promise<{ text: stri
   // failed. Silence here is honest.
   return { text: '', coverage: fullCoverage() };
 }
-
-export async function readDocumentText(file: File) {
-  return (await readDocumentWithCoverage(file)).text;
-}

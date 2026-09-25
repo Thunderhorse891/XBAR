@@ -68,10 +68,6 @@ export function openBuyerRequests(events: BuyerRoomEvent[]) {
   );
 }
 
-export function openBuyerQuestions(events: BuyerRoomEvent[]) {
-  return openBuyerRequests(events);
-}
-
 export function highestBuyerOffer(events: BuyerRoomEvent[]) {
   return events
     .filter((event) => event.kind === 'offer' && typeof event.amount === 'number')
