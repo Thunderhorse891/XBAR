@@ -119,7 +119,7 @@ jobs:
         ports:
           - 5432:5432
         options: >-
-          --health-cmd pg_isready --health-interval 5s
+          --health-cmd "pg_isready -U postgres -d xbar_ci" --health-interval 5s
           --health-timeout 5s --health-retries 10
     env:
       TEST_DATABASE_URL: postgresql://postgres:scratch-only@127.0.0.1:5432/xbar_ci
@@ -129,9 +129,6 @@ jobs:
         with:
           node-version: 24
       - name: PostgreSQL 17 client
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y postgresql-client-17
-          echo /usr/lib/postgresql/17/bin >> "$GITHUB_PATH"
+        run: bash scripts/install-postgres-client-ci.sh
       - name: Execute all migrations, RLS tests and encrypted restore drill
         run: npm run test:database

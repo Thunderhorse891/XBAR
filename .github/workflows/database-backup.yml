@@ -19,10 +19,7 @@ jobs:
         with:
           node-version: 24
       - name: Install matching PostgreSQL client
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y postgresql-client-17
-          echo '/usr/lib/postgresql/17/bin' >> "$GITHUB_PATH"
+        run: bash scripts/install-postgres-client-ci.sh
       - name: Encrypted logical backup (missing secrets fail the run)
         env:
           BACKUP_DATABASE_URL: ${{ secrets.BACKUP_DATABASE_URL }}
