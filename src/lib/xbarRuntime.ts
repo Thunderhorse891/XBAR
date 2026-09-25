@@ -1,5 +1,4 @@
 import type {
-  AssetCondition,
   DocumentRecord,
   DocumentEntities,
   DocumentSource,
@@ -160,16 +159,6 @@ export function createId(prefix: string) {
   return `${prefix}-${Date.now()}-${createRandomBase36(8)}`;
 }
 
-export function createNumericToken(length: number) {
-  const cryptoApi = getCryptoApi();
-  if (cryptoApi?.getRandomValues) {
-    const values = cryptoApi.getRandomValues(new Uint8Array(length));
-    return Array.from(values, (value) => String(value % 10)).join('');
-  }
-
-  return Array.from({ length }, (_, index) => String((Date.now() + index) % 10)).join('');
-}
-
 export function createShareAccessToken(length = 18) {
   return createRandomBase36(length);
 }
@@ -248,12 +237,6 @@ export function guessGalleryKind(fileName: string): GalleryAsset['kind'] {
   return 'Hero';
 }
 
-export function conditionTone(condition: AssetCondition) {
-  if (condition === 'Attention Required') return 'rose';
-  if (condition === 'Service Soon') return 'amber';
-  return 'emerald';
-}
-
 export function deriveSharedAccessSnapshot(
   sharedAccess: SharedAccessSnapshot,
   sharedListings: SharedListingRecord[],
@@ -281,15 +264,6 @@ export function deriveSharedAccessSnapshot(
 
 export function buildSharePath(horseId: string) {
   return `/profiles/${horseId}`;
-}
-
-export async function readFileAsDataUrl(file: File) {
-  return new Promise<string>((resolve, reject) => {
-    const reader = new FileReader();
-    reader.onerror = () => reject(reader.error ?? new Error('Unable to read file.'));
-    reader.onload = () => resolve(String(reader.result ?? ''));
-    reader.readAsDataURL(file);
-  });
 }
 
 async function readFileTextSnippet(file: File) {
@@ -479,14 +453,6 @@ export function rankHorseMatches(horses: HorseRecord[], haystack: string, entiti
     .filter((match): match is HorseMatchResult => Boolean(match))
     .sort((left, right) => right.confidence - left.confidence)
     .slice(0, 3);
-}
-
-export function findHorseMatch(horses: HorseRecord[], haystack: string) {
-  const [bestMatch] = rankHorseMatches(horses, haystack);
-  return {
-    horse: bestMatch?.horse,
-    confidence: bestMatch?.confidence ?? 0,
-  };
 }
 
 export async function buildDocumentRecord(params: {

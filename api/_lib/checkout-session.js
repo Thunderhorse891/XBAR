@@ -209,12 +209,6 @@ export async function releaseCheckoutLock(supabase, workspaceId, token) {
   }
 }
 
-/** Whether Stripe refused because another checkout for this workspace is in flight. */
-export function isIdempotencyConflict(error) {
-  const type = error && typeof error === 'object' ? String(error.type ?? '') : '';
-  return type === 'idempotency_error';
-}
-
 /**
  * What to do when expiring a stale session failed.
  *

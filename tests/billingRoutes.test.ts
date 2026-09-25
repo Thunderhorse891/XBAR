@@ -104,7 +104,6 @@ test('upgrade links use canonical billing path instead of legacy billing routes'
   const checkedFiles = [
     'src/components/RequireSubscriptionFeature.tsx',
     'src/components/SalePacketWizard.tsx',
-    'src/components/UsageMeterPanel.tsx',
     'src/lib/activation.ts',
     'src/lib/subscriptionGates.ts',
     'src/routes/Breeding.tsx',

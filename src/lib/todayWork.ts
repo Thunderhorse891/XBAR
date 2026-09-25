@@ -12,17 +12,6 @@ import type {
 } from '../types/xbar.js';
 import type { TaskPriority, WorkCategory, WorkLinkedType, WorkTask } from '../types/saas.js';
 
-export const workboardTabs = [
-  'All',
-  'Overdue',
-  'Setup',
-  'Animal Care',
-  'Ownership',
-  'Documents',
-  'Sales',
-  'Equipment',
-] as const;
-
 type TodayWorkInput = {
   horses: HorseRecord[];
   documents: DocumentRecord[];

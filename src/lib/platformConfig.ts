@@ -135,10 +135,6 @@ export function isRelationalCloudEnabled() {
   return isSupabaseConfigured() && supabaseConfig.relationalSyncEnabled;
 }
 
-export function isRelationalCloudMirrorEnabled() {
-  return isRelationalCloudEnabled();
-}
-
 export function isSnapshotFallbackEnabled() {
   return isSupabaseConfigured() && supabaseConfig.snapshotFallbackEnabled;
 }
