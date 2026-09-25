@@ -439,9 +439,10 @@ const REFERENCE_DOCUMENT =
  * paper and the name it was filed under: "Insurance.pdf" headed "Insurance
  * Requirements", or "CVI.pdf" headed "CVI Requirements for Interstate
  * Travel". Only a heading that says the paper is ABOUT a certificate, policy
- * or contract counts — the reference word as its subject ("Insurance
- * Requirements", "Coggins Test Instructions"), ahead of the kind ("Requirements
- * for a Health Certificate", "How to File an Insurance Claim"), or marking a
+ * or contract counts — the reference word as its subject, up to three words
+ * after the kind ("Insurance Requirements", "Coggins Test Instructions", "CVI
+ * Interstate Travel Requirements"), ahead of the kind ("Requirements for a
+ * Health Certificate", "How to File an Insurance Claim"), or marking a
  * specimen ("Sample CVI", "Blank Health Certificate"). A genuine paper's first
  * line can carry the same words as a field or a direction — "Sample ID: 4471",
  * "EIA Test Procedure: AGID", "see instructions on reverse" — and refusing it
@@ -451,7 +452,7 @@ const REFERENCE_KIND =
   '(?:cvi|health\\s+certificates?|certificates?(?:\\s+of\\s+veterinary\\s+inspection)?|coggins|eia|equine\\s+infectious\\s+ana?emia|insurance|polic(?:y|ies)|coverage|contracts?|agreements?|leases?)';
 const REFERENCE_HEADING = new RegExp(
   [
-    `\\b${REFERENCE_KIND}(?:[ \\t]+[a-z]+)?[ \\t]+(?:requirements?|checklists?|instructions?|guide(?:lines)?|rules|faqs?|templates?)\\b(?![ \\t]+on[ \\t]+(?:the[ \\t]+)?(?:reverse|back))`,
+    `\\b${REFERENCE_KIND}(?:[ \\t]+[a-z]+){0,3}?[ \\t]+(?:requirements?|checklists?|instructions?|guide(?:lines)?|rules|faqs?|templates?)\\b(?![ \\t]+on[ \\t]+(?:the[ \\t]+)?(?:reverse|back))`,
     `(?<!\\b(?:see|read|follow)[ \\t]+(?:the[ \\t]+)?)\\b(?:(?:requirements?|instructions?|guide(?:lines)?|rules|procedures?|checklists?)[ \\t]+(?:for|to|on|about|when)|how[ \\t]+to)(?:[ \\t]+[a-z]+){0,3}?[ \\t]+${REFERENCE_KIND}\\b`,
     `\\b(?:sample|blank|templates?)[ \\t:–-]+(?:(?:an?|the)[ \\t]+)?${REFERENCE_KIND}\\b`,
   ].join('|'),

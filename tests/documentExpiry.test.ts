@@ -1558,6 +1558,14 @@ const REFERENCE_HEADING_CORPUS: Array<[string, DocumentRecord['type'], string, s
     null,
   ],
   ['a specimen title', 'Vet Record', 'Sample CVI.pdf', 'Certificate of Veterinary Inspection', null],
+  [
+    'a multi-word reference subject in a file name, as reviewed',
+    'Registration',
+    'CVI Interstate Travel Requirements.pdf',
+    'Expiration Date: 07/15/2026',
+    null,
+  ],
+  ['a multi-word reference heading', 'Insurance', 'Policy.pdf', 'Equine Mortality Insurance Coverage Guidelines', null],
   // Controls: the papers themselves, including first lines that carry the same words.
   ['a Coggins named for its sample, as reviewed', 'Coggins', 'Coggins Sample Results - 4471.pdf', '', 'Coggins'],
   ['an EIA blood sample, as reviewed', 'Coggins', 'EIA Blood Sample 4471.pdf', '', 'Coggins'],
