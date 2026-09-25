@@ -97,6 +97,11 @@ async function verify({
   sellerCells = [],
   sellerExtraRows = 0,
   byline = null,
+  bylineAttrs = {},
+  sellerDecoys = [],
+  metaExtras = 0,
+  contactMovedTo = null,
+  extraContactTables = 0,
 }) {
   const out = element({ class: 'verify__out', 'data-digest': sealedDigest, ...outAttrs }, 'DIV');
   out._collapsed = outCollapsed;
@@ -123,33 +128,96 @@ async function verify({
   stamp.textContent = 'WATERMARK';
 
   /*
-   * The seller contact block as the generator prints it: a named table whose
-   * rows each hold one sealed field in a named cell, and the byline in a named
-   * span. Rows are modelled, not just cells, so an added or hidden row is
-   * expressible — the attacks here are exactly the ones a cell-only stub could
-   * not state.
+   * The seller contact block and the header's byline, as a browser holds them
+   * once the generator's markup is parsed: the contact table inside its own
+   * section under the content, its rows inside the tbody the parser inserts,
+   * each row a label and one named value cell; the byline a named span in the
+   * header's meta line. Modelled as structure, not as a list of ids, because
+   * an id is ordinary HTML an alterer controls — the attacks here move, strip
+   * and hide exactly those.
    */
+  const content = sealedChain[2];
+  const sellerSection = element({}, 'SECTION');
+  sellerSection.parentElement = content;
+  const extraTables = Array.from({ length: extraContactTables }, () => element({ id: 'xbar-seller-contact' }, 'TABLE'));
   const contactTable = element({ id: 'xbar-seller-contact' }, 'TABLE');
-  const sellerNodes = sellerCells.map(({ field, text, rowAttrs = {} }) => {
+  contactTable.parentElement = sellerSection;
+  const tbody = element({}, 'TBODY');
+  tbody.parentElement = contactTable;
+  const LABELS = { name: 'Seller', ranch: 'Ranch', email: 'Email' };
+  const contactRow = (label, cellAttrs, text, rowAttrs = {}) => {
     const rowNode = element(rowAttrs, 'TR');
-    rowNode.parentElement = contactTable;
-    const cell = element({ id: `xbar-seller-${field}` }, 'TD');
-    cell.textContent = text;
-    cell.parentElement = rowNode;
-    return cell;
-  });
+    rowNode.parentElement = tbody;
+    const th = element({}, 'TH');
+    th.textContent = label;
+    th.parentElement = rowNode;
+    const td = element(cellAttrs, 'TD');
+    td.textContent = text;
+    td.parentElement = rowNode;
+    rowNode.children = [th, td];
+    return rowNode;
+  };
   const sellerRows = [
-    ...sellerNodes.map((cell) => cell.parentElement),
-    ...Array.from({ length: sellerExtraRows }, () => {
-      const added = element({}, 'TR');
-      added.parentElement = contactTable;
-      return added;
-    }),
+    ...sellerCells.map(({ field, text, rowAttrs, cellAttrs, label }) =>
+      contactRow(label ?? LABELS[field], cellAttrs ?? { id: `xbar-seller-${field}` }, text, rowAttrs),
+    ),
+    ...Array.from({ length: sellerExtraRows }, () => contactRow('Wire to', {}, 'attacker account')),
   ];
-  const bylineNode = byline === null ? null : element({ id: 'xbar-seller-byline' }, 'SPAN');
-  if (bylineNode) bylineNode.textContent = byline;
-  const sellerElements = [...sellerNodes, ...sellerRows, ...(sellerRows.length ? [contactTable] : [])];
-  if (bylineNode) sellerElements.push(bylineNode);
+  // Marked copies an alterer parks out of sight: inside the collapsed by-hand section.
+  const closedDetails = element({ class: 'verify__manual' }, 'DETAILS');
+  closedDetails.open = false;
+  closedDetails.parentElement = sealedChain[0];
+  /*
+   * The whole sealed block moved: tucked into the collapsed section where no
+   * one reads it, or down into the footer, still visible but far from the top
+   * where a forged, unmarked contact table now sits.
+   */
+  if (contactMovedTo === 'details') sellerSection.parentElement = closedDetails;
+  if (contactMovedTo === 'footer') {
+    const footer = element({ class: 'footer' }, 'DIV');
+    footer.parentElement = content;
+    sellerSection.parentElement = footer;
+  }
+  const decoyNodes = sellerDecoys.map(({ id, text }) => {
+    const node = element({ id }, 'SPAN');
+    node.textContent = text;
+    node.parentElement = closedDetails;
+    return node;
+  });
+  const header = element({}, 'HEADER');
+  header.parentElement = content;
+  const meta = element({ class: 'meta', id: 'xbar-packet-meta' }, 'DIV');
+  meta.parentElement = header;
+  const generatedSpan = element({}, 'SPAN');
+  generatedSpan.textContent = 'Generated 2026-09-24';
+  generatedSpan.parentElement = meta;
+  const bylineNode = byline === null ? null : element({ id: 'xbar-seller-byline', ...bylineAttrs }, 'SPAN');
+  if (bylineNode) {
+    bylineNode.textContent = byline;
+    bylineNode.parentElement = meta;
+  }
+  const addedSpans = Array.from({ length: metaExtras }, () => {
+    const node = element({}, 'SPAN');
+    node.textContent = 'Prepared by Someone Else';
+    node.parentElement = meta;
+    return node;
+  });
+  meta.children = [generatedSpan, ...(bylineNode ? [bylineNode] : []), ...addedSpans];
+  const withId = (id) =>
+    [...sellerRows.map((row) => row.children[1]), ...decoyNodes, ...(bylineNode ? [bylineNode] : [])].filter(
+      (node) => node.getAttribute('id') === id,
+    );
+  const sellerElements = [
+    ...(sellerRows.length ? [sellerSection, contactTable, tbody] : []),
+    ...sellerRows.flatMap((row) => [row, ...row.children]),
+    closedDetails,
+    ...decoyNodes,
+    header,
+    meta,
+    generatedSpan,
+    ...(bylineNode ? [bylineNode] : []),
+    ...addedSpans,
+  ];
 
   let click;
   const btn = element(btnAttrs, 'BUTTON');
@@ -216,14 +284,17 @@ async function verify({
       if (selector === '*') {
         return [...links, ...extras, ...inlineStyled, out, btn, record, stamp, ...sealedChain, ...sellerElements];
       }
-      if (/^#xbar-seller-(name|ranch|email)$/.test(selector)) {
-        return sellerNodes.filter((cell) => cell.getAttribute('id') === selector.slice(1));
+      if (/^#xbar-seller-(name|ranch|email|byline)$/.test(selector)) {
+        return withId(selector.slice(1));
+      }
+      if (selector === '#xbar-seller-contact') {
+        return [...(sellerRows.length ? [contactTable] : []), ...extraTables];
       }
       if (selector === '#xbar-seller-contact tr') {
         return sellerRows;
       }
-      if (selector === '#xbar-seller-byline') {
-        return bylineNode ? [bylineNode] : [];
+      if (selector === '#xbar-packet-meta') {
+        return [meta];
       }
       if (selector === '#xbar-verify-btn') {
         return [btn, ...Array.from({ length: decoyButtons }, () => element({}, 'BUTTON'))];
@@ -404,6 +475,64 @@ test('a removed, duplicated, hidden or unsealed seller field is reported', async
   const result = await verify(unsealed);
   assert.equal(result.state, 'fail', result.text);
   assert.match(result.text, /never sealed/);
+});
+
+test('a sealed seller field moved out of sight while the visible one is replaced is reported, as reviewed', async () => {
+  // The attack: the visible email cell loses its id and shows the attacker's
+  // address; a marked copy of the sealed address is parked inside the collapsed
+  // by-hand section, so a lookup by id finds one node with the sealed text.
+  const result = await verify(
+    sellerPacket({
+      sellerCells: sellerPacket().sellerCells.map((cell) =>
+        cell.field === 'email' ? { field: 'email', text: 'attacker@example.com', cellAttrs: {} } : cell,
+      ),
+      sellerDecoys: [{ id: 'xbar-seller-email', text: SEALED_SELLER.email }],
+    }),
+  );
+  assert.equal(result.state, 'fail', result.text);
+  assert.match(result.text, /email row on this packet is not the one the seal put there/);
+});
+
+test('a seller row carrying anything the generator never emits is reported', async () => {
+  for (const [name, change] of [
+    ['a class on the value cell', { cellAttrs: { id: 'xbar-seller-email', class: 'watermark' } }],
+    ['a hidden value cell', { cellAttrs: { id: 'xbar-seller-email', hidden: '' } }],
+    ['a relabelled row', { label: 'Old email' }],
+  ]) {
+    const packet = sellerPacket();
+    packet.sellerCells = packet.sellerCells.map((cell) => (cell.field === 'email' ? { ...cell, ...change } : cell));
+    const result = await verify(packet);
+    assert.equal(result.state, 'fail', `${name} must not verify: ${result.text}`);
+  }
+});
+
+test('the sealed contact table tucked out of sight, or a second one added, is reported', async () => {
+  for (const place of ['details', 'footer']) {
+    const moved = await verify(sellerPacket({ contactMovedTo: place }));
+    assert.equal(moved.state, 'fail', `moved to the ${place}: ${moved.text}`);
+    assert.match(moved.text, /seller contact table on this packet is not where the seal put it/);
+  }
+  const doubled = await verify(sellerPacket({ extraContactTables: 1 }));
+  assert.equal(doubled.state, 'fail', doubled.text);
+  assert.match(doubled.text, /shows 2 seller contact table/);
+});
+
+test('a hidden, relocated or unsealed "Prepared by" line is reported, as reviewed', async () => {
+  const hidden = await verify(sellerPacket({ bylineAttrs: { hidden: '' } }));
+  assert.equal(hidden.state, 'fail', hidden.text);
+  assert.match(hidden.text, /Prepared by line on this packet is not where the seal put it/);
+  // The visible byline replaced by an unmarked one, the marked copy parked out of sight.
+  const moved = await verify(
+    sellerPacket({
+      byline: null,
+      metaExtras: 1,
+      sellerDecoys: [{ id: 'xbar-seller-byline', text: `Prepared by ${SEALED_BYLINE}` }],
+    }),
+  );
+  assert.equal(moved.state, 'fail', moved.text);
+  // Nothing sealed, and an unmarked byline added to the header.
+  const added = await verify(sellerPacket({ sealedBy: '', metaExtras: 1 }));
+  assert.equal(added.state, 'fail', added.text);
 });
 
 test('an edited or removed "Prepared by" line is reported', async () => {

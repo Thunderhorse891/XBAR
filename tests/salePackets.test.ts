@@ -410,6 +410,7 @@ test('each sealed seller field is printed where the verifier can compare it', ()
   );
   assert.deepEqual(cells, { name: payload.seller.name, ranch: payload.seller.ranch, email: payload.seller.email });
   assert.equal(packet.html.match(/id="xbar-seller-contact"/g)?.length, 1, 'one contact table, named');
+  assert.ok(packet.html.includes('<div class="meta" id="xbar-packet-meta">'), 'the byline sits in the named meta line');
   assert.ok(payload.sealedBy, 'the fixture has a byline to bind');
   assert.equal(
     /<span id="xbar-seller-byline">([^<]*)<\/span>/.exec(packet.html)?.[1],

@@ -787,73 +787,120 @@ export const PACKET_VERIFIER_SCRIPT = `
            * page vouches for it, and it is the fact a fraudster most wants to
            * change: a packet altered to show their own email left the payload
            * untouched, so the digest matched and this check said PASS while
-           * the buyer wrote to them. So each sealed field is compared outright.
-           * A field shown twice, removed, shown when none was sealed, or marked
-           * hidden is an alteration, and the table holds exactly the sealed
-           * rows: a row added beside them (Wire to: …) is unsealed text
-           * dressed as sealed.
+           * the buyer wrote to them.
+           *
+           * Found by walking the table the seal put there, never by id alone.
+           * An id is ordinary HTML an alterer controls: strip it from the
+           * visible cell, show another address there, and park a marked copy
+           * of the sealed one out of sight in the collapsed by-hand section,
+           * and a lookup by id finds exactly one node with the sealed text. So
+           * every piece is pinned to what the generator emits, the way the
+           * hero photo is: one table, in its own section under the content,
+           * with exactly one row per sealed field in sealed order, each row a
+           * plain label cell and one value cell carrying nothing but its name.
+           * Pinning every attribute is what keeps them visible: hidden, a
+           * concealing class, or a move into the collapsed section all change
+           * one, and anything hiding the content above them hides the verdict
+           * box too, which the presentation sweep already refuses. A row added
+           * beside them (Wire to: …) is unsealed text dressed as sealed.
            */
+          function exactly(node, tag, attrs) {
+            if (!node || String(node.tagName || '').toUpperCase() !== tag) return false;
+            var names = Object.keys(attrs);
+            var list = node.attributes || [];
+            if (list.length !== names.length) return false;
+            for (var n = 0; n < names.length; n += 1) {
+              if (node.getAttribute(names[n]) !== attrs[names[n]]) return false;
+            }
+            return true;
+          }
+          function textOf(node) {
+            return node ? (node.textContent || '').trim() : '';
+          }
           var sealedSeller = parsed && parsed.seller && typeof parsed.seller === 'object' ? parsed.seller : null;
           if (sealedSeller) {
-            var sealedRows = 0;
-            [
-              ['name', 'seller name'],
-              ['ranch', 'ranch'],
-              ['email', 'seller email'],
-            ].forEach(function (field) {
-              var want = typeof sealedSeller[field[0]] === 'string' ? sealedSeller[field[0]] : '';
-              if (want) sealedRows += 1;
-              var cells = document.querySelectorAll('#xbar-seller-' + field[0]);
-              var cell = cells.length === 1 ? cells[0] : null;
-              var seen = cell ? (cell.textContent || '').trim() : '';
-              if (cells.length > 1) {
-                problems.push(
-                  'This packet shows the ' + field[1] + ' ' + cells.length + ' times. The seal prints it once, so the other copies were added after it was sealed.',
-                );
-                return;
-              }
-              if (want && !cell) {
-                problems.push('The ' + field[1] + ' has been removed from this packet. It was sealed as "' + want + '".');
-                return;
-              }
-              if (!want && cell) {
-                problems.push('This packet shows a ' + field[1] + ' ("' + seen + '") that was never sealed. Do not use it.');
-                return;
-              }
-              if (cell && seen !== want) {
-                problems.push(
-                  'This packet shows the ' + field[1] + ' as "' + seen + '" but it was sealed as "' + want + '". Do not use the one shown.',
-                );
-              }
-              for (var up = cell; up; up = up.parentElement) {
-                if (up.getAttribute && up.getAttribute('hidden') !== null) {
-                  problems.push('The ' + field[1] + ' on this packet is marked hidden, so whatever you can read in its place was not sealed.');
-                  break;
+            var wanted = [
+              ['name', 'Seller', 'seller name'],
+              ['ranch', 'Ranch', 'ranch'],
+              ['email', 'Email', 'seller email'],
+            ].filter(function (field) {
+              return typeof sealedSeller[field[0]] === 'string' && sealedSeller[field[0]] !== '';
+            });
+            var tables = document.querySelectorAll('#xbar-seller-contact');
+            var table = tables.length === 1 ? tables[0] : null;
+            if (tables.length !== (wanted.length ? 1 : 0)) {
+              problems.push(
+                'This packet shows ' + tables.length + ' seller contact table(s), and the seal covers ' + (wanted.length ? 'one' : 'none') + '. Do not use the contact details shown.',
+              );
+            } else if (
+              table &&
+              (!exactly(table, 'TABLE', { id: 'xbar-seller-contact' }) ||
+                !exactly(table.parentElement, 'SECTION', {}) ||
+                !exactly(table.parentElement.parentElement, 'DIV', { class: 'content' }))
+            ) {
+              problems.push(
+                'The seller contact table on this packet is not where the seal put it, or is not shown as it was sealed, so the contact details on it cannot be trusted.',
+              );
+            }
+            var contactRows = document.querySelectorAll('#xbar-seller-contact tr');
+            if (contactRows.length !== wanted.length) {
+              problems.push(
+                'The seller contact table on this packet has ' + contactRows.length + ' row(s), and the seal covers ' + wanted.length + ', so at least one was removed or was never sealed. Do not use the contact details shown.',
+              );
+            } else {
+              for (var r = 0; r < contactRows.length; r += 1) {
+                var field = wanted[r];
+                var want = sealedSeller[field[0]];
+                var row = contactRows[r];
+                var cells = row.children || [];
+                var holder = row.parentElement;
+                if (holder && String(holder.tagName || '').toUpperCase() === 'TBODY') {
+                  holder = exactly(holder, 'TBODY', {}) ? holder.parentElement : null;
+                }
+                var inPlace =
+                  holder === table &&
+                  exactly(row, 'TR', {}) &&
+                  cells.length === 2 &&
+                  exactly(cells[0], 'TH', {}) &&
+                  textOf(cells[0]) === field[1] &&
+                  exactly(cells[1], 'TD', { id: 'xbar-seller-' + field[0] });
+                if (!inPlace) {
+                  problems.push(
+                    'The ' + field[2] + ' row on this packet is not the one the seal put there. It was sealed as "' + want + '". Do not use the one shown.',
+                  );
+                } else if (textOf(cells[1]) !== want) {
+                  problems.push(
+                    'This packet shows the ' + field[2] + ' as "' + textOf(cells[1]) + '" but it was sealed as "' + want + '". Do not use the one shown.',
+                  );
                 }
               }
-            });
-            var contactRows = document.querySelectorAll('#xbar-seller-contact tr');
-            if (contactRows.length !== sealedRows) {
-              problems.push(
-                'The seller contact table on this packet has ' + contactRows.length + ' row(s), and the seal covers ' + sealedRows + '. Anything added to it was not sealed.',
-              );
             }
           }
           /*
-           * The Prepared by line names the seller too, and is bound the same way.
+           * The Prepared by line names the seller too, and is pinned the same
+           * way: one named span, as the second and last item of the header meta
+           * line, carrying nothing but its name. With no
+           * byline sealed, the meta line holds its Generated stamp alone, so an
+           * unmarked Prepared by added there is caught too.
            */
           if (parsed && typeof parsed.sealedBy === 'string') {
-            var bylines = document.querySelectorAll('#xbar-seller-byline');
             var wantByline = parsed.sealedBy ? 'Prepared by ' + parsed.sealedBy : '';
-            var shownByline = bylines.length === 1 ? (bylines[0].textContent || '').trim() : '';
-            if (bylines.length > 1) {
-              problems.push('This packet shows its Prepared by line ' + bylines.length + ' times. The seal prints it once.');
-            } else if (wantByline && !bylines.length) {
-              problems.push('The Prepared by line has been removed from this packet. It was sealed as "' + wantByline + '".');
-            } else if (!wantByline && bylines.length) {
-              problems.push('This packet says "' + shownByline + '", which was never sealed.');
-            } else if (bylines.length && shownByline !== wantByline) {
-              problems.push('This packet says "' + shownByline + '" but was sealed as "' + wantByline + '".');
+            var metas = document.querySelectorAll('#xbar-packet-meta');
+            var metaLine = metas.length === 1 ? metas[0] : null;
+            var metaItems = metaLine && metaLine.children ? metaLine.children : [];
+            var byline = wantByline && metaItems.length === 2 ? metaItems[1] : null;
+            var bylinePlaced =
+              exactly(metaLine, 'DIV', { class: 'meta', id: 'xbar-packet-meta' }) &&
+              exactly(metaLine.parentElement, 'HEADER', {}) &&
+              metaItems.length === (wantByline ? 2 : 1) &&
+              document.querySelectorAll('#xbar-seller-byline').length === (wantByline ? 1 : 0) &&
+              (!wantByline || exactly(byline, 'SPAN', { id: 'xbar-seller-byline' }));
+            if (!bylinePlaced) {
+              problems.push(
+                'The Prepared by line on this packet is not where the seal put it, or is hidden, or was added. It was sealed as "' + (wantByline || 'no Prepared by line') + '".',
+              );
+            } else if (wantByline && textOf(byline) !== wantByline) {
+              problems.push('This packet says "' + textOf(byline) + '" but was sealed as "' + wantByline + '".');
             }
           }
 
