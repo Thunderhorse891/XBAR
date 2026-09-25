@@ -75,6 +75,12 @@ is still retained and nonempty. A green run with a deleted or expired artifact
 fails the check. This metadata check does not replace archive decryption or a
 restore drill. Preflight also rejects HTTP 200 health responses whose `ok` verdict
 is missing or false; its optional live probe times out after 15 seconds.
+The live probe also requires the deployment to report Supabase admin, email and
+reminder cron configuration explicitly as true. Local environment values cannot
+clear a deployment whose corresponding settings are false, missing or malformed.
+This checks reported configuration only; it does not prove credentials work,
+email arrives, migrations are applied or a cron has completed. Optional payment
+link configuration and the health endpoint's billing semantics are unchanged.
 GitHub schedules can be delayed and
 disabled after repository inactivity; this is best-effort free monitoring, not
 an uptime SLA. Cron records live in shared Redis and expire after three days.

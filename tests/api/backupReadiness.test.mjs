@@ -111,7 +111,8 @@ test('configured preflight rejects unhealthy or malformed HTTP 200 probe respons
     'VITE_SENTRY_DSN',
   ])
     env[name] = 'fixture-only';
-  let responseBody = { ok: true, subsystems: {} };
+  const configuredSubsystems = { supabaseAdmin: true, email: true, remindersCron: true };
+  let responseBody = { ok: true, subsystems: configuredSubsystems };
   let status = 200;
   const server = createServer((_req, res) => {
     res.writeHead(status, { 'Content-Type': 'application/json' });
@@ -141,10 +142,32 @@ test('configured preflight rejects unhealthy or malformed HTTP 200 probe respons
     assert.equal(control.code, 0, control.stderr);
     assert.match(control.stdout, /0 awaiting configuration/);
     assert.match(control.stdout, /VERIFIED EVIDENCE/);
+    // /api/health can correctly report liveness while these features are off.
+    // Local credentials must not mask missing configuration in the deployment.
+    for (const subsystem of Object.keys(configuredSubsystems)) {
+      for (const [label, value] of [
+        ['unconfigured', false],
+        ['missing', undefined],
+        ['malformed', 'true'],
+      ]) {
+        await t.test(`${subsystem} ${label} on deployment`, async () => {
+          responseBody = { ok: true, subsystems: { ...configuredSubsystems, [subsystem]: value } };
+          const result = await run();
+          assert.equal(result.code, 1, `probe accepted ${subsystem} ${label}: ${result.stdout}`);
+          assert.match(result.stderr, new RegExp(`Probe failed:.*${subsystem}`));
+        });
+      }
+    }
+    await t.test('optional subsystems may remain off', async () => {
+      responseBody = { ok: true, subsystems: { ...configuredSubsystems, paymentLinks: false } };
+      assert.equal((await run()).code, 0);
+    });
     for (const [label, body] of [
       ['negative health', { ok: false, subsystems: {} }],
       ['missing health verdict', {}],
       ['string health verdict', { ok: 'true' }],
+      ['missing subsystem report', { ok: true }],
+      ['null subsystem report', { ok: true, subsystems: null }],
       ['null body', null],
       ['invalid JSON', 'not-json'],
     ]) {

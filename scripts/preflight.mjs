@@ -163,6 +163,14 @@ if (probeUrl) {
         console.log(`    ${value ? '✓ reported configured' : '✗ reported unconfigured'}  ${key}`);
       }
     }
+    // Health's ok verdict establishes liveness/billing consistency, not that
+    // every launch feature is configured. Require the deployed values too;
+    // this shell's configuration cannot stand in for the target deployment.
+    const requiredSubsystems = ['supabaseAdmin', 'email', 'remindersCron'];
+    const missingSubsystems = requiredSubsystems.filter((key) => health.subsystems?.[key] !== true);
+    if (missingSubsystems.length) {
+      throw new Error(`Deployment configuration is missing or unverified: ${missingSubsystems.join(', ')}.`);
+    }
     console.log('  Compare reported configuration with the local env report. This does not test service access.');
     console.log('  Email delivery, auth callbacks, storage policies, webhooks and migrations remain unverified.');
   } catch (error) {
