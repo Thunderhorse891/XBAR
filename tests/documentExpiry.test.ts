@@ -1418,6 +1418,15 @@ const UNPLACED_IDENTITY_CORPUS: Array<[string, string, string, string | null]> =
   ['an insurance carrier field, as reviewed', 'scan0066', 'Insurance Carrier: Blue River', null],
   ['a lease contact field, as reviewed', 'scan0067', 'Lease Contact Name: Jane', null],
   ['a contract manager field, as reviewed', 'scan0068', 'Contract Manager: Jane', null],
+  ['a certificate number label, as reviewed', 'scan0069', 'Health Certificate No: 12345', 'Health certificate'],
+  [
+    'a certificate number label spelled out, as reviewed',
+    'scan0070',
+    'Health Certificate Number: 12345',
+    'Health certificate',
+  ],
+  ['a CVI number label, as reviewed', 'scan0071', 'CVI No: 12345', 'Health certificate'],
+  ['a contact number is still a field', 'scan0072', 'Lease Contact No: 555-0101', null],
   [
     'a four-line masthead over a qualified title',
     'scan0064',
@@ -1558,6 +1567,14 @@ const REFERENCE_HEADING_CORPUS: Array<[string, DocumentRecord['type'], string, s
     null,
   ],
   ['a specimen title', 'Vet Record', 'Sample CVI.pdf', 'Certificate of Veterinary Inspection', null],
+  ['a CVI procedure sheet, as reviewed', 'Registration', 'CVI Procedures.pdf', 'Expiration Date: 07/15/2026', null],
+  [
+    'an insurance procedure sheet, as reviewed',
+    'Registration',
+    'Insurance Procedures.pdf',
+    'Expiration Date: 07/15/2026',
+    null,
+  ],
   [
     'a multi-word reference subject in a file name, as reviewed',
     'Registration',
@@ -1697,6 +1714,8 @@ const VET_RECORD_IDENTITY_CORPUS: Array<[string, string, string, string | null]>
   ],
   ['a first line giving the CVI its date', 'scan0042', 'CVI valid until July 15, 2026', 'Health certificate'],
   ['a short heading with a column gap', 'scan0042', 'Health Certificate  Origin: Texas', 'Health certificate'],
+  ['a certificate number label, as reviewed', 'scan0042', 'Health Certificate No: 12345', 'Health certificate'],
+  ['a CVI number label, as reviewed', 'scan0042', 'CVI No: 12345', 'Health certificate'],
   ['a first line saying it will follow, as reviewed', 'Annual Vet Exam', 'Health certificate to follow.', null],
   [
     'a four-word form label above a follow-up note, as reviewed',

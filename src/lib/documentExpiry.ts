@@ -452,7 +452,7 @@ const REFERENCE_KIND =
   '(?:cvi|health\\s+certificates?|certificates?(?:\\s+of\\s+veterinary\\s+inspection)?|coggins|eia|equine\\s+infectious\\s+ana?emia|insurance|polic(?:y|ies)|coverage|contracts?|agreements?|leases?)';
 const REFERENCE_HEADING = new RegExp(
   [
-    `\\b${REFERENCE_KIND}(?:[ \\t]+[a-z]+){0,3}?[ \\t]+(?:requirements?|checklists?|instructions?|guide(?:lines)?|rules|faqs?|templates?)\\b(?![ \\t]+on[ \\t]+(?:the[ \\t]+)?(?:reverse|back))`,
+    `\\b${REFERENCE_KIND}(?:[ \\t]+[a-z]+){0,3}?[ \\t]+(?:requirements?|checklists?|instructions?|guide(?:lines)?|rules|faqs?|templates?|procedures|procedure(?![ \\t]*:))\\b(?![ \\t]+on[ \\t]+(?:the[ \\t]+)?(?:reverse|back))`,
     `(?<!\\b(?:see|read|follow)[ \\t]+(?:the[ \\t]+)?)\\b(?:(?:requirements?|instructions?|guide(?:lines)?|rules|procedures?|checklists?)[ \\t]+(?:for|to|on|about|when)|how[ \\t]+to)(?:[ \\t]+[a-z]+){0,3}?[ \\t]+${REFERENCE_KIND}\\b`,
     `\\b(?:sample|blank|templates?)[ \\t:–-]+(?:(?:an?|the)[ \\t]+)?${REFERENCE_KIND}\\b`,
   ].join('|'),
@@ -565,13 +565,18 @@ function titleLines(text: string): string[] {
  * and ends in the paper's own noun. A field's label ends in something else,
  * even when a paper's name describes it: "Insurance Agent Name:", "Insurance
  * Carrier:", "Lease Contact Name:", "Contract Manager:" are fields, and so is
- * "Owner or Consignor Name:", which titles nothing at all.
+ * "Owner or Consignor Name:", which titles nothing at all. The paper's own
+ * number may follow its noun ("Health Certificate No:", "CVI Number:"); a
+ * contact's number does not make it the paper ("Lease Contact No:").
  */
 const DOCUMENT_NOUN = /^(?:agreement|contract|lease|policy|insurance|coverage|binder|certificate|cvi)$/i;
+const IDENTIFIER_WORD = /^(?:no|number|num|id|#)$/i;
 function isFormField(line: string): boolean {
   if (!FIELD_LINE.test(line)) return false;
   const label = line.slice(0, line.indexOf(':'));
-  const lastWord = bareWord(label.trim().split(/\s+/).at(-1) ?? '');
+  const words = label.trim().split(/\s+/).map(bareWord).filter(Boolean);
+  if (words.length > 1 && IDENTIFIER_WORD.test(words.at(-1) ?? '')) words.pop();
+  const lastWord = words.at(-1) ?? '';
   const titlesThePaper =
     DOCUMENT_NOUN.test(lastWord) &&
     [HEALTH_CERTIFICATE_TEXT, INSURANCE_NAME, CONTRACT_NAME].some((name) => titleIndex(label, name) >= 0);
