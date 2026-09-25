@@ -4,7 +4,7 @@
  * App-side only: no Stripe trial, no card, no subscription object. A trial is
  * a record on the workspace's subscription profile —
  * `payload.trial = { startedAt, endsAt, plan }` — written by
- * `api/trial/start.js` through the service role, because workspace users have
+ * `api/account/[action].js` (action `trial-start`) through the service role, because workspace users have
  * no write access to `workspace_subscription_profiles` (the owner-write policy
  * was dropped in 20260611_commercial_entitlements.sql). The client can never
  * grant itself a trial; it only asks the endpoint.

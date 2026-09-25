@@ -182,7 +182,7 @@ export async function requestTrialStart(params: {
   }
 
   try {
-    const response = await fetch(buildApiUrl('/api/trial/start'), {
+    const response = await fetch(buildApiUrl('/api/account/trial-start'), {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',

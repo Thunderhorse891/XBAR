@@ -1,14 +1,14 @@
-import { readJsonBody, sendJson } from '../_lib/http.js';
-import { getSupabaseAdmin } from '../_lib/supabase-admin.js';
+import { readJsonBody, sendJson } from './http.js';
+import { getSupabaseAdmin } from './supabase-admin.js';
 import {
   confirmationSatisfied,
   documentPrefixesToPurge,
   loadAccountDeletionPlan,
   mediaPrefixesToPurge,
   workspacesStillPrivate,
-} from '../_lib/account-deletion.js';
-import { enforceRateLimit } from '../_lib/rate-limit.js';
-import { applyCors } from '../_lib/cors.js';
+} from './account-deletion.js';
+import { enforceRateLimit } from './rate-limit.js';
+import { applyCors } from './cors.js';
 
 // In-app account deletion. Irreversible. Deletes the
 // caller's own auth account and the workspaces they PRIVATELY own. Accounts

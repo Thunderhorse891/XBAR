@@ -1,10 +1,10 @@
 import { timingSafeEqual } from 'node:crypto';
-import { sendJson } from '../_lib/http.js';
-import { getSupabaseAdmin } from '../_lib/supabase-admin.js';
-import { processTrialReminders } from '../_lib/lifecycleTriggers.js';
+import { sendJson } from './http.js';
+import { getSupabaseAdmin } from './supabase-admin.js';
+import { processTrialReminders } from './lifecycleTriggers.js';
 
-// Daily background job (Vercel cron — see the /api/cron/trial-reminders entry
-// in vercel.json; schedule it for once a day, e.g. "0 13 * * *").
+// Daily background job (Vercel cron — see the /api/reminders/trial-reminders
+// entry in vercel.json; schedule it for once a day, e.g. "0 13 * * *").
 //
 // For every workspace whose trial ends within the "ending soon" window or has
 // just expired: send the matching lifecycle email, exactly once per trial

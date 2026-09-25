@@ -1,7 +1,7 @@
-import { sendJson } from '../_lib/http.js';
-import { getSupabaseAdmin } from '../_lib/supabase-admin.js';
-import { enforceRateLimit } from '../_lib/rate-limit.js';
-import { sendWelcomeForUser } from '../_lib/lifecycleTriggers.js';
+import { sendJson } from './http.js';
+import { getSupabaseAdmin } from './supabase-admin.js';
+import { enforceRateLimit } from './rate-limit.js';
+import { sendWelcomeForUser } from './lifecycleTriggers.js';
 
 // POST /api/account/send-welcome
 //

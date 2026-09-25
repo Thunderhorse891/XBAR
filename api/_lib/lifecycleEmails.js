@@ -3,8 +3,8 @@
 // This module is intentionally pure and dependency-free: templates and window
 // decisions take explicit params and touch no network, database, or env. The
 // DB-touching orchestration (claims, recipient lookup, sending) lives in
-// ./lifecycleTriggers.js; the HTTP wrappers are api/account/send-welcome.js
-// and api/cron/trial-reminders.js.
+// ./lifecycleTriggers.js; the HTTP wrappers are api/account/[action].js
+// (action `send-welcome`) and api/reminders/[action].js (action `trial-reminders`).
 //
 // Copy bar, per the owner: professional, plain-spoken, no hype. These go out
 // under the ranch's name, so they read like a note from the operation, not a
