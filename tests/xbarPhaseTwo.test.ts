@@ -388,3 +388,85 @@ test('calendar currency handles leap day, missing, invalid and future dates', ()
   assert.equal(current('2028-03-02'), false);
   assert.equal(current('2028-03-01'), true);
 });
+
+test('sale packet labels name the horse registry instead of assuming AQHA', () => {
+  const aqhaHorse = createHorse({
+    id: 'horse-aqha-label',
+    name: 'AQHA Label Horse',
+    barnName: 'Label',
+    owner: 'Owner',
+    ownerEntity: 'Entity',
+    aqhaNumber: 'AQHA 1',
+    registrationNumber: '',
+    registered: false,
+    registry: 'AQHA',
+  });
+  const aqhaPacket = buildHorsePacketCompleteness(aqhaHorse, []);
+  const aqhaPapers = aqhaPacket.saleSlots.find((slot) => slot.key === 'aqha-papers');
+  assert.equal(aqhaPapers?.label, 'AQHA papers');
+  assert.equal(aqhaPapers?.detail, 'No AQHA registration paper is attached yet.');
+
+  const arabianHorse = createHorse({
+    id: 'horse-arabian-label',
+    name: 'Arabian Label Horse',
+    barnName: 'Label',
+    owner: 'Owner',
+    ownerEntity: 'Entity',
+    aqhaNumber: '',
+    registrationNumber: 'AHA 654321',
+    registered: true,
+    registry: 'AHA',
+  });
+  const arabianPacket = buildHorsePacketCompleteness(arabianHorse, []);
+  assert.equal(arabianPacket.saleSlots.find((slot) => slot.key === 'aqha-papers')?.label, 'AHA papers');
+
+  const unknownRegistryHorse = createHorse({
+    id: 'horse-neutral-label',
+    name: 'Neutral Label Horse',
+    barnName: 'Label',
+    owner: 'Owner',
+    ownerEntity: 'Entity',
+    aqhaNumber: '',
+    registrationNumber: '',
+    registered: false,
+    registry: '',
+  });
+  const neutralPacket = buildHorsePacketCompleteness(unknownRegistryHorse, []);
+  const neutralPapers = neutralPacket.saleSlots.find((slot) => slot.key === 'aqha-papers');
+  assert.equal(neutralPapers?.label, 'Registration papers');
+  assert.equal(neutralPapers?.detail, 'No registration paper is attached yet.');
+});
+
+test('sale photo slot labels stay registry-neutral', () => {
+  const horse = createHorse({
+    id: 'horse-photo-label',
+    name: 'Photo Label Horse',
+    barnName: 'Label',
+    owner: 'Owner',
+    ownerEntity: 'Entity',
+    aqhaNumber: '',
+    registrationNumber: '',
+    registered: false,
+    registry: 'AQHA',
+  });
+  const packet = buildHorsePacketCompleteness(horse, []);
+  const photos = packet.saleSlots.find((slot) => slot.key === 'aqha-photos');
+  assert.equal(photos?.label, 'Sale photo set');
+  assert.equal(photos?.detail, 'No sale photos are attached yet.');
+});
+
+test('packet trust summary uses buyer-plain checks-cleared language', () => {
+  const horse = createHorse({
+    id: 'horse-trust-summary',
+    name: 'Trust Summary Horse',
+    barnName: 'Label',
+    owner: 'Owner',
+    ownerEntity: 'Entity',
+    aqhaNumber: '',
+    registrationNumber: '',
+    registered: false,
+    registry: '',
+  });
+  const packet = buildHorsePacketCompleteness(horse, []);
+  assert.match(packet.trustSummary, /^\d+ of \d+ checks cleared\.$/);
+});

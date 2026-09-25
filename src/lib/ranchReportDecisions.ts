@@ -7,6 +7,20 @@ export const reportDollars = (value: number) =>
     maximumFractionDigits: 0,
   }).format(value);
 
+/**
+ * "1 horse" / "2 horses" — the singular case is the common case on a small
+ * ranch, and "1 horses" on a document handed to a banker reads as careless.
+ */
+export function reportCount(value: number, singular: string, plural = `${singular}s`): string {
+  return `${value} ${value === 1 ? singular : plural}`;
+}
+
+/** The blocker's core noun phrase, as the blocker itself states it: "Active medical review". */
+function otherCore(blocker: string): string {
+  const core = blocker.split('—')[0].trim();
+  return core.charAt(0).toLowerCase() + core.slice(1);
+}
+
 /** Presentation only: preserve the report's accounting and sale-gate predicates. */
 export function reportException(horse: HorseEconomicsRow) {
   const ownership = horse.blockers.find((s) => s.startsWith('No ownership') || s.startsWith('Transfer'));
@@ -30,7 +44,9 @@ export function reportException(horse: HorseEconomicsRow) {
       [
         ownership ? (ownership.startsWith('No ownership') ? 'Start ownership' : 'Resolve transfer') : '',
         coggins ? (coggins.startsWith('No Coggins') ? 'Record Coggins' : 'Review Coggins') : '',
-        other.length ? 'Resolve care hold' : '',
+        // Mirrors the blocker's own language ("Active medical review", not the
+        // workspace's internal "care hold") — the rancher acts on this line.
+        other.length ? `Resolve ${otherCore(other[0])}${other.length > 1 ? ` and ${other.length - 1} more` : ''}` : '',
       ]
         .filter(Boolean)
         .join('; ') || 'No recorded sale blockers',
@@ -60,20 +76,22 @@ export function reportDecisions(report: RanchReport) {
   const actions: string[] = [];
   if (missingOwnership.length)
     actions.push(
-      `Start ownership records for ${missingOwnership.length} horses covering ${reportDollars(missingOwnership.reduce((n, h) => n + h.askPrice, 0))} in asking value. Other sale gates must also clear.`,
+      `Start ownership records for ${reportCount(missingOwnership.length, 'horse')} covering ${reportDollars(missingOwnership.reduce((n, h) => n + h.askPrice, 0))} in asking value. Other sale gates must also clear.`,
     );
   const transferCount = blocked.filter((h) => h.blockers.some((s) => s.startsWith('Transfer'))).length;
-  if (transferCount > 0) actions.push(`Resolve transfer requirements for ${transferCount} horses before sale release.`);
+  if (transferCount > 0)
+    actions.push(`Resolve transfer requirements for ${reportCount(transferCount, 'horse')} before sale release.`);
   if (missingCoggins.length)
     actions.push(
-      `Obtain or record Coggins for ${missingCoggins.length} horses; verify the exam date and review the file.`,
+      `Obtain or record Coggins for ${reportCount(missingCoggins.length, 'horse')}; verify the exam date and review the file.`,
     );
   const reviewCoggins = blocked.filter((h) => h.blockers.some((s) => s.startsWith('Coggins'))).length;
-  if (reviewCoggins) actions.push(`Review Coggins currency or approval for ${reviewCoggins} horses.`);
+  if (reviewCoggins)
+    actions.push(`Review the Coggins test date and approval status for ${reportCount(reviewCoggins, 'horse')}.`);
   const medical = blocked.filter((h) => h.blockers.some((s) => s.startsWith('Active medical'))).length;
-  if (medical) actions.push(`Resolve medical review and buyer disclosure for ${medical} horses.`);
+  if (medical) actions.push(`Resolve medical review and buyer disclosure for ${reportCount(medical, 'horse')}.`);
   if (report.documentsToReview)
-    actions.push(`Review ${report.documentsToReview} existing files in the document queue.`);
+    actions.push(`Review ${reportCount(report.documentsToReview, 'existing file')} in the document queue.`);
   if (report.money.unallocatedThisMonth > 0)
     actions.push(
       `Review ${reportDollars(report.money.unallocatedThisMonth)} of current-month unallocated overhead before assessing horse profitability.`,

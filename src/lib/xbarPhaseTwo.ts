@@ -21,7 +21,7 @@ const CURRENT_HEALTH_SUPPORT_DAYS = 180;
 type Tone = 'blue' | 'slate' | 'emerald' | 'amber' | 'rose';
 type PacketStatus = 'ready' | 'review' | 'missing';
 
-type PacketHorseInput = Pick<HorseRecord, 'id' | 'name' | 'status' | 'registered' | 'gallery' | 'sale'> & {
+type PacketHorseInput = Pick<HorseRecord, 'id' | 'name' | 'status' | 'registered' | 'registry' | 'gallery' | 'sale'> & {
   alerts: Array<Pick<HorseRecord['alerts'][number], 'severity' | 'module'>>;
 };
 
@@ -88,7 +88,22 @@ export type PacketCompleteness = {
   saleSlots: SalePacketSlot[];
 };
 
-function scoreTone(score: number): Tone {
+/**
+ * The horse is on the market: an asking price, a listing state buyers can
+ * see, or buyers already watching or asking. What the buyer profile and the
+ * release gate read as a listing, and what the profile header reads as "for sale".
+ */
+export function hasActiveListing(horse: Pick<HorseRecord, 'sale'>): boolean {
+  return (
+    horse.sale.askPrice > 0 ||
+    horse.sale.listingState === 'Buyer Review' ||
+    horse.sale.listingState === 'Market Ready' ||
+    horse.sale.watchlistCount > 0 ||
+    horse.sale.inquiryCount > 0
+  );
+}
+
+export function scoreTone(score: number): Tone {
   if (score >= 85) return 'emerald';
   if (score >= 70) return 'blue';
   if (score >= 55) return 'amber';
@@ -226,27 +241,33 @@ export function buildHorsePacketCompleteness(
       alert.severity === 'high' &&
       (alert.module === 'Ownership' || alert.module === 'Medical' || alert.module === 'Documents'),
   );
-  const activeListing =
-    horse.sale.askPrice > 0 ||
-    horse.sale.listingState === 'Buyer Review' ||
-    horse.sale.listingState === 'Market Ready' ||
-    horse.sale.watchlistCount > 0 ||
-    horse.sale.inquiryCount > 0;
+  const activeListing = hasActiveListing(horse);
 
   const cogginsDocs = collectDocuments(documents, ['Coggins']);
   const vetDocs = collectDocuments(documents, ['Vet Record']);
   const hasCurrentCoggins = hasCurrentReadyDocument(cogginsDocs, CURRENT_COGGINS_DAYS, asOfDate);
   const hasCurrentHealthSupport = hasCurrentReadyDocument(vetDocs, CURRENT_HEALTH_SUPPORT_DAYS, asOfDate);
   const medicalDocsCurrent = hasCurrentReadyDocument(medicalDocs, CURRENT_HEALTH_SUPPORT_DAYS, asOfDate);
+  // Registry-aware sale-packet labels: a Thoroughbred or Arabian buyer should
+  // never read AQHA-specific copy. When the horse's registry is known, name
+  // it (e.g. "AQHA papers"); otherwise fall back to neutral language.
+  const registryName = horse.registry?.trim() || '';
+  const papersLabel = registryName ? `${registryName} papers` : 'Registration papers';
+  const papersReadyDetail = registryName
+    ? `${registryName} registration is approved and attached.`
+    : 'Registration is approved and attached.';
+  const papersMissingDetail = registryName
+    ? `No ${registryName} registration paper is attached yet.`
+    : 'No registration paper is attached yet.';
   const saleSlots: SalePacketSlot[] = [
     buildSalePacketSlot({
       key: 'aqha-papers',
-      label: 'AQHA papers',
+      label: papersLabel,
       ready: registrationDocs.some(isDocumentReady),
       review: registrationDocs.some(isDocumentResolved) || horse.registered,
-      readyDetail: 'AQHA registration is approved and attached.',
+      readyDetail: papersReadyDetail,
       reviewDetail: 'Registration data is attached but still needs final confirmation.',
-      missingDetail: 'No AQHA registration paper is attached yet.',
+      missingDetail: papersMissingDetail,
     }),
     buildSalePacketSlot({
       key: 'transfer-papers',
@@ -289,12 +310,12 @@ export function buildHorsePacketCompleteness(
     }),
     buildSalePacketSlot({
       key: 'aqha-photos',
-      label: 'AQHA photos',
+      label: 'Sale photo set',
       ready: hasApprovedHero && (hasApprovedConformation || hasApprovedSaleStill) && approvedSalePhotos.length >= 2,
       review: approvedSalePhotos.length > 0 || horse.gallery.length > 0 || mediaDocs.some(isDocumentResolved),
       readyDetail: 'Approved hero and conformation photos are ready for the share view.',
       reviewDetail: 'Photos exist, but the sale set still needs stronger approved coverage.',
-      missingDetail: 'No approved AQHA photo set is attached yet.',
+      missingDetail: 'No sale photos are attached yet.',
     }),
   ];
 
@@ -423,7 +444,7 @@ export function buildHorsePacketCompleteness(
   const trustSummary =
     requirements.length === 0
       ? 'No packet checks are active yet.'
-      : `${readyCount} of ${requirements.length} packet checks are clear.`;
+      : `${readyCount} of ${requirements.length} checks cleared.`;
 
   return {
     score,

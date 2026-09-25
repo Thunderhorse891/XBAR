@@ -95,8 +95,8 @@ test('the packet still embeds the verifier inline', async () => {
 test('the readout is the whole sealed record, not a chosen subset', () => {
   /*
    * The curated version printed nine facts. So an attacker could edit the
-   * displayed breed, colour, owner entity, compliance deadline, a release
-   * blocker or a document title, leave the payload untouched, and the digest
+   * displayed breed, colour, owner entity, compliance deadline, seller email
+   * or a document title, leave the payload untouched, and the digest
    * still matched — while none of those edits appeared in the readout. The
    * check reported `pass` over a page that lied.
    *
@@ -108,7 +108,7 @@ test('the readout is the whole sealed record, not a chosen subset', () => {
   assert.match(PACKET_VERIFIER_SCRIPT, /function describe\(out, value, indent, key\)/);
 
   // Arrays and nested objects are part of the sealed record too: documents,
-  // attachments, pending documents, blockers and warnings all live in them.
+  // attachments, pending documents and the seller block all live in them.
   assert.match(PACKET_VERIFIER_SCRIPT, /Array\.isArray\(value\)/, 'lists must be rendered, not skipped');
   assert.match(PACKET_VERIFIER_SCRIPT, /typeof value === 'object'/, 'nested sections must be rendered');
 
@@ -129,6 +129,38 @@ test('the readout is the whole sealed record, not a chosen subset', () => {
  * not an embedded resource and does not raise the script count, so neither of
  * those sweeps sees it — added or edited in place.
  */
+/* The sealed hero photo is one img the verifier must allow — and only that one.
+ *
+ * The packet renders the seller contact block's hero photo as an <img>, and
+ * the alteration sweep flags every img as an added, unsealed element. Before
+ * this exemption, clicking "Recompute from this packet" reported an untouched
+ * photo-bearing packet as ALTERED — the checker crying wolf on the packet's
+ * own content. The payload's seller.heroPhotoUrl names the exact src the
+ * generator emitted, so an img whose src matches it character-for-character
+ * is the photo the seal covers; anything else is still an alteration.
+ */
+test('the verifier exempts the one sealed hero photo, not every img', async () => {
+  const verifier = await readFile('src/lib/packetVerifierScript.ts', 'utf8');
+  const code = verifier.replace(/\/\*[\s\S]*?\*\//g, '').replace(/\/\/[^\n]*/g, '');
+
+  assert.match(code, /parsed\.seller\.heroPhotoUrl/, 'the sealed photo URL has to be read from the record');
+  // Exact src match — a "close enough" match would bless a swapped photo.
+  assert.match(code, /from === sealedPhoto/, 'only the exact sealed src is exempt');
+  // A second copy or a replaced photo is still an alteration.
+  assert.match(code, /sealedPhotoSeen > 1/, 'duplicate sealed photos must be flagged');
+  // Removing the photo must not read as agreement.
+  assert.match(code, /sealedPhotoSeen === 0/, 'a deleted sealed photo is a tampered packet, not a missing check');
+  // The generator emits exactly <img src alt width> with the sealed horse
+  // name as alt and the literal width '100%'. Checking only attribute NAMES
+  // lets <img src="<sealed>" alt="different horse" width="0"> pass while the
+  // buyer sees no photo and altered alt text — the exemption must seal the
+  // complete expected element, values included.
+  assert.match(code, /isUnmodifiedHeroImg/, 'the exemption must check the generated element');
+  assert.match(code, /seen\.width === '100%'/, "width must equal the generated '100%'");
+  assert.match(code, /expectedAlt/, 'alt must be compared to the sealed horse name');
+  // The old blanket rule is gone: every other embed type is still flagged.
+  assert.match(code, /which the seal does not cover/, 'non-photo embeds are still reported');
+});
 test('the digest pinned in the verifier is the stylesheet the generator emits', async () => {
   const generator = await readFile('src/lib/localSalePacketGenerator.ts', 'utf8');
   const declared = /export const PACKET_STYLESHEET = `([\s\S]*?)`;/.exec(generator);

@@ -55,7 +55,22 @@ import { sha256 } from './sha256.js';
  * by hand, and a reader comparing two packets sealed weeks apart should be able
  * to tell from the version alone that the covered facts differ.
  */
-export const SALE_CREDENTIAL_VERSION = 4 as const;
+/*
+ * 5, two changes from 4:
+ *
+ *  - `release` (the seller-side release verdict: status, blockers, warnings)
+ *    left the payload. The payload is printed inside the buyer packet for
+ *    hand-verification, which makes everything sealed also everything
+ *    disclosed — and the verdict was stripped from the buyer artifact
+ *    deliberately. The release gate still drives the seller-side wizard; it
+ *    is just no longer part of what the buyer hashes.
+ *  - `seller` joined the payload: the seller name, ranch, operations email,
+ *    and hero photo the packet renders. They were printed in the packet but
+ *    outside the seal, so altering the visible contact block or swapping the
+ *    photo left the digest untouched. The photo is sealed by content digest
+ *    when its bytes were available at seal time (data: URL), otherwise by URL.
+ */
+export const SALE_CREDENTIAL_VERSION = 5 as const;
 
 /** Every buyer-facing metadata field of one included document. File bytes are
  * generated server-side; these fields are what the packet renders, so covering
@@ -121,12 +136,28 @@ export interface CredentialCare {
   lastVetVisit: string;
 }
 
-/** Release-gate verdict the packet renders. */
-export interface CredentialRelease {
-  status: string;
-  allowed: boolean;
-  blockers: string[];
-  warnings: string[];
+/** Seller contact block the packet renders, sealed so the visible seller name,
+ * ranch and email cannot be swapped without breaking the digest. The hero
+ * photo is sealed by URL — or by content digest when the bytes were in hand
+ * at seal time (see heroPhotoDigest): a remote photo's bytes can change at
+ * that address without breaking the seal, and the packet says so.
+ *
+ * Everything here is buyer-facing by design: it is exactly what the packet's
+ * "Contact the seller" section shows. Sealing it closes the hole where the
+ * packet printed contact details the fingerprint did not cover.
+ */
+export interface CredentialSeller {
+  name: string;
+  ranch: string;
+  email: string;
+  heroPhotoUrl: string;
+  /**
+   * SHA-256 of the hero photo's bytes when they were available at seal time
+   * (data: URL). Empty for remote URLs: the URL itself is sealed, which
+   * detects photo-swapping, while byte-level integrity of a remote file is a
+   * storage concern the seal cannot observe.
+   */
+  heroPhotoDigest: string;
 }
 
 /**
@@ -158,7 +189,11 @@ export interface SaleCredentialInput {
   documents: CredentialDocument[];
   /** Files embedded in the packet. Empty when the packet only lists documents. */
   attachments: CredentialAttachment[];
-  release: CredentialRelease;
+  /**
+   * The seller contact block the packet renders — sealed, because it is
+   * buyer-visible and was previously printed outside the fingerprint.
+   */
+  seller: CredentialSeller;
   /** Human labels of the ownership proofs that were VERIFIED at seal time. */
   verifiedProofs: string[];
   /**
@@ -272,11 +307,12 @@ export function buildCredentialPayload(input: SaleCredentialInput): string {
     },
     documents,
     attachments,
-    release: {
-      status: input.release.status,
-      allowed: input.release.allowed,
-      blockers: [...input.release.blockers].sort(),
-      warnings: [...input.release.warnings].sort(),
+    seller: {
+      name: input.seller.name,
+      ranch: input.seller.ranch,
+      email: input.seller.email,
+      heroPhotoUrl: input.seller.heroPhotoUrl,
+      heroPhotoDigest: input.seller.heroPhotoDigest,
     },
     verifiedProofs: [...input.verifiedProofs].sort(),
     sealedAt: input.sealedAt,
@@ -294,28 +330,85 @@ export function sealCodeFromDigest(digest: string): string {
   return `SEAL-${head.slice(0, 4)}-${head.slice(4, 8)}-${head.slice(8, 12)}`;
 }
 
+/** Buyer-facing registration line. A registered flag with no registry name on
+ * file must never render the literal word "registry" — a placeholder-looking
+ * fallback inside sealed facts a buyer reads as the document's own words.
+ * And a registered flag with no number must never claim a number is on file:
+ * the seal covers alteration, not truthfulness, so inventing certainty here
+ * would launder a guess into a verified fact. */
+function registrationLine(identity: CredentialIdentity): string {
+  if (!identity.registered) return 'Registration: not registered';
+  const registry = (identity.registry || '').trim();
+  const number = (identity.registrationNumber || '').trim();
+  if (registry && number) return `Registration: ${registry} ${number}`;
+  if (number) return `Registration: ${number}`;
+  if (registry) return `Registration: ${registry} (number not on file)`;
+  return 'Registration: registered (number not on file)';
+}
+
+/** Buyer-facing care line. The sealed care facts are the status and the last
+ * vet visit, so the manifest names them instead of saying nothing. */
+function careLine(care: CredentialCare): string {
+  const status = (care.status || '').trim() || 'not on file';
+  const lastVetVisit = (care.lastVetVisit || '').trim() || 'not on file';
+  return `Care summary: ${status} · last vet visit ${lastVetVisit}`;
+}
+
+/** Buyer-facing ownership-proof line. When nothing was verified at seal time
+ * the manifest says what the buyer should do instead of reading as a negative. */
+function verifiedProofsLine(verifiedProofs: string[]): string {
+  if (verifiedProofs.length) {
+    return `Verified proofs: ${[...verifiedProofs].sort().join(', ')}`;
+  }
+  return 'Ownership proofs: none verified at seal time — confirm the underlying documents with the seller';
+}
+
+/**
+ * Buyer-facing attribution line. The sealed watermark is required, and its
+ * resolver falls back to the platform name when no buyer is named — which
+ * traces to nobody. The manifest reads "General copy" in that case rather than
+ * printing an attribution to a buyer who does not exist, and never
+ * "(watermark)" implementation jargon.
+ */
+function issuedToLine(watermark: string): string {
+  const named = (watermark || '').trim();
+  const issuedTo = named === '' || named === 'XBAR' ? 'General copy' : named;
+  return `Issued to: ${issuedTo}`;
+}
+
+/** Buyer-facing seller-contact line. The packet's "Contact the seller" section is
+ * buyer-visible, so the seal names exactly what it shows — a swapped email or
+ * photo URL after sealing must read as a different sealed fact, not as the
+ * same packet. */
+function sellerLine(seller: CredentialSeller): string {
+  const contact = [seller.name, seller.ranch, seller.email].filter(Boolean).join(' · ') || 'not provided';
+  const photo = !seller.heroPhotoUrl
+    ? 'no photo'
+    : seller.heroPhotoDigest
+      ? 'photo sealed by content digest'
+      : 'photo sealed by URL';
+  return `Seller contact: ${contact} · hero ${photo}`;
+}
+
 function buildManifest(input: SaleCredentialInput): string[] {
   return [
     `Identity: ${input.identity.name || 'unnamed'} (${input.passportId})`,
-    input.identity.registered
-      ? `Registration: ${input.identity.registry || 'registry'} ${input.identity.registrationNumber || ''}`.trim()
-      : 'Registration: not registered',
+    registrationLine(input.identity),
     `Sale terms: ${input.sale.askPrice > 0 ? `$${input.sale.askPrice.toLocaleString()}` : 'no ask price'} · ${
       input.sale.listingState || 'unlisted'
     }`,
     `Ownership: ${input.ownership.legalOwner || 'unknown'} · transfer ${input.ownership.transferStatus || 'unknown'}`,
-    `Care & disclosure summary sealed`,
+    careLine(input.care),
+    sellerLine(input.seller),
     `Proof documents sealed: ${input.documents.length}`,
     input.attachments.length
       ? `Embedded files sealed by content: ${input.attachments.length}`
       : 'Embedded files: none in this packet',
-    input.verifiedProofs.length
-      ? `Verified proofs: ${[...input.verifiedProofs].sort().join(', ')}`
-      : 'Verified proofs: none verified at seal time',
+    verifiedProofsLine(input.verifiedProofs),
     // Displayed beside the seal so the buyer can read who this copy was issued
     // to out of the SEALED record, rather than off the watermark on the page —
     // which is the copy an altered packet would have changed.
-    `Issued to (watermark): ${input.watermark}`,
+    issuedToLine(input.watermark),
   ];
 }
 

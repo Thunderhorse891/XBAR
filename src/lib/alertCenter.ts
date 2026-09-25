@@ -18,6 +18,8 @@ export type AlertDigest = {
   alerts: AutomatedAlert[];
   overdueCount: number;
   dueSoonCount: number;
+  /** Alerts due later this month — a document inside its 30-day renewal window. */
+  dueThisMonthCount: number;
   emailSubject: string;
   emailBody: string;
   browserTitle: string;
@@ -56,9 +58,13 @@ export function buildAlertDigest(items: OperationsPriorityItem[], now = new Date
 
   const overdueCount = alerts.filter((alert) => alert.timing === 'Overdue').length;
   const dueSoonCount = alerts.filter((alert) => alert.timing === 'Today' || alert.timing === 'This week').length;
+  const dueThisMonthCount = alerts.filter((alert) => alert.timing === 'This month').length;
+  // Every alert listed is counted in the summary, so a digest never lists an
+  // alert under a subject that says "0 due soon".
+  const withinMonth = dueThisMonthCount ? `, ${dueThisMonthCount} within 30 days` : '';
   const dateStamp = now.toISOString().slice(0, 10);
   const emailSubject = alerts.length
-    ? `XBAR alerts: ${overdueCount} overdue, ${dueSoonCount} due soon`
+    ? `XBAR alerts: ${overdueCount} overdue, ${dueSoonCount} due soon${withinMonth}`
     : 'XBAR alerts: no open expiration alerts';
   const emailBody = alerts.length
     ? [
@@ -74,11 +80,14 @@ export function buildAlertDigest(items: OperationsPriorityItem[], now = new Date
     alerts,
     overdueCount,
     dueSoonCount,
+    dueThisMonthCount,
     emailSubject,
     emailBody,
     browserTitle: alerts.length ? 'XBAR alerts need attention' : 'XBAR alerts clear',
     browserBody: alerts.length
-      ? `${overdueCount} overdue · ${dueSoonCount} due today/this week`
+      ? `${overdueCount} overdue · ${dueSoonCount} due today/this week${
+          dueThisMonthCount ? ` · ${dueThisMonthCount} within 30 days` : ''
+        }`
       : 'No urgent horse-care alerts are open.',
   };
 }

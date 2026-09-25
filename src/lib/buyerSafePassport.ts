@@ -21,7 +21,9 @@ export interface PublicPassportDTO {
   color: string;
   markings: string;
   foaledOn: string;
-  age: number;
+  /** Null when the record has no usable age — never 0, which a buyer would read
+   * as a newborn foal. Renderers must omit the age line when this is null. */
+  age: number | null;
   /** Registration is shown only when the record is actually registered. */
   registered: boolean;
   registry: string;
@@ -67,7 +69,7 @@ export function toPublicPassport(horse: HorseRecord): PublicPassportDTO {
     color: str(horse.color),
     markings: str(horse.markings),
     foaledOn: str(horse.foaledOn),
-    age: typeof horse.age === 'number' && horse.age > 0 ? horse.age : 0,
+    age: typeof horse.age === 'number' && horse.age > 0 ? horse.age : null,
     registered,
     registry: registered ? str(horse.registry) : '',
     registrationNumber: registered ? str(horse.registrationNumber) || str(horse.aqhaNumber) : '',

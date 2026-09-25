@@ -42,6 +42,7 @@ const BuyerDealRoom = lazy(() => import('./routes/BuyerDealRoom'));
 const SalePacketStudio = lazy(() => import('./routes/SalePacketStudio'));
 const Reports = lazy(() => import('./routes/Reports'));
 const Financials = lazy(() => import('./routes/Financials'));
+const Costs = lazy(() => import('./routes/Costs'));
 const TodayWork = lazy(() => import('./routes/TodayWork'));
 const HerdGroups = lazy(() => import('./routes/HerdGroups'));
 const Pastures = lazy(() => import('./routes/Pastures'));
@@ -55,6 +56,7 @@ const Breeding = lazy(() => import('./routes/Breeding'));
 const BuyerProfile = lazy(() => import('./routes/BuyerProfile'));
 const VerifyPacket = lazy(() => import('./routes/VerifyPacket'));
 const Documents = lazy(() => import('./routes/Documents'));
+const ExpiringSoon = lazy(() => import('./routes/ExpiringSoon'));
 const Expenses = lazy(() => import('./routes/Expenses'));
 const Horses = lazy(() => import('./routes/Horses'));
 const Login = lazy(() => import('./routes/Login'));
@@ -90,9 +92,11 @@ const ROUTE_LABELS: Record<string, string> = {
   '/sale-packets': 'Sale Packets',
   '/reports': 'Reports',
   '/financials': 'Money',
+  '/costs': 'Costs',
   '/assets': 'Ranch Assets',
   '/breeding': 'Breeding Records',
   '/documents': 'Documents',
+  '/expiring': 'Expiring soon',
   '/expenses': 'Expenses',
   '/horses': 'Horses',
   '/login': 'Login',
@@ -318,6 +322,7 @@ export default function App() {
                 <Route path="sale-packet-studio" element={<Navigate to="/sale-packets" replace />} />
                 <Route path="reports" element={<Reports />} />
                 <Route path="financials" element={<Financials />} />
+                <Route path="costs" element={<Costs />} />
                 <Route path="animals" element={<Navigate to="/horses" replace />} />
                 <Route path="animals/:id" element={<LegacyHorseRedirect />} />
                 <Route path="health-care" element={<HealthCare />} />
@@ -327,6 +332,7 @@ export default function App() {
                 <Route path="horses" element={<Horses />} />
                 <Route path="horses/:id" element={<AnimalProfile />} />
                 <Route path="documents" element={<Documents />} />
+                <Route path="expiring" element={<ExpiringSoon />} />
                 <Route path="document-library" element={<Navigate to="/documents" replace />} />
                 <Route path="weather" element={<Weather />} />
                 <Route path="ownership" element={<Ownership />} />

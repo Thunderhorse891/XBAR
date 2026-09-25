@@ -52,11 +52,20 @@ export function buildBadgeSnippet(verifyUrl: string, sealCode: string): string {
 
 /**
  * A share caption for native share / social. Honest: says verified-unaltered,
- * points at verification, never claims an appraisal.
+ * points at verification, never claims an appraisal. Names the RANCH, not just
+ * the platform — the caption travels under the seller's name to buyers.
+ *
+ * `ranchName` is optional so existing callers keep working; pass the workspace
+ * business/ranch name so the caption reads "{Ranch}: sale packet for Bella
+ * verified by XBAR (seal code SEAL-…). Confirm it's unaltered before you buy:".
+ * Seal codes already start with "SEAL-" (see api/_lib/sale-credential.js), so
+ * the code is interpolated as-is — never double-prefixed.
  */
-export function buildShareText(horseName: string, sealCode?: string): string {
+export function buildShareText(horseName: string, sealCode?: string, ranchName?: string): string {
   const name = horseName.trim() || 'This horse';
   const seal = (sealCode || '').trim();
-  const sealPhrase = seal ? ` (seal ${seal})` : '';
-  return `${name}: sale packet verified by XBAR${sealPhrase}. Confirm it's unaltered before you buy:`;
+  const ranch = (ranchName || '').trim();
+  const sealPhrase = seal ? ` (seal code ${seal})` : '';
+  const subject = ranch ? `${ranch}: sale packet for ${name}` : `${name}: sale packet`;
+  return `${subject} verified by XBAR${sealPhrase}. Confirm it's unaltered before you buy:`;
 }

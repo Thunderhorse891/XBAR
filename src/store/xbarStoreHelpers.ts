@@ -361,6 +361,10 @@ export function createExpenseReceiptRecord(
     vendor: input.vendor.trim(),
     amount: Number(input.amount),
     receiptDate: input.receiptDate,
+    // Validation refuses half a pair, so both are present or neither is.
+    ...(input.quantity !== undefined && input.unit?.trim()
+      ? { quantity: Number(input.quantity), unit: input.unit.trim() }
+      : {}),
     notes: input.notes?.trim() || '',
     uploadedAt: nowStamp(),
     uploadedBy: input.uploadedBy.trim(),
@@ -816,11 +820,15 @@ export function canRestorePersistedState(raw: unknown): boolean {
          *                 template-literal site at AnimalProfile.tsx:323 and
          *                 stopped there.
          *   readiness.packetStatus
-         *                 `{animal.readiness?.packetStatus ?? 'Review'}` —
-         *                 AnimalProfile.tsx:670, inside a StatusChip. Excluded
-         *                 as "every read is a comparison or a template string",
-         *                 which describes Breeding.tsx:100 and Sales.tsx:61 and
-         *                 not this one.
+         *                 Printed into the buyer packet — publicBuyerPacket.ts
+         *                 `row('Packet status', …)` and the document template
+         *                 `fieldRow` — through String(), so an object reaches a
+         *                 buyer as "[object Object]". (The profile used to
+         *                 render it as a bare React child; that row now comes
+         *                 from the computed sale readiness score.) Excluded
+         *                 once as "every read is a comparison or a template
+         *                 string", which describes Breeding.tsx:100 and
+         *                 Sales.tsx:61 and not these.
          *
          * Deliberately absent, and this time checked by looking for what
          * actually breaks — a value reaching JSX as a bare child — rather than
@@ -881,7 +889,7 @@ export function canRestorePersistedState(raw: unknown): boolean {
         'location.stall',
         // `{horse.sale.listingState}` — Sales.tsx:380, SharedAccess.tsx:269.
         'sale.listingState',
-        // `{animal.readiness?.packetStatus ?? 'Review'}` — AnimalProfile.tsx:670.
+        // Printed into the buyer packet through String() — publicBuyerPacket.ts.
         'readiness.packetStatus',
       ],
       /*
@@ -2045,23 +2053,6 @@ export function guessHorseSexFromDocuments(documents: DocumentRecord[]): NewHors
   if (haystack.includes('colt')) return 'Colt';
   if (haystack.includes('filly')) return 'Filly';
   return 'Mare';
-}
-
-export function inferHorseNameFromDocumentTitle(title: string) {
-  const normalized = title
-    .replace(/[-_]/g, ' ')
-    .replace(
-      /\b(registration|certificate|papers?|coggins|health|bill\s+of\s+sale|transfer|packet|vet|record|scan|copy|document|doc|pdf|jpg|jpeg|png)\b/gi,
-      ' ',
-    )
-    .replace(/\s+/g, ' ')
-    .trim();
-
-  if (!/[A-Za-z]/.test(normalized) || normalized.length < 3) {
-    return '';
-  }
-
-  return normalized;
 }
 
 export function buildHorseInputFromDocuments(

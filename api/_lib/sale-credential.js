@@ -48,13 +48,28 @@ function str(value) {
  * bundled into the packet (server-selected), sorted by id so ordering never
  * changes the seal.
  */
-export function buildServerCredentialPayload({ packetId, horseId, context, ownershipRecord, documents, sealedAt }) {
+export function buildServerCredentialPayload({
+  packetId,
+  horseId,
+  context,
+  ownershipRecord,
+  documents,
+  sealedAt,
+  sellerIdentity,
+}) {
   const horse = context?.horse ?? {};
   const health = context?.health ?? {};
   const workspace = context?.workspace ?? {};
   const docs = (documents || [])
     .map((doc) => ({ id: str(doc.document_id), type: str(doc.document_type), title: str(doc.title) }))
     .sort((a, b) => (a.id < b.id ? -1 : a.id > b.id ? 1 : 0));
+
+  // The sealed seller names are the SAME filtered identity the PDF cover
+  // renders: the caller filters through api/_lib/workspace-identity.js before
+  // sealing, so the seal never authenticates a quick-start placeholder the
+  // cover omits. Without an explicit identity the raw workspace names are
+  // sealed, as before.
+  const identity = sellerIdentity ?? {};
 
   const payload = {
     version: SERVER_SALE_CREDENTIAL_VERSION,
@@ -85,8 +100,8 @@ export function buildServerCredentialPayload({ packetId, horseId, context, owner
     },
     documents: docs,
     workspace: {
-      businessName: str(workspace.businessName),
-      ranchName: str(workspace.ranchName),
+      businessName: str(identity.business ?? workspace.businessName),
+      ranchName: str(identity.ranch ?? workspace.ranchName),
     },
     sealedAt: str(sealedAt),
   };

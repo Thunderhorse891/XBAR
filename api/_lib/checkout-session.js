@@ -22,27 +22,30 @@ import { stripeSubscriptionBlocksCheckout } from './subscription-status.js';
  *
  * The rule:
  *
- *   - An open session for the same tier and seat count is the SAME purchase.
+ *   - An open session for the same tier, billing period, price and seat count
+ *     is the SAME purchase.
  *     Send the seller back to it instead of starting a second one.
  *   - Any other open session is a different purchase left half-finished. Expire
  *     it, because a stale tab that can still be completed is the duplicate
  *     charge waiting to happen.
  *
- * Seat count is compared through metadata written at creation. A session from
- * before that metadata existed has no seat count, so it never matches and is
- * expired rather than reused — which is the safe direction: reusing a session
- * for the wrong number of seats charges the wrong amount.
+ * All billable dimensions are compared through metadata written at creation.
+ * A session from before any of that metadata existed never matches and is
+ * expired rather than reused — which is the safe direction: guessing at a
+ * legacy session's price or cadence can charge the wrong amount.
  */
 
 /**
  * @param {Array<object>|null|undefined} openSessions Sessions Stripe reports as open for this customer.
- * @param {{ workspaceId: string, tier: string, seatCount: number }} intent What the seller is trying to buy now.
+ * @param {{ workspaceId: string, tier: string, seatCount: number, billingPeriod: string, priceId: string }} intent What the seller is trying to buy now.
  * @returns {{ action: 'reuse'|'create', session: object|null, expire: object[] }}
  */
 export function planCheckoutSession(openSessions, intent) {
   const workspaceId = String(intent?.workspaceId ?? '');
   const tier = String(intent?.tier ?? '');
   const seatCount = String(intent?.seatCount ?? '');
+  const billingPeriod = String(intent?.billingPeriod ?? '');
+  const priceId = String(intent?.priceId ?? '');
 
   const mine = (Array.isArray(openSessions) ? openSessions : []).filter((session) => {
     if (!session || typeof session !== 'object') return false;
@@ -56,8 +59,12 @@ export function planCheckoutSession(openSessions, intent) {
 
   const sameIntent = mine.find(
     (session) =>
+      (billingPeriod === 'monthly' || billingPeriod === 'annual') &&
+      priceId.length > 0 &&
       String(session.metadata?.workspace_tier ?? '') === tier &&
       String(session.metadata?.workspace_seats ?? '') === seatCount &&
+      String(session.metadata?.workspace_billing_period ?? '') === billingPeriod &&
+      String(session.metadata?.workspace_price_id ?? '') === priceId &&
       typeof session.url === 'string' &&
       session.url.length > 0,
   );
@@ -200,12 +207,6 @@ export async function releaseCheckoutLock(supabase, workspaceId, token) {
   } catch (error) {
     console.warn('Releasing the checkout lock failed; it will expire on its own.', error);
   }
-}
-
-/** Whether Stripe refused because another checkout for this workspace is in flight. */
-export function isIdempotencyConflict(error) {
-  const type = error && typeof error === 'object' ? String(error.type ?? '') : '';
-  return type === 'idempotency_error';
 }
 
 /**

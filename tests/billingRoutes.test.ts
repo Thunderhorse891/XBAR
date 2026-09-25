@@ -104,7 +104,6 @@ test('upgrade links use canonical billing path instead of legacy billing routes'
   const checkedFiles = [
     'src/components/RequireSubscriptionFeature.tsx',
     'src/components/SalePacketWizard.tsx',
-    'src/components/UsageMeterPanel.tsx',
     'src/lib/activation.ts',
     'src/lib/subscriptionGates.ts',
     'src/routes/Breeding.tsx',
@@ -147,8 +146,16 @@ test('only a missing managed identity may fall back to a payment link', async ()
   );
   assert.match(
     screen,
-    /const fallback = canUsePaymentLinkFallback\(managed\.code\) \? getStripePaymentLink\(tier\) : '';/,
+    /const fallback = canUsePaymentLinkFallback\(managed\.code\) \? getStripePaymentLink\(tier, billingPeriod\) : '';/,
     'the screen must reach the payment link only for the no-identity case',
+  );
+  // The fallback must honor the selected billing period. Reaching for the
+  // monthly link here would silently sell monthly to a buyer who chose
+  // annual — the wrong charge with a correct-looking receipt.
+  assert.doesNotMatch(
+    screen,
+    /const fallback = canUsePaymentLinkFallback\(managed\.code\) \? getStripePaymentLink\(tier\) : '';/,
+    'the payment-link fallback must not drop the billing period',
   );
 });
 

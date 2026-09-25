@@ -67,6 +67,7 @@ export function summarizeSealedPacket(row) {
   const horse = asObject(sealed.horse) || {};
   const owner = asObject(sealed.owner) || {};
   const transfer = asObject(sealed.transfer) || {};
+  const workspace = asObject(sealed.workspace) || {};
   const documents = Array.isArray(sealed.documents) ? sealed.documents : [];
 
   return {
@@ -89,6 +90,12 @@ export function summarizeSealedPacket(row) {
       color: str(horse.color),
       legalOwner: str(owner.legalOwner),
       transferStatus: str(transfer.status),
+      // The sealed seller identity, so a buyer can compare the PDF's
+      // "Presented By" against what XBAR actually sealed: a packet whose
+      // presenter line was edited while the packet code was kept still
+      // verifies as unaltered, but the mismatch is now visible.
+      sellerBusinessName: str(workspace.businessName),
+      sellerRanchName: str(workspace.ranchName),
       documents: documents.map((doc) => ({ type: str(doc.type), title: str(doc.title) })),
       sealedAt: str(seal.sealedAt),
     },
@@ -156,7 +163,7 @@ export default async function handler(req, res) {
       ok: true,
       found: true,
       anchored: false,
-      message: 'This packet exists but has no server-anchored seal on record. Ask the seller to regenerate it.',
+      message: 'This packet exists but has no verified seal on record. Ask the seller to regenerate it.',
     });
   }
 

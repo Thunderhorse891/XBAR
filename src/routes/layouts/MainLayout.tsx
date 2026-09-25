@@ -3,6 +3,8 @@ import { NavLink, Outlet, useLocation, useNavigate } from 'react-router-dom';
 import {
   Bell,
   Boxes,
+  Calculator,
+  CalendarClock,
   ChevronDown,
   CircleHelp,
   ClipboardList,
@@ -31,6 +33,7 @@ import { GlobalCreateDrawer, createActions } from '@/components/saas/flows';
 import { billingPath } from '@/lib/billingRoutes';
 import { buyerFollowUpPath } from '@/lib/buyerRoutes';
 import { buildCareBoardRows } from '@/lib/dashboardOps';
+import { buildExpiryRadar, expiryBellCount } from '@/lib/documentExpiry';
 import { isSupabaseConfigured } from '@/lib/platformConfig';
 import { useCloudStore } from '@/store/useCloudStore';
 import { useUiStore } from '@/store/useUiStore';
@@ -43,7 +46,12 @@ import { useEffectiveSubscription } from '@/hooks/useOwnerPreview';
 const XBAR_ICON = '/brand/apple-touch-icon.png';
 const XBAR_WATERMARK = '/brand/icon-512.png';
 
-type NavItem = { label: string; path: string; icon: LucideIcon; badgeKey?: 'docs' | 'transfers' | 'care' };
+type NavItem = {
+  label: string;
+  path: string;
+  icon: LucideIcon;
+  badgeKey?: 'docs' | 'transfers' | 'care' | 'expiring';
+};
 type NavGroup = { heading: string; items: NavItem[] };
 
 const navGroups: NavGroup[] = [
@@ -69,6 +77,7 @@ const navGroups: NavGroup[] = [
     heading: 'Selling',
     items: [
       { label: 'Money', path: '/financials', icon: TrendingUp },
+      { label: 'Costs', path: '/costs', icon: Calculator },
       { label: 'Sales', path: '/sales', icon: Gauge },
       { label: 'Buyer follow-up', path: buyerFollowUpPath(), icon: Users },
       { label: 'Sale Packets', path: '/sale-packets', icon: FileText },
@@ -79,6 +88,7 @@ const navGroups: NavGroup[] = [
     heading: 'Records',
     items: [
       { label: 'Documents', path: '/documents', icon: FolderOpen, badgeKey: 'docs' },
+      { label: 'Expiring soon', path: '/expiring', icon: CalendarClock, badgeKey: 'expiring' },
       { label: 'Equipment', path: '/equipment', icon: Boxes },
       { label: 'Expenses', path: '/expenses', icon: Coins },
       { label: 'Reports', path: '/reports', icon: Gauge },
@@ -121,13 +131,25 @@ export default function MainLayout() {
 
   const pendingReview = documents.filter((d) => d.state === 'Needs Review' || d.state === 'Matched').length;
   const pendingTransfers = ownershipRecords.filter((r) => r.transferStatus !== 'Clear').length;
-  const careDueCount = useMemo(() => {
-    const board = buildCareBoardRows(horses, documents, expenseReceipts);
-    return board.filter((row) => row.signals.some((s) => s.status === 'due')).length;
-  }, [horses, documents, expenseReceipts]);
+  const careBoard = useMemo(
+    () => buildCareBoardRows(horses, documents, expenseReceipts),
+    [horses, documents, expenseReceipts],
+  );
+  const careDueCount = careBoard.filter((row) => row.signals.some((s) => s.status === 'due')).length;
 
-  const badges: Record<string, number> = { docs: pendingReview, transfers: pendingTransfers, care: careDueCount };
-  const notifications = pendingReview + pendingTransfers + careDueCount;
+  // The nav badge counts every paper expired or under 30 days; the bell adds
+  // the ones careDueCount does not already hold.
+  const expiryRadar = useMemo(() => buildExpiryRadar(documents, horses), [documents, horses]);
+  const expiringCount = expiryRadar.attentionCount;
+  const expiringForBell = expiryBellCount(expiryRadar, careBoard);
+
+  const badges: Record<string, number> = {
+    docs: pendingReview,
+    transfers: pendingTransfers,
+    care: careDueCount,
+    expiring: expiringCount,
+  };
+  const notifications = pendingReview + pendingTransfers + careDueCount + expiringForBell;
 
   const ranchName = workspaceProfile.ranchName || workspaceProfile.businessName || 'Your ranch';
   const planTier = subscription?.tier || 'Starter';

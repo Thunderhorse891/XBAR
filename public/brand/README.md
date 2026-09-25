@@ -30,6 +30,16 @@ Keep existing aliases while code still references them. New consumers should use
 
 `xbar-horse-contour.svg`, `xbar-watermark-x.svg`, and `xbar-wordmark.svg` embed base64 PNG images inside an SVG wrapper. They are not editable vector masters and do not gain true resolution independence from the `.svg` extension. Do not use them as evidence that a scalable official mark exists.
 
+## Homepage pilot encodings
+
+`xbar-report-horse-landing.webp` (1672 × 941) and `xbar-report-mark-landing.webp`
+(1254 × 1254) are lossless WebP encodings of Erin's original
+`xbar-report-horse.png` and `xbar-report-mark.png`. They keep the same composition,
+colours, dimensions, and decoded pixels; the PNG masters remain unchanged.
+Only the public homepage pilot uses these encodings, through `<picture>` with
+the original PNG fallback. The below-fold X image loads lazily. These files
+reduce transfer size without creating a new mark, tracing or re-lettering it.
+
 ## Governance
 
 - Preserve Erin's supplied master artwork unchanged. Resize it proportionally and render it at or below its intrinsic dimensions.

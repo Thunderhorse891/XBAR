@@ -57,6 +57,11 @@ for (const tier of TIERS) {
       marketing.monthlyRate,
       `${tier} is billed at ${server.monthlyRate} but advertised at ${marketing.monthlyRate}`,
     );
+    assert.equal(
+      server.annualRate,
+      marketing.annualRate,
+      `${tier} annual is billed at ${server.annualRate} but advertised at ${marketing.annualRate}`,
+    );
 
     // deepEqual both ways: a limit present on one side and absent on the other
     // is drift too, not just a differing number.
