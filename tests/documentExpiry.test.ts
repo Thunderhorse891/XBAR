@@ -1090,6 +1090,26 @@ const CVI_EXPIRY_CORPUS: Array<[string, string, string]> = [
     '2026-07-15',
   ],
   [
+    'a preamble naming the CVI and a Coggins above the heading, as reviewed',
+    'A current CVI and Coggins are required\nCertificate of Veterinary Inspection\nExpiration Date: 07/15/2026',
+    '2026-07-15',
+  ],
+  [
+    'the same preamble in capitals',
+    'A CURRENT CVI AND COGGINS ARE REQUIRED\nCertificate of Veterinary Inspection\nExpiration Date: 07/15/2026',
+    '2026-07-15',
+  ],
+  [
+    'a qualified heading below a preamble',
+    'Travel papers: a current CVI is required\nEquine Interstate Health Certificate\nExpiration Date: 07/15/2026',
+    '2026-07-15',
+  ],
+  [
+    'a preamble and no heading at all',
+    'A current CVI and Coggins are required\nExpiration Date: 07/15/2026',
+    '2026-05-31',
+  ],
+  [
     'bare label opening a line',
     'Certificate of Veterinary Inspection\nCertificate expiration date: 07/15/2026',
     '2026-07-15',
@@ -1347,6 +1367,139 @@ test('the unplaced-paper identity corpus: a paper is what its name or heading sa
     }),
   );
   assert.deepEqual(failures, [], `${failures.length} of ${UNPLACED_IDENTITY_CORPUS.length} rows wrong`);
+});
+
+/*
+ * A heading that says the paper is about a certificate, policy or contract
+ * overrides the type intake gave it and the name it was filed under: "CVI.pdf"
+ * headed "CVI Requirements for Interstate Travel" is a requirements sheet.
+ * Only a heading that says so counts. A genuine paper's first line can carry
+ * the same words as a field or a direction — "Sample ID", "EIA Test
+ * Procedure:", "see instructions on reverse" — and refusing it would drop a
+ * real Coggins or CVI off the radar without a word.
+ */
+const REFERENCE_HEADING_CORPUS: Array<[string, DocumentRecord['type'], string, string, string | null]> = [
+  // [case, type, title, text, expected kind]
+  [
+    'insurance requirements heading, as reviewed',
+    'Insurance',
+    'Insurance.pdf',
+    'Insurance Requirements\nExpiration Date: 06/15/2026',
+    null,
+  ],
+  [
+    'CVI requirements heading, as reviewed',
+    'Registration',
+    'CVI.pdf',
+    'CVI Requirements for Interstate Travel\nExpiration Date: 07/15/2026',
+    null,
+  ],
+  [
+    'the same filed by the server',
+    'Ownership Memo',
+    'CVI.pdf',
+    'CVI Requirements for Interstate Travel\nExpiration Date: 07/15/2026',
+    null,
+  ],
+  [
+    'Coggins instructions heading',
+    'Coggins',
+    'Coggins.pdf',
+    'Coggins Test Instructions\nExpiration Date: 06/15/2026',
+    null,
+  ],
+  ['lease template heading', 'Breeding Contract', 'Contract.pdf', 'Lease Agreement Template', null],
+  [
+    'requirements for a certificate',
+    'Vet Record',
+    'CVI.pdf',
+    'Requirements for a Health Certificate\nExpiration Date: 07/15/2026',
+    null,
+  ],
+  ['a sample certificate', 'Registration', 'CVI.pdf', 'Sample Certificate of Veterinary Inspection', null],
+  ['a how-to sheet', 'Insurance', 'Policy.pdf', 'How to File an Insurance Claim', null],
+  [
+    'a heading with a colon',
+    'Insurance',
+    'Insurance.pdf',
+    'Insurance Requirements:\nExpiration Date: 06/15/2026',
+    null,
+  ],
+  // Controls: the papers themselves, including first lines that carry the same words.
+  [
+    'a genuine policy',
+    'Insurance',
+    'Insurance.pdf',
+    'Equine Mortality Insurance Policy\nExpiration Date: 06/15/2026',
+    'Insurance',
+  ],
+  [
+    'a genuine CVI',
+    'Registration',
+    'CVI.pdf',
+    'Certificate of Veterinary Inspection\nExpiration Date: 07/15/2026',
+    'Health certificate',
+  ],
+  ['a lab method field', 'Coggins', 'Coggins.pdf', 'EIA Test Procedure: AGID\nDate of Test: 05/01/2026', 'Coggins'],
+  ['a sample number', 'Coggins', 'Coggins.pdf', 'Sample ID: 4471  Equine Infectious Anemia', 'Coggins'],
+  ['a lab heading', 'Coggins', 'Coggins.pdf', 'Equine Infectious Anemia Laboratory Test', 'Coggins'],
+  [
+    'a form direction beside the heading',
+    'Registration',
+    'CVI.pdf',
+    'Certificate of Veterinary Inspection (see instructions on reverse)',
+    'Health certificate',
+  ],
+  [
+    'a form direction above the heading',
+    'Vet Record',
+    'CVI.pdf',
+    'See instructions on reverse of this certificate\nCertificate of Veterinary Inspection',
+    'Health certificate',
+  ],
+  [
+    'a form note OCR ran into the heading',
+    'Registration',
+    'CVI.pdf',
+    'HEALTH CERTIFICATE INSTRUCTIONS ON BACK',
+    'Health certificate',
+  ],
+  [
+    'an insurer with guide in its name',
+    'Insurance',
+    'Policy.pdf',
+    'Guide One Insurance Company\nPolicy Number: EQ-4471',
+    'Insurance',
+  ],
+];
+
+test('a heading that says the paper is about a certificate, policy or contract overrides its type and name', () => {
+  const failures = REFERENCE_HEADING_CORPUS.flatMap(([name, type, title, text, expected]) => {
+    const actual = expiryKindOf({ type, title, extractedTextPreview: text });
+    return actual === expected ? [] : [`${type} — ${name}: expected ${expected}, got ${actual}`];
+  });
+  assert.deepEqual(failures, [], `${failures.length} of ${REFERENCE_HEADING_CORPUS.length} rows wrong`);
+  // The reviewed pair makes no claim on the radar either.
+  const radar = buildExpiryRadar(
+    [
+      doc({
+        type: 'Insurance',
+        horseId: 'h1',
+        title: 'Insurance.pdf',
+        extractedTextPreview: 'Insurance Requirements\nExpiration Date: 06/15/2026',
+      }),
+      doc({
+        type: 'Registration',
+        horseId: 'h1',
+        title: 'CVI.pdf',
+        extractedTextPreview: 'CVI Requirements for Interstate Travel\nExpiration Date: 07/15/2026',
+      }),
+    ],
+    horses,
+    NOW,
+  );
+  assert.deepEqual(radar.items, []);
+  assert.deepEqual(describeExpiryRisk(radar, horses), [], 'no uncovered-value claim from a requirements heading');
 });
 
 test('a paper about a certificate, policy or contract is not one, whatever intake typed it', () => {

@@ -220,7 +220,7 @@ const COMPONENT_SECTION =
   /vaccin|immuniz|rabies|coggins|\bEIA\b|\bELISA\b|\bAGID\b|\btest|influenza|rhino|strangles|west\s+nile|tetanus|encephal|\bEEE\b|\bWEE\b|potomac|\bPHF\b|booster|\bdose|\blot\s*(?:no|#|number)|\bserial|administered|\bgiven\b|laborator|\blab\b|sample|accession/i;
 
 function inCertificateHeader(index: number, text: string): boolean {
-  const heading = text.search(HEALTH_CERTIFICATE_TEXT);
+  const heading = certificateHeadingIndex(text);
   const start = heading < 0 ? 0 : heading;
   const section = text.slice(start).search(COMPONENT_SECTION);
   const end = section < 0 ? text.length : start + section;
@@ -278,6 +278,27 @@ function singleLabelledDay(text: string | undefined, pattern: RegExp): number | 
 
 const HEALTH_CERTIFICATE_TEXT =
   /health\s+certificate|certificate\s+of\s+veterinary\s+inspection|\bCVI\b|interstate\s+health/i;
+
+/*
+ * The certificate's heading is the first line that names it as a title: the
+ * name opens the line, after at most a few capitalised qualifiers ("Equine
+ * Interstate Health Certificate", "TEXAS CVI"). A preamble that mentions it
+ * in a sentence ("A current CVI and Coggins are required") is not its
+ * heading, and neither is a line that also names a vaccine or test, which in
+ * capitals would otherwise pass as a title. With no such line the first
+ * mention is used, and a component named there ends the header at once, so
+ * the certificate falls back to its inspection window.
+ */
+const TITLE_QUALIFIERS = /^[ \t]*(?:[A-Z][\w.&'-]*[ \t]+){0,4}$/;
+
+function certificateHeadingIndex(text: string): number {
+  for (const line of text.matchAll(/[^\r\n]+/g)) {
+    const name = line[0].search(HEALTH_CERTIFICATE_TEXT);
+    if (name < 0 || COMPONENT_SECTION.test(line[0])) continue;
+    if (TITLE_QUALIFIERS.test(line[0].slice(0, name))) return (line.index ?? 0) + name;
+  }
+  return text.search(HEALTH_CERTIFICATE_TEXT);
+}
 /*
  * "Policy" alone is not insurance: a stable's biosecurity or vaccination
  * policy can carry a date too, and reading it as a lapsed insurance policy
@@ -324,11 +345,36 @@ const UNPLACED_TYPES: ReadonlySet<DocumentRecord['type']> = new Set(['Registrati
 const REFERENCE_DOCUMENT =
   /\b(?:requirements?|checklists?|instructions?|guide(?:lines)?|rules|procedures?|how\s+to|faq|templates?|blank|sample)\b/i;
 
+/*
+ * A heading can say the same thing, and it outranks the type intake gave the
+ * paper and the name it was filed under: "Insurance.pdf" headed "Insurance
+ * Requirements", or "CVI.pdf" headed "CVI Requirements for Interstate
+ * Travel". Only a heading that says the paper is ABOUT a certificate, policy
+ * or contract counts — the reference word as its subject ("Insurance
+ * Requirements", "Coggins Test Instructions"), ahead of the kind ("Requirements
+ * for a Health Certificate", "How to File an Insurance Claim"), or marking a
+ * specimen ("Sample CVI", "Blank Health Certificate"). A genuine paper's first
+ * line can carry the same words as a field or a direction — "Sample ID: 4471",
+ * "EIA Test Procedure: AGID", "see instructions on reverse" — and refusing it
+ * would drop a real Coggins or CVI off the radar without a word.
+ */
+const REFERENCE_KIND =
+  '(?:cvi|health\\s+certificates?|certificates?(?:\\s+of\\s+veterinary\\s+inspection)?|coggins|eia|equine\\s+infectious\\s+ana?emia|insurance|polic(?:y|ies)|coverage|contracts?|agreements?|leases?)';
+const REFERENCE_HEADING = new RegExp(
+  [
+    `\\b${REFERENCE_KIND}(?:[ \\t]+[a-z]+)?[ \\t]+(?:requirements?|checklists?|instructions?|guide(?:lines)?|rules|faqs?|templates?)\\b(?![ \\t]+on[ \\t]+(?:the[ \\t]+)?(?:reverse|back))`,
+    `(?<!\\b(?:see|read|follow)[ \\t]+(?:the[ \\t]+)?)\\b(?:(?:requirements?|instructions?|guide(?:lines)?|rules|procedures?|checklists?)[ \\t]+(?:for|to|on|about|when)|how[ \\t]+to)(?:[ \\t]+[a-z]+){0,3}?[ \\t]+${REFERENCE_KIND}\\b`,
+    `\\b(?:sample|blank|templates?)[ \\t:–-]+(?:(?:an?|the)[ \\t]+)?${REFERENCE_KIND}\\b`,
+  ].join('|'),
+  'i',
+);
+
 /** Which time-sensitive paper a document is, or null when it does not expire. */
 export function expiryKindOf(
   document: Pick<DocumentRecord, 'type' | 'title' | 'extractedTextPreview'>,
 ): ExpiryKind | null {
   if (REFERENCE_DOCUMENT.test(document.title ?? '')) return null;
+  if (REFERENCE_HEADING.test(headingOf(document.extractedTextPreview ?? ''))) return null;
   if (document.type === 'Coggins') return 'Coggins';
   if (document.type === 'Insurance') return 'Insurance';
   if (document.type === 'Breeding Contract') return 'Contract';
