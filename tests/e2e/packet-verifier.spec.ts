@@ -1,7 +1,8 @@
 import { expect, test, type Page } from '@playwright/test';
-import { writeFile } from 'node:fs/promises';
+import { readFile, writeFile } from 'node:fs/promises';
 import { pathToFileURL } from 'node:url';
 import { buildLocalSalePacket } from '../../src/lib/localSalePacketGenerator.js';
+import { PACKET_VERIFIER_SCRIPT } from '../../src/lib/packetVerifierScript.js';
 import type { HorseRecord, OwnershipRecord, WorkspaceProfile } from '../../src/types/xbar.js';
 
 // Exercise the exported file with Chromium's actual parser and DOM. The Node
@@ -234,4 +235,163 @@ test('rejects a hidden sealed byline', async ({ page }, testInfo) => {
   await page.locator('#xbar-seller-byline').evaluate((byline) => byline.setAttribute('hidden', ''));
   await expect(page.locator('#xbar-seller-byline')).not.toBeVisible();
   await expectVerdict(page, 'fail');
+});
+
+async function openVaultHost(page: Page) {
+  const config = JSON.parse(await readFile('vercel.json', 'utf8'));
+  const csp = config.headers[0].headers.find(
+    (header: { key: string }) => header.key === 'Content-Security-Policy',
+  ).value;
+  // The Vite server supplies the actual application modules; this one page
+  // receives the deployed policy so its blob documents inherit the real CSP.
+  await page.route('**/packet-vault-test', (route) =>
+    route.fulfill({
+      contentType: 'text/html',
+      headers: { 'Content-Security-Policy': csp },
+      body: '<!doctype html><title>Packet vault test</title>',
+    }),
+  );
+  await page.goto('http://127.0.0.1:4174/packet-vault-test');
+}
+
+function olderPacket() {
+  // A different script version has a different CSP hash, including when only
+  // a comment changed. Exercise that version boundary without keeping a copy
+  // of a vulnerable historical verifier in the test suite.
+  return packet({ photo: false }).html.replace(
+    `<script>${PACKET_VERIFIER_SCRIPT}</script>`,
+    `<script>/* previous version */${PACKET_VERIFIER_SCRIPT}</script>`,
+  );
+}
+
+test('an older verifier is blocked by the inherited production CSP', async ({ page }) => {
+  await openVaultHost(page);
+  const html = olderPacket();
+  const popupPromise = page.waitForEvent('popup');
+  await page.evaluate((content) => {
+    window.open(URL.createObjectURL(new Blob([content], { type: 'text/html' })));
+  }, html);
+  const popup = await popupPromise;
+  await popup.locator('#xbar-verify-btn').click();
+  await expect(popup.locator('#xbar-verify-out')).toHaveText('Not checked yet.');
+  await expect(popup.locator('#xbar-verify-out')).not.toHaveAttribute('data-state', /.+/);
+});
+
+for (const change of ['older', 'missing', 'external', 'duplicate'] as const) {
+  test(`opening a saved packet with an ${change} verifier explains how to rebuild and preserves the original`, async ({
+    page,
+    context,
+  }) => {
+    await openVaultHost(page);
+    const current = packet({ photo: false }).html;
+    const script = `<script>${PACKET_VERIFIER_SCRIPT}</script>`;
+    const html =
+      change === 'older'
+        ? olderPacket()
+        : current.replace(
+            script,
+            change === 'missing'
+              ? ''
+              : change === 'external'
+                ? `<script src="/retired-verifier.js">${PACKET_VERIFIER_SCRIPT}</script>`
+                : script + script,
+          );
+    const result = await page.evaluate(async (content) => {
+      const vaultPath = '/src/lib/localFileVault.ts';
+      const openerPath = '/src/lib/openStoredFile.ts';
+      const ownerPath = '/src/lib/vaultOwner.ts';
+      const vault = await import(/* @vite-ignore */ vaultPath);
+      const { openStoredFileInTab } = await import(/* @vite-ignore */ openerPath);
+      const { vaultOwnerId } = await import(/* @vite-ignore */ ownerPath);
+      const key = await vault.storeLocalFile(
+        new Blob([content], { type: 'text/html' }),
+        'saved-packet.html',
+        'text/html',
+        vaultOwnerId(),
+        { generated: true },
+      );
+      const opened = await openStoredFileInTab({ localFileKey: key });
+      return { opened, original: await (await vault.readLocalFile(key)).blob.text() };
+    }, html);
+    expect(result.opened.ok).toBe(false);
+    expect(result.opened.message).toContain('Sale Packets');
+    expect(result.opened.message).toContain('build a new packet');
+    expect(result.original).toBe(html);
+    await expect.poll(() => context.pages().length).toBe(1);
+  });
+}
+
+test('a current saved packet verifies under the inherited production CSP', async ({ page }) => {
+  await openVaultHost(page);
+  const popupPromise = page.waitForEvent('popup');
+  const result = await page.evaluate(
+    async (content) => {
+      const vaultPath = '/src/lib/localFileVault.ts';
+      const openerPath = '/src/lib/openStoredFile.ts';
+      const ownerPath = '/src/lib/vaultOwner.ts';
+      const vault = await import(/* @vite-ignore */ vaultPath);
+      const { openStoredFileInTab } = await import(/* @vite-ignore */ openerPath);
+      const { vaultOwnerId } = await import(/* @vite-ignore */ ownerPath);
+      const key = await vault.storeLocalFile(
+        new Blob([content], { type: 'text/html' }),
+        'current-packet.html',
+        'text/html',
+        vaultOwnerId(),
+        { generated: true },
+      );
+      return openStoredFileInTab({ localFileKey: key });
+    },
+    packet({ photo: false }).html,
+  );
+  expect(result).toEqual({ ok: true, delivery: 'tab' });
+  await expectVerdict(await popupPromise, 'pass');
+});
+
+test('compatibility checks preserve ordinary HTML and download-only uploads', async ({ page, context }) => {
+  await openVaultHost(page);
+  const downloadPromise = page.waitForEvent('download');
+  const result = await page.evaluate(async (content) => {
+    const vaultPath = '/src/lib/localFileVault.ts';
+    const vault = await import(/* @vite-ignore */ vaultPath);
+    const ordinary = '<!doctype html><title>Bill of Sale</title><p>Signed original</p>';
+    const generatedKey = await vault.storeLocalFile(
+      new Blob([ordinary], { type: 'text/html' }),
+      'bill-of-sale.html',
+      'text/html',
+      'ws-test',
+      { generated: true },
+    );
+    const uploadKey = await vault.storeLocalFile(
+      new Blob([content], { type: 'text/html' }),
+      'uploaded.html',
+      'text/html',
+      'ws-test',
+    );
+    const generated = await vault.openLocalFile(generatedKey, 'ws-test');
+    const upload = await vault.openLocalFile(uploadKey, 'ws-test');
+    const link = document.createElement('a');
+    link.href = upload.url;
+    link.download = upload.name;
+    document.body.append(link);
+    link.click();
+    link.remove();
+    const output = {
+      generatedInline: generated.inlineSafe,
+      generatedUrl: generated.url,
+      uploadInline: upload.inlineSafe,
+      foreign: await vault.openLocalFile(generatedKey, 'ws-other'),
+    };
+    // Keep the URLs alive through the actual navigation/download below. The
+    // owning page's pagehide hook releases them when the test context closes.
+    return output;
+  }, olderPacket());
+  expect(result.generatedInline).toBe(true);
+  const view = await context.newPage();
+  await view.goto(result.generatedUrl);
+  await expect(view.getByText('Signed original')).toBeVisible();
+  expect(result.uploadInline).toBe(false);
+  const download = await downloadPromise;
+  expect(await download.failure()).toBeNull();
+  expect(await readFile((await download.path())!, 'utf8')).toBe(olderPacket());
+  expect(result.foreign).toBeNull();
 });
