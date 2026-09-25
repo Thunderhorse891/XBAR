@@ -227,7 +227,11 @@ async function verify({
     return node;
   });
   meta.children = [generatedSpan, ...(bylineNode ? [bylineNode] : []), ...addedSpans];
-  header.children = [element({ class: 'eyebrow' }, 'DIV'), element({}, 'H1'), meta];
+  const eyebrow = element({ class: 'eyebrow' }, 'DIV');
+  eyebrow.textContent = 'XBAR™ Buyer Sale Packet';
+  const horseHeading = element({}, 'H1');
+  horseHeading.textContent = JSON.parse(payload).identity?.name || 'Unnamed horse';
+  header.children = [eyebrow, horseHeading, meta];
   /*
    * The content's own children, as the generator emits them: the header, the
    * seller section when the seal carries a contact or photo, seven sections,

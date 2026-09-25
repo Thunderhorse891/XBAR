@@ -1010,6 +1010,19 @@ export const PACKET_VERIFIER_SCRIPT = `
             } else if (wantByline && textOf(byline) !== wantByline) {
               problems.push('This packet says "' + textOf(byline) + '" but was sealed as "' + wantByline + '".');
             }
+            // The two siblings above the byline must not carry an unsealed
+            // payment instruction while the genuine byline remains in place.
+            if (bylinePlaced) {
+              var wantHeading = parsed.identity && parsed.identity.name ? parsed.identity.name : 'Unnamed horse';
+              if (
+                !leaf(head.children[0], 'DIV', { class: 'eyebrow' }) ||
+                head.children[0].textContent !== 'XBAR™ Buyer Sale Packet' ||
+                !leaf(head.children[1], 'H1', {}) ||
+                head.children[1].textContent !== wantHeading
+              ) {
+                problems.push('The title or horse name in this packet header was changed after sealing. Do not trust instructions added there.');
+              }
+            }
             if (metaLine) {
               refuseLooseText(head, 'to the header of this packet');
               refuseLooseText(metaLine, 'to the header of this packet');
