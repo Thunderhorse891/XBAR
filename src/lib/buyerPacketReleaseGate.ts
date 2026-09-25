@@ -1,6 +1,6 @@
-import { buildHorsePacketCompleteness } from '@/lib/xbarPhaseTwo';
-import { buildSaleHold } from '@/lib/saleTrustEngine';
-import type { DocumentRecord, HorseRecord, OwnershipRecord } from '@/types/xbar';
+import { buildHorsePacketCompleteness } from './xbarPhaseTwo.js';
+import { buildSaleHold } from './saleTrustEngine.js';
+import type { DocumentRecord, HorseRecord, OwnershipRecord } from '../types/xbar.js';
 
 export type BuyerPacketReleaseGate = {
   allowed: boolean;

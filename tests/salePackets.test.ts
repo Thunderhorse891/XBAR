@@ -149,7 +149,7 @@ test('the packet seal covers the bytes of every embedded file', async () => {
   );
   assert.match(
     generator,
-    /and the bytes of \$\{attachments\.length/,
+    /and the bytes of the \$\{attachments\.length\} embedded file/,
     'the seal note must say the file contents are covered',
   );
 });
@@ -242,4 +242,323 @@ test('the packet no longer claims that reading the seal proves anything', async 
     'the by-hand route must be offered, because the in-page script is as editable as the rest of the file',
   );
   assert.match(generator, /shasum -a 256/, 'the by-hand steps must name a tool the buyer already has');
+});
+
+import { buildLocalSalePacket } from '../src/lib/localSalePacketGenerator.js';
+import { PACKET_VERIFIER_SCRIPT } from '../src/lib/packetVerifierScript.js';
+import type { HorseRecord, OwnershipRecord, WorkspaceProfile } from '../src/types/xbar.js';
+
+/* Minimal horse: the seal-code swap must hold on any rendered packet. */
+function sealTestHorse(): HorseRecord {
+  return {
+    id: 'h-seal',
+    name: 'Bella',
+    barnName: 'Bella',
+    breed: 'Quarter Horse',
+    sex: 'Mare',
+    color: 'Sorrel',
+    foaledOn: '2018-05-01',
+    registry: 'AQHA',
+    registrationNumber: 'X7654321',
+    microchipId: '985141000999999',
+    owner: 'Erin Wyrick',
+    status: 'Pasture',
+    lastVetVisit: '2026-08-01',
+    sale: { askPrice: 15000, listingState: 'Listed' },
+    gallery: [],
+    alerts: [],
+  } as unknown as HorseRecord;
+}
+
+function sealTestOwnership(): OwnershipRecord {
+  return {
+    legalOwner: 'Rocking R Ranch LLC',
+    transferStatus: 'Clear',
+    pendingDocuments: [],
+    complianceDeadline: '',
+  } as unknown as OwnershipRecord;
+}
+
+const sealTestWorkspace = {
+  ranchName: 'Rocking R Ranch',
+  businessName: 'Rocking R Ranch LLC',
+  defaultOwnerName: 'Erin Wyrick',
+  operationsEmail: 'ranch@example.com',
+} as unknown as WorkspaceProfile;
+
+/*
+ * The seal attributes the packet to the seller by name, never by workspace
+ * role: when the byline is filtered (quick-start placeholder) or unset, the
+ * sealedBy field stays empty rather than sealing the role ("Admin") the
+ * wizard passes as generatedBy — a role is not a person, and sealing it
+ * would contradict the byline the packet omits.
+ */
+test('a filtered or unset seller identity leaves sealedBy empty, never a role', () => {
+  const quickStartWorkspace = {
+    ranchName: 'Main Ranch',
+    businessName: 'My Ranch LLC',
+    defaultOwnerName: 'Main Ranch',
+    ranchManagerName: 'Operations Lead',
+    operationsEmail: 'owner@ranch.local',
+  } as unknown as WorkspaceProfile;
+
+  for (const workspaceProfile of [quickStartWorkspace, undefined]) {
+    const packet = buildLocalSalePacket({
+      horse: sealTestHorse(),
+      workspaceProfile: workspaceProfile as WorkspaceProfile,
+      documents: [],
+      ownershipRecord: sealTestOwnership(),
+      selectedDocumentIds: [],
+      generatedBy: 'Admin',
+      now: new Date('2026-09-24T12:00:00Z'),
+    });
+    assert.equal(
+      JSON.parse(packet.credential.payload).sealedBy,
+      '',
+      'sealedBy must not carry the workspace role when there is no real seller identity',
+    );
+  }
+
+  // A real identity still seals by name.
+  const realPacket = buildLocalSalePacket({
+    horse: sealTestHorse(),
+    workspaceProfile: sealTestWorkspace,
+    documents: [],
+    ownershipRecord: sealTestOwnership(),
+    selectedDocumentIds: [],
+    generatedBy: 'Admin',
+    now: new Date('2026-09-24T12:00:00Z'),
+  });
+  assert.ok(
+    JSON.parse(realPacket.credential.payload).sealedBy.includes('Erin Wyrick'),
+    'a real seller identity is still attributed',
+  );
+});
+
+/* The seal and the page resolve the seller contact block from ONE profile.
+ *
+ * `buildLocalSalePacket` once called `buildPacketCredential` without
+ * `workspaceProfile`, so the seal covered blank name/ranch/email while the
+ * page printed the real contact block — a buyer could edit the visible seller
+ * details without changing the digest. Direct `buildSaleCredential` tests
+ * cannot catch that wiring gap: only an end-to-end packet can, so this test
+ * compares the rendered contact block with the sealed record.
+ */
+test('the sealed seller block is the contact block the packet renders', () => {
+  const horse = {
+    ...sealTestHorse(),
+    profileImage: 'https://photos.test/bella-hero.jpg',
+    gallery: [
+      { id: 'g-hero', label: 'Hero', kind: 'Hero', url: 'https://photos.test/bella-hero.jpg', status: 'Approved' },
+    ],
+  } as unknown as HorseRecord;
+
+  const packet = buildLocalSalePacket({
+    horse,
+    workspaceProfile: sealTestWorkspace,
+    documents: [],
+    ownershipRecord: sealTestOwnership(),
+    selectedDocumentIds: [],
+    generatedBy: 'Ranch Manager',
+    now: new Date('2026-09-24T12:00:00Z'),
+  });
+
+  const sealed = JSON.parse(packet.credential.payload).seller as {
+    name: string;
+    ranch: string;
+    email: string;
+    heroPhotoUrl: string;
+  };
+  // The profile values the page prints are the ones the seal covers.
+  assert.equal(sealed.name, 'Erin Wyrick');
+  assert.equal(sealed.ranch, 'Rocking R Ranch');
+  assert.equal(sealed.email, 'ranch@example.com');
+  assert.equal(sealed.heroPhotoUrl, 'https://photos.test/bella-hero.jpg');
+  // ...and the page prints exactly those values, including the sealed photo.
+  assert.ok(packet.html.includes('Erin Wyrick'), 'rendered seller name');
+  assert.ok(packet.html.includes('Rocking R Ranch'), 'rendered ranch');
+  assert.ok(packet.html.includes('ranch@example.com'), 'rendered email');
+  assert.ok(packet.html.includes('src="https://photos.test/bella-hero.jpg"'), 'rendered hero photo');
+});
+
+/*
+ * The verifier has to FIND the contact block to bind it. #252 sealed the
+ * seller's name, ranch and email, but the verifier compared only the hero
+ * photo, so a packet altered to show another email still read "matches the
+ * seal" — the buyer's reply, and the payment talk that follows it, going to
+ * whoever edited the page. Each sealed field is printed in a cell the verifier
+ * names, and the byline in a span it names; this pins that those carry exactly
+ * the sealed values, so the verifier compares against the right text.
+ */
+test('each sealed seller field is printed where the verifier can compare it', () => {
+  const build = (workspaceProfile: WorkspaceProfile) =>
+    buildLocalSalePacket({
+      horse: sealTestHorse(),
+      workspaceProfile,
+      documents: [],
+      ownershipRecord: sealTestOwnership(),
+      selectedDocumentIds: [],
+      generatedBy: 'Ranch Manager',
+      now: new Date('2026-09-24T12:00:00Z'),
+    });
+  const packet = build(sealTestWorkspace);
+  const payload = JSON.parse(packet.credential.payload) as {
+    sealedBy: string;
+    seller: { name: string; ranch: string; email: string };
+  };
+  const cells = Object.fromEntries(
+    [...packet.html.matchAll(/<td id="xbar-seller-(name|ranch|email)">([^<]*)<\/td>/g)].map((m) => [m[1], m[2]]),
+  );
+  assert.deepEqual(cells, { name: payload.seller.name, ranch: payload.seller.ranch, email: payload.seller.email });
+  assert.equal(packet.html.match(/id="xbar-seller-contact"/g)?.length, 1, 'one contact table, named');
+  assert.ok(packet.html.includes('<div class="meta" id="xbar-packet-meta">'), 'the byline sits in the named meta line');
+  assert.ok(payload.sealedBy, 'the fixture has a byline to bind');
+  assert.equal(
+    /<span id="xbar-seller-byline">([^<]*)<\/span>/.exec(packet.html)?.[1],
+    `Prepared by ${payload.sealedBy}`,
+  );
+  // A field that was not sealed is not printed, so "shown but not sealed" stays a real alteration.
+  const noEmail = build({ ...sealTestWorkspace, operationsEmail: '' } as WorkspaceProfile);
+  assert.equal(JSON.parse(noEmail.credential.payload).seller.email, '');
+  assert.ok(!noEmail.html.includes('xbar-seller-email'), 'an unsealed email has no cell');
+});
+
+/*
+ * The verifier counts the content's top-level parts, so a forged header or a
+ * second contact block added at the top of the page is caught. The count it
+ * pins is derived here from real generated packets, not transcribed: a copied
+ * number would rot silently the first time the packet's markup changed, and
+ * every honest packet would start reading as altered.
+ */
+function topLevelOfContent(html: string): string[] {
+  const opening = '<div class="content">';
+  const start = html.indexOf(opening);
+  assert.ok(start > -1, 'the content block must be findable in the packet');
+  const tag = /<(\/?)([a-zA-Z][a-zA-Z0-9]*)([^>]*)>/g;
+  tag.lastIndex = start + opening.length;
+  const voids = new Set(['meta', 'br', 'hr', 'img', 'input', 'link', 'source', 'track']);
+  const items: string[] = [];
+  let depth = 0;
+  let match: RegExpExecArray | null;
+  while ((match = tag.exec(html))) {
+    const [, closing, name, attrs] = match;
+    if (voids.has(name!.toLowerCase()) || attrs!.trim().endsWith('/')) {
+      if (depth === 0) items.push(name!.toUpperCase());
+      continue;
+    }
+    if (closing) {
+      if (depth === 0) break;
+      depth -= 1;
+      continue;
+    }
+    if (depth === 0) items.push(name!.toUpperCase());
+    depth += 1;
+  }
+  return items;
+}
+
+test('the top-level count the verifier pins is the one the generator emits', () => {
+  const build = (workspaceProfile: WorkspaceProfile) =>
+    buildLocalSalePacket({
+      horse: sealTestHorse(),
+      workspaceProfile,
+      documents: [],
+      ownershipRecord: sealTestOwnership(),
+      selectedDocumentIds: [],
+      generatedBy: 'Ranch Manager',
+      now: new Date('2026-09-24T12:00:00Z'),
+    });
+  const bare = topLevelOfContent(build({ ranchName: 'Main Ranch' } as unknown as WorkspaceProfile).html);
+  const withSeller = topLevelOfContent(build(sealTestWorkspace).html);
+  assert.equal(withSeller.length, bare.length + 1, 'the seller section is the one conditional top-level part');
+  assert.equal(bare[0], 'HEADER', 'the header opens the content');
+  assert.ok(
+    PACKET_VERIFIER_SCRIPT.includes(`var CONTENT_ITEMS = ${bare.length};`),
+    `the verifier pins a stale count. Set CONTENT_ITEMS in src/lib/packetVerifierScript.ts to ${bare.length}.`,
+  );
+});
+
+/* The quick-start placeholders are not seller contact details.
+ *
+ * handleQuickStart invents `Main Ranch` (as the ranch name —
+ * applyWorkspaceProfileDefaults then derives defaultOwnerName from it, so
+ * it also arrives as the seller name), `Operations Lead` and
+ * `owner@ranch.local` so a skipped setup yields a working ranch. Resolving
+ * them as real contact details would seal — and print on the buyer packet —
+ * an invented ranch, person and mailbox as authenticated contact
+ * information. The seller block degrades to an honest absence instead.
+ */
+test('quick-start placeholder contact is excluded from the sealed seller block', () => {
+  const quickStartProfile = {
+    ...sealTestWorkspace,
+    defaultOwnerName: 'Main Ranch',
+    ranchName: 'Main Ranch',
+    ranchManagerName: 'Operations Lead',
+    operationsEmail: 'owner@ranch.local',
+  } as unknown as WorkspaceProfile;
+
+  const packet = buildLocalSalePacket({
+    horse: sealTestHorse(),
+    workspaceProfile: quickStartProfile,
+    documents: [],
+    ownershipRecord: sealTestOwnership(),
+    selectedDocumentIds: [],
+    generatedBy: 'Ranch Manager',
+    now: new Date('2026-09-24T12:00:00Z'),
+  });
+
+  const sealed = JSON.parse(packet.credential.payload).seller as {
+    name: string;
+    ranch: string;
+    email: string;
+  };
+  assert.equal(sealed.name, '', 'the invented ranch name must not be sealed as the seller');
+  assert.equal(sealed.ranch, '', 'the invented ranch name must not be sealed as the ranch');
+  assert.equal(sealed.email, '', 'the invented mailbox must not be sealed');
+  assert.ok(!packet.html.includes('owner@ranch.local'), 'the invented mailbox must not be printed');
+  assert.ok(!packet.html.includes('Operations Lead'), 'the invented manager name must not be printed');
+  assert.ok(!packet.html.includes('Main Ranch'), 'the invented ranch name must not be printed');
+});
+
+/*
+ * M14: the by-hand verification steps used to print a literal example,
+ * `SEAL-XXXX-XXXX-XXXX`, as the seal code. A buyer following the steps would
+ * compare their recomputed hash against a placeholder that can never match —
+ * or worse, read it as the format and accept any SEAL-looking string. The
+ * steps now print this packet's own seal code.
+ */
+test("the by-hand seal check prints this packet's seal code, not an example", () => {
+  const packet = buildLocalSalePacket({
+    horse: sealTestHorse(),
+    workspaceProfile: sealTestWorkspace,
+    documents: [],
+    ownershipRecord: sealTestOwnership(),
+    selectedDocumentIds: [],
+    generatedBy: 'Ranch Manager',
+    now: new Date('2026-09-24T12:00:00Z'),
+  });
+
+  const printed = packet.html.match(/<div class="seal__code">([^<]+)<\/div>/)?.[1];
+  assert.ok(printed && /^SEAL-[0-9A-Z-]+$/.test(printed), 'the packet prints a real seal code');
+  assert.ok(!packet.html.includes('SEAL-XXXX-XXXX-XXXX'), 'the example placeholder must not ship in a packet');
+  assert.ok(
+    packet.html.includes(`are the seal code for this packet: <code>${printed}</code>`),
+    'the by-hand step must name this packet\u2019s own seal code',
+  );
+});
+
+/*
+ * The share sheet caption travels under the seller's name, not just the
+ * platform's: "{Ranch}: sale packet for Bella verified by XBAR…".
+ * `buildShareText` grew an optional ranch param for this; the wizard must
+ * pass it — filtered through realWorkspaceName, so a quick-start
+ * placeholder (My Ranch LLC, Main Ranch) is never presented as the seller.
+ */
+test('the wizard share caption names the ranch', async () => {
+  const source = await readFile('src/components/SalePacketWizard.tsx', 'utf8');
+  assert.match(
+    source,
+    /buildShareText\(\s*horse\?\.name \?\? '',\s*sealCode,\s*realWorkspaceName\(workspaceProfile\.businessName\) \|\| realWorkspaceName\(workspaceProfile\.ranchName\),?\s*\)/,
+    'the wizard must pass the sentinel-filtered ranch name as the share text’s third argument',
+  );
 });

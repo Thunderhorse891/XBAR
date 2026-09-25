@@ -29,10 +29,6 @@ export function planRank(tier: SubscriptionTier) {
   return planOrder.indexOf(tier);
 }
 
-export function nextPlan(tier: SubscriptionTier) {
-  return planOrder[Math.min(planOrder.length - 1, planRank(tier) + 1)];
-}
-
 export function featureGate(subscription: SubscriptionProfile, feature: CommercialFeature) {
   const required = minimumPlanByFeature[feature];
   return planRank(subscription.tier) >= planRank(required)
@@ -85,11 +81,4 @@ export function buildUsageMeters(subscription: SubscriptionProfile): UsageMeter[
             : `${meter.limit - meter.used} ${meter.label.toLowerCase()} remaining.`;
     return { ...meter, percent, pressure, message };
   });
-}
-
-export function highestUsagePressure(subscription: SubscriptionProfile) {
-  const rank: Record<UsagePressure, number> = { clear: 0, warning: 1, upgrade: 2, blocked: 3 };
-  return buildUsageMeters(subscription).sort(
-    (left, right) => rank[right.pressure] - rank[left.pressure] || right.percent - left.percent,
-  )[0];
 }

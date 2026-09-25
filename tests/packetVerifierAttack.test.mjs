@@ -42,7 +42,7 @@ const sha256Hex = (bytes) => createHash('sha256').update(bytes).digest('hex');
 const b64 = (text) => Buffer.from(text, 'utf8').toString('base64');
 
 function element(attrs = {}, tagName = 'A') {
-  const node = { _attrs: { ...attrs }, textContent: '', tagName, parentElement: null };
+  const node = { _attrs: { ...attrs }, textContent: '', tagName, parentElement: null, children: [] };
   node.getAttribute = (name) => (name in node._attrs ? node._attrs[name] : null);
   // Live view, because the verifier sweeps attribute NAMES looking for inline
   // handlers — a stub exposing only getAttribute could not express one.
@@ -94,6 +94,23 @@ async function verify({
   btnAttrs = {},
   decoyButtons = 0,
   metas = [],
+  sellerCells = [],
+  sellerExtraRows = 0,
+  byline = null,
+  bylineAttrs = {},
+  sellerDecoys = [],
+  metaExtras = 0,
+  contactMovedTo = null,
+  extraContactTables = 0,
+  headerMovedTo = null,
+  contentExtras = 0,
+  sectionExtras = 0,
+  tableCaption = false,
+  heroMovedTo = null,
+  tableSplitOff = false,
+  generatedText = 'Generated 2026-09-24',
+  contactHeading = 'Contact the seller',
+  looseText = null,
 }) {
   const out = element({ class: 'verify__out', 'data-digest': sealedDigest, ...outAttrs }, 'DIV');
   out._collapsed = outCollapsed;
@@ -118,6 +135,187 @@ async function verify({
   record.textContent = payload;
   const stamp = element();
   stamp.textContent = 'WATERMARK';
+
+  /*
+   * The seller contact block and the header's byline, as a browser holds them
+   * once the generator's markup is parsed: the contact table inside its own
+   * section under the content, its rows inside the tbody the parser inserts,
+   * each row a label and one named value cell; the byline a named span in the
+   * header's meta line. Modelled as structure, not as a list of ids, because
+   * an id is ordinary HTML an alterer controls — the attacks here move, strip
+   * and hide exactly those.
+   */
+  const content = sealedChain[2];
+  const sellerSection = element({}, 'SECTION');
+  sellerSection.parentElement = content;
+  const extraTables = Array.from({ length: extraContactTables }, () => element({ id: 'xbar-seller-contact' }, 'TABLE'));
+  const contactTable = element({ id: 'xbar-seller-contact' }, 'TABLE');
+  contactTable.parentElement = sellerSection;
+  const tbody = element({}, 'TBODY');
+  tbody.parentElement = contactTable;
+  const LABELS = { name: 'Seller', ranch: 'Ranch', email: 'Email' };
+  const contactRow = (label, cellAttrs, text, rowAttrs = {}) => {
+    const rowNode = element(rowAttrs, 'TR');
+    rowNode.parentElement = tbody;
+    const th = element({}, 'TH');
+    th.textContent = label;
+    th.parentElement = rowNode;
+    const td = element(cellAttrs, 'TD');
+    td.textContent = text;
+    td.parentElement = rowNode;
+    rowNode.children = [th, td];
+    return rowNode;
+  };
+  const sellerRows = [
+    ...sellerCells.map(({ field, text, rowAttrs, cellAttrs, label, nested }) => {
+      const rowNode = contactRow(label ?? LABELS[field], cellAttrs ?? { id: `xbar-seller-${field}` }, text, rowAttrs);
+      /*
+       * The cell keeps its sealed text, but hidden in a child, while a visible
+       * input shows the attacker's address: textContent reads the seal, the
+       * buyer reads the input.
+       */
+      if (nested)
+        rowNode.children[1].children = [
+          element({ value: 'attacker@example.com' }, 'INPUT'),
+          element({ hidden: '' }, 'SPAN'),
+        ];
+      return rowNode;
+    }),
+    ...Array.from({ length: sellerExtraRows }, () => contactRow('Wire to', {}, 'attacker account')),
+  ];
+  // Marked copies an alterer parks out of sight: inside the collapsed by-hand section.
+  const closedDetails = element({ class: 'verify__manual' }, 'DETAILS');
+  closedDetails.open = false;
+  closedDetails.parentElement = sealedChain[0];
+  /*
+   * The whole sealed block moved: tucked into the collapsed section where no
+   * one reads it, or down into the footer, still visible but far from the top
+   * where a forged, unmarked contact table now sits.
+   */
+  const footer = element({ class: 'footer' }, 'DIV');
+  footer.parentElement = content;
+  if (contactMovedTo === 'details') sellerSection.parentElement = closedDetails;
+  if (contactMovedTo === 'footer') sellerSection.parentElement = footer;
+  // A second content block, built inside the collapsed section to host the sealed one.
+  if (contactMovedTo === 'forged content') {
+    const forgedContent = element({ class: 'content' }, 'DIV');
+    forgedContent.parentElement = closedDetails;
+    sellerSection.parentElement = forgedContent;
+  }
+  const decoyNodes = sellerDecoys.map(({ id, text }) => {
+    const node = element({ id }, 'SPAN');
+    node.textContent = text;
+    node.parentElement = closedDetails;
+    return node;
+  });
+  const header = element({}, 'HEADER');
+  header.parentElement = headerMovedTo === 'details' ? closedDetails : content;
+  const meta = element({ class: 'meta', id: 'xbar-packet-meta' }, 'DIV');
+  meta.parentElement = header;
+  const generatedSpan = element({}, 'SPAN');
+  generatedSpan.textContent = generatedText;
+  generatedSpan.parentElement = meta;
+  const bylineNode = byline === null ? null : element({ id: 'xbar-seller-byline', ...bylineAttrs }, 'SPAN');
+  if (bylineNode) {
+    bylineNode.textContent = byline;
+    bylineNode.parentElement = meta;
+  }
+  const addedSpans = Array.from({ length: metaExtras }, () => {
+    const node = element({}, 'SPAN');
+    node.textContent = 'Prepared by Someone Else';
+    node.parentElement = meta;
+    return node;
+  });
+  meta.children = [generatedSpan, ...(bylineNode ? [bylineNode] : []), ...addedSpans];
+  const eyebrow = element({ class: 'eyebrow' }, 'DIV');
+  eyebrow.textContent = 'XBAR™ Buyer Sale Packet';
+  const horseHeading = element({}, 'H1');
+  horseHeading.textContent = JSON.parse(payload).identity?.name || 'Unnamed horse';
+  header.children = [eyebrow, horseHeading, meta];
+  /*
+   * The content's own children, as the generator emits them: the header, the
+   * seller section when the seal carries a contact or photo, seven sections,
+   * the seal section this verifier lives in, and the footer. Forged additions
+   * (a replacement header, say) land here too.
+   */
+  const heroImgs = extras.filter((node) => node.tagName === 'IMG');
+  /*
+   * The hero photo sits in the contact section. Moved out of sight, a forged
+   * note takes its slot, so the section still has the same number of items.
+   */
+  for (const img of heroImgs) img.parentElement = heroMovedTo === 'details' ? closedDetails : sellerSection;
+  const heroSlot = heroMovedTo === 'details' ? [element({}, 'P')] : heroImgs;
+  const sectionShown = sellerRows.length > 0 || heroImgs.length > 0;
+  tbody.children = sellerRows;
+  /*
+   * A caption is inside the table but is not a row ("Wire payments to …").
+   * Written after the rows, the parser places it after the tbody, so the
+   * table's first child is still the tbody.
+   */
+  contactTable.children = tableCaption ? [tbody, element({}, 'CAPTION')] : [tbody];
+  const sectionHeading = element({}, 'H2');
+  sectionHeading.textContent = contactHeading;
+  // Added between the heading and the table, so the table is still the section's last item.
+  /*
+   * The table split from its photo: moved into a forged top-level section of
+   * its own, a forged note in its slot beside the photo, and one empty section
+   * dropped so the content's count still matches.
+   */
+  const splitSection = element({}, 'SECTION');
+  if (tableSplitOff) {
+    splitSection.parentElement = content;
+    contactTable.parentElement = splitSection;
+    const splitHeading = element({}, 'H2');
+    splitHeading.textContent = 'Contact the seller';
+    splitSection.children = [splitHeading, contactTable];
+  }
+  sellerSection.children = [
+    sectionHeading,
+    ...heroSlot,
+    ...(tableSplitOff ? [element({}, 'P')] : []),
+    ...Array.from({ length: sectionExtras }, () => element({}, 'P')),
+    ...(sellerRows.length && !tableSplitOff ? [contactTable] : []),
+  ];
+  content.children = [
+    ...(headerMovedTo ? [] : [header]),
+    ...(sectionShown && sellerSection.parentElement === content ? [sellerSection] : []),
+    ...(tableSplitOff ? [splitSection] : []),
+    ...Array.from({ length: tableSplitOff ? 6 : 7 }, () => element({}, 'SECTION')),
+    sealedChain[1],
+    footer,
+    ...Array.from({ length: contentExtras }, () => element({}, 'HEADER')),
+  ];
+  /*
+   * A bare line of text typed between elements. It is a text node, so no
+   * element count or placement sees it, and the page shows it all the same.
+   */
+  if (looseText) {
+    const target = {
+      content,
+      header,
+      meta,
+      section: sellerSection,
+      table: contactTable,
+      tbody,
+      row: sellerRows[0],
+    }[looseText.into];
+    target.childNodes = [...target.children, { nodeType: 3, nodeValue: looseText.text }];
+  }
+  const withId = (id) =>
+    [...sellerRows.map((row) => row.children[1]), ...decoyNodes, ...(bylineNode ? [bylineNode] : [])].filter(
+      (node) => node.getAttribute('id') === id,
+    );
+  const sellerElements = [
+    ...(sellerRows.length ? [sellerSection, contactTable, tbody] : []),
+    ...sellerRows.flatMap((row) => [row, ...row.children]),
+    closedDetails,
+    ...decoyNodes,
+    header,
+    meta,
+    generatedSpan,
+    ...(bylineNode ? [bylineNode] : []),
+    ...addedSpans,
+  ];
 
   let click;
   const btn = element(btnAttrs, 'BUTTON');
@@ -182,7 +380,19 @@ async function verify({
        */
       // Every element in the packet, which is what the handler sweep walks.
       if (selector === '*') {
-        return [...links, ...extras, ...inlineStyled, out, btn, record, stamp, ...sealedChain];
+        return [...links, ...extras, ...inlineStyled, out, btn, record, stamp, ...sealedChain, ...sellerElements];
+      }
+      if (/^#xbar-seller-(name|ranch|email|byline)$/.test(selector)) {
+        return withId(selector.slice(1));
+      }
+      if (selector === '#xbar-seller-contact') {
+        return [...(sellerRows.length ? [contactTable] : []), ...extraTables];
+      }
+      if (selector === '#xbar-seller-contact tr') {
+        return sellerRows;
+      }
+      if (selector === '#xbar-packet-meta') {
+        return [meta];
       }
       if (selector === '#xbar-verify-btn') {
         return [btn, ...Array.from({ length: decoyButtons }, () => element({}, 'BUTTON'))];
@@ -287,6 +497,231 @@ test('an untouched packet still verifies', async () => {
   const result = await verify(honestPacket((base64) => `data:application/pdf;base64,${base64}`));
   assert.equal(result.state, 'pass', result.text);
   assert.match(result.text, /matches the seal/);
+});
+
+/*
+ * The seller contact block, sealed and printed. #252 sealed the seller's name,
+ * ranch and email, but the verifier compared only the hero photo: a packet
+ * altered to show an attacker's email left the payload untouched, so the
+ * digest matched and the verdict was PASS while the buyer's reply — and the
+ * payment talk after it — went to whoever edited the page.
+ */
+const SEALED_SELLER = {
+  name: 'Erin Wyrick',
+  ranch: 'Rocking R Ranch',
+  email: 'ranch@example.com',
+  heroPhotoUrl: '',
+  heroPhotoDigest: '',
+};
+const SEALED_BYLINE = 'Erin Wyrick · Rocking R Ranch';
+
+function sellerPacket({ seller = SEALED_SELLER, sealedBy = SEALED_BYLINE, ...shown } = {}) {
+  const payload = JSON.stringify({
+    watermark: 'WATERMARK',
+    sealedBy,
+    seller,
+    sealedAt: '2026-09-24T12:00:00.000Z',
+    attachments: [],
+  });
+  return {
+    payload,
+    sealedDigest: sha256Hex(Buffer.from(payload, 'utf8')),
+    links: [],
+    sellerCells: ['name', 'ranch', 'email']
+      .filter((field) => seller[field])
+      .map((field) => ({ field, text: seller[field] })),
+    byline: sealedBy ? `Prepared by ${sealedBy}` : null,
+    ...shown,
+  };
+}
+
+test('an untouched seller contact block still verifies', async () => {
+  const result = await verify(sellerPacket());
+  assert.equal(result.state, 'pass', result.text);
+});
+
+test('a substituted seller name, ranch or email is reported ALTERED, as reviewed', async () => {
+  for (const [field, forged] of [
+    ['name', 'Attacker'],
+    ['ranch', 'Fake Ranch'],
+    ['email', 'attacker@example.com'],
+  ]) {
+    const packet = sellerPacket();
+    packet.sellerCells = packet.sellerCells.map((cell) => (cell.field === field ? { field, text: forged } : cell));
+    const result = await verify(packet);
+    assert.equal(result.state, 'fail', `a forged ${field} must not verify: ${result.text}`);
+    assert.ok(result.text.includes(`as "${forged}" but it was sealed as "${SEALED_SELLER[field]}"`), result.text);
+  }
+});
+
+test('a removed, duplicated, hidden or unsealed seller field is reported', async () => {
+  const cases = {
+    'the email row removed': { sellerCells: sellerPacket().sellerCells.filter((cell) => cell.field !== 'email') },
+    'a second email beside the sealed one': {
+      sellerCells: [...sellerPacket().sellerCells, { field: 'email', text: 'attacker@example.com' }],
+    },
+    'the sealed email row hidden': {
+      sellerCells: sellerPacket().sellerCells.map((cell) =>
+        cell.field === 'email' ? { ...cell, rowAttrs: { hidden: '' } } : cell,
+      ),
+    },
+    'an unmarked row added to the contact table': { sellerExtraRows: 1 },
+  };
+  for (const [name, shown] of Object.entries(cases)) {
+    const result = await verify(sellerPacket(shown));
+    assert.equal(result.state, 'fail', `${name} must not verify: ${result.text}`);
+  }
+  // No email was sealed, yet the page shows one.
+  const unsealed = sellerPacket({
+    seller: { ...SEALED_SELLER, email: '' },
+    sellerCells: [...sellerPacket().sellerCells],
+  });
+  const result = await verify(unsealed);
+  assert.equal(result.state, 'fail', result.text);
+  assert.match(result.text, /never sealed/);
+});
+
+test('a sealed seller field moved out of sight while the visible one is replaced is reported, as reviewed', async () => {
+  // The attack: the visible email cell loses its id and shows the attacker's
+  // address; a marked copy of the sealed address is parked inside the collapsed
+  // by-hand section, so a lookup by id finds one node with the sealed text.
+  const result = await verify(
+    sellerPacket({
+      sellerCells: sellerPacket().sellerCells.map((cell) =>
+        cell.field === 'email' ? { field: 'email', text: 'attacker@example.com', cellAttrs: {} } : cell,
+      ),
+      sellerDecoys: [{ id: 'xbar-seller-email', text: SEALED_SELLER.email }],
+    }),
+  );
+  assert.equal(result.state, 'fail', result.text);
+  assert.match(result.text, /email row on this packet is not the one the seal put there/);
+});
+
+test('a seller row carrying anything the generator never emits is reported', async () => {
+  for (const [name, change] of [
+    ['a class on the value cell', { cellAttrs: { id: 'xbar-seller-email', class: 'watermark' } }],
+    ['a hidden value cell', { cellAttrs: { id: 'xbar-seller-email', hidden: '' } }],
+    ['a relabelled row', { label: 'Old email' }],
+  ]) {
+    const packet = sellerPacket();
+    packet.sellerCells = packet.sellerCells.map((cell) => (cell.field === 'email' ? { ...cell, ...change } : cell));
+    const result = await verify(packet);
+    assert.equal(result.state, 'fail', `${name} must not verify: ${result.text}`);
+  }
+});
+
+test('the sealed contact table tucked out of sight, or a second one added, is reported', async () => {
+  for (const place of ['details', 'footer', 'forged content']) {
+    const moved = await verify(sellerPacket({ contactMovedTo: place }));
+    assert.equal(moved.state, 'fail', `moved to the ${place}: ${moved.text}`);
+    assert.match(moved.text, /seller contact table on this packet is not where the seal put it/);
+  }
+  const captioned = await verify(sellerPacket({ tableCaption: true }));
+  assert.equal(captioned.state, 'fail', captioned.text);
+  assert.match(captioned.text, /seller contact table on this packet is not where the seal put it/);
+  const doubled = await verify(sellerPacket({ extraContactTables: 1 }));
+  assert.equal(doubled.state, 'fail', doubled.text);
+  assert.match(doubled.text, /shows 2 seller contact table/);
+});
+
+test('a value cell showing an input over hidden sealed text is reported, as reviewed', async () => {
+  const packet = sellerPacket();
+  packet.sellerCells = packet.sellerCells.map((cell) => (cell.field === 'email' ? { ...cell, nested: true } : cell));
+  const result = await verify(packet);
+  assert.equal(result.state, 'fail', result.text);
+  assert.match(result.text, /email row on this packet is not the one the seal put there/);
+});
+
+test('the genuine header moved out of sight behind a forged one is reported, as reviewed', async () => {
+  const result = await verify(sellerPacket({ headerMovedTo: 'details', contentExtras: 1 }));
+  assert.equal(result.state, 'fail', result.text);
+  assert.match(result.text, /Prepared by line on this packet is not where the seal put it/);
+});
+
+test('anything added at the top of the packet or inside the contact section is reported', async () => {
+  const topLevel = await verify(sellerPacket({ contentExtras: 1 }));
+  assert.equal(topLevel.state, 'fail', topLevel.text);
+  assert.match(topLevel.text, /top-level part/);
+  const inSection = await verify(sellerPacket({ sectionExtras: 1 }));
+  assert.equal(inSection.state, 'fail', inSection.text);
+  assert.match(inSection.text, /seller contact section on this packet holds/);
+});
+
+test('a bare line of text added to the contact block, header or page is reported, as reviewed', async () => {
+  const forged = 'UPDATED PAYMENT EMAIL: attacker@example.com';
+  for (const [into, where] of [
+    ['section', /added to the seller contact section of this packet after it was sealed/],
+    ['table', /added to the seller contact table of this packet after it was sealed/],
+    ['tbody', /added to the seller contact table of this packet after it was sealed/],
+    ['row', /added to the seller contact table of this packet after it was sealed/],
+    ['meta', /added to the header of this packet after it was sealed/],
+    ['header', /added to the header of this packet after it was sealed/],
+    ['content', /added between the sections of this packet after it was sealed/],
+  ]) {
+    const result = await verify(sellerPacket({ looseText: { into, text: forged } }));
+    assert.equal(result.state, 'fail', `text added to the ${into} must not verify: ${result.text}`);
+    assert.match(result.text, where);
+    assert.ok(result.text.includes(`"${forged}"`), result.text);
+  }
+});
+
+test('the whitespace between elements is not an alteration', async () => {
+  for (const into of ['section', 'table', 'tbody', 'row', 'meta', 'header', 'content']) {
+    const result = await verify(sellerPacket({ looseText: { into, text: '\n    ' } }));
+    assert.equal(result.state, 'pass', `whitespace in the ${into}: ${result.text}`);
+  }
+});
+
+test('the contact section heading is the one the seal put there', async () => {
+  const result = await verify(sellerPacket({ contactHeading: 'Contact the seller at attacker@example.com' }));
+  assert.equal(result.state, 'fail', result.text);
+  assert.ok(
+    result.text.includes(
+      'is headed "Contact the seller at attacker@example.com" where it was sealed as "Contact the seller"',
+    ),
+    result.text,
+  );
+});
+
+test('a hidden, relocated or unsealed "Prepared by" line is reported, as reviewed', async () => {
+  const hidden = await verify(sellerPacket({ bylineAttrs: { hidden: '' } }));
+  assert.equal(hidden.state, 'fail', hidden.text);
+  assert.match(hidden.text, /Prepared by line on this packet is not where the seal put it/);
+  // The visible byline replaced by an unmarked one, the marked copy parked out of sight.
+  const moved = await verify(
+    sellerPacket({
+      byline: null,
+      metaExtras: 1,
+      sellerDecoys: [{ id: 'xbar-seller-byline', text: `Prepared by ${SEALED_BYLINE}` }],
+    }),
+  );
+  assert.equal(moved.state, 'fail', moved.text);
+  // Nothing sealed, and an unmarked byline added to the header.
+  const added = await verify(sellerPacket({ sealedBy: '', metaExtras: 1 }));
+  assert.equal(added.state, 'fail', added.text);
+});
+
+test('the header stamp beside the byline is the sealed date, not free text, as reviewed', async () => {
+  // The attack: the first meta span, "Generated …", rewritten to show a forged
+  // contact beside the genuine byline, every count and placement unchanged.
+  const forged = await verify(sellerPacket({ generatedText: 'Prepared by attacker@example.com' }));
+  assert.equal(forged.state, 'fail', forged.text);
+  assert.match(forged.text, /was sealed as "Generated 2026-09-24"/);
+  const redated = await verify(sellerPacket({ generatedText: 'Generated 2026-10-01' }));
+  assert.equal(redated.state, 'fail', redated.text);
+});
+
+test('an edited or removed "Prepared by" line is reported', async () => {
+  const edited = await verify(sellerPacket({ byline: 'Prepared by Someone Else' }));
+  assert.equal(edited.state, 'fail', edited.text);
+  assert.ok(edited.text.includes(`sealed as "Prepared by ${SEALED_BYLINE}"`), edited.text);
+  const removed = await verify(sellerPacket({ byline: null }));
+  assert.equal(removed.state, 'fail', removed.text);
+  const unsealed = await verify(sellerPacket({ sealedBy: '', byline: 'Prepared by Someone Else' }));
+  assert.equal(unsealed.state, 'fail', unsealed.text);
+  // Sealed with no byline and showing none is the honest quick-start packet.
+  const none = await verify(sellerPacket({ sealedBy: '' }));
+  assert.equal(none.state, 'pass', none.text);
 });
 
 test('an attachment relinked to a remote URL is reported ALTERED, not passed', async () => {
@@ -815,4 +1250,124 @@ test('an ordinary enabled button is not called disabled', async () => {
   const result = await verify({ ...honest(), btnAttrs: { class: 'verify__btn', type: 'button' } });
   assert.equal(result.state, 'pass', result.text);
   assert.deepEqual(result.armingAlerts, []);
+});
+
+/*
+ * The sealed hero photo, attacked.
+ *
+ * The packet renders the seller contact block's hero photo as an <img>, and
+ * the verifier exempts exactly one img: the one whose src matches the sealed
+ * seller.heroPhotoUrl character-for-character AND carries only the generated
+ * attributes (src, alt, width). These run the shipped verifier against
+ * packets rather than asserting on its source text — a guard that only looks
+ * right in the source is the failure mode this file exists to catch.
+ */
+const PHOTO_URL = 'https://photos.test/hero.jpg';
+
+function photoPacket(imgAttrs) {
+  const credential = {
+    watermark: 'WATERMARK',
+    identity: { name: 'Bella' },
+    seller: {
+      name: 'Erin',
+      ranch: 'Rocking R Ranch',
+      email: 'ranch@example.com',
+      heroPhotoUrl: PHOTO_URL,
+      heroPhotoDigest: '',
+    },
+    attachments: [],
+  };
+  const payload = JSON.stringify(credential);
+  return {
+    payload,
+    sealedDigest: sha256Hex(Buffer.from(payload, 'utf8')),
+    links: [],
+    extras: [element(imgAttrs, 'IMG')],
+    // The contact rows the generator prints beside the photo for this seal;
+    // without them the page is not the one this seal describes.
+    sellerCells: ['name', 'ranch', 'email'].map((field) => ({ field, text: credential.seller[field] })),
+  };
+}
+
+test('the sealed hero photo verifies as an untouched packet', async () => {
+  // The over-correction guard: the exemption must not fail honest packets.
+  const result = await verify(photoPacket({ src: PHOTO_URL, alt: 'Bella', width: '100%' }));
+  assert.equal(result.state, 'pass', result.text);
+});
+
+test('the sealed photo moved out of sight, a forged note in its slot, is reported, as reviewed', async () => {
+  const moved = await verify({
+    ...photoPacket({ src: PHOTO_URL, alt: 'Bella', width: '100%' }),
+    heroMovedTo: 'details',
+  });
+  assert.equal(moved.state, 'fail', moved.text);
+  assert.match(moved.text, /seller contact section on this packet holds/);
+});
+
+test('the contact table split from its photo into a forged section is reported', async () => {
+  const split = await verify({ ...photoPacket({ src: PHOTO_URL, alt: 'Bella', width: '100%' }), tableSplitOff: true });
+  assert.equal(split.state, 'fail', split.text);
+  assert.match(split.text, /seller contact section on this packet holds/);
+});
+
+test('a photo-only contact section is pinned the same way', async () => {
+  const photoOnly = () => {
+    const packet = photoPacket({ src: PHOTO_URL, alt: 'Bella', width: '100%' });
+    const credential = JSON.parse(packet.payload);
+    credential.seller = { ...credential.seller, name: '', ranch: '', email: '' };
+    const payload = JSON.stringify(credential);
+    return { ...packet, payload, sealedDigest: sha256Hex(Buffer.from(payload, 'utf8')), sellerCells: [] };
+  };
+  const honest = await verify(photoOnly());
+  assert.equal(honest.state, 'pass', honest.text);
+  const moved = await verify({ ...photoOnly(), heroMovedTo: 'details' });
+  assert.equal(moved.state, 'fail', moved.text);
+  assert.match(moved.text, /seller contact section on this packet holds/);
+  // The whole photo-only section tucked away, a forged one at the top keeping the count.
+  const tucked = await verify({ ...photoOnly(), contactMovedTo: 'details', contentExtras: 1 });
+  assert.equal(tucked.state, 'fail', tucked.text);
+  assert.match(tucked.text, /seller contact section on this packet holds/);
+});
+
+test('a srcset added to the sealed photo is reported ALTERED', async () => {
+  // The attack: src still matches the sealed URL, but the browser displays
+  // the srcset candidate — an unsealed replacement photo.
+  const result = await verify(
+    photoPacket({ src: PHOTO_URL, alt: 'Bella', width: '100%', srcset: 'https://attacker.example/replacement.jpg 1x' }),
+  );
+  assert.equal(result.state, 'fail', `expected ALTERED, got: ${result.text}`);
+  assert.match(result.text, /ALTERED/);
+});
+
+test('a hidden attribute added to the sealed photo is reported ALTERED', async () => {
+  // The attack: the photo vanishes from the buyer-visible packet while the
+  // src still matches — without the attribute check this reads as PASS.
+  const result = await verify(photoPacket({ src: PHOTO_URL, alt: 'Bella', width: '100%', hidden: '' }));
+  assert.equal(result.state, 'fail', `expected ALTERED, got: ${result.text}`);
+  assert.match(result.text, /ALTERED/);
+});
+
+test('a second copy of the sealed photo is reported ALTERED', async () => {
+  const packet = photoPacket({ src: PHOTO_URL, alt: 'Bella', width: '100%' });
+  packet.extras.push(element({ src: PHOTO_URL, alt: 'Bella', width: '100%' }, 'IMG'));
+  const result = await verify(packet);
+  assert.equal(result.state, 'fail', `expected ALTERED, got: ${result.text}`);
+  assert.match(result.text, /ALTERED/);
+});
+
+test('an altered alt on the sealed photo is reported ALTERED', async () => {
+  // The attack: src matches and only allowed attribute names are present,
+  // but the alt text names a different horse — a names-only exemption
+  // would still count this as the sealed photo.
+  const result = await verify(photoPacket({ src: PHOTO_URL, alt: 'different horse', width: '100%' }));
+  assert.equal(result.state, 'fail', `expected ALTERED, got: ${result.text}`);
+  assert.match(result.text, /ALTERED/);
+});
+
+test('a zeroed width on the sealed photo is reported ALTERED', async () => {
+  // The attack: the img still matches the sealed src, but width="0" means
+  // the buyer sees no photo at all.
+  const result = await verify(photoPacket({ src: PHOTO_URL, alt: 'Bella', width: '0' }));
+  assert.equal(result.state, 'fail', `expected ALTERED, got: ${result.text}`);
+  assert.match(result.text, /ALTERED/);
 });

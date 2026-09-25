@@ -121,7 +121,7 @@ export default function Reports() {
 
   const handleCsv = async () => {
     if (locked) return;
-    const saved = await downloadRanchReportCsv(buildRanchReport(reportInput));
+    const saved = await downloadRanchReportCsv(buildRanchReport(reportInput), workspaceProfile.ranchName);
     if (!saved.ok) {
       pushToast({ title: 'Spreadsheet was not saved', message: saved.reason, tone: 'warning' });
     }

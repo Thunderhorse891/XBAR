@@ -150,23 +150,3 @@ export function filterAndSortRelationshipRows(
     return Date.parse(left.deadline || '9999-12-31') - Date.parse(right.deadline || '9999-12-31');
   });
 }
-
-export function getPendingTransfers(ownershipRecords: OwnershipRecord[]): OwnershipRecord[] {
-  return ownershipRecords.filter((record) => record.transferStatus !== 'Clear');
-}
-
-export function getMissingDocumentRows(relationshipRows: RelationshipRow[]): RelationshipRow[] {
-  return relationshipRows.filter((row) => row.pendingDocuments.length > 0);
-}
-
-export function getHorsesWithOwnership(relationshipRows: RelationshipRow[]): number {
-  return relationshipRows.filter((row) => row.record).length;
-}
-
-export function getLatestOwnershipDocuments(documents: DocumentRecord[], types: string[], limit = 6): DocumentRecord[] {
-  return documents
-    .filter((document) => types.includes(document.type))
-    .slice()
-    .sort((left, right) => Date.parse(right.uploadedAt) - Date.parse(left.uploadedAt))
-    .slice(0, limit);
-}

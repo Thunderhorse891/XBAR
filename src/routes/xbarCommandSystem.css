@@ -325,7 +325,7 @@ a[class*='border'] {
 button[class*='bg-[#1155dd]'],
 a[class*='bg-[#1155dd]'] {
   border-color: rgba(45, 140, 255, 0.72) !important;
-  background: linear-gradient(180deg, #2d8cff 0%, #166fe4 100%) !important;
+  background: var(--accent-ink) !important;
   color: #ffffff !important;
   box-shadow:
     0 12px 26px -12px rgba(22, 111, 228, 0.55),

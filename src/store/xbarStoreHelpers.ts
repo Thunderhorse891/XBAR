@@ -2055,23 +2055,6 @@ export function guessHorseSexFromDocuments(documents: DocumentRecord[]): NewHors
   return 'Mare';
 }
 
-export function inferHorseNameFromDocumentTitle(title: string) {
-  const normalized = title
-    .replace(/[-_]/g, ' ')
-    .replace(
-      /\b(registration|certificate|papers?|coggins|health|bill\s+of\s+sale|transfer|packet|vet|record|scan|copy|document|doc|pdf|jpg|jpeg|png)\b/gi,
-      ' ',
-    )
-    .replace(/\s+/g, ' ')
-    .trim();
-
-  if (!/[A-Za-z]/.test(normalized) || normalized.length < 3) {
-    return '';
-  }
-
-  return normalized;
-}
-
 export function buildHorseInputFromDocuments(
   documents: DocumentRecord[],
   workspaceProfile: WorkspaceProfile,

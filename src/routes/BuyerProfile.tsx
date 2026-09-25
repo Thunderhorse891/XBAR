@@ -9,6 +9,7 @@ import { Field, FieldGroup, FieldLabel } from '@/components/ui/field';
 import { Input } from '@/components/ui/input';
 import { buildPublicShareUrl, openFacebookShareDialog } from '@/lib/facebookSharing';
 import { formatCompactCurrency, formatPercent } from '@/lib/format';
+import { SUPPORT_CONTACT } from '@/lib/legalDocuments';
 import { apiConfig, isPublicShareLocalPreviewEnabled } from '@/lib/platformConfig';
 import { buildPublicBuyerPacketArtifact, downloadPublicBuyerPacketArtifact } from '@/lib/publicBuyerPacket';
 import {
@@ -215,7 +216,7 @@ function BuyerActionPanel({
               id="buyer-contact"
               value={buyerEmail}
               onChange={(event) => setBuyerEmail(event.target.value)}
-              placeholder="you@example.com"
+              placeholder="Your email address"
             />
           </Field>
           {mode === 'offer' && (
@@ -527,8 +528,7 @@ export default function BuyerProfile() {
             <div className="eyebrow">Sale profile</div>
             <h1 className="page-title">{horse.name}</h1>
             <div className="status-inline">
-              <Pill tone={packet.buyerProfileTone}>{packet.buyerProfileStatus}</Pill>
-              <Pill tone={packet.tone}>{formatPercent(packet.score)} record complete</Pill>
+              <Pill tone={packet.tone}>{formatPercent(packet.score)} record coverage</Pill>
               <Pill tone="blue">{horse.sale.listingState}</Pill>
               <Pill tone={sharedListing?.accessMode === 'Public Link' ? 'emerald' : 'slate'}>
                 {sharedListing?.accessMode ?? 'Private Token'}
@@ -559,27 +559,20 @@ export default function BuyerProfile() {
               </button>
             </div>
 
-            {/* Contact / inquiry CTA — visible to buyers on the public profile */}
-            <div style={{ marginTop: '4px' }}>
-              <a
-                className="button button--primary"
-                style={{ width: '100%', justifyContent: 'center' }}
-                href={`mailto:?subject=Inquiry: ${encodeURIComponent(horse.name)}&body=${encodeURIComponent(`Hi,\n\nI am interested in ${horse.name}. Please contact me to discuss availability and pricing.\n\nProfile: ${publicShareUrl}`)}`}
-              >
-                Contact seller about {horse.name}
-              </a>
-            </div>
+            {/* Seller contact: the public listing payload carries no seller
+                contact fields (the share RPC and its sanitizer expose only
+                listing metadata), so there is no direct-contact block to
+                render. The inquiry panel below is the contact path. */}
           </div>
         </section>
 
         <div className="metric-grid">
           <MetricCard
-            label="Record Complete"
+            label="Record coverage"
             value={formatPercent(packet.score)}
             detail={packet.trustSummary}
             tone={packet.tone}
           />
-          <MetricCard label="Inquiry count" value="—" detail="Buyer posture not disclosed" tone="slate" />
           <MetricCard
             label="Verified documents"
             value={`${visibleDocuments.length}`}
@@ -589,7 +582,7 @@ export default function BuyerProfile() {
           <MetricCard
             label="Asking price"
             value={horse.sale.askPrice ? formatCompactCurrency(horse.sale.askPrice) : 'Contact seller'}
-            detail="Contact ranch for financing options"
+            detail="Contact seller for payment terms"
             tone="slate"
           />
         </div>
@@ -667,7 +660,7 @@ export default function BuyerProfile() {
             </div>
           </Panel>
 
-          <Panel eyebrow="AQHA photos" title="Photo set">
+          <Panel eyebrow="Sale photos" title="Photo set">
             {salePhotoAssets.length ? (
               <div className="media-strip">
                 {salePhotoAssets.map((asset) => (
@@ -686,7 +679,7 @@ export default function BuyerProfile() {
             ) : (
               <EmptyState
                 compact
-                title="No AQHA photos"
+                title="No sale photos"
                 description="Add approved hero and conformation photos before sharing."
               />
             )}
@@ -712,6 +705,13 @@ export default function BuyerProfile() {
             ·{' '}
             <a href={publicSiteHref('/privacy')} style={{ color: 'rgba(100,140,180,0.45)', textDecoration: 'none' }}>
               Privacy
+            </a>{' '}
+            ·{' '}
+            <a
+              href={`mailto:${SUPPORT_CONTACT.email}`}
+              style={{ color: 'rgba(100,140,180,0.45)', textDecoration: 'none' }}
+            >
+              Support
             </a>
           </p>
         </footer>

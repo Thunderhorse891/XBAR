@@ -113,23 +113,3 @@ export async function createSalePacketRemote(
 ): Promise<BackendResult<RemoteSalePacket>> {
   return postJson<RemoteSalePacket>('/api/sale-packets', auth, input);
 }
-
-export type RemoteGeneratedDocument = {
-  documentId: string;
-  title: string;
-  fileName: string;
-  downloadUrl: string;
-  expiresInSeconds: number;
-  missingFields: string[];
-};
-
-export async function generateDocumentFromTemplateRemote(
-  auth: AuthParams,
-  input: {
-    templateId: string;
-    horseId: string;
-    fields?: Record<string, string>;
-  },
-): Promise<BackendResult<RemoteGeneratedDocument>> {
-  return postJson<RemoteGeneratedDocument>('/api/documents/generate-from-template', auth, input);
-}

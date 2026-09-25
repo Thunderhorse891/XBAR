@@ -17,6 +17,7 @@ import type { DocumentRecord, SaleCredentialSeal } from '@/types/xbar';
 import { billingPathForTier } from '@/lib/billingRoutes';
 import { openFacebookShareDialog } from '@/lib/facebookSharing';
 import { buildBadgeSnippet, buildShareText } from '@/lib/verificationBadge';
+import { realWorkspaceName } from '@/lib/workspaceIdentity';
 import { assessRevenueAtRisk, computeHorseEconomics } from '@/lib/businessIntelligence';
 import { formatCompactCurrency } from '@/lib/format';
 import { useCloudStore } from '@/store/useCloudStore';
@@ -150,10 +151,16 @@ export function SalePacketWizard({
 
   // Native share sheet when the browser offers one (phones), else Facebook if
   // configured, else copy the link. The share text is honest — verified/unaltered,
-  // never an appraisal.
+  // never an appraisal. The ranch prefix is omitted when the workspace never
+  // set a real name: buildShareText already supports the unprefixed form, and
+  // a quick-start placeholder (My Ranch LLC, Main Ranch) is not the seller.
   const shareVerification = async (verifyUrl: string, sealCode?: string) => {
     if (!verifyUrl) return;
-    const text = buildShareText(horse?.name ?? '', sealCode);
+    const text = buildShareText(
+      horse?.name ?? '',
+      sealCode,
+      realWorkspaceName(workspaceProfile.businessName) || realWorkspaceName(workspaceProfile.ranchName),
+    );
     const nav =
       typeof navigator !== 'undefined'
         ? (navigator as Navigator & { share?: (data: ShareData) => Promise<void> })

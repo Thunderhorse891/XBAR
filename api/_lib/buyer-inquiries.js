@@ -60,7 +60,7 @@ export default async function handler(req, res) {
       ok: false,
       message:
         kind === 'proof-requested'
-          ? 'Describe the proof or document you want to review.'
+          ? 'Describe the document you want to review.'
           : 'Enter your question for the seller.',
     });
   }
@@ -116,7 +116,7 @@ export default async function handler(req, res) {
           : kind === 'call-requested'
             ? 'Your call request was delivered to the seller.'
             : kind === 'proof-requested'
-              ? 'Your proof request was delivered to the seller.'
+              ? 'Your document request was delivered to the seller.'
               : 'Your message was delivered to the seller.',
   });
 }

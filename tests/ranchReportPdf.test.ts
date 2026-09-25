@@ -87,7 +87,13 @@ async function assertFits(bytes: Uint8Array) {
       item.x + (item.strong ? bold : regular).widthOfTextAtSize(item.text, item.size) <= 577,
       `Outside right margin: ${item.text}`,
     );
-    if (!item.text.startsWith('XBAR') && !/^\d+ \/ \d+$/.test(item.text))
+    // The footer credit is the only XBAR text allowed below the body: it sits at
+    // y=31, so it is exempted by its own prefix rather than by "XBAR".
+    if (
+      !item.text.startsWith('XBAR') &&
+      !item.text.startsWith('Unaudited management estimates') &&
+      !/^\d+ \/ \d+$/.test(item.text)
+    )
       assert.ok(item.y >= 48, `Body entered footer: ${item.text}`);
   }
 }
@@ -125,8 +131,22 @@ test('18-horse executive report has three deliberate pages, seven KPIs and compl
   assert.equal(report.documentsToReview, 0);
   assert.equal(reportDecisions(report).missingCoggins.length, 18);
   for (let i = 2; i <= 18; i++)
-    assert.ok(text.includes(`Synthetic Ranch Horse ${i} / B`), `Missing economics horse ${i}`);
+    assert.ok(text.includes(`Synthetic Ranch Horse ${i} - Blocked`), `Missing economics horse ${i}`);
   assert.ok(!text.includes('unlocks'));
+  // Buyer-facing professionalism: the rancher's operation is the masthead,
+  // never the platform, and never an invented business name.
+  assert.ok(!text.includes('XBAR™ / RANCH INTELLIGENCE'), 'no vendor masthead');
+  assert.ok(!text.includes('XBAR Ranch Ledger'), 'no invented entity name');
+  assert.ok(text.includes('SYNTHETIC REVIEW FIXTURE - XBAR Ranch'), 'the ranch name is the masthead');
+  assert.ok(text.includes('Prepared with XBAR'), 'the platform credit is footer small type');
+  assert.ok(text.includes('Generated September 11, 2026 · USD'), 'the date line reads like prose, not a machine stamp');
+  // Statuses and margin bands are spelled out for a lender: no single letters,
+  // no footnote legend. (This fixture blocks every horse, so "Ready to sell"
+  // and "Not for sale" are asserted on fixtures that actually produce them.)
+  assert.ok(!text.includes('/ B') && !text.includes('/ R') && !text.includes('/ N'), 'no gate codes');
+  assert.ok(!text.includes('H >=30%'), 'no margin-band codes');
+  assert.ok(text.includes('Floor'), 'the discount floor label matches the spreadsheet');
+  assert.ok(text.includes('18 horses · 18 horses in sale inventory'), 'counts use the plural');
   await assertFits(bytes);
 });
 
@@ -183,7 +203,8 @@ test('empty workspace and large registers render with no lost rows or footer col
       .map((s) => s.text)
       .join(' ');
     assert.ok(!/NaN|Infinity/.test(texts));
-    for (let i = 2; i <= count; i++) assert.ok(texts.includes(`Synthetic Ranch Horse ${i} / B`), `Missing horse ${i}`);
+    for (let i = 2; i <= count; i++)
+      assert.ok(texts.includes(`Synthetic Ranch Horse ${i} - Blocked`), `Missing horse ${i}`);
     assert.ok((await PDFDocument.load(bytes)).getPageCount() >= 3);
     await assertFits(bytes);
   }
@@ -217,6 +238,21 @@ test('ready horses, losses and unpriced inventory produce honest labels and rank
   assert.ok(text.includes('Current / reviewed'));
   assert.ok(text.includes('Review negative projected profits'));
   assert.ok(text.includes('N/A'));
+  // A horse with no blockers is "Ready to sell", spelled out — not "R".
+  assert.ok(text.includes('Ready to sell'), 'ready status spelled out');
+  await assertFits(bytes);
+});
+
+test('a horse outside sale inventory is labelled "Not for sale", not coded', async () => {
+  const input = fixture(1);
+  input.horses[0].sale.askPrice = 0;
+  input.horses[0].sale.listingState = 'Private';
+  const bytes = await renderReportPdf(buildRanchReport(input, now), 'Not-for-sale fixture', await branding());
+  const text = drawn(bytes)
+    .map((s) => s.text)
+    .join(' ');
+  assert.ok(text.includes('Not for sale'), 'non-inventory status spelled out');
+  assert.ok(!text.includes('/ N'), 'no N code');
   await assertFits(bytes);
 });
 
