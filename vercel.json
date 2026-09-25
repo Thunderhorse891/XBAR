@@ -1,4 +1,9 @@
 {
+  "git": {
+    "deploymentEnabled": {
+      "codex/trial-reminder-legacy-compat": false
+    }
+  },
   "trailingSlash": false,
   "headers": [
     {
