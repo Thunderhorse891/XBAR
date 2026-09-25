@@ -574,6 +574,32 @@ test('the supplier card reports the newest of two same-day purchases', () => {
   assert.equal(summary.feedSuppliers[0]?.latestUnitPrice, 11);
 });
 
+test('same-day supplier ordering survives the timestamp format transition', () => {
+  // A stale PWA tab still writes legacy `YYYY-MM-DD HH:mm`; new writes are
+  // ISO. Lexicographic order puts the later legacy upload
+  // ('2026-06-27 20:00') BEFORE the earlier ISO one
+  // ('2026-06-27T19:40:00.000Z'), selecting the wrong latest supplier price.
+  const summary = buildCostPerHorse({
+    horses: [horse('a')],
+    receipts: [
+      receipt({
+        amount: 360,
+        quantity: 40,
+        unit: 'bale',
+        receiptDate: daysAgo(3),
+        uploadedAt: '2026-06-27T19:40:00.000Z',
+      }),
+      receipt({ amount: 440, quantity: 40, unit: 'bale', receiptDate: daysAgo(3), uploadedAt: '2026-06-27 20:00' }),
+    ],
+    now: NOW,
+  });
+  assert.equal(
+    summary.feedSuppliers[0]?.latestUnitPrice,
+    11,
+    'the later legacy upload (legacy interpreted as UTC) is the newest',
+  );
+});
+
 test('a receipt logged today on the local calendar counts today, west of UTC included', async () => {
   const zone = process.env.TZ;
   try {
@@ -603,22 +629,24 @@ test('payback is measured against what is paid now, never a lapsed plan’s stor
   const profile = (fields: Pick<SubscriptionProfile, 'tier' | 'monthlyRate' | 'billingState'>) =>
     fields as SubscriptionProfile;
 
-  assert.deepEqual(paybackPlan(profile({ tier: 'Ranch Ops', monthlyRate: 199, billingState: 'Active' })), {
+  assert.deepEqual(paybackPlan(profile({ tier: 'Ranch Ops', monthlyRate: 79, billingState: 'Active' })), {
     tier: 'Ranch Ops',
-    monthlyRate: 199,
+    monthlyRate: 79,
     paying: true,
   });
   // Canceled: the tier drops to Starter but the purchased rate stays on file.
+  // The stored rate below is a legacy price on purpose — whatever it is, the
+  // payback card measures against the current list price (12), never it.
   assert.deepEqual(paybackPlan(profile({ tier: 'Starter', monthlyRate: 199, billingState: 'Inactive' })), {
     tier: 'Starter',
-    monthlyRate: 29,
+    monthlyRate: 12,
     paying: false,
   });
-  assert.equal(paybackPlan(profile({ tier: 'Ranch Ops', monthlyRate: 199, billingState: 'Past Due' })).paying, false);
+  assert.equal(paybackPlan(profile({ tier: 'Ranch Ops', monthlyRate: 79, billingState: 'Past Due' })).paying, false);
   // A fresh workspace is seeded at rate 0 under Manual Billing: a list price, not a purchase.
   assert.deepEqual(paybackPlan(profile({ tier: 'Starter', monthlyRate: 0, billingState: 'Manual Billing' })), {
     tier: 'Starter',
-    monthlyRate: 29,
+    monthlyRate: 12,
     paying: false,
   });
 

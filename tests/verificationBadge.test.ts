@@ -51,3 +51,63 @@ test('share text falls back gracefully without a name or seal', () => {
   assert.ok(text.startsWith('This horse'));
   assert.ok(!text.includes('(seal'));
 });
+
+test('share text names the ranch and the seal code without double-prefixing', () => {
+  const text = buildShareText('Bella', 'SEAL-AB12-CD34-EF56', 'Rocking R Ranch');
+  assert.equal(
+    text,
+    'Rocking R Ranch: sale packet for Bella verified by XBAR (seal code SEAL-AB12-CD34-EF56). ' +
+      "Confirm it's unaltered before you buy:",
+  );
+  assert.ok(!text.includes('SEAL-SEAL-'), 'seal code must not be double-prefixed');
+  assert.ok(!/apprais|guarantee/i.test(text));
+});
+
+test('share text without a ranch still reads honestly', () => {
+  const text = buildShareText('Bella', 'SEAL-AB12-CD34-EF56');
+  assert.ok(text.startsWith('Bella: sale packet verified by XBAR (seal code SEAL-AB12-CD34-EF56).'));
+  assert.ok(/unaltered/i.test(text));
+});
+
+/* The native-share caption must never carry a quick-start placeholder.
+ *
+ * After "Use preview defaults" the workspace stores `My Ranch LLC` as the
+ * business name; the wizard resolves the caption prefix through
+ * realWorkspaceName so a synced or upgraded workspace does not share
+ * buyer-facing text claiming an invented company sent the packet.
+ */
+test('the share caption omits a quick-start placeholder ranch name', async () => {
+  const { readFileSync } = await import('node:fs');
+  const { join } = await import('node:path');
+  const wizardSrc = readFileSync(join(process.cwd(), 'src/components/SalePacketWizard.tsx'), 'utf8');
+  assert.ok(
+    /realWorkspaceName\(workspaceProfile\.businessName\)/.test(wizardSrc),
+    'the wizard must filter the business name through realWorkspaceName',
+  );
+  assert.ok(
+    !/workspaceProfile\.businessName \|\| workspaceProfile\.ranchName/.test(wizardSrc),
+    'the unfiltered name must not reach the share caption',
+  );
+});
+
+test('realWorkspaceName treats quick-start placeholders as absent', async () => {
+  const { isQuickStartSentinel, realWorkspaceName } = await import('../src/lib/workspaceIdentity.js');
+  assert.ok(isQuickStartSentinel('My Ranch LLC'));
+  assert.ok(isQuickStartSentinel('Main Ranch'));
+  assert.ok(isQuickStartSentinel('Operations Lead'));
+  assert.ok(isQuickStartSentinel('owner@ranch.local'));
+  assert.ok(!isQuickStartSentinel('Rocking R Ranch'));
+  assert.equal(realWorkspaceName('My Ranch LLC'), '');
+  assert.equal(realWorkspaceName('  Main Ranch  '), '', 'surrounding whitespace is trimmed first');
+  assert.equal(realWorkspaceName('Rocking R Ranch'), 'Rocking R Ranch');
+  assert.equal(realWorkspaceName(''), '');
+  // The caption the wizard builds from a filtered placeholder: no invented
+  // prefix, honest unprefixed form.
+  const text = buildShareText(
+    'Bella',
+    'SEAL-AB12-CD34-EF56',
+    realWorkspaceName('My Ranch LLC') || realWorkspaceName('Main Ranch'),
+  );
+  assert.ok(!text.includes('My Ranch LLC') && !text.includes('Main Ranch'));
+  assert.ok(text.startsWith('Bella: sale packet verified by XBAR'));
+});

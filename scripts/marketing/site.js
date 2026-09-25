@@ -15,6 +15,33 @@
   if (!doc) return;
   doc.documentElement.classList.add('js');
 
+  // Only the homepage has these inert templates. This loader is independent
+  // of motion, so a blocked animation bundle never hides the artwork.
+  var deferredImages = doc.querySelectorAll('[data-landing-image]');
+  var hydrateImage = function (container) {
+    var template = container.querySelector('template');
+    if (!template) return;
+    container.appendChild(template.content.cloneNode(true));
+    template.remove();
+  };
+  if (deferredImages.length && 'IntersectionObserver' in window) {
+    var imageObserver = new window.IntersectionObserver(
+      function (entries) {
+        entries.forEach(function (entry) {
+          if (!entry.isIntersecting) return;
+          hydrateImage(entry.target);
+          imageObserver.unobserve(entry.target);
+        });
+      },
+      { rootMargin: '200px' },
+    );
+    deferredImages.forEach(function (container) {
+      imageObserver.observe(container);
+    });
+  } else {
+    deferredImages.forEach(hydrateImage);
+  }
+
   var reduceMotion =
     typeof window !== 'undefined' && window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
 
@@ -134,7 +161,9 @@
   }
 
   try {
-    setUpMotion();
+    // The homepage pilot owns its motion and pause/reduced-motion lifecycle.
+    // Navigation and analytics below still run unchanged on every page.
+    if (!doc.body.classList.contains('landing-page')) setUpMotion();
     setUpNavDropdowns();
   } catch {
     /* motion must never break the page */

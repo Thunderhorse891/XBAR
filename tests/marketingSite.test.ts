@@ -13,6 +13,7 @@ const load = (relPath: string) => import(pathToFileURL(path.join(repoRoot, relPa
 type MarketingPlan = {
   tier: string;
   monthlyRate: number;
+  annualRate: number;
   fit: string;
   features: string[];
   limits: Record<string, number>;
@@ -42,6 +43,7 @@ test('published pricing exactly matches the tier configuration the app enforces'
     const config = subscriptionTierConfig[plan.tier as keyof typeof subscriptionTierConfig];
     assert.ok(config, `unknown marketing tier ${plan.tier}`);
     assert.equal(plan.monthlyRate, config.monthlyRate, `${plan.tier} price drifted from the app`);
+    assert.equal(plan.annualRate, config.annualRate, `${plan.tier} annual price drifted from the app`);
     assert.deepEqual(plan.features, config.featureFlags, `${plan.tier} feature list drifted from the app`);
     assert.deepEqual(plan.limits, config.limits, `${plan.tier} limits drifted from the app`);
   }
@@ -113,5 +115,36 @@ test('marketing claims stay within evidence: no fabricated social proof', async 
   const forbidden = /trusted by [\d,]+|customers? (say|love)|testimonial|5-star|award-winning|#1 rated/i;
   for (const page of marketingPages) {
     assert.doesNotMatch(page.body, forbidden, `${page.path}: unverifiable social-proof claim`);
+  }
+});
+
+test('the cinematic pilot is homepage-only and keeps real prices and static actions', async () => {
+  const { marketingPages } = (await load('scripts/marketing/pages.mjs')) as { marketingPages: MarketingPage[] };
+  const { marketingPlans } = (await load('scripts/marketing/pricing-data.mjs')) as { marketingPlans: MarketingPlan[] };
+  const { renderPage } = (await load('scripts/marketing/render.mjs')) as {
+    renderPage: (page: MarketingPage) => string;
+  };
+  for (const page of marketingPages) {
+    const html = renderPage(page);
+    if (page.path !== '/') {
+      assert.doesNotMatch(html, /landing-page|\/landing.css|\/landing\/motion/);
+      continue;
+    }
+    assert.match(html, /class="landing-page"/);
+    assert.match(html, /href="\/app\/login\?mode=signup"/);
+    assert.match(html, /href="\/samples\/sample-sale-packet.html"/);
+    assert.match(html, /\/brand\/xbar-report-horse.png/);
+    assert.match(html, /\/brand\/xbar-report-mark.png/);
+    assert.match(html, /example data/);
+    for (const plan of marketingPlans) {
+      assert.ok(html.includes(`$${plan.monthlyRate}<span>/month</span>`), `${plan.tier} price must remain accurate`);
+    }
+    const counter = html.match(/data-landing-count="(\d+)"/);
+    const stages = page.body.match(/class="landing-stage-index"/g) ?? [];
+    assert.equal(
+      Number(counter?.[1]),
+      stages.length,
+      'counter describes the rendered workflow, not invented usage stats',
+    );
   }
 });

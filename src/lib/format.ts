@@ -35,6 +35,38 @@ function parseDateValue(value: string) {
 }
 
 /**
+ * Timestamp comparison that survives the nowStamp() format transition.
+ *
+ * New writes are absolute ISO UTC instants; records written before the
+ * transition — or synced from a stale PWA tab that still writes the old
+ * form — are local `YYYY-MM-DD HH:mm` wall-clock with no recorded offset.
+ * An offset-free wall clock cannot be converted to an absolute instant, so
+ * the legacy form is interpreted AS UTC: deterministic and identical on
+ * every client. Parsing it in the viewer's timezone made identical synced
+ * data pick different "latest" offers — and therefore different sale
+ * prices and profit figures — in Chicago vs Los Angeles. The trade-off is
+ * documented: a legacy stamp written west of UTC orders up to its UTC
+ * offset away from the real instant, but every client agrees on the order,
+ * and the mixed population shrinks as new ISO writes replace it. Raw
+ * lexicographic comparison is worse — it mis-sorts a later legacy value
+ * behind an earlier ISO one (`'2026-09-24 20:00'` <
+ * `'2026-09-24T19:40:00.000Z'` as strings, later as instants). Missing or
+ * unparseable values sort last.
+ */
+function parseTimestampInstant(value: string): number {
+  if (!value?.trim()) {
+    return Number.NEGATIVE_INFINITY;
+  }
+  const normalized = value.includes('T') ? value : `${value.replace(' ', 'T')}Z`;
+  const time = new Date(normalized).getTime();
+  return Number.isNaN(time) ? Number.NEGATIVE_INFINITY : time;
+}
+
+export function compareTimestampDesc(a: string | null | undefined, b: string | null | undefined): number {
+  return parseTimestampInstant(b ?? '') - parseTimestampInstant(a ?? '');
+}
+
+/**
  * A day as YYYY-MM-DD on the viewer's own calendar. Date inputs and receipt
  * dates mean the local day; toISOString() gives the UTC one, which west of
  * UTC turns into tomorrow every evening.

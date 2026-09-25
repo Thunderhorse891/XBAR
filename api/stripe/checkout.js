@@ -84,10 +84,11 @@ export default async function handler(req, res) {
     return sendJson(res, 400, { ok: false, message: parsed.message });
   }
   const { tier, workspaceId } = parsed.data;
+  const billingPeriod = parsed.data.billingPeriod === 'annual' ? 'annual' : 'monthly';
   const returnUrl = getTrustedReturnUrl(parsed.data.returnUrl);
   const requestedSeatCount = Number(parsed.data.seatCount || 1);
   const seatCount = Number.isInteger(requestedSeatCount) ? Math.min(100, Math.max(1, requestedSeatCount)) : 1;
-  const priceId = getStripePriceIdByTier(tier);
+  const priceId = getStripePriceIdByTier(tier, billingPeriod);
 
   if (!workspaceId || !priceId) {
     return sendJson(res, 400, { ok: false, message: 'Workspace id and a configured Stripe price id are required.' });
@@ -251,7 +252,7 @@ export default async function handler(req, res) {
      *
      * Stripe knows what is open, so ask it rather than tracking it in a column.
      */
-    const intent = { workspaceId, tier, seatCount };
+    const intent = { workspaceId, tier, seatCount, billingPeriod, priceId };
 
     let openSessions = [];
     if (stripeCustomerId) {
@@ -437,10 +438,11 @@ export default async function handler(req, res) {
         metadata: {
           workspace_id: workspaceId,
           workspace_tier: tier,
-          // Recorded so a later request can tell whether an open session is
-          // the SAME purchase. Reusing one for a different seat count would
-          // charge the wrong amount.
+          // Match the complete purchase on a retry, including a switch in
+          // billing period or a changed server-configured Stripe Price.
           workspace_seats: String(seatCount),
+          workspace_billing_period: billingPeriod,
+          workspace_price_id: priceId,
           owner_user_id: user.id,
         },
         subscription_data: {

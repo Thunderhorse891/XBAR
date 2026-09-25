@@ -1,4 +1,5 @@
 import type { ExpenseCategory, ExpenseReceipt, HorseRecord, SalesLead } from '../types/xbar.js';
+import { compareTimestampDesc } from './format.js';
 
 export type OfferDecisionStatus = 'no-offer' | 'missing-costs' | 'loss' | 'thin-margin' | 'protected-margin';
 
@@ -25,7 +26,7 @@ export function buildHorseProfitProfile(horse: HorseRecord, receipts: ExpenseRec
       (lead) =>
         lead.horseId === horse.id && ['Accepted', 'Deposit Due', 'Deposit Paid'].includes(lead.offerStatus ?? ''),
     )
-    .sort((left, right) => (right.offerUpdatedAt ?? '').localeCompare(left.offerUpdatedAt ?? ''))[0];
+    .sort((left, right) => compareTimestampDesc(left.offerUpdatedAt, right.offerUpdatedAt))[0];
   const salePrice = acceptedOffer?.counterOfferAmount ?? acceptedOffer?.offerAmount ?? horse.sale.askPrice;
   const profitLoss = salePrice - breakEven;
   const categorySpend = Array.from(
@@ -265,7 +266,7 @@ export function buildBankedHeadline(fin: RanchFinancials): BankedHeadline {
 }
 
 function latestByOfferDate(leads: SalesLead[]): SalesLead | undefined {
-  return [...leads].sort((left, right) => (right.offerUpdatedAt ?? '').localeCompare(left.offerUpdatedAt ?? ''))[0];
+  return [...leads].sort((left, right) => compareTimestampDesc(left.offerUpdatedAt, right.offerUpdatedAt))[0];
 }
 
 const ACTIVE_OFFER_STATUSES = new Set(['Accepted', 'Deposit Due', 'Deposit Paid']);

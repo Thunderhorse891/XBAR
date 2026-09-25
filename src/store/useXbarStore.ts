@@ -2510,6 +2510,9 @@ export const useXbarStore = create<XbarStore>()(
                     horse,
                     documents: state.documents,
                     ownershipRecord: packetOwnership,
+                    // The seller contact block is buyer-visible and sealed —
+                    // the seal gets the real profile, never an empty default.
+                    workspaceProfile: state.workspaceProfile,
                     // Explicit, like the generator's — the seal covers the
                     // buyer-safe allowlist, never the raw record.
                     disclosure: toPacketDisclosure(horse, packetOwnership, state.workspaceProfile),

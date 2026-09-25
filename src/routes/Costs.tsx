@@ -1,10 +1,11 @@
 import { type CSSProperties, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { ArrowUpRight, Receipt, Wheat } from 'lucide-react';
+import { ArrowUpRight, Download, Printer, Receipt, Wheat } from 'lucide-react';
 import { ActionButton, Card, PageHead, StatusChip } from '@/components/saas';
 import { ProgressBar } from '@/components/app-ui';
 import { Sparkline } from '@/components/dataviz/Charts';
 import { type CostGroup, buildCostPerHorse, buildSubscriptionPayback, paybackPlan } from '@/lib/costPerHorse';
+import { downloadCostPerHorseCsv } from '@/lib/costPerHorseExport';
 import { formatCurrency, formatCurrencyCents, formatDateLabel, formatPercent } from '@/lib/format';
 import { useUiStore } from '@/store/useUiStore';
 import { useXbarStore } from '@/store/useXbarStore';
@@ -31,9 +32,24 @@ function shareLabel(fraction: number) {
   return fraction > 0 && fraction < 0.01 ? 'under 1%' : formatPercent(fraction * 100);
 }
 
+// Browser-print affordance scoped to this route. The Costs figures are the
+// ones a rancher hands to a partner or an accountant, so the printed page
+// keeps the figures and drops the chrome: sidebar, action buttons, and the
+// row arrows that only mean anything on screen.
+const costsPrintCss = `
+@media print {
+  .xs-sidebar,
+  .xs-page__head .xs-topbar__right,
+  .fin-animal .fin-insight__go {
+    display: none !important;
+  }
+}
+`;
+
 export default function Costs() {
   const navigate = useNavigate();
   const openQuickCreate = useUiStore((state) => state.openQuickCreate);
+  const pushToast = useUiStore((state) => state.pushToast);
   const horses = useXbarStore((state) => state.horses);
   const expenseReceipts = useXbarStore((state) => state.expenseReceipts);
   const salesLeads = useXbarStore((state) => state.salesLeads);
@@ -52,23 +68,41 @@ export default function Costs() {
   const payback = useMemo(() => buildSubscriptionPayback(costs, plan.monthlyRate), [costs, plan.monthlyRate]);
   const trendValues = costs.trend.flatMap((point) => (point.perHorsePerDay === null ? [] : [point.perHorsePerDay]));
   const logFeed = () => openQuickCreate({ action: 'Add Expense' });
+  // The export is built from the same summary the screen renders, so the
+  // spreadsheet a rancher hands their accountant matches the numbers on the
+  // page — never a second, drifting computation.
+  const exportCsv = async () => {
+    const saved = await downloadCostPerHorseCsv(costs);
+    if (!saved.ok) {
+      pushToast({ title: 'Spreadsheet was not saved', message: saved.reason, tone: 'warning' });
+    }
+  };
 
   const head = (
-    <PageHead
-      eyebrow="Money"
-      title="Costs"
-      subtitle="What each horse costs you per day, where the money goes, and which suppliers raised their prices — from the receipts you log."
-      actions={
-        <>
-          <ActionButton variant="primary" icon={<Wheat size={15} />} onClick={logFeed}>
-            Log feed purchase
-          </ActionButton>
-          <ActionButton icon={<Receipt size={15} />} onClick={() => navigate('/expenses')}>
-            Open expenses
-          </ActionButton>
-        </>
-      }
-    />
+    <>
+      <style>{costsPrintCss}</style>
+      <PageHead
+        eyebrow="Money"
+        title="Costs"
+        subtitle="What each horse costs you per day, where the money goes, and which suppliers raised their prices — from the receipts you log."
+        actions={
+          <>
+            <ActionButton variant="primary" icon={<Wheat size={15} />} onClick={logFeed}>
+              Log feed purchase
+            </ActionButton>
+            <ActionButton icon={<Receipt size={15} />} onClick={() => navigate('/expenses')}>
+              Open expenses
+            </ActionButton>
+            <ActionButton icon={<Download size={15} />} onClick={exportCsv}>
+              Export CSV
+            </ActionButton>
+            <ActionButton icon={<Printer size={15} />} onClick={() => window.print()}>
+              Print
+            </ActionButton>
+          </>
+        }
+      />
+    </>
   );
 
   if (costs.trackedDays === 0) {

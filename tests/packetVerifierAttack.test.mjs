@@ -816,3 +816,86 @@ test('an ordinary enabled button is not called disabled', async () => {
   assert.equal(result.state, 'pass', result.text);
   assert.deepEqual(result.armingAlerts, []);
 });
+
+/*
+ * The sealed hero photo, attacked.
+ *
+ * The packet renders the seller contact block's hero photo as an <img>, and
+ * the verifier exempts exactly one img: the one whose src matches the sealed
+ * seller.heroPhotoUrl character-for-character AND carries only the generated
+ * attributes (src, alt, width). These run the shipped verifier against
+ * packets rather than asserting on its source text — a guard that only looks
+ * right in the source is the failure mode this file exists to catch.
+ */
+const PHOTO_URL = 'https://photos.test/hero.jpg';
+
+function photoPacket(imgAttrs) {
+  const credential = {
+    watermark: 'WATERMARK',
+    identity: { name: 'Bella' },
+    seller: {
+      name: 'Erin',
+      ranch: 'Rocking R Ranch',
+      email: 'ranch@example.com',
+      heroPhotoUrl: PHOTO_URL,
+      heroPhotoDigest: '',
+    },
+    attachments: [],
+  };
+  const payload = JSON.stringify(credential);
+  return {
+    payload,
+    sealedDigest: sha256Hex(Buffer.from(payload, 'utf8')),
+    links: [],
+    extras: [element(imgAttrs, 'IMG')],
+  };
+}
+
+test('the sealed hero photo verifies as an untouched packet', async () => {
+  // The over-correction guard: the exemption must not fail honest packets.
+  const result = await verify(photoPacket({ src: PHOTO_URL, alt: 'Bella', width: '100%' }));
+  assert.equal(result.state, 'pass', result.text);
+});
+
+test('a srcset added to the sealed photo is reported ALTERED', async () => {
+  // The attack: src still matches the sealed URL, but the browser displays
+  // the srcset candidate — an unsealed replacement photo.
+  const result = await verify(
+    photoPacket({ src: PHOTO_URL, alt: 'Bella', width: '100%', srcset: 'https://attacker.example/replacement.jpg 1x' }),
+  );
+  assert.equal(result.state, 'fail', `expected ALTERED, got: ${result.text}`);
+  assert.match(result.text, /ALTERED/);
+});
+
+test('a hidden attribute added to the sealed photo is reported ALTERED', async () => {
+  // The attack: the photo vanishes from the buyer-visible packet while the
+  // src still matches — without the attribute check this reads as PASS.
+  const result = await verify(photoPacket({ src: PHOTO_URL, alt: 'Bella', width: '100%', hidden: '' }));
+  assert.equal(result.state, 'fail', `expected ALTERED, got: ${result.text}`);
+  assert.match(result.text, /ALTERED/);
+});
+
+test('a second copy of the sealed photo is reported ALTERED', async () => {
+  const packet = photoPacket({ src: PHOTO_URL, alt: 'Bella', width: '100%' });
+  packet.extras.push(element({ src: PHOTO_URL, alt: 'Bella', width: '100%' }, 'IMG'));
+  const result = await verify(packet);
+  assert.equal(result.state, 'fail', `expected ALTERED, got: ${result.text}`);
+  assert.match(result.text, /ALTERED/);
+});
+
+test('an altered alt on the sealed photo is reported ALTERED', async () => {
+  // The attack: src matches and only allowed attribute names are present,
+  // but the alt text names a different horse — a names-only exemption
+  // would still count this as the sealed photo.
+  const result = await verify(photoPacket({ src: PHOTO_URL, alt: 'different horse', width: '100%' }));
+  assert.equal(result.state, 'fail', `expected ALTERED, got: ${result.text}`);
+  assert.match(result.text, /ALTERED/);
+});
+
+test('a zeroed width on the sealed photo is reported ALTERED', async () => {
+  // The attack: the img still matches the sealed src, but width="0" means
+  // the buyer sees no photo at all.
+  const result = await verify(photoPacket({ src: PHOTO_URL, alt: 'Bella', width: '0' }));
+  assert.equal(result.state, 'fail', `expected ALTERED, got: ${result.text}`);
+  assert.match(result.text, /ALTERED/);
+});

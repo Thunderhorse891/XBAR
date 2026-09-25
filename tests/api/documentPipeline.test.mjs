@@ -82,7 +82,7 @@ test('buyer proof requests require actionable details', async () => {
     message: '',
   });
   assert.equal(response.statusCode, 400);
-  assert.match(response.body.message, /Describe the proof/);
+  assert.match(response.body.message, /Describe the document you want to review/);
 });
 
 test('seller buyer responses require a target and response note', async () => {

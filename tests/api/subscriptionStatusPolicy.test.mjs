@@ -17,7 +17,12 @@ import {
   RECOVERABLE_STRIPE_STATUSES,
   TERMINAL_STRIPE_STATUSES,
 } from '../../api/_lib/subscription-status.js';
-import { buildSubscriptionProfile, findTierByPriceId, isKnownTier } from '../../api/_lib/subscription-plans.js';
+import {
+  buildSubscriptionProfile,
+  findTierByPriceId,
+  getStripePriceIdByTier,
+  isKnownTier,
+} from '../../api/_lib/subscription-plans.js';
 
 /*
  * What a billing status is allowed to mean.
@@ -173,6 +178,46 @@ test('creating a checkout session does not grant the tier', () => {
   const profile = buildSubscriptionProfile({ tier: 'Enterprise', billingStatus: 'incomplete' });
   assert.equal(profile.billingState, 'Inactive');
   assert.equal(entitledTierForBillingState(profile.tier, profile.billingState), BASELINE_TIER);
+});
+
+test('annual price ids resolve per period and back to their tier', () => {
+  const priceEnvKeys = [
+    'STRIPE_PRICE_ID_STARTER',
+    'STRIPE_PRICE_ID_PROFESSIONAL',
+    'STRIPE_PRICE_ID_STARTER_ANNUAL',
+    'STRIPE_PRICE_ID_PROFESSIONAL_ANNUAL',
+  ];
+  const saved = Object.fromEntries(priceEnvKeys.map((key) => [key, process.env[key]]));
+
+  try {
+    process.env.STRIPE_PRICE_ID_STARTER = 'price_starter_m';
+    process.env.STRIPE_PRICE_ID_PROFESSIONAL = 'price_pro_m';
+    process.env.STRIPE_PRICE_ID_STARTER_ANNUAL = 'price_starter_a';
+    process.env.STRIPE_PRICE_ID_PROFESSIONAL_ANNUAL = 'price_pro_a';
+
+    assert.equal(getStripePriceIdByTier('Professional', 'monthly'), 'price_pro_m');
+    assert.equal(getStripePriceIdByTier('Professional', 'annual'), 'price_pro_a');
+    // Older clients send no period; the default must stay monthly, never ''.
+    assert.equal(getStripePriceIdByTier('Professional'), 'price_pro_m');
+    assert.equal(getStripePriceIdByTier('Professional', 'weekly'), 'price_pro_m');
+
+    // The webhook sees only the price id, so both periods must resolve —
+    // otherwise an annual buyer would pay and never be entitled.
+    assert.equal(findTierByPriceId('price_pro_m'), 'Professional');
+    assert.equal(findTierByPriceId('price_pro_a'), 'Professional');
+    assert.equal(findTierByPriceId('price_starter_a'), 'Starter');
+
+    // Unset annual ids fail closed: '' never matches, so checkout refuses
+    // instead of selling monthly at the annual price (or vice versa).
+    delete process.env.STRIPE_PRICE_ID_PROFESSIONAL_ANNUAL;
+    assert.equal(getStripePriceIdByTier('Professional', 'annual'), '');
+    assert.equal(findTierByPriceId('price_pro_a'), null);
+  } finally {
+    for (const key of priceEnvKeys) {
+      if (saved[key] === undefined) delete process.env[key];
+      else process.env[key] = saved[key];
+    }
+  }
 });
 
 test('an unknown price id resolves to no tier rather than Starter', () => {

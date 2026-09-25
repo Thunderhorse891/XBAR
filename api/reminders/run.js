@@ -64,8 +64,14 @@ export default async function handler(req, res) {
         .maybeSingle();
 
       const horseName = horse?.name || 'a horse';
-      const title = `${formatReminderType(reminder.type)} due ${reminder.due_date}`;
-      const bodyText = `${formatReminderType(reminder.type)} for ${horseName} is due on ${reminder.due_date}. Open XBAR to review the record and schedule the appointment.`;
+      const typeLabel = formatReminderType(reminder.type);
+      const dueLabel = formatDueDate(reminder.due_date);
+      const appLink = `${reminderAppOrigin()}/app/reminders`;
+      const title = `${typeLabel} due ${dueLabel}`;
+      const bodyText = `${typeLabel} for ${horseName} is due on ${dueLabel}. Open XBAR (${appLink}) to review the record and schedule the appointment.`;
+      const bodyHtml =
+        `<p>${escapeHtml(typeLabel)} for ${escapeHtml(horseName)} is due on ${escapeHtml(dueLabel)}. ` +
+        `<a href="${escapeHtml(appLink)}">Open XBAR</a> to review the record and schedule the appointment.</p>`;
 
       let channel = 'in-app';
       if (isEmailConfigured() && recipient.email) {
@@ -73,7 +79,7 @@ export default async function handler(req, res) {
           to: recipient.email,
           subject: `XBAR reminder: ${title} for ${horseName}`,
           text: bodyText,
-          html: `<p>${bodyText}</p>`,
+          html: bodyHtml,
         });
         if (result.ok) {
           channel = 'email';
@@ -153,4 +159,51 @@ function formatReminderType(type) {
     health_cert: 'Health certificate renewal',
   };
   return labels[type] || `${type} reminder`;
+}
+
+const DUE_DATE_FORMAT = new Intl.DateTimeFormat('en-US', {
+  month: 'long',
+  day: 'numeric',
+  year: 'numeric',
+  timeZone: 'UTC',
+});
+
+/**
+ * A due date is a calendar day, not a timestamp — "2026-10-01", never
+ * "Coggins test due 2026-10-01". Format it at UTC noon so the day cannot
+ * shift when the cron runs in a different timezone than the rancher.
+ */
+export function formatDueDate(dueDate) {
+  const match = /^(\d{4})-(\d{2})-(\d{2})$/.exec(String(dueDate || '').trim());
+  if (!match) {
+    return String(dueDate || '');
+  }
+  const year = Number(match[1]);
+  const month = Number(match[2]);
+  const day = Number(match[3]);
+  return DUE_DATE_FORMAT.format(new Date(Date.UTC(year, month - 1, day, 12)));
+}
+
+/**
+ * Same origin resolution as the invite and sale-packet emails, so reminder
+ * links never come out relative. PUBLIC_APP_URL is the documented server
+ * var; the xbar.app fallback is the last resort when no deployment config
+ * exists — a reminder email without a working link is a dead end.
+ */
+export function reminderAppOrigin() {
+  return (
+    process.env.PUBLIC_APP_URL ||
+    process.env.VITE_PUBLIC_APP_URL ||
+    (process.env.VERCEL_URL ? `https://${process.env.VERCEL_URL}` : '') ||
+    'https://xbar.app'
+  );
+}
+
+function escapeHtml(value) {
+  return String(value ?? '')
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;');
 }

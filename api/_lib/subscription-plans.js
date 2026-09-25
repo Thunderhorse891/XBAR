@@ -7,7 +7,8 @@ import {
 
 export const subscriptionPlans = {
   Starter: {
-    monthlyRate: 29,
+    monthlyRate: 12,
+    annualRate: 120,
     sharedAccessEnabled: false,
     featureFlags: [
       'Keep clean records — horses, care, documents, expenses, reminders',
@@ -25,7 +26,8 @@ export const subscriptionPlans = {
     },
   },
   Professional: {
-    monthlyRate: 79,
+    monthlyRate: 29,
+    annualRate: 290,
     sharedAccessEnabled: true,
     featureFlags: [
       'Everything in Starter',
@@ -44,7 +46,8 @@ export const subscriptionPlans = {
     },
   },
   'Ranch Ops': {
-    monthlyRate: 199,
+    monthlyRate: 79,
+    annualRate: 790,
     sharedAccessEnabled: true,
     featureFlags: [
       'Everything in Professional',
@@ -62,7 +65,8 @@ export const subscriptionPlans = {
     },
   },
   Enterprise: {
-    monthlyRate: 499,
+    monthlyRate: 199,
+    annualRate: 1990,
     sharedAccessEnabled: true,
     featureFlags: [
       'Everything in Ranch Ops',
@@ -81,12 +85,22 @@ export const subscriptionPlans = {
   },
 };
 
-export function getStripePriceIdByTier(tier) {
+/**
+ * Resolve the Stripe price id for a tier and billing period.
+ *
+ * Annual prices live in their own Stripe Price objects
+ * (`STRIPE_PRICE_ID_*_ANNUAL`) because a Stripe Price pins its own
+ * billing interval — one Price cannot sell both monthly and annual.
+ * An unset id fails closed downstream: checkout refuses without one.
+ */
+export function getStripePriceIdByTier(tier, billingPeriod = 'monthly') {
+  const period = billingPeriod === 'annual' ? 'annual' : 'monthly';
+  const suffix = period === 'annual' ? '_ANNUAL' : '';
   const envMap = {
-    Starter: process.env.STRIPE_PRICE_ID_STARTER || '',
-    Professional: process.env.STRIPE_PRICE_ID_PROFESSIONAL || '',
-    'Ranch Ops': process.env.STRIPE_PRICE_ID_RANCH_OPS || '',
-    Enterprise: process.env.STRIPE_PRICE_ID_ENTERPRISE || '',
+    Starter: process.env[`STRIPE_PRICE_ID_STARTER${suffix}`] || '',
+    Professional: process.env[`STRIPE_PRICE_ID_PROFESSIONAL${suffix}`] || '',
+    'Ranch Ops': process.env[`STRIPE_PRICE_ID_RANCH_OPS${suffix}`] || '',
+    Enterprise: process.env[`STRIPE_PRICE_ID_ENTERPRISE${suffix}`] || '',
   };
 
   return envMap[tier] || '';
@@ -95,6 +109,10 @@ export function getStripePriceIdByTier(tier) {
 /**
  * Resolve a Stripe price id to a tier, or null when it matches none.
  *
+ * Checks both monthly and annual price ids: the webhook must recognize an
+ * annual purchase's price just like a monthly one, or the workspace would
+ * never be entitled after paying.
+ *
  * An empty price id never matches, even when a tier's STRIPE_PRICE_ID_* env var
  * is also unset — otherwise an unconfigured deployment would resolve every
  * unknown price to whichever tier happened to be blank.
@@ -102,7 +120,12 @@ export function getStripePriceIdByTier(tier) {
 export function findTierByPriceId(priceId) {
   const normalized = String(priceId ?? '').trim();
   if (!normalized) return null;
-  return Object.keys(subscriptionPlans).find((tier) => getStripePriceIdByTier(tier) === normalized) || null;
+  return (
+    Object.keys(subscriptionPlans).find(
+      (tier) =>
+        getStripePriceIdByTier(tier, 'monthly') === normalized || getStripePriceIdByTier(tier, 'annual') === normalized,
+    ) || null
+  );
 }
 
 /** Retained name; the decision itself lives in subscription-status.js. */

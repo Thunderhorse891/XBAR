@@ -15,12 +15,28 @@ import { buildServerSaleCredential } from './_lib/sale-credential.js';
 import { enforceRateLimit } from './_lib/rate-limit.js';
 import { applyCors } from './_lib/cors.js';
 import { packetOmissionSection, selectPacketDocuments } from './_lib/packet-selection.js';
+import { sellerIdentity } from './_lib/workspace-identity.js';
 
 const DOCUMENT_BUCKET =
   process.env.SUPABASE_DOCUMENT_BUCKET || process.env.VITE_SUPABASE_DOCUMENT_BUCKET || 'horse-documents';
 const PACKET_BUCKET = process.env.SUPABASE_SALE_PACKET_BUCKET || 'sale-packets';
-const SIGNED_URL_TTL_SECONDS = 3600;
+// Buyer download links live 72 hours, not 1: a buyer forwards the packet to a
+// partner, opens it on the weekend, or sits on it before deciding. A 1-hour
+// link that dies before they look is a dead end; the email tells them exactly
+// how to get a fresh one.
+const SIGNED_URL_TTL_SECONDS = 72 * 3600;
 const MAX_PACKET_ATTACHMENTS = 20;
+
+/*
+ * Support/contact email for buyer-facing copy. Canonical source is
+ * src/lib/legalDocuments.ts (SUPPORT_CONTACT.email) — Erin's current support
+ * address ("for now", not necessarily permanent); no company/postal address
+ * has been provided, so the email goes out alone with no address line.
+ * Mirrored here because api/* ships as plain JS and cannot import the TS
+ * module; tests/api/salePacketEmail.test.mjs pins the two together so they
+ * cannot drift. Env override wins so it can change without a code edit.
+ */
+const SUPPORT_EMAIL = process.env.SUPPORT_EMAIL || 'Xbarje@gmail.com';
 
 const RATE_LIMIT = { bucket: 'sale-packets', limit: 20, windowSeconds: 60 };
 
@@ -154,6 +170,12 @@ export default async function handler(req, res) {
     // is the tamper-PROOF anchor a buyer verifies against.
     const packetId = `packet-${randomUUID()}`;
     const packetPath = `${workspaceId}/${horseId}/${packetId}.pdf`;
+    // The buyer-facing seller identity with quick-start placeholders removed —
+    // a packet must never present an invented company/ranch as the seller.
+    // Resolved BEFORE the seal: the seal authenticates this same filtered
+    // identity, so the seal and the PDF cover cannot disagree about who the
+    // seller is.
+    const identity = sellerIdentity(context.workspace);
     const seal = buildServerSaleCredential({
       packetId,
       horseId,
@@ -161,11 +183,15 @@ export default async function handler(req, res) {
       ownershipRecord,
       documents: includedDocs,
       sealedAt: new Date().toISOString(),
+      sellerIdentity: identity,
     });
     const appOrigin =
       process.env.PUBLIC_APP_URL ||
       process.env.VITE_PUBLIC_APP_URL ||
-      (process.env.VERCEL_URL ? `https://${process.env.VERCEL_URL}` : '');
+      (process.env.VERCEL_URL ? `https://${process.env.VERCEL_URL}` : '') ||
+      // Never print a dead relative path on the packet: without a configured
+      // public URL the verify link falls back to the canonical domain.
+      'https://xbar.app';
     // The SPA (and its public routes) is served under /app — the router basename.
     /*
      * Built here, not earlier: the download loop above appends to `unavailable`
@@ -195,8 +221,17 @@ export default async function handler(req, res) {
         },
         {
           heading: 'Presented By',
+          // Neutral when the workspace never set a business/ranch name: a
+          // buyer-facing packet must not fall back to naming the platform —
+          // and quick-start placeholders (My Ranch LLC, Main Ranch) are not
+          // the seller's identity.
           lines: [
-            `${context.workspace.businessName || 'XBAR workspace'} (${context.workspace.ranchName || ''})`.trim(),
+            [
+              identity.business || identity.ranch || 'A horse seller',
+              identity.business && identity.ranch ? `(${identity.ranch})` : '',
+            ]
+              .filter(Boolean)
+              .join(' '),
             buyerName ? `Prepared for: ${buyerName}` : 'Prepared for: prospective buyer',
             `Prepared on: ${context.today_date}`,
           ],
@@ -287,11 +322,39 @@ export default async function handler(req, res) {
 
     let emailResult = { ok: false, skipped: true };
     if (buyerEmail && downloadUrl) {
+      // The buyer sees the email as coming from the ranch, not the platform:
+      // From carries the ranch's business name, replies go to the seller's ops
+      // email, and the signature names the ranch with the support contact. No
+      // phone or postal address is on file, so the signature carries neither —
+      // invented contact details on a legal-adjacent document are worse than none.
+      // Quick-start placeholders are filtered by sellerIdentity above: the
+      // email must not present an invented company/ranch/mailbox as the seller.
+      const sellerDisplayName = identity.business || identity.ranch;
+      const replyTo = identity.email || user?.email || '';
+      const senderName = identity.display || 'A horse seller';
+      const esc = (value) =>
+        String(value ?? '')
+          .replace(/&/g, '&amp;')
+          .replace(/</g, '&lt;')
+          .replace(/>/g, '&gt;')
+          .replace(/"/g, '&quot;');
+      const signatureLines = ['—', sellerDisplayName, SUPPORT_EMAIL].filter(Boolean);
+      const emailText =
+        `${senderName} shared a sale packet for ${context.horse.name}.\n\n` +
+        `Download the packet here (link expires in 72 hours): ${downloadUrl}\n\n` +
+        `If the link has expired, reply to this email or contact the seller and they'll send you a fresh one.\n\n` +
+        signatureLines.join('\n');
       emailResult = await sendEmail({
         to: buyerEmail,
+        fromName: sellerDisplayName,
+        replyTo,
         subject: `Sale packet for ${context.horse.name}`,
-        text: `${context.workspace.businessName || 'An XBAR workspace'} shared a sale packet for ${context.horse.name}. Download it here (link expires in 1 hour): ${downloadUrl}`,
-        html: `<p>${context.workspace.businessName || 'An XBAR workspace'} shared a sale packet for <strong>${context.horse.name}</strong>.</p><p><a href="${downloadUrl}">Download the packet</a> (link expires in 1 hour).</p>`,
+        text: emailText,
+        html:
+          `<p>${esc(senderName)} shared a sale packet for <strong>${esc(context.horse.name)}</strong>.</p>` +
+          `<p><a href="${esc(downloadUrl)}">Download the packet</a> (link expires in 72 hours).</p>` +
+          `<p>If the link has expired, reply to this email or contact the seller and they&rsquo;ll send you a fresh one.</p>` +
+          `<p>${signatureLines.map(esc).join('<br>')}</p>`,
       });
     }
 

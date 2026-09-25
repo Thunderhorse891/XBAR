@@ -1,5 +1,4 @@
 import type {
-  AssetCondition,
   DocumentRecord,
   DocumentEntities,
   DocumentSource,
@@ -23,6 +22,7 @@ const BASE36_ALPHABET = 'abcdefghijklmnopqrstuvwxyz0123456789';
 export const subscriptionTierConfig: Record<
   SubscriptionTier,
   Pick<SubscriptionProfile, 'monthlyRate' | 'sharedAccessEnabled' | 'featureFlags'> & {
+    annualRate: number;
     limits: Pick<
       SubscriptionProfile['usage'],
       'horseLimit' | 'seatLimit' | 'documentLimit' | 'salePacketLimit' | 'storageLimitGb' | 'sharedAccessSeatLimit'
@@ -30,7 +30,8 @@ export const subscriptionTierConfig: Record<
   }
 > = {
   Starter: {
-    monthlyRate: 29,
+    monthlyRate: 12,
+    annualRate: 120,
     sharedAccessEnabled: false,
     featureFlags: [
       'Keep clean records — horses, care, documents, expenses, reminders',
@@ -48,7 +49,8 @@ export const subscriptionTierConfig: Record<
     },
   },
   Professional: {
-    monthlyRate: 79,
+    monthlyRate: 29,
+    annualRate: 290,
     sharedAccessEnabled: true,
     featureFlags: [
       'Everything in Starter',
@@ -67,7 +69,8 @@ export const subscriptionTierConfig: Record<
     },
   },
   'Ranch Ops': {
-    monthlyRate: 199,
+    monthlyRate: 79,
+    annualRate: 790,
     sharedAccessEnabled: true,
     featureFlags: [
       'Everything in Professional',
@@ -85,7 +88,8 @@ export const subscriptionTierConfig: Record<
     },
   },
   Enterprise: {
-    monthlyRate: 499,
+    monthlyRate: 199,
+    annualRate: 1990,
     sharedAccessEnabled: true,
     featureFlags: [
       'Everything in Ranch Ops',
@@ -155,16 +159,6 @@ export function createId(prefix: string) {
   return `${prefix}-${Date.now()}-${createRandomBase36(8)}`;
 }
 
-export function createNumericToken(length: number) {
-  const cryptoApi = getCryptoApi();
-  if (cryptoApi?.getRandomValues) {
-    const values = cryptoApi.getRandomValues(new Uint8Array(length));
-    return Array.from(values, (value) => String(value % 10)).join('');
-  }
-
-  return Array.from({ length }, (_, index) => String((Date.now() + index) % 10)).join('');
-}
-
 export function createShareAccessToken(length = 18) {
   return createRandomBase36(length);
 }
@@ -173,8 +167,28 @@ export function todayStamp() {
   return new Date().toISOString().slice(0, 10);
 }
 
+/**
+ * An absolute UTC instant, ISO 8601 (`2026-09-24T18:55:00.000Z`).
+ *
+ * These stamps are synced across workspace members and compared as instants —
+ * `offerUpdatedAt` is ordered with `compareTimestampDesc` in
+ * profitIntelligence.ts. That comparator parses the new ISO form directly
+ * and interprets the legacy local `YYYY-MM-DD HH:mm` form a stale PWA tab
+ * can still sync AS UTC — deterministic and identical on every client, where
+ * a viewer-local parse made Chicago and Los Angeles order the same synced
+ * data differently. An offset-free local wall clock is not globally
+ * comparable on its own: during a DST fallback the same wall time happens
+ * twice, and a later update from a western time zone sorts before an
+ * earlier eastern one. UTC keeps lexicographic order identical to
+ * chronological order everywhere.
+ *
+ * Display still reads the viewer's clock: every reader parses the stamp with
+ * `new Date(...)` (see `parseDateValue` in format.ts) and formats it in local
+ * time, so screens never show the raw UTC the way the old unlabeled-UTC
+ * version did. Never slice these strings for display — parse them.
+ */
 export function nowStamp() {
-  return new Date().toISOString().replace('T', ' ').slice(0, 16);
+  return new Date().toISOString();
 }
 
 export function normalizeStorage(value: number) {
@@ -223,12 +237,6 @@ export function guessGalleryKind(fileName: string): GalleryAsset['kind'] {
   return 'Hero';
 }
 
-export function conditionTone(condition: AssetCondition) {
-  if (condition === 'Attention Required') return 'rose';
-  if (condition === 'Service Soon') return 'amber';
-  return 'emerald';
-}
-
 export function deriveSharedAccessSnapshot(
   sharedAccess: SharedAccessSnapshot,
   sharedListings: SharedListingRecord[],
@@ -256,15 +264,6 @@ export function deriveSharedAccessSnapshot(
 
 export function buildSharePath(horseId: string) {
   return `/profiles/${horseId}`;
-}
-
-export async function readFileAsDataUrl(file: File) {
-  return new Promise<string>((resolve, reject) => {
-    const reader = new FileReader();
-    reader.onerror = () => reject(reader.error ?? new Error('Unable to read file.'));
-    reader.onload = () => resolve(String(reader.result ?? ''));
-    reader.readAsDataURL(file);
-  });
 }
 
 async function readFileTextSnippet(file: File) {
@@ -454,14 +453,6 @@ export function rankHorseMatches(horses: HorseRecord[], haystack: string, entiti
     .filter((match): match is HorseMatchResult => Boolean(match))
     .sort((left, right) => right.confidence - left.confidence)
     .slice(0, 3);
-}
-
-export function findHorseMatch(horses: HorseRecord[], haystack: string) {
-  const [bestMatch] = rankHorseMatches(horses, haystack);
-  return {
-    horse: bestMatch?.horse,
-    confidence: bestMatch?.confidence ?? 0,
-  };
 }
 
 export async function buildDocumentRecord(params: {

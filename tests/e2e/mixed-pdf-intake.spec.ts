@@ -34,7 +34,7 @@ async function bootstrapWorkspace(page: Page) {
   await page.getByPlaceholder('XBAR LLC').fill('XBAR Holdings');
   await page.getByPlaceholder('Primary Ranch').fill('Thunder Horse Ranch');
   await page.getByPlaceholder('Ranch manager').fill('Erin Wyrick');
-  await page.getByPlaceholder('ops@xbar.com').fill('ops@xbar.test');
+  await page.getByPlaceholder('ops@yourranch.com').fill('ops@xbar.test');
   await page.getByPlaceholder('Legal owner').fill('Thunder Horse Ranch');
   await page.getByPlaceholder('Owner entity').fill('Thunder Horse Ranch LLC');
   await page.getByPlaceholder('Barn A').fill('Barn A');
