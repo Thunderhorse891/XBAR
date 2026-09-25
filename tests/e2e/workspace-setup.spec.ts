@@ -562,3 +562,44 @@ test('a damaged PDF in a batch reports failure without losing the readable regis
   await expect(row).not.toContainText('match confidence');
   await expect(row).toContainText('Enter the details by hand below, or upload a clearer scan');
 });
+
+// Synthetic stored image; this test exercises the actual review control/store,
+// not cloud upload or buyer signing (the separate #255 lane).
+test('new sale media needs explicit authorized review', async ({ page }) => {
+  await bootstrapWorkspace(page);
+  await seedHorse(page, 'Review Horse');
+  await page.evaluate(async () => {
+    const modulePath = '/src/store/useXbarStore.ts';
+    const { useXbarStore } = await import(/* @vite-ignore */ modulePath);
+    const horse = useXbarStore.getState().horses[0];
+    useXbarStore.setState({
+      currentRole: 'Admin',
+      horses: [
+        {
+          ...horse,
+          gallery: [
+            {
+              id: 'review-photo',
+              label: 'Review photo',
+              kind: 'Hero',
+              status: 'Pending',
+              url: 'data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///ywAAAAAAQABAAACAUwAOw==',
+            },
+          ],
+        },
+      ],
+    });
+  });
+  const review = page.getByRole('region', { name: 'Sale media review' });
+  await expect(review.getByText('Pending', { exact: true })).toBeVisible();
+  await review.getByRole('button', { name: 'Approve for sale presentation' }).click();
+  await expect(review.getByText('Approved', { exact: true })).toBeVisible();
+  await review.getByRole('button', { name: 'Return to review' }).click();
+  await expect(review.getByText('Pending', { exact: true })).toBeVisible();
+  await page.evaluate(async () => {
+    const modulePath = '/src/store/useXbarStore.ts';
+    const { useXbarStore } = await import(/* @vite-ignore */ modulePath);
+    useXbarStore.setState({ currentRole: 'Owner' });
+  });
+  await expect(review.getByRole('button', { name: 'Approve for sale presentation' })).toHaveCount(0);
+});

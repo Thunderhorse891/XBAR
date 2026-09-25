@@ -1,0 +1,44 @@
+name: database-backup
+on:
+  schedule:
+    - cron: '41 3 * * *'
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: database-backup
+  cancel-in-progress: false
+jobs:
+  backup:
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 24
+      - name: Install matching PostgreSQL client
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y postgresql-client-17
+          echo '/usr/lib/postgresql/17/bin' >> "$GITHUB_PATH"
+      - name: Encrypted logical backup (missing secrets fail the run)
+        env:
+          BACKUP_DATABASE_URL: ${{ secrets.BACKUP_DATABASE_URL }}
+          BACKUP_ENCRYPTION_KEY: ${{ secrets.BACKUP_ENCRYPTION_KEY }}
+          XBAR_BACKUP_SOURCE_REF: uxvwfepyothlakhqazwv
+        run: node scripts/database-backup.mjs create database.enc
+      # This repository is public. Never upload plaintext dumps or role SQL.
+      # Payload is capped at 50 MiB and retained 7 days to bound free storage.
+      - uses: actions/upload-artifact@v7
+        with:
+          name: encrypted-database-${{ github.run_id }}
+          path: |
+            database.enc
+            database.enc.json
+          if-no-files-found: error
+          retention-days: 7
+      - name: Remove local encrypted artifact
+        if: always()
+        run: rm -f database.enc database.enc.json

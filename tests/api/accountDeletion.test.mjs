@@ -135,7 +135,15 @@ test('verified private and shared workspaces produce distinct deletion plans', a
 });
 
 test('the real handler refuses failed prerequisites and shared-workspace deletion before destructive calls', async (t) => {
-  const envKeys = ['SUPABASE_URL', 'SUPABASE_SERVICE_ROLE_KEY', 'UPSTASH_REDIS_REST_URL', 'UPSTASH_REDIS_REST_TOKEN'];
+  const envKeys = [
+    'SUPABASE_URL',
+    'SUPABASE_SERVICE_ROLE_KEY',
+    'UPSTASH_REDIS_REST_URL',
+    'UPSTASH_REDIS_REST_TOKEN',
+    'NODE_ENV',
+    'RATE_LIMIT_MODE',
+    'VERCEL',
+  ];
   const savedEnv = Object.fromEntries(envKeys.map((key) => [key, process.env[key]]));
   t.after(() => {
     for (const key of envKeys) {
@@ -147,6 +155,9 @@ test('the real handler refuses failed prerequisites and shared-workspace deletio
   process.env.SUPABASE_SERVICE_ROLE_KEY = 'fixture-service-key';
   delete process.env.UPSTASH_REDIS_REST_URL;
   delete process.env.UPSTASH_REDIS_REST_TOKEN;
+  process.env.NODE_ENV = 'test';
+  process.env.RATE_LIMIT_MODE = 'memory';
+  delete process.env.VERCEL;
   let scenario;
   let writes = [];
   t.mock.method(globalThis, 'fetch', async (input, init = {}) => {
@@ -157,6 +168,7 @@ test('the real handler refuses failed prerequisites and shared-workspace deletio
     const reply = (data, status = 200) =>
       new Response(JSON.stringify(data), { status, headers: { 'Content-Type': 'application/json' } });
     const failure = () => reply({ message: 'Fixture database failure', code: 'XX000' }, 400);
+    if (url.pathname === '/rest/v1/account_deletion_events') return reply({ id: 'receipt' });
     if (url.pathname === '/auth/v1/user') return reply({ id: 'u1', email: 'owner@example.invalid' });
     if (url.pathname === '/rest/v1/workspaces' && method === 'GET')
       return scenario === 'owned' ? failure() : reply([{ id: 'ws1' }]);

@@ -8,6 +8,9 @@
 //
 // This never prints secret values — only whether each variable is set.
 
+import { readFileSync } from 'node:fs';
+import { checkBackupEvidence } from './backup-evidence.mjs';
+
 const args = process.argv.slice(2);
 const urlFlagIndex = args.indexOf('--url');
 const bareProbeUrl = args.find((arg) => /^https?:\/\//i.test(arg));
@@ -69,12 +72,21 @@ const groups = [
     required: [{ name: 'CRON_SECRET', note: 'any long random string; set the same value in Vercel' }],
   },
   {
+    title: 'Shared request protection and monitoring',
+    unlocks:
+      'Protected APIs, cron completion evidence and error tracking. Missing Redis blocks protected requests with 503.',
+    required: [
+      { name: 'UPSTASH_REDIS_REST_URL' },
+      { name: 'UPSTASH_REDIS_REST_TOKEN' },
+      { name: 'SENTRY_DSN' },
+      { name: 'VITE_SENTRY_DSN' },
+    ],
+  },
+  {
     title: 'Optional hardening & extras',
-    unlocks: 'Cross-instance rate limiting, server-side OCR, custom-domain canonicals.',
+    unlocks: 'Server-side OCR, custom-domain canonicals.',
     required: [],
     optional: [
-      { name: 'UPSTASH_REDIS_REST_URL', note: 'shared rate limiting' },
-      { name: 'UPSTASH_REDIS_REST_TOKEN', note: 'shared rate limiting' },
       { name: 'OCR_PROVIDER', note: 'textract enables AWS OCR (needs AWS keys); blank = on-device OCR' },
       {
         name: 'PUBLIC_SITE_ORIGIN',
@@ -122,6 +134,17 @@ console.log(
   'Configuration presence is not launch readiness. Verify real sign-in, email callbacks, storage and enabled billing before public release.',
 );
 console.log('A browser-only preview does not validate cloud account access or production services.');
+
+let backupEvidence;
+try {
+  backupEvidence = JSON.parse(readFileSync(process.env.BACKUP_EVIDENCE_PATH, 'utf8'));
+} catch {
+  /* Missing evidence blocks launch. */
+}
+const backup = checkBackupEvidence(backupEvidence, process.env.XBAR_BACKUP_SOURCE_REF);
+console.log(`Backup and restore — ${backup.ok ? 'VERIFIED EVIDENCE' : 'BLOCKED'}`);
+for (const failure of backup.failures) console.log(`  ${failure}`);
+if (!backup.ok || gatedGroups > 0) process.exitCode = 1;
 
 if (probeUrl) {
   const origin = probeUrl.replace(/\/+$/, '');

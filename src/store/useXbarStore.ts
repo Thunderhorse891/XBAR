@@ -15,6 +15,7 @@ import { normalizeWorkspaceEmail, validateWorkspaceInvitation } from '@/lib/work
 import { apiConfig, isSupabaseConfigured } from '@/lib/platformConfig';
 import { useCloudStore } from '@/store/useCloudStore';
 import { hasRoleCapability } from '@/lib/permissions';
+import { reviewMedia } from '@/lib/mediaApproval';
 import { hasHorsePhoto, isHorsePhotoAsset } from '@/lib/animalPassport';
 import { buildSaleHold } from '@/lib/saleTrustEngine';
 import { buildPacketCredential } from '@/lib/localSalePacketGenerator';
@@ -1406,6 +1407,17 @@ export const useXbarStore = create<XbarStore>()(
 
         return { ok: true, message: `${document.title} was removed from active review.`, id: document.id };
       },
+      reviewHorseMedia: (horseId, assetId, approved) => {
+        const horse = get().horses.find((item) => item.id === horseId);
+        if (!horse) return { ok: false, message: 'Horse record not found.' };
+        const result = reviewMedia(horse.gallery, assetId, get().currentRole, approved);
+        if (!result.ok || !result.gallery) return { ok: false, message: result.message };
+        const gallery = result.gallery;
+        set((current) => ({
+          horses: current.horses.map((item) => (item.id === horseId ? { ...item, gallery } : item)),
+        }));
+        return { ok: true, message: result.message, id: assetId };
+      },
       uploadHorseMedia: async ({ horseId, files, kind, makePrimary }) => {
         const deniedMessage = requireRoleCapability(get().currentRole, 'uploadMedia');
         if (deniedMessage) {
@@ -1456,7 +1468,7 @@ export const useXbarStore = create<XbarStore>()(
                   // legacy public URLs and local object URLs working.
                   url: '',
                   storagePath: uploadedAsset?.storagePath,
-                  status: 'Approved' as const,
+                  status: 'Pending' as const,
                 },
               };
             }),
@@ -1504,14 +1516,13 @@ export const useXbarStore = create<XbarStore>()(
                       ? {
                           ...horse.readiness,
                           score: Math.min(100, horse.readiness.score + 5),
-                          packetStatus:
-                            horse.readiness.packetStatus === 'Needs Photos' ? 'Ready' : horse.readiness.packetStatus,
+                          packetStatus: horse.readiness.packetStatus,
                           blockers: horse.readiness.blockers.filter(
                             (blocker) => blocker !== 'Hero image missing' && blocker !== 'Sale photos missing',
                           ),
                         }
                       : horse.readiness,
-                    sale: gainedFirstPhoto ? { ...horse.sale, socialReady: true } : horse.sale,
+                    sale: horse.sale,
                     activity: [
                       {
                         id: createId('activity'),

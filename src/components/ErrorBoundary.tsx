@@ -1,3 +1,4 @@
+import { captureUiError } from '@/lib/errorTracking';
 import type { ErrorInfo, ReactNode } from 'react';
 import { Component } from 'react';
 import { trackRuntimeEvent } from '@/lib/runtimeEvents';
@@ -19,6 +20,7 @@ class ErrorBoundaryImpl extends Component<ErrorBoundaryProps, ErrorBoundaryState
   }
 
   componentDidCatch(error: Error, errorInfo: ErrorInfo) {
+    captureUiError(error);
     console.error('XBAR UI error boundary', error, errorInfo);
     void trackRuntimeEvent({
       workspaceId: useCloudStore.getState().workspaceId,

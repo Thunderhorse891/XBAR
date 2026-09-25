@@ -9,6 +9,8 @@ import {
 } from './account-deletion.js';
 import { enforceRateLimit } from './rate-limit.js';
 import { applyCors } from './cors.js';
+import { randomUUID } from 'node:crypto';
+import { recordDeletionAudit } from './deletion-audit.js';
 
 // In-app account deletion. Irreversible. Deletes the
 // caller's own auth account and the workspaces they PRIVATELY own. Accounts
@@ -67,6 +69,8 @@ export default async function handler(req, res) {
     });
   }
 
+  let auditEvent;
+  let auditStarted = false;
   try {
     // Build the plan: for every owned workspace, look up its OTHER active members
     // so a shared workspace cannot be mistaken for private data to purge.
@@ -138,20 +142,32 @@ export default async function handler(req, res) {
       }
     }
 
+    auditEvent = { operation_id: randomUUID(), actor_user_id: user.id, workspace_ids: purgeable };
+    try {
+      await recordDeletionAudit(supabase, { ...auditEvent, phase: 'started' });
+      auditStarted = true;
+    } catch {
+      return sendJson(res, 503, {
+        ok: false,
+        code: 'deletion_audit_unavailable',
+        message: 'Deletion could not be recorded. Nothing was deleted. Please try again later.',
+      });
+    }
+
     // 2. Remove the user from every workspace they belong to (non-destructive).
     const { error: membershipRemovalError } = await supabase
       .from('workspace_memberships')
       .delete()
       .eq('user_id', user.id);
     if (membershipRemovalError) {
-      return sendJson(res, 502, { ok: false, message: 'Unable to remove workspace access. Account was not deleted.' });
+      throw new Error('membership_removal_failed');
     }
 
     // 3. Delete the auth account itself. Nothing destructive to the account's
     //    data has happened yet, so a failure here leaves it recoverable.
     const { error: deleteUserError } = await supabase.auth.admin.deleteUser(user.id);
     if (deleteUserError) {
-      return sendJson(res, 502, { ok: false, message: `Failed to delete the account: ${deleteUserError.message}` });
+      throw new Error('auth_deletion_failed');
     }
 
     /*
@@ -163,11 +179,8 @@ export default async function handler(req, res) {
      * anything, which is the part that genuinely still has to run here.
      */
     if (purgeable.length) {
-      await supabase
-        .from('workspaces')
-        .delete()
-        .in('id', purgeable)
-        .then(undefined, () => {});
+      const { error: cleanupError } = await supabase.from('workspaces').delete().in('id', purgeable);
+      if (cleanupError) throw new Error('workspace_cleanup_failed');
     }
     // Documents moved onto workspace-keyed paths, so sweeping only the
     // departing user's own prefix would leave every file in a purged private
@@ -179,20 +192,37 @@ export default async function handler(req, res) {
       supabase,
       DOCUMENT_BUCKET,
       documentPrefixesToPurge({ ...plan, workspacesToPurge: purgeable }),
-    ).catch(() => {});
+    );
     await removeStoragePrefixes(
       supabase,
       MEDIA_BUCKET,
       mediaPrefixesToPurge({ ...plan, workspacesToPurge: purgeable }),
-    ).catch(() => {});
+    );
+
+    await recordDeletionAudit(supabase, { ...auditEvent, phase: 'completed' });
 
     return sendJson(res, 200, {
       ok: true,
       purgedWorkspaces: purgeable.length,
       transferredWorkspaces: plan.workspacesToTransfer.length,
     });
-  } catch (error) {
-    return sendJson(res, 500, { ok: false, message: `Account deletion failed: ${error.message}` });
+  } catch {
+    let auditFailed = false;
+    if (auditStarted) {
+      try {
+        await recordDeletionAudit(supabase, { ...auditEvent, phase: 'failed' });
+      } catch {
+        auditFailed = true;
+        console.error('Account deletion outcome audit unavailable', auditEvent.operation_id);
+      }
+    }
+    return sendJson(res, auditFailed ? 503 : 502, {
+      ok: false,
+      code: auditFailed ? 'deletion_audit_incomplete' : 'deletion_incomplete',
+      operationId: auditEvent?.operation_id,
+      message:
+        'Account deletion could not be fully confirmed. Some steps may have completed. Contact support with this operation ID before retrying.',
+    });
   }
 }
 
@@ -204,7 +234,8 @@ async function listAllObjects(supabase, bucket, prefix, out) {
   const pageSize = 100;
   for (;;) {
     const { data: entries, error } = await supabase.storage.from(bucket).list(prefix, { limit: pageSize, offset });
-    if (error || !entries?.length) break;
+    if (error) throw new Error('storage_list_failed');
+    if (!entries?.length) break;
     for (const entry of entries) {
       const path = `${prefix}/${entry.name}`;
       if (entry.id) out.push(path);
@@ -220,7 +251,8 @@ async function removeStoragePrefixes(supabase, bucket, prefixes) {
     const paths = [];
     await listAllObjects(supabase, bucket, prefix, paths);
     for (let i = 0; i < paths.length; i += 100) {
-      await supabase.storage.from(bucket).remove(paths.slice(i, i + 100));
+      const { error } = await supabase.storage.from(bucket).remove(paths.slice(i, i + 100));
+      if (error) throw new Error('storage_remove_failed');
     }
   }
 }

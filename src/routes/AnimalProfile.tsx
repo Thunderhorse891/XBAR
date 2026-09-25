@@ -1,3 +1,4 @@
+import { HorseMediaPreview } from '@/components/HorseMediaPreview';
 import { useMemo, useRef, useState } from 'react';
 import type { ChangeEvent, CSSProperties } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
@@ -63,6 +64,7 @@ export default function AnimalProfile() {
   const openQuickCreate = useUiStore((s) => s.openQuickCreate);
   const pushToast = useUiStore((s) => s.pushToast);
   const uploadHorseMedia = useXbarStore((s) => s.uploadHorseMedia);
+  const reviewHorseMedia = useXbarStore((s) => s.reviewHorseMedia);
   const currentRole = useXbarStore((s) => s.currentRole);
   const expenseReceipts = useXbarStore((s) => s.expenseReceipts);
   const salesLeads = useXbarStore((s) => s.salesLeads);
@@ -318,6 +320,41 @@ export default function AnimalProfile() {
           </ActionButton>
         </div>
       </div>
+
+      {animal.gallery.length > 0 && (
+        <section aria-label="Sale media review" className="xs-card">
+          <h2>Sale media review</h2>
+          <p>New uploads need review by an Admin or Sales Lead before approval for sale presentation.</p>
+          {animal.gallery.map((asset) => (
+            <div key={asset.id}>
+              <HorseMediaPreview
+                src={asset.url}
+                storagePath={asset.storagePath}
+                name={asset.label}
+                imageClassName="h-40 w-60 object-contain"
+                fallbackClassName="h-40 w-60"
+              />
+              <span>{asset.label}</span>
+              <StatusChip tone={asset.status === 'Approved' ? 'success' : 'warning'}>{asset.status}</StatusChip>
+              {hasRoleCapability(currentRole, 'manageSales') && (
+                <ActionButton
+                  size="sm"
+                  onClick={() => {
+                    const result = reviewHorseMedia(animal.id, asset.id, asset.status !== 'Approved');
+                    pushToast({
+                      title: result.ok ? 'Media review saved' : 'Review failed',
+                      message: result.message,
+                      tone: result.ok ? 'success' : 'error',
+                    });
+                  }}
+                >
+                  {asset.status === 'Approved' ? 'Return to review' : 'Approve for sale presentation'}
+                </ActionButton>
+              )}
+            </div>
+          ))}
+        </section>
+      )}
 
       <div className="xs-tabbar">
         {TABS.map((t) => (

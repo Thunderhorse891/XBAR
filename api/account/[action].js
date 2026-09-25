@@ -1,3 +1,4 @@
+import { withErrorTracking } from '../_lib/error-tracking.js';
 import { sendJson } from '../_lib/http.js';
 import deleteHandler from '../_lib/account-delete.js';
 import sendWelcomeHandler from '../_lib/account-send-welcome.js';
@@ -24,7 +25,7 @@ function resolveAction(req) {
   return pathname.split('/').filter(Boolean).pop() || '';
 }
 
-export default async function handler(req, res) {
+async function handler(req, res) {
   const action = resolveAction(req);
   if (action === 'delete') {
     return deleteHandler(req, res);
@@ -37,3 +38,5 @@ export default async function handler(req, res) {
   }
   return sendJson(res, 404, { ok: false, message: 'Unknown account action.' });
 }
+
+export default withErrorTracking(handler, 'account/[action].js');

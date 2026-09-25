@@ -1,0 +1,50 @@
+name: production-monitor
+on:
+  schedule:
+    - cron: '*/15 * * * *'
+  workflow_dispatch:
+permissions:
+  actions: read
+  contents: read
+  issues: write
+concurrency:
+  group: production-monitor
+  cancel-in-progress: false
+jobs:
+  monitor:
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 24
+      - name: Health, both cron completions and backup freshness
+        id: probe
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+          UPSTASH_REDIS_REST_URL: ${{ secrets.UPSTASH_REDIS_REST_URL }}
+          UPSTASH_REDIS_REST_TOKEN: ${{ secrets.UPSTASH_REDIS_REST_TOKEN }}
+        run: node scripts/production-monitor.mjs
+      - name: Open one incident or close it on recovery
+        if: always()
+        uses: actions/github-script@v8
+        with:
+          script: |
+            const fs = require('fs');
+            const title = '[Production monitoring] XBAR check failed';
+            const failures = fs.existsSync('monitor-result.json')
+              ? JSON.parse(fs.readFileSync('monitor-result.json','utf8'))
+              : ['Monitoring could not complete its checks.'];
+            const {owner, repo} = context.repo;
+            const issues = await github.paginate(github.rest.issues.listForRepo, {owner,repo,state:'open',creator:'github-actions[bot]',per_page:100});
+            const incident = issues.find(item => item.title === title && !item.pull_request);
+            if (failures.length) {
+              const body = 'Automated checks failed:\n\n' + failures.map(x => '- '+x).join('\n') + '\n\nSee the production-monitor workflow for evidence. Do not restart cron jobs or restore data without review.';
+              if (!incident) await github.rest.issues.create({owner,repo,title,body});
+              else if (incident.body !== body) await github.rest.issues.update({owner,repo,issue_number:incident.number,body});
+            } else if (incident) {
+              await github.rest.issues.createComment({owner,repo,issue_number:incident.number,body:'Health, both cron completions and backup freshness passed. This is recovery of the monitored checks, not whole-app acceptance.'});
+              await github.rest.issues.update({owner,repo,issue_number:incident.number,state:'closed'});
+            }
