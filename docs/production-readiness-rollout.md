@@ -86,7 +86,13 @@ or alert subscription was configured by this PR.
 
 New uploads remain Pending. Admins/Sales Leads can inspect the image in the
 horse profile and explicitly approve it for sale presentation or return it to
-review. Existing historical statuses are preserved; this does not establish
+review. Shared review uses the authenticated `/api/account/media-review` action,
+which checks the existing manageSales capability and changes only the selected
+stored asset's status. It compares the viewed image and stored payload before
+writing, refuses conflicts, and requires an acknowledged write before updating
+the screen. This permits invited Sales Leads to review without expanding whole-row
+horse RLS writes. Device-only mode explicitly reports local persistence. Existing
+historical statuses are preserved; this does not establish
 historical human review or immutable ownership. #255 buyer signing/revocation
 work is unchanged and remains a separate lane. Existing URLs retain their TTL.
 

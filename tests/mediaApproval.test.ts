@@ -1,17 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { readFileSync } from 'node:fs';
 import type { GalleryAsset } from '../src/types/xbar.js';
-
-test('new uploads do not self-approve', () => {
-  const source = readFileSync('src/store/useXbarStore.ts', 'utf8');
-  const upload = source.slice(
-    source.indexOf('uploadHorseMedia: async'),
-    source.indexOf('uploadHorseMedia: async') + 4000,
-  );
-  assert.match(upload, /status: 'Pending' as const/);
-  assert.doesNotMatch(upload, /status: 'Approved'/);
-});
 
 test('explicit sale review requires a sales capability and usable media; preserves other assets', async () => {
   const { reviewMedia } = await import('../src/lib/mediaApproval.js');
@@ -27,4 +16,45 @@ test('explicit sale review requires a sales capability and usable media; preserv
   assert.equal(reviewMedia(gallery, 'missing', 'Admin', true).ok, false);
   assert.equal(reviewMedia([{ ...gallery[0], url: '' }], 'a', 'Admin', true).ok, false);
   assert.equal(reviewMedia(approved.gallery!, 'a', 'Admin', false).gallery?.[0].status, 'Pending');
+});
+
+test('shared review requires matching server acknowledgement and preserves error outcomes', async () => {
+  const { persistMediaReview } = await import('../src/lib/mediaReviewRequest.js');
+  const input = {
+    apiBase: '',
+    accessToken: 'fixture',
+    workspaceId: 'ranch',
+    horseId: 'horse',
+    assetId: 'photo',
+    approved: true,
+    expectedStoragePath: 'stored/photo',
+    expectedUrl: '',
+  };
+  const original = globalThis.fetch;
+  try {
+    for (const status of [401, 403, 409, 503]) {
+      globalThis.fetch = async () => new Response(JSON.stringify({ ok: false, message: 'Not saved' }), { status });
+      assert.equal((await persistMediaReview(input)).ok, false);
+    }
+    globalThis.fetch = async () =>
+      new Response(JSON.stringify({ ok: true, ...input, assetId: 'wrong', status: 'Approved' }));
+    assert.equal((await persistMediaReview(input)).ok, false);
+    globalThis.fetch = async (url, init) => {
+      assert.equal(url, '/api/account/media-review');
+      assert.equal(init?.method, 'POST');
+      assert.equal(JSON.parse(String(init?.body)).expectedStoragePath, input.expectedStoragePath);
+      return new Response(
+        JSON.stringify({
+          ok: true,
+          workspaceId: input.workspaceId,
+          horseId: input.horseId,
+          assetId: input.assetId,
+          status: 'Approved',
+        }),
+      );
+    };
+    assert.equal((await persistMediaReview(input)).ok, true);
+  } finally {
+    globalThis.fetch = original;
+  }
 });

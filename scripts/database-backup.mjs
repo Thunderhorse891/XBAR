@@ -1,6 +1,6 @@
 // Database-only recovery. Storage object bytes and project secrets are NOT in pg_dump.
 import { createCipheriv, createDecipheriv, createHash, randomBytes } from 'node:crypto';
-import { mkdtempSync, readFileSync, writeFileSync, rmSync, statSync } from 'node:fs';
+import { mkdtempSync, readFileSync, writeFileSync, rmSync, openSync, fstatSync, closeSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { spawnSync } from 'node:child_process';
@@ -53,11 +53,18 @@ export function createBackup({ url, sourceRef, key, output, runUrl = '' }) {
     const env = databaseEnv(url);
     const dump = path.join(dir, 'database.dump');
     command('pg_dump', ['--format=custom', '--file', dump], env);
-    if (statSync(dump).size > MAX_BYTES * 0.7) throw new Error('Dump exceeds the encrypted archive budget.');
+    // Check and read the same opened file, so a path replacement cannot bypass
+    // the size check between stat and read. pg_dump has exited before this.
+    const descriptor = openSync(dump, 'r');
+    let dumpBytes;
+    try {
+      if (fstatSync(descriptor).size > MAX_BYTES * 0.7) throw new Error('Dump exceeds the encrypted archive budget.');
+      dumpBytes = readFileSync(descriptor);
+    } finally {
+      closeSync(descriptor);
+    }
     const roles = command('pg_dumpall', ['--roles-only', '--no-role-passwords'], env);
-    const payload = Buffer.from(
-      JSON.stringify({ version: 1, sourceRef, roles, dump: readFileSync(dump).toString('base64') }),
-    );
+    const payload = Buffer.from(JSON.stringify({ version: 1, sourceRef, roles, dump: dumpBytes.toString('base64') }));
     const archive = encryptBackup(payload, key);
     writeFileSync(output, archive, { mode: 0o600 });
     const receipt = {

@@ -16,6 +16,7 @@ import { apiConfig, isSupabaseConfigured } from '@/lib/platformConfig';
 import { useCloudStore } from '@/store/useCloudStore';
 import { hasRoleCapability } from '@/lib/permissions';
 import { reviewMedia } from '@/lib/mediaApproval';
+import { persistMediaReview } from '@/lib/mediaReviewRequest';
 import { hasHorsePhoto, isHorsePhotoAsset } from '@/lib/animalPassport';
 import { buildSaleHold } from '@/lib/saleTrustEngine';
 import { buildPacketCredential } from '@/lib/localSalePacketGenerator';
@@ -1407,16 +1408,56 @@ export const useXbarStore = create<XbarStore>()(
 
         return { ok: true, message: `${document.title} was removed from active review.`, id: document.id };
       },
-      reviewHorseMedia: (horseId, assetId, approved) => {
+      reviewHorseMedia: async (horseId, assetId, approved) => {
         const horse = get().horses.find((item) => item.id === horseId);
         if (!horse) return { ok: false, message: 'Horse record not found.' };
         const result = reviewMedia(horse.gallery, assetId, get().currentRole, approved);
         if (!result.ok || !result.gallery) return { ok: false, message: result.message };
-        const gallery = result.gallery;
+        const cloud = useCloudStore.getState();
+        const shared = isSupabaseConfigured() || Boolean(cloud.session);
+        const asset = horse.gallery.find((item) => item.id === assetId)!;
+        if (shared) {
+          if (!cloud.session?.access_token || !cloud.workspaceId || !cloud.workspaceReady || !cloud.autosaveUnlocked)
+            return { ok: false, message: 'Wait for your shared ranch to finish loading before reviewing media.' };
+          const saved = await persistMediaReview({
+            apiBase: apiConfig.baseUrl,
+            accessToken: cloud.session.access_token,
+            workspaceId: cloud.workspaceId,
+            horseId,
+            assetId,
+            approved,
+            expectedStoragePath: asset.storagePath || '',
+            expectedUrl: asset.url || '',
+          });
+          if (!saved.ok) return saved;
+          const latest = useCloudStore.getState();
+          if (latest.session?.user.id !== cloud.session.user.id || latest.workspaceId !== cloud.workspaceId)
+            return { ok: false, message: 'The review was saved for the previous ranch. Reload the current ranch.' };
+        }
+        const currentAsset = get()
+          .horses.find((item) => item.id === horseId)
+          ?.gallery.find((item) => item.id === assetId);
+        if (!currentAsset || currentAsset.storagePath !== asset.storagePath || currentAsset.url !== asset.url)
+          return { ok: false, message: 'The displayed image changed. Reload it to see the shared review status.' };
         set((current) => ({
-          horses: current.horses.map((item) => (item.id === horseId ? { ...item, gallery } : item)),
+          horses: current.horses.map((item) =>
+            item.id === horseId
+              ? {
+                  ...item,
+                  gallery: item.gallery.map((image) =>
+                    image.id === assetId
+                      ? { ...image, status: approved ? ('Approved' as const) : ('Pending' as const) }
+                      : image,
+                  ),
+                }
+              : item,
+          ),
         }));
-        return { ok: true, message: result.message, id: assetId };
+        return {
+          ok: true,
+          message: shared ? 'Media review saved to the shared ranch.' : 'Media review saved on this device only.',
+          id: assetId,
+        };
       },
       uploadHorseMedia: async ({ horseId, files, kind, makePrimary }) => {
         const deniedMessage = requireRoleCapability(get().currentRole, 'uploadMedia');

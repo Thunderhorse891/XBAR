@@ -65,6 +65,7 @@ export default function AnimalProfile() {
   const pushToast = useUiStore((s) => s.pushToast);
   const uploadHorseMedia = useXbarStore((s) => s.uploadHorseMedia);
   const reviewHorseMedia = useXbarStore((s) => s.reviewHorseMedia);
+  const [reviewingMedia, setReviewingMedia] = useState(false);
   const currentRole = useXbarStore((s) => s.currentRole);
   const expenseReceipts = useXbarStore((s) => s.expenseReceipts);
   const salesLeads = useXbarStore((s) => s.salesLeads);
@@ -339,8 +340,11 @@ export default function AnimalProfile() {
               {hasRoleCapability(currentRole, 'manageSales') && (
                 <ActionButton
                   size="sm"
-                  onClick={() => {
-                    const result = reviewHorseMedia(animal.id, asset.id, asset.status !== 'Approved');
+                  disabled={reviewingMedia}
+                  onClick={async () => {
+                    setReviewingMedia(true);
+                    const result = await reviewHorseMedia(animal.id, asset.id, asset.status !== 'Approved');
+                    setReviewingMedia(false);
                     pushToast({
                       title: result.ok ? 'Media review saved' : 'Review failed',
                       message: result.message,

@@ -3,13 +3,17 @@ begin;
 insert into auth.users(id,email) values
  ('10000000-0000-4000-8000-000000000001','owner@example.invalid'),
  ('10000000-0000-4000-8000-000000000002','member@example.invalid'),
- ('10000000-0000-4000-8000-000000000003','outsider@example.invalid');
+ ('10000000-0000-4000-8000-000000000003','outsider@example.invalid'),
+ ('10000000-0000-4000-8000-000000000004','sales@example.invalid');
 insert into public.workspaces(id,owner_user_id) values
  ('20000000-0000-4000-8000-000000000001','10000000-0000-4000-8000-000000000001');
 insert into public.workspace_subscription_profiles(workspace_id,tier,billing_state) values
  ('20000000-0000-4000-8000-000000000001','Professional','Active');
 insert into public.workspace_memberships(workspace_id,user_id,email,role) values
- ('20000000-0000-4000-8000-000000000001','10000000-0000-4000-8000-000000000002','member@example.invalid','Owner');
+ ('20000000-0000-4000-8000-000000000001','10000000-0000-4000-8000-000000000002','member@example.invalid','Owner'),
+ ('20000000-0000-4000-8000-000000000001','10000000-0000-4000-8000-000000000004','sales@example.invalid','Sales Lead');
+insert into public.horses(workspace_id,horse_id,name,payload) values
+ ('20000000-0000-4000-8000-000000000001','review-horse','Review horse','{"gallery":[{"id":"photo","status":"Pending"}],"notes":"preserved"}');
 set local role authenticated;
 select set_config('request.jwt.claim.sub','10000000-0000-4000-8000-000000000001',true);
 do $$ declare n integer; begin
@@ -33,6 +37,13 @@ do $$ declare n integer; begin
  get diagnostics n = row_count;
  if n <> 0 then raise exception 'member promoted self'; end if;
 end $$;
+select set_config('request.jwt.claim.sub','10000000-0000-4000-8000-000000000004',true);
+do $$ declare n integer; begin
+ if (select count(*) from public.horses) <> 1 then raise exception 'sales lead cannot read horse'; end if;
+ update public.horses set name='Unauthorized whole-row edit';
+ get diagnostics n = row_count;
+ if n <> 0 then raise exception 'sales lead gained whole-row horse writes'; end if;
+end $$;
 select set_config('request.jwt.claim.sub','10000000-0000-4000-8000-000000000003',true);
 do $$ begin
  if exists (select 1 from public.workspaces) then raise exception 'outsider sees workspace'; end if;
@@ -53,6 +64,18 @@ end $$;
 -- Audit receipts survive an auth/workspace cascade and cannot be altered by
 -- the service role or read by an authenticated user.
 set local role service_role;
+do $$ declare n integer; original jsonb; begin
+ select payload into original from public.horses where horse_id='review-horse';
+ update public.horses set payload=jsonb_set(original,'{gallery,0,status}','"Approved"')
+ where workspace_id='20000000-0000-4000-8000-000000000001' and horse_id='review-horse' and payload=original;
+ get diagnostics n = row_count;
+ if n <> 1 then raise exception 'review compare-and-set failed'; end if;
+ if (select payload->>'notes' from public.horses where horse_id='review-horse') <> 'preserved'
+ then raise exception 'review changed unrelated fields'; end if;
+ update public.horses set payload=original where horse_id='review-horse' and payload=original;
+ get diagnostics n = row_count;
+ if n <> 0 then raise exception 'stale review overwrote newer payload'; end if;
+end $$;
 insert into public.account_deletion_events(operation_id,actor_user_id,workspace_ids,phase) values
  ('30000000-0000-4000-8000-000000000001','10000000-0000-4000-8000-000000000001',array['20000000-0000-4000-8000-000000000001'::uuid],'started');
 do $$ begin
