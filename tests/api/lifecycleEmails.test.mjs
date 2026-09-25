@@ -450,6 +450,44 @@ test('selectTrialReminders picks windows and skips paid workspaces', () => {
   assert.equal(byId['from-start'].trialEndDate, '2026-10-08');
 });
 
+test('selectTrialReminders ignores malformed trial records the entitlement contract rejects', () => {
+  // A trial OBJECT is governed by the strict contract in trial-status.js
+  // (plan, both timestamps, window length) — the same contract entitlement
+  // evaluation uses. A record that fails it is not a trial, so no reminder
+  // may be scheduled for it, even though its endsAt looks plausible.
+  const nowIso = '2026-10-05T12:00:00Z';
+  const trial = (overrides) => ({
+    startedAt: '2026-09-23T00:00:00.000Z',
+    endsAt: '2026-10-07T00:00:00.000Z',
+    plan: 'Professional',
+    ...overrides,
+  });
+  const rows = [
+    { workspace_id: 'wrong-plan', billing_state: 'Inactive', payload: { trial: trial({ plan: 'Enterprise' }) } },
+    { workspace_id: 'bad-start', billing_state: 'Inactive', payload: { trial: trial({ startedAt: 'not-a-date' }) } },
+    {
+      workspace_id: 'long-window',
+      billing_state: 'Inactive',
+      payload: { trial: trial({ startedAt: '2026-07-01T00:00:00.000Z' }) },
+    },
+    {
+      workspace_id: 'inverted',
+      billing_state: 'Inactive',
+      payload: { trial: trial({ startedAt: '2026-10-07T00:00:00.000Z', endsAt: '2026-10-01T00:00:00.000Z' }) },
+    },
+    { workspace_id: 'valid', billing_state: 'Inactive', payload: { trial: trial() } },
+    { workspace_id: 'legacy', billing_state: 'Inactive', payload: { trial_end: '2026-10-07' } },
+  ];
+  const selected = selectTrialReminders({ rows, nowIso });
+  const ids = selected.map((s) => s.workspaceId);
+  assert.ok(!ids.includes('wrong-plan'), 'wrong plan schedules no reminder');
+  assert.ok(!ids.includes('bad-start'), 'unparseable startedAt schedules no reminder');
+  assert.ok(!ids.includes('long-window'), 'overlong window schedules no reminder');
+  assert.ok(!ids.includes('inverted'), 'inverted window schedules no reminder');
+  assert.ok(ids.includes('valid'), 'a valid trial record is still selected');
+  assert.ok(ids.includes('legacy'), 'legacy date-only fields keep their behavior when no trial object is present');
+});
+
 test('processTrialReminders sends once per trial period and never double-sends', async () => {
   const profiles = [
     { workspace_id: 'ws-soon', billing_state: 'Inactive', payload: { trial_end: '2026-10-07' } },
