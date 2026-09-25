@@ -94,6 +94,9 @@ async function verify({
   btnAttrs = {},
   decoyButtons = 0,
   metas = [],
+  sellerCells = [],
+  sellerExtraRows = 0,
+  byline = null,
 }) {
   const out = element({ class: 'verify__out', 'data-digest': sealedDigest, ...outAttrs }, 'DIV');
   out._collapsed = outCollapsed;
@@ -118,6 +121,35 @@ async function verify({
   record.textContent = payload;
   const stamp = element();
   stamp.textContent = 'WATERMARK';
+
+  /*
+   * The seller contact block as the generator prints it: a named table whose
+   * rows each hold one sealed field in a named cell, and the byline in a named
+   * span. Rows are modelled, not just cells, so an added or hidden row is
+   * expressible — the attacks here are exactly the ones a cell-only stub could
+   * not state.
+   */
+  const contactTable = element({ id: 'xbar-seller-contact' }, 'TABLE');
+  const sellerNodes = sellerCells.map(({ field, text, rowAttrs = {} }) => {
+    const rowNode = element(rowAttrs, 'TR');
+    rowNode.parentElement = contactTable;
+    const cell = element({ id: `xbar-seller-${field}` }, 'TD');
+    cell.textContent = text;
+    cell.parentElement = rowNode;
+    return cell;
+  });
+  const sellerRows = [
+    ...sellerNodes.map((cell) => cell.parentElement),
+    ...Array.from({ length: sellerExtraRows }, () => {
+      const added = element({}, 'TR');
+      added.parentElement = contactTable;
+      return added;
+    }),
+  ];
+  const bylineNode = byline === null ? null : element({ id: 'xbar-seller-byline' }, 'SPAN');
+  if (bylineNode) bylineNode.textContent = byline;
+  const sellerElements = [...sellerNodes, ...sellerRows, ...(sellerRows.length ? [contactTable] : [])];
+  if (bylineNode) sellerElements.push(bylineNode);
 
   let click;
   const btn = element(btnAttrs, 'BUTTON');
@@ -182,7 +214,16 @@ async function verify({
        */
       // Every element in the packet, which is what the handler sweep walks.
       if (selector === '*') {
-        return [...links, ...extras, ...inlineStyled, out, btn, record, stamp, ...sealedChain];
+        return [...links, ...extras, ...inlineStyled, out, btn, record, stamp, ...sealedChain, ...sellerElements];
+      }
+      if (/^#xbar-seller-(name|ranch|email)$/.test(selector)) {
+        return sellerNodes.filter((cell) => cell.getAttribute('id') === selector.slice(1));
+      }
+      if (selector === '#xbar-seller-contact tr') {
+        return sellerRows;
+      }
+      if (selector === '#xbar-seller-byline') {
+        return bylineNode ? [bylineNode] : [];
       }
       if (selector === '#xbar-verify-btn') {
         return [btn, ...Array.from({ length: decoyButtons }, () => element({}, 'BUTTON'))];
@@ -287,6 +328,95 @@ test('an untouched packet still verifies', async () => {
   const result = await verify(honestPacket((base64) => `data:application/pdf;base64,${base64}`));
   assert.equal(result.state, 'pass', result.text);
   assert.match(result.text, /matches the seal/);
+});
+
+/*
+ * The seller contact block, sealed and printed. #252 sealed the seller's name,
+ * ranch and email, but the verifier compared only the hero photo: a packet
+ * altered to show an attacker's email left the payload untouched, so the
+ * digest matched and the verdict was PASS while the buyer's reply — and the
+ * payment talk after it — went to whoever edited the page.
+ */
+const SEALED_SELLER = {
+  name: 'Erin Wyrick',
+  ranch: 'Rocking R Ranch',
+  email: 'ranch@example.com',
+  heroPhotoUrl: '',
+  heroPhotoDigest: '',
+};
+const SEALED_BYLINE = 'Erin Wyrick · Rocking R Ranch';
+
+function sellerPacket({ seller = SEALED_SELLER, sealedBy = SEALED_BYLINE, ...shown } = {}) {
+  const payload = JSON.stringify({ watermark: 'WATERMARK', sealedBy, seller, attachments: [] });
+  return {
+    payload,
+    sealedDigest: sha256Hex(Buffer.from(payload, 'utf8')),
+    links: [],
+    sellerCells: ['name', 'ranch', 'email']
+      .filter((field) => seller[field])
+      .map((field) => ({ field, text: seller[field] })),
+    byline: sealedBy ? `Prepared by ${sealedBy}` : null,
+    ...shown,
+  };
+}
+
+test('an untouched seller contact block still verifies', async () => {
+  const result = await verify(sellerPacket());
+  assert.equal(result.state, 'pass', result.text);
+});
+
+test('a substituted seller name, ranch or email is reported ALTERED, as reviewed', async () => {
+  for (const [field, forged] of [
+    ['name', 'Attacker'],
+    ['ranch', 'Fake Ranch'],
+    ['email', 'attacker@example.com'],
+  ]) {
+    const packet = sellerPacket();
+    packet.sellerCells = packet.sellerCells.map((cell) => (cell.field === field ? { field, text: forged } : cell));
+    const result = await verify(packet);
+    assert.equal(result.state, 'fail', `a forged ${field} must not verify: ${result.text}`);
+    assert.ok(result.text.includes(`as "${forged}" but it was sealed as "${SEALED_SELLER[field]}"`), result.text);
+  }
+});
+
+test('a removed, duplicated, hidden or unsealed seller field is reported', async () => {
+  const cases = {
+    'the email row removed': { sellerCells: sellerPacket().sellerCells.filter((cell) => cell.field !== 'email') },
+    'a second email beside the sealed one': {
+      sellerCells: [...sellerPacket().sellerCells, { field: 'email', text: 'attacker@example.com' }],
+    },
+    'the sealed email row hidden': {
+      sellerCells: sellerPacket().sellerCells.map((cell) =>
+        cell.field === 'email' ? { ...cell, rowAttrs: { hidden: '' } } : cell,
+      ),
+    },
+    'an unmarked row added to the contact table': { sellerExtraRows: 1 },
+  };
+  for (const [name, shown] of Object.entries(cases)) {
+    const result = await verify(sellerPacket(shown));
+    assert.equal(result.state, 'fail', `${name} must not verify: ${result.text}`);
+  }
+  // No email was sealed, yet the page shows one.
+  const unsealed = sellerPacket({
+    seller: { ...SEALED_SELLER, email: '' },
+    sellerCells: [...sellerPacket().sellerCells],
+  });
+  const result = await verify(unsealed);
+  assert.equal(result.state, 'fail', result.text);
+  assert.match(result.text, /never sealed/);
+});
+
+test('an edited or removed "Prepared by" line is reported', async () => {
+  const edited = await verify(sellerPacket({ byline: 'Prepared by Someone Else' }));
+  assert.equal(edited.state, 'fail', edited.text);
+  assert.ok(edited.text.includes(`sealed as "Prepared by ${SEALED_BYLINE}"`), edited.text);
+  const removed = await verify(sellerPacket({ byline: null }));
+  assert.equal(removed.state, 'fail', removed.text);
+  const unsealed = await verify(sellerPacket({ sealedBy: '', byline: 'Prepared by Someone Else' }));
+  assert.equal(unsealed.state, 'fail', unsealed.text);
+  // Sealed with no byline and showing none is the honest quick-start packet.
+  const none = await verify(sellerPacket({ sealedBy: '' }));
+  assert.equal(none.state, 'pass', none.text);
 });
 
 test('an attachment relinked to a remote URL is reported ALTERED, not passed', async () => {
@@ -848,6 +978,9 @@ function photoPacket(imgAttrs) {
     sealedDigest: sha256Hex(Buffer.from(payload, 'utf8')),
     links: [],
     extras: [element(imgAttrs, 'IMG')],
+    // The contact rows the generator prints beside the photo for this seal;
+    // without them the page is not the one this seal describes.
+    sellerCells: ['name', 'ranch', 'email'].map((field) => ({ field, text: credential.seller[field] })),
   };
 }
 

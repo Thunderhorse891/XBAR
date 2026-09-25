@@ -779,6 +779,84 @@ export const PACKET_VERIFIER_SCRIPT = `
             }
           }
 
+          /*
+           * The seller contact block, against the one in the record.
+           *
+           * The watermark reasoning, with more at stake. The contact block is
+           * where a buyer learns whom to write to and pay, nothing else on the
+           * page vouches for it, and it is the fact a fraudster most wants to
+           * change: a packet altered to show their own email left the payload
+           * untouched, so the digest matched and this check said PASS while
+           * the buyer wrote to them. So each sealed field is compared outright.
+           * A field shown twice, removed, shown when none was sealed, or marked
+           * hidden is an alteration, and the table holds exactly the sealed
+           * rows: a row added beside them (Wire to: …) is unsealed text
+           * dressed as sealed.
+           */
+          var sealedSeller = parsed && parsed.seller && typeof parsed.seller === 'object' ? parsed.seller : null;
+          if (sealedSeller) {
+            var sealedRows = 0;
+            [
+              ['name', 'seller name'],
+              ['ranch', 'ranch'],
+              ['email', 'seller email'],
+            ].forEach(function (field) {
+              var want = typeof sealedSeller[field[0]] === 'string' ? sealedSeller[field[0]] : '';
+              if (want) sealedRows += 1;
+              var cells = document.querySelectorAll('#xbar-seller-' + field[0]);
+              var cell = cells.length === 1 ? cells[0] : null;
+              var seen = cell ? (cell.textContent || '').trim() : '';
+              if (cells.length > 1) {
+                problems.push(
+                  'This packet shows the ' + field[1] + ' ' + cells.length + ' times. The seal prints it once, so the other copies were added after it was sealed.',
+                );
+                return;
+              }
+              if (want && !cell) {
+                problems.push('The ' + field[1] + ' has been removed from this packet. It was sealed as "' + want + '".');
+                return;
+              }
+              if (!want && cell) {
+                problems.push('This packet shows a ' + field[1] + ' ("' + seen + '") that was never sealed. Do not use it.');
+                return;
+              }
+              if (cell && seen !== want) {
+                problems.push(
+                  'This packet shows the ' + field[1] + ' as "' + seen + '" but it was sealed as "' + want + '". Do not use the one shown.',
+                );
+              }
+              for (var up = cell; up; up = up.parentElement) {
+                if (up.getAttribute && up.getAttribute('hidden') !== null) {
+                  problems.push('The ' + field[1] + ' on this packet is marked hidden, so whatever you can read in its place was not sealed.');
+                  break;
+                }
+              }
+            });
+            var contactRows = document.querySelectorAll('#xbar-seller-contact tr');
+            if (contactRows.length !== sealedRows) {
+              problems.push(
+                'The seller contact table on this packet has ' + contactRows.length + ' row(s), and the seal covers ' + sealedRows + '. Anything added to it was not sealed.',
+              );
+            }
+          }
+          /*
+           * The Prepared by line names the seller too, and is bound the same way.
+           */
+          if (parsed && typeof parsed.sealedBy === 'string') {
+            var bylines = document.querySelectorAll('#xbar-seller-byline');
+            var wantByline = parsed.sealedBy ? 'Prepared by ' + parsed.sealedBy : '';
+            var shownByline = bylines.length === 1 ? (bylines[0].textContent || '').trim() : '';
+            if (bylines.length > 1) {
+              problems.push('This packet shows its Prepared by line ' + bylines.length + ' times. The seal prints it once.');
+            } else if (wantByline && !bylines.length) {
+              problems.push('The Prepared by line has been removed from this packet. It was sealed as "' + wantByline + '".');
+            } else if (!wantByline && bylines.length) {
+              problems.push('This packet says "' + shownByline + '", which was never sealed.');
+            } else if (bylines.length && shownByline !== wantByline) {
+              problems.push('This packet says "' + shownByline + '" but was sealed as "' + wantByline + '".');
+            }
+          }
+
           btn.disabled = false;
 
           /*

@@ -380,6 +380,47 @@ test('the sealed seller block is the contact block the packet renders', () => {
   assert.ok(packet.html.includes('src="https://photos.test/bella-hero.jpg"'), 'rendered hero photo');
 });
 
+/*
+ * The verifier has to FIND the contact block to bind it. #252 sealed the
+ * seller's name, ranch and email, but the verifier compared only the hero
+ * photo, so a packet altered to show another email still read "matches the
+ * seal" — the buyer's reply, and the payment talk that follows it, going to
+ * whoever edited the page. Each sealed field is printed in a cell the verifier
+ * names, and the byline in a span it names; this pins that those carry exactly
+ * the sealed values, so the verifier compares against the right text.
+ */
+test('each sealed seller field is printed where the verifier can compare it', () => {
+  const build = (workspaceProfile: WorkspaceProfile) =>
+    buildLocalSalePacket({
+      horse: sealTestHorse(),
+      workspaceProfile,
+      documents: [],
+      ownershipRecord: sealTestOwnership(),
+      selectedDocumentIds: [],
+      generatedBy: 'Ranch Manager',
+      now: new Date('2026-09-24T12:00:00Z'),
+    });
+  const packet = build(sealTestWorkspace);
+  const payload = JSON.parse(packet.credential.payload) as {
+    sealedBy: string;
+    seller: { name: string; ranch: string; email: string };
+  };
+  const cells = Object.fromEntries(
+    [...packet.html.matchAll(/<td id="xbar-seller-(name|ranch|email)">([^<]*)<\/td>/g)].map((m) => [m[1], m[2]]),
+  );
+  assert.deepEqual(cells, { name: payload.seller.name, ranch: payload.seller.ranch, email: payload.seller.email });
+  assert.equal(packet.html.match(/id="xbar-seller-contact"/g)?.length, 1, 'one contact table, named');
+  assert.ok(payload.sealedBy, 'the fixture has a byline to bind');
+  assert.equal(
+    /<span id="xbar-seller-byline">([^<]*)<\/span>/.exec(packet.html)?.[1],
+    `Prepared by ${payload.sealedBy}`,
+  );
+  // A field that was not sealed is not printed, so "shown but not sealed" stays a real alteration.
+  const noEmail = build({ ...sealTestWorkspace, operationsEmail: '' } as WorkspaceProfile);
+  assert.equal(JSON.parse(noEmail.credential.payload).seller.email, '');
+  assert.ok(!noEmail.html.includes('xbar-seller-email'), 'an unsealed email has no cell');
+});
+
 /* The quick-start placeholders are not seller contact details.
  *
  * handleQuickStart invents `Main Ranch` (as the ranch name —
