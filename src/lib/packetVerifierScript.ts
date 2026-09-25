@@ -679,6 +679,7 @@ export const PACKET_VERIFIER_SCRIPT = `
               ? parsed.seller.heroPhotoUrl
               : '';
           var sealedPhotoSeen = 0;
+          var heroNode = null;
           var EMBEDS =
             'img,iframe,embed,object,video,audio,source,track,link,base,svg,frame,frameset,applet,portal,form';
           [].slice.call(document.querySelectorAll(EMBEDS)).forEach(function (node) {
@@ -708,6 +709,7 @@ export const PACKET_VERIFIER_SCRIPT = `
             }
             if (tag === 'img' && sealedPhoto && from === sealedPhoto && isUnmodifiedHeroImg(node, parsed)) {
               sealedPhotoSeen += 1;
+              if (!heroNode) heroNode = node;
               if (sealedPhotoSeen > 1) {
                 problems.push(
                   'This packet shows the sealed hero photo more than once. The generator emits it exactly once, so the extra copy was added after sealing.',
@@ -878,16 +880,34 @@ export const PACKET_VERIFIER_SCRIPT = `
               problems.push(
                 'The seller contact table on this packet is not where the seal put it, or is not shown as it was sealed, so the contact details on it cannot be trusted.',
               );
-            } else if (table) {
-              var sectionItems = section.children || [];
-              var sectionHolds = sealedPhoto ? 3 : 2;
-              if (
-                sectionItems.length !== sectionHolds ||
-                !leaf(sectionItems[0], 'H2', {}) ||
-                sectionItems[sectionItems.length - 1] !== table
-              ) {
+            }
+            /*
+             * The contact section holds its heading, then the sealed hero photo
+             * when there is one, then the contact table when there is one, and
+             * nothing else, each item in its sealed place. The photo is pinned
+             * to this section as an element, not by a count: moved into the
+             * collapsed by-hand section, it still passes the photo sweep, and a
+             * forged note (an updated payment address) in its slot keeps the
+             * count. The section is found from the photo when the seal carries
+             * one, so a photo-only section is held to the same rule.
+             */
+            var contactSection = sealedPhoto && heroNode ? heroNode.parentElement : section;
+            if (contactSection && (sealedPhoto || wanted.length)) {
+              var expectedItems = [null];
+              if (sealedPhoto) expectedItems.push(heroNode);
+              if (wanted.length) expectedItems.push(table);
+              var sectionItems = contactSection.children || [];
+              var sectionHolds =
+                exactly(contactSection, 'SECTION', {}) &&
+                contactSection.parentElement === sealedContent &&
+                sectionItems.length === expectedItems.length &&
+                leaf(sectionItems[0], 'H2', {});
+              for (var item = 1; sectionHolds && item < expectedItems.length; item += 1) {
+                sectionHolds = sectionItems[item] === expectedItems[item];
+              }
+              if (!sectionHolds) {
                 problems.push(
-                  'The seller contact section on this packet holds ' + sectionItems.length + ' item(s), and the seal put ' + sectionHolds + ' there, so something in it was not sealed.',
+                  'The seller contact section on this packet holds ' + sectionItems.length + ' item(s), and the seal put ' + expectedItems.length + ' there in a fixed order, so something in it was moved or was not sealed.',
                 );
               }
             }

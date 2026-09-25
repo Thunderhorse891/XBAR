@@ -106,6 +106,8 @@ async function verify({
   contentExtras = 0,
   sectionExtras = 0,
   tableCaption = false,
+  heroMovedTo = null,
+  tableSplitOff = false,
 }) {
   const out = element({ class: 'verify__out', 'data-digest': sealedDigest, ...outAttrs }, 'DIV');
   out._collapsed = outCollapsed;
@@ -230,6 +232,12 @@ async function verify({
    * (a replacement header, say) land here too.
    */
   const heroImgs = extras.filter((node) => node.tagName === 'IMG');
+  /*
+   * The hero photo sits in the contact section. Moved out of sight, a forged
+   * note takes its slot, so the section still has the same number of items.
+   */
+  for (const img of heroImgs) img.parentElement = heroMovedTo === 'details' ? closedDetails : sellerSection;
+  const heroSlot = heroMovedTo === 'details' ? [element({}, 'P')] : heroImgs;
   const sectionShown = sellerRows.length > 0 || heroImgs.length > 0;
   tbody.children = sellerRows;
   /*
@@ -241,16 +249,31 @@ async function verify({
   const sectionHeading = element({}, 'H2');
   sectionHeading.textContent = 'Contact the seller';
   // Added between the heading and the table, so the table is still the section's last item.
+  /*
+   * The table split from its photo: moved into a forged top-level section of
+   * its own, a forged note in its slot beside the photo, and one empty section
+   * dropped so the content's count still matches.
+   */
+  const splitSection = element({}, 'SECTION');
+  if (tableSplitOff) {
+    splitSection.parentElement = content;
+    contactTable.parentElement = splitSection;
+    const splitHeading = element({}, 'H2');
+    splitHeading.textContent = 'Contact the seller';
+    splitSection.children = [splitHeading, contactTable];
+  }
   sellerSection.children = [
     sectionHeading,
-    ...heroImgs,
+    ...heroSlot,
+    ...(tableSplitOff ? [element({}, 'P')] : []),
     ...Array.from({ length: sectionExtras }, () => element({}, 'P')),
-    ...(sellerRows.length ? [contactTable] : []),
+    ...(sellerRows.length && !tableSplitOff ? [contactTable] : []),
   ];
   content.children = [
     ...(headerMovedTo ? [] : [header]),
     ...(sectionShown && sellerSection.parentElement === content ? [sellerSection] : []),
-    ...Array.from({ length: 7 }, () => element({}, 'SECTION')),
+    ...(tableSplitOff ? [splitSection] : []),
+    ...Array.from({ length: tableSplitOff ? 6 : 7 }, () => element({}, 'SECTION')),
     sealedChain[1],
     footer,
     ...Array.from({ length: contentExtras }, () => element({}, 'HEADER')),
@@ -1195,6 +1218,40 @@ test('the sealed hero photo verifies as an untouched packet', async () => {
   // The over-correction guard: the exemption must not fail honest packets.
   const result = await verify(photoPacket({ src: PHOTO_URL, alt: 'Bella', width: '100%' }));
   assert.equal(result.state, 'pass', result.text);
+});
+
+test('the sealed photo moved out of sight, a forged note in its slot, is reported, as reviewed', async () => {
+  const moved = await verify({
+    ...photoPacket({ src: PHOTO_URL, alt: 'Bella', width: '100%' }),
+    heroMovedTo: 'details',
+  });
+  assert.equal(moved.state, 'fail', moved.text);
+  assert.match(moved.text, /seller contact section on this packet holds/);
+});
+
+test('the contact table split from its photo into a forged section is reported', async () => {
+  const split = await verify({ ...photoPacket({ src: PHOTO_URL, alt: 'Bella', width: '100%' }), tableSplitOff: true });
+  assert.equal(split.state, 'fail', split.text);
+  assert.match(split.text, /seller contact section on this packet holds/);
+});
+
+test('a photo-only contact section is pinned the same way', async () => {
+  const photoOnly = () => {
+    const packet = photoPacket({ src: PHOTO_URL, alt: 'Bella', width: '100%' });
+    const credential = JSON.parse(packet.payload);
+    credential.seller = { ...credential.seller, name: '', ranch: '', email: '' };
+    const payload = JSON.stringify(credential);
+    return { ...packet, payload, sealedDigest: sha256Hex(Buffer.from(payload, 'utf8')), sellerCells: [] };
+  };
+  const honest = await verify(photoOnly());
+  assert.equal(honest.state, 'pass', honest.text);
+  const moved = await verify({ ...photoOnly(), heroMovedTo: 'details' });
+  assert.equal(moved.state, 'fail', moved.text);
+  assert.match(moved.text, /seller contact section on this packet holds/);
+  // The whole photo-only section tucked away, a forged one at the top keeping the count.
+  const tucked = await verify({ ...photoOnly(), contactMovedTo: 'details', contentExtras: 1 });
+  assert.equal(tucked.state, 'fail', tucked.text);
+  assert.match(tucked.text, /seller contact section on this packet holds/);
 });
 
 test('a srcset added to the sealed photo is reported ALTERED', async () => {
