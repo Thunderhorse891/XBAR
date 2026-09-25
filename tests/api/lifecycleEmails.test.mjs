@@ -450,8 +450,58 @@ test('selectTrialReminders picks windows and skips paid workspaces', () => {
   assert.equal(byId['from-start'].trialEndDate, '2026-10-08');
 });
 
+for (const [field, value] of [
+  ['end', '2026-10-07'],
+  ['trial_end', '2026-10-07'],
+  ['start', '2026-09-23'],
+]) {
+  test(`selectTrialReminders preserves legacy trial.${field}`, () => {
+    const rows = [
+      { workspace_id: 'legacy', billing_state: 'Inactive', payload: { trial: { [field]: value } } },
+      { workspace_id: 'paid', billing_state: 'Active', payload: { trial: { [field]: value } } },
+    ];
+    for (const [nowIso, kind, daysLeft, suffix] of [
+      ['2026-10-05T12:00:00Z', 'ending-soon', 2, '2026-10-07'],
+      ['2026-10-08T12:00:00Z', 'expired', -1, '2026-10-07:expired'],
+    ]) {
+      assert.deepEqual(selectTrialReminders({ rows, nowIso }), [
+        {
+          workspaceId: 'legacy',
+          kind,
+          trialEndDate: '2026-10-07',
+          daysLeft,
+          key: lifecycleEventKey(`trial-${kind}`, 'legacy', suffix),
+        },
+      ]);
+    }
+  });
+}
+
+test('selectTrialReminders never falls back to legacy dates for partial modern records', () => {
+  for (const field of ['startedAt', 'endsAt', 'plan']) {
+    for (const value of [undefined, null, '', 'invalid']) {
+      for (const legacy of [
+        { trial: { end: '2026-10-07' } },
+        { trial: { trial_end: '2026-10-07' } },
+        { trial: { start: '2026-09-23' } },
+        { trial_end: '2026-10-07' },
+      ]) {
+        const payload = { ...legacy, trial: { ...legacy.trial, [field]: value } };
+        assert.deepEqual(
+          selectTrialReminders({
+            rows: [{ workspace_id: 'malformed', billing_state: 'Inactive', payload }],
+            nowIso: '2026-10-05T12:00:00Z',
+          }),
+          [],
+          `${field}=${String(value)} must not fall back to ${JSON.stringify(legacy)}`,
+        );
+      }
+    }
+  }
+});
+
 test('selectTrialReminders ignores malformed trial records the entitlement contract rejects', () => {
-  // A trial OBJECT is governed by the strict contract in trial-status.js
+  // A modern trial record is governed by the strict contract in trial-status.js
   // (plan, both timestamps, window length) — the same contract entitlement
   // evaluation uses. A record that fails it is not a trial, so no reminder
   // may be scheduled for it, even though its endsAt looks plausible.
