@@ -963,20 +963,47 @@ test('a tied re-subscription is not treated as a stale sibling snapshot', async 
   );
 });
 
-test('the webhook really has no invoice handler, which is why the first rule was wrong', async () => {
+test('the only invoice handler is dunning, which grants no entitlement', async () => {
   /*
-   * The claim that a refused re-subscription would be rescued by a later
-   * invoice event was checked only after it had been made, and it was false.
-   * Pinned here so the reasoning cannot be quietly restored: if an invoice
-   * handler is ever added, that changes what a refusal costs and this rule
-   * deserves a second look.
+   * This replaces the earlier pin "the webhook really has no invoice handler".
+   * That pin existed because a refused re-subscription was once claimed to be
+   * rescuable by a later invoice event, and that claim was false. It said, in
+   * so many words: if an invoice handler is ever added, the refusal-cost
+   * reasoning deserves a second look.
+   *
+   * The dunning addition (invoice.payment_failed -> "update your payment
+   * method" email) is that moment, and the second look is this test. The
+   * conclusion stands: the invoice branch is notification-only. It never calls
+   * syncWorkspaceSubscription, never touches the billing RPC, and cannot
+   * grant entitlement — so a refused tied re-subscription still has no rescue,
+   * exactly as the original reasoning required.
+   *
+   * If a FUTURE invoice handler starts granting entitlement, this test's
+   * handled-set assertion fires again, and the refusal reasoning gets its
+   * third look then.
    */
   const webhook = await readFile('api/stripe/webhook.js', 'utf8');
-  const handled = [...webhook.matchAll(/event\.type === '([^']+)'/g)].map(([, type]) => type);
+  const handled = [...new Set([...webhook.matchAll(/event\.type === '([^']+)'/g)].map(([, type]) => type))].sort();
 
   assert.deepEqual(
-    [...new Set(handled)].sort(),
-    ['checkout.session.completed', 'customer.subscription.deleted', 'customer.subscription.updated'],
-    'these are the only events that can grant entitlement, so a refusal here has no other rescue',
+    handled,
+    [
+      'checkout.session.completed',
+      'customer.subscription.deleted',
+      'customer.subscription.updated',
+      'invoice.payment_failed',
+    ],
+    'the handled set changed again; re-check whether a refusal still has no rescue',
+  );
+
+  const invoiceAt = webhook.indexOf("event.type === 'invoice.payment_failed'");
+  assert.ok(invoiceAt >= 0, 'the invoice branch exists');
+  const invoiceBranch = webhook.slice(invoiceAt);
+  assert.doesNotMatch(invoiceBranch, /syncWorkspaceSubscription/, 'dunning must never write entitlement');
+  assert.doesNotMatch(invoiceBranch, /xbar_apply_subscription_event/, 'dunning must never touch the billing RPC');
+  assert.match(
+    invoiceBranch,
+    /handleInvoicePaymentFailed/,
+    'the invoice branch is the dunning trigger and nothing else',
   );
 });

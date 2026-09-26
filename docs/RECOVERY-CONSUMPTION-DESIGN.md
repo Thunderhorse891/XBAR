@@ -47,7 +47,7 @@ performs the insert.
 The repository already has that path, and already uses it twice:
 
 - `api/_lib/supabase-admin.js` builds a service-role client from
-  `SUPABASE_SERVICE_ROLE_KEY`, and `api/account/delete.js` already depends on
+  `SUPABASE_SERVICE_ROLE_KEY`, and `api/account/[action].js (action `delete`)` already depends on
   it. **This design therefore introduces no secret beyond one the deployment
   already needs** for in-app account deletion.
 
@@ -77,7 +77,7 @@ So the conditional insert is an RPC on the same pattern:
 
 - The endpoint reads the bearer from `Authorization`.
 - It calls `supabase.auth.getUser(accessToken)` on the service-role client — the
-  same verification `api/account/delete.js` performs. A forged, expired or
+  same verification `api/account/[action].js (action `delete`)` performs. A forged, expired or
   foreign token fails here.
 - `sub` is taken from the **verified user**, never from the body. `session_id`
   and `amr` are read from the token payload and are only trusted for a token

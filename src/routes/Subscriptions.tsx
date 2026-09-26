@@ -1,6 +1,14 @@
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
-import { canUsePaymentLinkFallback, checkoutRouteFor, startManagedCheckout } from '@/lib/billingApi';
+import { canUsePaymentLinkFallback, checkoutRouteFor, requestTrialStart, startManagedCheckout } from '@/lib/billingApi';
+import {
+  CHECKOUT_CONFIRMATION_POLL_INTERVAL_MS,
+  CHECKOUT_CONFIRMATION_TIMEOUT_MS,
+  isCheckoutConfirmationComplete,
+  parseCheckoutReturn,
+  stripCheckoutReturnParam,
+} from '@/lib/checkoutReturn';
+import { refreshWorkspaceSubscriptionProfile } from '@/lib/cloudWorkspace';
 import { formatCurrency } from '@/lib/format';
 import { isNativeApp } from '@/lib/nativePlatform';
 import {
@@ -25,6 +33,7 @@ import {
   recommendedTier,
 } from '@/lib/subscriptionDecision';
 import { subscriptionPlans } from '@/lib/subscriptionPlans';
+import { getTrialState, trialDaysRemaining, trialStatusCopy } from '@/lib/trialSubscription';
 import { useCloudStore } from '@/store/useCloudStore';
 import { useUiStore } from '@/store/useUiStore';
 import { useCurrentRoleCapability, useWorkspaceReady, useXbarStore } from '@/store/useXbarStore';
@@ -52,7 +61,9 @@ export default function Subscriptions() {
   const session = useCloudStore((state) => state.session);
   const workspaceId = useCloudStore((state) => state.workspaceId);
   const pushToast = useUiStore((state) => state.pushToast);
+  const startTrialSubscription = useXbarStore((state) => state.startTrialSubscription);
   const [checkoutTier, setCheckoutTier] = useState<SubscriptionTier | null>(null);
+  const [trialStarting, setTrialStarting] = useState(false);
   // Billing period for plan display and checkout. Annual is 10x monthly (2
   // months free). The server fails closed when an annual price id is not
   // configured, so selecting annual before Stripe is set up cannot sell the
@@ -132,6 +143,16 @@ export default function Subscriptions() {
   // screen offering a button that would be refused.
   const subscriptionActive = hasActivePaidPlan(subscription);
   /*
+   * Trial state: 'none' | 'active' | 'expired', computed from the profile's
+   * recorded trial start. Native apps never get the trial CTA — Apple treats
+   * in-app "free trial" offers as digital-goods language under 3.1.1, and the
+   * trial is web-only until the iOS path decision lands.
+   */
+  const trialState = getTrialState(subscription.trialStart);
+  const trialDaysLeft = trialState === 'active' ? trialDaysRemaining(subscription.trialStart) : 0;
+  const trialCopy = trialStatusCopy(trialState, trialDaysLeft);
+  const trialCanStart = trialState === 'none' && !nativeApp && canManageBilling && !subscriptionActive;
+  /*
    * Where a workspace that already has a subscription is sent instead.
    *
    * Refusing checkout is right and is not enough on its own: without this the
@@ -181,13 +202,16 @@ export default function Subscriptions() {
   // checkout the customer needed to resubscribe.
   const selectedPaidCurrent = isCurrentPaidPlan(subscription, decisionTier);
 
-  const emit = (
-    eventName: Parameters<typeof productEvent>[0],
-    payload: Record<string, unknown>,
-    severity: 'info' | 'warning' = 'info',
-  ) => {
-    void trackRuntimeEvent({ workspaceId, severity, ...productEvent(eventName, payload) });
-  };
+  const emit = useCallback(
+    (
+      eventName: Parameters<typeof productEvent>[0],
+      payload: Record<string, unknown>,
+      severity: 'info' | 'warning' = 'info',
+    ) => {
+      void trackRuntimeEvent({ workspaceId, severity, ...productEvent(eventName, payload) });
+    },
+    [workspaceId],
+  );
 
   useEffect(() => {
     setSelectedTier(defaultDecisionTier);
@@ -227,6 +251,99 @@ export default function Subscriptions() {
     clearPendingHostedPurchase(workspaceId);
     setPendingPurchase(null);
   };
+
+  /*
+   * A return from Stripe's hosted checkout.
+   *
+   * `api/stripe/checkout.js` sends the customer back to this page with
+   * `?checkout=success` or `?checkout=cancelled`, and nothing read the
+   * parameter: the page reloaded showing Starter with the plan buttons still
+   * enabled, and the customer concluded the payment had failed. The success
+   * case says so up front and then polls the subscription profile until the
+   * webhook lands — the row the webhook writes is the only thing that can
+   * prove the payment, so the "confirming" state is not cleared until that row
+   * says the workspace pays. See `checkoutReturn` for the pure half.
+   */
+  const [checkoutReturnState, setCheckoutReturnState] = useState<
+    'confirming' | 'confirmed' | 'stale' | 'cancelled' | null
+  >(null);
+  const checkoutReturnHandled = useRef(false);
+
+  /*
+   * Read the return once and clean the URL immediately, so a refresh or a
+   * back-navigation cannot re-run the handling. `plan=` is kept: it only
+   * preselects the tier card and is not part of the return.
+   */
+  useEffect(() => {
+    if (checkoutReturnHandled.current) return;
+    checkoutReturnHandled.current = true;
+    const kind = parseCheckoutReturn(window.location.search);
+    if (!kind) return;
+    const cleaned = stripCheckoutReturnParam(window.location.search);
+    window.history.replaceState(null, '', `${window.location.pathname}${cleaned}${window.location.hash}`);
+    if (kind === 'cancelled') {
+      setCheckoutReturnState('cancelled');
+      return;
+    }
+    pushToast({
+      title: 'Payment completed',
+      message: 'Your payment went through. Confirming your plan now.',
+      tone: 'success',
+    });
+    /*
+     * Managed checkout always has a workspace id; without one there is no
+     * profile to poll, so the toast is the whole story.
+     */
+    if (workspaceId) {
+      setCheckoutReturnState('confirming');
+    }
+  }, [pushToast, workspaceId]);
+
+  /*
+   * Confirm the completed checkout against the cloud profile.
+   *
+   * The webhook writes the profile on `checkout.session.completed`; until then
+   * the screen still shows the pre-payment plan. Each poll re-reads the row
+   * and activates the paid plan the moment the row says the workspace pays —
+   * which is also what flips the plan cards, because both read
+   * `hasActivePaidPlan`. A poll that cannot read the row keeps going: unknown
+   * is not failure, and the timeout says "still confirming", never that the
+   * payment failed.
+   */
+  useEffect(() => {
+    if (checkoutReturnState !== 'confirming') return;
+    let cancelled = false;
+    let timer: number | undefined;
+    const startedAt = Date.now();
+    const poll = async () => {
+      if (cancelled) return;
+      const refreshed = await refreshWorkspaceSubscriptionProfile(workspaceId);
+      if (cancelled) return;
+      const profile = refreshed.ok ? refreshed.profile : null;
+      if (profile && isCheckoutConfirmationComplete(profile)) {
+        useXbarStore.setState({ subscription: profile });
+        emit(productEventNames.checkoutConfirmed, { tier: profile.tier });
+        pushToast({
+          title: 'Your plan is active',
+          message: `${profile.tier} is now active on this workspace.`,
+          tone: 'success',
+        });
+        setCheckoutReturnState('confirmed');
+        return;
+      }
+      if (Date.now() - startedAt >= CHECKOUT_CONFIRMATION_TIMEOUT_MS) {
+        emit(productEventNames.checkoutConfirmationStale, {}, 'warning');
+        setCheckoutReturnState('stale');
+        return;
+      }
+      timer = window.setTimeout(poll, CHECKOUT_CONFIRMATION_POLL_INTERVAL_MS);
+    };
+    void poll();
+    return () => {
+      cancelled = true;
+      if (timer !== undefined) window.clearTimeout(timer);
+    };
+  }, [checkoutReturnState, workspaceId, emit, pushToast]);
 
   /*
    * THE only way this screen follows a payment link.
@@ -407,8 +524,64 @@ export default function Subscriptions() {
     setCheckoutTier(null);
   };
 
-  const startTrial = () => {
-    navigate(continuePath);
+  const startTrial = async () => {
+    // First-run onboarding keeps its own path: this screen doubles as the
+    // setup flow before the workspace is ready.
+    if (!workspaceReady) {
+      navigate('/setup');
+      return;
+    }
+    // An active or expired trial has no action here — the countdown or the
+    // upgrade prompt is the content, and the plan list below is the way up.
+    if (trialState !== 'none') {
+      navigate('/');
+      return;
+    }
+    // Everyone who cannot start a trial (no billing permission, native app,
+    // already on a paid plan) keeps the old behavior: continue on the Starter
+    // path. The button says so; it must not silently do nothing.
+    if (!trialCanStart || trialStarting) {
+      navigate(continuePath);
+      return;
+    }
+
+    setTrialStarting(true);
+    try {
+      // Cloud workspaces record the trial on the server: the client cannot
+      // grant itself one. Local-only workspaces apply it directly — there is
+      // no server to call and the profile persists on this device.
+      const startedAt = hasManagedIdentity
+        ? await requestTrialStart({ workspaceId: workspaceId ?? '', accessToken: session?.access_token ?? '' }).then(
+            (result) => {
+              if (!result.ok) {
+                pushToast({ title: 'Trial could not start', message: result.message, tone: 'error' });
+                return null;
+              }
+              return result.trial.startedAt;
+            },
+          )
+        : new Date().toISOString();
+
+      if (!startedAt) return;
+      const applied = startTrialSubscription(startedAt);
+      if (applied.ok) {
+        emit(productEventNames.trialStarted, { plan: 'Professional' });
+        pushToast({
+          title: 'Professional trial started',
+          message: 'You have 14 days of full Professional access. No card was charged.',
+        });
+      } else {
+        // The server already recorded the trial, so this is a local-view
+        // problem, not a lost trial: the next cloud load reads the record.
+        pushToast({
+          title: 'Trial started',
+          message: `${applied.message} Reload the page to see your Professional access.`,
+          tone: 'warning',
+        });
+      }
+    } finally {
+      setTrialStarting(false);
+    }
   };
 
   const renderPaidPlan = (tier: SubscriptionTier) => {
@@ -520,19 +693,85 @@ export default function Subscriptions() {
             </span>
           </div>
 
+          {checkoutReturnState === 'confirming' && (
+            <div className="checkout-return-banner" role="status">
+              <span>Payment received</span>
+              <strong>Confirming your payment…</strong>
+              <p>Your plan activates here as soon as the payment is confirmed — usually within a few seconds.</p>
+            </div>
+          )}
+          {checkoutReturnState === 'confirmed' && (
+            <div className="checkout-return-banner" role="status">
+              <span>Payment confirmed</span>
+              <strong>Your plan is active.</strong>
+              <button type="button" className="checkout-inline-action" onClick={() => setCheckoutReturnState(null)}>
+                Dismiss
+              </button>
+            </div>
+          )}
+          {checkoutReturnState === 'stale' && (
+            <div className="checkout-return-banner" role="status">
+              <span>Payment received</span>
+              <strong>We&apos;re still confirming your payment.</strong>
+              <p>
+                Check back shortly — your plan will appear here once confirmation lands. Your receipt from the payment
+                processor is proof the payment went through.
+              </p>
+              <button type="button" className="checkout-inline-action" onClick={() => setCheckoutReturnState(null)}>
+                Dismiss
+              </button>
+            </div>
+          )}
+          {checkoutReturnState === 'cancelled' && (
+            <div className="checkout-return-banner checkout-return-banner--quiet" role="status">
+              <p>Checkout cancelled — no charge was made.</p>
+              <button type="button" className="checkout-inline-action" onClick={() => setCheckoutReturnState(null)}>
+                Dismiss
+              </button>
+            </div>
+          )}
+
           <div className="checkout-trial">
             <div>
-              <span>Starter setup</span>
-              <h2>Start with XBAR</h2>
-              <p>No payment is collected in this local setup flow. Paid plans require completed checkout.</p>
+              {!workspaceReady ? (
+                <>
+                  <span>Starter setup</span>
+                  <h2>Start with XBAR</h2>
+                  <p>No payment is collected in this local setup flow. Paid plans require completed checkout.</p>
+                </>
+              ) : (
+                <>
+                  <span>{trialCopy.eyebrow}</span>
+                  <h2>{trialCopy.heading}</h2>
+                  <p>{trialCopy.message}</p>
+                </>
+              )}
             </div>
-            <button type="button" onClick={startTrial}>
-              {workspaceReady ? 'Continue' : 'Continue setup'}
+            <button
+              type="button"
+              onClick={startTrial}
+              disabled={trialState === 'none' && trialCanStart && trialStarting}
+            >
+              {!workspaceReady
+                ? 'Continue setup'
+                : trialState === 'active'
+                  ? 'Continue'
+                  : trialState === 'expired'
+                    ? 'Continue'
+                    : trialCanStart
+                      ? trialStarting
+                        ? 'Starting trial…'
+                        : 'Start 14-day trial'
+                      : 'Continue'}
             </button>
             <small>
               {starterSetup
                 ? 'Setup active'
-                : `${formatLimit(subscriptionPlans.Starter.limits.horseLimit, 'horses')} and ${formatLimit(subscriptionPlans.Starter.limits.documentLimit, 'documents')}`}
+                : trialState === 'active'
+                  ? `${trialDaysLeft} of 14 days left · full Professional access`
+                  : trialState === 'expired'
+                    ? 'Pick a plan below to keep going'
+                    : `${formatLimit(subscriptionPlans.Starter.limits.horseLimit, 'horses')} and ${formatLimit(subscriptionPlans.Starter.limits.documentLimit, 'documents')}`}
             </small>
           </div>
 
@@ -706,8 +945,17 @@ export default function Subscriptions() {
                       : 'Continue to secure checkout'}
             </button>
           )}
-          <button className="checkout-secondary-action" type="button" onClick={startTrial}>
-            Continue with Starter setup
+          <button
+            className="checkout-secondary-action"
+            type="button"
+            onClick={startTrial}
+            disabled={trialCanStart && trialStarting}
+          >
+            {trialCanStart
+              ? trialStarting
+                ? 'Starting trial…'
+                : 'Start 14-day Professional trial instead'
+              : 'Continue with Starter setup'}
           </button>
           {/*
             Said plainly, because the alternative is a customer staring at a

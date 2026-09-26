@@ -1,7 +1,7 @@
 import { timingSafeEqual } from 'node:crypto';
-import { sendJson } from '../_lib/http.js';
-import { getSupabaseAdmin } from '../_lib/supabase-admin.js';
-import { sendEmail, isEmailConfigured } from '../_lib/email.js';
+import { sendJson } from './http.js';
+import { getSupabaseAdmin } from './supabase-admin.js';
+import { sendEmail, isEmailConfigured } from './email.js';
 
 // Daily background job (Vercel cron, see vercel.json). For each reminder due
 // within the next 7 days that hasn't been notified: email the workspace's

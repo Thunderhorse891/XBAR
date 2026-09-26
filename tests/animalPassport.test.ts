@@ -117,15 +117,31 @@ test('hasHorsePhoto: profile image or real photo kind counts, docs do not', () =
     false,
   );
   assert.equal(hasHorsePhoto(horse({})), false);
+  // A fresh upload has url: '' (no durable URL on a private bucket); its
+  // storagePath is what makes the photo real.
+  assert.equal(
+    hasHorsePhoto(
+      horse({
+        gallery: [
+          { id: 'g', label: '', kind: 'Hero', url: '', storagePath: 'uid/horses/x.jpg', status: 'Approved' },
+        ] as HorseRecord['gallery'],
+      }),
+    ),
+    true,
+  );
 });
 
-test('isHorsePhotoAsset: only real photo kinds with a URL qualify', () => {
+test('isHorsePhotoAsset: only real photo kinds with a resolvable location qualify', () => {
   assert.equal(isHorsePhotoAsset({ kind: 'Hero', url: 'u' }), true);
   assert.equal(isHorsePhotoAsset({ kind: 'Conformation', url: 'u' }), true);
   assert.equal(isHorsePhotoAsset({ kind: 'Sale Still', url: 'u' }), true);
   assert.equal(isHorsePhotoAsset({ kind: 'Pedigree', url: 'u' }), false);
   assert.equal(isHorsePhotoAsset({ kind: 'Document Cover', url: 'u' }), false);
   assert.equal(isHorsePhotoAsset({ kind: 'Hero', url: '' }), false);
+  // Private-bucket uploads store no durable URL; a storagePath that renders
+  // resolve through signed URLs is an equally usable photo location.
+  assert.equal(isHorsePhotoAsset({ kind: 'Hero', url: '', storagePath: 'uid/horses/x.jpg' }), true);
+  assert.equal(isHorsePhotoAsset({ kind: 'Pedigree', url: '', storagePath: 'uid/horses/x.jpg' }), false);
 });
 
 test('percent is rounded, not truncated', () => {

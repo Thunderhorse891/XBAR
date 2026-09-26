@@ -1,5 +1,6 @@
 import type { SubscriptionProfile } from '../types/xbar.js';
 import { isEntitledBillingState, normalizeTier } from './subscriptionDecision.js';
+import { applyTrialToProfile } from './trialSubscription.js';
 import { subscriptionTierConfig } from './xbarRuntime.js';
 
 function record(value: unknown): Record<string, unknown> {
@@ -30,14 +31,23 @@ export function subscriptionFromCloudRow(
   // Preserve billing recovery metadata: an unreadable flag must not open a
   // second checkout while an existing subscription could still collect.
   const recoverable = payload.subscriptionRecoverable;
+  // The trial marker rides in the same payload. Read defensively — a
+  // hand-edited value is "no trial", never a crash — and resolve the
+  // entitlement from it so a reload lands on the right feature set.
+  const trialValue = payload.trial;
+  const trialStart =
+    trialValue && typeof trialValue === 'object' && !Array.isArray(trialValue)
+      ? (trialValue as Record<string, unknown>).startedAt
+      : undefined;
 
-  return {
+  const profile: SubscriptionProfile = {
     tier,
     purchasedTier,
     billingState,
     monthlyRate: nonnegative(row.monthly_rate),
     renewalDate: typeof payload.renewalDate === 'string' ? payload.renewalDate : '',
     ...(recoverable == null ? {} : { subscriptionRecoverable: typeof recoverable === 'boolean' ? recoverable : true }),
+    ...(typeof trialStart === 'string' && trialStart.length > 0 ? { trialStart } : {}),
     sharedAccessEnabled: config.sharedAccessEnabled,
     featureFlags: [...config.featureFlags],
     usage: {
@@ -50,4 +60,8 @@ export function subscriptionFromCloudRow(
       ...config.limits,
     },
   };
+
+  // An active trial grants Professional on top of whatever the billing state
+  // says; an expired or absent one leaves the profile exactly as computed.
+  return applyTrialToProfile(profile);
 }

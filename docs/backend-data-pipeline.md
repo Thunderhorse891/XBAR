@@ -215,7 +215,7 @@ returned as `{ packetId, downloadUrl (1h), includedDocumentIds, emailed }`.
 `GET /api/sale-packets?workspaceId=…[&horseId=…]` lists packets with fresh
 signed URLs.
 
-### GET|POST `/api/reminders/run` (cron)
+### GET|POST `/api/reminders/[action].js (action `run`)` (cron)
 
 Vercel cron (daily 12:00 UTC, `vercel.json`) sends
 `Authorization: Bearer $CRON_SECRET`. The job finds reminders due within 7
@@ -283,7 +283,7 @@ template rendering, PDF/watermark assembly). Run with `npm test`.
    `sale-packets`). See `.env.example`.
 3. **Deploy**: `vercel deploy` (the SPA rewrite and the daily cron are in
    `vercel.json`). The cron requires a Vercel plan with cron support;
-   alternatively hit `/api/reminders/run` from any scheduler with the
+   alternatively hit `/api/reminders/[action].js (action `run`)` from any scheduler with the
    bearer secret.
 4. **Stripe**: unchanged — price IDs per tier + webhook secret as before.
 

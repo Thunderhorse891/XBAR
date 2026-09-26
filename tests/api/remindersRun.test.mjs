@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 
-import { formatDueDate, reminderAppOrigin } from '../../api/reminders/run.js';
+import { formatDueDate, reminderAppOrigin } from '../../api/_lib/reminders-run.js';
 
 /*
  * Reminder emails are buyer-facing professionalism: "Coggins test due

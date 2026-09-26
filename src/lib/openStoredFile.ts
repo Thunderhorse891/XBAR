@@ -1,5 +1,6 @@
 import { getDocumentAccessUrl } from '@/lib/cloudWorkspace';
 import { isNavigableFileUrl } from '@/lib/navigableFileUrl';
+import { SavedPacketCompatibilityError } from '@/lib/savedPacketCompatibility';
 import type { StoredFileRef } from '@/lib/storedFiles';
 
 /*
@@ -55,8 +56,11 @@ export async function openStoredFileInTab(record: StoredFileRef): Promise<OpenSt
   try {
     access = await getDocumentAccessUrl(record);
   } catch (error) {
-    console.error('Resolving a stored file failed.', error);
     previewWindow?.close();
+    if (error instanceof SavedPacketCompatibilityError) {
+      return { ok: false, message: error.message };
+    }
+    console.error('Resolving a stored file failed.', error);
     return { ok: false, message: 'This file could not be read from storage. Try again in a moment.' };
   }
 

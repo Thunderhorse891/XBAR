@@ -245,6 +245,7 @@ test('the packet no longer claims that reading the seal proves anything', async 
 });
 
 import { buildLocalSalePacket } from '../src/lib/localSalePacketGenerator.js';
+import { PACKET_VERIFIER_SCRIPT } from '../src/lib/packetVerifierScript.js';
 import type { HorseRecord, OwnershipRecord, WorkspaceProfile } from '../src/types/xbar.js';
 
 /* Minimal horse: the seal-code swap must hold on any rendered packet. */
@@ -378,6 +379,103 @@ test('the sealed seller block is the contact block the packet renders', () => {
   assert.ok(packet.html.includes('Rocking R Ranch'), 'rendered ranch');
   assert.ok(packet.html.includes('ranch@example.com'), 'rendered email');
   assert.ok(packet.html.includes('src="https://photos.test/bella-hero.jpg"'), 'rendered hero photo');
+});
+
+/*
+ * The verifier has to FIND the contact block to bind it. #252 sealed the
+ * seller's name, ranch and email, but the verifier compared only the hero
+ * photo, so a packet altered to show another email still read "matches the
+ * seal" — the buyer's reply, and the payment talk that follows it, going to
+ * whoever edited the page. Each sealed field is printed in a cell the verifier
+ * names, and the byline in a span it names; this pins that those carry exactly
+ * the sealed values, so the verifier compares against the right text.
+ */
+test('each sealed seller field is printed where the verifier can compare it', () => {
+  const build = (workspaceProfile: WorkspaceProfile) =>
+    buildLocalSalePacket({
+      horse: sealTestHorse(),
+      workspaceProfile,
+      documents: [],
+      ownershipRecord: sealTestOwnership(),
+      selectedDocumentIds: [],
+      generatedBy: 'Ranch Manager',
+      now: new Date('2026-09-24T12:00:00Z'),
+    });
+  const packet = build(sealTestWorkspace);
+  const payload = JSON.parse(packet.credential.payload) as {
+    sealedBy: string;
+    seller: { name: string; ranch: string; email: string };
+  };
+  const cells = Object.fromEntries(
+    [...packet.html.matchAll(/<td id="xbar-seller-(name|ranch|email)">([^<]*)<\/td>/g)].map((m) => [m[1], m[2]]),
+  );
+  assert.deepEqual(cells, { name: payload.seller.name, ranch: payload.seller.ranch, email: payload.seller.email });
+  assert.equal(packet.html.match(/id="xbar-seller-contact"/g)?.length, 1, 'one contact table, named');
+  assert.ok(packet.html.includes('<div class="meta" id="xbar-packet-meta">'), 'the byline sits in the named meta line');
+  assert.ok(payload.sealedBy, 'the fixture has a byline to bind');
+  assert.equal(
+    /<span id="xbar-seller-byline">([^<]*)<\/span>/.exec(packet.html)?.[1],
+    `Prepared by ${payload.sealedBy}`,
+  );
+  // A field that was not sealed is not printed, so "shown but not sealed" stays a real alteration.
+  const noEmail = build({ ...sealTestWorkspace, operationsEmail: '' } as WorkspaceProfile);
+  assert.equal(JSON.parse(noEmail.credential.payload).seller.email, '');
+  assert.ok(!noEmail.html.includes('xbar-seller-email'), 'an unsealed email has no cell');
+});
+
+/*
+ * The verifier counts the content's top-level parts, so a forged header or a
+ * second contact block added at the top of the page is caught. The count it
+ * pins is derived here from real generated packets, not transcribed: a copied
+ * number would rot silently the first time the packet's markup changed, and
+ * every honest packet would start reading as altered.
+ */
+function topLevelOfContent(html: string): string[] {
+  const opening = '<div class="content">';
+  const start = html.indexOf(opening);
+  assert.ok(start > -1, 'the content block must be findable in the packet');
+  const tag = /<(\/?)([a-zA-Z][a-zA-Z0-9]*)([^>]*)>/g;
+  tag.lastIndex = start + opening.length;
+  const voids = new Set(['meta', 'br', 'hr', 'img', 'input', 'link', 'source', 'track']);
+  const items: string[] = [];
+  let depth = 0;
+  let match: RegExpExecArray | null;
+  while ((match = tag.exec(html))) {
+    const [, closing, name, attrs] = match;
+    if (voids.has(name!.toLowerCase()) || attrs!.trim().endsWith('/')) {
+      if (depth === 0) items.push(name!.toUpperCase());
+      continue;
+    }
+    if (closing) {
+      if (depth === 0) break;
+      depth -= 1;
+      continue;
+    }
+    if (depth === 0) items.push(name!.toUpperCase());
+    depth += 1;
+  }
+  return items;
+}
+
+test('the top-level count the verifier pins is the one the generator emits', () => {
+  const build = (workspaceProfile: WorkspaceProfile) =>
+    buildLocalSalePacket({
+      horse: sealTestHorse(),
+      workspaceProfile,
+      documents: [],
+      ownershipRecord: sealTestOwnership(),
+      selectedDocumentIds: [],
+      generatedBy: 'Ranch Manager',
+      now: new Date('2026-09-24T12:00:00Z'),
+    });
+  const bare = topLevelOfContent(build({ ranchName: 'Main Ranch' } as unknown as WorkspaceProfile).html);
+  const withSeller = topLevelOfContent(build(sealTestWorkspace).html);
+  assert.equal(withSeller.length, bare.length + 1, 'the seller section is the one conditional top-level part');
+  assert.equal(bare[0], 'HEADER', 'the header opens the content');
+  assert.ok(
+    PACKET_VERIFIER_SCRIPT.includes(`var CONTENT_ITEMS = ${bare.length};`),
+    `the verifier pins a stale count. Set CONTENT_ITEMS in src/lib/packetVerifierScript.ts to ${bare.length}.`,
+  );
 });
 
 /* The quick-start placeholders are not seller contact details.

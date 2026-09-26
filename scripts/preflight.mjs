@@ -40,6 +40,13 @@ const groups = [
       { name: 'STRIPE_PRICE_ID_PROFESSIONAL' },
       { name: 'STRIPE_PRICE_ID_RANCH_OPS' },
       { name: 'STRIPE_PRICE_ID_ENTERPRISE' },
+      // Annual billing has its own Stripe Price per tier (a Price pins its
+      // interval), and checkout refuses an annual purchase without one — so a
+      // deployment missing these is not fully configured for billing.
+      { name: 'STRIPE_PRICE_ID_STARTER_ANNUAL', note: 'annual price' },
+      { name: 'STRIPE_PRICE_ID_PROFESSIONAL_ANNUAL', note: 'annual price' },
+      { name: 'STRIPE_PRICE_ID_RANCH_OPS_ANNUAL', note: 'annual price' },
+      { name: 'STRIPE_PRICE_ID_ENTERPRISE_ANNUAL', note: 'annual price' },
     ],
     extra: [
       `VITE_MANAGED_BILLING_ENABLED is ${flagOn('VITE_MANAGED_BILLING_ENABLED') ? 'ON — the app shows online checkout' : 'OFF — the app shows the manual-billing panel'}. Flip it to true only after every Stripe value above is set (billing also requires Supabase).`,
