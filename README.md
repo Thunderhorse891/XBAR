@@ -367,6 +367,11 @@ psql -1 -v ON_ERROR_STOP=1 "$DATABASE_URL" -f supabase/migrations/20260912055000
 #     to Professional in the database triggers. A trial only ever raises a
 #     baseline workspace — paid and comped tiers are untouched.
 psql "$DATABASE_URL" -f supabase/migrations/20260924130000_trial_entitlement.sql
+
+# Reject impossible trial dates without aborting database capacity checks.
+# Validate both supabase/checks/trial-*.sql files on a disposable database
+# first. Production application still requires the owner's explicit approval.
+psql -v ON_ERROR_STOP=1 "$DATABASE_URL" -f supabase/migrations/20260926000000_trial_dates_fail_closed.sql
 # Prove it on a throwaway database rather than trusting the diff. Load the
 # migration first, then:
 #   psql "$THROWAWAY_URL" -f supabase/checks/trial-entitlement.sql

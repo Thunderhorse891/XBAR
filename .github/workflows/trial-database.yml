@@ -1,0 +1,69 @@
+name: Trial database contract
+
+on:
+  pull_request:
+    paths:
+      - 'supabase/migrations/**'
+      - 'supabase/checks/trial-*.sql'
+      - '.github/workflows/trial-database.yml'
+  push:
+    branches: [main]
+    paths:
+      - 'supabase/migrations/**'
+      - 'supabase/checks/trial-*.sql'
+      - '.github/workflows/trial-database.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  trial-database:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    services:
+      postgres:
+        image: postgres:17
+        env:
+          POSTGRES_PASSWORD: disposable-test-password
+          POSTGRES_DB: xbar_trial_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    env:
+      PGHOST: localhost
+      PGPORT: 5432
+      PGUSER: postgres
+      PGPASSWORD: disposable-test-password
+      PGDATABASE: xbar_trial_test
+    steps:
+      - uses: actions/checkout@v7
+      - name: Prepare disposable trial schema
+        run: |
+          psql -v ON_ERROR_STOP=1 <<'SQL'
+          create role authenticated;
+          create table public.workspace_subscription_profiles (
+            workspace_id uuid primary key,
+            tier text not null default 'Starter',
+            billing_state text not null default 'Inactive',
+            payload jsonb not null default '{}'::jsonb
+          );
+          SQL
+          psql -v ON_ERROR_STOP=1 -f supabase/migrations/20260924130000_trial_entitlement.sql
+      - name: Confirm regression rejects the old predicate
+        run: |
+          if psql -v ON_ERROR_STOP=1 -f supabase/checks/trial-date-validation.sql; then
+            echo 'Regression check unexpectedly accepted the old predicate.'
+            exit 1
+          fi
+      - name: Apply correction and verify reapplication
+        run: |
+          psql -v ON_ERROR_STOP=1 -f supabase/migrations/20260926000000_trial_dates_fail_closed.sql
+          psql -v ON_ERROR_STOP=1 -f supabase/checks/trial-date-validation.sql
+          psql -v ON_ERROR_STOP=1 -f supabase/checks/trial-entitlement.sql
+          psql -v ON_ERROR_STOP=1 -f supabase/migrations/20260926000000_trial_dates_fail_closed.sql
+          psql -v ON_ERROR_STOP=1 -f supabase/checks/trial-date-validation.sql
