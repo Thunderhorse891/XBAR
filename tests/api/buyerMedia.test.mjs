@@ -14,8 +14,9 @@ import handler, {
  * The horse-media bucket is private, so anonymous buyers cannot mint signed
  * URLs themselves. POST /api/buyer/media signs on their behalf -- but only
  * after the share token resolves through the same RPC the buyer page uses,
- * and only for storage paths in that listing's horse gallery. A token for
- * listing A must never sign media from listing B.
+ * and only for explicitly Approved storage paths in that listing's horse
+ * gallery. A token for listing A must never sign media from listing B or
+ * unapproved media from listing A.
  */
 
 const GALLERY_PATH = 'uploader-uuid-1/horses/horse-abc/media-uuid-9.jpg';
@@ -42,6 +43,8 @@ function fakeSupabase({
   rpcError = null,
   signedUrl = 'https://signed.example/p',
   signError = null,
+  postSignListing = listing,
+  postSignRpcError = rpcError,
 } = {}) {
   const calls = { rpc: [], sign: [] };
   return {
@@ -49,7 +52,9 @@ function fakeSupabase({
     client: {
       rpc: async (name, params) => {
         calls.rpc.push({ name, params });
-        return { data: listing, error: rpcError };
+        return calls.sign.length
+          ? { data: postSignListing, error: postSignRpcError }
+          : { data: listing, error: rpcError };
       },
       storage: {
         from: (bucket) => ({
@@ -86,7 +91,7 @@ test('malformed storage paths are rejected before any signing', () => {
   assert.equal(isHorseMediaStoragePath('a/b/c/d/e.jpg'), false);
 });
 
-test('gallery membership is an exact storage-path match', () => {
+test('buyer gallery membership requires an exact path and explicit approval', () => {
   const listing = listingWithGallery([GALLERY_PATH]);
   assert.equal(isStoragePathInListingGallery(listing, GALLERY_PATH), true);
   assert.equal(isStoragePathInListingGallery(listing, OTHER_PATH), false);
@@ -94,8 +99,96 @@ test('gallery membership is an exact storage-path match', () => {
   assert.equal(isStoragePathInListingGallery(null, GALLERY_PATH), false);
   assert.equal(
     isStoragePathInListingGallery({ horse: { gallery: [null, { storagePath: GALLERY_PATH }] } }, GALLERY_PATH),
-    true,
+    false,
   );
+});
+
+for (const status of ['Pending', 'Rejected', undefined, null, '', 'approved', 'Unknown']) {
+  test(`a matching photo with status ${String(status)} signs nothing`, async () => {
+    const listing = listingWithGallery([GALLERY_PATH, OTHER_PATH]);
+    listing.horse.gallery[0].status = status;
+    // Another approved photo must not authorize the requested unapproved one.
+    const { client, calls } = fakeSupabase({ listing });
+    const result = await resolveBuyerMediaUrl({ ...baseArgs, supabase: client });
+    assert.equal(result.ok, false);
+    assert.equal(result.status, 403);
+    assert.deepEqual(calls.sign, []);
+  });
+}
+
+test('an approved photo still signs when other gallery photos need review', async () => {
+  const listing = listingWithGallery([OTHER_PATH, GALLERY_PATH]);
+  listing.horse.gallery[0].status = 'Pending';
+  const { client, calls } = fakeSupabase({ listing });
+  const result = await resolveBuyerMediaUrl({ ...baseArgs, supabase: client });
+  assert.equal(result.ok, true);
+  assert.deepEqual(calls.sign, [
+    { bucket: 'horse-media', storagePath: GALLERY_PATH, expiresIn: BUYER_MEDIA_URL_TTL_SECONDS },
+  ]);
+});
+
+test('withdrawing photo approval prevents the next signing request', async () => {
+  const listing = listingWithGallery([GALLERY_PATH]);
+  const { client, calls } = fakeSupabase({ listing });
+  assert.equal((await resolveBuyerMediaUrl({ ...baseArgs, supabase: client })).ok, true);
+  listing.horse.gallery[0].status = 'Rejected';
+  const result = await resolveBuyerMediaUrl({ ...baseArgs, supabase: client });
+  assert.equal(result.status, 403);
+  assert.equal(result.ok, false);
+  assert.equal(calls.sign.length, 1);
+  assert.equal(calls.rpc.length, 3);
+});
+
+for (const status of ['Pending', 'Rejected', undefined]) {
+  test(`approval changed to ${String(status)} during signing discards the URL`, async () => {
+    const postSignListing = listingWithGallery([GALLERY_PATH]);
+    postSignListing.horse.gallery[0].status = status;
+    const { client, calls } = fakeSupabase({
+      listing: listingWithGallery([GALLERY_PATH]),
+      postSignListing,
+    });
+    const result = await resolveBuyerMediaUrl({ ...baseArgs, supabase: client });
+    assert.equal(calls.sign.length, 1);
+    assert.equal(result.status, 403);
+    assert.equal(result.ok, false);
+    assert.equal(result.url, undefined);
+  });
+}
+
+test('a photo removed during signing is not returned to the buyer', async () => {
+  const { client, calls } = fakeSupabase({
+    listing: listingWithGallery([GALLERY_PATH]),
+    postSignListing: listingWithGallery([OTHER_PATH]),
+  });
+  const result = await resolveBuyerMediaUrl({ ...baseArgs, supabase: client });
+  assert.equal(calls.sign.length, 1);
+  assert.equal(result.status, 403);
+  assert.equal(result.ok, false);
+  assert.equal(result.url, undefined);
+});
+
+test('a listing access change during signing discards the URL', async () => {
+  const { client, calls } = fakeSupabase({
+    listing: listingWithGallery([GALLERY_PATH]),
+    postSignListing: null,
+  });
+  const result = await resolveBuyerMediaUrl({ ...baseArgs, supabase: client });
+  assert.equal(calls.sign.length, 1);
+  assert.equal(result.status, 404);
+  assert.equal(result.ok, false);
+  assert.equal(result.url, undefined);
+});
+
+test('a failed approval recheck discards the URL even if it returns stale listing data', async () => {
+  const { client, calls } = fakeSupabase({
+    listing: listingWithGallery([GALLERY_PATH]),
+    postSignRpcError: new Error('read failed'),
+  });
+  const result = await resolveBuyerMediaUrl({ ...baseArgs, supabase: client });
+  assert.equal(calls.sign.length, 1);
+  assert.equal(result.status, 404);
+  assert.equal(result.ok, false);
+  assert.equal(result.url, undefined);
 });
 
 test('a malformed storage path is refused without touching the database', async () => {
@@ -157,10 +250,11 @@ test('the happy path signs the exact gallery path with the listing-aligned TTL',
 test('the token is passed through to the listing RPC for validation', async () => {
   const { client, calls } = fakeSupabase({ listing: listingWithGallery([GALLERY_PATH]) });
   await resolveBuyerMediaUrl({ ...baseArgs, supabase: client });
-  assert.equal(calls.rpc.length, 1);
+  assert.equal(calls.rpc.length, 2);
   assert.equal(calls.rpc[0].name, 'xbar_resolve_public_listing');
   assert.equal(calls.rpc[0].params.p_share_path, '/profiles/horse-abc');
   assert.equal(calls.rpc[0].params.p_share_token, 'token-123');
+  assert.deepEqual(calls.rpc[1], calls.rpc[0]);
 });
 
 function mockReqRes({ method = 'POST', body = undefined } = {}) {
