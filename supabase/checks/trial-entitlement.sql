@@ -1,7 +1,8 @@
 -- Executable check for the trial entitlement migration.
 --
--- Load against a throwaway PostgreSQL 16 database AFTER loading the
--- migration under test:
+-- Load against a throwaway database AFTER loading the schema and migrations.
+-- jsonb_build_object serializes timestamptz as ISO timestamps. Casting to text
+-- first inserts a space instead of T and does not represent a server trial.
 --
 --     psql "$DATABASE_URL" -f supabase/migrations/20260924130000_trial_entitlement.sql
 --     psql "$DATABASE_URL" -f supabase/checks/trial-entitlement.sql
@@ -32,26 +33,26 @@ begin
   insert into public.workspace_subscription_profiles (workspace_id, tier, billing_state, payload) values
     (ws_active_trial, 'Starter', 'Inactive',
       jsonb_build_object('trial', jsonb_build_object(
-        'startedAt', (now() - interval '1 day')::text,
-        'endsAt', (now() + interval '13 days')::text,
+        'startedAt', (now() - interval '1 day'),
+        'endsAt', (now() + interval '13 days'),
         'plan', 'Professional'))),
     (ws_expired_trial, 'Starter', 'Inactive',
       jsonb_build_object('trial', jsonb_build_object(
-        'startedAt', (now() - interval '30 days')::text,
-        'endsAt', (now() - interval '16 days')::text,
+        'startedAt', (now() - interval '30 days'),
+        'endsAt', (now() - interval '16 days'),
         'plan', 'Professional'))),
     (ws_malformed, 'Starter', 'Inactive',
       jsonb_build_object('trial', jsonb_build_object('startedAt', 'garbage'))),
     (ws_long_window, 'Starter', 'Inactive',
       jsonb_build_object('trial', jsonb_build_object(
-        'startedAt', now()::text,
-        'endsAt', (now() + interval '90 days')::text,
+        'startedAt', now(),
+        'endsAt', (now() + interval '90 days'),
         'plan', 'Professional'))),
     (ws_no_trial, 'Starter', 'Inactive', '{}'::jsonb),
     (ws_paid_with_trial, 'Ranch Ops', 'Active',
       jsonb_build_object('trial', jsonb_build_object(
-        'startedAt', (now() - interval '1 day')::text,
-        'endsAt', (now() + interval '13 days')::text,
+        'startedAt', (now() - interval '1 day'),
+        'endsAt', (now() + interval '13 days'),
         'plan', 'Professional')));
 
   -- xbar_trial_active directly
