@@ -103,5 +103,6 @@
       "path": "/api/reminders/trial-reminders",
       "schedule": "0 13 * * *"
     }
-  ]
+  ],
+  "git": { "deploymentEnabled": { "codex/go-live-readiness": false } }
 }

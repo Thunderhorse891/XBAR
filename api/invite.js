@@ -1,3 +1,4 @@
+import { withErrorTracking } from './_lib/error-tracking.js';
 import { readJsonBody, sendJson } from './_lib/http.js';
 import { getWorkspaceEntitlements, checkSeatCapacity } from './_lib/entitlements.js';
 import { getSupabaseAdmin, requireWorkspaceAccess } from './_lib/supabase-admin.js';
@@ -11,7 +12,7 @@ import { applyCors } from './_lib/cors.js';
 
 const RATE_LIMIT = { bucket: 'invite', limit: 10, windowSeconds: 60 };
 
-export default async function handler(req, res) {
+async function handler(req, res) {
   if (!applyCors(req, res)) {
     return;
   }
@@ -83,3 +84,5 @@ export default async function handler(req, res) {
 
   return sendJson(res, 200, { ok: true, message: `Invite sent to ${email}.`, userId: data.user?.id });
 }
+
+export default withErrorTracking(handler, 'invite.js');

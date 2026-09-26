@@ -562,3 +562,112 @@ test('a damaged PDF in a batch reports failure without losing the readable regis
   await expect(row).not.toContainText('match confidence');
   await expect(row).toContainText('Enter the details by hand below, or upload a clearer scan');
 });
+
+// Substitute only the cloud storage boundary. The upload and review actions,
+// persistence and rendered controls are real; no customer upload or #255 call.
+test('new sale media needs explicit authorized review', async ({ page }) => {
+  await page.route('**/src/lib/cloudWorkspace.ts*', async (route) => {
+    const response = await route.fetch();
+    const body = await response.text();
+    const boundary = /export async function uploadMediaAssetToCloud\(params\) \{/;
+    expect(body).toMatch(boundary);
+    await route.fulfill({
+      response,
+      body: body.replace(boundary, '$& return { storagePath: "synthetic-workspace/review-photo.gif" };'),
+    });
+  });
+  await bootstrapWorkspace(page);
+  await seedHorse(page, 'Review Horse');
+  const uploaded = await page.evaluate(async () => {
+    const modulePath = '/src/store/useXbarStore.ts';
+    const { useXbarStore } = await import(/* @vite-ignore */ modulePath);
+    const horse = useXbarStore.getState().horses[0];
+    useXbarStore.setState({ currentRole: 'Admin' });
+    const bytes = Uint8Array.from(atob('R0lGODlhAQABAIAAAAAAAP///ywAAAAAAQABAAACAUwAOw=='), (c) => c.charCodeAt(0));
+    const result = await useXbarStore.getState().uploadHorseMedia({
+      horseId: horse.id,
+      files: [new File([bytes], 'review-photo.gif', { type: 'image/gif' })],
+      kind: 'Hero',
+      makePrimary: true,
+    });
+    return { ok: result.ok, status: useXbarStore.getState().horses[0].gallery[0]?.status };
+  });
+  expect(uploaded).toEqual({ ok: true, status: 'Pending' });
+  const review = page.getByRole('region', { name: 'Sale media review' });
+  await expect(review.getByText('Pending', { exact: true })).toBeVisible();
+  await review.getByRole('button', { name: 'Approve for sale presentation' }).click();
+  await expect(review.getByText('Approved', { exact: true })).toBeVisible();
+  await review.getByRole('button', { name: 'Return to review' }).click();
+  await expect(review.getByText('Pending', { exact: true })).toBeVisible();
+  await page.evaluate(async () => {
+    const modulePath = '/src/store/useXbarStore.ts';
+    const { useXbarStore } = await import(/* @vite-ignore */ modulePath);
+    useXbarStore.setState({ currentRole: 'Owner' });
+  });
+  await expect(review.getByRole('button', { name: 'Approve for sale presentation' })).toHaveCount(0);
+
+  // An invited reviewer must receive a matching shared-write acknowledgment
+  // before the visible approval changes. Later write failure preserves it.
+  let requests = 0;
+  let release = () => {};
+  const responseGate = new Promise<void>((resolve) => {
+    release = resolve;
+  });
+  await page.route('**/api/account/media-review', async (route) => {
+    requests++;
+    const body = route.request().postDataJSON();
+    if (requests > 1) {
+      await route.fulfill({ status: 503, json: { ok: false, message: 'Shared write unavailable' } });
+      return;
+    }
+    await responseGate;
+    await route.fulfill({
+      json: {
+        ok: true,
+        workspaceId: body.workspaceId,
+        horseId: body.horseId,
+        assetId: body.assetId,
+        status: 'Approved',
+      },
+    });
+  });
+  await page.evaluate(async () => {
+    const xbarPath = '/src/store/useXbarStore.ts';
+    const cloudPath = '/src/store/useCloudStore.ts';
+    const { useXbarStore } = await import(/* @vite-ignore */ xbarPath);
+    const { useCloudStore } = await import(/* @vite-ignore */ cloudPath);
+    useCloudStore.setState({
+      status: 'signed-in',
+      workspaceId: 'synthetic-ranch',
+      workspaceRole: 'Sales Lead',
+      workspaceReady: true,
+      autosaveReady: false,
+      autosaveUnlocked: true,
+      session: { access_token: 'synthetic-token', user: { id: 'invited-reviewer' } },
+    });
+    useXbarStore.setState({ currentRole: 'Sales Lead' });
+  });
+  await expect
+    .poll(() =>
+      page.evaluate(async () => {
+        const modulePath = '/src/store/useCloudStore.ts';
+        const { useCloudStore } = await import(/* @vite-ignore */ modulePath);
+        return useCloudStore.getState().autosaveReady;
+      }),
+    )
+    .toBe(true);
+  // Hydration uses the seeded synthetic ranch instead of a hosted account.
+  await page.evaluate(async () => {
+    const modulePath = '/src/store/useCloudStore.ts';
+    const { useCloudStore } = await import(/* @vite-ignore */ modulePath);
+    useCloudStore.setState({ autosaveUnlocked: true });
+  });
+  await review.getByRole('button', { name: 'Approve for sale presentation' }).click();
+  await expect.poll(() => requests).toBe(1);
+  await expect(review.getByText('Pending', { exact: true })).toBeVisible();
+  release();
+  await expect(review.getByText('Approved', { exact: true })).toBeVisible();
+  await review.getByRole('button', { name: 'Return to review' }).click();
+  await expect.poll(() => requests).toBe(2);
+  await expect(review.getByText('Approved', { exact: true })).toBeVisible();
+});

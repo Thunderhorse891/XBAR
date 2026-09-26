@@ -19,6 +19,14 @@ function read(file: string) {
   return readFileSync(path.join(repoRoot, file), 'utf8');
 }
 
+function unitScript(): string {
+  const scripts = JSON.parse(read('package.json')).scripts;
+  assert.equal(scripts.test, 'node scripts/test-suite.mjs');
+  assert.match(read('scripts/test-suite.mjs'), /scripts\['test:unit'\]/);
+  assert.match(read('scripts/test-suite.mjs'), /for \(const command of commands\)/);
+  return scripts['test:unit'];
+}
+
 const envExample = read('.env.example');
 
 function documentedKeys(): Set<string> {
@@ -106,7 +114,7 @@ test('the billing section states what happens with Stripe absent', () => {
  * check that files get registered.
  */
 test('every test file is actually run by npm test', () => {
-  const script = JSON.parse(read('package.json')).scripts.test as string;
+  const script = unitScript();
   const suites = readdirSync(path.join(repoRoot, 'tests'))
     .filter((name) => name.endsWith('.test.ts'))
     .map((name) => name.replace(/\.ts$/, '.js'));
@@ -119,7 +127,7 @@ test('every test file is actually run by npm test', () => {
 });
 
 test('every api test file is actually run by npm test', () => {
-  const script = JSON.parse(read('package.json')).scripts.test as string;
+  const script = unitScript();
   const suites = readdirSync(path.join(repoRoot, 'tests/api')).filter((name) => name.endsWith('.test.mjs'));
 
   const missing = suites.filter((name) => !script.includes(`tests/api/${name}`));

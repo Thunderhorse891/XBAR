@@ -491,3 +491,16 @@ Managed checkout is restricted to workspace admins and only returns customers to
 - Proof Vault for document intake, review, matching, approval, and buyer-safe release
 - Operating Ledger for receipt intake, cost allocation, and ranch-level expense visibility
 - Buyer Desk, buyer follow-ups, shared buyer packets, ranch assets, action queue, and field conditions
+
+### Held readiness rollout
+
+See [production readiness rollout](docs/production-readiness-rollout.md) and
+[database recovery](docs/database-recovery.md). The deletion audit requires
+`20260925180000_account_deletion_audit.sql` before its endpoint can run.
+The following is a reviewed-staging command, not authorization to apply production:
+
+```sh
+psql "$STAGING_DATABASE_URL" -v ON_ERROR_STOP=1 -f supabase/migrations/20260925180000_account_deletion_audit.sql
+```
+
+Production application remains held pending Erin's explicit approval and backup/restore verification.

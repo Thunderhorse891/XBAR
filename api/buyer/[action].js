@@ -1,3 +1,4 @@
+import { withErrorTracking } from '../_lib/error-tracking.js';
 import { sendJson } from '../_lib/http.js';
 import inquiriesHandler from '../_lib/buyer-inquiries.js';
 import responsesHandler from '../_lib/buyer-responses.js';
@@ -25,7 +26,7 @@ function resolveAction(req) {
   return pathname.split('/').filter(Boolean).pop() || '';
 }
 
-export default async function handler(req, res) {
+async function handler(req, res) {
   const action = resolveAction(req);
   if (action === 'inquiries') {
     return inquiriesHandler(req, res);
@@ -41,3 +42,5 @@ export default async function handler(req, res) {
   }
   return sendJson(res, 404, { ok: false, message: 'Unknown buyer action.' });
 }
+
+export default withErrorTracking(handler, 'buyer/[action].js');

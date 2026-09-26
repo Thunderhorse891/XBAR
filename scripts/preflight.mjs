@@ -8,6 +8,9 @@
 //
 // This never prints secret values — only whether each variable is set.
 
+import { readFileSync } from 'node:fs';
+import { checkBackupEvidence } from './backup-evidence.mjs';
+
 const args = process.argv.slice(2);
 const urlFlagIndex = args.indexOf('--url');
 const bareProbeUrl = args.find((arg) => /^https?:\/\//i.test(arg));
@@ -69,12 +72,21 @@ const groups = [
     required: [{ name: 'CRON_SECRET', note: 'any long random string; set the same value in Vercel' }],
   },
   {
+    title: 'Shared request protection and monitoring',
+    unlocks:
+      'Protected APIs, cron completion evidence and error tracking. Missing Redis blocks protected requests with 503.',
+    required: [
+      { name: 'UPSTASH_REDIS_REST_URL' },
+      { name: 'UPSTASH_REDIS_REST_TOKEN' },
+      { name: 'SENTRY_DSN' },
+      { name: 'VITE_SENTRY_DSN' },
+    ],
+  },
+  {
     title: 'Optional hardening & extras',
-    unlocks: 'Cross-instance rate limiting, server-side OCR, custom-domain canonicals.',
+    unlocks: 'Server-side OCR, custom-domain canonicals.',
     required: [],
     optional: [
-      { name: 'UPSTASH_REDIS_REST_URL', note: 'shared rate limiting' },
-      { name: 'UPSTASH_REDIS_REST_TOKEN', note: 'shared rate limiting' },
       { name: 'OCR_PROVIDER', note: 'textract enables AWS OCR (needs AWS keys); blank = on-device OCR' },
       {
         name: 'PUBLIC_SITE_ORIGIN',
@@ -123,18 +135,41 @@ console.log(
 );
 console.log('A browser-only preview does not validate cloud account access or production services.');
 
+let backupEvidence;
+try {
+  backupEvidence = JSON.parse(readFileSync(process.env.BACKUP_EVIDENCE_PATH, 'utf8'));
+} catch {
+  /* Missing evidence blocks launch. */
+}
+const backup = checkBackupEvidence(backupEvidence, process.env.XBAR_BACKUP_SOURCE_REF);
+console.log(`Backup and restore — ${backup.ok ? 'VERIFIED EVIDENCE' : 'BLOCKED'}`);
+for (const failure of backup.failures) console.log(`  ${failure}`);
+if (!backup.ok || gatedGroups > 0) process.exitCode = 1;
+
 if (probeUrl) {
   const origin = probeUrl.replace(/\/+$/, '');
   console.log(`\nProbing ${origin}/api/health ...`);
   try {
-    const response = await fetch(`${origin}/api/health`, { headers: { accept: 'application/json' } });
+    const response = await fetch(`${origin}/api/health`, {
+      headers: { accept: 'application/json' },
+      signal: AbortSignal.timeout(15000),
+    });
     if (!response.ok) throw new Error(`Health endpoint returned HTTP ${response.status}`);
     const health = await response.json();
+    if (health?.ok !== true) throw new Error('Health endpoint did not report a successful health verdict.');
     console.log(`  HTTP ${response.status}`);
     for (const [key, value] of Object.entries(health.subsystems ?? health)) {
       if (typeof value === 'boolean') {
         console.log(`    ${value ? '✓ reported configured' : '✗ reported unconfigured'}  ${key}`);
       }
+    }
+    // Health's ok verdict establishes liveness/billing consistency, not that
+    // every launch feature is configured. Require the deployed values too;
+    // this shell's configuration cannot stand in for the target deployment.
+    const requiredSubsystems = ['supabaseAdmin', 'email', 'remindersCron'];
+    const missingSubsystems = requiredSubsystems.filter((key) => health.subsystems?.[key] !== true);
+    if (missingSubsystems.length) {
+      throw new Error(`Deployment configuration is missing or unverified: ${missingSubsystems.join(', ')}.`);
     }
     console.log('  Compare reported configuration with the local env report. This does not test service access.');
     console.log('  Email delivery, auth callbacks, storage policies, webhooks and migrations remain unverified.');

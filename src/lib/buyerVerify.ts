@@ -6,6 +6,8 @@
 // sealed against the copy they were sent; any difference means the packet was
 // altered. This never fetches the PDF — only the seal and its facts.
 
+import { apiUrl } from './apiUrl.js';
+
 export interface VerifiedSeal {
   version: number;
   anchor: 'server';
@@ -46,7 +48,7 @@ export async function verifyPacket(packetId: string): Promise<VerifyResult> {
 
   let response: Response;
   try {
-    response = await fetch(`/api/buyer/verify?packetId=${encodeURIComponent(id)}`, {
+    response = await fetch(apiUrl(`/api/buyer/verify?packetId=${encodeURIComponent(id)}`), {
       method: 'GET',
       headers: { accept: 'application/json' },
     });

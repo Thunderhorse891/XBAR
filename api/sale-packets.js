@@ -1,6 +1,8 @@
+import { withErrorTracking } from './_lib/error-tracking.js';
 import { randomUUID } from 'node:crypto';
 import { readJsonBody, sendJson, getQuery } from './_lib/http.js';
 import { requireWorkspaceAccess } from './_lib/supabase-admin.js';
+import { requireRoleCapability } from './_lib/permissions.js';
 import {
   checkSalePacketCapacity,
   checkStorageCapacity,
@@ -40,7 +42,7 @@ const SUPPORT_EMAIL = process.env.SUPPORT_EMAIL || 'Xbarje@gmail.com';
 
 const RATE_LIMIT = { bucket: 'sale-packets', limit: 20, windowSeconds: 60 };
 
-export default async function handler(req, res) {
+async function handler(req, res) {
   if (!applyCors(req, res, { methods: 'GET, POST, OPTIONS' })) {
     return;
   }
@@ -83,6 +85,9 @@ export default async function handler(req, res) {
     return sendJson(res, access.status, { ok: false, message: access.message });
   }
   const { supabase, user } = access;
+
+  const denied = requireRoleCapability(access.role, 'manageSales');
+  if (denied) return sendJson(res, 403, { ok: false, code: 'capability_required', message: denied });
 
   const entitlements = await getWorkspaceEntitlements(supabase, workspaceId, user?.email);
   if (!entitlements.ok) {
@@ -437,3 +442,5 @@ async function listPackets(res, access, horseId) {
 
   return sendJson(res, 200, { ok: true, packets });
 }
+
+export default withErrorTracking(handler, 'sale-packets.js');

@@ -8,7 +8,7 @@
 
 function getAllowedOrigins() {
   const vercelOrigin = process.env.VERCEL_URL ? `https://${process.env.VERCEL_URL}` : '';
-  return [process.env.PUBLIC_APP_URL, process.env.VITE_PUBLIC_APP_URL, vercelOrigin]
+  const webOrigins = [process.env.PUBLIC_APP_URL, process.env.VITE_PUBLIC_APP_URL, vercelOrigin]
     .filter(Boolean)
     .map((value) => {
       try {
@@ -18,6 +18,10 @@ function getAllowedOrigins() {
       }
     })
     .filter(Boolean);
+  // Capacitor's bundled iOS and Android origins. This grants browser transport
+  // only: handlers still require their bearer token, workspace and capability.
+  // Never reflect arbitrary custom schemes, localhost subdomains or Origin:null.
+  return [...webOrigins, 'capacitor://localhost', 'https://localhost'];
 }
 
 /**

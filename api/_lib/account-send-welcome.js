@@ -2,6 +2,7 @@ import { sendJson } from './http.js';
 import { getSupabaseAdmin } from './supabase-admin.js';
 import { enforceRateLimit } from './rate-limit.js';
 import { sendWelcomeForUser } from './lifecycleTriggers.js';
+import { applyCors } from './cors.js';
 
 // POST /api/account/send-welcome
 //
@@ -16,6 +17,7 @@ import { sendWelcomeForUser } from './lifecycleTriggers.js';
 const RATE_LIMIT = { bucket: 'send-welcome', limit: 5, windowSeconds: 60 };
 
 export default async function handler(req, res) {
+  if (!applyCors(req, res, { methods: 'POST, OPTIONS' })) return;
   if (req.method !== 'POST') {
     return sendJson(res, 405, { ok: false, message: 'Method not allowed.' });
   }

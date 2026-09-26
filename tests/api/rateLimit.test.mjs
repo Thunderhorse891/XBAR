@@ -73,6 +73,9 @@ function mockRes() {
 }
 
 test('rotating the spoofed leftmost entry does not escape the limit on the real IP', async () => {
+  process.env.NODE_ENV = 'test';
+  process.env.RATE_LIMIT_MODE = 'memory';
+  delete process.env.VERCEL;
   delete process.env.UPSTASH_REDIS_REST_URL;
   delete process.env.UPSTASH_REDIS_REST_TOKEN;
   const bucket = `rate-limit-spoof-${Date.now()}`;
