@@ -8,7 +8,17 @@ final class AppUITests: XCTestCase {
         let webView = app.webViews.firstMatch
         XCTAssertTrue(webView.waitForExistence(timeout: 30), "The bundled WKWebView must load")
         let email = webView.textFields.firstMatch
-        XCTAssertTrue(email.waitForExistence(timeout: 30), "The real sign-in form must render")
+        let emailRendered = email.waitForExistence(timeout: 30)
+        if !emailRendered {
+            // Capture the actual native page before XCTest stops at the assertion.
+            // CI runs only with synthetic configuration and never signs in.
+            print("XBAR startup accessibility tree:\n\(app.debugDescription)")
+            let failureScreenshot = XCTAttachment(screenshot: app.screenshot())
+            failureScreenshot.name = "XBAR-startup-failure"
+            failureScreenshot.lifetime = .keepAlways
+            add(failureScreenshot)
+        }
+        XCTAssertTrue(emailRendered, "The real sign-in form must render")
         XCTAssertTrue(webView.secureTextFields.firstMatch.exists)
         XCTAssertTrue(webView.buttons["Sign In"].exists)
         XCTAssertTrue(webView.buttons["Email me a sign-in code"].exists)

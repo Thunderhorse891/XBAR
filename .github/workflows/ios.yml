@@ -51,8 +51,8 @@ jobs:
             -destination 'generic/platform=iOS' -derivedDataPath ios/DerivedData \
             CODE_SIGNING_ALLOWED=NO build
           node scripts/check-ios-project.mjs ios/DerivedData/Build/Products/Release-iphoneos/App.app
-      - name: Exercise the real WKWebView in iOS Simulator
-        timeout-minutes: 14
+      - name: Boot the matching iOS Simulator
+        timeout-minutes: 7
         run: |
           set -euo pipefail
           # Match the installed SDK instead of selecting the first (oldest)
@@ -60,24 +60,34 @@ jobs:
           export IOS_SIMULATOR_SDK=$(xcrun --sdk iphonesimulator --show-sdk-version)
           runtime_id=$(xcrun simctl list runtimes -j | python3 -c 'import json,os,sys; r=json.load(sys.stdin)["runtimes"]; print(next(v["identifier"] for v in r if v["isAvailable"] and v["name"].startswith("iOS ") and v["version"] == os.environ["IOS_SIMULATOR_SDK"]))')
           device_id=$(xcrun simctl create XBAR-CI com.apple.CoreSimulator.SimDeviceType.iPhone-17 "$runtime_id")
+          echo "IOS_SIMULATOR_ID=$device_id" >> "$GITHUB_ENV"
           echo "Simulator SDK: $IOS_SIMULATOR_SDK; runtime: $runtime_id"
           echo "Selected simulator: $device_id"
           xcrun simctl list devices available
           xcrun simctl boot "$device_id"
           open -a Simulator
           python3 -c 'import subprocess,sys; subprocess.run(["xcrun","simctl","bootstatus",sys.argv[1],"-b"],check=True,timeout=300)' "$device_id"
+      - name: Build the simulator app and XCTest runner
+        timeout-minutes: 10
+        run: |
           xcodebuild -project ios/App/App.xcodeproj -scheme App -configuration Debug \
-            -destination "platform=iOS Simulator,id=$device_id" -derivedDataPath ios/DerivedData \
+            -destination "platform=iOS Simulator,id=$IOS_SIMULATOR_ID" -derivedDataPath ios/DerivedData \
+            CODE_SIGN_IDENTITY=- build-for-testing
+      - name: Exercise the real WKWebView in iOS Simulator
+        timeout-minutes: 7
+        run: |
+          xcodebuild -project ios/App/App.xcodeproj -scheme App -configuration Debug \
+            -destination "platform=iOS Simulator,id=$IOS_SIMULATOR_ID" -derivedDataPath ios/DerivedData \
             -parallel-testing-enabled NO -resultBundlePath ios/native-tests.xcresult \
             -test-timeouts-enabled YES -maximum-test-execution-time-allowance 180 \
-            CODE_SIGN_IDENTITY=- test
+            CODE_SIGN_IDENTITY=- test-without-building
       - name: Native test diagnostics
         if: failure() || cancelled()
         timeout-minutes: 2
         run: |
           sysctl hw.memsize
           vm_stat
-          ps -axo pid,%cpu,%mem,rss,comm | sort -nrk4 | head -20
+          ps -axo pid,%cpu,%mem,rss,comm | sort -nrk4 | sed -n '1,20p'
           xcrun simctl list devices
           xcrun xcresulttool get test-results summary --path ios/native-tests.xcresult || true
           python3 - <<'PY'
@@ -88,3 +98,30 @@ jobs:
               print("CoreSimulator diagnostic log timed out; native check remains failed.")
           PY
           find "$HOME/Library/Logs/DiagnosticReports" -maxdepth 1 -name '*App*' -print || true
+      - name: Export native failure screenshots
+        if: failure()
+        timeout-minutes: 2
+        run: |
+          mkdir -p ios/native-diagnostics
+          xcrun xcresulttool export attachments --path ios/native-tests.xcresult --output-path ios/native-diagnostics || true
+          # Keep synthetic diagnostics within the free artifact budget. Never
+          # upload the full build directory, simulator filesystem or credentials.
+          python3 - <<'PY'
+          from pathlib import Path
+          root = Path('ios/native-diagnostics')
+          for item in root.rglob('*'):
+              if item.is_file() and item.suffix.lower() != '.png':
+                  item.unlink()
+          files = [p for p in root.rglob('*.png') if p.is_file()]
+          if sum(p.stat().st_size for p in files) > 20 * 1024 * 1024:
+              for item in files:
+                  item.unlink()
+              print('Screenshot artifact exceeds the 20 MiB cap; see the accessibility tree in the failed test log.')
+          PY
+      - uses: actions/upload-artifact@v4
+        if: failure()
+        with:
+          name: native-failure-screenshots
+          path: ios/native-diagnostics/**/*.png
+          if-no-files-found: ignore
+          retention-days: 1
