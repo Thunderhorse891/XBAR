@@ -10,10 +10,13 @@ import {
   expiryKindOf,
   expiryReminderItems,
   findPrintedExpiryDate,
+  type ExpiryKind,
 } from '../src/lib/documentExpiry.js';
 import { CURRENT_COGGINS_DAYS, isCurrentDatedDocument } from '../src/lib/documentCurrency.js';
 import { buildAlertDigest } from '../src/lib/alertCenter.js';
 import { buildOperationsPriorities } from '../src/lib/operationsPriority.js';
+import { buildCareBoardRows } from '../src/lib/dashboardOps.js';
+import { buildDocumentRecord } from '../src/lib/xbarRuntime.js';
 import type { DocumentRecord, HorseRecord } from '../src/types/xbar.js';
 
 // The expiry radar tells a rancher which papers run out and what that puts at
@@ -51,6 +54,9 @@ const horses = [
 
 const coggins = (horseId: string, examDate: string | undefined, extra: Partial<DocumentRecord> = {}) =>
   doc({ type: 'Coggins', horseId, entities: examDate ? { examDate } : {}, ...extra });
+
+// The care board built from the same documents, the way the Reminders page builds it.
+const careBoardFor = (documents: DocumentRecord[]) => buildCareBoardRows(horses, documents, [], NOW);
 
 test('a Coggins runs out twelve months after the test, sorted into the right bucket', () => {
   const radar = buildExpiryRadar(
@@ -229,17 +235,14 @@ test('money at risk is said in plain words, with dollars only from the horse rec
 });
 
 test('expired and 30-day papers reach the Reminders queue and its alert digest, Coggins excepted', () => {
-  const radar = buildExpiryRadar(
-    [
-      coggins('h1', '2025-05-01'),
-      doc({ id: 'ins-1', type: 'Insurance', horseId: 'h1', extractedTextPreview: 'Expiration Date: 06/15/2026' }),
-      doc({ id: 'ins-2', type: 'Insurance', horseId: 'h2', extractedTextPreview: 'Expiration Date: 07/20/2026' }),
-      doc({ id: 'ins-3', type: 'Insurance', horseId: 'h3', extractedTextPreview: 'Expiration Date: 09/01/2026' }),
-    ],
-    horses,
-    NOW,
-  );
-  const reminders = expiryReminderItems(radar);
+  const documents = [
+    coggins('h1', '2025-05-01'),
+    doc({ id: 'ins-1', type: 'Insurance', horseId: 'h1', extractedTextPreview: 'Expiration Date: 06/15/2026' }),
+    doc({ id: 'ins-2', type: 'Insurance', horseId: 'h2', extractedTextPreview: 'Expiration Date: 07/20/2026' }),
+    doc({ id: 'ins-3', type: 'Insurance', horseId: 'h3', extractedTextPreview: 'Expiration Date: 09/01/2026' }),
+  ];
+  const radar = buildExpiryRadar(documents, horses, NOW);
+  const reminders = expiryReminderItems(radar, careBoardFor(documents));
 
   // The care board already raises Coggins; a second reminder for it is noise.
   assert.deepEqual(
@@ -283,7 +286,7 @@ test('the radar never modifies a document it reads', () => {
 
   const radar = buildExpiryRadar(documents, horses, NOW);
   describeExpiryRisk(radar, horses);
-  expiryReminderItems(radar);
+  expiryReminderItems(radar, careBoardFor(documents));
 
   assert.deepEqual(documents, before);
   assert.equal(documents.length, 4, 'archived documents are skipped, not removed');
@@ -326,7 +329,7 @@ test('separate insurance policies stay separate, so a current one cannot hide on
     'both lapsed policies are listed beside the current ones',
   );
   assert.equal(radar.currentCount, 2);
-  assert.equal(expiryReminderItems(radar).length, 2);
+  assert.equal(expiryReminderItems(radar, []).length, 2);
 });
 
 test('an exam date after today is a typo to check, not a current Coggins, and hides nothing', () => {
@@ -363,7 +366,7 @@ test('a paper inside its 30-day window reaches the emailed digest, not just the 
       documents: [],
       salesLeads: [],
       horseNames: {},
-      expiringDocuments: expiryReminderItems(radar),
+      expiringDocuments: expiryReminderItems(radar, []),
     },
     NOW,
   );
@@ -412,7 +415,7 @@ test('a Coggins with no horse on the roster still reaches the Reminders queue', 
   const radar = buildExpiryRadar([loose, orphaned, linked], horses, NOW);
 
   assert.deepEqual(
-    expiryReminderItems(radar)
+    expiryReminderItems(radar, careBoardFor([loose, orphaned, linked]))
       .map((item) => item.id)
       .sort(),
     [`expiry-${loose.id}`, `expiry-${orphaned.id}`].sort(),
@@ -433,7 +436,7 @@ test('a digest counts every alert it lists, including ones due within 30 days', 
       documents: [],
       salesLeads: [],
       horseNames: {},
-      expiringDocuments: expiryReminderItems(radar),
+      expiringDocuments: expiryReminderItems(radar, []),
     },
     NOW,
   );
@@ -561,7 +564,7 @@ test('a date read off a paper still in review makes no claim and no second remin
   assert.equal(radar.expired.length, 1, 'it is listed on the page, flagged as not reviewed');
 
   // The queue already carries a review reminder for it.
-  assert.deepEqual(expiryReminderItems(radar), []);
+  assert.deepEqual(expiryReminderItems(radar, []), []);
 
   // An OCR slip must not become "$40,000 of insured horse value has no current policy".
   const risk = describeExpiryRisk(radar, horses);
@@ -574,6 +577,1304 @@ test('a date read off a paper still in review makes no claim and no second remin
   ]);
 
   const approved = buildExpiryRadar([{ ...pendingLapse, state: 'Ready' }], horses, NOW);
-  assert.equal(expiryReminderItems(approved).length, 1);
+  assert.equal(expiryReminderItems(approved, []).length, 1);
   assert.match(describeExpiryRisk(approved, horses).join(' '), /\$40,000/);
+});
+
+test('a CVI filed as Registration is still read as a health certificate', () => {
+  // Local intake types a file by its name alone, and anything it doesn't
+  // recognise becomes Registration — "CVI.pdf" and "Health Certificate.pdf"
+  // included. The review screen can't change a type, so the radar must
+  // recognise the paper itself or it silently reports nothing due.
+  const byName = doc({ type: 'Registration', horseId: 'h1', title: 'CVI', entities: { examDate: '2026-05-01' } });
+  const byTitle = doc({
+    type: 'Registration',
+    horseId: 'h2',
+    title: 'Health Certificate',
+    entities: { examDate: '2026-06-10' },
+  });
+  const byText = doc({
+    type: 'Registration',
+    horseId: 'h3',
+    title: 'scan0042',
+    extractedTextPreview: 'CERTIFICATE OF VETERINARY INSPECTION  Origin: Texas',
+    entities: { examDate: '2026-06-10' },
+  });
+  // The server's classifier files what it can't place as Ownership Memo.
+  const serverUnknown = doc({
+    type: 'Ownership Memo',
+    horseId: 'h3',
+    title: 'upload',
+    extractedTextPreview: 'Certificate of Veterinary Inspection',
+    entities: { examDate: '2026-06-12' },
+  });
+  for (const paper of [byName, byTitle, byText, serverUnknown]) {
+    assert.equal(expiryKindOf(paper), 'Health certificate', paper.title);
+  }
+  const radar = buildExpiryRadar([byName, byTitle], horses, NOW);
+  assert.deepEqual(
+    radar.items.map((item) => [item.documentId, item.expiresOn, item.urgency]),
+    [
+      [byName.id, '2026-05-31', 'expired'],
+      [byTitle.id, '2026-07-10', 'under30'],
+    ],
+  );
+
+  // A registration paper stays a registration paper.
+  const registration = doc({
+    type: 'Registration',
+    horseId: 'h1',
+    title: 'AQHA Registration',
+    extractedTextPreview:
+      'American Quarter Horse Association  Certificate of Registration  Registration Number 5512345',
+  });
+  assert.equal(expiryKindOf(registration), null);
+  // A type the intake did recognise is never second-guessed.
+  assert.equal(
+    expiryKindOf(doc({ type: 'Bill of Sale', title: 'Bill of Sale', extractedTextPreview: 'CVI attached' })),
+    null,
+  );
+});
+
+test('a policy or agreement filed as Registration is still read, and still dated only from the paper', () => {
+  const liability = doc({
+    type: 'Registration',
+    title: 'Farm Liability Policy',
+    extractedTextPreview: 'Expiration Date: 06/15/2026',
+  });
+  const service = doc({
+    type: 'Registration',
+    horseId: 'h2',
+    title: 'Stallion Service Agreement',
+    extractedTextPreview: 'Agreement ends 07/20/2026',
+  });
+  const policyByText = doc({
+    type: 'Registration',
+    horseId: 'h1',
+    title: 'scan0043',
+    extractedTextPreview: 'Equine Mortality Insurance Policy  Policy Number EQ-4471  Expiration Date: 09/01/2026',
+  });
+  const leaseByText = doc({
+    type: 'Ownership Memo',
+    horseId: 'h3',
+    title: 'upload',
+    extractedTextPreview: 'Mare Lease Agreement  Term ends 12/31/2026',
+  });
+  assert.equal(expiryKindOf(liability), 'Insurance');
+  assert.equal(expiryKindOf(service), 'Contract');
+  assert.equal(expiryKindOf(policyByText), 'Insurance');
+  assert.equal(expiryKindOf(leaseByText), 'Contract');
+
+  const radar = buildExpiryRadar([liability, service, policyByText, leaseByText], horses, NOW);
+  assert.deepEqual(
+    radar.expired.map((item) => item.documentId),
+    [liability.id],
+  );
+  assert.deepEqual(
+    radar.under30.map((item) => item.documentId),
+    [service.id],
+  );
+  assert.deepEqual(
+    radar.under90.map((item) => item.documentId),
+    [policyByText.id],
+  );
+  assert.equal(expiryReminderItems(radar, []).length, 2, 'both reach the Reminders queue');
+
+  // An expiry label alone does not make a paper expire: with nothing saying
+  // what the paper is, it is left alone rather than guessed at.
+  assert.equal(
+    expiryKindOf(doc({ type: 'Registration', title: 'scan0044', extractedTextPreview: 'Expiration Date: 06/15/2026' })),
+    null,
+  );
+});
+
+test('a health certificate is dated by the certificate, never by a vaccination printed on it', () => {
+  const inspected = { type: 'Vet Record' as const, horseId: 'h1', entities: { examDate: '2026-05-01' } };
+  const withRabies = doc({
+    ...inspected,
+    extractedTextPreview: 'Certificate of Veterinary Inspection  Rabies vaccination expires 05/01/2027',
+  });
+  const withCoggins = doc({
+    ...inspected,
+    horseId: 'h2',
+    extractedTextPreview: 'Health certificate  EIA test valid through 04/20/2027',
+  });
+  const radar = buildExpiryRadar([withRabies, withCoggins], horses, NOW);
+  assert.deepEqual(
+    radar.items.map((item) => [item.documentId, item.expiresOn, item.urgency]),
+    [
+      [withRabies.id, '2026-05-31', 'expired'],
+      [withCoggins.id, '2026-05-31', 'expired'],
+    ],
+    'the 30-day inspection window, not the vaccine or test date',
+  );
+
+  // A date the certificate gives for itself is used.
+  for (const text of [
+    'Certificate of Veterinary Inspection  This certificate is valid through 07/15/2026',
+    'Health certificate  Certificate expiration date: 07/15/2026',
+    'CVI valid until July 15, 2026  Rabies vaccination expires 05/01/2027',
+  ]) {
+    const item = buildExpiryRadar([doc({ ...inspected, extractedTextPreview: text })], horses, NOW).items[0];
+    assert.equal(item?.expiresOn, '2026-07-15', text);
+    assert.match(item?.basis ?? '', /read from the document/);
+  }
+  // Two certificate dates that disagree are a guess; the window is used.
+  const conflicting = doc({
+    ...inspected,
+    extractedTextPreview:
+      'Health certificate  Certificate valid through 07/15/2026  Certificate valid through 08/15/2026',
+  });
+  assert.equal(buildExpiryRadar([conflicting], horses, NOW).items[0]?.expiresOn, '2026-05-31');
+});
+
+test('a Coggins is left out of reminders only when the care board raises one for that horse', () => {
+  // The care board reads the newest Ready Coggins by exam date, falling back
+  // to the upload date. A newer paper with no exam date (or a mistyped future
+  // one) reads as current there, while the radar still holds last year's
+  // expired Coggins. Dropping it then would leave the horse with no Coggins
+  // reminder at all.
+  const expired = coggins('h1', '2025-05-01');
+  const undatedNewer = coggins('h1', undefined, { uploadedAt: '2026-06-01T00:00:00Z' });
+  const documents = [expired, undatedNewer];
+  const careBoard = careBoardFor(documents);
+  const cogginsSignal = careBoard
+    .find((row) => row.horseId === 'h1')
+    ?.signals.find((signal) => signal.key === 'coggins');
+  assert.equal(cogginsSignal?.status, 'clear', 'the care board raises nothing for this Coggins');
+
+  const radar = buildExpiryRadar(documents, horses, NOW);
+  assert.deepEqual(
+    expiryReminderItems(radar, careBoard).map((item) => item.id),
+    [`expiry-${expired.id}`],
+  );
+
+  const typo = coggins('h1', '2062-05-01');
+  const withTypo = [expired, typo];
+  assert.deepEqual(
+    expiryReminderItems(buildExpiryRadar(withTypo, horses, NOW), careBoardFor(withTypo)).map((item) => item.id),
+    [`expiry-${expired.id}`],
+    'a mistyped future exam does not silence the real expiry either',
+  );
+
+  // When the care board does raise it, one reminder is enough.
+  assert.deepEqual(expiryReminderItems(buildExpiryRadar([expired], horses, NOW), careBoardFor([expired])), []);
+});
+
+test('the Reminders page passes its care board to the radar reminders', async () => {
+  const page = await readFile('src/routes/Reminders.tsx', 'utf8');
+  assert.match(page, /expiryReminderItems\(buildExpiryRadar\(documents, horses\), careRows\)/);
+  assert.match(page, /careRows,\n/);
+});
+
+test('a CVI is dated by its formal name too: "Certificate of Veterinary Inspection valid until …"', () => {
+  const inspected = { type: 'Vet Record' as const, horseId: 'h1', entities: { examDate: '2026-05-01' } };
+  for (const text of [
+    'Certificate of Veterinary Inspection valid until July 15, 2026',
+    'Certificate of Veterinary Inspection (CVI) valid until 07/15/2026',
+    'Certificate of Veterinary Inspection expires 07/15/2026  Rabies vaccination expires 05/01/2027',
+    'Interstate health certificate valid through 07/15/2026',
+  ]) {
+    const item = buildExpiryRadar([doc({ ...inspected, extractedTextPreview: text })], horses, NOW).items[0];
+    assert.equal(item?.expiresOn, '2026-07-15', text);
+    assert.equal(item?.urgency, 'under30', text);
+  }
+});
+
+test('a CVI recovered from a Registration upload is dated by the inspection date printed on it', async () => {
+  // The real local intake: "CVI" is not a name guessDocumentType knows, so the
+  // paper is filed as Registration, and entity extraction reads an exam date
+  // only for Vet Record and Coggins. The radar must read the labelled
+  // inspection date itself, or the certificate sits undated.
+  const upload = await buildDocumentRecord({
+    file: new File(
+      ['Certificate of Veterinary Inspection\nOrigin: Texas\nInspection Date: 2026-05-01\nDr. Jane Smith'],
+      'CVI.txt',
+      { type: 'text/plain' },
+    ),
+    uploadedBy: 'Ops Desk',
+    source: 'Manual Upload',
+    horses: [],
+    existingDocuments: [],
+  });
+  assert.equal(upload.type, 'Registration', 'intake still files it as Registration');
+  assert.equal(upload.entities.examDate, undefined, 'and reads no exam date');
+  const recovered = { ...upload, state: 'Ready' as const, horseId: 'h1' };
+  const item = buildExpiryRadar([recovered], horses, NOW).items[0];
+  assert.equal(item?.kind, 'Health certificate');
+  assert.equal(item?.expiresOn, '2026-05-31', '30 days from the printed inspection');
+  assert.equal(item?.urgency, 'expired');
+  assert.match(item?.basis ?? '', /inspection/);
+  assert.match(item?.basis ?? '', /check it against the paper/i);
+
+  const certificate = (text: string, type: DocumentRecord['type'] = 'Registration') =>
+    doc({ type, horseId: 'h2', title: 'CVI', extractedTextPreview: text });
+  // Other ways a certificate labels it; a vet record with no stored exam date reads it too.
+  for (const [text, type] of [
+    ['Date of Inspection: 06/10/2026', 'Registration'],
+    ['Date Inspected June 10, 2026', 'Ownership Memo'],
+    ['Certificate of Veterinary Inspection  Examination Date: 06/10/2026', 'Vet Record'],
+  ] as const) {
+    assert.equal(buildExpiryRadar([certificate(text, type)], horses, NOW).items[0]?.expiresOn, '2026-07-10', text);
+  }
+  // It refuses to guess: an unlabelled date, two labelled dates that disagree,
+  // or an inspection after today leave the certificate undated.
+  for (const text of [
+    'CVI  2026-06-10',
+    'Inspection Date: 06/10/2026  Inspection Date: 06/12/2026',
+    'Inspection Date: 12/01/2026',
+  ]) {
+    const item = buildExpiryRadar([certificate(text)], horses, NOW).items[0];
+    assert.equal(item?.urgency, 'undated', text);
+  }
+  // A stored exam date still decides when there is one.
+  const stored = doc({
+    type: 'Vet Record',
+    horseId: 'h3',
+    extractedTextPreview: 'Health certificate  Inspection Date: 06/12/2026',
+    entities: { examDate: '2026-06-10' },
+  });
+  assert.equal(buildExpiryRadar([stored], horses, NOW).items[0]?.expiresOn, '2026-07-10');
+});
+
+test('a vaccination or test certificate printed on a CVI is never read as the CVI’s own expiry', () => {
+  const cvi = (text: string) => doc({ type: 'Vet Record', horseId: 'h1', title: 'CVI', extractedTextPreview: text });
+  // The reviewer's case: nothing on the paper dates the certificate itself.
+  const radar = buildExpiryRadar(
+    [cvi('Health certificate\nInspection Date: 2026-05-01\nRabies vaccination certificate valid through 05/01/2027')],
+    horses,
+    NOW,
+  );
+  assert.equal(radar.items[0]?.expiresOn, '2026-05-31', 'the inspection window, not the rabies date');
+  assert.equal(radar.items[0]?.urgency, 'expired');
+  assert.equal(radar.currentCount, 0);
+  assert.equal(radar.attentionCount, 1);
+  assert.equal(
+    buildExpiryRadar(
+      [cvi('Health certificate\nInspection Date: 2026-05-01\nCoggins test certificate valid through 04/20/2027')],
+      horses,
+      NOW,
+    ).items[0]?.expiresOn,
+    '2026-05-31',
+  );
+
+  // Beside the certificate's own date, the component certificate neither wins nor makes the dates "disagree".
+  assert.equal(
+    buildExpiryRadar(
+      [
+        cvi(
+          'Health certificate\nThis certificate is valid through 07/15/2026\nRabies vaccination certificate valid through 05/01/2027',
+        ),
+      ],
+      horses,
+      NOW,
+    ).items[0]?.expiresOn,
+    '2026-07-15',
+  );
+  // A bare "Certificate …" label that starts its own field is still the certificate's.
+  for (const text of [
+    'Certificate of Veterinary Inspection\nCertificate expiration date: 07/15/2026',
+    'Health certificate  Certificate expiration date: 07/15/2026',
+  ]) {
+    assert.equal(
+      buildExpiryRadar(
+        [doc({ type: 'Vet Record', horseId: 'h1', extractedTextPreview: text, entities: { examDate: '2026-05-01' } })],
+        horses,
+        NOW,
+      ).items[0]?.expiresOn,
+      '2026-07-15',
+      text,
+    );
+  }
+});
+
+test('a policy or agreement that mentions a health certificate keeps its own identity', () => {
+  // The reviewer's case: the paper's name says what it is; a line in its body
+  // about bringing a health certificate does not make it one.
+  const agreement = doc({
+    type: 'Registration',
+    horseId: 'h2',
+    title: 'Stallion Service Agreement',
+    extractedTextPreview:
+      'Stallion service agreement. A current health certificate is required before arrival. Agreement ends 06/10/2026',
+  });
+  const policy = doc({
+    type: 'Registration',
+    horseId: 'h1',
+    title: 'Farm Liability Policy',
+    extractedTextPreview:
+      'Coverage requires a current CVI for every horse on the premises. Expiration Date: 06/15/2026',
+  });
+  const certificate = doc({
+    type: 'Registration',
+    horseId: 'h3',
+    title: 'CVI',
+    extractedTextPreview: 'Certificate of Veterinary Inspection  Owner carries mortality insurance policy number EQ-1',
+    entities: { examDate: '2026-06-10' },
+  });
+  assert.equal(expiryKindOf(agreement), 'Contract');
+  assert.equal(expiryKindOf(policy), 'Insurance');
+  assert.equal(expiryKindOf(certificate), 'Health certificate');
+
+  const radar = buildExpiryRadar([agreement, policy], horses, NOW);
+  assert.deepEqual(
+    radar.expired.map((item) => [item.documentId, item.kind]).sort(),
+    [
+      [agreement.id, 'Contract'],
+      [policy.id, 'Insurance'],
+    ].sort(),
+  );
+  assert.equal(expiryReminderItems(radar, []).length, 2, 'both stay in the attention set');
+
+  // With no name to go on, the heading decides: this one titles an agreement
+  // and only mentions the certificate it requires, so it is a contract.
+  assert.equal(expiryKindOf({ ...agreement, title: 'scan0046' }), 'Contract');
+  // Likewise a heading that titles a policy and mentions the CVI it requires.
+  assert.equal(
+    expiryKindOf({
+      ...policy,
+      title: 'scan0047',
+      extractedTextPreview: `Insurance policy number EQ-2. ${policy.extractedTextPreview}`,
+    }),
+    'Insurance',
+  );
+  // Evidence that titles two kinds is refused rather than presenting the paper
+  // as the wrong kind: an agreement heading over a line titled as a CVI.
+  assert.equal(
+    expiryKindOf({
+      ...agreement,
+      title: 'scan0048',
+      extractedTextPreview: 'Horse Purchase Agreement\nCertificate of Veterinary Inspection attached',
+    }),
+    null,
+  );
+  // A name that itself points two ways is refused too.
+  assert.equal(expiryKindOf({ ...agreement, title: 'CVI and Lease Agreement' }), null);
+});
+
+test('a CVI’s own expiry field on its own line counts; a component’s expiry never does', () => {
+  const cvi = (text: string) => doc({ type: 'Vet Record', horseId: 'h1', title: 'CVI', extractedTextPreview: text });
+  const dated = (text: string) => buildExpiryRadar([cvi(text)], horses, NOW).items[0]?.expiresOn;
+  // An eCVI prints its own validity as a field of its own, not beside the certificate's name.
+  assert.equal(
+    dated('Certificate of Veterinary Inspection\nInspection Date: 05/01/2026\nExpiration Date: 07/15/2026'),
+    '2026-07-15',
+  );
+  assert.equal(dated('Health certificate\nInspection Date: 2026-05-01\nValid Through: 07/15/2026'), '2026-07-15');
+  // Still refused: a label that follows a vaccine or test on its line, including across a table's column gap.
+  assert.equal(
+    dated('Health certificate\nInspection Date: 2026-05-01\nRabies vaccination expires 05/01/2027'),
+    '2026-05-31',
+  );
+  assert.equal(
+    dated('Health certificate\nInspection Date: 2026-05-01\nRabies  05/01/2026  Expires 05/01/2027'),
+    '2026-05-31',
+  );
+  // Two expiry fields that disagree are a guess; the inspection window is used.
+  assert.equal(
+    dated('Health certificate\nInspection Date: 2026-05-01\nExpiration Date: 07/15/2026\nExpires: 05/01/2027'),
+    '2026-05-31',
+  );
+});
+
+test('a line naming a policy, contract or term is never a CVI’s own expiry', () => {
+  // The standalone-field rule takes validity labels a certificate uses for
+  // itself ("Expiration Date", "Valid Through"), not labels that name another
+  // paper. A line break doesn't make a policy's expiry the certificate's.
+  const dated = (line: string) =>
+    buildExpiryRadar(
+      [
+        doc({
+          type: 'Vet Record',
+          horseId: 'h1',
+          title: 'CVI',
+          extractedTextPreview: `Certificate of Veterinary Inspection\nInspection Date: 05/01/2026\n${line}`,
+        }),
+      ],
+      horses,
+      NOW,
+    );
+  for (const line of [
+    'Policy expires 05/01/2027',
+    'Contract ends 05/01/2027',
+    'Agreement ends 05/01/2027',
+    'Coverage expires 05/01/2027',
+    'Term ends 05/01/2027',
+    'End date: 05/01/2027',
+    'Termination date: 05/01/2027',
+  ]) {
+    const radar = dated(line);
+    assert.equal(radar.items[0]?.expiresOn, '2026-05-31', line);
+    assert.equal(radar.attentionCount, 1, line);
+  }
+  // The control beside them: the certificate's own validity field still counts.
+  for (const line of ['Expiration Date: 07/15/2026', 'Valid Through: 07/15/2026', 'Exp. Date: 07/15/2026']) {
+    assert.equal(dated(line).items[0]?.expiresOn, '2026-07-15', line);
+  }
+});
+
+test('a validity field counts only in the certificate’s own header, never inside a vaccine, test or lab section', () => {
+  const dated = (body: string) =>
+    buildExpiryRadar(
+      [
+        doc({
+          type: 'Vet Record',
+          horseId: 'h1',
+          title: 'CVI',
+          extractedTextPreview: `Certificate of Veterinary Inspection\nInspection Date: 05/01/2026\n${body}`,
+        }),
+      ],
+      horses,
+      NOW,
+    ).items[0]?.expiresOn;
+  // Codex's case: the component is named on the line above its own expiry field.
+  assert.equal(dated('Rabies Vaccination\nExpiration Date: 05/01/2027'), '2026-05-31');
+  // A component section a few fields long, and one whose disease XBAR doesn't know, named only by its fields.
+  assert.equal(
+    dated('Rabies Vaccination\nVaccine: Imrab 3\nDate Given: 05/01/2026\nExpiration Date: 05/01/2027'),
+    '2026-05-31',
+  );
+  assert.equal(dated('Potomac Horse Fever\nLot No. 12345\nExpiration Date: 05/01/2027'), '2026-05-31');
+  assert.equal(dated('EIA Test Date: 01/01/2026\nExpiration Date: 01/01/2027'), '2026-05-31');
+  // The certificate's own field, before any component section, still counts — and the one inside the section doesn't.
+  assert.equal(dated('Expiration Date: 07/15/2026\nRabies Vaccination\nExpiration Date: 05/01/2027'), '2026-07-15');
+  assert.equal(dated('Expiration Date: 07/15/2026'), '2026-07-15');
+  // The header starts at the certificate's name: a test named above it, on a cover line, doesn't disqualify it.
+  const withCover = doc({
+    type: 'Vet Record',
+    horseId: 'h1',
+    title: 'CVI',
+    extractedTextPreview:
+      'EIA test attached\nCertificate of Veterinary Inspection\nInspection Date: 05/01/2026\nExpiration Date: 07/15/2026',
+    entities: { examDate: '2026-05-01' },
+  });
+  assert.equal(buildExpiryRadar([withCover], horses, NOW).items[0]?.expiresOn, '2026-07-15');
+});
+
+test('with no name to go on, a paper is what its heading says, not what its body mentions', () => {
+  const unnamed = (text: string) =>
+    doc({ type: 'Registration', horseId: 'h2', title: 'scan0046', extractedTextPreview: text });
+  // The reviewers' case: a CVI mentioned in the body of a purchase agreement.
+  const purchase = unnamed(
+    'Horse Purchase Agreement\nA current CVI is required before delivery.\nExpiration Date: 07/15/2026',
+  );
+  assert.notEqual(expiryKindOf(purchase), 'Health certificate');
+  assert.equal(expiryKindOf(purchase), 'Contract', 'its heading says what it is');
+  const item = buildExpiryRadar([purchase], horses, NOW).items[0];
+  assert.equal(item?.kind, 'Contract');
+  assert.equal(item?.expiresOn, '2026-07-15');
+  // A health certificate mentioned in the body of a paper with no identifying heading is not a certificate.
+  assert.equal(
+    expiryKindOf(unnamed('Buyer: J. Smith\nA current health certificate is required before delivery.')),
+    null,
+  );
+  // A real CVI under an agency heading is still recognised by its formal name.
+  assert.equal(
+    expiryKindOf(
+      unnamed('TEXAS ANIMAL HEALTH COMMISSION\nCertificate of Veterinary Inspection\nInspection Date: 06/10/2026'),
+    ),
+    'Health certificate',
+  );
+  // A heading that names one kind, and a body that proves another, is refused.
+  assert.equal(expiryKindOf(unnamed('Horse Purchase Agreement\nCertificate of Veterinary Inspection attached')), null);
+});
+
+/*
+ * Every CVI expiry case raised across #240 and #249, in one place, each
+ * asserting what a person reading the paper would say. A change to how a
+ * certificate is dated is done when every row passes — not the row that
+ * prompted it. A new case gets a new row.
+ *
+ * Each paper is a Ready vet record titled CVI with a 05/01/2026 inspection,
+ * so the 30-day window gives 2026-05-31; a row expecting that is one where the
+ * paper gives no date the certificate owns.
+ */
+const CVI_EXPIRY_CORPUS: Array<[string, string, string]> = [
+  // Dates the certificate gives for itself.
+  ['formal name, valid until', 'Certificate of Veterinary Inspection valid until July 15, 2026', '2026-07-15'],
+  ['formal name with (CVI)', 'Certificate of Veterinary Inspection (CVI) valid until 07/15/2026', '2026-07-15'],
+  ['interstate health certificate', 'Interstate health certificate valid through 07/15/2026', '2026-07-15'],
+  ['this certificate', 'Health certificate\nThis certificate is valid through 07/15/2026', '2026-07-15'],
+  ['CVI valid until', 'CVI valid until July 15, 2026', '2026-07-15'],
+  [
+    'formal name directly above its own field',
+    'Certificate of Veterinary Inspection\nExpiration Date: 07/15/2026',
+    '2026-07-15',
+  ],
+  [
+    'a certificate expiry date label, as reviewed',
+    'Certificate of Veterinary Inspection\nCertificate Expiry Date: 07/15/2026',
+    '2026-07-15',
+  ],
+  ['a CVI expiry date label, as reviewed', 'CVI Expiry Date: 07/15/2026', '2026-07-15'],
+  ['a certificate exp. date label', 'Health certificate\nCertificate Exp. Date: 07/15/2026', '2026-07-15'],
+  [
+    'a preamble naming the CVI and a Coggins above the heading, as reviewed',
+    'A current CVI and Coggins are required\nCertificate of Veterinary Inspection\nExpiration Date: 07/15/2026',
+    '2026-07-15',
+  ],
+  [
+    'the same preamble in capitals',
+    'A CURRENT CVI AND COGGINS ARE REQUIRED\nCertificate of Veterinary Inspection\nExpiration Date: 07/15/2026',
+    '2026-07-15',
+  ],
+  [
+    'a capitalised test line naming the CVI above the heading',
+    'EIA TEST REQUIRED FOR CVI\nCertificate of Veterinary Inspection\nExpiration Date: 07/15/2026',
+    '2026-07-15',
+  ],
+  [
+    'a cover line titling the CVI and naming a Coggins, above the heading',
+    'CVI Travel Packet — Coggins Enclosed\nCertificate of Veterinary Inspection\nExpiration Date: 07/15/2026',
+    '2026-07-15',
+  ],
+  [
+    'a qualified heading below a preamble',
+    'Travel papers: a current CVI is required\nEquine Interstate Health Certificate\nExpiration Date: 07/15/2026',
+    '2026-07-15',
+  ],
+  [
+    'a preamble and no heading at all',
+    'A current CVI and Coggins are required\nExpiration Date: 07/15/2026',
+    '2026-05-31',
+  ],
+  [
+    'bare label opening a line',
+    'Certificate of Veterinary Inspection\nCertificate expiration date: 07/15/2026',
+    '2026-07-15',
+  ],
+  ['bare label after a column gap', 'Health certificate  Certificate expiration date: 07/15/2026', '2026-07-15'],
+  [
+    'Expiration Date field in the header',
+    'Certificate of Veterinary Inspection\nInspection Date: 05/01/2026\nExpiration Date: 07/15/2026',
+    '2026-07-15',
+  ],
+  ['Valid Through field in the header', 'Health certificate\nValid Through: 07/15/2026', '2026-07-15'],
+  ['Exp. Date field in the header', 'Health certificate\nExp. Date: 07/15/2026', '2026-07-15'],
+  [
+    'header field, then a vaccine section',
+    'Health certificate\nExpiration Date: 07/15/2026\nRabies Vaccination\nExpiration Date: 05/01/2027',
+    '2026-07-15',
+  ],
+  [
+    'test on a cover line above the heading',
+    'EIA test attached\nCertificate of Veterinary Inspection\nInspection Date: 05/01/2026\nExpiration Date: 07/15/2026',
+    '2026-07-15',
+  ],
+  [
+    'own date beside a rabies expiry',
+    'Certificate of Veterinary Inspection expires 07/15/2026  Rabies vaccination expires 05/01/2027',
+    '2026-07-15',
+  ],
+  [
+    'own date beside a rabies certificate',
+    'Health certificate\nThis certificate is valid through 07/15/2026\nRabies vaccination certificate valid through 05/01/2027',
+    '2026-07-15',
+  ],
+  // Dates that belong to something else: the inspection window applies.
+  [
+    'rabies expiry on its line',
+    'Certificate of Veterinary Inspection  Rabies vaccination expires 05/01/2027',
+    '2026-05-31',
+  ],
+  ['EIA test valid through', 'Health certificate  EIA test valid through 04/20/2027', '2026-05-31'],
+  [
+    'rabies certificate mid-line',
+    'Health certificate\nRabies vaccination certificate valid through 05/01/2027',
+    '2026-05-31',
+  ],
+  ['Coggins test certificate', 'Health certificate\nCoggins test certificate valid through 04/20/2027', '2026-05-31'],
+  ['table column gap', 'Health certificate\nRabies  05/01/2026  Expires 05/01/2027', '2026-05-31'],
+  [
+    'component named on the line above',
+    'Health certificate\nRabies Vaccination\nExpiration Date: 05/01/2027',
+    '2026-05-31',
+  ],
+  [
+    'multi-field vaccine section',
+    'Health certificate\nRabies Vaccination\nVaccine: Imrab 3\nDate Given: 05/01/2026\nExpiration Date: 05/01/2027',
+    '2026-05-31',
+  ],
+  [
+    'unlisted disease by its lot number',
+    'Health certificate\nPotomac Horse Fever\nLot No. 12345\nExpiration Date: 05/01/2027',
+    '2026-05-31',
+  ],
+  ['EIA test line', 'Health certificate\nEIA Test Date: 01/01/2026\nExpiration Date: 01/01/2027', '2026-05-31'],
+  [
+    'CVI mentioned inside a vaccine section',
+    'Certificate of Veterinary Inspection\nRabies Vaccination\nRequired for CVI\nExpiration Date: 05/01/2027',
+    '2026-05-31',
+  ],
+  [
+    'bare label wrapped under a vaccine',
+    'Certificate of Veterinary Inspection\nRabies vaccination\ncertificate valid through 05/01/2027',
+    '2026-05-31',
+  ],
+  ['policy on its own line', 'Certificate of Veterinary Inspection\nPolicy expires 05/01/2027', '2026-05-31'],
+  ['contract on its own line', 'Certificate of Veterinary Inspection\nContract ends 05/01/2027', '2026-05-31'],
+  ['term on its own line', 'Certificate of Veterinary Inspection\nTerm ends 05/01/2027', '2026-05-31'],
+  ['end date on its own line', 'Certificate of Veterinary Inspection\nEnd date: 05/01/2027', '2026-05-31'],
+  [
+    'two own dates that disagree',
+    'Health certificate\nCertificate valid through 07/15/2026\nCertificate valid through 08/15/2026',
+    '2026-05-31',
+  ],
+  [
+    '"this certificate" inside a vaccine section',
+    'Health certificate\nRabies Vaccination Certificate\nThis certificate is valid through 05/01/2027',
+    '2026-05-31',
+  ],
+  [
+    '"this certificate" under a vaccine certificate heading, as reviewed',
+    'Certificate of Veterinary Inspection\nRabies Vaccination Certificate\nThis certificate is valid through 05/01/2027',
+    '2026-05-31',
+  ],
+  [
+    'the same line without "This"',
+    'Certificate of Veterinary Inspection\nRabies Vaccination Certificate\ncertificate is valid through 05/01/2027',
+    '2026-05-31',
+  ],
+  [
+    'certificate-prefixed field in a vaccine section',
+    'Health certificate\nRabies Vaccination\nCertificate Expiration Date: 05/01/2027',
+    '2026-05-31',
+  ],
+  [
+    'two header fields that disagree',
+    'Health certificate\nExpiration Date: 07/15/2026\nExpires: 05/01/2027',
+    '2026-05-31',
+  ],
+];
+
+test('the CVI expiry corpus: every case raised reads the way a person reading the paper would', () => {
+  const failures = CVI_EXPIRY_CORPUS.flatMap(([name, text, expected]) => {
+    const paper = doc({
+      type: 'Vet Record',
+      horseId: 'h1',
+      title: 'CVI',
+      extractedTextPreview: text,
+      entities: { examDate: '2026-05-01' },
+    });
+    const actual = buildExpiryRadar([paper], horses, NOW).items[0]?.expiresOn ?? '(current, not listed)';
+    return actual === expected ? [] : [`${name}: expected ${expected}, got ${actual}`];
+  });
+  assert.deepEqual(failures, [], `${failures.length} of ${CVI_EXPIRY_CORPUS.length} rows wrong`);
+});
+
+/*
+ * Every identity case raised for papers intake couldn't place (filed as
+ * Registration or Ownership Memo), in one table. The paper's name decides; with
+ * no name, only its heading or an identity phrase that opens a line — a title
+ * or a field — says what it is. A phrase inside a sentence is a mention.
+ */
+const UNPLACED_IDENTITY_CORPUS: Array<[string, string, string, string | null]> = [
+  // [case, title, text, expected kind]
+  ['CVI by name', 'CVI', '', 'Health certificate'],
+  ['health certificate by name', 'Health Certificate', '', 'Health certificate'],
+  ['mortality policy by name', 'Equine Mortality Policy', '', 'Insurance'],
+  ['major medical policy by name', 'Major Medical Policy', '', 'Insurance'],
+  ['insurance by name', 'Horse Insurance', '', 'Insurance'],
+  ['a policy that is not insurance', 'Stable Biosecurity Policy', 'Expiration Date: 06/15/2026', null],
+  ['a vaccination policy', 'Barn Vaccination Policy', '', null],
+  ['a non-insurance policy heading', 'scan0048', 'Stable Biosecurity Policy\nExpiration Date: 06/15/2026', null],
+  [
+    'policy by name',
+    'Farm Liability Policy',
+    'Coverage requires a current CVI. Expiration Date: 06/15/2026',
+    'Insurance',
+  ],
+  [
+    'agreement by name',
+    'Stallion Service Agreement',
+    'A current health certificate is required before arrival.',
+    'Contract',
+  ],
+  [
+    'CVI by name whose body mentions insurance',
+    'CVI',
+    'Owner carries mortality insurance policy number EQ-1',
+    'Health certificate',
+  ],
+  ['a name pointing two ways', 'CVI and Lease Agreement', '', null],
+  ['CVI by heading', 'scan0042', 'CERTIFICATE OF VETERINARY INSPECTION  Origin: Texas', 'Health certificate'],
+  [
+    'CVI under an agency heading',
+    'scan0042',
+    'TEXAS ANIMAL HEALTH COMMISSION\nCertificate of Veterinary Inspection\nInspection Date: 06/10/2026',
+    'Health certificate',
+  ],
+  ['policy by heading', 'scan0043', 'Equine Mortality Insurance Policy  Policy Number EQ-4471', 'Insurance'],
+  [
+    'policy by its number field',
+    'scan0043',
+    'Blue River Mutual\nPolicy Number: EQ-4471\nExpiration Date: 09/01/2026',
+    'Insurance',
+  ],
+  ['lease by heading', 'upload', 'Mare Lease Agreement  Term ends 12/31/2026', 'Contract'],
+  [
+    'purchase agreement mentioning a CVI',
+    'scan0046',
+    'Horse Purchase Agreement\nA current CVI is required before delivery.',
+    'Contract',
+  ],
+  [
+    'a mention of a health certificate only',
+    'scan0046',
+    'Buyer: J. Smith\nA current health certificate is required before delivery.',
+    null,
+  ],
+  [
+    'a mention of the formal name only',
+    'scan0046',
+    'Buyer: J. Smith\nA current Certificate of Veterinary Inspection is required before delivery.\nExpiration Date: 07/15/2026',
+    null,
+  ],
+  [
+    'a mention of a lease only',
+    'scan0046',
+    'Buyer: J. Smith\nThis sale is subject to the existing lease agreement.',
+    null,
+  ],
+  [
+    'a mention of a policy number only',
+    'scan0046',
+    'Buyer: J. Smith\nBuyer will provide the policy number before delivery.',
+    null,
+  ],
+  [
+    'heading and a CVI title line disagree',
+    'scan0046',
+    'Horse Purchase Agreement\nCertificate of Veterinary Inspection attached',
+    null,
+  ],
+  [
+    // Corrected from null: the line is titled by the agreement and only mentions
+    // the certificate, which the heading rule now tells apart (fails with the old rule).
+    'an agreement heading that mentions a health certificate',
+    'scan0046',
+    'Stallion service agreement. A current health certificate is required before arrival.',
+    'Contract',
+  ],
+  [
+    'a first-line mention of a CVI',
+    'scan0050',
+    'A current CVI is required before delivery.\nExpiration Date: 07/15/2026',
+    null,
+  ],
+  [
+    'a first-line instruction naming insurance, as reviewed',
+    'scan0052',
+    'Insurance is required before arrival.\nExpiration Date: 07/15/2026',
+    null,
+  ],
+  [
+    'a first-line instruction naming a lease, as reviewed',
+    'scan0053',
+    'Lease Agreement is required before breeding.',
+    null,
+  ],
+  [
+    'the formal name opening an instruction line',
+    'scan0056',
+    'Buyer: J. Smith\nCertificate of Veterinary Inspection is required before travel.',
+    null,
+  ],
+  [
+    'a title with a preposition after the name',
+    'scan0054',
+    'Certificate of Veterinary Inspection for Interstate Movement',
+    'Health certificate',
+  ],
+  [
+    'a masthead over a qualified title',
+    'scan0055',
+    'USDA APHIS\nEquine Interstate Health Certificate',
+    'Health certificate',
+  ],
+  ['a first line saying it will follow', 'scan0057', 'Health certificate to follow.', null],
+  [
+    'insurance to follow below a long form label, as reviewed',
+    'scan0058',
+    'Owner / Consignor Name: Jane\nInsurance to follow.',
+    null,
+  ],
+  [
+    'a lease to follow below a long form label, as reviewed',
+    'scan0059',
+    'Horse Registered Name and Number: Bella\nLease agreement to follow.',
+    null,
+  ],
+  [
+    'an instruction as the file name, as reviewed',
+    'CVI is Required Before Travel.pdf',
+    'Expiration Date: 07/15/2026',
+    null,
+  ],
+  ['a file name joining two papers', 'Coggins and CVI.pdf', '', 'Health certificate'],
+  ['a colon-qualified lease title, as reviewed', 'scan0061', 'Texas Equine Lease Agreement: Bella', 'Contract'],
+  ['a ranch-named lease title, as reviewed', 'scan0062', 'Rocking R Ranch Lease Agreement: Bella', 'Contract'],
+  ['a colon-qualified policy title, as reviewed', 'scan0063', 'Equine Mortality Insurance Policy: Bella', 'Insurance'],
+  ['an insurance agent field, as reviewed', 'scan0065', 'Insurance Agent Name: Jane', null],
+  ['an insurance carrier field, as reviewed', 'scan0066', 'Insurance Carrier: Blue River', null],
+  ['a lease contact field, as reviewed', 'scan0067', 'Lease Contact Name: Jane', null],
+  ['a contract manager field, as reviewed', 'scan0068', 'Contract Manager: Jane', null],
+  ['a certificate number label, as reviewed', 'scan0069', 'Health Certificate No: 12345', 'Health certificate'],
+  [
+    'a certificate number label spelled out, as reviewed',
+    'scan0070',
+    'Health Certificate Number: 12345',
+    'Health certificate',
+  ],
+  ['a CVI number label, as reviewed', 'scan0071', 'CVI No: 12345', 'Health certificate'],
+  ['a contact number is still a field', 'scan0072', 'Lease Contact No: 555-0101', null],
+  [
+    'a four-line masthead over a qualified title',
+    'scan0064',
+    'UNITED STATES DEPARTMENT OF AGRICULTURE\nANIMAL AND PLANT HEALTH INSPECTION SERVICE\nVETERINARY SERVICES\nEQUINE INTERSTATE HEALTH CERTIFICATE',
+    'Health certificate',
+  ],
+  [
+    'a title with "to" later in its clause',
+    'scan0060',
+    'Certificate of Veterinary Inspection for Export to Mexico',
+    'Health certificate',
+  ],
+  [
+    'a first-line mention of insurance',
+    'scan0051',
+    'Proof of insurance is required before delivery.\nExpiration Date: 07/15/2026',
+    null,
+  ],
+  ['an expiry label with nothing to say what it is', 'scan0044', 'Expiration Date: 06/15/2026', null],
+  ['CVI requirements', 'CVI Requirements', 'Expiration Date: 07/15/2026', null],
+  ['CVI instructions', 'CVI Instructions', '', null],
+  ['insurance requirements', 'Insurance Requirements', 'Expiration Date: 06/15/2026', null],
+  ['a lease template', 'Lease Agreement Template', '', null],
+  ['a health certificate checklist', 'Health Certificate Checklist', '', null],
+  [
+    'a requirements heading',
+    'scan0049',
+    'CVI Requirements for Interstate Travel\nCertificate of Veterinary Inspection\nExpiration Date: 07/15/2026',
+    null,
+  ],
+  [
+    'CVI requirements over a travel body, as reviewed',
+    'CVI Requirements.pdf',
+    'Travel requirements\nExpiration Date: 07/15/2026',
+    null,
+  ],
+  [
+    'CVI instructions over a travel body, as reviewed',
+    'CVI Instructions.pdf',
+    'Travel requirements\nExpiration Date: 07/15/2026',
+    null,
+  ],
+  ['a genuine CVI title beside them', 'CVI 2026.pdf', 'Certificate of Veterinary Inspection', 'Health certificate'],
+  [
+    'a registration paper',
+    'AQHA Registration',
+    'American Quarter Horse Association  Certificate of Registration',
+    null,
+  ],
+];
+
+test('the unplaced-paper identity corpus: a paper is what its name or heading says, never what it mentions', () => {
+  // Both intake fallbacks: Registration (local, by filename) and Ownership Memo (the server's).
+  const failures = (['Registration', 'Ownership Memo'] as const).flatMap((type) =>
+    UNPLACED_IDENTITY_CORPUS.flatMap(([name, title, text, expected]) => {
+      const actual = expiryKindOf({ type, title, extractedTextPreview: text });
+      return actual === expected ? [] : [`${type} — ${name}: expected ${expected}, got ${actual}`];
+    }),
+  );
+  assert.deepEqual(failures, [], `${failures.length} of ${UNPLACED_IDENTITY_CORPUS.length} rows wrong`);
+});
+
+/*
+ * A heading that says the paper is about a certificate, policy or contract
+ * overrides the type intake gave it and the name it was filed under: "CVI.pdf"
+ * headed "CVI Requirements for Interstate Travel" is a requirements sheet.
+ * Only a heading that says so counts. A genuine paper's first line can carry
+ * the same words as a field or a direction — "Sample ID", "EIA Test
+ * Procedure:", "see instructions on reverse" — and refusing it would drop a
+ * real Coggins or CVI off the radar without a word.
+ */
+const REFERENCE_HEADING_CORPUS: Array<[string, DocumentRecord['type'], string, string, string | null]> = [
+  // [case, type, title, text, expected kind]
+  [
+    'insurance requirements heading, as reviewed',
+    'Insurance',
+    'Insurance.pdf',
+    'Insurance Requirements\nExpiration Date: 06/15/2026',
+    null,
+  ],
+  [
+    'CVI requirements heading, as reviewed',
+    'Registration',
+    'CVI.pdf',
+    'CVI Requirements for Interstate Travel\nExpiration Date: 07/15/2026',
+    null,
+  ],
+  [
+    'the same filed by the server',
+    'Ownership Memo',
+    'CVI.pdf',
+    'CVI Requirements for Interstate Travel\nExpiration Date: 07/15/2026',
+    null,
+  ],
+  [
+    'Coggins instructions heading',
+    'Coggins',
+    'Coggins.pdf',
+    'Coggins Test Instructions\nExpiration Date: 06/15/2026',
+    null,
+  ],
+  ['lease template heading', 'Breeding Contract', 'Contract.pdf', 'Lease Agreement Template', null],
+  [
+    'requirements for a certificate',
+    'Vet Record',
+    'CVI.pdf',
+    'Requirements for a Health Certificate\nExpiration Date: 07/15/2026',
+    null,
+  ],
+  ['a sample certificate', 'Registration', 'CVI.pdf', 'Sample Certificate of Veterinary Inspection', null],
+  ['a how-to sheet', 'Insurance', 'Policy.pdf', 'How to File an Insurance Claim', null],
+  [
+    'a heading with a colon',
+    'Insurance',
+    'Insurance.pdf',
+    'Insurance Requirements:\nExpiration Date: 06/15/2026',
+    null,
+  ],
+  [
+    'a requirements heading below an agency masthead, as reviewed',
+    'Registration',
+    'CVI.pdf',
+    'USDA APHIS\nCVI Requirements for Interstate Travel\nExpiration Date: 07/15/2026',
+    null,
+  ],
+  [
+    'below a two-line masthead',
+    'Insurance',
+    'Insurance.pdf',
+    'Blue River Mutual\nClaims Department\nInsurance Requirements\nExpiration Date: 06/15/2026',
+    null,
+  ],
+  [
+    'a requirements heading under a three-line masthead, as reviewed',
+    'Registration',
+    'CVI.pdf',
+    'USDA\nAPHIS\nVeterinary Services\nCVI Requirements for Interstate Travel\nExpiration Date: 07/15/2026',
+    null,
+  ],
+  ['a specimen title', 'Vet Record', 'Sample CVI.pdf', 'Certificate of Veterinary Inspection', null],
+  ['a CVI procedure sheet, as reviewed', 'Registration', 'CVI Procedures.pdf', 'Expiration Date: 07/15/2026', null],
+  [
+    'an insurance procedure sheet, as reviewed',
+    'Registration',
+    'Insurance Procedures.pdf',
+    'Expiration Date: 07/15/2026',
+    null,
+  ],
+  [
+    'a multi-word reference subject in a file name, as reviewed',
+    'Registration',
+    'CVI Interstate Travel Requirements.pdf',
+    'Expiration Date: 07/15/2026',
+    null,
+  ],
+  ['a multi-word reference heading', 'Insurance', 'Policy.pdf', 'Equine Mortality Insurance Coverage Guidelines', null],
+  // Controls: the papers themselves, including first lines that carry the same words.
+  ['a Coggins named for its sample, as reviewed', 'Coggins', 'Coggins Sample Results - 4471.pdf', '', 'Coggins'],
+  ['an EIA blood sample, as reviewed', 'Coggins', 'EIA Blood Sample 4471.pdf', '', 'Coggins'],
+  [
+    'a lab form whose fields come first',
+    'Coggins',
+    'Coggins.pdf',
+    'Accession: 4471\nSample ID: 99\nCoggins Test Instructions on file',
+    'Coggins',
+  ],
+  [
+    'a genuine CVI under a masthead',
+    'Registration',
+    'CVI.pdf',
+    'USDA APHIS\nCertificate of Veterinary Inspection\nExpiration Date: 07/15/2026',
+    'Health certificate',
+  ],
+  [
+    'a genuine CVI with form instructions on line three, as reviewed',
+    'Registration',
+    'CVI.pdf',
+    'Certificate of Veterinary Inspection\nOwner: Jane\nInstructions for completing this certificate',
+    'Health certificate',
+  ],
+  [
+    'a genuine policy with guidelines below its title',
+    'Insurance',
+    'Policy.pdf',
+    'Blue River Mutual\nEquine Mortality Insurance Policy\nInsurance Guidelines for Claims',
+    'Insurance',
+  ],
+  [
+    'a reference phrase below the heading block',
+    'Coggins',
+    'Coggins.pdf',
+    'Equine Infectious Anemia Laboratory Test\nOwner: J. Smith\nHorse: Bella\nSee the Coggins Test Instructions on file',
+    'Coggins',
+  ],
+  [
+    'a genuine policy',
+    'Insurance',
+    'Insurance.pdf',
+    'Equine Mortality Insurance Policy\nExpiration Date: 06/15/2026',
+    'Insurance',
+  ],
+  [
+    'a genuine CVI',
+    'Registration',
+    'CVI.pdf',
+    'Certificate of Veterinary Inspection\nExpiration Date: 07/15/2026',
+    'Health certificate',
+  ],
+  ['a lab method field', 'Coggins', 'Coggins.pdf', 'EIA Test Procedure: AGID\nDate of Test: 05/01/2026', 'Coggins'],
+  ['a sample number', 'Coggins', 'Coggins.pdf', 'Sample ID: 4471  Equine Infectious Anemia', 'Coggins'],
+  ['a lab heading', 'Coggins', 'Coggins.pdf', 'Equine Infectious Anemia Laboratory Test', 'Coggins'],
+  [
+    'a form direction beside the heading',
+    'Registration',
+    'CVI.pdf',
+    'Certificate of Veterinary Inspection (see instructions on reverse)',
+    'Health certificate',
+  ],
+  [
+    'a form direction above the heading',
+    'Vet Record',
+    'CVI.pdf',
+    'See instructions on reverse of this certificate\nCertificate of Veterinary Inspection',
+    'Health certificate',
+  ],
+  [
+    'a form note OCR ran into the heading',
+    'Registration',
+    'CVI.pdf',
+    'HEALTH CERTIFICATE INSTRUCTIONS ON BACK',
+    'Health certificate',
+  ],
+  [
+    'an insurer with guide in its name',
+    'Insurance',
+    'Policy.pdf',
+    'Guide One Insurance Company\nPolicy Number: EQ-4471',
+    'Insurance',
+  ],
+];
+
+/*
+ * A vet record is a health certificate only when it says it is one: its name,
+ * a heading that titles it one, or the formal name opening a line under an
+ * agency masthead. An exam that notes "A current CVI is required before
+ * interstate travel" mentions a certificate; reading it as one listed an
+ * ordinary exam as an expired CVI to replace.
+ */
+const VET_RECORD_IDENTITY_CORPUS: Array<[string, string, string, string | null]> = [
+  // [case, title, text, expected kind]
+  [
+    'an exam that mentions a CVI, as reviewed',
+    'Annual Vet Exam',
+    'A current CVI is required before interstate travel',
+    null,
+  ],
+  ['the same in capitals', 'Annual Vet Exam', 'A CURRENT CVI IS REQUIRED BEFORE INTERSTATE TRAVEL', null],
+  [
+    'a later line mentioning a certificate',
+    'Spring Exam',
+    'Exam Date: 05/01/2026\nHealth certificate to follow.',
+    null,
+  ],
+  ['an exam with a Coggins note', 'Annual Vet Exam', 'Coggins drawn today', null],
+  ['CVI by name', 'CVI 2026', '', 'Health certificate'],
+  [
+    'CVI by heading',
+    'scan0042',
+    'Equine Interstate Health Certificate\nInspection Date: 05/01/2026',
+    'Health certificate',
+  ],
+  [
+    'CVI under an agency heading',
+    'scan0042',
+    'TEXAS ANIMAL HEALTH COMMISSION\nCertificate of Veterinary Inspection',
+    'Health certificate',
+  ],
+  ['a lowercase OCR heading', 'scan0042', 'certificate of veterinary inspection\nOrigin: Texas', 'Health certificate'],
+  ['the reviewed instruction with the name first', 'Annual Vet Exam', 'CVI is required before interstate travel', null],
+  [
+    'a masthead over a qualified title, as reviewed',
+    'scan0042',
+    'USDA APHIS\nEquine Interstate Health Certificate',
+    'Health certificate',
+  ],
+  ['a first line giving the CVI its date', 'scan0042', 'CVI valid until July 15, 2026', 'Health certificate'],
+  ['a short heading with a column gap', 'scan0042', 'Health Certificate  Origin: Texas', 'Health certificate'],
+  ['a certificate number label, as reviewed', 'scan0042', 'Health Certificate No: 12345', 'Health certificate'],
+  ['a CVI number label, as reviewed', 'scan0042', 'CVI No: 12345', 'Health certificate'],
+  ['a first line saying it will follow, as reviewed', 'Annual Vet Exam', 'Health certificate to follow.', null],
+  [
+    'a four-word form label above a follow-up note, as reviewed',
+    'Annual Vet Exam',
+    'Veterinarian Name and Address: Jane\nHealth certificate to follow.',
+    null,
+  ],
+  [
+    'a long form label above a note',
+    'Annual Vet Exam',
+    'Owner or Consignor Name: Jane\nHealth certificate on file',
+    null,
+  ],
+  ['an instruction as the file name, as reviewed', 'CVI is Required Before Travel.pdf', '', null],
+];
+
+test('a vet record is a health certificate only when it says it is one', () => {
+  const failures = VET_RECORD_IDENTITY_CORPUS.flatMap(([name, title, text, expected]) => {
+    const actual = expiryKindOf({ type: 'Vet Record', title, extractedTextPreview: text });
+    return actual === expected ? [] : [`${name}: expected ${expected}, got ${actual}`];
+  });
+  assert.deepEqual(failures, [], `${failures.length} of ${VET_RECORD_IDENTITY_CORPUS.length} rows wrong`);
+  const radar = buildExpiryRadar(
+    [
+      doc({
+        type: 'Vet Record',
+        horseId: 'h1',
+        title: 'Annual Vet Exam',
+        extractedTextPreview: 'A current CVI is required before interstate travel',
+        entities: { examDate: '2026-05-01' },
+      }),
+    ],
+    horses,
+    NOW,
+  );
+  assert.deepEqual(radar.items, [], 'an ordinary exam is not an expired certificate');
+});
+
+test('a heading that says the paper is about a certificate, policy or contract overrides its type and name', () => {
+  const failures = REFERENCE_HEADING_CORPUS.flatMap(([name, type, title, text, expected]) => {
+    const actual = expiryKindOf({ type, title, extractedTextPreview: text });
+    return actual === expected ? [] : [`${type} — ${name}: expected ${expected}, got ${actual}`];
+  });
+  assert.deepEqual(failures, [], `${failures.length} of ${REFERENCE_HEADING_CORPUS.length} rows wrong`);
+  // The reviewed pair makes no claim on the radar either.
+  const radar = buildExpiryRadar(
+    [
+      doc({
+        type: 'Insurance',
+        horseId: 'h1',
+        title: 'Insurance.pdf',
+        extractedTextPreview: 'Insurance Requirements\nExpiration Date: 06/15/2026',
+      }),
+      doc({
+        type: 'Registration',
+        horseId: 'h1',
+        title: 'CVI.pdf',
+        extractedTextPreview: 'CVI Requirements for Interstate Travel\nExpiration Date: 07/15/2026',
+      }),
+    ],
+    horses,
+    NOW,
+  );
+  assert.deepEqual(radar.items, []);
+  assert.deepEqual(describeExpiryRisk(radar, horses), [], 'no uncovered-value claim from a requirements heading');
+});
+
+/*
+ * Every name that identifies a paper must also mark a reference to it. The
+ * reference check once kept its own copy of the kind names, and the copy
+ * drifted: "Interstate Health Requirements.pdf" and "Major Medical Cover
+ * Requirements.pdf" were read by name as a certificate and a policy, so a
+ * requirements sheet's own expiry date reached the radar. Each spelling here is
+ * one the identity check accepts, and each reference form of it — a name or a
+ * heading about the paper, a specimen of it — must claim nothing, whatever
+ * intake typed it. The bare name stays the paper itself.
+ */
+const IDENTITY_SPELLINGS: Array<[ExpiryKind, DocumentRecord['type'], string[]]> = [
+  [
+    'Health certificate',
+    'Vet Record',
+    ['Health Certificate', 'Certificate of Veterinary Inspection', 'CVI', 'Interstate Health'],
+  ],
+  ['Coggins', 'Coggins', ['Coggins', 'EIA', 'Equine Infectious Anemia', 'Equine Infectious Anaemia']],
+  [
+    'Insurance',
+    'Insurance',
+    [
+      'Insurance',
+      'Mortality Policy',
+      'Liability Coverage',
+      'Major Medical Cover',
+      'Loss of Use Cover',
+      'Surgical Cover',
+      'Farm Policy',
+      'Equine Coverage',
+    ],
+  ],
+  ['Contract', 'Breeding Contract', ['Contract', 'Agreement', 'Lease']],
+];
+
+test('every name that identifies a paper also marks a reference to it, as reviewed', () => {
+  const EXPIRY = 'Expiration Date: 07/15/2026';
+  const failures = IDENTITY_SPELLINGS.flatMap(([expected, intakeType, names]) =>
+    names.flatMap((name) => {
+      const wrong: string[] = [];
+      for (const type of ['Registration', 'Ownership Memo', intakeType] as DocumentRecord['type'][]) {
+        for (const title of [
+          `${name} Requirements.pdf`,
+          `${name} Checklist.pdf`,
+          `Requirements for ${name}.pdf`,
+          `Sample ${name}.pdf`,
+        ]) {
+          const kind = expiryKindOf({ type, title, extractedTextPreview: EXPIRY });
+          if (kind !== null) wrong.push(`${type} "${title}" -> ${kind}`);
+        }
+        const headed = expiryKindOf({
+          type,
+          title: `${name}.pdf`,
+          extractedTextPreview: `${name} Requirements\n${EXPIRY}`,
+        });
+        if (headed !== null) wrong.push(`${type} headed "${name} Requirements" -> ${headed}`);
+      }
+      // Control: the paper itself, filed under its own name by the intake that types it.
+      const itself = expiryKindOf({ type: intakeType, title: `${name}.pdf`, extractedTextPreview: EXPIRY });
+      if (itself !== expected) wrong.push(`${intakeType} "${name}.pdf" -> ${itself}, want ${expected}`);
+      return wrong;
+    }),
+  );
+  assert.deepEqual(failures, [], `${failures.length} reference forms or controls wrong`);
+});
+
+test('a paper about a certificate, policy or contract is not one, whatever intake typed it', () => {
+  // Intake types by filename, so "Insurance Requirements.pdf" arrives typed Insurance
+  // and "Coggins Instructions.pdf" typed Coggins. A name that says the paper is about
+  // the thing — requirements, instructions, a checklist, a template — says it isn't it.
+  const kind = (type: DocumentRecord['type'], title: string, text = '') =>
+    expiryKindOf({ type, title, extractedTextPreview: text });
+  assert.equal(kind('Insurance', 'Insurance Requirements', 'Expiration Date: 06/15/2026'), null);
+  assert.equal(kind('Coggins', 'Coggins Instructions'), null);
+  assert.equal(kind('Breeding Contract', 'Breeding Contract Template'), null);
+  assert.equal(kind('Vet Record', 'CVI Requirements', 'Certificate of Veterinary Inspection'), null);
+  // Controls: the papers themselves.
+  assert.equal(kind('Insurance', 'Farm Insurance'), 'Insurance');
+  assert.equal(kind('Coggins', 'Coggins 2026'), 'Coggins');
+  assert.equal(kind('Vet Record', 'CVI', 'Certificate of Veterinary Inspection'), 'Health certificate');
+  const radar = buildExpiryRadar(
+    [
+      doc({
+        type: 'Insurance',
+        horseId: 'h1',
+        title: 'Insurance Requirements',
+        extractedTextPreview: 'Expiration Date: 06/15/2026',
+      }),
+    ],
+    horses,
+    NOW,
+  );
+  assert.equal(radar.attentionCount, 0);
+  assert.deepEqual(describeExpiryRisk(radar, horses), [], 'no uncovered-value claim from a requirements sheet');
 });

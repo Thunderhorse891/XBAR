@@ -10,6 +10,7 @@ import {
   readinessHeadline,
 } from '@/lib/saleReadinessScore';
 import { getCapabilityDeniedMessage, hasRoleCapability } from '@/lib/permissions';
+import { documentsStageUrl } from '@/features/documents/pipeline';
 import { useUiStore } from '@/store/useUiStore';
 import { useXbarStore } from '@/store/useXbarStore';
 
@@ -44,6 +45,9 @@ export function SaleReadinessCard({
         return;
       case 'review-documents':
         navigate('/documents');
+        return;
+      case 'processing-documents':
+        navigate(documentsStageUrl('Processing'));
         return;
       case 'add-photo':
         onAddPhoto?.();

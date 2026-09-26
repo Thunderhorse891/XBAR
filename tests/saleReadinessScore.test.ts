@@ -10,6 +10,12 @@ import {
 } from '../src/lib/saleReadinessScore.js';
 import { hasRoleCapability } from '../src/lib/permissions.js';
 import { hasActiveListing } from '../src/lib/xbarPhaseTwo.js';
+import {
+  PIPELINE_STAGES,
+  computeStageBuckets,
+  documentsStageUrl,
+  stageFromParam,
+} from '../src/features/documents/pipeline.js';
 import type {
   DocumentRecord,
   ExpenseReceipt,
@@ -385,6 +391,8 @@ test('a readiness step the current role cannot finish is shown as such', async (
     'edit-horse': 'editHorse',
     'upload-document': 'uploadDocuments',
     'review-documents': 'reviewDocuments',
+    // Waiting on a file still being read ends in approving it.
+    'processing-documents': 'reviewDocuments',
     'add-photo': 'uploadMedia',
     care: 'manageAssets',
     ownership: 'manageOwnership',
@@ -420,4 +428,107 @@ test('the profile header says "for sale" from the listing, not the stored score'
   // step, so a row reading it could say "Needs Transfer Docs" beside a card
   // saying the packet is ready.
   assert.doesNotMatch(profile, /readiness\?\.packetStatus/, 'packet status comes from the computed score');
+});
+
+test('a file still being read is waited on, not offered for approval', () => {
+  // Documents puts only Needs Review and Matched papers in its review queue;
+  // a Queued one sits under Processing with nothing to approve yet.
+  const queuedTransfer = complete({ documents: [currentCoggins(), doc('Transfer Packet', { state: 'Queued' })] });
+  const transfer = queuedTransfer.actions.find((action) => action.key === 'transfer');
+  assert.equal(transfer?.label, 'Let the transfer file finish reading, then approve it');
+  assert.doesNotMatch(transfer?.label ?? '', /^Approve/);
+  assert.match(queuedTransfer.components.find((c) => c.key === 'transfer')?.detail ?? '', /still being read/);
+
+  const queuedCoggins = complete({
+    documents: [doc('Coggins', { state: 'Queued', entities: { examDate: '2026-06-02' } }), transferFile()],
+  });
+  assert.equal(queuedCoggins.actions[0]?.label, 'Let the Coggins finish reading, then approve it');
+  assert.match(queuedCoggins.components.find((c) => c.key === 'coggins')?.detail ?? '', /still being read/);
+
+  // Not read yet, so no exam date yet: still worth waiting for.
+  const unreadCoggins = complete({ documents: [doc('Coggins', { state: 'Queued', entities: {} }), transferFile()] });
+  assert.equal(unreadCoggins.actions[0]?.label, 'Let the Coggins finish reading, then approve it');
+
+  // Last year's reviewed Coggins beside this year's upload still being read: wait, don't re-upload.
+  const renewalReading = complete({
+    documents: [
+      doc('Coggins', { entities: { examDate: '2025-05-01' } }),
+      doc('Coggins', { state: 'Queued', entities: {} }),
+      transferFile(),
+    ],
+  });
+  assert.equal(renewalReading.actions[0]?.label, 'Let the Coggins finish reading, then approve it');
+
+  // A paper that can be approved wins over one still being read.
+  const both = complete({
+    documents: [
+      currentCoggins(),
+      doc('Transfer Packet', { state: 'Queued' }),
+      doc('Bill of Sale', { state: 'Matched' }),
+    ],
+  });
+  assert.equal(both.actions.find((action) => action.key === 'transfer')?.label, 'Approve the transfer file in review');
+
+  // A queued paper already dated out of the window would not help once read.
+  const oldQueued = complete({
+    documents: [doc('Coggins', { state: 'Queued', entities: { examDate: '2025-01-01' } }), transferFile()],
+  });
+  assert.equal(oldQueued.actions[0]?.label, 'Add a current Coggins');
+});
+
+test('the card offers approval for exactly the papers the Documents review queue holds', () => {
+  // The Documents screen also scores each paper against the roster, which reads these.
+  const horse = makeHorse({ barnName: 'Copper', ownerEntity: 'Thunder Horse Ranch LLC' });
+  for (const state of ['Queued', 'Needs Review', 'Matched', 'Ready'] as const) {
+    const transfer = doc('Transfer Packet', { state });
+    const coggins = doc('Coggins', { state, entities: { examDate: '2026-06-02' } });
+    const buckets = computeStageBuckets([transfer, coggins], [horse], [], NOW.getTime());
+    const readiness = complete({ documents: [transfer, coggins] });
+    const approvable = (key: string) =>
+      /^Approve/.test(readiness.actions.find((action) => action.key === key)?.label ?? '');
+
+    assert.equal(approvable('transfer'), buckets.reviewQueue.includes(transfer), `transfer, ${state}`);
+    assert.equal(approvable('coggins'), buckets.reviewQueue.includes(coggins), `Coggins, ${state}`);
+  }
+});
+
+test('the Sale Packets page follows the computed verdict, with no second checklist overriding it', async () => {
+  // SalePacketStudio sits behind the Vite alias, so it is pinned from source.
+  // Its old five-slot list (bill of sale, sale photos, …) is not the release
+  // gate: the gate clears a horse with approved registration and transfer
+  // papers and no bill of sale, which the packet wizard can draft itself. Left
+  // in, that list labelled a gate-cleared horse "Needs Review" and asked for an
+  // upload while its profile offered "Generate proof packet".
+  const studio = await readFile('src/routes/SalePacketStudio.tsx', 'utf8');
+  assert.doesNotMatch(studio, /const REQUIRED = \[/, 'no second requirements list');
+  assert.doesNotMatch(studio, /missing\.length/, 'nothing overrides the verdict with missing slots');
+  assert.doesNotMatch(studio, /'Needs Review'/, 'a row is ready or blocked, as the gate says');
+  assert.match(studio, /const state: 'Ready' \| 'Blocked' = score\.proofPacketReady \? 'Ready' : 'Blocked';/);
+  assert.match(studio, /const blockers = score\.proofPacketBlocker \? \[score\.proofPacketBlocker\] : \[\];/);
+});
+
+test('a step waiting on a file still being read opens Documents where that file is shown', async () => {
+  // Documents opens on Review, and a Queued upload is listed only under
+  // Processing, so sending the wait step to plain /documents lands on a
+  // screen without the file.
+  const queuedTransfer = complete({ documents: [currentCoggins(), doc('Transfer Packet', { state: 'Queued' })] });
+  assert.equal(queuedTransfer.actions.find((action) => action.key === 'transfer')?.target, 'processing-documents');
+  const queuedCoggins = complete({ documents: [doc('Coggins', { state: 'Queued', entities: {} }), transferFile()] });
+  assert.equal(queuedCoggins.actions[0]?.target, 'processing-documents');
+  const inReview = complete({ documents: [currentCoggins(), doc('Transfer Packet', { state: 'Needs Review' })] });
+  assert.equal(inReview.actions.find((action) => action.key === 'transfer')?.target, 'review-documents');
+
+  // The link the card builds is the stage the Documents page opens on, for every stage.
+  for (const { id } of PIPELINE_STAGES) {
+    const url = new URL(documentsStageUrl(id), 'https://xbar.test');
+    assert.equal(url.pathname, '/documents');
+    assert.equal(stageFromParam(url.searchParams.get('stage')), id);
+  }
+  assert.equal(stageFromParam(null), null);
+  assert.equal(stageFromParam('Nonsense'), null, 'an unknown stage opens the default, not a blank tab');
+
+  const card = await readFile('src/components/SaleReadinessCard.tsx', 'utf8');
+  assert.match(card, /case 'processing-documents':\s*navigate\(documentsStageUrl\('Processing'\)\);/);
+  const documents = await readFile('src/routes/Documents.tsx', 'utf8');
+  assert.match(documents, /stageFromParam\(searchParams\.get\('stage'\)\)/);
 });

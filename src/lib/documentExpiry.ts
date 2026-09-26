@@ -147,23 +147,458 @@ export function findPrintedExpiryDate(text: string | undefined): string | null {
   return found.size === 1 ? isoDay([...found][0]!) : null;
 }
 
-const HEALTH_CERTIFICATE_TEXT =
-  /health\s+certificate|certificate\s+of\s+veterinary\s+inspection|\bCVI\b|interstate\s+health/i;
+/*
+ * A health certificate carries other dates with expiry labels on it — a
+ * rabies vaccination, an EIA test "valid through" next spring. Those say
+ * nothing about when the certificate itself lapses, so only a date the
+ * certificate gives for ITSELF counts ("This certificate is valid through",
+ * "Certificate expiration date", "CVI valid until"). Anything else falls back
+ * to the inspection window.
+ */
+const CERTIFICATE_DATE = new RegExp(
+  `(?:(?:this\\s+)?(?:health\\s+)?certificate(?:\\s+of\\s+veterinary\\s+inspection)?(?:\\s*\\(CVI\\))?|\\bCVI)[ \\t]+(?:is[ \\t]+)?(?:expir(?:es|ation|y)(?:\\s+date)?|exp\\.?\\s+date|valid\\s+(?:through|thru|until|to)|good\\s+(?:through|thru|until))(?:\\s+on)?\\s*[:\\-–]?\\s*${DATE_PATTERN}`,
+  'gi',
+);
+
+/*
+ * A bare "certificate" is the paper's own only where it opens a field — at
+ * the start of the text, a new line, after punctuation, or after the wider gap
+ * OCR leaves between columns ("Certificate expiration date: …"). Mid-sentence
+ * it names something else: "Rabies vaccination certificate valid through
+ * 05/01/2027" is the vaccination's certificate, not the CVI's. "This
+ * certificate", "health certificate", the formal name and "CVI" say whose it
+ * is, so they need no such check — but only on their own line: "Required for
+ * CVI" followed by a vaccine's "Expiration Date:" on the next is not "CVI
+ * expires". Refusing a doubtful bare label costs only the fallback to the
+ * 30-day inspection window.
+ */
+const BARE_CERTIFICATE_LABEL = /^certificate(?!\s+of\s+veterinary\s+inspection)/i;
+const THIS_CERTIFICATE_LABEL = /^this\s+certificate\b/i;
+const FIELD_START = /(?:^|[\n\r.:;|•(]\s*|\s{2,})$/;
+
+function namesThisCertificate(match: RegExpMatchArray, text: string): boolean {
+  const index = match.index ?? 0;
+  // "This certificate" means whichever certificate it sits in: in a "Rabies
+  // Vaccination Certificate" section it is the vaccination's.
+  if (THIS_CERTIFICATE_LABEL.test(match[0])) return inCertificateHeader(index, text);
+  if (!BARE_CERTIFICATE_LABEL.test(match[0])) return true;
+  return FIELD_START.test(text.slice(0, index)) && inCertificateHeader(index, text);
+}
+
+/*
+ * An eCVI also prints its validity as a field of its own — "Expiration Date:"
+ * or "Valid Through:" on a line of its own, below the heading rather than
+ * beside the certificate's name. A generic expiry label counts only there, at
+ * the start of a line: after a vaccine or test on the same line, or across a
+ * table's column gap, it belongs to that component.
+ */
+const LINE_START = /(?:^|[\n\r])[ \t]*$/;
+/*
+ * Only the validity labels a certificate uses for itself. LABELLED_DATE also
+ * knows "Policy expires", "Contract ends", "Term ends" and "End date" — labels
+ * that name another paper, which a line break does not make the certificate's.
+ */
+const VALIDITY_DATE = new RegExp(
+  `(?:expir(?:es|ation|y)(?:\\s+date)?|exp\\.?\\s+date|valid\\s+(?:through|thru|until|to)|good\\s+(?:through|thru|until))(?:\\s+on)?\\s*[:\\-–]?\\s*${DATE_PATTERN}`,
+  'gi',
+);
+
+/*
+ * A line to itself is not enough: a CVI lists vaccines and tests as sections
+ * of their own ("Rabies Vaccination" / "Expiration Date: 05/01/2027"), and
+ * their fields look exactly like the certificate's. So a validity field, or a
+ * bare "Certificate …" label, counts only in the certificate's own header:
+ * from its heading (the first time the paper names itself) to the first line
+ * that names a vaccine, test, lab or batch. A later mention of the CVI inside
+ * a section ("Required for CVI") does not start a new header. A field XBAR
+ * can't place falls back to the 30-day inspection window, which flags a
+ * certificate early rather than showing a lapsed one as current. Labels that
+ * name the certificate itself ("This certificate…", "CVI valid until…") need
+ * no such check.
+ */
+const COMPONENT_SECTION =
+  /vaccin|immuniz|rabies|coggins|\bEIA\b|\bELISA\b|\bAGID\b|\btest|influenza|rhino|strangles|west\s+nile|tetanus|encephal|\bEEE\b|\bWEE\b|potomac|\bPHF\b|booster|\bdose|\blot\s*(?:no|#|number)|\bserial|administered|\bgiven\b|laborator|\blab\b|sample|accession/i;
+
+function inCertificateHeader(index: number, text: string): boolean {
+  const heading = certificateHeadingIndex(text);
+  const start = heading < 0 ? 0 : heading;
+  const section = text.slice(start).search(COMPONENT_SECTION);
+  const end = section < 0 ? text.length : start + section;
+  return index >= start && index < end;
+}
+
+function certificateValidityField(match: RegExpMatchArray, text: string): boolean {
+  const index = match.index ?? 0;
+  return LINE_START.test(text.slice(0, index)) && inCertificateHeader(index, text);
+}
+
+/** The date a health certificate prints for its own expiry, or null. Disagreeing dates return null. */
+export function findCertificateExpiryDate(text: string | undefined): string | null {
+  const found = new Set([
+    ...labelledDays(text, CERTIFICATE_DATE, namesThisCertificate),
+    ...labelledDays(text, VALIDITY_DATE, certificateValidityField),
+  ]);
+  return found.size === 1 ? isoDay([...found][0]!) : null;
+}
+
+/*
+ * The inspection date printed on a certificate, for one with no exam date on
+ * record. Local intake reads an exam date only for papers it filed as Vet
+ * Record or Coggins, so a CVI it filed as Registration arrives with none.
+ * Only a labelled date counts ("Inspection Date", "Date of Inspection",
+ * "Examination Date"): the first date anywhere on the paper could be a
+ * vaccination or a foaling date.
+ */
+const INSPECTION_DATE = new RegExp(
+  `(?:date\\s+of\\s+(?:inspection|examination|exam)|(?:inspection|examination|exam)\\s+date|date\\s+(?:inspected|examined))(?:\\s+on)?\\s*[:\\-–]?\\s*${DATE_PATTERN}`,
+  'gi',
+);
+
+/** Every distinct day the pattern labels in the text, keeping only the matches `accept` allows. */
+function labelledDays(
+  text: string | undefined,
+  pattern: RegExp,
+  accept: (match: RegExpMatchArray, text: string) => boolean = () => true,
+): Set<number> {
+  const source = String(text ?? '');
+  const found = new Set<number>();
+  for (const match of source.matchAll(pattern)) {
+    if (!accept(match, source)) continue;
+    const day = parsePrintedDate(match[1] ?? '');
+    if (day !== null) found.add(day);
+  }
+  return found;
+}
+
+/** Every date the pattern labels, as one day number; null when there is none or they disagree. */
+function singleLabelledDay(text: string | undefined, pattern: RegExp): number | null {
+  const found = labelledDays(text, pattern);
+  return found.size === 1 ? [...found][0]! : null;
+}
+
+/*
+ * Each kind's names are written once, as pattern source, because two checks
+ * read them: identity (is this the paper?) and reference (is this a paper
+ * ABOUT it?). The reference check once kept its own copy, the copy drifted,
+ * and "Interstate Health Requirements.pdf" was read by name as a certificate.
+ */
+const HEALTH_CERTIFICATE_NAMES =
+  'health\\s+certificate|certificate\\s+of\\s+veterinary\\s+inspection|\\bCVI\\b|interstate\\s+health';
+const HEALTH_CERTIFICATE_TEXT = new RegExp(HEALTH_CERTIFICATE_NAMES, 'i');
+
+/*
+ * A line TITLES a paper with a name when the name opens it, after at most a
+ * few title words — "Equine Interstate Health Certificate", "TEXAS CVI",
+ * "Stallion service agreement", "Horse Purchase Agreement". A sentence that
+ * mentions the name is not a title: "A current CVI is required", "Proof of
+ * insurance is required", "This sale is subject to the existing lease
+ * agreement". What gives a sentence away ahead of the name is its grammar —
+ * an article, a determiner, a verb or a preposition — not its capitals, which
+ * OCR and form mastheads use freely and sentence-case titles don't.
+ */
+const TITLE_WORDS = 4;
+const SENTENCE_WORD =
+  /^(?:a|an|the|this|that|these|those|your|our|their|any|all|each|every|is|are|was|were|be|been|must|will|shall|should|may|can|please|require[sd]?|need|needs|provides?|provided|bring|send|attach(?:ed)?|includes?|included|proof|copy|current|valid|of|for|to|with|without|before|after|per|under|by|from|and|or|if|when)$/i;
+
+/*
+ * Nor is a line whose name is followed by a verb: "CVI is required before
+ * interstate travel", "Insurance is required before arrival", "Lease
+ * Agreement is required before breeding" are instructions. Only the words up
+ * to the line's first break count (a full stop, a colon, a column gap), so
+ * "Stallion service agreement. A current health certificate is required…" is
+ * still titled by its first clause. And only a verb gives it away — a title
+ * goes on with a preposition as often as not ("Certificate of Veterinary
+ * Inspection for Interstate Movement", "CVI valid until July 15").
+ */
+const INSTRUCTION_VERB =
+  /^(?:is|are|was|were|be|been|must|will|shall|should|may|can|require[sd]?|needs?|needed|has|have)$/i;
+const CLAUSE_BREAK = /[.:;|•]|\s{2,}/;
+/*
+ * A note says the paper is not here: "Health certificate to follow",
+ * "Insurance pending", "CVI missing". The word right after the name gives it
+ * away, and only there — "Certificate of Veterinary Inspection for Export to
+ * Mexico" is still a title. "Attached" and "enclosed" are not on the list:
+ * they say the other paper IS in this file, so an agreement with its CVI
+ * attached holds two papers and is refused as pointing two ways.
+ */
+const FOLLOW_UP = /^(?:to|not|pending|due|missing|requested|forthcoming)$/i;
+const bareWord = (word: string) => word.replace(/[^\w'-]/g, '');
+
+/** The name is followed, in its own clause, by an instruction or a follow-up note rather than more title. */
+function instructionAfter(line: string, match: RegExpMatchArray): boolean {
+  const clause = line.slice((match.index ?? 0) + match[0].length).split(CLAUSE_BREAK)[0] ?? '';
+  const after = clause.trim().split(/\s+/).map(bareWord).filter(Boolean);
+  return after.some((word) => INSTRUCTION_VERB.test(word)) || FOLLOW_UP.test(after[0] ?? '');
+}
+
+/*
+ * A file name is the uploader's label, so it is read more loosely than a
+ * heading — "Coggins and CVI.pdf" names both papers it holds — but an
+ * instruction as a name ("CVI is Required Before Travel.pdf") names none.
+ */
+function namesInFilename(title: string, name: RegExp): boolean {
+  const match = title.match(name);
+  return !!match && !instructionAfter(title, match);
+}
+
+/** Where the name titles this line, or -1 when it is absent or only mentioned. */
+function titleIndex(line: string, name: RegExp): number {
+  const match = line.match(name);
+  if (!match || match.index === undefined) return -1;
+  const at = match.index;
+  const before = line.slice(0, at).trim().split(/\s+/).filter(Boolean);
+  if (before.length > TITLE_WORDS || before.some((word) => SENTENCE_WORD.test(bareWord(word)))) return -1;
+  return instructionAfter(line, match) ? -1 : at;
+}
+
+/** A line of the heading, above its first field, that titles the paper with this name. */
+function titledInHeading(text: string, name: RegExp): boolean {
+  return titleLines(text).some((line) => titleIndex(line, name) >= 0);
+}
+
+/*
+ * A reference title counts only ABOVE the paper's own title. A masthead can
+ * sit over "CVI Requirements for Interstate Travel"; but once a line titles
+ * the paper — "Certificate of Veterinary Inspection" — a later "Instructions
+ * for completing this certificate" is part of the form, not what it is.
+ */
+const COGGINS_NAMES = '\\bcoggins\\b|\\bEIA\\b|equine\\s+infectious\\s+ana?emia';
+const COGGINS_NAME = new RegExp(COGGINS_NAMES, 'i');
+function headedAsReference(text: string): boolean {
+  for (const line of headingBlock(text)) {
+    if (REFERENCE_HEADING.test(line)) return true;
+    const titled = [HEALTH_CERTIFICATE_TEXT, INSURANCE_NAME, CONTRACT_NAME, COGGINS_NAME].some(
+      (name) => titleIndex(line, name) >= 0,
+    );
+    // The paper's own title, or its first field, ends the heading.
+    if (titled || isFormField(line)) return false;
+  }
+  return false;
+}
+
+/*
+ * The certificate's heading is the first line that titles it. A preamble that
+ * mentions it is not its heading, and neither is a line that also names a
+ * vaccine or test ("CVI Travel Packet — Coggins Enclosed"), whose component
+ * would otherwise close the header before it began. With no such line the
+ * first mention is used, and a component named there ends the header at once,
+ * so the certificate falls back to its inspection window.
+ */
+function certificateHeadingIndex(text: string): number {
+  for (const line of text.matchAll(/[^\r\n]+/g)) {
+    if (COMPONENT_SECTION.test(line[0])) continue;
+    const name = titleIndex(line[0], HEALTH_CERTIFICATE_TEXT);
+    if (name >= 0) return (line.index ?? 0) + name;
+  }
+  return text.search(HEALTH_CERTIFICATE_TEXT);
+}
+/*
+ * "Policy" alone is not insurance: a stable's biosecurity or vaccination
+ * policy can carry a date too, and reading it as a lapsed insurance policy
+ * would claim the horse's insured value is uncovered. A name or heading says
+ * insurance when it says so, or names the cover a policy gives.
+ */
+const INSURANCE_NAMES =
+  '\\binsurance\\b|\\b(?:liability|mortality|major\\s+medical|medical|surgical|property|loss\\s+of\\s+use|equine|farm)\\s+(?:policy|coverage|cover)\\b';
+const INSURANCE_NAME = new RegExp(INSURANCE_NAMES, 'i');
+const INSURANCE_TEXT =
+  /\binsurance\s+(?:policy|certificate|binder)\b|\bcertificate\s+of\s+(?:liability\s+)?insurance\b|\bpolicy\s+(?:number|no\.?|#)|\bnamed\s+insured\b|\bdeclarations\s+page\b/i;
+const CONTRACT_NAMES = '\\b(?:contract|agreement|lease)\\b';
+const CONTRACT_NAME = new RegExp(CONTRACT_NAMES, 'i');
+const CONTRACT_TEXT = /\b(?:breeding|stallion\s+service|service|lease|boarding)\s+(?:contract|agreement)\b/i;
+
+/*
+ * The types an intake gives a paper it could not place. Local intake types a
+ * file by its name alone and files anything it doesn't recognise as
+ * Registration — "CVI.pdf", "Farm Liability Policy.pdf" and "Stallion
+ * Service Agreement.pdf" among them. The server's classifier files what it
+ * can't place as Ownership Memo. Review can't change a type, so for these two
+ * the paper's own name and text decide whether it is a certificate, a policy
+ * or an agreement. A type the intake did recognise is never second-guessed.
+ *
+ * The name is the paper's identity and decides first. The body is read only
+ * when the name says nothing, and then only for identity — its heading, or a
+ * phrase only that kind of paper prints — because bodies mention other papers:
+ * a service agreement requires "a current health certificate", a policy
+ * requires a CVI. When the name, or else the body, points to more than one
+ * kind, nothing is claimed — a paper left off the radar is better than one
+ * listed as the wrong kind with the wrong date.
+ *
+ * Recognising the paper is not dating it: a policy or agreement still gets a
+ * date only from a labelled date printed on it, and an expiry label alone
+ * does not make an unplaced paper expire.
+ */
+const UNPLACED_TYPES: ReadonlySet<DocumentRecord['type']> = new Set(['Registration', 'Ownership Memo']);
+
+/*
+ * A paper about a certificate, policy or contract is not one: "CVI
+ * Requirements", "Coggins Instructions", "Insurance Requirements", "Lease
+ * Agreement Template". Intake types by filename, so such a sheet can arrive
+ * typed Insurance or Coggins; its expiry label would otherwise read as a lapsed
+ * policy or a current certificate. Its name or heading saying so is enough —
+ * read with REFERENCE_HEADING below, so a specimen word naming the paper's
+ * own content ("Coggins Sample Results", "EIA Blood Sample") is not taken for
+ * a blank. This broader word list is kept only for an unplaced paper's first
+ * line when nothing else identifies it.
+ */
+const REFERENCE_DOCUMENT =
+  /\b(?:requirements?|checklists?|instructions?|guide(?:lines)?|rules|procedures?|how\s+to|faq|templates?|blank|sample)\b/i;
+
+/*
+ * A heading can say the same thing, and it outranks the type intake gave the
+ * paper and the name it was filed under: "Insurance.pdf" headed "Insurance
+ * Requirements", or "CVI.pdf" headed "CVI Requirements for Interstate
+ * Travel". Only a heading that says the paper is ABOUT a certificate, policy
+ * or contract counts — the reference word as its subject, up to three words
+ * after the kind ("Insurance Requirements", "Coggins Test Instructions", "CVI
+ * Interstate Travel Requirements"), ahead of the kind ("Requirements for a
+ * Health Certificate", "How to File an Insurance Claim"), or marking a
+ * specimen ("Sample CVI", "Blank Health Certificate"). A genuine paper's first
+ * line can carry the same words as a field or a direction — "Sample ID: 4471",
+ * "EIA Test Procedure: AGID", "see instructions on reverse" — and refusing it
+ * would drop a real Coggins or CVI off the radar without a word.
+ */
+// Every identity name, so no spelling can identify a paper without also marking
+// a reference to it, plus the plurals and bare nouns a reference title uses.
+const REFERENCE_KIND = `(?:${HEALTH_CERTIFICATE_NAMES}|${COGGINS_NAMES}|${INSURANCE_NAMES}|${CONTRACT_NAMES}|health\\s+certificates|certificates?(?:\\s+of\\s+veterinary\\s+inspection)?|polic(?:y|ies)|coverage|contracts|agreements|leases)`;
+const REFERENCE_HEADING = new RegExp(
+  [
+    `\\b${REFERENCE_KIND}(?:[ \\t]+[a-z]+){0,3}?[ \\t]+(?:requirements?|checklists?|instructions?|guide(?:lines)?|rules|faqs?|templates?|procedures|procedure(?![ \\t]*:))\\b(?![ \\t]+on[ \\t]+(?:the[ \\t]+)?(?:reverse|back))`,
+    `(?<!\\b(?:see|read|follow)[ \\t]+(?:the[ \\t]+)?)\\b(?:(?:requirements?|instructions?|guide(?:lines)?|rules|procedures?|checklists?)[ \\t]+(?:for|to|on|about|when)|how[ \\t]+to)(?:[ \\t]+[a-z]+){0,3}?[ \\t]+${REFERENCE_KIND}\\b`,
+    `\\b(?:sample|blank|templates?)[ \\t:–-]+(?:(?:an?|the)[ \\t]+)?${REFERENCE_KIND}\\b`,
+  ].join('|'),
+  'i',
+);
 
 /** Which time-sensitive paper a document is, or null when it does not expire. */
 export function expiryKindOf(
   document: Pick<DocumentRecord, 'type' | 'title' | 'extractedTextPreview'>,
 ): ExpiryKind | null {
+  if (REFERENCE_HEADING.test(document.title ?? '')) return null;
+  if (headedAsReference(document.extractedTextPreview ?? '')) return null;
   if (document.type === 'Coggins') return 'Coggins';
   if (document.type === 'Insurance') return 'Insurance';
   if (document.type === 'Breeding Contract') return 'Contract';
-  if (
-    document.type === 'Vet Record' &&
-    HEALTH_CERTIFICATE_TEXT.test(`${document.title ?? ''} ${document.extractedTextPreview ?? ''}`)
-  ) {
-    return 'Health certificate';
+  const title = document.title ?? '';
+  const text = document.extractedTextPreview ?? '';
+  if (document.type === 'Vet Record') {
+    // A vet record is a certificate only when it says it is one, never because
+    // it mentions one: an exam noting "A current CVI is required" is an exam.
+    const titled = namesInFilename(title, HEALTH_CERTIFICATE_TEXT) || titledInHeading(text, HEALTH_CERTIFICATE_TEXT);
+    return titled || opensATitledLine(text, FORMAL_CVI_NAME) ? 'Health certificate' : null;
   }
-  return null;
+  if (!UNPLACED_TYPES.has(document.type)) return null;
+  const byName = onlyKind([
+    ['Health certificate', namesInFilename(title, HEALTH_CERTIFICATE_TEXT)],
+    ['Insurance', namesInFilename(title, INSURANCE_NAME)],
+    ['Contract', namesInFilename(title, CONTRACT_NAME)],
+  ]);
+  if (byName !== undefined) return byName;
+  // With no name, the body must say what the paper IS, not what it mentions:
+  // its heading, or a phrase only that kind of paper prints.
+  const heading = headingOf(text);
+  if (REFERENCE_DOCUMENT.test(heading)) return null;
+  return (
+    onlyKind([
+      ['Health certificate', titledInHeading(text, HEALTH_CERTIFICATE_TEXT) || opensATitledLine(text, FORMAL_CVI_NAME)],
+      ['Insurance', titledInHeading(text, INSURANCE_NAME) || opensATitledLine(text, INSURANCE_TEXT)],
+      ['Contract', titledInHeading(text, CONTRACT_NAME) || opensATitledLine(text, CONTRACT_TEXT)],
+    ]) ?? null
+  );
+}
+
+/*
+ * A paper's own heading: the lines at its top, as far as a title runs.
+ * "Horse Purchase Agreement" heads an agreement whose body asks for "a current
+ * CVI"; the mention says nothing about what the paper is. Past the heading, an
+ * identity phrase counts only where it opens a line and titles it — a title or
+ * a field: the formal "Certificate of Veterinary Inspection" under an agency
+ * heading, "Policy Number:", "Named Insured:", "Stallion Service Agreement".
+ * Inside a sentence ("A current Certificate of Veterinary Inspection is
+ * required", "subject to the existing lease agreement"), or followed by a verb
+ * ("Lease Agreement is required before breeding"), it is a mention.
+ */
+const HEADING_LENGTH = 120;
+const FORMAL_CVI_NAME = /certificate\s+of\s+veterinary\s+inspection/i;
+
+/** Some line of the text opens with the name and titles it. */
+function opensATitledLine(text: string, name: RegExp): boolean {
+  return text.split(/[\r\n]+/).some((line) => {
+    const at = titleIndex(line, name);
+    return at >= 0 && line.slice(0, at).trim() === '';
+  });
+}
+
+function headingOf(text: string): string {
+  return headingBlock(text)[0] ?? '';
+}
+
+/*
+ * The lines a paper's heading can occupy: its first non-empty lines, up to its
+ * first field and never more than six. A title often sits under an agency or
+ * insurer masthead, and a federal one runs to three lines of its own ("United
+ * States Department of Agriculture" / "Animal and Plant Health Inspection
+ * Service" / "Veterinary Services" / "Equine Interstate Health Certificate"),
+ * so both the reference check and identity read this block, not the first
+ * line alone.
+ */
+const HEADING_LINES = 6;
+function headingBlock(text: string): string[] {
+  return text
+    .split(/[\r\n]+/)
+    .filter((line) => line.trim())
+    .slice(0, HEADING_LINES)
+    .map((line) => line.slice(0, HEADING_LENGTH));
+}
+
+/*
+ * Only the block's lines above its first field can title the paper. A masthead
+ * carries no field; a form's body starts with one ("Exam Date: 05/01/2026"),
+ * and a note below it ("Health certificate to follow.") is not a title. A field
+ * is a label of up to six single-spaced words ("Owner or Consignor Name",
+ * "Horse Registered Name and Number"), then a colon and a value — a column gap
+ * ("CERTIFICATE OF VETERINARY INSPECTION  Origin: Texas") keeps a title a
+ * title.
+ */
+const FIELD_LINE = /^\s*[A-Za-z][\w.#/&'()-]*(?: [\w.#/&'()-]+){0,5}:\s*\S/;
+function titleLines(text: string): string[] {
+  const lines: string[] = [];
+  for (const line of headingBlock(text)) {
+    if (isFormField(line)) break;
+    lines.push(line);
+  }
+  return lines;
+}
+
+/*
+ * A colon can also qualify a title: "Texas Equine Lease Agreement: Bella",
+ * "Equine Mortality Insurance Policy: Bella". Such a label titles the paper
+ * and ends in the paper's own noun. A field's label ends in something else,
+ * even when a paper's name describes it: "Insurance Agent Name:", "Insurance
+ * Carrier:", "Lease Contact Name:", "Contract Manager:" are fields, and so is
+ * "Owner or Consignor Name:", which titles nothing at all. The paper's own
+ * number may follow its noun ("Health Certificate No:", "CVI Number:"); a
+ * contact's number does not make it the paper ("Lease Contact No:").
+ */
+const DOCUMENT_NOUN = /^(?:agreement|contract|lease|policy|insurance|coverage|binder|certificate|cvi)$/i;
+const IDENTIFIER_WORD = /^(?:no|number|num|id|#)$/i;
+function isFormField(line: string): boolean {
+  if (!FIELD_LINE.test(line)) return false;
+  const label = line.slice(0, line.indexOf(':'));
+  const words = label.trim().split(/\s+/).map(bareWord).filter(Boolean);
+  if (words.length > 1 && IDENTIFIER_WORD.test(words.at(-1) ?? '')) words.pop();
+  const lastWord = words.at(-1) ?? '';
+  const titlesThePaper =
+    DOCUMENT_NOUN.test(lastWord) &&
+    [HEALTH_CERTIFICATE_TEXT, INSURANCE_NAME, CONTRACT_NAME].some((name) => titleIndex(label, name) >= 0);
+  return !titlesThePaper;
+}
+
+/** The one kind that matched; null when several did; undefined when none did. */
+function onlyKind(signals: Array<[ExpiryKind, boolean]>): ExpiryKind | null | undefined {
+  const kinds = signals.filter(([, matched]) => matched).map(([kind]) => kind);
+  if (!kinds.length) return undefined;
+  return kinds.length === 1 ? kinds[0]! : null;
 }
 
 function localDay(now: Date): number {
@@ -205,7 +640,10 @@ function resolveExpiry(
       ? { day: null, basis: 'No exam date on this Coggins, so XBAR can’t tell when it runs out.' }
       : { day: exam + CURRENT_COGGINS_DAYS, basis: `12 months from the ${readableDay(exam)} test.` };
   }
-  const printed = findPrintedExpiryDate(document.extractedTextPreview);
+  const printed =
+    kind === 'Health certificate'
+      ? findCertificateExpiryDate(document.extractedTextPreview)
+      : findPrintedExpiryDate(document.extractedTextPreview);
   if (printed) {
     return {
       day: parsePrintedDate(printed),
@@ -213,13 +651,18 @@ function resolveExpiry(
     };
   }
   if (kind === 'Health certificate') {
-    const exam = examDay(document);
+    const stored = examDay(document);
+    const printed = stored === null ? singleLabelledDay(document.extractedTextPreview, INSPECTION_DATE) : null;
+    const exam = stored ?? printed;
     if (exam !== null && exam > today) return futureExam('inspection');
     return exam === null
       ? { day: null, basis: 'No inspection date on this certificate, so XBAR can’t tell when it runs out.' }
       : {
           day: exam + HEALTH_CERTIFICATE_DAYS,
-          basis: `30 days from the ${readableDay(exam)} inspection — the usual interstate window; some states differ.`,
+          basis:
+            printed === null
+              ? `30 days from the ${readableDay(exam)} inspection — the usual interstate window; some states differ.`
+              : `30 days from the ${readableDay(exam)} inspection read from the certificate — the usual interstate window; some states differ. Check it against the paper.`,
         };
   }
   return { day: null, basis: 'No expiry date XBAR can read on this document — check the paper.' };
@@ -457,19 +900,31 @@ export function expiryBellCount(
 /**
  * Radar entries for the Reminders queue and its alert digest.
  *
- * A Coggins for a horse on the roster is left out on purpose: the care board
- * already raises a Coggins reminder for every such horse, and a second one
- * for the same paper would be noise. A Coggins not linked to a known horse has
- * no care row, so it stays in. A paper still in review is left out too: the
- * queue already carries a review reminder for it, and its date is not
- * confirmed. Only what needs attention now goes in — expired or under 30 days.
+ * A Coggins is left out only when the care board already raises a Coggins
+ * reminder for that horse (its Coggins signal is due or watch): a second one
+ * for the same horse would be noise. The care board reads a single paper per
+ * horse — the newest Ready Coggins, dated by upload when it has no exam date —
+ * so a newer paper with no exam date, or a mistyped future one, can read as
+ * clear there while the radar still holds last year's expired Coggins. That
+ * one stays in, as does a Coggins with no horse on the roster, which has no
+ * care row at all. A paper still in review is left out too: the queue already
+ * carries a review reminder for it, and its date is not confirmed. Only what
+ * needs attention now goes in — expired or under 30 days.
  */
-export function expiryReminderItems(radar: ExpiryRadar): ReminderItem[] {
+export function expiryReminderItems(
+  radar: ExpiryRadar,
+  careBoard: ReadonlyArray<Pick<CareBoardRow, 'horseId' | 'signals'>>,
+): ReminderItem[] {
+  const cogginsOnCareBoard = new Set(
+    careBoard
+      .filter((row) => row.signals.some((signal) => signal.key === 'coggins' && signal.status !== 'clear'))
+      .map((row) => row.horseId),
+  );
   return (
     [...radar.expired, ...radar.under30]
       // A paper still in review already has a review reminder of its own.
       .filter((item) => item.reviewed)
-      .filter((item) => !(item.kind === 'Coggins' && item.horseId))
+      .filter((item) => !(item.kind === 'Coggins' && item.horseId && cogginsOnCareBoard.has(item.horseId)))
       .map((item): ReminderItem => ({
         id: `expiry-${item.documentId}`,
         kind: 'Documents',

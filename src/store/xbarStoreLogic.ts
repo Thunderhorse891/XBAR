@@ -255,6 +255,9 @@ export function validateExpenseReceiptInput(input: ExpenseReceiptInput) {
   );
 }
 
+/** Receipts bought by the unit — the ones whose quantity feeds the supplier price watch. */
+export const PRICED_BY_UNIT_CATEGORIES: ReadonlySet<ExpenseCategory> = new Set(['Feed', 'Supplements', 'Bedding']);
+
 /**
  * A typed quantity as a number: undefined when blank, NaN when it is not a
  * plain positive amount. Thousands separators are the only formatting

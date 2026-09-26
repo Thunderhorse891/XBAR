@@ -294,31 +294,61 @@ function buildPriceRises(dated: DatedReceipt[], today: number): { rises: Supplie
         -compareTimestampDesc(String(left.receipt.uploadedAt), String(right.receipt.uploadedAt)),
     );
     const inWindow = (index: number) => today - purchases[index]!.day < COST_WINDOW_DAYS;
-    // The supplier's own price before a delivery: its last few deliveries.
+    /*
+     * The supplier's own price before a delivery: the middle of its last three
+     * deliveries, not their average. An average carries a one-off excursion
+     * forward: a $20 spike between $10s held a later $12 under the baseline,
+     * and a $5 sale made the next ordinary $10 read as a 20% rise. With two
+     * deliveries of history the higher one is used, so a rise is never claimed
+     * on the strength of a price that may have been a discount.
+     */
     const priceBefore = (index: number) => {
-      const prior = purchases.slice(Math.max(0, index - PRICE_BASELINE_PURCHASES), index);
-      return prior.reduce((sum, entry) => sum + entry.unitPrice, 0) / prior.length;
+      const prior = purchases
+        .slice(Math.max(0, index - PRICE_BASELINE_PURCHASES), index)
+        .map((entry) => entry.unitPrice)
+        .sort((left, right) => left - right);
+      return prior[Math.floor(prior.length / 2)]!;
     };
     if (purchases.some((_, index) => index > 0 && inWindow(index))) comparisons += 1;
 
     /*
      * Every delivery in the window is checked against the deliveries before
-     * it, and the first one that came in higher is where the rise began. A
+     * it. The rise is the earliest one that has held since: every delivery
+     * from it to the latest still at least 5% above the price before it. So a
      * price that went up and stayed up is still flagged after the dearer
-     * deliveries have become the recent history. A rise last spring is not
-     * something to act on today, and a rise that has since come back down is
-     * not flagged.
+     * deliveries have become the recent history, a spike that came back down
+     * neither counts nor hides a newer rise, and a rise last spring is not
+     * something to act on today.
+     *
+     * Each delivery since the rise is judged with its neighbours, the way the
+     * baseline is: the middle of the three, so a one-off $5 promotion between
+     * $12 deliveries does not erase a rise the supplier is still charging. The
+     * first is judged with the one after it, the cheaper of the two, so a
+     * spike that came back down is not where a rise began. The latest is
+     * judged alone, so a rise that has come down is not current.
      */
-    const start = purchases.findIndex((entry, index) => {
-      if (index === 0 || !inWindow(index)) return false;
+    const holds = (price: number, before: number) => (price - before) / before >= PRICE_RISE_THRESHOLD;
+    const heldFrom = (index: number) => {
       const before = priceBefore(index);
-      return before > 0 && (entry.unitPrice - before) / before >= PRICE_RISE_THRESHOLD;
-    });
+      if (!(before > 0)) return false;
+      const last = purchases.length - 1;
+      const price = (at: number) => purchases[at]!.unitPrice;
+      for (let at = index; at <= last; at += 1) {
+        const typical =
+          at === last
+            ? price(at)
+            : at === index
+              ? Math.min(price(at), price(at + 1))
+              : [price(at - 1), price(at), price(at + 1)].sort((left, right) => left - right)[1]!;
+        if (!holds(typical, before)) return false;
+      }
+      return true;
+    };
+    const start = purchases.findIndex((_, index) => index > 0 && inWindow(index) && heldFrom(index));
     if (start < 0) continue;
     const baseline = priceBefore(start);
     const latest = purchases[purchases.length - 1]!;
     const rise = (latest.unitPrice - baseline) / baseline;
-    if (rise < PRICE_RISE_THRESHOLD) continue;
     const sinceRise = purchases.slice(start);
     const extraCost = sinceRise.reduce(
       (sum, entry) => sum + Math.max(0, entry.unitPrice - baseline) * Number(entry.receipt.quantity),
@@ -376,7 +406,7 @@ function buildFeedSuppliers(windowReceipts: DatedReceipt[]): FeedSupplierSummary
       existing.latestPricedDay = entry.day;
       existing.latestUploadedAt = uploadedAt;
       existing.summary.latestUnitPrice = unitPrice;
-      existing.summary.unit = String(entry.receipt.unit).trim();
+      existing.summary.unit = unitKeyOf(entry.receipt.unit);
     }
     suppliers.set(key, existing);
   }

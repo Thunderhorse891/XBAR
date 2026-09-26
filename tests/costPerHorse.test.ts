@@ -17,6 +17,7 @@ import {
 } from '../src/lib/costPerHorse.js';
 import { localIsoDate } from '../src/lib/format.js';
 import {
+  PRICED_BY_UNIT_CATEGORIES,
   parseReceiptQuantity,
   validateExpenseReceiptInput,
   type ExpenseReceiptInput,
@@ -514,6 +515,7 @@ test('singular and plural spellings of a unit are one unit', () => {
   });
   assert.equal(summary.priceRises.length, 1, 'bales then bale is the same hay rising');
   assert.equal(summary.priceRises[0]?.unit, 'bale');
+  assert.equal(summary.feedSuppliers[0]?.unit, 'bale', 'the supplier card reads "per bale" too');
   assert.equal(unitKeyOf(' 50 LBS  Bags '), '50 lb bag');
   assert.equal(unitKeyOf('boxes'), 'box');
   assert.equal(unitKeyOf('ton'), 'ton');
@@ -661,4 +663,73 @@ test('a thousands separator is accepted only where it belongs', () => {
   for (const malformed of ['1234,567', '1,2345', ',500', '1,,200', '12,50']) {
     assert.ok(Number.isNaN(parseReceiptQuantity(malformed)), `${malformed} is refused, not stripped`);
   }
+});
+
+test('a spike that came back down neither counts nor hides a newer rise', () => {
+  const summary = buildCostPerHorse({
+    horses: [horse('a')],
+    receipts: [
+      receipt({ amount: 100, quantity: 10, unit: 'bale', receiptDate: daysAgo(80) }), // $10
+      receipt({ amount: 200, quantity: 10, unit: 'bale', receiptDate: daysAgo(70) }), // $20 spike
+      receipt({ amount: 50, quantity: 10, unit: 'bale', receiptDate: daysAgo(60) }), // $5
+      receipt({ amount: 50, quantity: 10, unit: 'bale', receiptDate: daysAgo(40) }),
+      receipt({ amount: 50, quantity: 10, unit: 'bale', receiptDate: daysAgo(20) }),
+      receipt({ amount: 60, quantity: 10, unit: 'bale', receiptDate: daysAgo(2) }), // $6
+    ],
+    now: NOW,
+  });
+  assert.equal(summary.priceRises.length, 1);
+  const rise = summary.priceRises[0]!;
+  assert.equal(rise.baselineUnitPrice, 5, 'the $6 is measured against the three $5 deliveries before it');
+  assert.equal(rise.risePercent, 20);
+  assert.equal(rise.risingSince, daysAgo(2));
+  assert.equal(rise.extraCost, 10);
+});
+
+test('the Expenses intake records quantity and unit like the quick-create drawer', async () => {
+  assert.deepEqual([...PRICED_BY_UNIT_CATEGORIES].sort(), ['Bedding', 'Feed', 'Supplements']);
+  const intake = await readFile('src/routes/Expenses.tsx', 'utf8');
+  assert.match(intake, /PRICED_BY_UNIT_CATEGORIES\.has\(draft\.category\)/);
+  assert.match(intake, /quantity: parseReceiptQuantity\(draft\.quantity\)/);
+  const drawer = await readFile('src/components/saas/flows.tsx', 'utf8');
+  assert.match(drawer, /PRICED_BY_UNIT_CATEGORIES\.has\(category\)/, 'one list of priced categories, not two');
+});
+
+test('a one-off spike or discount in the last three deliveries does not move the price they are compared with', () => {
+  const series = (...prices: number[]) =>
+    buildCostPerHorse({
+      horses: [horse('a')],
+      receipts: prices.map((price, index) =>
+        receipt({ amount: price * 10, quantity: 10, unit: 'bale', receiptDate: daysAgo(80 - index * 10) }),
+      ),
+      now: NOW,
+    }).priceRises;
+
+  // The reviewer's case: a $20 spike that came back to $10, then a lasting rise to $12.
+  const rises = series(10, 20, 10, 12, 12);
+  assert.equal(rises.length, 1, 'averaging the spike into the baseline hid a real 20% rise');
+  assert.equal(rises[0]!.baselineUnitPrice, 10);
+  assert.equal(rises[0]!.risePercent, 20);
+  assert.equal(rises[0]!.risingSince, daysAgo(50));
+  assert.equal(rises[0]!.extraCost, 40, '$2 over on each of two 10-bale deliveries');
+
+  // The mirror image: a one-off discount is not the price the next delivery is measured against.
+  assert.deepEqual(series(10, 10, 5, 10), [], 'back to $10 after a $5 sale is not a 20% rise');
+  assert.deepEqual(series(10, 5, 10), [], 'with two deliveries of history, the discounted one is not the baseline');
+
+  // And a one-off discount after a lasting rise does not erase it, as reviewed.
+  const discounted = series(10, 12, 12, 5, 12, 12);
+  assert.equal(discounted.length, 1, 'a $5 promotion between $12 deliveries hid a current 20% rise');
+  assert.equal(discounted[0]!.baselineUnitPrice, 10);
+  assert.equal(discounted[0]!.risePercent, 20);
+  assert.equal(discounted[0]!.risingSince, daysAgo(70));
+  assert.equal(
+    discounted[0]!.extraCost,
+    80,
+    '$2 over on four 10-bale deliveries; the discounted one cost nothing extra',
+  );
+  assert.equal(series(10, 12, 12, 5, 12).length, 1, 'one dearer delivery after the discount is enough');
+  // But two cheaper deliveries in a row, or a cheaper latest one, mean the price came down.
+  assert.deepEqual(series(10, 12, 12, 5, 5), [], 'two cheaper deliveries in a row are the price now');
+  assert.deepEqual(series(10, 12, 12, 5), [], 'the latest delivery is the price now');
 });
