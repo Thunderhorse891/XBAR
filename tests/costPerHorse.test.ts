@@ -716,4 +716,20 @@ test('a one-off spike or discount in the last three deliveries does not move the
   // The mirror image: a one-off discount is not the price the next delivery is measured against.
   assert.deepEqual(series(10, 10, 5, 10), [], 'back to $10 after a $5 sale is not a 20% rise');
   assert.deepEqual(series(10, 5, 10), [], 'with two deliveries of history, the discounted one is not the baseline');
+
+  // And a one-off discount after a lasting rise does not erase it, as reviewed.
+  const discounted = series(10, 12, 12, 5, 12, 12);
+  assert.equal(discounted.length, 1, 'a $5 promotion between $12 deliveries hid a current 20% rise');
+  assert.equal(discounted[0]!.baselineUnitPrice, 10);
+  assert.equal(discounted[0]!.risePercent, 20);
+  assert.equal(discounted[0]!.risingSince, daysAgo(70));
+  assert.equal(
+    discounted[0]!.extraCost,
+    80,
+    '$2 over on four 10-bale deliveries; the discounted one cost nothing extra',
+  );
+  assert.equal(series(10, 12, 12, 5, 12).length, 1, 'one dearer delivery after the discount is enough');
+  // But two cheaper deliveries in a row, or a cheaper latest one, mean the price came down.
+  assert.deepEqual(series(10, 12, 12, 5, 5), [], 'two cheaper deliveries in a row are the price now');
+  assert.deepEqual(series(10, 12, 12, 5), [], 'the latest delivery is the price now');
 });

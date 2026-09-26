@@ -276,8 +276,15 @@ function singleLabelledDay(text: string | undefined, pattern: RegExp): number | 
   return found.size === 1 ? [...found][0]! : null;
 }
 
-const HEALTH_CERTIFICATE_TEXT =
-  /health\s+certificate|certificate\s+of\s+veterinary\s+inspection|\bCVI\b|interstate\s+health/i;
+/*
+ * Each kind's names are written once, as pattern source, because two checks
+ * read them: identity (is this the paper?) and reference (is this a paper
+ * ABOUT it?). The reference check once kept its own copy, the copy drifted,
+ * and "Interstate Health Requirements.pdf" was read by name as a certificate.
+ */
+const HEALTH_CERTIFICATE_NAMES =
+  'health\\s+certificate|certificate\\s+of\\s+veterinary\\s+inspection|\\bCVI\\b|interstate\\s+health';
+const HEALTH_CERTIFICATE_TEXT = new RegExp(HEALTH_CERTIFICATE_NAMES, 'i');
 
 /*
  * A line TITLES a paper with a name when the name opens it, after at most a
@@ -355,7 +362,8 @@ function titledInHeading(text: string, name: RegExp): boolean {
  * the paper — "Certificate of Veterinary Inspection" — a later "Instructions
  * for completing this certificate" is part of the form, not what it is.
  */
-const COGGINS_NAME = /\bcoggins\b|\bEIA\b|equine\s+infectious\s+ana?emia/i;
+const COGGINS_NAMES = '\\bcoggins\\b|\\bEIA\\b|equine\\s+infectious\\s+ana?emia';
+const COGGINS_NAME = new RegExp(COGGINS_NAMES, 'i');
 function headedAsReference(text: string): boolean {
   for (const line of headingBlock(text)) {
     if (REFERENCE_HEADING.test(line)) return true;
@@ -390,11 +398,13 @@ function certificateHeadingIndex(text: string): number {
  * would claim the horse's insured value is uncovered. A name or heading says
  * insurance when it says so, or names the cover a policy gives.
  */
-const INSURANCE_NAME =
-  /\binsurance\b|\b(?:liability|mortality|major\s+medical|medical|surgical|property|loss\s+of\s+use|equine|farm)\s+(?:policy|coverage|cover)\b/i;
+const INSURANCE_NAMES =
+  '\\binsurance\\b|\\b(?:liability|mortality|major\\s+medical|medical|surgical|property|loss\\s+of\\s+use|equine|farm)\\s+(?:policy|coverage|cover)\\b';
+const INSURANCE_NAME = new RegExp(INSURANCE_NAMES, 'i');
 const INSURANCE_TEXT =
   /\binsurance\s+(?:policy|certificate|binder)\b|\bcertificate\s+of\s+(?:liability\s+)?insurance\b|\bpolicy\s+(?:number|no\.?|#)|\bnamed\s+insured\b|\bdeclarations\s+page\b/i;
-const CONTRACT_NAME = /\b(?:contract|agreement|lease)\b/i;
+const CONTRACT_NAMES = '\\b(?:contract|agreement|lease)\\b';
+const CONTRACT_NAME = new RegExp(CONTRACT_NAMES, 'i');
 const CONTRACT_TEXT = /\b(?:breeding|stallion\s+service|service|lease|boarding)\s+(?:contract|agreement)\b/i;
 
 /*
@@ -448,8 +458,9 @@ const REFERENCE_DOCUMENT =
  * "EIA Test Procedure: AGID", "see instructions on reverse" — and refusing it
  * would drop a real Coggins or CVI off the radar without a word.
  */
-const REFERENCE_KIND =
-  '(?:cvi|health\\s+certificates?|certificates?(?:\\s+of\\s+veterinary\\s+inspection)?|coggins|eia|equine\\s+infectious\\s+ana?emia|insurance|polic(?:y|ies)|coverage|contracts?|agreements?|leases?)';
+// Every identity name, so no spelling can identify a paper without also marking
+// a reference to it, plus the plurals and bare nouns a reference title uses.
+const REFERENCE_KIND = `(?:${HEALTH_CERTIFICATE_NAMES}|${COGGINS_NAMES}|${INSURANCE_NAMES}|${CONTRACT_NAMES}|health\\s+certificates|certificates?(?:\\s+of\\s+veterinary\\s+inspection)?|polic(?:y|ies)|coverage|contracts|agreements|leases)`;
 const REFERENCE_HEADING = new RegExp(
   [
     `\\b${REFERENCE_KIND}(?:[ \\t]+[a-z]+){0,3}?[ \\t]+(?:requirements?|checklists?|instructions?|guide(?:lines)?|rules|faqs?|templates?|procedures|procedure(?![ \\t]*:))\\b(?![ \\t]+on[ \\t]+(?:the[ \\t]+)?(?:reverse|back))`,

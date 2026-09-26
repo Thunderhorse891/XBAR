@@ -319,13 +319,30 @@ function buildPriceRises(dated: DatedReceipt[], today: number): { rises: Supplie
      * deliveries have become the recent history, a spike that came back down
      * neither counts nor hides a newer rise, and a rise last spring is not
      * something to act on today.
+     *
+     * Each delivery since the rise is judged with its neighbours, the way the
+     * baseline is: the middle of the three, so a one-off $5 promotion between
+     * $12 deliveries does not erase a rise the supplier is still charging. The
+     * first is judged with the one after it, the cheaper of the two, so a
+     * spike that came back down is not where a rise began. The latest is
+     * judged alone, so a rise that has come down is not current.
      */
+    const holds = (price: number, before: number) => (price - before) / before >= PRICE_RISE_THRESHOLD;
     const heldFrom = (index: number) => {
       const before = priceBefore(index);
-      return (
-        before > 0 &&
-        purchases.slice(index).every((entry) => (entry.unitPrice - before) / before >= PRICE_RISE_THRESHOLD)
-      );
+      if (!(before > 0)) return false;
+      const last = purchases.length - 1;
+      const price = (at: number) => purchases[at]!.unitPrice;
+      for (let at = index; at <= last; at += 1) {
+        const typical =
+          at === last
+            ? price(at)
+            : at === index
+              ? Math.min(price(at), price(at + 1))
+              : [price(at - 1), price(at), price(at + 1)].sort((left, right) => left - right)[1]!;
+        if (!holds(typical, before)) return false;
+      }
+      return true;
     };
     const start = purchases.findIndex((_, index) => index > 0 && inWindow(index) && heldFrom(index));
     if (start < 0) continue;

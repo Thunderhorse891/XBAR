@@ -10,6 +10,7 @@ import {
   expiryKindOf,
   expiryReminderItems,
   findPrintedExpiryDate,
+  type ExpiryKind,
 } from '../src/lib/documentExpiry.js';
 import { CURRENT_COGGINS_DAYS, isCurrentDatedDocument } from '../src/lib/documentCurrency.js';
 import { buildAlertDigest } from '../src/lib/alertCenter.js';
@@ -1781,6 +1782,71 @@ test('a heading that says the paper is about a certificate, policy or contract o
   );
   assert.deepEqual(radar.items, []);
   assert.deepEqual(describeExpiryRisk(radar, horses), [], 'no uncovered-value claim from a requirements heading');
+});
+
+/*
+ * Every name that identifies a paper must also mark a reference to it. The
+ * reference check once kept its own copy of the kind names, and the copy
+ * drifted: "Interstate Health Requirements.pdf" and "Major Medical Cover
+ * Requirements.pdf" were read by name as a certificate and a policy, so a
+ * requirements sheet's own expiry date reached the radar. Each spelling here is
+ * one the identity check accepts, and each reference form of it — a name or a
+ * heading about the paper, a specimen of it — must claim nothing, whatever
+ * intake typed it. The bare name stays the paper itself.
+ */
+const IDENTITY_SPELLINGS: Array<[ExpiryKind, DocumentRecord['type'], string[]]> = [
+  [
+    'Health certificate',
+    'Vet Record',
+    ['Health Certificate', 'Certificate of Veterinary Inspection', 'CVI', 'Interstate Health'],
+  ],
+  ['Coggins', 'Coggins', ['Coggins', 'EIA', 'Equine Infectious Anemia', 'Equine Infectious Anaemia']],
+  [
+    'Insurance',
+    'Insurance',
+    [
+      'Insurance',
+      'Mortality Policy',
+      'Liability Coverage',
+      'Major Medical Cover',
+      'Loss of Use Cover',
+      'Surgical Cover',
+      'Farm Policy',
+      'Equine Coverage',
+    ],
+  ],
+  ['Contract', 'Breeding Contract', ['Contract', 'Agreement', 'Lease']],
+];
+
+test('every name that identifies a paper also marks a reference to it, as reviewed', () => {
+  const EXPIRY = 'Expiration Date: 07/15/2026';
+  const failures = IDENTITY_SPELLINGS.flatMap(([expected, intakeType, names]) =>
+    names.flatMap((name) => {
+      const wrong: string[] = [];
+      for (const type of ['Registration', 'Ownership Memo', intakeType] as DocumentRecord['type'][]) {
+        for (const title of [
+          `${name} Requirements.pdf`,
+          `${name} Checklist.pdf`,
+          `Requirements for ${name}.pdf`,
+          `Sample ${name}.pdf`,
+        ]) {
+          const kind = expiryKindOf({ type, title, extractedTextPreview: EXPIRY });
+          if (kind !== null) wrong.push(`${type} "${title}" -> ${kind}`);
+        }
+        const headed = expiryKindOf({
+          type,
+          title: `${name}.pdf`,
+          extractedTextPreview: `${name} Requirements\n${EXPIRY}`,
+        });
+        if (headed !== null) wrong.push(`${type} headed "${name} Requirements" -> ${headed}`);
+      }
+      // Control: the paper itself, filed under its own name by the intake that types it.
+      const itself = expiryKindOf({ type: intakeType, title: `${name}.pdf`, extractedTextPreview: EXPIRY });
+      if (itself !== expected) wrong.push(`${intakeType} "${name}.pdf" -> ${itself}, want ${expected}`);
+      return wrong;
+    }),
+  );
+  assert.deepEqual(failures, [], `${failures.length} reference forms or controls wrong`);
 });
 
 test('a paper about a certificate, policy or contract is not one, whatever intake typed it', () => {
