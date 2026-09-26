@@ -329,18 +329,44 @@ function findHorseNames(text: string, lineStarts: Set<number>): LabeledField[] {
   // Keep candidates until the parent boundary is known. An explicit name in
   // the sire section must not displace the horse's earlier bare Name field.
   const candidates: LabeledField[] = [];
+  // When OCR preserved the form's line breaks, a labeled name ends at its own
+  // line. Flattening joins lines with a space, so without this a following
+  // field whose label isn't in STOP_LABELS (e.g. "Year Foaled") leaks its
+  // leading word into the name ("STAR Year"). Bound the value at the next real
+  // line start; fall back to the flattened slice when the value is empty on the
+  // label's line, so a value OCR wrapped onto the next line is still read.
+  const orderedLineStarts = [...lineStarts].sort((a, b) => a - b);
+  const lineBoundedField = (index: number, labelPattern: string): LabeledField | undefined => {
+    const lineEnd = orderedLineStarts.find((start) => start > index) ?? text.length;
+    // Only end the name at the line break when the NEXT line begins a new field
+    // -- it carries field syntax (a colon/hash/equals) or a known label. A next
+    // line with neither is a value OCR wrapped across the break ("LUCKY" /
+    // "NUMBER SEVEN"), so read across it. This is what tells "STAR" above a
+    // "Year Foaled:" field from "LUCKY" above its own continuation.
+    if (lineEnd < text.length) {
+      const nextEnd = orderedLineStarts.find((start) => start > lineEnd) ?? text.length;
+      const nextLine = text.slice(lineEnd, nextEnd);
+      const nextLineIsField = /[:#=]/.test(nextLine) || new RegExp(`\\b(?:${STOP_GROUP})\\b`, 'i').test(nextLine);
+      if (nextLineIsField) {
+        const bounded = labeledField(text.slice(index, lineEnd), labelPattern);
+        if (bounded) return bounded;
+      }
+    }
+    return labeledField(text.slice(index), labelPattern);
+  };
+
   // Registries label the horse's name several ways. "Animal Name" and "Horse's
   // Name" are as explicit as "Registered Name"; missing them left the bare-Name
   // scan to reject the label as a qualifier and the horse came out unnamed.
   const explicitPattern = "registered\\s+name|name\\s+of\\s+horse|horse(?:['’]s)?\\s+name|animal\\s+name";
   for (const match of text.matchAll(new RegExp(`\\b(?:${explicitPattern})\\b`, 'ig'))) {
-    const field = labeledField(text.slice(match.index), explicitPattern);
-    if (field) candidates.push({ ...field, start: field.start + match.index, end: field.end + match.index });
+    const field = lineBoundedField(match.index!, explicitPattern);
+    if (field) candidates.push({ ...field, start: field.start + match.index!, end: field.end + match.index! });
   }
 
   for (const match of text.matchAll(/\bname\b/gi)) {
     const before = text.slice(0, match.index);
-    const after = text.slice(match.index + match[0].length);
+    const after = text.slice(match.index! + match[0].length);
     // Do not turn another qualified field (Association Name, Farm Name, etc.)
     // into horse data. A bare Name starts a field or follows a numeric value.
     const prefix = before.trim();
@@ -351,13 +377,13 @@ function findHorseNames(text: string, lineStarts: Set<number>): LabeledField[] {
       `\\b(?:(?:sex|gender)\\s*[:#=-]?\\s*${SEX_VALUE}|colou?r\\s*[:#=-]?\\s*${COLOR_VALUE})$`,
       'i',
     ).test(prefix);
-    if (!lineStarts.has(match.index) && prefix && !/[\d|;]$/.test(prefix) && !followsHeading && !followsCompleteField)
+    if (!lineStarts.has(match.index!) && prefix && !/[\d|;]$/.test(prefix) && !followsHeading && !followsCompleteField)
       continue;
     if (/^\s+of\b/i.test(after)) continue;
     if (new RegExp(`\\b(?:sire|dam|${OWNER_LABELS}|breeder)(?:['’]s)?\\s*$`, 'i').test(before)) continue;
     if (new RegExp(`^\\s+(?:of\\s+)?(?:sire|dam|${OWNER_LABELS}|breeder)\\b`, 'i').test(after)) continue;
-    const field = labeledField(text.slice(match.index), 'name');
-    if (field) candidates.push({ ...field, start: field.start + match.index, end: field.end + match.index });
+    const field = lineBoundedField(match.index!, 'name');
+    if (field) candidates.push({ ...field, start: field.start + match.index!, end: field.end + match.index! });
   }
   return candidates;
 }
