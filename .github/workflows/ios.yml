@@ -98,6 +98,28 @@ jobs:
               print("CoreSimulator diagnostic log timed out; native check remains failed.")
           PY
           find "$HOME/Library/Logs/DiagnosticReports" -maxdepth 1 -name '*App*' -print || true
+      - name: Capture the failed app's startup console
+        if: failure() && env.IOS_SIMULATOR_ID != ''
+        timeout-minutes: 2
+        run: |
+          # The XCTest verdict is already recorded. Relaunch only the synthetic
+          # CI app to capture Capacitor's native load/JavaScript diagnostics.
+          # A diagnostic launch cannot make the failed test pass.
+          python3 - <<'PY'
+          import os, subprocess
+          device = os.environ['IOS_SIMULATOR_ID']
+          try:
+              subprocess.run(['xcrun', 'simctl', 'terminate', device, 'com.xbar.ranch'], timeout=15, check=False)
+              app = subprocess.Popen(['xcrun', 'simctl', 'launch', '--console-pty', device, 'com.xbar.ranch'], stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True)
+              try:
+                  output, _ = app.communicate(timeout=45)
+              except subprocess.TimeoutExpired:
+                  app.kill()
+                  output, _ = app.communicate(timeout=10)
+              print('\n'.join(output.splitlines()[-300:]))
+          except subprocess.TimeoutExpired:
+              print('Native console capture timed out; the startup test remains failed.')
+          PY
       - name: Export native failure screenshots
         if: failure()
         timeout-minutes: 2
