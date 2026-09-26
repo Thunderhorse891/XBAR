@@ -215,3 +215,34 @@ test('CORS permits only the native shell and configured web origins', () => {
     if (allowed) assert.equal(headers['Access-Control-Allow-Headers'], 'Content-Type, Authorization');
   }
 });
+
+test('invalid web-origin configuration cannot authorize opaque or custom-scheme callers', () => {
+  const previous = { ...process.env };
+  try {
+    delete process.env.VERCEL_URL;
+    delete process.env.VITE_PUBLIC_APP_URL;
+    for (const [configured, origin, allowed] of [
+      ['https://ranch.example/app', 'https://ranch.example', true],
+      ['http://localhost:5173/app', 'http://localhost:5173', true],
+      ['https://ranch.example', 'https://ranch.example.attacker.invalid', false],
+      ['capacitor://localhost', 'null', false],
+      ['file:///app/index.html', 'null', false],
+      ['data:text/html,example', 'null', false],
+      ['ftp://ranch.example', 'ftp://ranch.example', false],
+    ]) {
+      process.env.PUBLIC_APP_URL = configured;
+      const headers = {};
+      const res = {
+        setHeader: (name, value) => {
+          headers[name] = value;
+        },
+        end() {},
+      };
+      assert.equal(applyCors({ method: 'OPTIONS', headers: { origin } }, res), false);
+      assert.equal(res.statusCode, 204);
+      assert.equal(headers['Access-Control-Allow-Origin'], allowed ? origin : undefined, configured);
+    }
+  } finally {
+    process.env = previous;
+  }
+});

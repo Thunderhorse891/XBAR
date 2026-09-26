@@ -12,7 +12,11 @@ function getAllowedOrigins() {
     .filter(Boolean)
     .map((value) => {
       try {
-        return new URL(value).origin;
+        const url = new URL(value);
+        // Opaque URLs (including capacitor:, file: and data:) serialize their
+        // origin as "null". They must not authorize sandboxed browser callers.
+        // Native shell origins are admitted explicitly below instead.
+        return url.protocol === 'https:' || url.protocol === 'http:' ? url.origin : '';
       } catch {
         return '';
       }
