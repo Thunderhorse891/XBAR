@@ -1,0 +1,56 @@
+name: Trial webhook serialization
+
+on:
+  pull_request:
+    paths:
+      - 'supabase/migrations/**'
+      - 'supabase/checks/trial-event-schema.sql'
+      - 'scripts/test-trial-event-race.py'
+      - '.github/workflows/trial-event-database.yml'
+  push:
+    branches: [main]
+    paths:
+      - 'supabase/migrations/**'
+      - 'supabase/checks/trial-event-schema.sql'
+      - 'scripts/test-trial-event-race.py'
+      - '.github/workflows/trial-event-database.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  trial-event-race:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    services:
+      postgres:
+        image: postgres:17
+        env:
+          POSTGRES_PASSWORD: disposable-test-password
+          POSTGRES_DB: xbar_trial_event_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    env:
+      PGHOST: localhost
+      PGPORT: 5432
+      PGUSER: postgres
+      PGPASSWORD: disposable-test-password
+      PGDATABASE: xbar_trial_event_test
+    steps:
+      - uses: actions/checkout@v7
+      - name: Prepare disposable event schema and original RPC
+        run: |
+          psql -v ON_ERROR_STOP=1 -f supabase/checks/trial-event-schema.sql
+          psql -v ON_ERROR_STOP=1 -f supabase/migrations/20260924223000_preserve_trial_in_event_rpc.sql
+      - name: Reproduce both real connection interleavings
+        run: python3 scripts/test-trial-event-race.py --expect-loss
+      - name: Correct the RPC and preserve both trials
+        run: |
+          psql -v ON_ERROR_STOP=1 -f supabase/migrations/20260926003000_atomic_trial_event_merge.sql
+          python3 scripts/test-trial-event-race.py

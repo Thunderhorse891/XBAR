@@ -20,7 +20,7 @@
  * record must block a restart without granting anything.
  */
 
-import { isEntitledBillingState } from './subscription-status.js';
+import { isEntitledBillingState, isStoredSubscriptionRecoverable } from './subscription-status.js';
 
 /** The only plan a trial may grant. Fixed — the endpoint never takes a tier. */
 export const TRIAL_PLAN_TIER = 'Professional';
@@ -112,8 +112,9 @@ export function buildTrialRecord(nowMs = Date.now()) {
  *
  * A workspace already entitled to paid features has nothing to trial. A
  * workspace that already carries a trial record — active, expired, or
- * malformed — may not start another. Everything else (including a lapsed
- * subscription and a brand-new workspace with no row at all) may.
+ * malformed — may not start another. A recoverable Stripe subscription must
+ * be resolved through billing first. A terminal subscription or a brand-new
+ * workspace with no row at all may start a trial.
  */
 export function decideTrialStart(row) {
   if (hasTrialRecord(row?.payload)) {
@@ -134,8 +135,8 @@ export function decideTrialStart(row) {
    * predicates keep enforcing Starter limits: paid actions gated by a
    * divergent client decision. Reject the paid row explicitly.
    *
-   * Lapsed states ('Past Due', 'Inactive', unknown) still fall through to
-   * ok:true — a former customer may trial, per the contract above.
+   * Non-entitled states still need the recoverability check below: a paused
+   * or unpaid subscription can resume collecting without granting access now.
    */
   if (isEntitledBillingState(row?.billing_state)) {
     return {
@@ -146,16 +147,28 @@ export function decideTrialStart(row) {
     };
   }
 
+  // Reuse the stored billing policy, including its legacy Past Due fallback.
+  // The canonical column takes precedence over a stale payload billingState.
+  if (isStoredSubscriptionRecoverable({ ...row?.payload, billingState: row?.billing_state })) {
+    return {
+      ok: false,
+      code: 'subscription_recoverable',
+      status: 409,
+      message:
+        'This workspace has a subscription that can resume billing. Resolve it in the billing portal before starting a trial.',
+    };
+  }
+
   return { ok: true };
 }
 
 /**
  * Start the trial for a workspace: decide, then write the record.
  *
- * The update carries the same "no trial yet" condition the decision read, so
- * two concurrent starts do not both move the window — the loser sees zero
- * rows affected and is told the trial is already used instead of silently
- * restarting it.
+ * The update pins the billing state and complete payload that were read, as
+ * well as "no trial yet". A webhook or another trial request changing that
+ * state makes the write affect zero rows instead of overwriting newer billing
+ * information or granting a trial based on an obsolete decision.
  *
  * A failed read refuses rather than treating "no row" as "no trial": a read
  * error is not evidence the workspace never trialed, and writing over an
@@ -189,6 +202,8 @@ export async function startWorkspaceTrial(supabase, workspaceId, nowMs = Date.no
       .from('workspace_subscription_profiles')
       .update({ payload: nextPayload, updated_at: startedIso })
       .eq('workspace_id', workspaceId)
+      .eq('billing_state', row.billing_state)
+      .eq('payload', JSON.stringify(row.payload))
       // The race guard: only write when no trial record appeared since the read.
       .filter('payload->trial->>startedAt', 'is', null)
       .select('workspace_id');
@@ -205,9 +220,9 @@ export async function startWorkspaceTrial(supabase, workspaceId, nowMs = Date.no
     if (!Array.isArray(updated) || updated.length === 0) {
       return {
         ok: false,
-        code: 'trial_already_used',
+        code: 'subscription_changed',
         status: 409,
-        message: 'This workspace has already used its 14-day Professional trial.',
+        message: 'The subscription changed while starting the trial. Refresh billing and try again.',
       };
     }
   } else {
