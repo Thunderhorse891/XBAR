@@ -1,0 +1,360 @@
+/* Static public pages use the approved homepage palette and navigation.
+   Kept separate from the homepage's choreography and the authenticated app. */
+.marketing-page {
+  color-scheme: light;
+  --bg: var(--xbar-warm-white);
+  --bg-raised: var(--xbar-warm-white);
+  --bg-panel: var(--xbar-warm-white);
+  --ink: var(--xbar-black);
+  --ink-soft: var(--xbar-steel);
+  --ink-faint: var(--xbar-steel);
+  --edge: var(--xbar-silver);
+  --edge-soft: var(--xbar-silver);
+  --accent: var(--xbar-gunmetal);
+  --accent-strong: var(--xbar-blue);
+  --accent-ink: var(--xbar-warm-white);
+  --ok: var(--xbar-gunmetal);
+  --max: 1240px;
+  --radius: 8px;
+  --font-display: var(--font-ui);
+  --surface: linear-gradient(var(--bg), var(--bg));
+  --surface-strong: linear-gradient(var(--bg-raised), var(--bg-raised));
+  --hairline: linear-gradient(var(--edge), var(--edge));
+  --hairline-hot: linear-gradient(var(--xbar-silver), var(--xbar-silver));
+  background: var(--bg);
+}
+@supports (color: color-mix(in srgb, white, black)) {
+  .marketing-page {
+    --bg-raised: color-mix(in srgb, var(--xbar-warm-white) 94%, var(--xbar-silver));
+    --edge: color-mix(in srgb, var(--xbar-steel) 24%, transparent);
+    --edge-soft: var(--edge);
+  }
+}
+.marketing-page .bg-fx {
+  display: none;
+}
+.marketing-page ::selection {
+  background: var(--xbar-gunmetal);
+  color: var(--xbar-warm-white);
+}
+.marketing-page :focus-visible {
+  outline: 2px solid var(--xbar-blue);
+  outline-offset: 5px;
+}
+.marketing-page .site-header,
+.marketing-page .site-header.scrolled {
+  background: var(--bg);
+  box-shadow: none;
+}
+.marketing-page .site-header::after,
+.marketing-page .section::before {
+  background: linear-gradient(90deg, transparent, var(--edge), transparent);
+}
+.marketing-page .brand small {
+  text-transform: none;
+  letter-spacing: 0.025em;
+  font-size: 11px;
+}
+.marketing-page .site-nav a,
+.marketing-page .nav-dd > summary {
+  font-size: 14px;
+  padding-inline: 10px;
+}
+.marketing-page .nav-menu {
+  background: var(--bg);
+  border-color: var(--edge);
+  box-shadow: none;
+  box-shadow: 0 16px 36px color-mix(in srgb, var(--xbar-black) 12%, transparent);
+}
+.marketing-page .site-nav a:hover,
+.marketing-page .site-nav a[aria-current='page'],
+.marketing-page .nav-dd--active > summary,
+.marketing-page .nav-dd[open] > summary {
+  background: var(--bg-raised);
+}
+.marketing-page .btn,
+.marketing-page .btn:hover {
+  border: 1px solid var(--edge);
+  border-radius: 6px;
+  background: transparent;
+  color: var(--ink);
+  min-height: 48px;
+  box-shadow: none;
+  transform: none;
+}
+.marketing-page .btn--primary,
+.marketing-page .btn--primary:hover {
+  background: var(--xbar-gunmetal);
+  color: var(--xbar-warm-white);
+  border-color: var(--xbar-gunmetal);
+}
+.marketing-page .btn:hover {
+  border-color: var(--xbar-blue);
+}
+.marketing-page .btn--quiet {
+  border-color: transparent;
+}
+.marketing-page h1 {
+  font-weight: 500;
+  font-size: clamp(40px, 5.1vw, 70px);
+  line-height: 1.06;
+  letter-spacing: -0.05em;
+  margin-bottom: 28px;
+}
+.marketing-page h2 {
+  font-weight: 500;
+  font-size: clamp(30px, 3.6vw, 48px);
+  line-height: 1.13;
+  letter-spacing: -0.04em;
+}
+.marketing-page h3 {
+  font-weight: 500;
+  letter-spacing: -0.015em;
+}
+.marketing-page .grad,
+.marketing-page .plan__price {
+  background: none;
+  color: var(--ink);
+  -webkit-text-fill-color: currentColor;
+}
+.marketing-page .hero {
+  padding-top: 112px;
+  padding-bottom: 80px;
+}
+.marketing-page .hero--solo {
+  max-width: var(--max);
+}
+.marketing-page .hero--solo h1 {
+  max-width: 20ch;
+}
+.marketing-page .hero--solo .lead {
+  max-width: 62ch;
+}
+.marketing-page .kicker {
+  color: var(--ink-soft);
+  background: none;
+  border: 0;
+  padding: 0;
+  letter-spacing: 0.08em;
+  margin-bottom: 24px;
+}
+.marketing-page .kicker::before {
+  width: 24px;
+  height: 1px;
+  border-radius: 0;
+  background: var(--xbar-blue);
+  box-shadow: none;
+}
+.marketing-page .section {
+  padding-block: 104px;
+}
+.marketing-page .section--flush {
+  padding-top: 0;
+}
+/* A hero may also carry section--flush; keep its intentional top whitespace. */
+.marketing-page .hero.section--flush {
+  padding-top: 112px;
+  padding-bottom: 80px;
+}
+.marketing-page .grid {
+  gap: 28px;
+}
+.marketing-page .card,
+.marketing-page .plan {
+  padding: 32px;
+}
+.marketing-page .card:hover,
+.marketing-page .plan:hover {
+  box-shadow: none;
+  box-shadow: 0 12px 28px color-mix(in srgb, var(--xbar-black) 6%, transparent);
+}
+.marketing-page .card::before {
+  display: none;
+}
+.marketing-page .card ul li::before {
+  box-shadow: none;
+}
+.marketing-page .steps li::before {
+  background: var(--bg-raised);
+  border-color: var(--edge);
+  color: var(--ink);
+}
+.marketing-page .steps li::after {
+  background: var(--edge);
+}
+.marketing-page .plan--featured {
+  background: var(--bg-raised);
+  border-color: var(--xbar-gunmetal);
+  box-shadow: none;
+}
+.marketing-page .plan__badge {
+  background: var(--xbar-gunmetal);
+  color: var(--xbar-warm-white);
+  box-shadow: none;
+  border-radius: 4px;
+}
+.marketing-page .plan {
+  border-radius: var(--radius);
+  padding-inline: 24px;
+}
+.marketing-page table.limits thead th,
+.marketing-page .callout {
+  background: var(--bg-raised);
+}
+.marketing-page .callout {
+  border-color: var(--edge);
+  border-left-color: var(--xbar-blue);
+}
+.marketing-page .article {
+  padding-block: 96px;
+}
+.marketing-page .article h1 {
+  font-size: clamp(36px, 4vw, 52px);
+}
+.marketing-page .article h2 {
+  font-size: 28px;
+}
+.marketing-page .article a:not(.btn) {
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+.marketing-page .shot-frame {
+  box-shadow: none;
+  box-shadow: 0 16px 36px color-mix(in srgb, var(--xbar-black) 10%, transparent);
+}
+.marketing-page .shot::after {
+  display: none;
+}
+.marketing-page .shot-chrome,
+.marketing-page .shot-chrome .shot-url {
+  background: var(--bg-raised);
+  border-color: var(--edge);
+}
+.marketing-page .cta {
+  padding: 32px 24px 104px;
+}
+.marketing-page .cta .wrap {
+  background: var(--bg-raised);
+  border-color: var(--edge);
+  border-radius: 8px;
+  padding-block: 80px;
+}
+.marketing-page .cta .wrap::before {
+  display: none;
+}
+.marketing-page .site-footer {
+  background: var(--bg);
+  border-top: 1px solid var(--edge);
+}
+.marketing-page .site-footer::before {
+  display: none;
+}
+.marketing-page .site-footer h3 {
+  color: var(--ink);
+}
+.public-mobile-nav {
+  display: none;
+}
+@media (max-width: 1050px) {
+  .marketing-page .site-header .wrap {
+    flex-wrap: nowrap;
+    min-height: 72px;
+    padding-block: 10px;
+  }
+  .marketing-page .site-header .site-nav,
+  .marketing-page .site-header > .wrap > .btn {
+    display: none;
+  }
+  .public-mobile-nav {
+    display: block;
+    position: relative;
+    margin-left: auto;
+  }
+  .public-mobile-nav > summary {
+    list-style: none;
+    display: grid;
+    grid-auto-flow: column;
+    align-items: center;
+    gap: 14px;
+    padding: 10px 14px;
+    min-height: 44px;
+    border: 1px solid var(--edge);
+    border-radius: 5px;
+    cursor: pointer;
+    font-size: 14px;
+  }
+  .public-mobile-nav > summary::-webkit-details-marker {
+    display: none;
+  }
+  .public-mobile-nav[open] .nav-caret {
+    transform: rotate(225deg);
+  }
+  .public-mobile-nav nav {
+    position: absolute;
+    right: 0;
+    top: calc(100% + 12px);
+    width: min(330px, calc(100vw - 40px));
+    max-height: calc(100vh - 100px);
+    max-height: calc(100dvh - 100px);
+    overflow-y: auto;
+    padding: 8px;
+    border: 1px solid var(--edge);
+    border-radius: 8px;
+    background: var(--bg);
+    box-shadow: none;
+    box-shadow: 0 16px 36px color-mix(in srgb, var(--xbar-black) 12%, transparent);
+  }
+  .public-mobile-nav nav a {
+    display: block;
+    padding: 12px 14px;
+    min-height: 44px;
+    border-radius: 4px;
+    font-size: 15px;
+  }
+  .public-mobile-nav nav a:hover,
+  .public-mobile-nav nav a[aria-current='page'] {
+    background: var(--bg-raised);
+  }
+}
+@media (max-width: 760px) {
+  .marketing-page .hero,
+  .marketing-page .hero.section--flush {
+    padding-top: 72px;
+    padding-bottom: 56px;
+  }
+  .marketing-page .section {
+    padding-block: 72px;
+  }
+  .marketing-page .section--flush {
+    padding-top: 0;
+  }
+  .marketing-page .card {
+    padding: 26px;
+  }
+  .marketing-page .article {
+    padding-block: 64px;
+  }
+  .marketing-page .cta {
+    padding: 24px 20px 72px;
+  }
+  .marketing-page .cta .wrap {
+    padding: 56px 24px;
+  }
+}
+@media (max-width: 420px) {
+  .marketing-page .wrap {
+    padding-inline: 20px;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .marketing-page *,
+  .marketing-page *::before,
+  .marketing-page *::after {
+    transition: none;
+  }
+  .marketing-page .card:hover,
+  .marketing-page .plan:hover,
+  .marketing-page .steps li:hover {
+    transform: none;
+  }
+}
