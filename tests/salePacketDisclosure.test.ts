@@ -19,6 +19,8 @@ test('packet generation does not claim a buyer share; seller must confirm sharin
     source.indexOf("title: result.ok ? 'Sharing logged'"),
   );
   assert.match(share, /actor: currentRole/);
+  assert.ok(share.includes('buyerName.trim()'));
+  assert.ok(share.includes('buyerEmail.trim()'));
 });
 
 /*

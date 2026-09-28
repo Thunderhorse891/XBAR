@@ -867,7 +867,9 @@ export function SalePacketWizard({
                       kind: 'packet-shared',
                       actor: currentRole,
                       packetId: generated.packetId,
-                      note: 'Seller confirmed the packet was shared.',
+                      note: `Seller confirmed the packet was shared. Recipient: ${
+                        [buyerName.trim(), buyerEmail.trim()].filter(Boolean).join(' — ') || 'not specified'
+                      }.`,
                     });
                     pushToast({
                       title: result.ok ? 'Sharing logged' : 'Sharing not logged',
