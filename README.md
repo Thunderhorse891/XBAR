@@ -501,6 +501,11 @@ The following is a reviewed-staging command, not authorization to apply producti
 
 ```sh
 psql "$STAGING_DATABASE_URL" -v ON_ERROR_STOP=1 -f supabase/migrations/20260925180000_account_deletion_audit.sql
+psql "$STAGING_DATABASE_URL" -v ON_ERROR_STOP=1 -f supabase/migrations/20260928150000_restrict_anon_table_discovery.sql
 ```
 
 Production application remains held pending Erin's explicit approval and backup/restore verification.
+The anonymous-table migration preserves the intended public buyer RPCs and
+aborts if removing inherited table/column grants would remove authenticated or
+service-role reads. Review its actual catalog diff and the full
+[database rollout dependencies](docs/PRODUCTION-DATABASE-ROLLOUT.md) first.

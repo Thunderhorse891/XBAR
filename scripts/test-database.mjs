@@ -14,6 +14,8 @@ for (const [command, args] of [
   [process.execPath, ['scripts/database-readiness.mjs', '--baseline']],
   [process.execPath, ['scripts/test-database-readiness.mjs']],
   ['psql', [url, '-v', 'ON_ERROR_STOP=1', '-f', 'supabase/checks/ci-release-behavior.sql']],
+  ['psql', [url, '-v', 'ON_ERROR_STOP=1', '-f', 'supabase/checks/ci-anon-table-access.sql']],
+  [process.execPath, ['scripts/test-anon-table-access.mjs']],
 ]) {
   const result = spawnSync(command, args, { stdio: 'inherit' });
   if (result.error || result.status !== 0) process.exit(1);

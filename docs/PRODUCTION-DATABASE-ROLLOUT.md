@@ -12,6 +12,12 @@ Read-only inspection of `uxvwfepyothlakhqazwv` confirmed:
   migration prepared in this PR is also absent.
 - Subscription profiles have RLS and one authenticated SELECT policy, without
   authenticated write policies.
+- No public-table policy targets anon or PUBLIC. The anonymous frontend uses
+  the two authorized public-share RPCs, not direct table reads. A new held
+  `20260928150000_restrict_anon_table_discovery.sql` removes unnecessary anon and
+  PUBLIC table/column SELECT grants, preserving function grants and verifying
+  authenticated/service-role access is unchanged. It aborts on unsafe grant
+  inheritance instead of adding broad privileges. It is not applied live.
 - Production's document policies intentionally retain legacy uploader access.
   Some definitions were applied with different ledger versions. Never infer
   that every missing filename should be replayed.
@@ -30,7 +36,7 @@ in command arguments, PRs or logs. The script uses a bounded, repeatable-read,
 read-only transaction; it reads metadata and migration versions, never customer
 rows, and performs no RPC, DDL or ledger repair.
 
-It compares the actual function definitions and execution privileges, policies,
+It compares the actual function definitions, execution/table privileges, policies,
 RLS, enforcement triggers, billing column and three bucket privacy flags with
 `supabase/checks/release-catalog.expected.json`. Missing, changed and extra
 objects all require disposition. Function hashes detect definition drift; they
@@ -62,7 +68,10 @@ another empty local database. Never generate the baseline from production.
    `b1601dff6d2859aeed796491378cc9f5e7310ecf` owns the atomic trial/event repair;
    PR #267 at `26f5e90b703c19bf28cd5fa10e4ded89ee0e31e8` owns malformed trial
    timestamp rejection. Both remain separate unmerged changes at this check.
-   Refresh their final review/CI before composing a release. Do not duplicate them.
+   #267 still has the existing review finding `4109515402`: timezone offsets
+   such as `+99:00` raise SQLSTATE `22009` instead of failing closed. Green CI
+   does not clear that finding. Refresh both final review/CI results before
+   composing a release. Do not duplicate their implementations.
 2. Resolve the media ownership finding before calling private media secure:
    the existing proposed SELECT policy trusts paths inside editable horse gallery
    JSON. A private bucket alone does not prove immutable object ownership.
@@ -100,6 +109,10 @@ to apply the current files as-is**. The findings above must be resolved first.
    Current deployed client signed-URL handling and legacy paths must be verified.
 6. `20260925180000_account_deletion_audit.sql` before releasing this PR's deletion
    handler, otherwise that handler deliberately refuses unaudited deletion.
+7. `20260928150000_restrict_anon_table_discovery.sql` after the table and function
+   inventory review. Recheck the two buyer RPCs, authenticated CRUD and GraphQL
+   schema visibility. Do not revoke authenticated SELECT to hide its schema:
+   the signed-in application needs those table privileges with RLS.
 
 Use a maintenance window with writers and webhook processing controlled under a
 reviewed operations plan. Record every transaction result and migration version;
@@ -112,10 +125,17 @@ On isolated scratch, `ci-release-behavior.sql` exercises authenticated insertion
 of a sixth horse during a valid trial, denial after expiry, the real named-argument
 billing RPC with annual-period/trial preservation, private bucket configuration,
 uploader reads and unrelated-user denial. `ci-rls.sql` covers subscription write
-denial and deletion-audit durability. `test-database-readiness.mjs` changes nine
+denial and deletion-audit durability. `test-database-readiness.mjs` changes eleven
 catalog conditions inside rolled-back transactions and verifies each blocks the
 release check. These do not emulate Storage HTTP, Stripe delivery or trial races;
 #266 owns the concurrent database test.
+
+`ci-anon-table-access.sql` verifies direct anonymous reads are denied while valid
+tokened shares and intentional tokenless Public Links each resolve and record
+exactly one view, invalid/missing private tokens stay denied and an authenticated
+owner still reads their horse. Grant regression tests
+cover table/column/PUBLIC grants, repeat application and transactional refusal
+when revoking inherited privileges would remove an intended role's access.
 
 Before release, use authorized disposable accounts/records for Storage HTTP
 upload/read/signed-URL/outsider tests and an actual Stripe test-mode checkout,

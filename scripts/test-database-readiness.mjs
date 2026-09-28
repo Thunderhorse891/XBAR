@@ -34,6 +34,8 @@ const cases = [
   ],
   ['alter table public.horses disable trigger trg_horses_enforce_commercial_limits;', 'triggers.public.horses'],
   ['grant execute on all functions in schema public to anon;', 'functions.'],
+  ['grant select on public.horses to anon;', 'tableSelectGrants.horses'],
+  ['grant select (name) on public.horses to public;', 'tableSelectGrants.horses'],
   [
     'create or replace function public.xbar_trial_active(p_payload jsonb) returns boolean language sql stable as $$ select true $$;',
     'functions.xbar_trial_active',

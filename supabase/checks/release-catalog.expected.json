@@ -1,6 +1,13 @@
 {
-  "sourceDigest": "d1122473c4e37d113ef1b1d62421329a1f891ca5da97d433c90c6fe1ac6b0e35",
-  "requiredVersions": ["20260924120000", "20260924130000", "20260924134000", "20260924223000", "20260925180000"],
+  "sourceDigest": "9c0cca5f5ff1c97ac913bf6602dada9ae69782a39be430eb5f7a4affc5847087",
+  "requiredVersions": [
+    "20260924120000",
+    "20260924130000",
+    "20260924134000",
+    "20260924223000",
+    "20260925180000",
+    "20260928150000"
+  ],
   "catalog": {
     "rls": {
       "public.horses": true,
@@ -217,6 +224,138 @@
     "billingPeriod": {
       "type": "text",
       "nullable": "YES"
+    },
+    "tableSelectGrants": {
+      "horses": {
+        "anon": false,
+        "service_role": true,
+        "authenticated": true
+      },
+      "documents": {
+        "anon": false,
+        "service_role": true,
+        "authenticated": true
+      },
+      "reminders": {
+        "anon": false,
+        "service_role": true,
+        "authenticated": true
+      },
+      "audit_logs": {
+        "anon": false,
+        "service_role": true,
+        "authenticated": true
+      },
+      "workspaces": {
+        "anon": false,
+        "service_role": true,
+        "authenticated": true
+      },
+      "sales_leads": {
+        "anon": false,
+        "service_role": true,
+        "authenticated": true
+      },
+      "ranch_assets": {
+        "anon": false,
+        "service_role": true,
+        "authenticated": true
+      },
+      "sale_packets": {
+        "anon": false,
+        "service_role": true,
+        "authenticated": true
+      },
+      "notifications": {
+        "anon": false,
+        "service_role": true,
+        "authenticated": true
+      },
+      "intake_batches": {
+        "anon": false,
+        "service_role": true,
+        "authenticated": true
+      },
+      "runtime_events": {
+        "anon": false,
+        "service_role": true,
+        "authenticated": true
+      },
+      "shared_listings": {
+        "anon": false,
+        "service_role": true,
+        "authenticated": true
+      },
+      "expense_receipts": {
+        "anon": false,
+        "service_role": true,
+        "authenticated": true
+      },
+      "horse_vet_access": {
+        "anon": false,
+        "service_role": true,
+        "authenticated": true
+      },
+      "ownership_records": {
+        "anon": false,
+        "service_role": true,
+        "authenticated": true
+      },
+      "document_templates": {
+        "anon": false,
+        "service_role": true,
+        "authenticated": true
+      },
+      "workspace_profiles": {
+        "anon": false,
+        "service_role": true,
+        "authenticated": true
+      },
+      "public_share_events": {
+        "anon": false,
+        "service_role": true,
+        "authenticated": true
+      },
+      "workspace_snapshots": {
+        "anon": false,
+        "service_role": true,
+        "authenticated": true
+      },
+      "workspace_invitations": {
+        "anon": false,
+        "service_role": true,
+        "authenticated": true
+      },
+      "workspace_memberships": {
+        "anon": false,
+        "service_role": true,
+        "authenticated": true
+      },
+      "account_deletion_events": {
+        "anon": false,
+        "service_role": true,
+        "authenticated": false
+      },
+      "document_processing_jobs": {
+        "anon": false,
+        "service_role": true,
+        "authenticated": true
+      },
+      "workspace_billing_customers": {
+        "anon": false,
+        "service_role": true,
+        "authenticated": true
+      },
+      "workspace_subscription_events": {
+        "anon": false,
+        "service_role": true,
+        "authenticated": true
+      },
+      "workspace_subscription_profiles": {
+        "anon": false,
+        "service_role": true,
+        "authenticated": true
+      }
     }
   }
 }
