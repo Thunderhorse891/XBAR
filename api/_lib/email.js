@@ -88,7 +88,11 @@ export async function sendEmail({ to, subject, html, text, fromName, fromEmail, 
     });
     if (!response.ok) {
       const detail = await response.text().catch(() => '');
-      return { ok: false, message: `Resend send failed (${response.status}): ${detail.slice(0, 200)}` };
+      return {
+        ok: false,
+        ...retryableRejection(response),
+        message: `Resend send failed (${response.status}): ${detail.slice(0, 200)}`,
+      };
     }
     return { ok: true, provider: 'resend' };
   }
@@ -119,10 +123,27 @@ export async function sendEmail({ to, subject, html, text, fromName, fromEmail, 
     });
     if (!response.ok) {
       const detail = await response.text().catch(() => '');
-      return { ok: false, message: `SendGrid send failed (${response.status}): ${detail.slice(0, 200)}` };
+      return {
+        ok: false,
+        ...retryableRejection(response),
+        message: `SendGrid send failed (${response.status}): ${detail.slice(0, 200)}`,
+      };
     }
     return { ok: true, provider: 'sendgrid' };
   }
 
   return { ok: false, skipped: true, message: 'No email provider configured.' };
+}
+
+function retryableRejection(response) {
+  // A 429 explicitly declines the request. Transport failures and 5xx may be
+  // ambiguous; permanent 4xx errors need a configuration/request correction.
+  if (response.status !== 429) return {};
+  const value = response.headers.get('retry-after');
+  const seconds = Number(value);
+  const retryAfterSeconds =
+    value && Number.isFinite(seconds) && seconds >= 0
+      ? seconds
+      : Math.max(0, (Date.parse(value || '') - Date.now()) / 1000) || 60;
+  return { retryable: true, retryAfterSeconds };
 }

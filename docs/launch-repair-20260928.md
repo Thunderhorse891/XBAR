@@ -69,14 +69,20 @@ is not an acceptable default recovery action.
   Failed batches return 500; completed counts require confirmed writes. Email
   counts describe provider acceptance. Notifications have deterministic IDs and
   email attempts use service-only durable claims keyed by workspace, reminder,
-  and due date. Repeated/concurrent runs cannot automatically resend a claimed
-  email. A crash or failure after claiming remains pending and returns failure
+  and due date. Repeated/concurrent runs cannot automatically resend an accepted
+  or ambiguous email attempt. A crash after claiming remains pending and returns failure
   for operator reconciliation; exactly-once delivery is not claimed.
   `notification_sent` and `completed` record durable in-app completion even if
   email fails; the response still reports the email failure. Pending email
   claims therefore cannot occupy the oldest 200 reminder slots indefinitely.
-  Email failures are reconciled separately, rather than automatically retried
-  by the in-app reminder scan.
+  Confirmed HTTP 429 declines have a separate bounded retry queue with at least
+  one hour of backoff and respect for Retry-After. A conditional database claim
+  allows only one concurrent retry; accepted requests are never retried.
+  Transport/5xx ambiguity and permanent request/configuration errors remain
+  held for reconciliation. The private request snapshot is cleared on acceptance.
+  Source `20260928170000_reminder_declined_retry.sql` adds the retry fields/index.
+  It was applied as hosted ledger `20260928163507_reminder_declined_retry`;
+  local reapplication and rolled-back live conditional-retry-claim checks passed.
   The additive `20260928163000_reminder_email_delivery_claims.sql` migration was
   applied as hosted ledger `20260928161212_reminder_email_delivery_claims`.
   Local reapplication and a rolled-back hosted uniqueness/grant/receipt check

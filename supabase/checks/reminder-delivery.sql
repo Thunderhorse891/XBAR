@@ -5,6 +5,7 @@ declare
   workspace uuid := (select id from public.workspaces limit 1);
   delivery uuid := gen_random_uuid();
   reminder text := 'delivery-contract-' || gen_random_uuid()::text;
+  retry_at timestamptz := now() - interval '1 hour';
 begin
   if has_table_privilege('anon', 'public.reminder_email_deliveries', 'SELECT')
     or has_table_privilege('authenticated', 'public.reminder_email_deliveries', 'INSERT')
@@ -20,6 +21,11 @@ begin
     raise exception 'Duplicate occurrence was accepted';
   exception when unique_violation then null;
   end;
+  update public.reminder_email_deliveries set next_attempt_at=retry_at where id=delivery;
+  update public.reminder_email_deliveries set next_attempt_at=null where id=delivery and next_attempt_at=retry_at;
+  if not found then raise exception 'Declined retry could not be claimed'; end if;
+  update public.reminder_email_deliveries set next_attempt_at=null where id=delivery and next_attempt_at=retry_at;
+  if found then raise exception 'Retry was claimed twice'; end if;
   update public.reminder_email_deliveries set status='accepted',accepted_at=now()
     where id=delivery and status='pending';
   if not found then raise exception 'Pending claim could not be acknowledged'; end if;

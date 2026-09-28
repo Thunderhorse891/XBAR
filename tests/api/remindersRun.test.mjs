@@ -32,6 +32,73 @@ async function invokeReminder() {
   return res;
 }
 
+for (const provider of ['resend', 'sendgrid']) {
+  test(`${provider} rate-limit rejection retries once after backoff, independently of in-app completion`, async () => {
+    setScenario({ honorCompletion: true });
+    const savedEnv = { ...process.env };
+    const savedFetch = globalThis.fetch;
+    const savedNow = Date.now;
+    let now = savedNow();
+    Date.now = () => now;
+    process.env.CRON_SECRET = 'fixture-secret';
+    delete process.env.RESEND_API_KEY;
+    delete process.env.SENDGRID_API_KEY;
+    process.env[provider === 'resend' ? 'RESEND_API_KEY' : 'SENDGRID_API_KEY'] = 'fixture-only';
+    let sends = 0;
+    globalThis.fetch = async () => {
+      sends += 1;
+      return new Response('{}', { status: sends === 1 ? 429 : 200, headers: { 'Retry-After': '7200' } });
+    };
+    try {
+      const initial = await invokeReminder();
+      assert.equal(initial.statusCode, 500);
+      assert.equal(initial.payload.completed, 1);
+      await invokeReminder();
+      assert.equal(sends, 1, 'respect provider backoff');
+      now += 3 * 60 * 60 * 1000;
+      const retries = await Promise.all([invokeReminder(), invokeReminder()]);
+      assert.equal(sends, 2, 'one concurrent retry may claim the declined delivery');
+      assert.equal(
+        retries.reduce((sum, res) => sum + res.payload.emailed, 0),
+        1,
+      );
+      await invokeReminder();
+      assert.equal(sends, 2, 'accepted delivery is never retried');
+      assert.equal(notificationCount(), 1);
+    } finally {
+      Date.now = savedNow;
+      globalThis.fetch = savedFetch;
+      process.env = savedEnv;
+    }
+  });
+}
+
+for (const status of [400, 500]) {
+  test(`provider ${status} needs reconciliation rather than an unsafe automatic retry`, async () => {
+    setScenario({ honorCompletion: true });
+    const savedFetch = globalThis.fetch;
+    const savedNow = Date.now;
+    let now = savedNow();
+    Date.now = () => now;
+    let sends = 0;
+    globalThis.fetch = async () => {
+      sends += 1;
+      return new Response('{}', { status });
+    };
+    try {
+      const initial = await runReminder(undefined, true);
+      assert.equal(initial.statusCode, 500);
+      assert.equal(initial.payload.completed, 1);
+      now += 3 * 60 * 60 * 1000;
+      await runReminder(undefined, true);
+      assert.equal(sends, 1);
+    } finally {
+      Date.now = savedNow;
+      globalThis.fetch = savedFetch;
+    }
+  });
+}
+
 test('200 uncertain emails cannot starve the next reminder in-app notification', async () => {
   setScenario({
     honorCompletion: true,

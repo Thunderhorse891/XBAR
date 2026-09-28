@@ -17,6 +17,7 @@ export function getSupabaseAdmin() {
       let operation = 'read';
       let row;
       const filters = {};
+      const upperBounds = {};
       let batchLimit = Infinity;
       const query = {
         select() {
@@ -26,7 +27,8 @@ export function getSupabaseAdmin() {
           filters[key] = value;
           return this;
         },
-        lte() {
+        lte(key, value) {
+          upperBounds[key] = value;
           return this;
         },
         order() {
@@ -67,11 +69,31 @@ export function getSupabaseAdmin() {
               }
             } else if (operation === 'update') {
               if (scenario.acceptError) result = { data: null, error: { message: 'accept write failed' } };
+              else if (
+                !rows.has(key) ||
+                Object.entries(filters).some(([field, value]) => rows.get(key)[field] !== value)
+              )
+                result = { data: [], error: null };
               else {
                 rows.set(key, { ...rows.get(key), ...row });
                 result = { data: [{ id: filters.id }], error: null };
               }
-            } else result = { data: rows.get(key) ?? null, error: null };
+            } else if (!filters.id)
+              result = {
+                data: [...rows.entries()]
+                  .filter(([key]) => key.startsWith('delivery:'))
+                  .map(([, value]) => value)
+                  .filter(
+                    (value) =>
+                      value.status === filters.status &&
+                      value.next_attempt_at &&
+                      value.next_attempt_at <= upperBounds.next_attempt_at,
+                  )
+                  .slice(0, batchLimit)
+                  .map((value) => ({ ...value })),
+                error: null,
+              };
+            else result = { data: rows.get(key) ?? null, error: null };
           } else if (operation === 'insert') {
             const key = `notification:${row.id}`;
             if (scenario.insertResult) result = scenario.insertResult;

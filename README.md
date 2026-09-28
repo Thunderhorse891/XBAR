@@ -392,6 +392,7 @@ psql -v ON_ERROR_STOP=1 "$DATABASE_URL" -f supabase/migrations/20260926000000_tr
 # Internal trial predicate: remove Supabase's default public execution grants.
 psql -v ON_ERROR_STOP=1 "$DATABASE_URL" -f supabase/migrations/20260928120000_trial_helper_private.sql
 psql -v ON_ERROR_STOP=1 "$DATABASE_URL" -f supabase/migrations/20260928163000_reminder_email_delivery_claims.sql
+psql -v ON_ERROR_STOP=1 "$DATABASE_URL" -f supabase/migrations/20260928170000_reminder_declined_retry.sql
 # Prove it on a throwaway database rather than trusting the diff. Load the
 # migration first, then:
 #   psql "$THROWAWAY_URL" -f supabase/checks/trial-entitlement.sql

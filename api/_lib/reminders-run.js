@@ -106,6 +106,12 @@ export default async function handler(req, res) {
       let channel = 'in-app';
       try {
         if (isEmailConfigured() && recipient.email) {
+          const request = {
+            to: recipient.email,
+            subject: `XBAR reminder: ${title} for ${horseName}`,
+            text: bodyText,
+            html: bodyHtml,
+          };
           const { data: claim, error: claimError } = await supabase
             .from('reminder_email_deliveries')
             .insert({
@@ -114,6 +120,7 @@ export default async function handler(req, res) {
               reminder_id: reminder.reminder_id,
               due_date: reminder.due_date,
               status: 'pending',
+              request,
             })
             .select('id')
             .single();
@@ -131,28 +138,15 @@ export default async function handler(req, res) {
           } else {
             if (claimError || claim?.id !== deliveryId)
               throw new Error(claimError?.message || 'Email delivery claim failed.');
-            // Never release this claim automatically: even a timeout can mean the
-            // provider accepted mail. This is at-most-one attempt, not exactly-once delivery.
-            const result = await sendEmail({
-              to: recipient.email,
-              subject: `XBAR reminder: ${title} for ${horseName}`,
-              text: bodyText,
-              html: bodyHtml,
-            });
+            // Never automatically reclaim an ambiguous attempt: even a timeout
+            // can mean the provider accepted mail. Only explicit 429 declines retry.
+            const result = await attemptClaimedEmail(supabase, deliveryId, request);
+            if (result.accepted) {
+              sent += 1;
+              channel = 'email';
+            }
             if (!result.ok)
               throw new Error(result.message || 'Email delivery was not accepted; reconciliation required.');
-            sent += 1;
-            channel = 'email';
-            const { data: accepted, error: acceptedError } = await supabase
-              .from('reminder_email_deliveries')
-              .update({ status: 'accepted', accepted_at: new Date().toISOString() })
-              .eq('id', deliveryId)
-              .eq('status', 'pending')
-              .select('id');
-            if (acceptedError || accepted?.length !== 1 || accepted[0].id !== deliveryId) {
-              throw new Error('Email accepted but its receipt could not be saved; reconciliation required.');
-            }
-            channel = 'email';
           }
         }
       } catch (emailError) {
@@ -178,6 +172,40 @@ export default async function handler(req, res) {
     }
   }
 
+  // Declined emails have their own bounded queue; neither pending ambiguous
+  // claims nor rejected requests consume the new in-app reminder batch.
+  if (isEmailConfigured()) {
+    const { data: retries, error: retryError } = await supabase
+      .from('reminder_email_deliveries')
+      .select('id, reminder_id, request, next_attempt_at')
+      .eq('status', 'pending')
+      .lte('next_attempt_at', new Date(Date.now()).toISOString())
+      .order('next_attempt_at', { ascending: true })
+      .limit(BATCH_LIMIT);
+    if (retryError) failures.push({ message: 'Email retry queue could not be read.' });
+    else
+      for (const delivery of retries || []) {
+        try {
+          const { data: claimed, error: claimError } = await supabase
+            .from('reminder_email_deliveries')
+            .update({ next_attempt_at: null })
+            .eq('id', delivery.id)
+            .eq('status', 'pending')
+            .eq('next_attempt_at', delivery.next_attempt_at)
+            .select('id');
+          if (claimError) throw new Error('Email retry could not be claimed.');
+          if (Array.isArray(claimed) && claimed.length === 0) continue; // Another worker owns it.
+          if (claimed?.length !== 1 || claimed[0].id !== delivery.id)
+            throw new Error('Email retry claim was not verified.');
+          const result = await attemptClaimedEmail(supabase, delivery.id, delivery.request);
+          if (result.accepted) sent += 1;
+          if (!result.ok) throw new Error(result.message);
+        } catch (retryFailure) {
+          failures.push({ reminderId: delivery.reminder_id, message: retryFailure.message });
+        }
+      }
+  }
+
   return sendJson(res, failures.length ? 500 : 200, {
     ok: failures.length === 0,
     processed: (reminders || []).length,
@@ -186,6 +214,29 @@ export default async function handler(req, res) {
     inAppOnly,
     failures,
   });
+}
+
+async function attemptClaimedEmail(supabase, id, request) {
+  if (!request || typeof request.to !== 'string' || typeof request.subject !== 'string')
+    throw new Error('Email request is missing; reconciliation required.');
+  const result = await sendEmail(request);
+  if (!result.ok && !result.retryable) return result;
+  const update = result.ok
+    ? { status: 'accepted', accepted_at: new Date().toISOString(), request: null, next_attempt_at: null }
+    : { next_attempt_at: new Date(Date.now() + Math.max(3600, result.retryAfterSeconds || 60) * 1000).toISOString() };
+  const { data, error } = await supabase
+    .from('reminder_email_deliveries')
+    .update(update)
+    .eq('id', id)
+    .eq('status', 'pending')
+    .select('id');
+  if (error || data?.length !== 1 || data[0].id !== id)
+    return {
+      ok: false,
+      accepted: result.ok,
+      message: 'Email result could not be saved; reconciliation required.',
+    };
+  return { ...result, accepted: result.ok };
 }
 
 function reminderDeliveryId(reminder) {
