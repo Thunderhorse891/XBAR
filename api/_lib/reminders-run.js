@@ -104,54 +104,61 @@ export default async function handler(req, res) {
       }
 
       let channel = 'in-app';
-      if (isEmailConfigured() && recipient.email) {
-        const { data: claim, error: claimError } = await supabase
-          .from('reminder_email_deliveries')
-          .insert({
-            id: deliveryId,
-            workspace_id: reminder.workspace_id,
-            reminder_id: reminder.reminder_id,
-            due_date: reminder.due_date,
-            status: 'pending',
-          })
-          .select('id')
-          .single();
-        if (claimError?.code === '23505') {
-          const { data: prior, error: priorError } = await supabase
+      try {
+        if (isEmailConfigured() && recipient.email) {
+          const { data: claim, error: claimError } = await supabase
             .from('reminder_email_deliveries')
-            .select('status')
-            .eq('id', deliveryId)
-            .eq('workspace_id', reminder.workspace_id)
-            .maybeSingle();
-          if (priorError || prior?.status !== 'accepted') {
-            throw new Error('Email delivery is pending or uncertain; reconcile the provider result before retrying.');
+            .insert({
+              id: deliveryId,
+              workspace_id: reminder.workspace_id,
+              reminder_id: reminder.reminder_id,
+              due_date: reminder.due_date,
+              status: 'pending',
+            })
+            .select('id')
+            .single();
+          if (claimError?.code === '23505') {
+            const { data: prior, error: priorError } = await supabase
+              .from('reminder_email_deliveries')
+              .select('status')
+              .eq('id', deliveryId)
+              .eq('workspace_id', reminder.workspace_id)
+              .maybeSingle();
+            if (priorError || prior?.status !== 'accepted') {
+              throw new Error('Email delivery is pending or uncertain; reconcile the provider result before retrying.');
+            }
+            channel = 'email';
+          } else {
+            if (claimError || claim?.id !== deliveryId)
+              throw new Error(claimError?.message || 'Email delivery claim failed.');
+            // Never release this claim automatically: even a timeout can mean the
+            // provider accepted mail. This is at-most-one attempt, not exactly-once delivery.
+            const result = await sendEmail({
+              to: recipient.email,
+              subject: `XBAR reminder: ${title} for ${horseName}`,
+              text: bodyText,
+              html: bodyHtml,
+            });
+            if (!result.ok)
+              throw new Error(result.message || 'Email delivery was not accepted; reconciliation required.');
+            sent += 1;
+            channel = 'email';
+            const { data: accepted, error: acceptedError } = await supabase
+              .from('reminder_email_deliveries')
+              .update({ status: 'accepted', accepted_at: new Date().toISOString() })
+              .eq('id', deliveryId)
+              .eq('status', 'pending')
+              .select('id');
+            if (acceptedError || accepted?.length !== 1 || accepted[0].id !== deliveryId) {
+              throw new Error('Email accepted but its receipt could not be saved; reconciliation required.');
+            }
+            channel = 'email';
           }
-          channel = 'email';
-        } else {
-          if (claimError || claim?.id !== deliveryId)
-            throw new Error(claimError?.message || 'Email delivery claim failed.');
-          // Never release this claim automatically: even a timeout can mean the
-          // provider accepted mail. This is at-most-one attempt, not exactly-once delivery.
-          const result = await sendEmail({
-            to: recipient.email,
-            subject: `XBAR reminder: ${title} for ${horseName}`,
-            text: bodyText,
-            html: bodyHtml,
-          });
-          if (!result.ok)
-            throw new Error(result.message || 'Email delivery was not accepted; reconciliation required.');
-          sent += 1;
-          const { data: accepted, error: acceptedError } = await supabase
-            .from('reminder_email_deliveries')
-            .update({ status: 'accepted', accepted_at: new Date().toISOString() })
-            .eq('id', deliveryId)
-            .eq('status', 'pending')
-            .select('id');
-          if (acceptedError || accepted?.length !== 1 || accepted[0].id !== deliveryId) {
-            throw new Error('Email accepted but its receipt could not be saved; reconciliation required.');
-          }
-          channel = 'email';
         }
+      } catch (emailError) {
+        // In-app delivery is already durable. Complete that channel even when
+        // email needs reconciliation, so pending claims cannot fill every batch.
+        failures.push({ reminderId: reminder.reminder_id, message: emailError.message });
       }
 
       const { data: updated, error: updateError } = await supabase

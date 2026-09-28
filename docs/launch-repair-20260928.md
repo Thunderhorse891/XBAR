@@ -72,6 +72,11 @@ is not an acceptable default recovery action.
   and due date. Repeated/concurrent runs cannot automatically resend a claimed
   email. A crash or failure after claiming remains pending and returns failure
   for operator reconciliation; exactly-once delivery is not claimed.
+  `notification_sent` and `completed` record durable in-app completion even if
+  email fails; the response still reports the email failure. Pending email
+  claims therefore cannot occupy the oldest 200 reminder slots indefinitely.
+  Email failures are reconciled separately, rather than automatically retried
+  by the in-app reminder scan.
   The additive `20260928163000_reminder_email_delivery_claims.sql` migration was
   applied as hosted ledger `20260928161212_reminder_email_delivery_claims`.
   Local reapplication and a rolled-back hosted uniqueness/grant/receipt check

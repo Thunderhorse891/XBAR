@@ -32,6 +32,37 @@ async function invokeReminder() {
   return res;
 }
 
+test('200 uncertain emails cannot starve the next reminder in-app notification', async () => {
+  setScenario({
+    honorCompletion: true,
+    reminders: Array.from({ length: 201 }, (_, index) => ({
+      workspace_id: 'w1',
+      reminder_id: `r${index}`,
+      horse_id: 'h1',
+      type: 'farrier',
+      due_date: '2026-09-28',
+    })),
+  });
+  const savedFetch = globalThis.fetch;
+  let sends = 0;
+  globalThis.fetch = async () => {
+    sends += 1;
+    throw new Error('ambiguous provider failure');
+  };
+  try {
+    const first = await runReminder(undefined, true);
+    const next = await runReminder(undefined, true);
+    assert.equal(first.payload.processed, 200);
+    assert.equal(next.payload.processed, 1);
+    assert.equal(first.payload.completed, 200);
+    assert.equal(notificationCount(), 201);
+    assert.equal(sends, 201);
+    assert.equal(first.statusCode, 500);
+  } finally {
+    globalThis.fetch = savedFetch;
+  }
+});
+
 for (const scenario of [
   { insertResult: { data: null, error: { message: 'insert failed' } } },
   { updateResult: { data: null, error: { message: 'completion failed' } } },

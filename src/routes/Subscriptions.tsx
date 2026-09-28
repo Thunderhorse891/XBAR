@@ -93,6 +93,7 @@ export default function Subscriptions() {
   const [verifiedMissingBillingRow, setVerifiedMissingBillingRow] = useState<{
     workspaceId: string;
     profile: SubscriptionProfile;
+    status: 'missing' | 'present' | 'error';
   } | null>(null);
   useEffect(() => {
     if (!hasManagedIdentity || !workspaceId) return;
@@ -100,12 +101,14 @@ export default function Subscriptions() {
     void refreshWorkspaceSubscriptionProfile(workspaceId)
       .then((result) => {
         if (!cancelled)
-          setVerifiedMissingBillingRow(
-            result.ok && result.profile === null ? { workspaceId, profile: subscription } : null,
-          );
+          setVerifiedMissingBillingRow({
+            workspaceId,
+            profile: subscription,
+            status: !result.ok ? 'error' : result.profile === null ? 'missing' : 'present',
+          });
       })
       .catch(() => {
-        if (!cancelled) setVerifiedMissingBillingRow(null);
+        if (!cancelled) setVerifiedMissingBillingRow({ workspaceId, profile: subscription, status: 'error' });
       });
     return () => {
       cancelled = true;
@@ -172,12 +175,22 @@ export default function Subscriptions() {
   const trialState = getTrialState(subscription.trialStart);
   const trialDaysLeft = trialState === 'active' ? trialDaysRemaining(subscription.trialStart) : 0;
   const trialCopy = trialStatusCopy(trialState, trialDaysLeft);
+  const billingRowVerified =
+    verifiedMissingBillingRow?.workspaceId === workspaceId && verifiedMissingBillingRow?.profile === subscription;
+  const trialVerificationRequired =
+    hasManagedIdentity && starterSetup && subscription.billingState === 'Manual Billing';
+  const trialVerificationBlocked =
+    trialVerificationRequired && (!billingRowVerified || verifiedMissingBillingRow?.status === 'error');
+  const trialVerificationLabel = trialVerificationBlocked
+    ? billingRowVerified
+      ? 'Billing check failed — refresh to retry'
+      : 'Checking trial eligibility…'
+    : null;
   const trialCanStart = canStartTrial(subscription, {
     nativeApp,
     canManageBilling,
     localOrMissingBillingRow:
-      !hasManagedIdentity ||
-      (verifiedMissingBillingRow?.workspaceId === workspaceId && verifiedMissingBillingRow?.profile === subscription),
+      !hasManagedIdentity || (billingRowVerified && verifiedMissingBillingRow?.status === 'missing'),
   });
   /*
    * Where a workspace that already has a subscription is sent instead.
@@ -552,6 +565,7 @@ export default function Subscriptions() {
   };
 
   const startTrial = async () => {
+    if (trialVerificationBlocked) return;
     if (subscriptionRecoverable && billingPortalAction) {
       openBillingPortal();
       return;
@@ -781,21 +795,23 @@ export default function Subscriptions() {
             <button
               type="button"
               onClick={startTrial}
-              disabled={trialState === 'none' && trialCanStart && trialStarting}
+              disabled={trialVerificationBlocked || (trialState === 'none' && trialCanStart && trialStarting)}
             >
-              {subscriptionRecoverable && billingPortalAction
-                ? billingPortalAction.label
-                : !workspaceReady
-                  ? 'Continue setup'
-                  : trialState === 'active'
-                    ? 'Continue'
-                    : trialState === 'expired'
+              {trialVerificationLabel
+                ? trialVerificationLabel
+                : subscriptionRecoverable && billingPortalAction
+                  ? billingPortalAction.label
+                  : !workspaceReady
+                    ? 'Continue setup'
+                    : trialState === 'active'
                       ? 'Continue'
-                      : trialCanStart
-                        ? trialStarting
-                          ? 'Starting trial…'
-                          : 'Start 14-day trial'
-                        : 'Continue'}
+                      : trialState === 'expired'
+                        ? 'Continue'
+                        : trialCanStart
+                          ? trialStarting
+                            ? 'Starting trial…'
+                            : 'Start 14-day trial'
+                          : 'Continue'}
             </button>
             <small>
               {starterSetup
@@ -982,15 +998,17 @@ export default function Subscriptions() {
             className="checkout-secondary-action"
             type="button"
             onClick={startTrial}
-            disabled={trialCanStart && trialStarting}
+            disabled={trialVerificationBlocked || (trialCanStart && trialStarting)}
           >
-            {subscriptionRecoverable && billingPortalAction
-              ? billingPortalAction.label
-              : trialCanStart
-                ? trialStarting
-                  ? 'Starting trial…'
-                  : 'Start 14-day Professional trial instead'
-                : 'Continue with Starter setup'}
+            {trialVerificationLabel
+              ? trialVerificationLabel
+              : subscriptionRecoverable && billingPortalAction
+                ? billingPortalAction.label
+                : trialCanStart
+                  ? trialStarting
+                    ? 'Starting trial…'
+                    : 'Start 14-day Professional trial instead'
+                  : 'Continue with Starter setup'}
           </button>
           {/*
             Said plainly, because the alternative is a customer staring at a

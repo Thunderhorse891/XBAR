@@ -1,6 +1,7 @@
 export const writes = [];
 let scenario = {};
 const rows = new Map();
+const completed = new Set();
 export function notificationCount() {
   return [...rows.keys()].filter((key) => key.startsWith('notification:')).length;
 }
@@ -8,6 +9,7 @@ export function setScenario(next = {}) {
   scenario = next;
   writes.length = 0;
   rows.clear();
+  completed.clear();
 }
 export function getSupabaseAdmin() {
   return {
@@ -15,6 +17,7 @@ export function getSupabaseAdmin() {
       let operation = 'read';
       let row;
       const filters = {};
+      let batchLimit = Infinity;
       const query = {
         select() {
           return this;
@@ -29,7 +32,8 @@ export function getSupabaseAdmin() {
         order() {
           return this;
         },
-        limit() {
+        limit(value) {
+          batchLimit = value;
           return this;
         },
         maybeSingle() {
@@ -76,14 +80,19 @@ export function getSupabaseAdmin() {
               rows.set(key, { ...row });
               result = { data: row, error: null };
             }
-          } else if (operation === 'update')
-            result = scenario.updateResult ?? { data: [{ reminder_id: 'r1' }], error: null };
-          else if (table === 'notifications') result = { data: rows.get(`notification:${filters.id}`), error: null };
+          } else if (operation === 'update') {
+            result = scenario.updateResult ?? { data: [{ reminder_id: filters.reminder_id }], error: null };
+            if (!result.error && result.data?.length) completed.add(filters.reminder_id);
+          } else if (table === 'notifications') result = { data: rows.get(`notification:${filters.id}`), error: null };
           else if (table === 'reminders')
             result = {
-              data: [
-                { workspace_id: 'w1', reminder_id: 'r1', horse_id: 'h1', type: 'farrier', due_date: '2026-09-28' },
-              ],
+              data: (
+                scenario.reminders ?? [
+                  { workspace_id: 'w1', reminder_id: 'r1', horse_id: 'h1', type: 'farrier', due_date: '2026-09-28' },
+                ]
+              )
+                .filter((item) => !scenario.honorCompletion || !completed.has(item.reminder_id))
+                .slice(0, batchLimit),
               error: null,
             };
           else if (table === 'workspaces') result = { data: { owner_user_id: 'u1' }, error: null };
