@@ -1,4 +1,4 @@
-import { timingSafeEqual } from 'node:crypto';
+import { createHash, timingSafeEqual } from 'node:crypto';
 import { sendJson } from './http.js';
 import { getSupabaseAdmin } from './supabase-admin.js';
 import { sendEmail, isEmailConfigured } from './email.js';
@@ -6,7 +6,8 @@ import { sendEmail, isEmailConfigured } from './email.js';
 // Daily background job (Vercel cron, see vercel.json). For each reminder due
 // within the next 7 days that hasn't been notified: email the workspace's
 // operations contact (falling back to the workspace owner), write an in-app
-// notification, then mark notification_sent so it never double-fires.
+// notification, then mark notification_sent. Durable email claims prevent
+// repeated/concurrent attempts; ambiguous outcomes require reconciliation.
 
 const LOOKAHEAD_DAYS = 7;
 const BATCH_LIMIT = 200;
@@ -49,6 +50,7 @@ export default async function handler(req, res) {
   }
 
   let sent = 0;
+  let completed = 0;
   let inAppOnly = 0;
   const failures = [];
   const recipientCache = new Map();
@@ -73,52 +75,175 @@ export default async function handler(req, res) {
         `<p>${escapeHtml(typeLabel)} for ${escapeHtml(horseName)} is due on ${escapeHtml(dueLabel)}. ` +
         `<a href="${escapeHtml(appLink)}">Open XBAR</a> to review the record and schedule the appointment.</p>`;
 
+      const deliveryId = reminderDeliveryId(reminder);
+      const { data: notification, error: notificationError } = await supabase
+        .from('notifications')
+        .insert({
+          id: deliveryId,
+          workspace_id: reminder.workspace_id,
+          user_id: recipient.userId,
+          reminder_id: reminder.reminder_id,
+          title,
+          body: bodyText,
+          channel: 'in-app',
+        })
+        .select('id')
+        .single();
+      if (notificationError?.code === '23505') {
+        const { data: existing, error: existingError } = await supabase
+          .from('notifications')
+          .select('id')
+          .eq('id', deliveryId)
+          .eq('workspace_id', reminder.workspace_id)
+          .eq('reminder_id', reminder.reminder_id)
+          .maybeSingle();
+        if (existingError || existing?.id !== deliveryId)
+          throw new Error('Notification identity could not be verified.');
+      } else if (notificationError || notification?.id !== deliveryId) {
+        throw new Error(notificationError?.message || 'Notification insert returned no row.');
+      }
+
       let channel = 'in-app';
-      if (isEmailConfigured() && recipient.email) {
-        const result = await sendEmail({
-          to: recipient.email,
-          subject: `XBAR reminder: ${title} for ${horseName}`,
-          text: bodyText,
-          html: bodyHtml,
-        });
-        if (result.ok) {
-          channel = 'email';
-          sent += 1;
-        } else if (!result.skipped) {
-          failures.push({ reminderId: reminder.reminder_id, message: result.message });
-          continue; // Leave notification_sent=false so the next run retries.
+      try {
+        if (isEmailConfigured() && recipient.email) {
+          const request = {
+            to: recipient.email,
+            subject: `XBAR reminder: ${title} for ${horseName}`,
+            text: bodyText,
+            html: bodyHtml,
+          };
+          const { data: claim, error: claimError } = await supabase
+            .from('reminder_email_deliveries')
+            .insert({
+              id: deliveryId,
+              workspace_id: reminder.workspace_id,
+              reminder_id: reminder.reminder_id,
+              due_date: reminder.due_date,
+              status: 'pending',
+              request,
+            })
+            .select('id')
+            .single();
+          if (claimError?.code === '23505') {
+            const { data: prior, error: priorError } = await supabase
+              .from('reminder_email_deliveries')
+              .select('status')
+              .eq('id', deliveryId)
+              .eq('workspace_id', reminder.workspace_id)
+              .maybeSingle();
+            if (priorError || prior?.status !== 'accepted') {
+              throw new Error('Email delivery is pending or uncertain; reconcile the provider result before retrying.');
+            }
+            channel = 'email';
+          } else {
+            if (claimError || claim?.id !== deliveryId)
+              throw new Error(claimError?.message || 'Email delivery claim failed.');
+            // Never automatically reclaim an ambiguous attempt: even a timeout
+            // can mean the provider accepted mail. Only explicit 429 declines retry.
+            const result = await attemptClaimedEmail(supabase, deliveryId, request);
+            if (result.accepted) {
+              sent += 1;
+              channel = 'email';
+            }
+            if (!result.ok)
+              throw new Error(result.message || 'Email delivery was not accepted; reconciliation required.');
+          }
         }
-      }
-      if (channel === 'in-app') {
-        inAppOnly += 1;
+      } catch (emailError) {
+        // In-app delivery is already durable. Complete that channel even when
+        // email needs reconciliation, so pending claims cannot fill every batch.
+        failures.push({ reminderId: reminder.reminder_id, message: emailError.message });
       }
 
-      await supabase.from('notifications').insert({
-        workspace_id: reminder.workspace_id,
-        user_id: recipient.userId,
-        reminder_id: reminder.reminder_id,
-        title,
-        body: bodyText,
-        channel,
-      });
-
-      await supabase
+      const { data: updated, error: updateError } = await supabase
         .from('reminders')
         .update({ notification_sent: true, updated_at: new Date().toISOString() })
         .eq('workspace_id', reminder.workspace_id)
-        .eq('reminder_id', reminder.reminder_id);
+        .eq('reminder_id', reminder.reminder_id)
+        .eq('due_date', reminder.due_date)
+        .select('reminder_id');
+      if (updateError || updated?.length !== 1 || updated[0].reminder_id !== reminder.reminder_id) {
+        throw new Error(updateError?.message || 'Reminder completion did not update the expected row.');
+      }
+      completed += 1;
+      if (channel === 'in-app') inAppOnly += 1;
     } catch (jobError) {
       failures.push({ reminderId: reminder.reminder_id, message: jobError.message });
     }
   }
 
-  return sendJson(res, 200, {
-    ok: true,
+  // Declined emails have their own bounded queue; neither pending ambiguous
+  // claims nor rejected requests consume the new in-app reminder batch.
+  if (isEmailConfigured()) {
+    const { data: retries, error: retryError } = await supabase
+      .from('reminder_email_deliveries')
+      .select('id, reminder_id, request, next_attempt_at')
+      .eq('status', 'pending')
+      .lte('next_attempt_at', new Date(Date.now()).toISOString())
+      .order('next_attempt_at', { ascending: true })
+      .limit(BATCH_LIMIT);
+    if (retryError) failures.push({ message: 'Email retry queue could not be read.' });
+    else
+      for (const delivery of retries || []) {
+        try {
+          const { data: claimed, error: claimError } = await supabase
+            .from('reminder_email_deliveries')
+            .update({ next_attempt_at: null })
+            .eq('id', delivery.id)
+            .eq('status', 'pending')
+            .eq('next_attempt_at', delivery.next_attempt_at)
+            .select('id');
+          if (claimError) throw new Error('Email retry could not be claimed.');
+          if (Array.isArray(claimed) && claimed.length === 0) continue; // Another worker owns it.
+          if (claimed?.length !== 1 || claimed[0].id !== delivery.id)
+            throw new Error('Email retry claim was not verified.');
+          const result = await attemptClaimedEmail(supabase, delivery.id, delivery.request);
+          if (result.accepted) sent += 1;
+          if (!result.ok) throw new Error(result.message);
+        } catch (retryFailure) {
+          failures.push({ reminderId: delivery.reminder_id, message: retryFailure.message });
+        }
+      }
+  }
+
+  return sendJson(res, failures.length ? 500 : 200, {
+    ok: failures.length === 0,
     processed: (reminders || []).length,
+    completed,
     emailed: sent,
     inAppOnly,
     failures,
   });
+}
+
+async function attemptClaimedEmail(supabase, id, request) {
+  if (!request || typeof request.to !== 'string' || typeof request.subject !== 'string')
+    throw new Error('Email request is missing; reconciliation required.');
+  const result = await sendEmail(request);
+  if (!result.ok && !result.retryable) return result;
+  const update = result.ok
+    ? { status: 'accepted', accepted_at: new Date().toISOString(), request: null, next_attempt_at: null }
+    : { next_attempt_at: new Date(Date.now() + Math.max(3600, result.retryAfterSeconds || 60) * 1000).toISOString() };
+  const { data, error } = await supabase
+    .from('reminder_email_deliveries')
+    .update(update)
+    .eq('id', id)
+    .eq('status', 'pending')
+    .select('id');
+  if (error || data?.length !== 1 || data[0].id !== id)
+    return {
+      ok: false,
+      accepted: result.ok,
+      message: 'Email result could not be saved; reconciliation required.',
+    };
+  return { ...result, accepted: result.ok };
+}
+
+function reminderDeliveryId(reminder) {
+  const hex = createHash('sha256')
+    .update(JSON.stringify(['xbar-reminder-v1', reminder.workspace_id, reminder.reminder_id, reminder.due_date]))
+    .digest('hex');
+  return `${hex.slice(0, 8)}-${hex.slice(8, 12)}-5${hex.slice(13, 16)}-a${hex.slice(17, 20)}-${hex.slice(20, 32)}`;
 }
 
 async function resolveRecipient(supabase, workspaceId, cache) {

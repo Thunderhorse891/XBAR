@@ -33,11 +33,11 @@ import {
   recommendedTier,
 } from '@/lib/subscriptionDecision';
 import { subscriptionPlans } from '@/lib/subscriptionPlans';
-import { getTrialState, trialDaysRemaining, trialStatusCopy } from '@/lib/trialSubscription';
+import { canStartTrial, getTrialState, trialDaysRemaining, trialStatusCopy } from '@/lib/trialSubscription';
 import { useCloudStore } from '@/store/useCloudStore';
 import { useUiStore } from '@/store/useUiStore';
 import { useCurrentRoleCapability, useWorkspaceReady, useXbarStore } from '@/store/useXbarStore';
-import type { SubscriptionTier } from '@/types/xbar';
+import type { SubscriptionProfile, SubscriptionTier } from '@/types/xbar';
 import './checkoutExperience.css';
 
 const tiers: SubscriptionTier[] = ['Starter', 'Professional', 'Ranch Ops', 'Enterprise'];
@@ -90,6 +90,30 @@ export default function Subscriptions() {
   const decisionConfig = subscriptionPlans[decisionTier];
   const decisionProfile = revenuePlanMatrix[decisionTier];
   const hasManagedIdentity = Boolean(session?.access_token && workspaceId);
+  const [verifiedMissingBillingRow, setVerifiedMissingBillingRow] = useState<{
+    workspaceId: string;
+    profile: SubscriptionProfile;
+    status: 'missing' | 'present' | 'error';
+  } | null>(null);
+  useEffect(() => {
+    if (!hasManagedIdentity || !workspaceId) return;
+    let cancelled = false;
+    void refreshWorkspaceSubscriptionProfile(workspaceId)
+      .then((result) => {
+        if (!cancelled)
+          setVerifiedMissingBillingRow({
+            workspaceId,
+            profile: subscription,
+            status: !result.ok ? 'error' : result.profile === null ? 'missing' : 'present',
+          });
+      })
+      .catch(() => {
+        if (!cancelled) setVerifiedMissingBillingRow({ workspaceId, profile: subscription, status: 'error' });
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [hasManagedIdentity, workspaceId, subscription, session?.access_token]);
   const billingEnabled = stripeConfig.managedBillingEnabled;
   const selectedPaymentLink = Boolean(getStripePaymentLink(decisionTier, billingPeriod));
   // The annual toggle is only useful when annual can actually be bought:
@@ -151,7 +175,23 @@ export default function Subscriptions() {
   const trialState = getTrialState(subscription.trialStart);
   const trialDaysLeft = trialState === 'active' ? trialDaysRemaining(subscription.trialStart) : 0;
   const trialCopy = trialStatusCopy(trialState, trialDaysLeft);
-  const trialCanStart = trialState === 'none' && !nativeApp && canManageBilling && !subscriptionActive;
+  const billingRowVerified =
+    verifiedMissingBillingRow?.workspaceId === workspaceId && verifiedMissingBillingRow?.profile === subscription;
+  const trialVerificationRequired =
+    hasManagedIdentity && starterSetup && subscription.billingState === 'Manual Billing';
+  const trialVerificationBlocked =
+    trialVerificationRequired && (!billingRowVerified || verifiedMissingBillingRow?.status === 'error');
+  const trialVerificationLabel = trialVerificationBlocked
+    ? billingRowVerified
+      ? 'Billing check failed — refresh to retry'
+      : 'Checking trial eligibility…'
+    : null;
+  const trialCanStart = canStartTrial(subscription, {
+    nativeApp,
+    canManageBilling,
+    localOrMissingBillingRow:
+      !hasManagedIdentity || (billingRowVerified && verifiedMissingBillingRow?.status === 'missing'),
+  });
   /*
    * Where a workspace that already has a subscription is sent instead.
    *
@@ -525,6 +565,11 @@ export default function Subscriptions() {
   };
 
   const startTrial = async () => {
+    if (trialVerificationBlocked) return;
+    if (subscriptionRecoverable && billingPortalAction) {
+      openBillingPortal();
+      return;
+    }
     // First-run onboarding keeps its own path: this screen doubles as the
     // setup flow before the workspace is ready.
     if (!workspaceReady) {
@@ -750,19 +795,23 @@ export default function Subscriptions() {
             <button
               type="button"
               onClick={startTrial}
-              disabled={trialState === 'none' && trialCanStart && trialStarting}
+              disabled={trialVerificationBlocked || (trialState === 'none' && trialCanStart && trialStarting)}
             >
-              {!workspaceReady
-                ? 'Continue setup'
-                : trialState === 'active'
-                  ? 'Continue'
-                  : trialState === 'expired'
-                    ? 'Continue'
-                    : trialCanStart
-                      ? trialStarting
-                        ? 'Starting trial…'
-                        : 'Start 14-day trial'
-                      : 'Continue'}
+              {trialVerificationLabel
+                ? trialVerificationLabel
+                : subscriptionRecoverable && billingPortalAction
+                  ? billingPortalAction.label
+                  : !workspaceReady
+                    ? 'Continue setup'
+                    : trialState === 'active'
+                      ? 'Continue'
+                      : trialState === 'expired'
+                        ? 'Continue'
+                        : trialCanStart
+                          ? trialStarting
+                            ? 'Starting trial…'
+                            : 'Start 14-day trial'
+                          : 'Continue'}
             </button>
             <small>
               {starterSetup
@@ -949,13 +998,17 @@ export default function Subscriptions() {
             className="checkout-secondary-action"
             type="button"
             onClick={startTrial}
-            disabled={trialCanStart && trialStarting}
+            disabled={trialVerificationBlocked || (trialCanStart && trialStarting)}
           >
-            {trialCanStart
-              ? trialStarting
-                ? 'Starting trial…'
-                : 'Start 14-day Professional trial instead'
-              : 'Continue with Starter setup'}
+            {trialVerificationLabel
+              ? trialVerificationLabel
+              : subscriptionRecoverable && billingPortalAction
+                ? billingPortalAction.label
+                : trialCanStart
+                  ? trialStarting
+                    ? 'Starting trial…'
+                    : 'Start 14-day Professional trial instead'
+                  : 'Continue with Starter setup'}
           </button>
           {/*
             Said plainly, because the alternative is a customer staring at a

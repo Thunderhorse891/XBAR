@@ -170,6 +170,17 @@ reported, never faked.
 
 ### Supabase migration rollout and recorded deployment
 
+September 28 update: the billing-period, trial, private-media, trial-history,
+invalid-date and atomic-event corrections are applied on `xbar-records` as
+`20260928153909_xbar_launch_billing_trial_private_media_reconciliation`.
+The internal trial grant correction is recorded as
+`20260928154229_trial_helper_private`. See
+[the repair record](docs/launch-repair-20260928.md) for the six source files,
+verification and recovery boundaries. Do not replay those files merely because
+their original filenames do not appear individually in the hosted ledger.
+Run `supabase/checks/launch-readiness.sql` for a read-only schema check;
+`/api/health` checks configuration and does not prove schema compatibility.
+
 On `xbar-records` (`uxvwfepyothlakhqazwv`), the Supabase migration ledger checked
 on September 10, 2026 records steps 1–5 below as applied on September 4. Step 6
 was applied on September 10 as `20260910173613_private_share_token_fail_closed`;
@@ -356,6 +367,11 @@ psql "$DATABASE_URL" -f supabase/migrations/20260924120000_billing_period.sql
 #     change that wrote it.
 psql "$DATABASE_URL" -f supabase/migrations/20260924223000_preserve_trial_in_event_rpc.sql
 
+# Merge trial history from the actual conflict row, not an earlier read.
+# Validate the trial-event-database CI contract and obtain explicit production
+# migration approval before applying. The Python/schema fixtures are CI-only.
+psql -v ON_ERROR_STOP=1 "$DATABASE_URL" -f supabase/migrations/20260926003000_atomic_trial_event_merge.sql
+
 # 10. EXPAND before deploying the workspace-path client. Retains uploader paths
 #    for older app versions. Includes authenticated RLS checks with rolled-back
 #    fixtures. Run atomically so a failed assertion rolls back policy changes.
@@ -367,6 +383,16 @@ psql -1 -v ON_ERROR_STOP=1 "$DATABASE_URL" -f supabase/migrations/20260912055000
 #     to Professional in the database triggers. A trial only ever raises a
 #     baseline workspace — paid and comped tiers are untouched.
 psql "$DATABASE_URL" -f supabase/migrations/20260924130000_trial_entitlement.sql
+
+# Reject impossible trial dates without aborting database capacity checks.
+# Validate both supabase/checks/trial-*.sql files on a disposable database
+# first. Production application still requires the owner's explicit approval.
+psql -v ON_ERROR_STOP=1 "$DATABASE_URL" -f supabase/migrations/20260926000000_trial_dates_fail_closed.sql
+
+# Internal trial predicate: remove Supabase's default public execution grants.
+psql -v ON_ERROR_STOP=1 "$DATABASE_URL" -f supabase/migrations/20260928120000_trial_helper_private.sql
+psql -v ON_ERROR_STOP=1 "$DATABASE_URL" -f supabase/migrations/20260928163000_reminder_email_delivery_claims.sql
+psql -v ON_ERROR_STOP=1 "$DATABASE_URL" -f supabase/migrations/20260928170000_reminder_declined_retry.sql
 # Prove it on a throwaway database rather than trusting the diff. Load the
 # migration first, then:
 #   psql "$THROWAWAY_URL" -f supabase/checks/trial-entitlement.sql
