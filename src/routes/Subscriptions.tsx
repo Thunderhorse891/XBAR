@@ -33,7 +33,7 @@ import {
   recommendedTier,
 } from '@/lib/subscriptionDecision';
 import { subscriptionPlans } from '@/lib/subscriptionPlans';
-import { getTrialState, trialDaysRemaining, trialStatusCopy } from '@/lib/trialSubscription';
+import { canStartTrial, getTrialState, trialDaysRemaining, trialStatusCopy } from '@/lib/trialSubscription';
 import { useCloudStore } from '@/store/useCloudStore';
 import { useUiStore } from '@/store/useUiStore';
 import { useCurrentRoleCapability, useWorkspaceReady, useXbarStore } from '@/store/useXbarStore';
@@ -151,7 +151,7 @@ export default function Subscriptions() {
   const trialState = getTrialState(subscription.trialStart);
   const trialDaysLeft = trialState === 'active' ? trialDaysRemaining(subscription.trialStart) : 0;
   const trialCopy = trialStatusCopy(trialState, trialDaysLeft);
-  const trialCanStart = trialState === 'none' && !nativeApp && canManageBilling && !subscriptionActive;
+  const trialCanStart = canStartTrial(subscription, { nativeApp, canManageBilling });
   /*
    * Where a workspace that already has a subscription is sent instead.
    *
@@ -525,6 +525,10 @@ export default function Subscriptions() {
   };
 
   const startTrial = async () => {
+    if (subscriptionRecoverable && billingPortalAction) {
+      openBillingPortal();
+      return;
+    }
     // First-run onboarding keeps its own path: this screen doubles as the
     // setup flow before the workspace is ready.
     if (!workspaceReady) {
@@ -752,17 +756,19 @@ export default function Subscriptions() {
               onClick={startTrial}
               disabled={trialState === 'none' && trialCanStart && trialStarting}
             >
-              {!workspaceReady
-                ? 'Continue setup'
-                : trialState === 'active'
-                  ? 'Continue'
-                  : trialState === 'expired'
+              {subscriptionRecoverable && billingPortalAction
+                ? billingPortalAction.label
+                : !workspaceReady
+                  ? 'Continue setup'
+                  : trialState === 'active'
                     ? 'Continue'
-                    : trialCanStart
-                      ? trialStarting
-                        ? 'Starting trial…'
-                        : 'Start 14-day trial'
-                      : 'Continue'}
+                    : trialState === 'expired'
+                      ? 'Continue'
+                      : trialCanStart
+                        ? trialStarting
+                          ? 'Starting trial…'
+                          : 'Start 14-day trial'
+                        : 'Continue'}
             </button>
             <small>
               {starterSetup
@@ -951,11 +957,13 @@ export default function Subscriptions() {
             onClick={startTrial}
             disabled={trialCanStart && trialStarting}
           >
-            {trialCanStart
-              ? trialStarting
-                ? 'Starting trial…'
-                : 'Start 14-day Professional trial instead'
-              : 'Continue with Starter setup'}
+            {subscriptionRecoverable && billingPortalAction
+              ? billingPortalAction.label
+              : trialCanStart
+                ? trialStarting
+                  ? 'Starting trial…'
+                  : 'Start 14-day Professional trial instead'
+                : 'Continue with Starter setup'}
           </button>
           {/*
             Said plainly, because the alternative is a customer staring at a

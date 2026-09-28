@@ -1,5 +1,5 @@
 import type { SubscriptionProfile, SubscriptionTier } from '../types/xbar.js';
-import { isEntitledBillingState } from './subscriptionDecision.js';
+import { isEntitledBillingState, isSubscriptionRecoverable } from './subscriptionDecision.js';
 import { subscriptionTierConfig } from './xbarRuntime.js';
 
 /**
@@ -26,6 +26,20 @@ export const TRIAL_LENGTH_DAYS = 14;
 const MS_PER_DAY = 24 * 60 * 60 * 1000;
 
 export type TrialState = 'active' | 'expired' | 'none';
+
+/** UI eligibility; the server remains authoritative for cloud trial writes. */
+export function canStartTrial(
+  profile: SubscriptionProfile,
+  context: { nativeApp: boolean; canManageBilling: boolean },
+): boolean {
+  return (
+    !profile.trialStart &&
+    !context.nativeApp &&
+    context.canManageBilling &&
+    !isEntitledBillingState(profile.billingState) &&
+    !isSubscriptionRecoverable(profile)
+  );
+}
 
 /** Parse a stored trial start defensively: garbage is "no trial", never a crash. */
 export function parseTrialStart(value: unknown): Date | null {
