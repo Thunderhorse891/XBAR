@@ -279,6 +279,24 @@ test('snapshot saves cannot overwrite invitation lifecycle changes', async () =>
   assert.match(cloud, /export async function createWorkspaceInvitationInCloud[\s\S]*?\.insert\(/);
 });
 
+test('personal workspace bootstrap gives its verified creator the Admin seat', async () => {
+  const cloud = await readFile('src/lib/cloudWorkspace.ts', 'utf8');
+  const save = cloud.slice(
+    cloud.indexOf('async function ensurePrimaryWorkspace'),
+    cloud.indexOf('async function replaceWorkspaceRows'),
+  );
+  // Reproduced in production: a metadata-free signup resolved to Owner, which
+  // is a client seat. Starter has zero client seats, so every save was rejected
+  // before any horse rows landed. Ownership is established by the workspace
+  // upsert; session metadata must not choose this membership's role.
+  assert.doesNotMatch(save, /const membershipRole = resolveSessionRole\(session\)/);
+  assert.match(save, /workspaceId = workspaceRow\.id as string;[\s\S]*?const membershipRole = 'Admin'/);
+  assert.match(save, /role: membershipRole,[\s\S]*?payload: \{[\s\S]*?role: membershipRole/);
+  // Existing invited administrators must still use their shared workspace.
+  assert.match(save, /workspaceId = membership\.workspace_id as string/);
+  assert.match(save, /if \(!workspaceId\) \{[\s\S]*?owner_user_id: session\.user\.id/);
+});
+
 test('a second batch is measured against bytes already uploaded, not just persisted rows', async () => {
   /*
    * `xbar_workspace_storage_bytes` sums `documents` AND `sale_packets` ROWS. A

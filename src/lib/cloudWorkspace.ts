@@ -461,7 +461,6 @@ async function ensurePrimaryWorkspace(session: Session, backup: CloudWorkspaceBa
   const updatedAt = backup.exportedAt ?? new Date().toISOString();
   const workspaceName = profile?.ranchName?.trim() || 'Primary Ranch';
   const businessName = profile?.businessName?.trim() || 'XBAR';
-  const membershipRole = resolveSessionRole(session);
 
   // Match the workspace used by reads. A teammate must not bootstrap a new
   // personally owned ranch from the shared ranch's snapshot. Lookup failures
@@ -533,6 +532,10 @@ async function ensurePrimaryWorkspace(session: Session, backup: CloudWorkspaceBa
 
     workspaceId = workspaceRow.id as string;
 
+    // This branch has established personal workspace ownership. Owner is the
+    // client-access role, not the ranch administrator, and Starter has no
+    // client seats. Do not derive this owner membership from session metadata.
+    const membershipRole = 'Admin';
     const { error: membershipError } = await client.from('workspace_memberships').upsert(
       {
         workspace_id: workspaceId,
