@@ -33,7 +33,8 @@ begin
     false
   );
 exception
-  when invalid_datetime_format or datetime_field_overflow then
+  -- 22009 is an out-of-range timezone displacement, e.g. +99:00.
+  when invalid_datetime_format or datetime_field_overflow or sqlstate '22009' then
     return false;
 end;
 $$;

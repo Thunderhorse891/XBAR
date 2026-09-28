@@ -49,6 +49,7 @@ export default async function handler(req, res) {
   }
 
   let sent = 0;
+  let completed = 0;
   let inAppOnly = 0;
   const failures = [];
   const recipientCache = new Map();
@@ -89,32 +90,42 @@ export default async function handler(req, res) {
           continue; // Leave notification_sent=false so the next run retries.
         }
       }
-      if (channel === 'in-app') {
-        inAppOnly += 1;
+      const { data: notification, error: notificationError } = await supabase
+        .from('notifications')
+        .insert({
+          workspace_id: reminder.workspace_id,
+          user_id: recipient.userId,
+          reminder_id: reminder.reminder_id,
+          title,
+          body: bodyText,
+          channel,
+        })
+        .select('id')
+        .single();
+      if (notificationError || !notification?.id) {
+        throw new Error(notificationError?.message || 'Notification insert returned no row.');
       }
 
-      await supabase.from('notifications').insert({
-        workspace_id: reminder.workspace_id,
-        user_id: recipient.userId,
-        reminder_id: reminder.reminder_id,
-        title,
-        body: bodyText,
-        channel,
-      });
-
-      await supabase
+      const { data: updated, error: updateError } = await supabase
         .from('reminders')
         .update({ notification_sent: true, updated_at: new Date().toISOString() })
         .eq('workspace_id', reminder.workspace_id)
-        .eq('reminder_id', reminder.reminder_id);
+        .eq('reminder_id', reminder.reminder_id)
+        .select('reminder_id');
+      if (updateError || updated?.length !== 1 || updated[0].reminder_id !== reminder.reminder_id) {
+        throw new Error(updateError?.message || 'Reminder completion did not update the expected row.');
+      }
+      completed += 1;
+      if (channel === 'in-app') inAppOnly += 1;
     } catch (jobError) {
       failures.push({ reminderId: reminder.reminder_id, message: jobError.message });
     }
   }
 
-  return sendJson(res, 200, {
-    ok: true,
+  return sendJson(res, failures.length ? 500 : 200, {
+    ok: failures.length === 0,
     processed: (reminders || []).length,
+    completed,
     emailed: sent,
     inAppOnly,
     failures,

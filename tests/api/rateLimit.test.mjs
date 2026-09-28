@@ -72,6 +72,39 @@ function mockRes() {
   };
 }
 
+for (const failure of ['http', 'network', 'malformed', 'redis-error', 'expiry-error']) {
+  test(`configured shared limiter fails closed on ${failure}`, async () => {
+    const saved = { ...process.env };
+    const originalFetch = globalThis.fetch;
+    process.env.UPSTASH_REDIS_REST_URL = 'https://redis.example.invalid';
+    process.env.UPSTASH_REDIS_REST_TOKEN = 'fixture';
+    globalThis.fetch = async () => {
+      if (failure === 'network') throw new Error('offline');
+      return {
+        ok: failure !== 'http',
+        json: async () =>
+          failure === 'malformed'
+            ? {}
+            : failure === 'redis-error'
+              ? [{ error: 'failed' }, { result: 1 }]
+              : [{ result: 1 }, { error: 'failed' }],
+      };
+    };
+    try {
+      const res = mockRes();
+      assert.equal(
+        await enforceRateLimit(reqWith({}), res, { bucket: 'test-failure', limit: 5, windowSeconds: 60 }),
+        false,
+      );
+      assert.equal(res.statusCode, 503);
+      assert.equal(JSON.parse(res.body).ok, false);
+    } finally {
+      globalThis.fetch = originalFetch;
+      process.env = saved;
+    }
+  });
+}
+
 test('rotating the spoofed leftmost entry does not escape the limit on the real IP', async () => {
   delete process.env.UPSTASH_REDIS_REST_URL;
   delete process.env.UPSTASH_REDIS_REST_TOKEN;

@@ -170,6 +170,17 @@ reported, never faked.
 
 ### Supabase migration rollout and recorded deployment
 
+September 28 update: the billing-period, trial, private-media, trial-history,
+invalid-date and atomic-event corrections are applied on `xbar-records` as
+`20260928153909_xbar_launch_billing_trial_private_media_reconciliation`.
+The internal trial grant correction is recorded as
+`20260928154229_trial_helper_private`. See
+[the repair record](docs/launch-repair-20260928.md) for the six source files,
+verification and recovery boundaries. Do not replay those files merely because
+their original filenames do not appear individually in the hosted ledger.
+Run `supabase/checks/launch-readiness.sql` for a read-only schema check;
+`/api/health` checks configuration and does not prove schema compatibility.
+
 On `xbar-records` (`uxvwfepyothlakhqazwv`), the Supabase migration ledger checked
 on September 10, 2026 records steps 1–5 below as applied on September 4. Step 6
 was applied on September 10 as `20260910173613_private_share_token_fail_closed`;
@@ -377,6 +388,9 @@ psql "$DATABASE_URL" -f supabase/migrations/20260924130000_trial_entitlement.sql
 # Validate both supabase/checks/trial-*.sql files on a disposable database
 # first. Production application still requires the owner's explicit approval.
 psql -v ON_ERROR_STOP=1 "$DATABASE_URL" -f supabase/migrations/20260926000000_trial_dates_fail_closed.sql
+
+# Internal trial predicate: remove Supabase's default public execution grants.
+psql -v ON_ERROR_STOP=1 "$DATABASE_URL" -f supabase/migrations/20260928120000_trial_helper_private.sql
 # Prove it on a throwaway database rather than trusting the diff. Load the
 # migration first, then:
 #   psql "$THROWAWAY_URL" -f supabase/checks/trial-entitlement.sql

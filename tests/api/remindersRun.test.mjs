@@ -1,7 +1,61 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 
-import { formatDueDate, reminderAppOrigin } from '../../api/_lib/reminders-run.js';
+import { register } from 'node:module';
+register(new URL('./fixtures/remindersLoader.mjs', import.meta.url));
+const { default: handler, formatDueDate, reminderAppOrigin } = await import('../../api/_lib/reminders-run.js');
+const { setScenario, writes } = await import('./fixtures/remindersBoundary.mjs');
+
+async function runReminder(scenario) {
+  setScenario(scenario);
+  const saved = { ...process.env };
+  process.env.CRON_SECRET = 'fixture-secret';
+  delete process.env.RESEND_API_KEY;
+  delete process.env.SENDGRID_API_KEY;
+  const res = {
+    statusCode: 200,
+    setHeader() {},
+    end(body) {
+      this.payload = JSON.parse(body);
+    },
+  };
+  try {
+    await handler({ method: 'GET', headers: { authorization: 'Bearer fixture-secret' } }, res);
+  } finally {
+    process.env = saved;
+  }
+  return res;
+}
+
+test('notification insert error is a failure and leaves the reminder retryable', async () => {
+  const res = await runReminder({ insertResult: { data: null, error: { message: 'insert failed' } } });
+  assert.equal(res.statusCode, 500);
+  assert.equal(res.payload.ok, false);
+  assert.equal(res.payload.inAppOnly, 0);
+  assert.equal(res.payload.failures.length, 1);
+  assert.equal(writes.filter((write) => write.table === 'reminders').length, 0);
+});
+
+for (const updateResult of [
+  { data: null, error: { message: 'update failed' } },
+  { data: [], error: null },
+]) {
+  test(`reminder completion refuses ${updateResult.error ? 'an error' : 'zero affected rows'}`, async () => {
+    const res = await runReminder({ updateResult });
+    assert.equal(res.statusCode, 500);
+    assert.equal(res.payload.ok, false);
+    assert.equal(res.payload.inAppOnly, 0);
+    assert.equal(res.payload.failures.length, 1);
+  });
+}
+
+test('only confirmed notification and reminder writes count as completed', async () => {
+  const res = await runReminder({});
+  assert.equal(res.statusCode, 200);
+  assert.equal(res.payload.ok, true);
+  assert.equal(res.payload.inAppOnly, 1);
+  assert.equal(res.payload.completed, 1);
+});
 
 /*
  * Reminder emails are buyer-facing professionalism: "Coggins test due

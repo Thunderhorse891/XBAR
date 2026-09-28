@@ -30,7 +30,7 @@ import { canPresentPurchaseFlow } from '@/lib/nativePlatform';
  * The core paid workflow: select horse → release gate (title/transfer is a
  * HARD gate, stale Coggins requires explicit disclosure) → choose proof →
  * buyer + watermark → generate (real PDF in cloud workspaces, recorded build
- * in local mode) → buyer follow-up opens automatically (packet-shared event +
+ * in local mode) → buyer follow-up opens automatically (sales lead +
  * sales lead) with the next money action offered.
  */
 
@@ -325,15 +325,8 @@ export function SalePacketWizard({
         return;
       }
 
-      // Buyer follow-up opens automatically: share event + sales lead.
+      // Preparing a packet creates a lead, but does not prove it was shared.
       if (buyerName.trim()) {
-        logBuyerRoomEvent({
-          horseId: horse.id,
-          kind: 'packet-shared',
-          actor: buyerName.trim(),
-          packetId: build.packet.id,
-          note: buyerEmail.trim() ? `Shared to ${buyerEmail.trim()}` : 'Shared directly',
-        });
         const existingLead = salesLeads.some(
           (lead) => lead.horseId === horse.id && lead.name.toLowerCase() === buyerName.trim().toLowerCase(),
         );
@@ -732,7 +725,7 @@ export function SalePacketWizard({
                 <li>Watermark “{effectiveWatermark}” on every page.</li>
                 <li>
                   {buyerName.trim()
-                    ? `Buyer follow-up opens for ${buyerName.trim()} with a packet-shared event and a sales lead.`
+                    ? `A sales lead is created for ${buyerName.trim()}. Log sharing after you send the packet.`
                     : 'No buyer named — packet generates without a buyer follow-up entry.'}
                 </li>
                 <li>The build and buyer attribution are written to the audit log.</li>
@@ -864,6 +857,26 @@ export function SalePacketWizard({
                   }}
                 >
                   Open Sales to track {buyerName.trim() || 'this buyer'}
+                </button>
+                <button
+                  className="button button--ghost button--compact"
+                  type="button"
+                  onClick={() => {
+                    const result = logBuyerRoomEvent({
+                      horseId: horse.id,
+                      kind: 'packet-shared',
+                      actor: buyerName.trim() || 'Buyer',
+                      packetId: generated.packetId,
+                      note: 'Seller confirmed the packet was shared.',
+                    });
+                    pushToast({
+                      title: result.ok ? 'Sharing logged' : 'Sharing not logged',
+                      message: result.message,
+                      tone: result.ok ? 'success' : 'error',
+                    });
+                  }}
+                >
+                  Log that I shared the packet
                 </button>
                 <button
                   className="button button--ghost button--compact"
