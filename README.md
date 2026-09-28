@@ -356,6 +356,11 @@ psql "$DATABASE_URL" -f supabase/migrations/20260924120000_billing_period.sql
 #     change that wrote it.
 psql "$DATABASE_URL" -f supabase/migrations/20260924223000_preserve_trial_in_event_rpc.sql
 
+# Merge trial history from the actual conflict row, not an earlier read.
+# Validate the trial-event-database CI contract and obtain explicit production
+# migration approval before applying. The Python/schema fixtures are CI-only.
+psql -v ON_ERROR_STOP=1 "$DATABASE_URL" -f supabase/migrations/20260926003000_atomic_trial_event_merge.sql
+
 # 10. EXPAND before deploying the workspace-path client. Retains uploader paths
 #    for older app versions. Includes authenticated RLS checks with rolled-back
 #    fixtures. Run atomically so a failed assertion rolls back policy changes.
