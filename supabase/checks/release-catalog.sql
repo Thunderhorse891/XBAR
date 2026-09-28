@@ -32,14 +32,14 @@ select jsonb_build_object(
         'using', qual, 'check', with_check))
     from pg_policies where (schemaname = 'storage' and tablename = 'objects')
       or (schemaname = 'public' and tablename in
-        ('workspace_subscription_profiles', 'workspace_billing_customers', 'account_deletion_events'))
+        ('workspace_subscription_profiles', 'workspace_billing_customers', 'account_deletion_events', 'reminder_email_deliveries'))
   ), '{}'::jsonb),
   'rls', coalesce((
     select jsonb_object_agg(n.nspname || '.' || c.relname, c.relrowsecurity)
     from pg_class c join pg_namespace n on n.oid = c.relnamespace
     where c.relkind = 'r' and ((n.nspname = 'public' and c.relname in
       ('horses', 'documents', 'workspace_memberships', 'workspace_subscription_profiles',
-       'workspace_billing_customers', 'account_deletion_events'))
+       'workspace_billing_customers', 'account_deletion_events', 'reminder_email_deliveries'))
       or (n.nspname = 'storage' and c.relname = 'objects'))
   ), '{}'::jsonb),
   'triggers', coalesce((
@@ -48,6 +48,19 @@ select jsonb_build_object(
     from pg_trigger t join pg_class c on c.oid = t.tgrelid join pg_namespace n on n.oid = c.relnamespace
     where n.nspname = 'public' and not t.tgisinternal
   ), '{}'::jsonb),
+  'reminderDelivery', jsonb_build_object(
+    'columns', coalesce((select jsonb_object_agg(a.attname,jsonb_build_object(
+      'type',format_type(a.atttypid,a.atttypmod),'notNull',a.attnotnull,
+      'default',pg_get_expr(d.adbin,d.adrelid)))
+      from pg_attribute a left join pg_attrdef d on d.adrelid=a.attrelid and d.adnum=a.attnum
+      where a.attrelid=to_regclass('public.reminder_email_deliveries') and a.attnum>0 and not a.attisdropped), '{}'::jsonb),
+    'constraints', coalesce((select jsonb_object_agg(conname,pg_get_constraintdef(oid))
+      from pg_constraint where conrelid=to_regclass('public.reminder_email_deliveries')), '{}'::jsonb),
+    'indexes', coalesce((select jsonb_object_agg(c.relname,jsonb_build_object(
+      'definition',pg_get_indexdef(i.indexrelid),'valid',i.indisvalid,'ready',i.indisready))
+      from pg_index i join pg_class c on c.oid=i.indexrelid
+      where i.indrelid=to_regclass('public.reminder_email_deliveries')), '{}'::jsonb)
+  ),
   'billingPeriod', coalesce((
     select jsonb_build_object('type', data_type, 'nullable', is_nullable)
     from information_schema.columns where table_schema = 'public'

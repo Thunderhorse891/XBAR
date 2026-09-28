@@ -41,14 +41,41 @@ These facts supersede the earlier absence/public-bucket snapshot above. They do
 not prove complete definition equivalence, immutable media ownership, hosted
 restore, payment/email delivery or whole-app acceptance. The other PR reports
 rolled-back live behavior tests; those are its author's evidence, not execution
-by this task. Its code is unmerged and review finding `4124238598` still calls
-for recoverable-subscription trial eligibility to agree between client/server.
+by this task. At that snapshot its code was unmerged and trial eligibility
+review was still in progress; the later closure below supersedes that status.
 
 Before composing a release, reconcile #271's exact SQL files and batch ledger
 mapping with this PR's baseline and required versions. Do not replay the older
 files, invent individual ledger entries, or loosen the gate just to pass it.
 The dependency order below remains held and must be revised against the actual
 combined source and deployed definitions before any further execution.
+
+## Reviewed integration (September 28, after 17:02 UTC)
+
+#271 merged as `04cc7a374fc7a0f55eeee995584316ebd3115eb2`, with the same tree as
+reviewed `cd6aa6d2abae61c6d40c2b67333b639696586ae5`. Final-head checks and review
+closed the recorded trial/reminder/share corrections. Production alias is READY
+at `dpl_EM5v6NGk4u58f4M8vkxVawnYtUCF` for that merge. This branch incorporates
+that source while retaining its stricter missing-Redis refusal and atomic limiter.
+No merge to main, deployment or production write was performed by this task.
+
+Read-only ledger SQL was compared to the committed files. All six statements
+inside the `20260928153909` batch match their source text after removing only
+individual transaction wrappers and the added source headings; the batch has
+one outer transaction. The helper-private statement matches its source commands
+with comments/whitespace omitted. Both reminder migrations match exact source
+text after trimming surrounding whitespace. Hosted `20260928161212` maps to
+`20260928163000_reminder_email_delivery_claims.sql`; hosted `20260928163507` maps
+to `20260928170000_reminder_declined_retry.sql`.
+
+`migration-ledger-map.json` pins this project's batch names, statement counts,
+raw SQL SHA-256 values and normalized source-file SHA-256 values. The gate accepts
+these aliases only for this project with matching read-only ledger metadata.
+Changed source needs a new reviewed mapping; a batch ID alone is insufficient.
+The full actual catalog still must match, including reminder RLS, columns,
+constraints and retry index. Unrelated missing versions (including this PR's
+deletion-audit/anonymous-grant migrations) remain blocking. No ledger rows are
+inserted or renamed. This does not establish payment/email or recovery acceptance.
 
 ## Read-only release check
 
@@ -74,9 +101,9 @@ that same result instead of trusting hand-edited `true` flags.
 
 Set `DATABASE_EVIDENCE_PATH` to the receipt before `npm run preflight`. Preflight
 requires client/server Supabase project URLs to match, the receipt to name that
-project, its timestamp to be within one hour, the schema/query digest to match
-this checkout, every critical ledger version to exist and the actual catalog to
-match. Configuration and `/api/health` success cannot bypass this gate. Evidence
+project, its timestamp to be within one hour, the schema/query/mapping digest to
+match this checkout, each critical version or verified batch alias to exist and
+the actual catalog to match. Configuration and `/api/health` success cannot bypass this gate. Evidence
 is a local, unsigned operator receipt: keep the original read-only output and
 review it. Never fabricate, relabel or copy a scratch receipt as production proof.
 
@@ -88,16 +115,10 @@ another empty local database. Never generate the baseline from production.
 
 ## Prerequisites before requesting production execution
 
-1. Close the remaining schema/authorization findings. PR #266 at
-   `b1601dff6d2859aeed796491378cc9f5e7310ecf` owns the atomic trial/event repair;
-   PR #267 at `26f5e90b703c19bf28cd5fa10e4ded89ee0e31e8` owns malformed trial
-   timestamp rejection. Both remain separate unmerged changes at this check.
-   #267 still has the existing review finding `4109515402`: timezone offsets
-   such as `+99:00` raise SQLSTATE `22009` instead of failing closed. Green CI
-   does not clear that finding. Refresh both final review/CI results before
-   composing a release. #271 incorporates their corrections and reports the
-   additional timezone repair; review that combined head instead of duplicating
-   their implementations. It is not a whole-PR clearance for the older branches.
+1. Review the combined #265/#271 source and its generated local baseline. #266's
+   atomic trial/event correction and #267's date correction, including SQLSTATE
+   `22009`, are incorporated through #271; do not apply those branches again.
+   Their passing isolated contracts do not replace full hosted workflow checks.
 2. Resolve the media ownership finding before calling private media secure:
    the existing proposed SELECT policy trusts paths inside editable horse gallery
    JSON. A private bucket alone does not prove immutable object ownership.
@@ -116,10 +137,12 @@ another empty local database. Never generate the baseline from production.
    production migration approval under contract section 15. Approval has not
    been given by this PR or this document.
 
-## Proposed order, still held
+## Historical dependency order and remaining held work
 
-The following is a dependency order, **not an executable approval or instruction
-to apply the current files as-is**. The findings above must be resolved first.
+The following records dependencies, **not instructions to replay applied work**.
+Steps 2–4 and the bucket-private portion of step 5 were applied in the reviewed
+hosted batch. The reminder claim/retry migrations also have verified aliases.
+Remaining production changes still require the prerequisites and explicit approval.
 
 1. Reconcile pre-September-24 prerequisites and historical ledger aliases against
    their actual definitions. Recording a version requires verified equivalence;
@@ -151,7 +174,7 @@ On isolated scratch, `ci-release-behavior.sql` exercises authenticated insertion
 of a sixth horse during a valid trial, denial after expiry, the real named-argument
 billing RPC with annual-period/trial preservation, private bucket configuration,
 uploader reads and unrelated-user denial. `ci-rls.sql` covers subscription write
-denial and deletion-audit durability. `test-database-readiness.mjs` changes thirteen
+denial and deletion-audit durability. `test-database-readiness.mjs` changes seventeen
 catalog conditions inside rolled-back transactions and verifies each blocks the
 release check. These do not emulate Storage HTTP, Stripe delivery or trial races;
 #266 owns the concurrent database test.

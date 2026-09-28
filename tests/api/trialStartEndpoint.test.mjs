@@ -13,7 +13,7 @@
  * - only workspace admins can start it, and denial happens before any
  *   database write;
  * - the one-trial rule holds for active, expired, AND malformed records;
- * - a lost write race reports "already used" instead of restarting the
+ * - a lost write race reports a subscription conflict instead of restarting the
  *   window;
  * - a failed subscription read fails closed instead of writing over an
  *   unreadable row.
@@ -79,6 +79,24 @@ async function postTrialStart({ body = { workspaceId: 'ws_1' }, token = 'Bearer 
 
 function dbWrites() {
   return calls.db.filter((call) => call.steps.some((step) => step.op === 'update' || step.op === 'insert'));
+}
+
+for (const subscriptionRecoverable of ['false', {}, 0, []]) {
+  test(`malformed recoverability ${JSON.stringify(subscriptionRecoverable)} refuses trial without writes`, async () => {
+    __setTrialBoundary({
+      access: { ok: true, role: 'Admin', message: '' },
+      row: { tier: 'Starter', billing_state: 'Inactive', payload: { subscriptionRecoverable } },
+    });
+    const req = mockReq({
+      headers: { authorization: 'Bearer tok_1', 'x-forwarded-for': nextIp() },
+      body: { workspaceId: 'ws_1' },
+    });
+    const res = mockRes();
+    await handler(req, res);
+    assert.equal(res.statusCode, 409);
+    assert.equal(JSON.parse(res.body).code, 'subscription_recoverable');
+    assert.equal(dbWrites().length, 0);
+  });
 }
 
 test('rejects non-POST methods with 405', async () => {
@@ -239,7 +257,7 @@ test('a malformed trial record blocks a restart without granting anything', asyn
   assert.equal(dbWrites().length, 0);
 });
 
-test('a lost write race reports already-used instead of restarting the window', async () => {
+test('a lost write race reports a subscription conflict instead of restarting the window', async () => {
   __setTrialBoundary({
     access: { ok: true, role: 'Admin', message: '' },
     row: { tier: 'Starter', billing_state: 'Inactive', payload: {} },
@@ -255,5 +273,5 @@ test('a lost write race reports already-used instead of restarting the window', 
   await handler(req, res);
   const payload = JSON.parse(res.body);
   assert.equal(res.statusCode, 409);
-  assert.equal(payload.code, 'trial_already_used');
+  assert.equal(payload.code, 'subscription_changed');
 });

@@ -9,25 +9,66 @@ import { databaseEnv } from './database-backup.mjs';
 const root = fileURLToPath(new URL('../', import.meta.url));
 export const catalogPath = 'supabase/checks/release-catalog.sql';
 export const baselinePath = 'supabase/checks/release-catalog.expected.json';
+export const ledgerMapPath = 'supabase/checks/migration-ledger-map.json';
 const read = (name) => readFileSync(path.join(root, name), 'utf8').replace(/\r\n/g, '\n');
 const migrations = readdirSync(path.join(root, 'supabase/migrations'))
   .filter((f) => f.endsWith('.sql'))
   .sort();
 // Earlier production migrations used different ledger versions. Reconciliation
-// of those is by actual definitions; these release-critical versions are exact.
+// of those is by actual definitions. Critical versions require their exact ID
+// or a reviewed, project-bound batch whose SQL and source hashes still match.
 export const requiredVersions = migrations.filter((f) => f >= '20260924').map((f) => f.split('_')[0]);
+export function loadLedgerMap() {
+  return validateLedgerMap(JSON.parse(read(ledgerMapPath)));
+}
+export function validateLedgerMap(map) {
+  if (map.version !== 1 || !/^[a-z]{20}$/.test(map.sourceRef) || !Array.isArray(map.batches))
+    throw new Error('Invalid reviewed migration ledger map.');
+  const versions = new Set();
+  const mappedFiles = new Set();
+  for (const batch of map.batches) {
+    if (
+      !/^\d{14}$/.test(batch.version) ||
+      versions.has(batch.version) ||
+      typeof batch.name !== 'string' ||
+      !batch.name ||
+      batch.statementCount !== 1 ||
+      !/^[a-f0-9]{64}$/.test(batch.statementsSha256) ||
+      !batch.sourceFiles ||
+      typeof batch.sourceFiles !== 'object' ||
+      Array.isArray(batch.sourceFiles) ||
+      Object.keys(batch.sourceFiles).length === 0
+    )
+      throw new Error('Invalid reviewed migration ledger batch.');
+    versions.add(batch.version);
+    for (const [file, expectedHash] of Object.entries(batch.sourceFiles)) {
+      if (
+        !migrations.includes(file) ||
+        mappedFiles.has(file) ||
+        createHash('sha256')
+          .update(read(`supabase/migrations/${file}`))
+          .digest('hex') !== expectedHash
+      )
+        throw new Error(`Migration ledger mapping needs source review: ${file}`);
+      mappedFiles.add(file);
+    }
+  }
+  return map;
+}
 export function sourceDigest() {
   const hash = createHash('sha256');
   for (const name of [
     'supabase/production-schema.sql',
     ...migrations.map((f) => `supabase/migrations/${f}`),
     catalogPath,
+    ledgerMapPath,
   ]) {
     hash.update(name).update('\0').update(read(name)).update('\0');
   }
   return hash.digest('hex');
 }
 export function loadBaseline() {
+  loadLedgerMap();
   const baseline = JSON.parse(read(baselinePath));
   if (baseline.sourceDigest !== sourceDigest() || !isDeepStrictEqual(baseline.requiredVersions, requiredVersions)) {
     throw new Error('Database baseline is stale; regenerate from an isolated migrated PostgreSQL 17 database.');
@@ -67,8 +108,25 @@ export function checkDatabaseEvidence(evidence, sourceRef, now = Date.now()) {
     failures.push('Database evidence does not match this revision of the schema and migrations.');
   }
   const versions = evidence?.migrationVersions;
+  const map = loadLedgerMap();
+  const covered = new Set();
+  if (evidence?.sourceRef === map.sourceRef && Array.isArray(versions) && Array.isArray(evidence?.migrationRecords)) {
+    for (const batch of map.batches) {
+      const records = evidence.migrationRecords.filter((r) => r?.version === batch.version);
+      const record = records[0];
+      if (
+        versions.includes(batch.version) &&
+        records.length === 1 &&
+        record.name === batch.name &&
+        record.statementCount === batch.statementCount &&
+        record.statementsSha256 === batch.statementsSha256
+      ) {
+        for (const file of Object.keys(batch.sourceFiles)) covered.add(file.split('_')[0]);
+      }
+    }
+  }
   for (const version of requiredVersions) {
-    if (!Array.isArray(versions) || !versions.includes(version))
+    if (!Array.isArray(versions) || (!versions.includes(version) && !covered.has(version)))
       failures.push(`Missing migration ledger version: ${version}`);
   }
   failures.push(...compareCatalog(evidence?.catalog, expected.catalog));
@@ -100,6 +158,7 @@ if (process.argv[1] && import.meta.url === pathToFileURL(path.resolve(process.ar
   try {
     const [mode, output] = process.argv.slice(2);
     if (mode === '--baseline') {
+      loadLedgerMap();
       const url = process.env.TEST_DATABASE_URL;
       if (!url || !['127.0.0.1', 'localhost', 'postgres'].includes(new URL(url).hostname)) {
         throw new Error('Baseline generation requires an isolated local test database.');
@@ -132,15 +191,21 @@ if (process.argv[1] && import.meta.url === pathToFileURL(path.resolve(process.ar
       }
       const sql = read(catalogPath).replace(
         'rollback;',
-        "select coalesce(jsonb_agg(version order by version), '[]'::jsonb) from supabase_migrations.schema_migrations;\nrollback;",
+        `select jsonb_build_object(
+          'versions', coalesce(jsonb_agg(version order by version), '[]'::jsonb),
+          'records', coalesce(jsonb_agg(jsonb_build_object(
+            'version', version, 'name', name, 'statementCount', coalesce(cardinality(statements),0),
+            'statementsSha256', encode(sha256(convert_to(coalesce(array_to_string(statements,E'\\n'),''),'UTF8')),'hex')
+          ) order by version), '[]'::jsonb)) from supabase_migrations.schema_migrations;\nrollback;`,
       );
-      const [catalog, migrationVersions] = query(sql, url);
+      const [catalog, ledger] = query(sql, url);
       const evidence = {
         version: 1,
         sourceRef,
         checkedAt: new Date().toISOString(),
         sourceDigest: sourceDigest(),
-        migrationVersions,
+        migrationVersions: ledger?.versions,
+        migrationRecords: ledger?.records,
         catalog,
       };
       writeFileSync(output, `${JSON.stringify(evidence, null, 2)}\n`, { mode: 0o600 });

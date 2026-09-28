@@ -14,6 +14,7 @@ for (const [command, args] of [
   [process.execPath, ['scripts/database-readiness.mjs', '--baseline']],
   [process.execPath, ['scripts/test-database-readiness.mjs']],
   ['psql', [url, '-v', 'ON_ERROR_STOP=1', '-f', 'supabase/checks/ci-release-behavior.sql']],
+  ['psql', [url, '-v', 'ON_ERROR_STOP=1', '-f', 'supabase/checks/reminder-delivery.sql']],
   ['psql', [url, '-v', 'ON_ERROR_STOP=1', '-f', 'supabase/checks/ci-anon-table-access.sql']],
   [process.execPath, ['scripts/test-anon-table-access.mjs']],
 ]) {

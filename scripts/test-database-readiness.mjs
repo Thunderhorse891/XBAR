@@ -42,6 +42,13 @@ const cases = [
     'create or replace function public.xbar_trial_active(p_payload jsonb) returns boolean language sql stable as $$ select true $$;',
     'functions.xbar_trial_active',
   ],
+  ['alter table public.reminder_email_deliveries disable row level security;', 'rls.public.reminder_email_deliveries'],
+  [
+    'alter table public.reminder_email_deliveries drop constraint reminder_email_deliveries_workspace_id_reminder_id_due_date_key;',
+    'reminderDelivery.constraints',
+  ],
+  ['drop index public.reminder_email_retry_due;', 'reminderDelivery.indexes'],
+  ['alter table public.reminder_email_deliveries drop column request;', 'reminderDelivery.columns'],
 ];
 for (const [mutation, label] of cases) {
   const result = spawnSync('psql', ['-XqAt', '-v', 'ON_ERROR_STOP=1'], {

@@ -4,6 +4,25 @@ import test from 'node:test';
 import { toPacketDisclosure } from '../src/lib/salePacketDisclosure.js';
 import type { HorseRecord, OwnershipRecord, WorkspaceProfile } from '../src/types/xbar.js';
 
+test('packet generation does not claim a buyer share; seller must confirm sharing', async () => {
+  const source = await readFile('src/components/SalePacketWizard.tsx', 'utf8');
+  const generation = source.slice(
+    source.indexOf('if (!build.ok || !build.packet)'),
+    source.indexOf('let packetDelivery:'),
+  );
+  assert.ok(generation.includes('createSalesLead'));
+  assert.ok(!generation.includes("kind: 'packet-shared'"));
+  assert.ok(source.includes('Log that I shared the packet'));
+  assert.ok(source.includes('Seller confirmed the packet was shared.'));
+  const share = source.slice(
+    source.indexOf("kind: 'packet-shared'"),
+    source.indexOf("title: result.ok ? 'Sharing logged'"),
+  );
+  assert.match(share, /actor: currentRole/);
+  assert.ok(share.includes('buyerName.trim()'));
+  assert.ok(share.includes('buyerEmail.trim()'));
+});
+
 /*
  * A buyer sale packet was rendered straight from the whole `HorseRecord`.
  *

@@ -162,10 +162,39 @@ test('decideTrialStart refuses a paying Starter workspace: entitlement is the bi
   assert.equal(manualStarter.code, 'already_entitled');
 });
 
-test('decideTrialStart allows a lapsed subscription to trial', () => {
-  // Past Due / Inactive resolve to the baseline, so a former customer may trial.
-  assert.deepEqual(decideTrialStart({ tier: 'Ranch Ops', billing_state: 'Past Due', payload: {} }), { ok: true });
+test('decideTrialStart allows a terminal subscription to trial', () => {
+  assert.deepEqual(
+    decideTrialStart({ tier: 'Ranch Ops', billing_state: 'Inactive', payload: { subscriptionRecoverable: false } }),
+    { ok: true },
+  );
   assert.deepEqual(decideTrialStart({ tier: 'Professional', billing_state: 'Inactive', payload: {} }), { ok: true });
+});
+
+for (const stripeStatus of ['past_due', 'unpaid', 'paused', 'incomplete']) {
+  test(`startWorkspaceTrial refuses ${stripeStatus} before any subscription write`, async () => {
+    const observed = {};
+    const row = {
+      tier: 'Professional',
+      billing_state: stripeStatus === 'past_due' ? 'Past Due' : 'Inactive',
+      payload: { subscriptionRecoverable: true },
+    };
+    const result = await startWorkspaceTrial(fakeSupabase({ row }, observed), 'ws-1', NOW_MS);
+    assert.equal(result.ok, false);
+    assert.equal(result.code, 'subscription_recoverable');
+    assert.equal(result.status, 409);
+    assert.equal(observed.update, undefined);
+    assert.equal(observed.insert, undefined);
+  });
+}
+
+test('legacy Past Due rows cannot start trials when the recoverability flag is absent', () => {
+  const result = decideTrialStart({
+    tier: 'Professional',
+    billing_state: 'Past Due',
+    payload: { billingState: 'Inactive' },
+  });
+  assert.equal(result.ok, false);
+  assert.equal(result.code, 'subscription_recoverable');
 });
 
 /*
@@ -184,6 +213,7 @@ function fakeSupabase(
     updateResult = [{ workspace_id: 'ws-1' }],
     updateError = null,
     insertError = null,
+    rowAtWrite = row,
   } = {},
   observed = {},
 ) {
@@ -215,17 +245,30 @@ function fakeSupabase(
         },
         update(values) {
           observed.update = values;
-          return {
-            eq: () => ({
-              filter: (column, operator, fvalue) => ({
-                select: () => {
-                  observed.updateFilter = [column, operator, fvalue];
-                  if (updateError) return Promise.resolve({ data: null, error: updateError });
-                  return Promise.resolve({ data: updateResult, error: null });
-                },
-              }),
-            }),
+          const filters = [];
+          const update = {
+            eq(field, value) {
+              filters.push([field, value]);
+              return update;
+            },
+            filter(column, operator, fvalue) {
+              observed.updateFilter = [column, operator, fvalue];
+              return update;
+            },
+            select() {
+              if (updateError) return Promise.resolve({ data: null, error: updateError });
+              const matches = filters.every(([field, value]) => {
+                if (field === 'workspace_id') return value === 'ws-1';
+                if (field === 'payload') return JSON.stringify(rowAtWrite.payload) === value;
+                if (field === 'billing_state') return rowAtWrite.billing_state === value;
+                assert.fail(`Unexpected write filter: ${field}`);
+              });
+              if (!matches) return Promise.resolve({ data: [], error: null });
+              observed.persisted = values;
+              return Promise.resolve({ data: updateResult, error: null });
+            },
           };
+          return update;
         },
         insert(values) {
           observed.insert = values;
@@ -287,17 +330,32 @@ test('startWorkspaceTrial refuses an already-trialed workspace', async () => {
   assert.equal(result.status, 409);
 });
 
-test('startWorkspaceTrial reports a lost race as already-used, not an error', async () => {
-  // The update's row guard filtered the write out: someone else started first.
+test('startWorkspaceTrial reports a lost race without claiming a trial started', async () => {
+  // A zero-row update proves a conflict, not which concurrent change occurred.
   const supabase = fakeSupabase({
     row: { tier: 'Starter', billing_state: 'Inactive', monthly_rate: 0, payload: {} },
     updateResult: [],
   });
   const result = await startWorkspaceTrial(supabase, 'ws-1', NOW_MS);
   assert.equal(result.ok, false);
-  assert.equal(result.code, 'trial_already_used');
+  assert.equal(result.code, 'subscription_changed');
   assert.equal(result.status, 409);
 });
+
+for (const rowAtWrite of [
+  { billing_state: 'Active', payload: {} },
+  { billing_state: 'Inactive', payload: { subscriptionRecoverable: true } },
+  { billing_state: 'Inactive', payload: { usage: { horsesUsed: 4 } } },
+]) {
+  test(`trial start preserves a concurrent subscription update: ${JSON.stringify(rowAtWrite)}`, async () => {
+    const observed = {};
+    const row = { tier: 'Starter', billing_state: 'Inactive', payload: {} };
+    const result = await startWorkspaceTrial(fakeSupabase({ row, rowAtWrite }, observed), 'ws-1', NOW_MS);
+    assert.equal(result.ok, false);
+    assert.equal(result.code, 'subscription_changed');
+    assert.equal(observed.persisted, undefined);
+  });
+}
 
 test('startWorkspaceTrial refuses a workspace already paying', async () => {
   const supabase = fakeSupabase({

@@ -1,12 +1,17 @@
 {
-  "sourceDigest": "0ebbfe8540422fbc1a2fcece73b8ae4fb44084f2965b7faa61ce19a89c37c18c",
+  "sourceDigest": "bc4f4d4f8267bc9ce5c104f93987846f2bdf5ef3c4da6742f0132e8ba6576994",
   "requiredVersions": [
     "20260924120000",
     "20260924130000",
     "20260924134000",
     "20260924223000",
     "20260925180000",
-    "20260928150000"
+    "20260926000000",
+    "20260926003000",
+    "20260928120000",
+    "20260928150000",
+    "20260928163000",
+    "20260928170000"
   ],
   "catalog": {
     "rls": {
@@ -15,6 +20,7 @@
       "public.documents": true,
       "public.workspace_memberships": true,
       "public.account_deletion_events": true,
+      "public.reminder_email_deliveries": true,
       "public.workspace_billing_customers": true,
       "public.workspace_subscription_profiles": true
     },
@@ -137,10 +143,10 @@
         "authenticated": false
       },
       "xbar_trial_active(p_payload jsonb)": {
-        "anon": true,
-        "definition": "223af27d123a1385a24135a84c4b3996",
+        "anon": false,
+        "definition": "064373d177c9ae87b7ea54e8c490a994",
         "service_role": true,
-        "authenticated": true
+        "authenticated": false
       },
       "xbar_enforce_workspace_seat_limits()": {
         "anon": false,
@@ -216,7 +222,7 @@
       },
       "xbar_apply_subscription_event(p_workspace_id uuid, p_event_id text, p_event_type text, p_event_created_at timestamp with time zone, p_payload jsonb, p_tier text, p_billing_state text, p_monthly_rate double precision, p_profile jsonb, p_customer_id text, p_subscription_id text, p_price_id text, p_seat_count integer, p_from_sibling boolean, p_billing_period text)": {
         "anon": false,
-        "definition": "1df8e7a9b4b9909d168373b1528674f4",
+        "definition": "ef3f3903350ad487ceb5bf923e8beab2",
         "service_role": true,
         "authenticated": false
       }
@@ -1464,6 +1470,60 @@
           }
         }
       },
+      "reminder_email_deliveries": {
+        "table": {
+          "anon": {
+            "DELETE": false,
+            "INSERT": false,
+            "SELECT": false,
+            "UPDATE": false,
+            "TRIGGER": false,
+            "MAINTAIN": false,
+            "TRUNCATE": false,
+            "REFERENCES": false
+          },
+          "service_role": {
+            "DELETE": true,
+            "INSERT": true,
+            "SELECT": true,
+            "UPDATE": true,
+            "TRIGGER": true,
+            "MAINTAIN": true,
+            "TRUNCATE": true,
+            "REFERENCES": true
+          },
+          "authenticated": {
+            "DELETE": false,
+            "INSERT": false,
+            "SELECT": false,
+            "UPDATE": false,
+            "TRIGGER": false,
+            "MAINTAIN": false,
+            "TRUNCATE": false,
+            "REFERENCES": false
+          }
+        },
+        "column": {
+          "anon": {
+            "INSERT": false,
+            "SELECT": false,
+            "UPDATE": false,
+            "REFERENCES": false
+          },
+          "service_role": {
+            "INSERT": true,
+            "SELECT": true,
+            "UPDATE": true,
+            "REFERENCES": true
+          },
+          "authenticated": {
+            "INSERT": false,
+            "SELECT": false,
+            "UPDATE": false,
+            "REFERENCES": false
+          }
+        }
+      },
       "workspace_billing_customers": {
         "table": {
           "anon": {
@@ -1630,6 +1690,78 @@
     "billingPeriod": {
       "type": "text",
       "nullable": "YES"
+    },
+    "reminderDelivery": {
+      "columns": {
+        "id": {
+          "type": "uuid",
+          "default": null,
+          "notNull": true
+        },
+        "status": {
+          "type": "text",
+          "default": null,
+          "notNull": true
+        },
+        "request": {
+          "type": "jsonb",
+          "default": null,
+          "notNull": false
+        },
+        "due_date": {
+          "type": "date",
+          "default": null,
+          "notNull": true
+        },
+        "created_at": {
+          "type": "timestamp with time zone",
+          "default": "now()",
+          "notNull": true
+        },
+        "accepted_at": {
+          "type": "timestamp with time zone",
+          "default": null,
+          "notNull": false
+        },
+        "reminder_id": {
+          "type": "text",
+          "default": null,
+          "notNull": true
+        },
+        "workspace_id": {
+          "type": "uuid",
+          "default": null,
+          "notNull": true
+        },
+        "next_attempt_at": {
+          "type": "timestamp with time zone",
+          "default": null,
+          "notNull": false
+        }
+      },
+      "indexes": {
+        "reminder_email_retry_due": {
+          "ready": true,
+          "valid": true,
+          "definition": "CREATE INDEX reminder_email_retry_due ON public.reminder_email_deliveries USING btree (next_attempt_at) WHERE ((status = 'pending'::text) AND (next_attempt_at IS NOT NULL))"
+        },
+        "reminder_email_deliveries_pkey": {
+          "ready": true,
+          "valid": true,
+          "definition": "CREATE UNIQUE INDEX reminder_email_deliveries_pkey ON public.reminder_email_deliveries USING btree (id)"
+        },
+        "reminder_email_deliveries_workspace_id_reminder_id_due_date_key": {
+          "ready": true,
+          "valid": true,
+          "definition": "CREATE UNIQUE INDEX reminder_email_deliveries_workspace_id_reminder_id_due_date_key ON public.reminder_email_deliveries USING btree (workspace_id, reminder_id, due_date)"
+        }
+      },
+      "constraints": {
+        "reminder_email_deliveries_pkey": "PRIMARY KEY (id)",
+        "reminder_email_deliveries_status_check": "CHECK ((status = ANY (ARRAY['pending'::text, 'accepted'::text])))",
+        "reminder_email_deliveries_workspace_id_fkey": "FOREIGN KEY (workspace_id) REFERENCES public.workspaces(id) ON DELETE CASCADE",
+        "reminder_email_deliveries_workspace_id_reminder_id_due_date_key": "UNIQUE (workspace_id, reminder_id, due_date)"
+      }
     }
   }
 }
