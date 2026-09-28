@@ -1,6 +1,18 @@
 import XCTest
 
 final class AppUITests: XCTestCase {
+    override func record(_ issue: XCTIssue) {
+        // Retain the page for every failing assertion, including controls that
+        // appear after the email field. This app uses synthetic CI data only.
+        let app = XCUIApplication()
+        print("XBAR native failure accessibility tree:\n\(app.debugDescription)")
+        let screenshot = XCTAttachment(screenshot: app.screenshot())
+        screenshot.name = "XBAR-native-failure"
+        screenshot.lifetime = .keepAlways
+        add(screenshot)
+        super.record(issue)
+    }
+
     func testBundledSignInScreen() {
         continueAfterFailure = false
         let app = XCUIApplication()
@@ -9,15 +21,6 @@ final class AppUITests: XCTestCase {
         XCTAssertTrue(webView.waitForExistence(timeout: 30), "The bundled WKWebView must load")
         let email = webView.textFields.firstMatch
         let emailRendered = email.waitForExistence(timeout: 30)
-        if !emailRendered {
-            // Capture the actual native page before XCTest stops at the assertion.
-            // CI runs only with synthetic configuration and never signs in.
-            print("XBAR startup accessibility tree:\n\(app.debugDescription)")
-            let failureScreenshot = XCTAttachment(screenshot: app.screenshot())
-            failureScreenshot.name = "XBAR-startup-failure"
-            failureScreenshot.lifetime = .keepAlways
-            add(failureScreenshot)
-        }
         XCTAssertTrue(emailRendered, "The real sign-in form must render")
         XCTAssertTrue(webView.secureTextFields.firstMatch.exists)
         XCTAssertTrue(webView.buttons["Sign In"].exists)
