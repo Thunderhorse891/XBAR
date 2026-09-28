@@ -451,10 +451,10 @@ the counts are documented at the bottom of file 3.
 ### Operations
 
 - **Health probe**: `GET /api/health` returns liveness plus subsystem-configured booleans (no secrets, no database touch). Point uptime monitors here.
-- **Rate limiting**: every request-driven API endpoint is per-IP rate limited. Set `UPSTASH_REDIS_REST_URL` and `UPSTASH_REDIS_REST_TOKEN` so limits are shared across all serverless instances; without them the limiter degrades to per-instance in-memory counting.
+- **Rate limiting**: set `UPSTASH_REDIS_REST_URL` and `UPSTASH_REDIS_REST_TOKEN` for shared request protection. Protected production requests fail closed with 503 if Redis is missing or fails; in-memory mode is limited to explicit local/test operation.
 - **Crash telemetry**: uncaught browser errors and unhandled promise rejections are reported to `runtime_events` through `/api/telemetry` (rate limited, workspace-verified, capped at 20 reports per session).
 - **Marketing analytics**: every public page loads the first-party beacon `/site.js`, which reports pageviews and CTA clicks to `/api/metrics` — anonymous (no cookies, no identifiers, honors Do Not Track), CSP-safe, logged in the Vercel function stream, and stored in `runtime_events` as `marketing.*` when Supabase is configured.
-- **Go-live preflight**: `npm run preflight` reports which subsystems are configured and what each missing env var keeps switched off; add `-- --url <deployment>` to probe the live `/api/health` and compare.
+- **Go-live preflight**: `npm run preflight` requires configuration, verified backup/restore evidence and a fresh matching database catalog/critical migration ledger. Add `-- --url <deployment>` to compare the live health response too. See [database reconciliation](docs/PRODUCTION-DATABASE-ROLLOUT.md); health success alone cannot clear this gate.
 - **Webhook replays**: Stripe webhook deliveries are idempotent on `stripe_event_id` — retried events are acknowledged without re-running the subscription sync.
 - **CI**: every push runs lint, format check, production-dependency audit, typecheck, unit tests, build, and a browser smoke test of the built bundle; CodeQL scans weekly and on PRs; Dependabot files grouped weekly updates.
 
@@ -466,7 +466,7 @@ Do not paste `supabase/production-schema.sql` directly into production. Generate
 npm run supabase:prepare
 ```
 
-Then apply `supabase/production-schema.generated.sql` in the Supabase SQL editor. It converts unsupported policy syntax and appends the idempotent workspace RLS hardening migration.
+The generated schema is for an empty, isolated bootstrap/test database. It converts unsupported policy syntax and appends migrations. **Do not replay it over the existing production project.** Reconcile live definitions and legacy client compatibility, verify recovery and obtain Erin's explicit approval for a reviewed migration sequence; see [the rollout plan](docs/PRODUCTION-DATABASE-ROLLOUT.md).
 
 ### Stripe Go-Live
 

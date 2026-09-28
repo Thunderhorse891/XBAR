@@ -11,6 +11,9 @@ for (const [command, args] of [
   ['psql', [url, '-v', 'ON_ERROR_STOP=1', '-f', 'supabase/checks/ci-platform.sql']],
   ['psql', [url, '-v', 'ON_ERROR_STOP=1', '-f', 'supabase/production-schema.generated.sql']],
   ['psql', [url, '-v', 'ON_ERROR_STOP=1', '-f', 'supabase/checks/ci-rls.sql']],
+  [process.execPath, ['scripts/database-readiness.mjs', '--baseline']],
+  [process.execPath, ['scripts/test-database-readiness.mjs']],
+  ['psql', [url, '-v', 'ON_ERROR_STOP=1', '-f', 'supabase/checks/ci-release-behavior.sql']],
 ]) {
   const result = spawnSync(command, args, { stdio: 'inherit' });
   if (result.error || result.status !== 0) process.exit(1);

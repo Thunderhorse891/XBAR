@@ -7,6 +7,7 @@ import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { checkBackupEvidence } from '../../scripts/backup-evidence.mjs';
 import { encryptBackup, decryptBackup } from '../../scripts/database-backup.mjs';
+import { loadBaseline } from '../../scripts/database-readiness.mjs';
 
 test('production preflight fails without verified backup and restore evidence', () => {
   const result = spawnSync(process.execPath, ['scripts/preflight.mjs'], {
@@ -87,6 +88,20 @@ test('configured preflight rejects unhealthy or malformed HTTP 200 probe respons
     BACKUP_EVIDENCE_PATH: receipt,
     XBAR_BACKUP_SOURCE_REF: 'fixture-production',
   };
+  const databaseReceipt = path.join(dir, 'database.json');
+  const baseline = loadBaseline();
+  writeFileSync(
+    databaseReceipt,
+    JSON.stringify({
+      version: 1,
+      sourceRef: 'abcdefghijklmnopqrst',
+      checkedAt: stamp,
+      sourceDigest: baseline.sourceDigest,
+      migrationVersions: baseline.requiredVersions,
+      catalog: baseline.catalog,
+    }),
+  );
+  env.DATABASE_EVIDENCE_PATH = databaseReceipt;
   for (const name of [
     'VITE_SUPABASE_URL',
     'VITE_SUPABASE_ANON_KEY',
@@ -111,6 +126,7 @@ test('configured preflight rejects unhealthy or malformed HTTP 200 probe respons
     'VITE_SENTRY_DSN',
   ])
     env[name] = 'fixture-only';
+  env.SUPABASE_URL = env.VITE_SUPABASE_URL = 'https://abcdefghijklmnopqrst.supabase.co';
   const configuredSubsystems = { supabaseAdmin: true, email: true, remindersCron: true };
   let responseBody = { ok: true, subsystems: configuredSubsystems };
   let status = 200;
@@ -142,6 +158,13 @@ test('configured preflight rejects unhealthy or malformed HTTP 200 probe respons
     assert.equal(control.code, 0, control.stderr);
     assert.match(control.stdout, /0 awaiting configuration/);
     assert.match(control.stdout, /VERIFIED EVIDENCE/);
+    await t.test('configuration and backup evidence cannot clear an unverified production database', async () => {
+      delete env.DATABASE_EVIDENCE_PATH;
+      const result = await run();
+      assert.equal(result.code, 1, `preflight accepted an unverified database: ${result.stdout}`);
+      assert.match(result.stdout, /Database compatibility.*BLOCKED/);
+      env.DATABASE_EVIDENCE_PATH = databaseReceipt;
+    });
     // /api/health can correctly report liveness while these features are off.
     // Local credentials must not mask missing configuration in the deployment.
     for (const subsystem of Object.keys(configuredSubsystems)) {

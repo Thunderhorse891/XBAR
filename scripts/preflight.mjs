@@ -10,6 +10,7 @@
 
 import { readFileSync } from 'node:fs';
 import { checkBackupEvidence } from './backup-evidence.mjs';
+import { checkDatabaseEvidence } from './database-readiness.mjs';
 
 const args = process.argv.slice(2);
 const urlFlagIndex = args.indexOf('--url');
@@ -145,6 +146,31 @@ const backup = checkBackupEvidence(backupEvidence, process.env.XBAR_BACKUP_SOURC
 console.log(`Backup and restore — ${backup.ok ? 'VERIFIED EVIDENCE' : 'BLOCKED'}`);
 for (const failure of backup.failures) console.log(`  ${failure}`);
 if (!backup.ok || gatedGroups > 0) process.exitCode = 1;
+
+let databaseEvidence;
+try {
+  databaseEvidence = JSON.parse(readFileSync(process.env.DATABASE_EVIDENCE_PATH, 'utf8'));
+} catch {
+  /* A successful health probe cannot stand in for database compatibility. */
+}
+let databaseRef;
+try {
+  const server = new URL(process.env.SUPABASE_URL);
+  const client = new URL(process.env.VITE_SUPABASE_URL);
+  if (
+    server.origin === client.origin &&
+    server.protocol === 'https:' &&
+    /^[a-z]{20}\.supabase\.co$/.test(server.hostname)
+  ) {
+    databaseRef = server.hostname.split('.')[0];
+  }
+} catch {
+  /* Malformed or mismatched project configuration must fail closed. */
+}
+const database = checkDatabaseEvidence(databaseEvidence, databaseRef);
+console.log(`Database compatibility — ${database.ok ? 'MATCHED CATALOG EVIDENCE' : 'BLOCKED'}`);
+for (const failure of database.failures) console.log(`  ${failure}`);
+if (!database.ok) process.exitCode = 1;
 
 if (probeUrl) {
   const origin = probeUrl.replace(/\/+$/, '');

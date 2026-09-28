@@ -1,0 +1,222 @@
+{
+  "sourceDigest": "d1122473c4e37d113ef1b1d62421329a1f891ca5da97d433c90c6fe1ac6b0e35",
+  "requiredVersions": ["20260924120000", "20260924130000", "20260924134000", "20260924223000", "20260925180000"],
+  "catalog": {
+    "rls": {
+      "public.horses": true,
+      "storage.objects": true,
+      "public.documents": true,
+      "public.workspace_memberships": true,
+      "public.account_deletion_events": true,
+      "public.workspace_billing_customers": true,
+      "public.workspace_subscription_profiles": true
+    },
+    "buckets": {
+      "horse-media": false,
+      "sale-packets": false,
+      "horse-documents": false
+    },
+    "policies": {
+      "storage.objects.horse media update own": {
+        "check": "((bucket_id = 'horse-media'::text) AND ((auth.uid())::text = split_part(name, '/'::text, 1)))",
+        "roles": ["authenticated"],
+        "using": "((bucket_id = 'horse-media'::text) AND ((auth.uid())::text = split_part(name, '/'::text, 1)))",
+        "command": "UPDATE",
+        "permissive": "PERMISSIVE"
+      },
+      "storage.objects.horse media upload own": {
+        "check": "((bucket_id = 'horse-media'::text) AND ((auth.uid())::text = split_part(name, '/'::text, 1)))",
+        "roles": ["authenticated"],
+        "using": null,
+        "command": "INSERT",
+        "permissive": "PERMISSIVE"
+      },
+      "storage.objects.horse media select workspace": {
+        "check": null,
+        "roles": ["authenticated"],
+        "using": "((bucket_id = 'horse-media'::text) AND (((auth.uid())::text = split_part(name, '/'::text, 1)) OR (EXISTS ( SELECT 1\n   FROM public.horses h\n  WHERE (public.xbar_has_workspace_access(h.workspace_id) AND (jsonb_typeof((h.payload -> 'gallery'::text)) = 'array'::text) AND (EXISTS ( SELECT 1\n           FROM jsonb_array_elements((h.payload -> 'gallery'::text)) g(asset)\n          WHERE ((g.asset ->> 'storagePath'::text) = objects.name))))))))",
+        "command": "SELECT",
+        "permissive": "PERMISSIVE"
+      },
+      "storage.objects.horse documents insert workspace": {
+        "check": "((bucket_id = 'horse-documents'::text) AND\nCASE\n    WHEN (split_part(name, '/'::text, 1) ~ '^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$'::text) THEN public.xbar_can_manage_workspace((split_part(name, '/'::text, 1))::uuid)\n    ELSE false\nEND)",
+        "roles": ["authenticated"],
+        "using": null,
+        "command": "INSERT",
+        "permissive": "PERMISSIVE"
+      },
+      "storage.objects.horse documents select workspace": {
+        "check": null,
+        "roles": ["authenticated"],
+        "using": "((bucket_id = 'horse-documents'::text) AND (\nCASE\n    WHEN (split_part(name, '/'::text, 1) ~ '^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$'::text) THEN public.xbar_has_workspace_access((split_part(name, '/'::text, 1))::uuid)\n    ELSE false\nEND OR ((auth.uid())::text = split_part(name, '/'::text, 1))))",
+        "command": "SELECT",
+        "permissive": "PERMISSIVE"
+      },
+      "storage.objects.horse documents update workspace": {
+        "check": "((bucket_id = 'horse-documents'::text) AND\nCASE\n    WHEN (split_part(name, '/'::text, 1) ~ '^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$'::text) THEN public.xbar_can_manage_workspace((split_part(name, '/'::text, 1))::uuid)\n    ELSE false\nEND)",
+        "roles": ["authenticated"],
+        "using": "((bucket_id = 'horse-documents'::text) AND (\nCASE\n    WHEN (split_part(name, '/'::text, 1) ~ '^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$'::text) THEN public.xbar_can_manage_workspace((split_part(name, '/'::text, 1))::uuid)\n    ELSE false\nEND OR ((auth.uid())::text = split_part(name, '/'::text, 1))))",
+        "command": "UPDATE",
+        "permissive": "PERMISSIVE"
+      },
+      "public.workspace_billing_customers.workspace billing customers own workspace": {
+        "check": "(EXISTS ( SELECT 1\n   FROM public.workspaces w\n  WHERE ((w.id = workspace_billing_customers.workspace_id) AND (w.owner_user_id = auth.uid()))))",
+        "roles": ["authenticated"],
+        "using": "(EXISTS ( SELECT 1\n   FROM public.workspaces w\n  WHERE ((w.id = workspace_billing_customers.workspace_id) AND (w.owner_user_id = auth.uid()))))",
+        "command": "ALL",
+        "permissive": "PERMISSIVE"
+      },
+      "public.workspace_subscription_profiles.subscription profiles select active memberships": {
+        "check": null,
+        "roles": ["authenticated"],
+        "using": "((EXISTS ( SELECT 1\n   FROM public.workspace_memberships m\n  WHERE ((m.workspace_id = workspace_subscription_profiles.workspace_id) AND (m.user_id = auth.uid()) AND (m.status = 'active'::text)))) OR (EXISTS ( SELECT 1\n   FROM public.workspaces w\n  WHERE ((w.id = workspace_subscription_profiles.workspace_id) AND (w.owner_user_id = auth.uid())))))",
+        "command": "SELECT",
+        "permissive": "PERMISSIVE"
+      }
+    },
+    "triggers": {
+      "public.documents.trg_documents_enforce_storage": {
+        "enabled": "O",
+        "definition": "CREATE TRIGGER trg_documents_enforce_storage BEFORE INSERT OR UPDATE ON public.documents FOR EACH ROW EXECUTE FUNCTION public.xbar_enforce_storage_limit()"
+      },
+      "public.shared_listings.trg_shared_listings_audit": {
+        "enabled": "O",
+        "definition": "CREATE TRIGGER trg_shared_listings_audit AFTER INSERT OR UPDATE ON public.shared_listings FOR EACH ROW EXECUTE FUNCTION public.xbar_audit_shared_listing_change()"
+      },
+      "public.horses.trg_horses_enforce_commercial_limits": {
+        "enabled": "O",
+        "definition": "CREATE TRIGGER trg_horses_enforce_commercial_limits BEFORE INSERT OR UPDATE ON public.horses FOR EACH ROW EXECUTE FUNCTION public.xbar_enforce_commercial_resource_limits()"
+      },
+      "public.sale_packets.trg_sale_packets_enforce_storage": {
+        "enabled": "O",
+        "definition": "CREATE TRIGGER trg_sale_packets_enforce_storage BEFORE INSERT OR UPDATE ON public.sale_packets FOR EACH ROW EXECUTE FUNCTION public.xbar_enforce_storage_limit()"
+      },
+      "public.documents.trg_documents_enforce_commercial_limits": {
+        "enabled": "O",
+        "definition": "CREATE TRIGGER trg_documents_enforce_commercial_limits BEFORE INSERT OR UPDATE ON public.documents FOR EACH ROW EXECUTE FUNCTION public.xbar_enforce_commercial_resource_limits()"
+      },
+      "public.sales_leads.trg_sales_leads_enforce_commercial_limits": {
+        "enabled": "O",
+        "definition": "CREATE TRIGGER trg_sales_leads_enforce_commercial_limits BEFORE INSERT OR UPDATE ON public.sales_leads FOR EACH ROW EXECUTE FUNCTION public.xbar_enforce_commercial_resource_limits()"
+      },
+      "public.sale_packets.trg_sale_packets_enforce_commercial_limits": {
+        "enabled": "O",
+        "definition": "CREATE TRIGGER trg_sale_packets_enforce_commercial_limits BEFORE INSERT OR UPDATE ON public.sale_packets FOR EACH ROW EXECUTE FUNCTION public.xbar_enforce_commercial_resource_limits()"
+      },
+      "public.shared_listings.trg_shared_listings_enforce_commercial_limits": {
+        "enabled": "O",
+        "definition": "CREATE TRIGGER trg_shared_listings_enforce_commercial_limits BEFORE INSERT OR UPDATE ON public.shared_listings FOR EACH ROW EXECUTE FUNCTION public.xbar_enforce_commercial_resource_limits()"
+      },
+      "public.workspace_invitations.trg_workspace_invitations_enforce_limits": {
+        "enabled": "O",
+        "definition": "CREATE TRIGGER trg_workspace_invitations_enforce_limits BEFORE INSERT OR UPDATE ON public.workspace_invitations FOR EACH ROW EXECUTE FUNCTION public.xbar_enforce_workspace_seat_limits()"
+      },
+      "public.workspace_memberships.trg_workspace_memberships_enforce_limits": {
+        "enabled": "O",
+        "definition": "CREATE TRIGGER trg_workspace_memberships_enforce_limits BEFORE INSERT OR UPDATE ON public.workspace_memberships FOR EACH ROW EXECUTE FUNCTION public.xbar_enforce_workspace_seat_limits()"
+      }
+    },
+    "functions": {
+      "xbar_enforce_storage_limit()": {
+        "anon": false,
+        "definition": "3a019db8c477a2491725388e22bbdd84",
+        "service_role": false,
+        "authenticated": false
+      },
+      "xbar_audit_shared_listing_change()": {
+        "anon": false,
+        "definition": "0f8c0fcb5230643caf045e3992bae46b",
+        "service_role": false,
+        "authenticated": false
+      },
+      "xbar_trial_active(p_payload jsonb)": {
+        "anon": true,
+        "definition": "223af27d123a1385a24135a84c4b3996",
+        "service_role": true,
+        "authenticated": true
+      },
+      "xbar_enforce_workspace_seat_limits()": {
+        "anon": false,
+        "definition": "530df416d991ef8d5b89661b30a15187",
+        "service_role": false,
+        "authenticated": false
+      },
+      "xbar_enforce_commercial_resource_limits()": {
+        "anon": false,
+        "definition": "b47cb2dd91edc81a1a7283ff6c435dc1",
+        "service_role": false,
+        "authenticated": false
+      },
+      "xbar_commercial_limits(p_workspace_id uuid)": {
+        "anon": false,
+        "definition": "e0ae86d38896a73f730c70d9e26a4561",
+        "service_role": false,
+        "authenticated": true
+      },
+      "xbar_subscription_limits(p_workspace_id uuid)": {
+        "anon": false,
+        "definition": "1bb45a8e38dd4aeea5e0d6aa63f3e7b8",
+        "service_role": false,
+        "authenticated": true
+      },
+      "xbar_can_manage_workspace(p_workspace_id uuid)": {
+        "anon": false,
+        "definition": "af95b8127b3ea45f93f00492ab0fa4ed",
+        "service_role": false,
+        "authenticated": true
+      },
+      "xbar_has_workspace_access(p_workspace_id uuid)": {
+        "anon": false,
+        "definition": "a3cc86ead0b628fea8dc17b2d5c1211f",
+        "service_role": false,
+        "authenticated": true
+      },
+      "xbar_workspace_storage_bytes(p_workspace_id uuid)": {
+        "anon": false,
+        "definition": "fdbb980d37ebe88ce14c979ec81c746a",
+        "service_role": true,
+        "authenticated": true
+      },
+      "xbar_resolve_public_listing(p_share_path text, p_share_token text)": {
+        "anon": true,
+        "definition": "47aa1850c91338efa195be10072cb582",
+        "service_role": true,
+        "authenticated": true
+      },
+      "xbar_track_public_share_view(p_share_path text, p_share_token text)": {
+        "anon": true,
+        "definition": "3f44374eebed808717fbfba4723ad339",
+        "service_role": true,
+        "authenticated": true
+      },
+      "xbar_resolve_public_listing_legacy(p_share_path text, p_share_token text)": {
+        "anon": false,
+        "definition": "b7997bce8e3c59af8672b238c713dda7",
+        "service_role": false,
+        "authenticated": true
+      },
+      "xbar_accept_workspace_invitation(p_workspace_id uuid, p_invitation_id text)": {
+        "anon": false,
+        "definition": "fee35a70113e568328f1772e5a4a9ba5",
+        "service_role": false,
+        "authenticated": true
+      },
+      "xbar_claim_checkout_lock(p_workspace_id uuid, p_stale_before timestamp with time zone, p_token text)": {
+        "anon": false,
+        "definition": "9186539c2375e644d7f5dd855d5c837a",
+        "service_role": true,
+        "authenticated": false
+      },
+      "xbar_apply_subscription_event(p_workspace_id uuid, p_event_id text, p_event_type text, p_event_created_at timestamp with time zone, p_payload jsonb, p_tier text, p_billing_state text, p_monthly_rate double precision, p_profile jsonb, p_customer_id text, p_subscription_id text, p_price_id text, p_seat_count integer, p_from_sibling boolean, p_billing_period text)": {
+        "anon": false,
+        "definition": "1df8e7a9b4b9909d168373b1528674f4",
+        "service_role": true,
+        "authenticated": false
+      }
+    },
+    "billingPeriod": {
+      "type": "text",
+      "nullable": "YES"
+    }
+  }
+}
