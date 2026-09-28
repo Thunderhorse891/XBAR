@@ -1,6 +1,6 @@
 # Production database reconciliation and release hold
 
-## Current evidence (September 28, 2026)
+## Initial evidence (September 28, before 15:39 UTC)
 
 Read-only inspection of `uxvwfepyothlakhqazwv` confirmed:
 
@@ -27,6 +27,28 @@ Read-only inspection of `uxvwfepyothlakhqazwv` confirmed:
 Production and remote main were both `6d6d9273d0a4cd31371e916452d8fba070189ece`;
 Vercel `dpl_87BjnhWgQXM6VCrMMYSmyz4bJ6yh` was READY. Those deployment facts do
 not clear the database mismatch. No production writes were performed.
+
+## Subsequent reconciliation (September 28, after 15:42 UTC)
+
+Separate PR #271 (`9bc2561bec6da1ca6bdb3deaa1d0161e5dc44f4a`) records a hosted
+batch migration. A fresh read-only catalog check independently confirms
+`billing_period`, `xbar_trial_active(jsonb)`, a 15-argument subscription event RPC,
+private `horse-media`, and ledger versions `20260928153909` / `20260928154229`.
+The 25 existing public tables still grant anonymous SELECT; this PR's anonymous
+privilege correction remains unapplied. This task performed no production writes.
+
+These facts supersede the earlier absence/public-bucket snapshot above. They do
+not prove complete definition equivalence, immutable media ownership, hosted
+restore, payment/email delivery or whole-app acceptance. The other PR reports
+rolled-back live behavior tests; those are its author's evidence, not execution
+by this task. Its code is unmerged and review finding `4124238598` still calls
+for recoverable-subscription trial eligibility to agree between client/server.
+
+Before composing a release, reconcile #271's exact SQL files and batch ledger
+mapping with this PR's baseline and required versions. Do not replay the older
+files, invent individual ledger entries, or loosen the gate just to pass it.
+The dependency order below remains held and must be revised against the actual
+combined source and deployed definitions before any further execution.
 
 ## Read-only release check
 
@@ -73,7 +95,9 @@ another empty local database. Never generate the baseline from production.
    #267 still has the existing review finding `4109515402`: timezone offsets
    such as `+99:00` raise SQLSTATE `22009` instead of failing closed. Green CI
    does not clear that finding. Refresh both final review/CI results before
-   composing a release. Do not duplicate their implementations.
+   composing a release. #271 incorporates their corrections and reports the
+   additional timezone repair; review that combined head instead of duplicating
+   their implementations. It is not a whole-PR clearance for the older branches.
 2. Resolve the media ownership finding before calling private media secure:
    the existing proposed SELECT policy trusts paths inside editable horse gallery
    JSON. A private bucket alone does not prove immutable object ownership.
