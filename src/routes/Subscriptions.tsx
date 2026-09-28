@@ -37,7 +37,7 @@ import { canStartTrial, getTrialState, trialDaysRemaining, trialStatusCopy } fro
 import { useCloudStore } from '@/store/useCloudStore';
 import { useUiStore } from '@/store/useUiStore';
 import { useCurrentRoleCapability, useWorkspaceReady, useXbarStore } from '@/store/useXbarStore';
-import type { SubscriptionTier } from '@/types/xbar';
+import type { SubscriptionProfile, SubscriptionTier } from '@/types/xbar';
 import './checkoutExperience.css';
 
 const tiers: SubscriptionTier[] = ['Starter', 'Professional', 'Ranch Ops', 'Enterprise'];
@@ -90,6 +90,27 @@ export default function Subscriptions() {
   const decisionConfig = subscriptionPlans[decisionTier];
   const decisionProfile = revenuePlanMatrix[decisionTier];
   const hasManagedIdentity = Boolean(session?.access_token && workspaceId);
+  const [verifiedMissingBillingRow, setVerifiedMissingBillingRow] = useState<{
+    workspaceId: string;
+    profile: SubscriptionProfile;
+  } | null>(null);
+  useEffect(() => {
+    if (!hasManagedIdentity || !workspaceId) return;
+    let cancelled = false;
+    void refreshWorkspaceSubscriptionProfile(workspaceId)
+      .then((result) => {
+        if (!cancelled)
+          setVerifiedMissingBillingRow(
+            result.ok && result.profile === null ? { workspaceId, profile: subscription } : null,
+          );
+      })
+      .catch(() => {
+        if (!cancelled) setVerifiedMissingBillingRow(null);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [hasManagedIdentity, workspaceId, subscription, session?.access_token]);
   const billingEnabled = stripeConfig.managedBillingEnabled;
   const selectedPaymentLink = Boolean(getStripePaymentLink(decisionTier, billingPeriod));
   // The annual toggle is only useful when annual can actually be bought:
@@ -151,7 +172,13 @@ export default function Subscriptions() {
   const trialState = getTrialState(subscription.trialStart);
   const trialDaysLeft = trialState === 'active' ? trialDaysRemaining(subscription.trialStart) : 0;
   const trialCopy = trialStatusCopy(trialState, trialDaysLeft);
-  const trialCanStart = canStartTrial(subscription, { nativeApp, canManageBilling });
+  const trialCanStart = canStartTrial(subscription, {
+    nativeApp,
+    canManageBilling,
+    localOrMissingBillingRow:
+      !hasManagedIdentity ||
+      (verifiedMissingBillingRow?.workspaceId === workspaceId && verifiedMissingBillingRow?.profile === subscription),
+  });
   /*
    * Where a workspace that already has a subscription is sent instead.
    *

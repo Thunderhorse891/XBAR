@@ -14,6 +14,11 @@ test('packet generation does not claim a buyer share; seller must confirm sharin
   assert.ok(!generation.includes("kind: 'packet-shared'"));
   assert.ok(source.includes('Log that I shared the packet'));
   assert.ok(source.includes('Seller confirmed the packet was shared.'));
+  const share = source.slice(
+    source.indexOf("kind: 'packet-shared'"),
+    source.indexOf("title: result.ok ? 'Sharing logged'"),
+  );
+  assert.match(share, /actor: currentRole/);
 });
 
 /*

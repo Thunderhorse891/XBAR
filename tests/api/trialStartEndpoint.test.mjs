@@ -81,6 +81,24 @@ function dbWrites() {
   return calls.db.filter((call) => call.steps.some((step) => step.op === 'update' || step.op === 'insert'));
 }
 
+for (const subscriptionRecoverable of ['false', {}, 0, []]) {
+  test(`malformed recoverability ${JSON.stringify(subscriptionRecoverable)} refuses trial without writes`, async () => {
+    __setTrialBoundary({
+      access: { ok: true, role: 'Admin', message: '' },
+      row: { tier: 'Starter', billing_state: 'Inactive', payload: { subscriptionRecoverable } },
+    });
+    const req = mockReq({
+      headers: { authorization: 'Bearer tok_1', 'x-forwarded-for': nextIp() },
+      body: { workspaceId: 'ws_1' },
+    });
+    const res = mockRes();
+    await handler(req, res);
+    assert.equal(res.statusCode, 409);
+    assert.equal(JSON.parse(res.body).code, 'subscription_recoverable');
+    assert.equal(dbWrites().length, 0);
+  });
+}
+
 test('rejects non-POST methods with 405', async () => {
   const req = mockReq({ method: 'GET', headers: { 'x-forwarded-for': nextIp() } });
   const res = mockRes();

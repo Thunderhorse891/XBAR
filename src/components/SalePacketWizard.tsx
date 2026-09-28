@@ -865,7 +865,7 @@ export function SalePacketWizard({
                     const result = logBuyerRoomEvent({
                       horseId: horse.id,
                       kind: 'packet-shared',
-                      actor: buyerName.trim() || 'Buyer',
+                      actor: currentRole,
                       packetId: generated.packetId,
                       note: 'Seller confirmed the packet was shared.',
                     });

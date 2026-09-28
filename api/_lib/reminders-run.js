@@ -1,4 +1,4 @@
-import { timingSafeEqual } from 'node:crypto';
+import { createHash, timingSafeEqual } from 'node:crypto';
 import { sendJson } from './http.js';
 import { getSupabaseAdmin } from './supabase-admin.js';
 import { sendEmail, isEmailConfigured } from './email.js';
@@ -6,7 +6,8 @@ import { sendEmail, isEmailConfigured } from './email.js';
 // Daily background job (Vercel cron, see vercel.json). For each reminder due
 // within the next 7 days that hasn't been notified: email the workspace's
 // operations contact (falling back to the workspace owner), write an in-app
-// notification, then mark notification_sent so it never double-fires.
+// notification, then mark notification_sent. Durable email claims prevent
+// repeated/concurrent attempts; ambiguous outcomes require reconciliation.
 
 const LOOKAHEAD_DAYS = 7;
 const BATCH_LIMIT = 200;
@@ -74,36 +75,83 @@ export default async function handler(req, res) {
         `<p>${escapeHtml(typeLabel)} for ${escapeHtml(horseName)} is due on ${escapeHtml(dueLabel)}. ` +
         `<a href="${escapeHtml(appLink)}">Open XBAR</a> to review the record and schedule the appointment.</p>`;
 
-      let channel = 'in-app';
-      if (isEmailConfigured() && recipient.email) {
-        const result = await sendEmail({
-          to: recipient.email,
-          subject: `XBAR reminder: ${title} for ${horseName}`,
-          text: bodyText,
-          html: bodyHtml,
-        });
-        if (result.ok) {
-          channel = 'email';
-          sent += 1;
-        } else if (!result.skipped) {
-          failures.push({ reminderId: reminder.reminder_id, message: result.message });
-          continue; // Leave notification_sent=false so the next run retries.
-        }
-      }
+      const deliveryId = reminderDeliveryId(reminder);
       const { data: notification, error: notificationError } = await supabase
         .from('notifications')
         .insert({
+          id: deliveryId,
           workspace_id: reminder.workspace_id,
           user_id: recipient.userId,
           reminder_id: reminder.reminder_id,
           title,
           body: bodyText,
-          channel,
+          channel: 'in-app',
         })
         .select('id')
         .single();
-      if (notificationError || !notification?.id) {
+      if (notificationError?.code === '23505') {
+        const { data: existing, error: existingError } = await supabase
+          .from('notifications')
+          .select('id')
+          .eq('id', deliveryId)
+          .eq('workspace_id', reminder.workspace_id)
+          .eq('reminder_id', reminder.reminder_id)
+          .maybeSingle();
+        if (existingError || existing?.id !== deliveryId)
+          throw new Error('Notification identity could not be verified.');
+      } else if (notificationError || notification?.id !== deliveryId) {
         throw new Error(notificationError?.message || 'Notification insert returned no row.');
+      }
+
+      let channel = 'in-app';
+      if (isEmailConfigured() && recipient.email) {
+        const { data: claim, error: claimError } = await supabase
+          .from('reminder_email_deliveries')
+          .insert({
+            id: deliveryId,
+            workspace_id: reminder.workspace_id,
+            reminder_id: reminder.reminder_id,
+            due_date: reminder.due_date,
+            status: 'pending',
+          })
+          .select('id')
+          .single();
+        if (claimError?.code === '23505') {
+          const { data: prior, error: priorError } = await supabase
+            .from('reminder_email_deliveries')
+            .select('status')
+            .eq('id', deliveryId)
+            .eq('workspace_id', reminder.workspace_id)
+            .maybeSingle();
+          if (priorError || prior?.status !== 'accepted') {
+            throw new Error('Email delivery is pending or uncertain; reconcile the provider result before retrying.');
+          }
+          channel = 'email';
+        } else {
+          if (claimError || claim?.id !== deliveryId)
+            throw new Error(claimError?.message || 'Email delivery claim failed.');
+          // Never release this claim automatically: even a timeout can mean the
+          // provider accepted mail. This is at-most-one attempt, not exactly-once delivery.
+          const result = await sendEmail({
+            to: recipient.email,
+            subject: `XBAR reminder: ${title} for ${horseName}`,
+            text: bodyText,
+            html: bodyHtml,
+          });
+          if (!result.ok)
+            throw new Error(result.message || 'Email delivery was not accepted; reconciliation required.');
+          sent += 1;
+          const { data: accepted, error: acceptedError } = await supabase
+            .from('reminder_email_deliveries')
+            .update({ status: 'accepted', accepted_at: new Date().toISOString() })
+            .eq('id', deliveryId)
+            .eq('status', 'pending')
+            .select('id');
+          if (acceptedError || accepted?.length !== 1 || accepted[0].id !== deliveryId) {
+            throw new Error('Email accepted but its receipt could not be saved; reconciliation required.');
+          }
+          channel = 'email';
+        }
       }
 
       const { data: updated, error: updateError } = await supabase
@@ -111,6 +159,7 @@ export default async function handler(req, res) {
         .update({ notification_sent: true, updated_at: new Date().toISOString() })
         .eq('workspace_id', reminder.workspace_id)
         .eq('reminder_id', reminder.reminder_id)
+        .eq('due_date', reminder.due_date)
         .select('reminder_id');
       if (updateError || updated?.length !== 1 || updated[0].reminder_id !== reminder.reminder_id) {
         throw new Error(updateError?.message || 'Reminder completion did not update the expected row.');
@@ -130,6 +179,13 @@ export default async function handler(req, res) {
     inAppOnly,
     failures,
   });
+}
+
+function reminderDeliveryId(reminder) {
+  const hex = createHash('sha256')
+    .update(JSON.stringify(['xbar-reminder-v1', reminder.workspace_id, reminder.reminder_id, reminder.due_date]))
+    .digest('hex');
+  return `${hex.slice(0, 8)}-${hex.slice(8, 12)}-5${hex.slice(13, 16)}-a${hex.slice(17, 20)}-${hex.slice(20, 32)}`;
 }
 
 async function resolveRecipient(supabase, workspaceId, cache) {

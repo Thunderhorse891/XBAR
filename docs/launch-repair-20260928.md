@@ -67,8 +67,24 @@ is not an acceptable default recovery action.
   truthful subscription-conflict result when a conditional update loses a race.
 - Reminder insert/update errors and zero affected rows no longer report success.
   Failed batches return 500; completed counts require confirmed writes. Email
-  counts describe provider acceptance. Retries can still duplicate an email or
-  notification after partial completion; exactly-once delivery is not claimed.
+  counts describe provider acceptance. Notifications have deterministic IDs and
+  email attempts use service-only durable claims keyed by workspace, reminder,
+  and due date. Repeated/concurrent runs cannot automatically resend a claimed
+  email. A crash or failure after claiming remains pending and returns failure
+  for operator reconciliation; exactly-once delivery is not claimed.
+  The additive `20260928163000_reminder_email_delivery_claims.sql` migration was
+  applied as hosted ledger `20260928161212_reminder_email_delivery_claims`.
+  Local reapplication and a rolled-back hosted uniqueness/grant/receipt check
+  passed. No existing customer rows were rewritten and no claim fixtures remain.
+  To recover a pending claim, inspect provider logs for that occurrence first.
+  Record acceptance if confirmed. Only reset a claim after proving no send was
+  accepted and that no sender remains active; never automatically expire claims.
+  If acceptance cannot be determined, retain the claim and in-app notification.
+- Trial UI refuses recoverable subscriptions and routes to the billing portal;
+  malformed recoverability flags also fail closed at the server boundary.
+  The client/server matrix covers 64 paid/current/legacy/malformed profiles,
+  including zero-rate persisted manual grants. A setup placeholder requires
+  local mode or a successful cloud read proving no billing row exists.
 - Configured shared rate limiter failures, malformed responses and Redis command
   errors return 503 with Retry-After. Unconfigured environments retain the existing
   per-instance limiter; this does not establish a shared production boundary.

@@ -149,7 +149,11 @@ export function decideTrialStart(row) {
 
   // Reuse the stored billing policy, including its legacy Past Due fallback.
   // The canonical column takes precedence over a stale payload billingState.
-  if (isStoredSubscriptionRecoverable({ ...row?.payload, billingState: row?.billing_state })) {
+  const recoverable = row?.payload?.subscriptionRecoverable;
+  if (
+    (recoverable !== undefined && recoverable !== null && typeof recoverable !== 'boolean') ||
+    isStoredSubscriptionRecoverable({ ...row?.payload, billingState: row?.billing_state })
+  ) {
     return {
       ok: false,
       code: 'subscription_recoverable',

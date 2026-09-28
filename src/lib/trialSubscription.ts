@@ -30,12 +30,15 @@ export type TrialState = 'active' | 'expired' | 'none';
 /** UI eligibility; the server remains authoritative for cloud trial writes. */
 export function canStartTrial(
   profile: SubscriptionProfile,
-  context: { nativeApp: boolean; canManageBilling: boolean },
+  context: { nativeApp: boolean; canManageBilling: boolean; localOrMissingBillingRow?: boolean },
 ): boolean {
   // The client represents an unpurchased workspace with the Manual Billing /
   // Starter / zero-rate seed. A real paid Starter row must still be refused.
   const setupSeed =
-    profile.tier === 'Starter' && profile.billingState === 'Manual Billing' && profile.monthlyRate === 0;
+    context.localOrMissingBillingRow === true &&
+    profile.tier === 'Starter' &&
+    profile.billingState === 'Manual Billing' &&
+    profile.monthlyRate === 0;
   return (
     !profile.trialStart &&
     !context.nativeApp &&

@@ -15,6 +15,7 @@ import {
 } from '../src/lib/trialSubscription.js';
 import { subscriptionTierConfig } from '../src/lib/xbarRuntime.js';
 import type { SubscriptionProfile } from '../src/types/xbar.js';
+import { subscriptionFromCloudRow } from '../src/lib/cloudSubscription.js';
 
 const DAY_MS = 24 * 60 * 60 * 1000;
 
@@ -59,8 +60,13 @@ test('client trial eligibility agrees with server for current and legacy billing
   const { decideTrialStart } = await import(pathToFileURL(path.join(process.cwd(), 'api/_lib/trial-status.js')).href);
   for (const tier of ['Starter', 'Professional'] as const) {
     for (const billingState of ['Active', 'Manual Billing', 'Inactive', 'Past Due'] as const) {
-      for (const subscriptionRecoverable of [undefined, false, true]) {
-        const candidate = profile({ tier, billingState, monthlyRate: 29, subscriptionRecoverable });
+      for (const subscriptionRecoverable of [undefined, null, false, true, 'false', {}, 0, []]) {
+        const candidate = profile({
+          tier,
+          billingState,
+          monthlyRate: 0,
+          subscriptionRecoverable: subscriptionRecoverable as boolean | undefined,
+        });
         const server = decideTrialStart({ tier, billing_state: billingState, payload: { subscriptionRecoverable } });
         assert.equal(
           canStartTrial(candidate, { nativeApp: false, canManageBilling: true }),
@@ -78,6 +84,13 @@ test('trial action preserves eligible, terminal, role, native, paid and used-tri
   // New local/cloud workspace placeholders use this seed before a billing row exists.
   assert.equal(
     canStartTrial(profile({ billingState: 'Manual Billing', subscriptionRecoverable: false }), context),
+    false,
+  );
+  assert.equal(
+    canStartTrial(profile({ billingState: 'Manual Billing', subscriptionRecoverable: false }), {
+      ...context,
+      localOrMissingBillingRow: true,
+    }),
     true,
   );
   assert.equal(canStartTrial(profile({ billingState: 'Past Due', subscriptionRecoverable: false }), context), true);
@@ -93,6 +106,17 @@ test('trial action preserves eligible, terminal, role, native, paid and used-tri
     false,
   );
   assert.equal(canStartTrial(profile({ trialStart: 'invalid' }), context), false);
+});
+
+test('a hydrated zero-rate manual grant is not a missing billing row', async () => {
+  const { decideTrialStart } = await import(pathToFileURL(path.join(process.cwd(), 'api/_lib/trial-status.js')).href);
+  const row = { tier: 'Starter', billing_state: 'Manual Billing', monthly_rate: 0, payload: {} };
+  const persisted = subscriptionFromCloudRow(row);
+  assert.ok(persisted);
+  assert.equal(canStartTrial(persisted, { nativeApp: false, canManageBilling: true }), false);
+  assert.equal(decideTrialStart(row).ok, false);
+  assert.equal(subscriptionFromCloudRow(null), undefined);
+  assert.equal(decideTrialStart(null).ok, true);
 });
 
 test('the trial grants the Professional plan for exactly 14 days', () => {
