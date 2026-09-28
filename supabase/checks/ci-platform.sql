@@ -24,4 +24,4 @@ alter default privileges in schema public grant all on tables to authenticated, 
 alter default privileges in schema public grant usage on sequences to authenticated, service_role;
 -- Reproduce Supabase's legacy anonymous table-discovery grants. The final
 -- hardening migration must remove these while retaining public share RPCs.
-alter default privileges in schema public grant select on tables to anon;
+alter default privileges in schema public grant all on tables to anon;

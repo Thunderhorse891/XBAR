@@ -14,13 +14,24 @@ const migration = readFileSync('supabase/migrations/20260928150000_restrict_anon
 for (const [grants, allowed] of [
   ['grant select on public.anon_acl_probe to anon;', true],
   ['grant select(id) on public.anon_acl_probe to anon;', true],
+  ['grant all privileges on public.anon_acl_probe to anon;', true],
+  ['grant update(id), insert(id), references(id) on public.anon_acl_probe to anon;', true],
   ['grant select on public.anon_acl_probe to public;', true],
+  ['grant all privileges on public.anon_acl_probe to public;', true],
   [
     'revoke select on public.anon_acl_probe from authenticated; grant select on public.anon_acl_probe to public;',
     false,
   ],
   [
     'revoke select on public.anon_acl_probe from authenticated, service_role; grant select(id) on public.anon_acl_probe to public;',
+    false,
+  ],
+  [
+    'revoke update on public.anon_acl_probe from authenticated; grant update on public.anon_acl_probe to public;',
+    false,
+  ],
+  [
+    'revoke insert on public.anon_acl_probe from authenticated; grant insert(id) on public.anon_acl_probe to public;',
     false,
   ],
 ]) {
@@ -30,8 +41,9 @@ for (const [grants, allowed] of [
     ${migration}
     ${migration}
     do $$ begin
-      if has_any_column_privilege('anon','public.anon_acl_probe','SELECT')
-      then raise exception 'anon SELECT survived'; end if;
+      if exists(select 1 from unnest(array['SELECT','INSERT','UPDATE','DELETE','TRUNCATE','REFERENCES','TRIGGER','MAINTAIN']) p where has_table_privilege('anon','public.anon_acl_probe',p))
+      or exists(select 1 from unnest(array['SELECT','INSERT','UPDATE','REFERENCES']) p where has_any_column_privilege('anon','public.anon_acl_probe',p))
+      then raise exception 'anon privilege survived'; end if;
       if not has_table_privilege('authenticated','public.anon_acl_probe','SELECT')
       or not has_table_privilege('service_role','public.anon_acl_probe','SELECT')
       then raise exception 'intended role lost SELECT'; end if;
@@ -46,7 +58,7 @@ for (const [grants, allowed] of [
   if (allowed) assert.equal(result.status, 0, result.stderr);
   else {
     assert.notEqual(result.status, 0, 'unsafe inherited access must abort');
-    assert.match(result.stderr, /Intended read access changed for public.anon_acl_probe/);
+    assert.match(result.stderr, /Intended access changed for public.anon_acl_probe/);
   }
 }
 console.log(

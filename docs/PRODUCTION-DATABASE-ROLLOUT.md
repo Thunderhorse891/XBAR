@@ -15,8 +15,10 @@ Read-only inspection of `uxvwfepyothlakhqazwv` confirmed:
 - No public-table policy targets anon or PUBLIC. The anonymous frontend uses
   the two authorized public-share RPCs, not direct table reads. A new held
   `20260928150000_restrict_anon_table_discovery.sql` removes unnecessary anon and
-  PUBLIC table/column SELECT grants, preserving function grants and verifying
-  authenticated/service-role access is unchanged. It aborts on unsafe grant
+  PUBLIC table/column read and write grants, preserving function grants and verifying
+  authenticated/service-role access is unchanged. The read-only inventory also
+  confirmed unnecessary anonymous write grants; SELECT-only revocation would
+  leave mutation privileges behind. The migration aborts on unsafe grant
   inheritance instead of adding broad privileges. It is not applied live.
 - Production's document policies intentionally retain legacy uploader access.
   Some definitions were applied with different ledger versions. Never infer
@@ -125,7 +127,7 @@ On isolated scratch, `ci-release-behavior.sql` exercises authenticated insertion
 of a sixth horse during a valid trial, denial after expiry, the real named-argument
 billing RPC with annual-period/trial preservation, private bucket configuration,
 uploader reads and unrelated-user denial. `ci-rls.sql` covers subscription write
-denial and deletion-audit durability. `test-database-readiness.mjs` changes eleven
+denial and deletion-audit durability. `test-database-readiness.mjs` changes thirteen
 catalog conditions inside rolled-back transactions and verifies each blocks the
 release check. These do not emulate Storage HTTP, Stripe delivery or trial races;
 #266 owns the concurrent database test.
@@ -135,7 +137,8 @@ tokened shares and intentional tokenless Public Links each resolve and record
 exactly one view, invalid/missing private tokens stay denied and an authenticated
 owner still reads their horse. Grant regression tests
 cover table/column/PUBLIC grants, repeat application and transactional refusal
-when revoking inherited privileges would remove an intended role's access.
+when revoking inherited privileges would remove an intended role's read or
+write access. An authenticated owner update is exercised as well.
 
 Before release, use authorized disposable accounts/records for Storage HTTP
 upload/read/signed-URL/outsider tests and an actual Stripe test-mode checkout,

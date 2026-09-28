@@ -4,7 +4,8 @@ begin;
 do $$ begin
  if exists(select 1 from pg_class c join pg_namespace n on n.oid=c.relnamespace
   where n.nspname='public' and c.relkind in ('r','p')
-  and (has_table_privilege('anon',c.oid,'SELECT') or has_any_column_privilege('anon',c.oid,'SELECT')))
+  and (exists(select 1 from unnest(array['SELECT','INSERT','UPDATE','DELETE','TRUNCATE','REFERENCES','TRIGGER','MAINTAIN']) p where has_table_privilege('anon',c.oid,p))
+    or exists(select 1 from unnest(array['SELECT','INSERT','UPDATE','REFERENCES']) p where has_any_column_privilege('anon',c.oid,p))))
  then raise exception 'anonymous table discovery remains enabled'; end if;
 end $$;
 insert into auth.users(id,email) values
@@ -25,6 +26,10 @@ do $$ begin
  begin
   perform * from public.horses;
   raise exception 'anon table read did not raise permission denial';
+ exception when insufficient_privilege then null; end;
+ begin
+  update public.horses set name='Unauthorized' where horse_id='share-horse';
+  raise exception 'anon table update did not raise permission denial';
  exception when insufficient_privilege then null; end;
  if public.xbar_resolve_public_listing('/verify/anon-table-test',null) is not null
  then raise exception 'missing token resolved'; end if;
@@ -50,6 +55,11 @@ select set_config('request.jwt.claim.sub','81000000-0000-4000-8000-000000000001'
 do $$ begin
  if (select count(*) from public.horses where horse_id='share-horse') <> 1
  then raise exception 'authenticated owner lost row access'; end if;
+end $$;
+update public.horses set name='Owner update' where horse_id='share-horse';
+do $$ begin
+ if not exists(select 1 from public.horses where horse_id='share-horse' and name='Owner update')
+ then raise exception 'authenticated owner lost update access'; end if;
 end $$;
 reset role;
 rollback;

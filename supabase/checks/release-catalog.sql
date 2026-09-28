@@ -13,11 +13,16 @@ select jsonb_build_object(
     from pg_proc p join pg_namespace n on n.oid = p.pronamespace
     where n.nspname = 'public' and p.proname like 'xbar\_%' escape '\'
   ), '{}'::jsonb),
-  'tableSelectGrants', coalesce((
+  'tableGrants', coalesce((
     select jsonb_object_agg(c.relname, jsonb_build_object(
-      'anon', has_table_privilege('anon',c.oid,'SELECT') or has_any_column_privilege('anon',c.oid,'SELECT'),
-      'authenticated', has_table_privilege('authenticated',c.oid,'SELECT'),
-      'service_role', has_table_privilege('service_role',c.oid,'SELECT')))
+      'table', (select jsonb_object_agg(role_name,permissions) from (
+        select role_name,(select jsonb_object_agg(p,has_table_privilege(role_name,c.oid,p))
+          from unnest(array['SELECT','INSERT','UPDATE','DELETE','TRUNCATE','REFERENCES','TRIGGER','MAINTAIN']) p) permissions
+        from unnest(array['anon','authenticated','service_role']) role_name) grants),
+      'column', (select jsonb_object_agg(role_name,permissions) from (
+        select role_name,(select jsonb_object_agg(p,has_any_column_privilege(role_name,c.oid,p))
+          from unnest(array['SELECT','INSERT','UPDATE','REFERENCES']) p) permissions
+        from unnest(array['anon','authenticated','service_role']) role_name) grants)))
     from pg_class c join pg_namespace n on n.oid=c.relnamespace
     where n.nspname='public' and c.relkind in ('r','p')
   ), '{}'::jsonb),
