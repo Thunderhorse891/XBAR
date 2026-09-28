@@ -32,11 +32,15 @@ export function canStartTrial(
   profile: SubscriptionProfile,
   context: { nativeApp: boolean; canManageBilling: boolean },
 ): boolean {
+  // The client represents an unpurchased workspace with the Manual Billing /
+  // Starter / zero-rate seed. A real paid Starter row must still be refused.
+  const setupSeed =
+    profile.tier === 'Starter' && profile.billingState === 'Manual Billing' && profile.monthlyRate === 0;
   return (
     !profile.trialStart &&
     !context.nativeApp &&
     context.canManageBilling &&
-    !isEntitledBillingState(profile.billingState) &&
+    (!isEntitledBillingState(profile.billingState) || setupSeed) &&
     !isSubscriptionRecoverable(profile)
   );
 }

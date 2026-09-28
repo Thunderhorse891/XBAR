@@ -60,7 +60,7 @@ test('client trial eligibility agrees with server for current and legacy billing
   for (const tier of ['Starter', 'Professional'] as const) {
     for (const billingState of ['Active', 'Manual Billing', 'Inactive', 'Past Due'] as const) {
       for (const subscriptionRecoverable of [undefined, false, true]) {
-        const candidate = profile({ tier, billingState, subscriptionRecoverable });
+        const candidate = profile({ tier, billingState, monthlyRate: 29, subscriptionRecoverable });
         const server = decideTrialStart({ tier, billing_state: billingState, payload: { subscriptionRecoverable } });
         assert.equal(
           canStartTrial(candidate, { nativeApp: false, canManageBilling: true }),
@@ -75,6 +75,11 @@ test('client trial eligibility agrees with server for current and legacy billing
 test('trial action preserves eligible, terminal, role, native, paid and used-trial boundaries', () => {
   const context = { nativeApp: false, canManageBilling: true };
   assert.equal(canStartTrial(profile(), context), true);
+  // New local/cloud workspace placeholders use this seed before a billing row exists.
+  assert.equal(
+    canStartTrial(profile({ billingState: 'Manual Billing', subscriptionRecoverable: false }), context),
+    true,
+  );
   assert.equal(canStartTrial(profile({ billingState: 'Past Due', subscriptionRecoverable: false }), context), true);
   assert.equal(canStartTrial(profile(), { ...context, nativeApp: true }), false);
   assert.equal(canStartTrial(profile(), { ...context, canManageBilling: false }), false);
