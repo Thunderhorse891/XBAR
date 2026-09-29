@@ -1,4 +1,5 @@
 import type { SalesLead } from '../types/xbar.js';
+import { localIsoDate } from './format.js';
 
 export const buyerOfferStatuses = [
   'Submitted',
@@ -44,8 +45,9 @@ export type BuyerOfferPatch = Partial<
 
 type MoneyParseResult = { ok: true; value?: number } | { ok: false; message: string };
 
+// The seller's calendar day; the UTC one is tomorrow every evening west of UTC.
 function todayStamp(now: Date) {
-  return now.toISOString().slice(0, 10);
+  return localIsoDate(now);
 }
 
 function parsePositiveMoney(value: string, label: string, required = false): MoneyParseResult {

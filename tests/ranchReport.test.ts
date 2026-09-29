@@ -18,7 +18,10 @@ import type { ExpenseReceipt, HorseRecord, SalesLead } from '../src/types/xbar.j
  * NaN, and that the CSV escapes what real horse names contain.
  */
 
-const NOW = new Date('2026-08-21T12:00:00Z');
+// Noon on the 21st on the local calendar, where the report dates itself. As a
+// UTC instant it was already the 22nd from UTC+12, so every dated assertion
+// below held only for zones near UTC.
+const NOW = new Date(2026, 7, 21, 12, 0, 0);
 
 function horse(overrides: Partial<HorseRecord> & { id: string; name: string }): HorseRecord {
   return {

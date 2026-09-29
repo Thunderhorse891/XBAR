@@ -1,4 +1,5 @@
 import type { DocumentRecord, ExpenseCategory, ExpenseReceipt, HorseRecord, OwnershipRecord } from '../types/xbar.js';
+import { addLocalCalendarDays, localCalendarDay, localIsoDate } from './format.js';
 
 export type CareSignalStatus = 'due' | 'watch' | 'clear';
 
@@ -52,10 +53,6 @@ function parseDate(value?: string) {
   return Number.isNaN(parsed.getTime()) ? null : parsed;
 }
 
-function diffDays(from: Date, to: Date) {
-  return Math.floor((to.getTime() - from.getTime()) / dayMs);
-}
-
 function buildMonthKey(date: Date) {
   return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}`;
 }
@@ -96,8 +93,12 @@ function createTimedSignal(params: {
     };
   }
 
-  const ageDays = diffDays(parsed, params.now);
-  const dueDate = new Date(parsed.getTime() + params.dueDays * dayMs).toISOString().slice(0, 10);
+  // Whole days on the rancher's calendar. A difference of instants against the
+  // reference date's local noon flipped at noon, so on its due date a signal
+  // read "soon" all morning and "overdue" after lunch; and the UTC date of that
+  // noon is already tomorrow from UTC+12, where New Zealand spends its summer.
+  const ageDays = Math.round((localCalendarDay(params.now) - localCalendarDay(parsed)) / dayMs);
+  const dueDate = localIsoDate(addLocalCalendarDays(parsed, params.dueDays));
 
   if (ageDays >= params.dueDays) {
     return {

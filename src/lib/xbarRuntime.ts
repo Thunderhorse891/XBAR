@@ -15,6 +15,7 @@ import type {
 } from '../types/xbar.js';
 import { describeDocumentCoverage, fullCoverage, readDocumentWithCoverage } from './documentIntelligence.js';
 import { extractRegistrationFields } from './registrationExtraction.js';
+import { localIsoDate } from './format.js';
 
 const GIGABYTE = 1024 * 1024 * 1024;
 const BASE36_ALPHABET = 'abcdefghijklmnopqrstuvwxyz0123456789';
@@ -163,8 +164,9 @@ export function createShareAccessToken(length = 18) {
   return createRandomBase36(length);
 }
 
+/** Today on the user's own calendar, for fields that hold a day, not an instant. */
 export function todayStamp() {
-  return new Date().toISOString().slice(0, 10);
+  return localIsoDate();
 }
 
 /**

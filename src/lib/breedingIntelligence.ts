@@ -1,4 +1,5 @@
 import type { HorseRecord, TimelineEvent, BreedingRecordDetails } from '../types/xbar.js';
+import { localCalendarDay } from './format.js';
 
 /*
  * Breeding operations intelligence. Pure domain logic over the breeding
@@ -81,6 +82,20 @@ function addDays(date: Date, days: number): Date {
   return new Date(date.getTime() + days * DAY_MS);
 }
 
+/*
+ * Days from the viewer's today to a record's date, day against day.
+ *
+ * A record's date is the calendar day it was written as — a bare 'YYYY-MM-DD'
+ * parses as UTC midnight, so it is read by its UTC components. Today is the
+ * viewer's own calendar day. Measuring an instant against that UTC midnight
+ * moved every checkpoint and foaling countdown a day early each evening west
+ * of UTC, and a day late each morning east of it.
+ */
+function daysFromToday(date: Date, now: Date): number {
+  const recordDay = Date.UTC(date.getUTCFullYear(), date.getUTCMonth(), date.getUTCDate());
+  return Math.round((recordDay - localCalendarDay(now)) / DAY_MS);
+}
+
 function breedingDetails(event: TimelineEvent): BreedingRecordDetails | undefined {
   const details = event.details as BreedingRecordDetails | undefined;
   return details && 'recordType' in details ? details : undefined;
@@ -140,7 +155,7 @@ const CHECKPOINT_TEMPLATE: { day: number; label: string; kind: BreedingCheckpoin
 export function buildCheckpoints(bredOn: Date, now: Date): BreedingCheckpoint[] {
   return CHECKPOINT_TEMPLATE.map((template) => {
     const dueDate = addDays(bredOn, template.day);
-    const daysUntil = Math.ceil((dueDate.getTime() - now.getTime()) / DAY_MS);
+    const daysUntil = daysFromToday(dueDate, now);
     const status: BreedingCheckpoint['status'] = daysUntil < 0 ? 'overdue' : daysUntil <= 7 ? 'due' : 'upcoming';
     return {
       id: `chk-${template.day}`,
@@ -297,7 +312,7 @@ export function buildMareBreedingState(horse: HorseRecord, now: Date = new Date(
     if (checkpoint.status !== 'overdue' || !checkpoint.critical) return false;
     // A logged check supersedes diagnostic checkpoints at or before its day.
     if (checkpoint.kind === 'diagnostic' && checkpoint.dayOffset <= latestCheckDay) return false;
-    const ageDays = (now.getTime() - new Date(checkpoint.dueDate).getTime()) / DAY_MS;
+    const ageDays = -daysFromToday(new Date(checkpoint.dueDate), now);
     return ageDays <= RECENT_OVERDUE_WINDOW_DAYS;
   });
   const nextCheckpoint = checkpoints.find((checkpoint) => checkpoint.status !== 'overdue');
@@ -305,7 +320,7 @@ export function buildMareBreedingState(horse: HorseRecord, now: Date = new Date(
   const expectedFoaling = addDays(bredOn, GESTATION_MEAN_DAYS);
   const windowStart = addDays(bredOn, GESTATION_EARLY_DAYS);
   const windowEnd = addDays(bredOn, GESTATION_LATE_DAYS);
-  const daysToFoaling = Math.ceil((expectedFoaling.getTime() - now.getTime()) / DAY_MS);
+  const daysToFoaling = daysFromToday(expectedFoaling, now);
 
   const confirmed = positivePregnancyCheck(events, breeding.date);
 

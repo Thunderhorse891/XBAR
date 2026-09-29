@@ -1,5 +1,6 @@
 import type { DocumentRecord, HorseRecord, SharedListingRecord } from '../types/xbar.js';
 import { saveTextAsFile, type FileSaveResult } from './fileDownload.js';
+import { localIsoDate } from './format.js';
 
 export type PublicBuyerPacketArtifact = {
   fileName: string;
@@ -43,7 +44,7 @@ export function buildPublicBuyerPacketArtifact(params: {
   sharedListing?: PublicBuyerPacketListing;
   generatedAt?: Date;
 }): PublicBuyerPacketArtifact {
-  const generatedOn = (params.generatedAt ?? new Date()).toISOString().slice(0, 10);
+  const generatedOn = localIsoDate(params.generatedAt ?? new Date());
   const registration = params.horse.registrationNumber || params.horse.aqhaNumber;
   const documents = params.documents.length
     ? params.documents

@@ -19,7 +19,7 @@ import { openFacebookShareDialog } from '@/lib/facebookSharing';
 import { buildBadgeSnippet, buildShareText } from '@/lib/verificationBadge';
 import { realWorkspaceName } from '@/lib/workspaceIdentity';
 import { assessRevenueAtRisk, computeHorseEconomics } from '@/lib/businessIntelligence';
-import { formatCompactCurrency } from '@/lib/format';
+import { formatCompactCurrency, localIsoDate } from '@/lib/format';
 import { useCloudStore } from '@/store/useCloudStore';
 import { useUiStore } from '@/store/useUiStore';
 import { useXbarStore } from '@/store/useXbarStore';
@@ -121,7 +121,7 @@ export function SalePacketWizard({
       document.horseId === effectiveHorseId && document.state === 'Ready' && isBuyerSafeDocumentType(document.type),
   );
   const docSelection = selectedDocIds ?? readyDocs.map((document) => document.id);
-  const defaultWatermark = `Copy for ${buyerName.trim() || 'buyer review'} – ${new Date().toISOString().slice(0, 10)}`;
+  const defaultWatermark = `Copy for ${buyerName.trim() || 'buyer review'} – ${localIsoDate()}`;
   const effectiveWatermark = watermark.trim() || defaultWatermark;
 
   if (!open) return null;

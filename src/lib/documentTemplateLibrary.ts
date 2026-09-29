@@ -6,6 +6,7 @@ import type {
   WorkspaceProfile,
 } from '../types/xbar.js';
 import { saveTextAsFile, type FileSaveResult } from './fileDownload.js';
+import { localIsoDate } from './format.js';
 
 export type DocumentTemplateTier = 'Basic' | 'Pro' | 'Business';
 
@@ -230,7 +231,7 @@ export function buildPrefilledDocument(params: {
   ];
 
   const title = `${template.label} — ${params.horse.name}`;
-  const generatedAt = now.toISOString().slice(0, 10);
+  const generatedAt = localIsoDate(now);
   const identityRows = [
     fieldRow('Horse name', params.horse.name),
     fieldRow('Barn name', params.horse.barnName),
