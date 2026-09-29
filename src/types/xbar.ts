@@ -172,7 +172,18 @@ export interface SalePacketBuild {
   includesBillOfSale: boolean;
   status: 'draft' | 'generated' | 'shared';
   fileName?: string;
+  /**
+   * The link returned when the cloud built the packet. It expires 72 hours
+   * later, so it is only used for packets with no `serverPacketId` to re-sign.
+   */
   downloadUrl?: string;
+  /**
+   * The packet's id on the server, for a packet the cloud built. Opening the
+   * packet asks the server for a fresh link by this id rather than reusing
+   * `downloadUrl`, which is dead three days after generation — exactly when a
+   * seller comes back to send the packet to the next buyer.
+   */
+  serverPacketId?: string;
   /**
    * Key into the on-device file vault holding the generated packet.
    *

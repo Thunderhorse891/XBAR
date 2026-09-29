@@ -1,7 +1,10 @@
+import { hasBackendIdentity, refreshSalePacketDownload } from '@/lib/backendApi';
 import { getDocumentAccessUrl } from '@/lib/cloudWorkspace';
 import { isNavigableFileUrl } from '@/lib/navigableFileUrl';
+import { serverPacketIdOf } from '@/lib/salePacketAccess';
 import { SavedPacketCompatibilityError } from '@/lib/savedPacketCompatibility';
 import type { StoredFileRef } from '@/lib/storedFiles';
+import type { SalePacketBuild } from '@/types/xbar';
 
 /*
  * Opening a stored file, wherever it is stored.
@@ -34,7 +37,16 @@ const OBJECT_URL_LIFETIME_MS = 60_000;
  */
 export type OpenStoredFileResult = { ok: true; delivery: 'tab' | 'download' } | { ok: false; message: string };
 
-export async function openStoredFileInTab(record: StoredFileRef): Promise<OpenStoredFileResult> {
+type StoredFileAccess = Awaited<ReturnType<typeof getDocumentAccessUrl>>;
+
+/**
+ * `resolve` finds the file's address. It defaults to the record's own storage;
+ * a saved cloud packet passes one that asks the server to sign it again.
+ */
+export async function openStoredFileInTab(
+  record: StoredFileRef,
+  resolve: () => Promise<StoredFileAccess> = () => getDocumentAccessUrl(record),
+): Promise<OpenStoredFileResult> {
   // Opened synchronously, before any await: a `window.open` that happens after
   // one is no longer attributable to the click and is blocked by default.
   const previewWindow = typeof window !== 'undefined' ? window.open('', '_blank') : null;
@@ -52,9 +64,9 @@ export async function openStoredFileInTab(record: StoredFileRef): Promise<OpenSt
    * because each of them only handles `{ ok: false }`. The result is a stuck
    * button and an empty tab, with no explanation anywhere.
    */
-  let access: Awaited<ReturnType<typeof getDocumentAccessUrl>>;
+  let access: StoredFileAccess;
   try {
-    access = await getDocumentAccessUrl(record);
+    access = await resolve();
   } catch (error) {
     previewWindow?.close();
     if (error instanceof SavedPacketCompatibilityError) {
@@ -148,4 +160,28 @@ export async function openStoredFileInTab(record: StoredFileRef): Promise<OpenSt
 
   scheduleRelease();
   return { ok: true, delivery: 'tab' };
+}
+
+/**
+ * Opens a saved sale packet, wherever it is.
+ *
+ * A packet the cloud built is signed again by its server id every time it is
+ * opened. The link saved when it was built expires after 72 hours, which is
+ * sooner than a seller is done sending a packet to buyers. A packet with no
+ * server id to ask for opens from this device's vault as before.
+ *
+ * The tab is still opened before the first await (inside `openStoredFileInTab`),
+ * so the network round trip does not cost the click its popup permission.
+ */
+export function openSalePacketInTab(
+  packet: SalePacketBuild,
+  auth: { workspaceId: string; accessToken: string },
+): Promise<OpenStoredFileResult> {
+  const serverPacketId = serverPacketIdOf(packet);
+  if (!serverPacketId) return openStoredFileInTab(packet);
+  return openStoredFileInTab(packet, async () =>
+    hasBackendIdentity(auth)
+      ? refreshSalePacketDownload(auth, serverPacketId)
+      : { ok: false as const, message: 'Sign in to open sale packets stored in the cloud.' },
+  );
 }

@@ -212,6 +212,8 @@ export type XbarStore = {
     includesBillOfSale: boolean;
     createdBy: string;
     downloadUrl?: string;
+    /** The cloud packet's server id, so a saved packet can be re-signed. */
+    serverPacketId?: string;
     /** When a cloud PDF was generated, the server-anchored (tamper-proof) seal
      * returned with it. If present it is stored as the packet's credential in
      * place of the client-side one. */

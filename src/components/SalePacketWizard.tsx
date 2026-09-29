@@ -202,6 +202,7 @@ export function SalePacketWizard({
     try {
       const auth = { workspaceId, accessToken: session?.access_token ?? '' };
       let downloadUrl: string | undefined;
+      let serverPacketId: string | undefined;
       let serverSeal: RemoteSalePacketSeal | undefined;
       let verifyUrl: string | undefined;
       let localPacket: LocalSalePacket | undefined;
@@ -248,6 +249,8 @@ export function SalePacketWizard({
           return;
         }
         downloadUrl = remote.downloadUrl;
+        // Kept so the saved packet can be signed again once this link expires.
+        serverPacketId = remote.packetId;
         serverSeal = remote.seal;
         verifyUrl = remote.verifyUrl;
         remoteUnavailable = remote.unavailableDocuments ?? [];
@@ -313,6 +316,7 @@ export function SalePacketWizard({
         includesBillOfSale: false,
         createdBy: currentRole,
         downloadUrl,
+        serverPacketId,
         serverSeal,
         localSeal,
         localFileKey,

@@ -5,7 +5,9 @@ import { ActionButton, Card, PageHead, StatusChip } from '@/components/saas';
 import { SalePacketWizard } from '@/components/SalePacketWizard';
 import { useXbarStore } from '@/store/useXbarStore';
 import { useUiStore } from '@/store/useUiStore';
-import { openStoredFileInTab } from '@/lib/openStoredFile';
+import { openSalePacketInTab } from '@/lib/openStoredFile';
+import { serverPacketIdOf } from '@/lib/salePacketAccess';
+import { useCloudStore } from '@/store/useCloudStore';
 import type { DocumentType, SalePacketBuild } from '@/types/xbar';
 import { isNavigableFileUrl } from '@/lib/navigableFileUrl';
 import { buildSaleReadinessScore } from '@/lib/saleReadinessScore';
@@ -50,10 +52,12 @@ export default function SalePacketStudio() {
   const [wizardOpen, setWizardOpen] = useState<boolean>(Boolean(requestedHorseId));
   const [openingPacketId, setOpeningPacketId] = useState('');
   const pushToast = useUiStore((state) => state.pushToast);
+  const workspaceId = useCloudStore((state) => state.workspaceId);
+  const accessToken = useCloudStore((state) => state.session?.access_token ?? '');
 
   const openPacket = async (packet: SalePacketBuild) => {
     setOpeningPacketId(packet.id);
-    const result = await openStoredFileInTab(packet);
+    const result = await openSalePacketInTab(packet, { workspaceId, accessToken });
     setOpeningPacketId('');
 
     if (!result.ok) {
@@ -200,9 +204,20 @@ export default function SalePacketStudio() {
                   <StatusChip tone={packet.status === 'shared' ? 'info' : 'success'}>
                     {packet.status === 'shared' ? 'Shared' : 'Generated'}
                   </StatusChip>
-                  {/* Scheme-checked: an imported packet's downloadUrl is untrusted, and
-                      `download` does not stop a browser running a `javascript:` href. */}
-                  {isNavigableFileUrl(packet.downloadUrl) ? (
+                  {/* A cloud packet is signed again on every open: the link saved when
+                      it was built dies after 72 hours. */}
+                  {serverPacketIdOf(packet) ? (
+                    <button
+                      className="xs-btn xs-btn--sm"
+                      type="button"
+                      onClick={() => void openPacket(packet)}
+                      disabled={openingPacketId === packet.id}
+                    >
+                      {openingPacketId === packet.id ? 'Opening...' : 'Download'}
+                    </button>
+                  ) : /* Scheme-checked: an imported packet's downloadUrl is untrusted, and
+                      `download` does not stop a browser running a `javascript:` href. */
+                  isNavigableFileUrl(packet.downloadUrl) ? (
                     <a className="xs-btn xs-btn--sm" href={packet.downloadUrl} download={packet.fileName}>
                       Download
                     </a>

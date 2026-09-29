@@ -2587,6 +2587,7 @@ export const useXbarStore = create<XbarStore>()(
           // open on the buyer's machine with no explanation.
           fileName: input.fileName ?? `sale-packet-${slug}-${todayStamp()}.pdf`,
           downloadUrl: input.downloadUrl,
+          serverPacketId: input.serverPacketId,
           localFileKey: input.localFileKey,
           credential,
         };

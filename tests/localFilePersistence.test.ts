@@ -398,10 +398,13 @@ test('a throwing file lookup becomes a result, not an escaping rejection', async
    * its "Opening..." state forever, because all of them only handle
    * `{ ok: false }`.
    */
+  assert.match(source, /try \{\s*access = await resolve\(\);\s*\} catch \(error\) \{/, 'resolution must be guarded');
+  // Every resolver runs inside that guard — the record's own storage lookup by
+  // default, and the saved-packet re-sign when a caller passes one.
   assert.match(
     source,
-    /try \{\s*access = await getDocumentAccessUrl\(record\);\s*\} catch \(error\) \{/,
-    'resolution must be guarded',
+    /resolve: \(\) => Promise<StoredFileAccess> = \(\) => getDocumentAccessUrl\(record\),/,
+    "the default resolution must still be the record's own storage lookup",
   );
   assert.match(
     source,
