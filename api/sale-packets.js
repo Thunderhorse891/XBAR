@@ -16,6 +16,7 @@ import { enforceRateLimit } from './_lib/rate-limit.js';
 import { applyCors } from './_lib/cors.js';
 import { packetOmissionSection, selectPacketDocuments } from './_lib/packet-selection.js';
 import { sellerIdentity } from './_lib/workspace-identity.js';
+import { RECORDED_PATH_REFUSED, mayReadPacketPath, mayUseClientStoragePath } from './_lib/document-storage.js';
 
 const DOCUMENT_BUCKET =
   process.env.SUPABASE_DOCUMENT_BUCKET || process.env.VITE_SUPABASE_DOCUMENT_BUCKET || 'horse-documents';
@@ -148,6 +149,12 @@ export default async function handler(req, res) {
     const attachments = [];
     const includedDocs = [];
     for (const doc of packetDocs) {
+      // storage_path is editable by any workspace manager and this download
+      // uses the service role: read only what the caller could read themselves.
+      if (!mayUseClientStoragePath({ storagePath: doc.storage_path, workspaceId, userId: user?.id })) {
+        unavailable.push(`${doc.title} (the stored file does not belong to this workspace)`);
+        continue;
+      }
       const { data, error } = await supabase.storage.from(DOCUMENT_BUCKET).download(doc.storage_path);
       if (error || !data) {
         unavailable.push(`${doc.title} (${error?.message || 'download failed'})`);
@@ -419,9 +426,11 @@ async function listPackets(res, access, horseId) {
 
   const packets = [];
   for (const row of data || []) {
-    const { data: signed } = await supabase.storage
-      .from(PACKET_BUCKET)
-      .createSignedUrl(row.packet_pdf_path, SIGNED_URL_TTL_SECONDS);
+    // packet_pdf_path is editable by any workspace manager; see mayReadPacketPath.
+    const readable = mayReadPacketPath({ packetPath: row.packet_pdf_path, workspaceId });
+    const { data: signed } = readable
+      ? await supabase.storage.from(PACKET_BUCKET).createSignedUrl(row.packet_pdf_path, SIGNED_URL_TTL_SECONDS)
+      : { data: null };
     packets.push({
       packetId: row.packet_id,
       horseId: row.horse_id,
@@ -432,6 +441,7 @@ async function listPackets(res, access, horseId) {
       createdAt: row.created_at,
       downloadUrl: signed?.signedUrl || '',
       expiresInSeconds: SIGNED_URL_TTL_SECONDS,
+      ...(readable ? {} : { downloadUnavailable: RECORDED_PATH_REFUSED }),
     });
   }
 

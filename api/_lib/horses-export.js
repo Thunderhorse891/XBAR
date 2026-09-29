@@ -3,6 +3,7 @@ import { requireWorkspaceAccess } from './supabase-admin.js';
 import { recordAuditEvent } from './audit.js';
 import { enforceRateLimit } from './rate-limit.js';
 import { applyCors } from './cors.js';
+import { RECORDED_PATH_REFUSED, mayReadPacketPath, mayUseClientStoragePath } from './document-storage.js';
 
 // Full data export for one horse: profile, documents (with 1-hour signed
 // URLs for the original files), ownership records, reminders, and sale
@@ -73,14 +74,26 @@ export default async function handler(req, res) {
       .eq('horse_id', horseId),
   ]);
 
+  /*
+   * Both paths below are columns a workspace manager can edit, and they are
+   * signed with the service role, which bypasses Storage RLS. So a path is
+   * signed only when the caller could have read it with their own token: see
+   * mayUseClientStoragePath and mayReadPacketPath. A refused file stays in the
+   * export, marked as refused.
+   */
   const documentExports = [];
   for (const doc of documents || []) {
     let downloadUrl = '';
+    let downloadUnavailable;
     if (doc.storage_path) {
-      const { data: signed } = await supabase.storage
-        .from(DOCUMENT_BUCKET)
-        .createSignedUrl(doc.storage_path, SIGNED_URL_TTL_SECONDS);
-      downloadUrl = signed?.signedUrl || '';
+      if (mayUseClientStoragePath({ storagePath: doc.storage_path, workspaceId, userId: user.id })) {
+        const { data: signed } = await supabase.storage
+          .from(DOCUMENT_BUCKET)
+          .createSignedUrl(doc.storage_path, SIGNED_URL_TTL_SECONDS);
+        downloadUrl = signed?.signedUrl || '';
+      } else {
+        downloadUnavailable = RECORDED_PATH_REFUSED;
+      }
     }
     documentExports.push({
       documentId: doc.document_id,
@@ -95,14 +108,16 @@ export default async function handler(req, res) {
       ocrConfidenceMap: doc.ocr_confidence_map,
       createdAt: doc.created_at,
       downloadUrl,
+      ...(downloadUnavailable ? { downloadUnavailable } : {}),
     });
   }
 
   const packetExports = [];
   for (const packet of packets || []) {
-    const { data: signed } = await supabase.storage
-      .from(PACKET_BUCKET)
-      .createSignedUrl(packet.packet_pdf_path, SIGNED_URL_TTL_SECONDS);
+    const readable = mayReadPacketPath({ packetPath: packet.packet_pdf_path, workspaceId });
+    const { data: signed } = readable
+      ? await supabase.storage.from(PACKET_BUCKET).createSignedUrl(packet.packet_pdf_path, SIGNED_URL_TTL_SECONDS)
+      : { data: null };
     packetExports.push({
       packetId: packet.packet_id,
       watermarkText: packet.watermark_text,
@@ -110,6 +125,7 @@ export default async function handler(req, res) {
       status: packet.status,
       createdAt: packet.created_at,
       downloadUrl: signed?.signedUrl || '',
+      ...(readable ? {} : { downloadUnavailable: RECORDED_PATH_REFUSED }),
     });
   }
 

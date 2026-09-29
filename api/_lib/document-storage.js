@@ -81,6 +81,37 @@ export function mayUseClientStoragePath({ storagePath, workspaceId, userId }) {
   return namespace === workspace || namespace === owner;
 }
 
+/**
+ * May the server sign or download a packet PDF recorded on a sale_packets row?
+ *
+ * `packet_pdf_path` is a column any workspace manager can update, and the
+ * readers (the saved-packet list and the horse export) sign it with the SERVICE
+ * ROLE. Unchecked, a manager of one ranch could point a row at another ranch's
+ * packet and have it signed for them.
+ *
+ * Stricter than `mayUseClientStoragePath`: only the server ever writes a
+ * packet, and always as `${workspaceId}/${horseId}/${packetId}.pdf`, so there is
+ * no older uploader-keyed shape to honour. A `..` segment is refused outright;
+ * nothing the server writes contains one.
+ */
+export function mayReadPacketPath({ packetPath, workspaceId }) {
+  if (typeof packetPath !== 'string' || !packetPath) {
+    return false;
+  }
+  const segments = packetPath.split('/');
+  if (segments.includes('..')) {
+    return false;
+  }
+  const workspace = typeof workspaceId === 'string' ? workspaceId.toLowerCase() : '';
+  return Boolean(workspace) && (segments[0] ?? '').toLowerCase() === workspace;
+}
+
+/**
+ * Said, not dropped, when a recorded path is refused: an export or packet list
+ * that quietly omitted a file would read as complete.
+ */
+export const RECORDED_PATH_REFUSED = 'The stored file does not belong to this workspace, so it was not signed.';
+
 export function documentObjectPath({ workspaceId, documentId, fileName, fallbackName = 'upload.bin' }) {
   if (typeof workspaceId !== 'string' || !WORKSPACE_ID_PATTERN.test(workspaceId)) {
     throw new Error('A document can only be stored under a valid workspace id.');
