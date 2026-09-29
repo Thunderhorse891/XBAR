@@ -810,10 +810,16 @@ test('an update event is a trigger to look, not the authority on status', async 
   const branch = code.slice(code.indexOf("if (event.type === 'customer.subscription.updated'"));
   assert.match(
     branch,
-    /if \(event\.type === 'customer\.subscription\.updated' && payload\.id\) \{\s*effective = await stripe\.subscriptions\.retrieve\(payload\.id\);/,
+    /if \(event\.type === 'customer\.subscription\.updated' && payload\.id\) \{\s*effective = await stripe\.subscriptions\.retrieve\(payload\.id, WITH_FIRST_INVOICE\);/,
     'an updated event must resolve the subscription rather than trust its payload',
   );
-  assert.match(branch, /status: effective\.status,/, 'and the resolved status is what gets written');
+  // Resolved, then settled: an active subscription whose first invoice is
+  // unpaid entitles nothing yet (webhookSettlement.test.mjs pins the behavior).
+  assert.match(
+    branch,
+    /status: settledSubscriptionStatus\(effective\),/,
+    'and the resolved status is what gets written',
+  );
   assert.doesNotMatch(branch, /status: payload\.status,/, 'never the event snapshot');
 
   /*
@@ -981,6 +987,13 @@ test('the only invoice handler is dunning, which grants no entitlement', async (
    * If a FUTURE invoice handler starts granting entitlement, this test's
    * handled-set assertion fires again, and the refusal reasoning gets its
    * third look then.
+   *
+   * Third look: checkout.session.async_payment_succeeded and _failed were
+   * added so a delayed payment (ACH) grants only once it settles. They are not
+   * invoice handlers and not a rescue: they take the checkout path, which never
+   * sets p_from_sibling, and the tie rule refuses only sibling-adopted
+   * entitlement. So a refused tied re-subscription still has no rescue, and a
+   * genuine one is still never refused, exactly as before.
    */
   const webhook = await readFile('api/stripe/webhook.js', 'utf8');
   const handled = [...new Set([...webhook.matchAll(/event\.type === '([^']+)'/g)].map(([, type]) => type))].sort();
@@ -988,6 +1001,8 @@ test('the only invoice handler is dunning, which grants no entitlement', async (
   assert.deepEqual(
     handled,
     [
+      'checkout.session.async_payment_failed',
+      'checkout.session.async_payment_succeeded',
       'checkout.session.completed',
       'customer.subscription.deleted',
       'customer.subscription.updated',

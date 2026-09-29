@@ -155,7 +155,9 @@ test('the sibling lookup runs only when the event would deactivate', () => {
 
   assert.match(
     code,
-    /if \(customerId && !isEntitledBillingState\(billingStateForStripeStatus\(effective\.status\)\)\) \{/,
+    // The same settled status that gets written: a first payment still
+    // settling deactivates, so it is what the sibling lookup has to answer.
+    /if \(customerId && !isEntitledBillingState\(billingStateForStripeStatus\(settledSubscriptionStatus\(effective\)\)\)\) \{/,
     'an entitling event must not pay for an extra Stripe round trip',
   );
   // The row has to name the subscription it describes, or a workspace kept

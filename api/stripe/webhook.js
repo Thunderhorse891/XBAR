@@ -51,9 +51,64 @@ const stripe = stripeSecretKey ? new Stripe(stripeSecretKey, { apiVersion: '2026
  * follows is that unknown is not permission — there, not permission to charge;
  * here, not permission to cut off access.
  */
+/*
+ * The status a subscription ENTITLES by, once its first payment is accounted
+ * for.
+ *
+ * Stripe's status is not enough for the first grant. With delayed-confirmation
+ * methods (ACH Direct Debit and the like) a new subscription "can bypass
+ * incomplete and move directly to active upon creation", and if that payment
+ * later fails "Stripe voids the invoice while the subscription remains
+ * active". Read on status alone, an unpaid checkout granted Active paid access,
+ * and the failure that followed changed nothing.
+ *
+ * So while the CREATION invoice is not paid, the subscription is treated the
+ * way Stripe treats a card payment that has not gone through: incomplete, which
+ * entitles nothing. Only the creation invoice: a paying customer keeps access
+ * while a renewal settles, and a renewal that fails reaches past_due through
+ * Stripe's own flow. A trial's creation invoice is a paid $0 invoice, so a
+ * trial still starts at once.
+ *
+ * A Checkout Session that Stripe reports `paid` is settlement evidence for
+ * its own invoice (`paidInvoiceId`): the invoice re-read a moment after
+ * async_payment_succeeded can still read `open`, and holding back a payment
+ * that went through is the direction that costs a paying customer. It vouches
+ * for that one invoice only.
+ *
+ * Needs the invoice itself, so every read of a subscription here expands
+ * `latest_invoice`. An id string is not evidence either way and leaves the
+ * status as Stripe reports it; no read in this file asks without expanding.
+ */
+export function settledSubscriptionStatus(subscription, { paidInvoiceId = '' } = {}) {
+  const status = subscription?.status;
+  const invoice = subscription?.latest_invoice;
+  if (
+    invoice &&
+    typeof invoice === 'object' &&
+    invoice.billing_reason === 'subscription_create' &&
+    invoice.status !== 'paid' &&
+    !(paidInvoiceId && invoice.id === paidInvoiceId) &&
+    isEntitledBillingState(billingStateForStripeStatus(status))
+  ) {
+    return 'incomplete';
+  }
+  return status;
+}
+
+/*
+ * The end of the paid period. The pinned API version moved it from the
+ * subscription onto each subscription item (Stripe, 2025-03-31); reading only
+ * the old top-level field stored a blank renewal date for every purchase.
+ */
+function currentPeriodEndOf(subscription) {
+  return subscription?.current_period_end ?? subscription?.items?.data?.[0]?.current_period_end ?? null;
+}
+
+const WITH_FIRST_INVOICE = { expand: ['latest_invoice'] };
+
 export async function findEntitlingSibling(stripe, customerId, canceledSubscriptionId) {
   const { items, complete } = await collectStripePages((params) =>
-    stripe.subscriptions.list({ customer: customerId, status: 'all', ...params }),
+    stripe.subscriptions.list({ customer: customerId, status: 'all', expand: ['data.latest_invoice'], ...params }),
   );
 
   if (!complete) {
@@ -64,7 +119,7 @@ export async function findEntitlingSibling(stripe, customerId, canceledSubscript
     items.find(
       (candidate) =>
         candidate.id !== canceledSubscriptionId &&
-        isEntitledBillingState(billingStateForStripeStatus(candidate.status)),
+        isEntitledBillingState(billingStateForStripeStatus(settledSubscriptionStatus(candidate))),
     ) ?? null
   );
 }
@@ -268,20 +323,33 @@ export default async function handler(req, res) {
       }
     }
 
-    if (event.type === 'checkout.session.completed' && payload.mode === 'subscription') {
+    /*
+     * A delayed payment completes Checkout before the money arrives, then
+     * reports the outcome as async_payment_succeeded or async_payment_failed.
+     * All three re-read the subscription and write what it now says, so the
+     * grant follows settlement: see `settledSubscriptionStatus`.
+     */
+    if (
+      (event.type === 'checkout.session.completed' ||
+        event.type === 'checkout.session.async_payment_succeeded' ||
+        event.type === 'checkout.session.async_payment_failed') &&
+      payload.mode === 'subscription'
+    ) {
       const workspaceId = payload.metadata?.workspace_id;
       const subscriptionId = typeof payload.subscription === 'string' ? payload.subscription : payload.subscription?.id;
       const customerId = typeof payload.customer === 'string' ? payload.customer : payload.customer?.id;
       if (workspaceId && subscriptionId) {
-        const subscription = await stripe.subscriptions.retrieve(subscriptionId);
+        const subscription = await stripe.subscriptions.retrieve(subscriptionId, WITH_FIRST_INVOICE);
         const lineItem = subscription.items.data[0];
+        const sessionInvoiceId = typeof payload.invoice === 'string' ? payload.invoice : payload.invoice?.id || '';
+        const paidInvoiceId = payload.payment_status === 'paid' ? sessionInvoiceId : '';
         await syncWorkspaceSubscription({
           workspaceId,
           customerId,
           subscriptionId,
           priceId: lineItem?.price?.id || '',
-          status: subscription.status,
-          currentPeriodEnd: subscription.current_period_end,
+          status: settledSubscriptionStatus(subscription, { paidInvoiceId }),
+          currentPeriodEnd: currentPeriodEndOf(subscription),
           quantity: lineItem?.quantity || 1,
           eventId: event.id,
           eventType: event.type,
@@ -300,11 +368,28 @@ export default async function handler(req, res) {
       let resolvedWorkspaceId = directWorkspaceId;
       if (!resolvedWorkspaceId && customerId) {
         const supabase = getSupabaseAdmin();
-        const { data: billingCustomer } = await supabase
+        if (!supabase) {
+          return sendJson(res, 503, { ok: false, message: 'Supabase admin credentials are not configured.' });
+        }
+        const { data: billingCustomer, error: billingCustomerError } = await supabase
           .from('workspace_billing_customers')
           .select('workspace_id')
           .eq('stripe_customer_id', customerId)
           .maybeSingle();
+        /*
+         * A failed lookup is not "no workspace". Treating it as one
+         * acknowledged the event with nothing written, and an acknowledged
+         * event is never redelivered: a cancellation lost to a statement
+         * timeout left the workspace paid for good. Fail the delivery instead,
+         * so Stripe retries it.
+         */
+        if (billingCustomerError) {
+          return sendJson(res, 503, {
+            ok: false,
+            message:
+              `Could not map Stripe customer ${customerId} to a workspace; retry. ${billingCustomerError.message ?? ''}`.trim(),
+          });
+        }
         resolvedWorkspaceId = billingCustomer?.workspace_id || null;
       }
 
@@ -336,7 +421,7 @@ export default async function handler(req, res) {
          */
         let effective = payload;
         if (event.type === 'customer.subscription.updated' && payload.id) {
-          effective = await stripe.subscriptions.retrieve(payload.id);
+          effective = await stripe.subscriptions.retrieve(payload.id, WITH_FIRST_INVOICE);
         }
 
         /*
@@ -350,7 +435,7 @@ export default async function handler(req, res) {
          * reason.
          */
         let entitlementFromSibling = false;
-        if (customerId && !isEntitledBillingState(billingStateForStripeStatus(effective.status))) {
+        if (customerId && !isEntitledBillingState(billingStateForStripeStatus(settledSubscriptionStatus(effective)))) {
           const sibling = await findEntitlingSibling(stripe, customerId, payload.id);
           if (sibling) {
             effective = sibling;
@@ -371,8 +456,8 @@ export default async function handler(req, res) {
           // workspace's billing record at a subscription that no longer exists.
           subscriptionId: effective.id || payload.id,
           priceId: effectiveLineItem?.price?.id || '',
-          status: effective.status,
-          currentPeriodEnd: effective.current_period_end,
+          status: settledSubscriptionStatus(effective),
+          currentPeriodEnd: currentPeriodEndOf(effective),
           quantity: effectiveLineItem?.quantity || 1,
           eventId: event.id,
           eventType: event.type,
