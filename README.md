@@ -408,7 +408,8 @@ the original contract phase for documents. Step 11's contract
 from both buckets. **Never run it after step 11:** it rebuilds the document
 policies WITH the uploader branch and would silently undo that contract. On a
 database that has had neither, running it is optional and only ever before
-step 11. Its check script describes that intermediate state and nothing later.
+step 11; once step 11 has begun it refuses to run. Its check script describes
+that intermediate state and nothing later.
 
 ```sh
 # Superseded by step 11. Optional, and only BEFORE step 11's contract.

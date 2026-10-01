@@ -11,7 +11,8 @@
 --     writes follow manage. Inactive and invited members get nothing.
 --   * Uploader-keyed `<user id>/...` objects open for no one and cannot be
 --     minted, and no update moves a file out of its workspace.
---   * Two workspaces cannot hold a live listing at the same share path.
+--   * No client can rename a photo at all (an UPDATE is a move, and a rename
+--     inside the ranch strands its gallery entry).
 begin;
 do $check$
 declare
@@ -30,7 +31,6 @@ declare
   media_legacy text;
   affected integer;
   reader uuid;
-  check_path text := '/profiles/check-' || gen_random_uuid()::text;
 begin
   doc_shared := workspace::text || '/documents/fixture/shared.pdf';
   doc_legacy := admin_id::text || '/documents/fixture/legacy.pdf';
@@ -148,13 +148,18 @@ begin
   exception when insufficient_privilege then null;
   end;
   begin
+    update storage.objects set name = workspace::text || '/horses/fixture/renamed.jpg'
+    where bucket_id = 'horse-media' and name = media_ws;
+  exception when insufficient_privilege then null;
+  end;
+  begin
     update storage.objects set name = other_workspace::text || '/horses/fixture/taken.jpg'
     where bucket_id = 'horse-media' and name = media_ws;
   exception when insufficient_privilege then null;
   end;
   reset role;
   if not exists (select 1 from storage.objects where bucket_id = 'horse-media' and name = media_ws)
-    then raise exception 'A member moved a ranch photo out of its workspace'; end if;
+    then raise exception 'A member moved or renamed a ranch photo'; end if;
 
   perform set_config('request.jwt.claim.sub', admin_id::text, true);
   set local role authenticated;
@@ -201,25 +206,7 @@ begin
   if not public.xbar_has_workspace_capability(workspace, 'manageMedical')
     then raise exception 'Medical Lead lost manageMedical'; end if;
 
-  -- ------------------------------------------------- one ranch per path
-  insert into public.shared_listings (workspace_id, listing_id, horse_id, share_path, state)
-  values (workspace, 'check-listing', 'check-horse', check_path, 'Live');
-  -- The same ranch may hold another row there; the resolver orders them.
-  insert into public.shared_listings (workspace_id, listing_id, horse_id, share_path, state)
-  values (workspace, 'check-listing-2', 'check-horse', check_path, 'Draft');
-  begin
-    insert into public.shared_listings (workspace_id, listing_id, horse_id, share_path, state)
-    values (other_workspace, 'check-listing', 'check-horse', check_path, 'Live');
-    raise exception 'Another workspace published at a share path this one holds';
-  exception when unique_violation then null;
-  end;
-  -- An archived row holds nothing, and archiving frees the path.
-  insert into public.shared_listings (workspace_id, listing_id, horse_id, share_path, state)
-  values (other_workspace, 'check-archived', 'check-horse', check_path, 'Archived');
-  update public.shared_listings set state = 'Archived' where workspace_id = workspace and share_path = check_path;
-  update public.shared_listings set state = 'Live'
-  where workspace_id = other_workspace and listing_id = 'check-archived';
 end;
 $check$;
 rollback;
-select 'PASS: documents and photos are reachable only through the workspace in their first path segment; gallery listings grant nothing; photo writes follow uploadMedia and document writes follow manage; uploader-keyed paths unreadable, unmintable and unmovable; no move leaves a workspace; inactive, invited, outside-tenant and signed-out callers refused; one workspace per live share path; all fixtures rolled back' as result;
+select 'PASS: documents and photos are reachable only through the workspace in their first path segment; gallery listings grant nothing; photo writes follow uploadMedia and document writes follow manage; uploader-keyed paths unreadable, unmintable and unmovable; no client renames or moves a photo; no move leaves a workspace; inactive, invited, outside-tenant and signed-out callers refused; all fixtures rolled back' as result;

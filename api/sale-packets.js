@@ -475,8 +475,10 @@ async function listPackets(res, access, horseId) {
       workspaceId,
       actorUserId: user?.id,
       action: 'storage.path_refused',
-      entityType: 'sale_packet',
-      entityId: horseId || '',
+      // Same labels as the export's event: the horse when the list was for one,
+      // otherwise the workspace the list was for.
+      entityType: horseId ? 'horse' : 'workspace',
+      entityId: horseId || workspaceId,
       metadata: { rows: refused },
     });
   }

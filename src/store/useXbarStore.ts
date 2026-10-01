@@ -50,6 +50,8 @@ import {
   createAuditEvent,
   createOwnershipRecord,
   intakeIdentityChanged,
+  photoBatchIdentityChanged,
+  isStoragePolicyRefusal,
   normalizeOwnershipRecord,
   validateExpenseReceiptInput,
   summarizeBatch,
@@ -1448,6 +1450,10 @@ export const useXbarStore = create<XbarStore>()(
           };
         }
 
+        // A storage policy refusal is not a connection problem: it means this
+        // role may not upload photos to this ranch (or the ranch's photo
+        // storage is not set up), and retrying will not change it.
+        let refusedByStoragePolicy = false;
         try {
           const results = await Promise.all(
             fileList.map(async (file) => {
@@ -1455,6 +1461,7 @@ export const useXbarStore = create<XbarStore>()(
               try {
                 uploadedAsset = await uploadMediaAssetToCloud({ file, horseId, target: uploadTarget });
               } catch (error) {
+                if (isStoragePolicyRefusal(error)) refusedByStoragePolicy = true;
                 console.error('Cloud media upload failed.', error);
               }
               return {
@@ -1479,7 +1486,7 @@ export const useXbarStore = create<XbarStore>()(
           // The same account and ranch must still be here to receive them; if
           // not, the stored files stay orphaned in the ranch they were written
           // for rather than being attached to a horse in another one.
-          if (intakeIdentityChanged(uploadTarget, readIntakeIdentity())) {
+          if (photoBatchIdentityChanged(uploadTarget, readIntakeIdentity())) {
             return {
               ok: false,
               message:
@@ -1498,7 +1505,9 @@ export const useXbarStore = create<XbarStore>()(
           if (uploadedAssets.length === 0) {
             return {
               ok: false,
-              message: 'Photo upload failed — no image was stored. Check your connection and try again.',
+              message: refusedByStoragePolicy
+                ? "Photo upload was refused by this ranch's storage permissions, so no image was stored. Ask the ranch owner to check your role."
+                : 'Photo upload failed — no image was stored. Check your connection and try again.',
             };
           }
 

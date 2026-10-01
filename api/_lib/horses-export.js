@@ -85,14 +85,26 @@ export default async function handler(req, res) {
    * export, marked with the reason, and a refused path is audited.
    */
   const documentRows = documents || [];
-  const documentSigned = await signRecordedObjects({
-    supabase,
-    bucket: DOCUMENT_BUCKET,
-    paths: documentRows.map(recordedDocumentPath),
-    workspaceId,
-    ttlSeconds: SIGNED_URL_TTL_SECONDS,
-    emptyReason: DOCUMENT_HAS_NO_FILE,
-  });
+  const packetRows = packets || [];
+  // Independent batches: sign both in one round trip.
+  const [documentSigned, packetSigned] = await Promise.all([
+    signRecordedObjects({
+      supabase,
+      bucket: DOCUMENT_BUCKET,
+      paths: documentRows.map(recordedDocumentPath),
+      workspaceId,
+      ttlSeconds: SIGNED_URL_TTL_SECONDS,
+      emptyReason: DOCUMENT_HAS_NO_FILE,
+    }),
+    signRecordedObjects({
+      supabase,
+      bucket: PACKET_BUCKET,
+      paths: packetRows.map((packet) => packet.packet_pdf_path || ''),
+      workspaceId,
+      ttlSeconds: SIGNED_URL_TTL_SECONDS,
+      emptyReason: PACKET_FILE_NOT_STORED,
+    }),
+  ]);
   const documentExports = documentRows.map((doc, index) => {
     const signed = documentSigned[index];
     // A document kept only in the on-device vault has no cloud path, which is
@@ -117,15 +129,6 @@ export default async function handler(req, res) {
     };
   });
 
-  const packetRows = packets || [];
-  const packetSigned = await signRecordedObjects({
-    supabase,
-    bucket: PACKET_BUCKET,
-    paths: packetRows.map((packet) => packet.packet_pdf_path || ''),
-    workspaceId,
-    ttlSeconds: SIGNED_URL_TTL_SECONDS,
-    emptyReason: PACKET_FILE_NOT_STORED,
-  });
   const packetExports = packetRows.map((packet, index) => {
     const signed = packetSigned[index];
     return {

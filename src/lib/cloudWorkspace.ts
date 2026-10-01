@@ -2,10 +2,9 @@ import { apiConfig, isRelationalCloudEnabled, isSnapshotFallbackEnabled, supabas
 import { publicShareEventToBuyerRoomEvent, type PublicShareEventRow } from '@/lib/buyerDealRoom';
 import {
   buildDocumentStoragePath,
-  documentFileExtension,
+  buildMediaStoragePath,
   explainUnopenableCloudDocument,
   isWorkspaceStorageKey,
-  sanitizeDocumentPathSegment,
 } from '@/lib/documentStoragePath';
 import { createId, todayStamp } from '@/lib/xbarRuntime';
 import { WORKSPACE_SCHEMA_VERSION } from '@/store/xbarStoreHelpers';
@@ -110,13 +109,6 @@ type RelationalMembershipRow = {
 };
 
 const userRoles: UserRole[] = ['Admin', 'Ranch Manager', 'Owner', 'Medical Lead', 'Sales Lead'];
-
-function sanitizeStorageSegment(value: string) {
-  // One segment rule for every client-written object path (see
-  // documentStoragePath.ts); a second copy could drift from the server's
-  // canonical-path check.
-  return sanitizeDocumentPathSegment(value, 'record');
-}
 
 function normalizeWorkspaceRole(value: unknown): UserRole | null {
   return typeof value === 'string' && userRoles.includes(value as UserRole) ? (value as UserRole) : null;
@@ -1169,8 +1161,15 @@ export async function uploadMediaAssetToCloud(params: { file: File; horseId: str
   if (!isWorkspaceStorageKey(target.workspaceId) || session.user.id !== target.userId) {
     return null;
   }
-  const fileName = `${createId('media')}.${documentFileExtension(params.file.name)}`;
-  const path = `${target.workspaceId.toLowerCase()}/horses/${sanitizeStorageSegment(params.horseId)}/${fileName}`;
+  const path = buildMediaStoragePath({
+    workspaceId: target.workspaceId,
+    horseId: params.horseId,
+    objectId: createId('media'),
+    originalFileName: params.file.name,
+  });
+  if (!path) {
+    return null;
+  }
   const { error } = await client.storage.from(supabaseConfig.mediaBucket).upload(path, params.file, {
     upsert: false,
     contentType: params.file.type || undefined,
@@ -1457,6 +1456,7 @@ export async function getDocumentAccessUrl(
       storagePath: document.storagePath,
       viewerUserId: session.user.id,
       workspaceId: accessProfile.workspaceId,
+      refusalStatus: (error as { status?: number } | null)?.status,
     });
     return {
       ok: false,
