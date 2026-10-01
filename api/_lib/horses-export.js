@@ -3,6 +3,7 @@ import { requireWorkspaceAccess } from './supabase-admin.js';
 import { recordAuditEvent } from './audit.js';
 import { enforceRateLimit } from './rate-limit.js';
 import { applyCors } from './cors.js';
+import { PACKET_FILE_NOT_STORED, recordedDocumentPath, signRecordedObjects } from './document-storage.js';
 
 // Full data export for one horse: profile, documents (with 1-hour signed
 // URLs for the original files), ownership records, reminders, and sale
@@ -14,6 +15,10 @@ const PACKET_BUCKET = process.env.SUPABASE_SALE_PACKET_BUCKET || 'sale-packets';
 const SIGNED_URL_TTL_SECONDS = 3600;
 
 const RATE_LIMIT = { bucket: 'horses-export', limit: 12, windowSeconds: 60 };
+
+const DOCUMENT_HAS_NO_FILE = 'No file is attached to this document.';
+const DOCUMENT_ON_DEVICE_ONLY =
+  'This file is saved only on the device it was added from, not in the cloud, so it is not in this export. Upload it from that device to include it.';
 
 export default async function handler(req, res) {
   if (!applyCors(req, res, { methods: 'GET, OPTIONS' })) {
@@ -73,16 +78,29 @@ export default async function handler(req, res) {
       .eq('horse_id', horseId),
   ]);
 
-  const documentExports = [];
-  for (const doc of documents || []) {
-    let downloadUrl = '';
-    if (doc.storage_path) {
-      const { data: signed } = await supabase.storage
-        .from(DOCUMENT_BUCKET)
-        .createSignedUrl(doc.storage_path, SIGNED_URL_TTL_SECONDS);
-      downloadUrl = signed?.signedUrl || '';
+  /*
+   * Both paths below are columns a workspace manager can edit, and they are
+   * signed with the service role, which bypasses Storage RLS. signRecordedObjects
+   * signs only canonical paths under this workspace; anything else stays in the
+   * export, marked with the reason, and a refused path is audited.
+   */
+  const documentRows = documents || [];
+  const documentSigned = await signRecordedObjects({
+    supabase,
+    bucket: DOCUMENT_BUCKET,
+    paths: documentRows.map(recordedDocumentPath),
+    workspaceId,
+    ttlSeconds: SIGNED_URL_TTL_SECONDS,
+    emptyReason: DOCUMENT_HAS_NO_FILE,
+  });
+  const documentExports = documentRows.map((doc, index) => {
+    const signed = documentSigned[index];
+    // A document kept only in the on-device vault has no cloud path, which is
+    // not the same as having no file: say where it is, as packet assembly does.
+    if (signed.unavailable === DOCUMENT_HAS_NO_FILE && doc.payload?.localFileKey) {
+      signed.unavailable = DOCUMENT_ON_DEVICE_ONLY;
     }
-    documentExports.push({
+    return {
       documentId: doc.document_id,
       title: doc.title,
       documentType: doc.document_type,
@@ -94,22 +112,45 @@ export default async function handler(req, res) {
       extractedData: doc.extracted_data,
       ocrConfidenceMap: doc.ocr_confidence_map,
       createdAt: doc.created_at,
-      downloadUrl,
-    });
-  }
+      downloadUrl: signed.url || '',
+      ...(signed.unavailable ? { downloadUnavailable: signed.unavailable } : {}),
+    };
+  });
 
-  const packetExports = [];
-  for (const packet of packets || []) {
-    const { data: signed } = await supabase.storage
-      .from(PACKET_BUCKET)
-      .createSignedUrl(packet.packet_pdf_path, SIGNED_URL_TTL_SECONDS);
-    packetExports.push({
+  const packetRows = packets || [];
+  const packetSigned = await signRecordedObjects({
+    supabase,
+    bucket: PACKET_BUCKET,
+    paths: packetRows.map((packet) => packet.packet_pdf_path || ''),
+    workspaceId,
+    ttlSeconds: SIGNED_URL_TTL_SECONDS,
+    emptyReason: PACKET_FILE_NOT_STORED,
+  });
+  const packetExports = packetRows.map((packet, index) => {
+    const signed = packetSigned[index];
+    return {
       packetId: packet.packet_id,
       watermarkText: packet.watermark_text,
       sharedWithEmail: packet.shared_with_email,
       status: packet.status,
       createdAt: packet.created_at,
-      downloadUrl: signed?.signedUrl || '',
+      downloadUrl: signed.url || '',
+      ...(signed.unavailable ? { downloadUnavailable: signed.unavailable } : {}),
+    };
+  });
+
+  const refusedPaths = [
+    ...documentRows.filter((_, index) => documentSigned[index].refused).map((doc) => `document:${doc.document_id}`),
+    ...packetRows.filter((_, index) => packetSigned[index].refused).map((packet) => `packet:${packet.packet_id}`),
+  ];
+  if (refusedPaths.length) {
+    await recordAuditEvent(supabase, {
+      workspaceId,
+      actorUserId: user.id,
+      action: 'storage.path_refused',
+      entityType: 'horse',
+      entityId: horseId,
+      metadata: { rows: refusedPaths },
     });
   }
 

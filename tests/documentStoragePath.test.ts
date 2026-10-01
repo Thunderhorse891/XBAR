@@ -130,7 +130,7 @@ test('a teammate is told why an old document will not open for them', () => {
     workspaceId,
   });
   assert.ok(message);
-  assert.match(message, /uploaded it/);
+  assert.match(message, /teammate who added it/);
   assert.match(message, /upload it again/);
 });
 
@@ -148,23 +148,19 @@ test('nothing is invented about a document in this workspace', () => {
   );
 });
 
-test('nothing is invented about the viewer own legacy upload', () => {
-  assert.equal(
-    explainUnopenableCloudDocument({
-      storagePath: `${viewerId}/documents/horse-42/document-abc.pdf`,
-      viewerUserId: viewerId,
-      workspaceId,
-    }),
-    null,
-  );
-  assert.equal(
-    explainUnopenableCloudDocument({
-      storagePath: `${viewerId.toUpperCase()}/documents/horse-42/document-abc.pdf`,
-      viewerUserId: viewerId,
-      workspaceId,
-    }),
-    null,
-  );
+test('the viewer is told their own pre-shared-storage upload must be uploaded again', () => {
+  // Uploader-keyed objects open for no one once 20261001090100 removes the
+  // uploader read branch -- the uploader included -- so staying silent here
+  // would leave them with the storage layer's bare refusal and no fix.
+  for (const storagePath of [
+    `${viewerId}/documents/horse-42/document-abc.pdf`,
+    `${viewerId.toUpperCase()}/documents/horse-42/document-abc.pdf`,
+  ]) {
+    const message = explainUnopenableCloudDocument({ storagePath, viewerUserId: viewerId, workspaceId });
+    assert.ok(message, storagePath);
+    assert.match(message, /You added this file/);
+    assert.match(message, /Upload it again/);
+  }
 });
 
 test('a path with no workspace-shaped namespace explains nothing', () => {
@@ -177,16 +173,14 @@ test('a path with no workspace-shaped namespace explains nothing', () => {
   }
 });
 
-test('an unresolved workspace still keeps the viewer own uploads out of the story', () => {
-  // With no workspace loaded, the one thing we still know is the viewer's id.
-  assert.equal(
-    explainUnopenableCloudDocument({
-      storagePath: `${viewerId}/documents/horse-42/x.pdf`,
-      viewerUserId: viewerId,
-      workspaceId: null,
-    }),
-    null,
-  );
+test('an unresolved workspace still tells the viewer about their own old upload', () => {
+  const message = explainUnopenableCloudDocument({
+    storagePath: `${viewerId}/documents/horse-42/x.pdf`,
+    viewerUserId: viewerId,
+    workspaceId: null,
+  });
+  assert.ok(message);
+  assert.match(message, /You added this file/);
 });
 
 test('an unresolved workspace does not silence the explanation either', () => {
@@ -200,5 +194,5 @@ test('an unresolved workspace does not silence the explanation either', () => {
     workspaceId: null,
   });
   assert.ok(message);
-  assert.match(message, /uploaded it/);
+  assert.match(message, /teammate who added it/);
 });

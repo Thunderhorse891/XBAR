@@ -400,14 +400,18 @@ psql -v ON_ERROR_STOP=1 "$DATABASE_URL" -f supabase/migrations/20260928170000_re
 # with the owner's explicit approval (production engineering contract §15).
 ```
 
-**Stop after expansion while older production clients remain.** The live project
-has completed this phase. See [storage rollout evidence](docs/DOCUMENT-STORAGE-ROLLOUT.md).
-The separate contract phase below removes legacy uploads. Run it only after the
-workspace-path client and file upload/download behavior have been verified and
-older upload clients retired; it is not the next automatic deployment command.
+**The uploader-keyed contract for documents is now part of step 11.** The live
+project completed the document-storage expansion; see
+[storage rollout evidence](docs/DOCUMENT-STORAGE-ROLLOUT.md). `20260912060000` was
+the original contract phase for documents. Step 11's contract
+(`20261001090100`) supersedes it and removes the same uploader-keyed branches
+from both buckets. **Never run it after step 11:** it rebuilds the document
+policies WITH the uploader branch and would silently undo that contract. On a
+database that has had neither, running it is optional and only ever before
+step 11. Its check script describes that intermediate state and nothing later.
 
 ```sh
-# Deferred contract phase: existing legacy files remain uploader-readable.
+# Superseded by step 11. Optional, and only BEFORE step 11's contract.
 psql -1 -v ON_ERROR_STOP=1 "$DATABASE_URL" -f supabase/migrations/20260912060000_workspace_keyed_document_storage.sql
 psql -v ON_ERROR_STOP=1 "$DATABASE_URL" -f supabase/checks/document-storage-live-rollback.sql
 ```
@@ -421,6 +425,24 @@ psql -v ON_ERROR_STOP=1 "$DATABASE_URL" -f supabase/checks/document-storage-live
 #    resolving the moment it runs, and rollback instructions live in the
 #    migration header.
 psql -1 -v ON_ERROR_STOP=1 "$DATABASE_URL" -f supabase/migrations/20260924134000_horse_media_private_signed_urls.sql
+
+# 11. Workspace-keyed storage (audit F02), in two phases.
+#    EXPAND first -- before the client that files photos under the workspace
+#    id is deployed. It closes the gallery-listing read and adds workspace
+#    reads and uploadMedia-gated writes, while keeping the uploader-keyed
+#    branches so a tab still running the previous bundle keeps working.
+psql -1 -v ON_ERROR_STOP=1 "$DATABASE_URL" -f supabase/migrations/20261001090000_workspace_keyed_storage_expand.sql
+psql -v ON_ERROR_STOP=1 "$DATABASE_URL" -f supabase/checks/workspace-keyed-storage-expand.sql
+#    Then deploy the client. CONTRACT only once it is live: it removes every
+#    uploader-keyed branch from horse-media and horse-documents. Moves no
+#    data; first confirm no object is still uploader-keyed:
+#      select bucket_id, count(*) from storage.objects
+#      where bucket_id in ('horse-media','horse-documents')
+#        and split_part(name,'/',1) not in (select id::text from public.workspaces)
+#      group by 1;
+psql -1 -v ON_ERROR_STOP=1 "$DATABASE_URL" -f supabase/migrations/20261001090100_workspace_keyed_storage_contract.sql
+#    Prove the final state under real RLS (synthetic users, all rolled back):
+psql -v ON_ERROR_STOP=1 "$DATABASE_URL" -f supabase/checks/workspace-keyed-storage.sql
 ```
 
 **(4) and (5) are prerequisites for billing, not optimizations to schedule

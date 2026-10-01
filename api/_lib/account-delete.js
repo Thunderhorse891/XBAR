@@ -5,6 +5,7 @@ import {
   documentPrefixesToPurge,
   loadAccountDeletionPlan,
   mediaPrefixesToPurge,
+  packetPrefixesToPurge,
   workspacesStillPrivate,
 } from './account-deletion.js';
 import { enforceRateLimit } from './rate-limit.js';
@@ -24,6 +25,7 @@ const RATE_LIMIT = { bucket: 'account-delete', limit: 5, windowSeconds: 300 };
 const DOCUMENT_BUCKET =
   process.env.SUPABASE_DOCUMENT_BUCKET || process.env.VITE_SUPABASE_DOCUMENT_BUCKET || 'horse-documents';
 const MEDIA_BUCKET = process.env.SUPABASE_MEDIA_BUCKET || process.env.VITE_SUPABASE_MEDIA_BUCKET || 'horse-media';
+const PACKET_BUCKET = process.env.SUPABASE_SALE_PACKET_BUCKET || 'sale-packets';
 
 export default async function handler(req, res) {
   if (!applyCors(req, res, { methods: 'POST, OPTIONS' })) {
@@ -184,6 +186,11 @@ export default async function handler(req, res) {
       supabase,
       MEDIA_BUCKET,
       mediaPrefixesToPurge({ ...plan, workspacesToPurge: purgeable }),
+    ).catch(() => {});
+    await removeStoragePrefixes(
+      supabase,
+      PACKET_BUCKET,
+      packetPrefixesToPurge({ ...plan, workspacesToPurge: purgeable }),
     ).catch(() => {});
 
     return sendJson(res, 200, {

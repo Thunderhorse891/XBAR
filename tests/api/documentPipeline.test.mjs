@@ -547,12 +547,14 @@ test('an unnamed file still lands somewhere, under the workspace', () => {
 const fixtureUser = 'cccccccc-cccc-4ccc-8ccc-cccccccccccc';
 const foreignWorkspace = 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb';
 
-test('a caller may name a file in their own workspace, or their own older upload', () => {
+test('a caller may name a file in their own workspace, and not an uploader-keyed one', () => {
   const allowed = { workspaceId: fixtureWorkspace, userId: fixtureUser };
   assert.equal(mayUseClientStoragePath({ storagePath: `${fixtureWorkspace}/documents/doc-1/x.pdf`, ...allowed }), true);
-  // The legacy branch of the SELECT policy, mirrored: their own uploader-keyed
-  // object from before the storage migration.
-  assert.equal(mayUseClientStoragePath({ storagePath: `${fixtureUser}/documents/doc-1/x.pdf`, ...allowed }), true);
+  // The older `<user id>/...` layout is refused, even for the caller's own id:
+  // that object may belong to a DIFFERENT workspace the caller is also in, and
+  // reading it here would copy it into this workspace's packets and exports.
+  // Production holds no object in that layout (audit F02).
+  assert.equal(mayUseClientStoragePath({ storagePath: `${fixtureUser}/documents/doc-1/x.pdf`, ...allowed }), false);
 });
 
 test('a caller cannot make the server read another tenant file for them', () => {

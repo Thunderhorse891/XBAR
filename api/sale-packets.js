@@ -16,6 +16,14 @@ import { enforceRateLimit } from './_lib/rate-limit.js';
 import { applyCors } from './_lib/cors.js';
 import { packetOmissionSection, selectPacketDocuments } from './_lib/packet-selection.js';
 import { sellerIdentity } from './_lib/workspace-identity.js';
+import {
+  PACKET_FILE_NOT_STORED,
+  SELLER_FILE_REFUSED,
+  SELLER_FILE_UNREADABLE,
+  isWorkspaceObjectPath,
+  safeDocumentSegment,
+  signRecordedObjects,
+} from './_lib/document-storage.js';
 
 const DOCUMENT_BUCKET =
   process.env.SUPABASE_DOCUMENT_BUCKET || process.env.VITE_SUPABASE_DOCUMENT_BUCKET || 'horse-documents';
@@ -130,7 +138,28 @@ export default async function handler(req, res) {
     // Select the documents to bundle: caller-specified list, or every stored
     // document attached to the horse (originals + generated templates).
     const requestedIds = Array.isArray(body.documentIds) ? body.documentIds.filter((id) => typeof id === 'string') : [];
-    const { packetDocs, unavailable } = selectPacketDocuments(loaded.documents, requestedIds, MAX_PACKET_ATTACHMENTS);
+    // storage_path is editable by any workspace manager and the download below
+    // uses the service role, so only canonical paths under this workspace are
+    // read. A refused file is named to the seller with the fix, on the cover in
+    // buyer-safe words, and audited.
+    const refusedDocumentIds = [];
+    const { packetDocs, unavailable } = selectPacketDocuments(loaded.documents, requestedIds, MAX_PACKET_ATTACHMENTS, {
+      refuse: (doc) => {
+        if (isWorkspaceObjectPath({ path: doc.storage_path, workspaceId })) return null;
+        refusedDocumentIds.push(doc.document_id);
+        return SELLER_FILE_REFUSED;
+      },
+    });
+    if (refusedDocumentIds.length) {
+      await recordAuditEvent(supabase, {
+        workspaceId,
+        actorUserId: user.id,
+        action: 'storage.path_refused',
+        entityType: 'horse',
+        entityId: horseId,
+        metadata: { rows: refusedDocumentIds.map((id) => `document:${id}`) },
+      });
+    }
 
     /*
      * What is IN the packet, which is not the same as what was selected for it.
@@ -150,7 +179,15 @@ export default async function handler(req, res) {
     for (const doc of packetDocs) {
       const { data, error } = await supabase.storage.from(DOCUMENT_BUCKET).download(doc.storage_path);
       if (error || !data) {
-        unavailable.push(`${doc.title} (${error?.message || 'download failed'})`);
+        // The seller is told to re-upload; the buyer's cover says only that the
+        // file is unavailable (packetOmissionSection); the storage error itself
+        // is for the operator.
+        console.error('sale packet: stored document could not be downloaded', {
+          workspaceId,
+          documentId: doc.document_id,
+          message: error?.message || 'no data',
+        });
+        unavailable.push(`${doc.title} (${SELLER_FILE_UNREADABLE})`);
         continue;
       }
       includedDocs.push(doc);
@@ -169,7 +206,11 @@ export default async function handler(req, res) {
     // from the workspace's authoritative records — never from client input — and
     // is the tamper-PROOF anchor a buyer verifies against.
     const packetId = `packet-${randomUUID()}`;
-    const packetPath = `${workspaceId}/${horseId}/${packetId}.pdf`;
+    // horse_id is free text a manager can write, so it is reduced to a plain
+    // segment: the server must never write a path that leaves its workspace.
+    // Lowercase like every other writer: prefix sweeps (account deletion) and
+    // the storage census compare against workspaces.id::text, which is.
+    const packetPath = `${workspaceId.toLowerCase()}/${safeDocumentSegment(horseId, 'horse')}/${packetId}.pdf`;
     // The buyer-facing seller identity with quick-start placeholders removed —
     // a packet must never present an invented company/ranch as the seller.
     // Resolved BEFORE the seal: the seal authenticates this same filtered
@@ -401,7 +442,7 @@ export default async function handler(req, res) {
 }
 
 async function listPackets(res, access, horseId) {
-  const { supabase, workspaceId } = access;
+  const { supabase, workspaceId, user } = access;
   let query = supabase
     .from('sale_packets')
     .select('packet_id, horse_id, packet_pdf_path, watermark_text, shared_with_email, document_ids, status, created_at')
@@ -417,23 +458,40 @@ async function listPackets(res, access, horseId) {
     return sendJson(res, 500, { ok: false, message: error.message });
   }
 
-  const packets = [];
-  for (const row of data || []) {
-    const { data: signed } = await supabase.storage
-      .from(PACKET_BUCKET)
-      .createSignedUrl(row.packet_pdf_path, SIGNED_URL_TTL_SECONDS);
-    packets.push({
-      packetId: row.packet_id,
-      horseId: row.horse_id,
-      watermarkText: row.watermark_text,
-      sharedWithEmail: row.shared_with_email,
-      documentIds: row.document_ids,
-      status: row.status,
-      createdAt: row.created_at,
-      downloadUrl: signed?.signedUrl || '',
-      expiresInSeconds: SIGNED_URL_TTL_SECONDS,
+  const rows = data || [];
+  // packet_pdf_path is editable by any workspace manager; signRecordedObjects
+  // signs only canonical paths under this workspace and says why when it won't.
+  const signed = await signRecordedObjects({
+    supabase,
+    bucket: PACKET_BUCKET,
+    paths: rows.map((row) => row.packet_pdf_path || ''),
+    workspaceId,
+    ttlSeconds: SIGNED_URL_TTL_SECONDS,
+    emptyReason: PACKET_FILE_NOT_STORED,
+  });
+  const refused = rows.filter((_, index) => signed[index].refused).map((row) => `packet:${row.packet_id}`);
+  if (refused.length) {
+    await recordAuditEvent(supabase, {
+      workspaceId,
+      actorUserId: user?.id,
+      action: 'storage.path_refused',
+      entityType: 'sale_packet',
+      entityId: horseId || '',
+      metadata: { rows: refused },
     });
   }
+  const packets = rows.map((row, index) => ({
+    packetId: row.packet_id,
+    horseId: row.horse_id,
+    watermarkText: row.watermark_text,
+    sharedWithEmail: row.shared_with_email,
+    documentIds: row.document_ids,
+    status: row.status,
+    createdAt: row.created_at,
+    downloadUrl: signed[index].url || '',
+    expiresInSeconds: SIGNED_URL_TTL_SECONDS,
+    ...(signed[index].unavailable ? { downloadUnavailable: signed[index].unavailable } : {}),
+  }));
 
   return sendJson(res, 200, { ok: true, packets });
 }
