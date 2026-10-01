@@ -21,7 +21,7 @@
  * @param {number} maxAttachments Hard cap on documents in one packet.
  * @returns {{packetDocs: Array<object>, unavailable: string[]}}
  */
-export function selectPacketDocuments(documents, requestedIds, maxAttachments) {
+export function selectPacketDocuments(documents, requestedIds, maxAttachments, { refuse } = {}) {
   const requestedSet = requestedIds.length ? new Set(requestedIds) : null;
   let packetDocs = requestedSet ? documents.filter((doc) => requestedSet.has(doc.document_id)) : documents.slice();
   const unavailable = [];
@@ -41,6 +41,16 @@ export function selectPacketDocuments(documents, requestedIds, maxAttachments) {
     if (!doc.storage_path) unavailable.push(`${doc.title} (stored on the seller's device, not in the cloud)`);
   }
   packetDocs = packetDocs.filter((doc) => doc.storage_path);
+
+  // A stored file the server will not read (see isWorkspaceObjectPath) is
+  // named before the cap is applied, so it never takes a slot from a real one.
+  if (refuse) {
+    packetDocs = packetDocs.filter((doc) => {
+      const reason = refuse(doc);
+      if (reason) unavailable.push(`${doc.title} (${reason})`);
+      return !reason;
+    });
+  }
 
   if (packetDocs.length > maxAttachments) {
     for (const doc of packetDocs.slice(maxAttachments)) {

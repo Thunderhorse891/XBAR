@@ -19,11 +19,17 @@ import handler, {
  * unapproved media from listing A.
  */
 
-const GALLERY_PATH = 'uploader-uuid-1/horses/horse-abc/media-uuid-9.jpg';
-const OTHER_PATH = 'uploader-uuid-2/horses/horse-xyz/media-uuid-10.jpg';
+const WORKSPACE_A = '11111111-1111-4111-8111-111111111111';
+const WORKSPACE_B = '22222222-2222-4222-8222-222222222222';
+const GALLERY_PATH = `${WORKSPACE_A}/horses/horse-abc/media-uuid-9.jpg`;
+const OTHER_PATH = `${WORKSPACE_A}/horses/horse-xyz/media-uuid-10.jpg`;
+// Workspace A's photo, listed in workspace B's gallery.
+const FOREIGN_PATH = `${WORKSPACE_A}/horses/horse-victim/media-uuid-77.jpg`;
+const LISTING_ID = 'listing-abc';
 
 function listingWithGallery(paths) {
   return {
+    sharedListing: { id: LISTING_ID, sharePath: '/profiles/horse-abc' },
     horse: {
       id: 'horse-abc',
       gallery: paths.map((storagePath, index) => ({
@@ -45,11 +51,26 @@ function fakeSupabase({
   signError = null,
   postSignListing = listing,
   postSignRpcError = rpcError,
+  listingRow = { workspace_id: WORKSPACE_A, listing_id: LISTING_ID },
+  listingRowError = null,
 } = {}) {
-  const calls = { rpc: [], sign: [] };
+  const calls = { rpc: [], sign: [], listingRows: [] };
   return {
     calls,
     client: {
+      from: (table) => {
+        const query = { table, filters: [] };
+        calls.listingRows.push(query);
+        const chain = {
+          select: (columns) => ((query.columns = columns), chain),
+          eq: (column, value) => (query.filters.push(['eq', column, value]), chain),
+          neq: (column, value) => (query.filters.push(['neq', column, value]), chain),
+          order: (column, options) => ((query.order = [column, options]), chain),
+          limit: (count) => ((query.limit = count), chain),
+          maybeSingle: async () => ({ data: listingRowError ? null : listingRow, error: listingRowError }),
+        };
+        return chain;
+      },
       rpc: async (name, params) => {
         calls.rpc.push({ name, params });
         return calls.sign.length
@@ -78,17 +99,34 @@ const baseArgs = {
 
 test('well-formed horse-media storage paths are accepted', () => {
   assert.equal(isHorseMediaStoragePath(GALLERY_PATH), true);
-  assert.equal(isHorseMediaStoragePath('uploader-uuid-1/horses/horse-abc/media-uuid-9'), true);
+  assert.equal(isHorseMediaStoragePath(`${WORKSPACE_A}/horses/horse-abc/media-uuid-9`), true);
+  assert.equal(isHorseMediaStoragePath(`${WORKSPACE_A.toUpperCase()}/horses/horse-abc/media-uuid-9.jpg`), true);
 });
 
 test('malformed storage paths are rejected before any signing', () => {
   assert.equal(isHorseMediaStoragePath(''), false);
   assert.equal(isHorseMediaStoragePath(null), false);
-  assert.equal(isHorseMediaStoragePath('uploader-uuid-1/horses/horse-abc'), false);
-  assert.equal(isHorseMediaStoragePath('uploader-uuid-1/documents/horse-abc/media-uuid-9.jpg'), false);
-  assert.equal(isHorseMediaStoragePath('uploader-uuid-1/horses/horse-abc/document-uuid-9.jpg'), false);
-  assert.equal(isHorseMediaStoragePath('uploader-uuid-1/horses/../horse-abc/media-uuid-9.jpg'), false);
+  assert.equal(isHorseMediaStoragePath(`${WORKSPACE_A}/horses/horse-abc`), false);
+  assert.equal(isHorseMediaStoragePath(`${WORKSPACE_A}/documents/horse-abc/media-uuid-9.jpg`), false);
+  assert.equal(isHorseMediaStoragePath(`${WORKSPACE_A}/horses/horse-abc/document-uuid-9.jpg`), false);
+  assert.equal(isHorseMediaStoragePath(`${WORKSPACE_A}/horses/../horse-abc/media-uuid-9.jpg`), false);
   assert.equal(isHorseMediaStoragePath('a/b/c/d/e.jpg'), false);
+});
+
+test('uploader-keyed and non-canonical media paths are not signable', () => {
+  // The old layout keyed media by uploader, not workspace.
+  assert.equal(isHorseMediaStoragePath('uploader-uuid-1/horses/horse-abc/media-uuid-9.jpg'), false);
+  for (const traversal of [
+    `${WORKSPACE_B}/horses/..%2f..%2f${WORKSPACE_A}/media-1.jpg`,
+    `${WORKSPACE_A}/horses/%2e%2e/media-1.jpg`,
+    `${WORKSPACE_A}/horses/.%2E/media-1.jpg`,
+    `${WORKSPACE_A}/horses/..\\x/media-1.jpg`,
+    `${WORKSPACE_A}/horses/.hidden/media-1.jpg`,
+    `${WORKSPACE_A}/horses//media-1.jpg`,
+    `/${WORKSPACE_A}/horses/x/media-1.jpg`,
+  ]) {
+    assert.equal(isHorseMediaStoragePath(traversal), false, traversal);
+  }
 });
 
 test('buyer gallery membership requires an exact path and explicit approval', () => {
@@ -247,6 +285,57 @@ test('the happy path signs the exact gallery path with the listing-aligned TTL',
   assert.equal(BUYER_MEDIA_URL_TTL_SECONDS, 3600);
 });
 
+test("an approved gallery entry pointing at another workspace's photo signs nothing", async () => {
+  // Workspace B's owner lists workspace A's photo path in B's own gallery and
+  // approves it. The listing resolves, the path is "approved" -- but the file
+  // is not B's, so the service role must not sign it.
+  const { client, calls } = fakeSupabase({
+    listing: listingWithGallery([FOREIGN_PATH]),
+    listingRow: { workspace_id: WORKSPACE_B, listing_id: LISTING_ID },
+  });
+  const result = await resolveBuyerMediaUrl({ ...baseArgs, supabase: client, storagePath: FOREIGN_PATH });
+  assert.equal(result.ok, false);
+  assert.equal(result.status, 403);
+  assert.deepEqual(calls.sign, []);
+});
+
+test('the owning workspace is read for the exact listing the share link resolved to', async () => {
+  const { client, calls } = fakeSupabase({ listing: listingWithGallery([GALLERY_PATH]) });
+  assert.equal((await resolveBuyerMediaUrl({ ...baseArgs, supabase: client })).ok, true);
+  const [lookup] = calls.listingRows;
+  assert.equal(lookup.table, 'shared_listings');
+  assert.deepEqual(lookup.filters, [
+    ['eq', 'share_path', '/profiles/horse-abc'],
+    ['neq', 'state', 'Archived'],
+  ]);
+  assert.deepEqual(lookup.order, ['updated_at', { ascending: false }]);
+  assert.equal(lookup.limit, 1);
+});
+
+for (const [label, overrides] of [
+  ['a different listing row', { listingRow: { workspace_id: WORKSPACE_A, listing_id: 'listing-other' } }],
+  ['no listing row', { listingRow: null }],
+  ['a lookup error', { listingRowError: new Error('db down') }],
+  ['a row without a workspace', { listingRow: { workspace_id: null, listing_id: LISTING_ID } }],
+]) {
+  test(`${label} for the owning workspace signs nothing`, async () => {
+    const { client, calls } = fakeSupabase({ listing: listingWithGallery([GALLERY_PATH]), ...overrides });
+    const result = await resolveBuyerMediaUrl({ ...baseArgs, supabase: client });
+    assert.equal(result.ok, false);
+    assert.equal(result.status, 403);
+    assert.deepEqual(calls.sign, []);
+  });
+}
+
+test('a resolved listing without an id signs nothing', async () => {
+  const listing = listingWithGallery([GALLERY_PATH]);
+  delete listing.sharedListing;
+  const { client, calls } = fakeSupabase({ listing });
+  const result = await resolveBuyerMediaUrl({ ...baseArgs, supabase: client });
+  assert.equal(result.status, 403);
+  assert.deepEqual(calls.sign, []);
+});
+
 test('the token is passed through to the listing RPC for validation', async () => {
   const { client, calls } = fakeSupabase({ listing: listingWithGallery([GALLERY_PATH]) });
   await resolveBuyerMediaUrl({ ...baseArgs, supabase: client });
@@ -316,4 +405,33 @@ test('the migration flips the bucket private with a workspace-scoped read policy
   // ...and ships rollback instructions, because contract #15 forbids applying
   // this without Erin's explicit approval.
   assert.match(migration, /ROLLBACK/i);
+});
+
+test('the workspace-keyed storage migration removes every gallery and uploader-keyed branch', () => {
+  const migration = readFileSync(
+    path.join(process.cwd(), 'supabase', 'migrations', '20261001090000_workspace_keyed_storage_only.sql'),
+    'utf8',
+  );
+  // No policy grants a file by gallery listing or by uploader id any more.
+  assert.ok(!migration.includes('jsonb_array_elements'), 'a gallery listing must not grant a read');
+  assert.ok(!/auth\.uid\(\)\)?::text = split_part/.test(migration), 'an uploader-keyed branch survived');
+  for (const legacy of [
+    'horse media upload own',
+    'horse media update own',
+    'horse documents read own',
+    'horse documents upload own',
+    'horse documents update own',
+  ]) {
+    assert.match(migration, new RegExp(`drop policy if exists "${legacy}" on storage\\.objects;`), legacy);
+    assert.ok(!migration.includes(`create policy "${legacy}"`), `${legacy} is recreated`);
+  }
+  // Reads follow workspace membership; writes follow the uploadMedia grant.
+  assert.match(migration, /create policy "horse media select workspace"[\s\S]*?xbar_has_workspace_access\(split_part/);
+  assert.match(
+    migration,
+    /create policy "horse media insert workspace"[\s\S]*?xbar_has_workspace_capability\(split_part\(name, '\/', 1\)::uuid, 'uploadMedia'\)/,
+  );
+  assert.ok(!migration.includes('to anon'));
+  assert.match(migration, /^begin;/m);
+  assert.match(migration, /^commit;/m);
 });

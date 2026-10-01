@@ -45,72 +45,115 @@ export function safeDocumentSegment(value, fallback) {
  * upload with a 502 or a skip — both of which are better than writing bytes
  * that the ranch cannot read and will not know to re-upload.
  */
-/**
- * May this caller name an object that already exists, rather than sending bytes?
+/*
+ * One rule for every object path the server reads with the service role.
  *
- * The bulk endpoint accepts a `storagePath` so a client that has just uploaded
- * a file directly to Storage can ask for it to be ingested without sending the
- * bytes again. It then downloads that path with the SERVICE ROLE, which
- * bypasses RLS completely -- so an unchecked path makes the endpoint a confused
- * deputy: any authenticated member could name another tenant's object, have the
- * server read it, and receive its extracted text back inside their own
- * workspace. The path is also recorded on the resulting `documents` row, and
- * horses-export.js and sale-packets.js later download by that recorded path
- * with the same service role.
+ * The service role bypasses Storage RLS, so any path the server signs or
+ * downloads on a caller's behalf must be one the database would have let that
+ * caller read. Every path XBAR writes has the same shape — the workspace id,
+ * then plain name segments — so that is the only shape accepted:
  *
- * The rule deliberately mirrors the SELECT policy in
- * 20260912060000_workspace_keyed_document_storage.sql exactly: the caller's own
- * workspace, or their own uploader-keyed object from before that migration.
- * This is what the database would have allowed had the download used the
- * caller's token instead of the service role -- which is the point. A privilege
- * held only so the server can do its job must not widen what the caller can reach.
+ *   <workspace uuid>/<segment>/.../<segment>
+ *   segment = letters, digits, '.', '_', '-', never starting with '.'
+ *
+ * A prefix comparison is not enough on its own. Storage requests travel as
+ * URLs, and the URL parser resolves `..`, `%2e%2e`, `.%2E` and `..\` before
+ * the request reaches Storage, so `B/../A/x` passes a first-segment check for
+ * workspace B and is served from workspace A. Refusing every segment that
+ * starts with a dot, and every `%` and `\`, removes all of those spellings at
+ * once; nothing XBAR writes contains them (documentObjectPath,
+ * buildDocumentStoragePath and the packet writer all sanitize to this shape,
+ * and every object in production already matches it).
+ *
+ * There is no longer an uploader-keyed exception. The older `<user id>/...`
+ * layout let one member's private files from ANOTHER workspace be pulled into
+ * a packet or export that this whole workspace can open; no object in
+ * production uses it.
  */
-export function mayUseClientStoragePath({ storagePath, workspaceId, userId }) {
-  if (typeof storagePath !== 'string' || !storagePath) {
-    return false;
+const CANONICAL_SEGMENT = /^[A-Za-z0-9_-][A-Za-z0-9._-]*$/;
+const MAX_OBJECT_PATH_LENGTH = 1024;
+
+/** The path's segments when it has the canonical shape, otherwise null. */
+export function canonicalObjectSegments(path) {
+  if (typeof path !== 'string' || !path || path.length > MAX_OBJECT_PATH_LENGTH) {
+    return null;
   }
-  // An empty namespace is refused here, which is also what stops an absent
-  // workspace or user id matching one: below, `namespace` is always non-empty,
-  // so a missing identity compares as '' and can never match it.
-  const namespace = (storagePath.split('/')[0] ?? '').toLowerCase();
-  if (!namespace) {
-    return false;
+  const segments = path.split('/');
+  if (segments.length < 2 || !segments.every((segment) => CANONICAL_SEGMENT.test(segment))) {
+    return null;
   }
-  const workspace = typeof workspaceId === 'string' ? workspaceId.toLowerCase() : '';
-  const owner = typeof userId === 'string' ? userId.toLowerCase() : '';
-  return namespace === workspace || namespace === owner;
+  return segments;
 }
 
 /**
- * May the server sign or download a packet PDF recorded on a sale_packets row?
- *
- * `packet_pdf_path` is a column any workspace manager can update, and the
- * readers (the saved-packet list and the horse export) sign it with the SERVICE
- * ROLE. Unchecked, a manager of one ranch could point a row at another ranch's
- * packet and have it signed for them.
- *
- * Stricter than `mayUseClientStoragePath`: only the server ever writes a
- * packet, and always as `${workspaceId}/${horseId}/${packetId}.pdf`, so there is
- * no older uploader-keyed shape to honour. A `..` segment is refused outright;
- * nothing the server writes contains one.
+ * May the server read this object for someone acting in `workspaceId`?
+ * Only when the path is canonical and lives under that workspace.
  */
+export function isWorkspaceObjectPath({ path, workspaceId }) {
+  if (typeof workspaceId !== 'string' || !WORKSPACE_ID_PATTERN.test(workspaceId)) {
+    return false;
+  }
+  const segments = canonicalObjectSegments(path);
+  return Boolean(segments) && segments[0].toLowerCase() === workspaceId.toLowerCase();
+}
+
+/**
+ * The bulk endpoint's `storagePath` (a file the client already uploaded) and
+ * every recorded `documents.storage_path` are held to the same rule.
+ */
+export function mayUseClientStoragePath({ storagePath, workspaceId }) {
+  return isWorkspaceObjectPath({ path: storagePath, workspaceId });
+}
+
+/** Recorded `sale_packets.packet_pdf_path`, same rule. */
 export function mayReadPacketPath({ packetPath, workspaceId }) {
-  if (typeof packetPath !== 'string' || !packetPath) {
-    return false;
-  }
-  const segments = packetPath.split('/');
-  if (segments.includes('..')) {
-    return false;
-  }
-  const workspace = typeof workspaceId === 'string' ? workspaceId.toLowerCase() : '';
-  return Boolean(workspace) && (segments[0] ?? '').toLowerCase() === workspace;
+  return isWorkspaceObjectPath({ path: packetPath, workspaceId });
 }
 
-/**
- * Said, not dropped, when a recorded path is refused: an export or packet list
- * that quietly omitted a file would read as complete.
+/*
+ * What the seller is told when a recorded file cannot be served. Said, never
+ * dropped: an export or list that quietly omitted a file would read as
+ * complete. Buyer-facing text (the packet cover) uses the short form, which
+ * does not describe an internal check to a buyer.
  */
-export const RECORDED_PATH_REFUSED = 'The stored file does not belong to this workspace, so it was not signed.';
+export const RECORDED_PATH_REFUSED =
+  'This file is not stored in this workspace, so it was not included. Re-upload it to include it.';
+export const RECORDED_FILE_MISSING =
+  'This file could not be found in storage. Re-upload it (or rebuild the packet) to include it.';
+export const PACKET_FILE_NOT_STORED = 'No PDF is stored for this packet. Build it again to send it.';
+export const BUYER_FILE_UNAVAILABLE = 'file unavailable';
+
+/**
+ * Sign recorded object paths for a caller acting in `workspaceId`.
+ *
+ * Returns one `{ url }` or `{ unavailable, refused? }` per input path, in order.
+ * An empty path is "nothing stored", a non-canonical or foreign path is refused
+ * (and flagged so the caller can audit it), and a path Storage cannot sign is
+ * reported as missing — none of them come back as a bare empty link.
+ */
+export async function signRecordedObjects({ supabase, bucket, paths, workspaceId, ttlSeconds, emptyReason }) {
+  const results = paths.map((path) => {
+    if (!path) return { unavailable: emptyReason ?? RECORDED_FILE_MISSING };
+    if (!isWorkspaceObjectPath({ path, workspaceId })) return { unavailable: RECORDED_PATH_REFUSED, refused: true };
+    return null;
+  });
+  const toSign = paths.filter((_, index) => results[index] === null);
+  if (toSign.length) {
+    const { data, error } = await supabase.storage.from(bucket).createSignedUrls(toSign, ttlSeconds);
+    const byPath = new Map();
+    if (!error && Array.isArray(data)) {
+      for (const entry of data) {
+        if (entry?.path && entry.signedUrl && !entry.error) byPath.set(entry.path, entry.signedUrl);
+      }
+    }
+    paths.forEach((path, index) => {
+      if (results[index] !== null) return;
+      const url = byPath.get(path);
+      results[index] = url ? { url } : { unavailable: RECORDED_FILE_MISSING };
+    });
+  }
+  return results;
+}
 
 export function documentObjectPath({ workspaceId, documentId, fileName, fallbackName = 'upload.bin' }) {
   if (typeof workspaceId !== 'string' || !WORKSPACE_ID_PATTERN.test(workspaceId)) {

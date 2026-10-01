@@ -421,6 +421,18 @@ psql -v ON_ERROR_STOP=1 "$DATABASE_URL" -f supabase/checks/document-storage-live
 #    resolving the moment it runs, and rollback instructions live in the
 #    migration header.
 psql -1 -v ON_ERROR_STOP=1 "$DATABASE_URL" -f supabase/migrations/20260924134000_horse_media_private_signed_urls.sql
+
+# 11. Workspace-keyed storage only (audit F02). horse-media reads and writes
+#    follow the workspace named by the object's first path segment, like
+#    documents; the gallery-listing and uploader-keyed branches go, as do the
+#    legacy uploader-keyed horse-documents policies. Deploy the client that
+#    uploads media under the workspace id FIRST. Moves no data; check first
+#    that no object in either bucket still starts with a user id:
+#      select bucket_id, count(*) from storage.objects
+#      where bucket_id in ('horse-media','horse-documents')
+#        and split_part(name,'/',1) not in (select id::text from public.workspaces)
+#      group by 1;
+psql -1 -v ON_ERROR_STOP=1 "$DATABASE_URL" -f supabase/migrations/20261001090000_workspace_keyed_storage_only.sql
 ```
 
 **(4) and (5) are prerequisites for billing, not optimizations to schedule

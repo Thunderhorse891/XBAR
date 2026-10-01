@@ -1,6 +1,11 @@
 import { apiConfig, isRelationalCloudEnabled, isSnapshotFallbackEnabled, supabaseConfig } from '@/lib/platformConfig';
 import { publicShareEventToBuyerRoomEvent, type PublicShareEventRow } from '@/lib/buyerDealRoom';
-import { buildDocumentStoragePath, explainUnopenableCloudDocument } from '@/lib/documentStoragePath';
+import {
+  buildDocumentStoragePath,
+  documentFileExtension,
+  explainUnopenableCloudDocument,
+  isWorkspaceStorageKey,
+} from '@/lib/documentStoragePath';
 import { createId, todayStamp } from '@/lib/xbarRuntime';
 import { WORKSPACE_SCHEMA_VERSION } from '@/store/xbarStoreHelpers';
 import { intakeIdentityChanged, type IntakeIdentity } from '@/store/xbarStoreLogic';
@@ -1154,9 +1159,16 @@ export async function uploadMediaAssetToCloud(params: { file: File; horseId: str
     return null;
   }
 
-  const extension = params.file.name.includes('.') ? params.file.name.split('.').pop() : 'bin';
-  const fileName = `${createId('media')}.${extension}`;
-  const path = `${session.user.id}/horses/${sanitizeStorageSegment(params.horseId)}/${fileName}`;
+  // Workspace first, like documents: the storage policy grants a photo to the
+  // members of the workspace named by its first segment, and to no one else.
+  // The earlier uploader-first key made a photo readable through any gallery
+  // that listed its path — and a gallery is something an owner can edit.
+  const accessProfile = await loadWorkspaceAccessProfile(session);
+  if (!isWorkspaceStorageKey(accessProfile.workspaceId)) {
+    return null;
+  }
+  const fileName = `${createId('media')}.${documentFileExtension(params.file.name)}`;
+  const path = `${accessProfile.workspaceId.toLowerCase()}/horses/${sanitizeStorageSegment(params.horseId)}/${fileName}`;
   const { error } = await client.storage.from(supabaseConfig.mediaBucket).upload(path, params.file, {
     upsert: false,
     contentType: params.file.type || undefined,
@@ -1188,9 +1200,8 @@ export const HORSE_MEDIA_SIGNED_URL_TTL_SECONDS = 15 * 60;
 /**
  * Mint a short-lived signed URL for a horse-media object.
  *
- * The caller must be signed in and entitled to read the object under the
- * bucket's storage policies (the uploader, or a member of the workspace whose
- * horse references it). Returns null when the client is unavailable, the
+ * The caller must be signed in and a member of the workspace the object's
+ * path is filed under (its first segment); the storage policy enforces it. Returns null when the client is unavailable, the
  * session is missing, or storage refuses -- the render layer treats null as
  * "no image" and shows its fallback, never a broken link.
  */

@@ -149,7 +149,7 @@ test('what the packet leaves out reaches the buyer, not just the seller', async 
 
   // Built after the download loop, or a file that failed to come out of
   // storage would be named to the seller and hidden from the buyer.
-  const loopAt = handler.indexOf("unavailable.push(`${doc.title} (${error?.message || 'download failed'})`)");
+  const loopAt = handler.indexOf('unavailable.push(`${doc.title} (${BUYER_FILE_UNAVAILABLE})`)');
   const builtAt = handler.indexOf('const omissionSection = packetOmissionSection(unavailable);');
   assert.ok(loopAt > -1 && builtAt > loopAt, 'the section must be built after every omission is known');
 });
@@ -193,6 +193,11 @@ test('a document that failed to download is described as absent everywhere', asy
   }
 
   // And a failed download is still named to the buyer, so the two sets partition
-  // the selection rather than both dropping it.
-  assert.match(code, /unavailable\.push\(`\$\{doc\.title\} \(\$\{error\?\.message \|\| 'download failed'\}\)`\)/);
+  // the selection rather than both dropping it -- in words a buyer can read,
+  // never a raw storage error.
+  assert.match(
+    code,
+    /if \(error \|\| !data\) \{[\s\S]*?unavailable\.push\(`\$\{doc\.title\} \(\$\{BUYER_FILE_UNAVAILABLE\}\)`\);\s*continue;/,
+  );
+  assert.ok(!/unavailable\.push\([^)]*error\?\.message/.test(code), 'a storage error message reaches the buyer cover');
 });

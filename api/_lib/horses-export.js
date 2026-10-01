@@ -3,7 +3,7 @@ import { requireWorkspaceAccess } from './supabase-admin.js';
 import { recordAuditEvent } from './audit.js';
 import { enforceRateLimit } from './rate-limit.js';
 import { applyCors } from './cors.js';
-import { RECORDED_PATH_REFUSED, mayReadPacketPath, mayUseClientStoragePath } from './document-storage.js';
+import { PACKET_FILE_NOT_STORED, signRecordedObjects } from './document-storage.js';
 
 // Full data export for one horse: profile, documents (with 1-hour signed
 // URLs for the original files), ownership records, reminders, and sale
@@ -76,26 +76,22 @@ export default async function handler(req, res) {
 
   /*
    * Both paths below are columns a workspace manager can edit, and they are
-   * signed with the service role, which bypasses Storage RLS. So a path is
-   * signed only when the caller could have read it with their own token: see
-   * mayUseClientStoragePath and mayReadPacketPath. A refused file stays in the
-   * export, marked as refused.
+   * signed with the service role, which bypasses Storage RLS. signRecordedObjects
+   * signs only canonical paths under this workspace; anything else stays in the
+   * export, marked with the reason, and a refused path is audited.
    */
-  const documentExports = [];
-  for (const doc of documents || []) {
-    let downloadUrl = '';
-    let downloadUnavailable;
-    if (doc.storage_path) {
-      if (mayUseClientStoragePath({ storagePath: doc.storage_path, workspaceId, userId: user.id })) {
-        const { data: signed } = await supabase.storage
-          .from(DOCUMENT_BUCKET)
-          .createSignedUrl(doc.storage_path, SIGNED_URL_TTL_SECONDS);
-        downloadUrl = signed?.signedUrl || '';
-      } else {
-        downloadUnavailable = RECORDED_PATH_REFUSED;
-      }
-    }
-    documentExports.push({
+  const documentRows = documents || [];
+  const documentSigned = await signRecordedObjects({
+    supabase,
+    bucket: DOCUMENT_BUCKET,
+    paths: documentRows.map((doc) => doc.storage_path || ''),
+    workspaceId,
+    ttlSeconds: SIGNED_URL_TTL_SECONDS,
+    emptyReason: 'No file is attached to this document.',
+  });
+  const documentExports = documentRows.map((doc, index) => {
+    const signed = documentSigned[index];
+    return {
       documentId: doc.document_id,
       title: doc.title,
       documentType: doc.document_type,
@@ -107,25 +103,45 @@ export default async function handler(req, res) {
       extractedData: doc.extracted_data,
       ocrConfidenceMap: doc.ocr_confidence_map,
       createdAt: doc.created_at,
-      downloadUrl,
-      ...(downloadUnavailable ? { downloadUnavailable } : {}),
-    });
-  }
+      downloadUrl: signed.url || '',
+      ...(signed.unavailable ? { downloadUnavailable: signed.unavailable } : {}),
+    };
+  });
 
-  const packetExports = [];
-  for (const packet of packets || []) {
-    const readable = mayReadPacketPath({ packetPath: packet.packet_pdf_path, workspaceId });
-    const { data: signed } = readable
-      ? await supabase.storage.from(PACKET_BUCKET).createSignedUrl(packet.packet_pdf_path, SIGNED_URL_TTL_SECONDS)
-      : { data: null };
-    packetExports.push({
+  const packetRows = packets || [];
+  const packetSigned = await signRecordedObjects({
+    supabase,
+    bucket: PACKET_BUCKET,
+    paths: packetRows.map((packet) => packet.packet_pdf_path || ''),
+    workspaceId,
+    ttlSeconds: SIGNED_URL_TTL_SECONDS,
+    emptyReason: PACKET_FILE_NOT_STORED,
+  });
+  const packetExports = packetRows.map((packet, index) => {
+    const signed = packetSigned[index];
+    return {
       packetId: packet.packet_id,
       watermarkText: packet.watermark_text,
       sharedWithEmail: packet.shared_with_email,
       status: packet.status,
       createdAt: packet.created_at,
-      downloadUrl: signed?.signedUrl || '',
-      ...(readable ? {} : { downloadUnavailable: RECORDED_PATH_REFUSED }),
+      downloadUrl: signed.url || '',
+      ...(signed.unavailable ? { downloadUnavailable: signed.unavailable } : {}),
+    };
+  });
+
+  const refusedPaths = [
+    ...documentRows.filter((_, index) => documentSigned[index].refused).map((doc) => `document:${doc.document_id}`),
+    ...packetRows.filter((_, index) => packetSigned[index].refused).map((packet) => `packet:${packet.packet_id}`),
+  ];
+  if (refusedPaths.length) {
+    await recordAuditEvent(supabase, {
+      workspaceId,
+      actorUserId: user.id,
+      action: 'storage.path_refused',
+      entityType: 'horse',
+      entityId: horseId,
+      metadata: { rows: refusedPaths },
     });
   }
 

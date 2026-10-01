@@ -1,4 +1,5 @@
 import { readJsonBody, sendJson } from './http.js';
+import { canonicalObjectSegments } from './document-storage.js';
 import { getSupabaseAdmin } from './supabase-admin.js';
 import { enforceRateLimit } from './rate-limit.js';
 import { applyCors } from './cors.js';
@@ -28,27 +29,46 @@ import { buyerMediaSchema, parseBody } from './validation.js';
 export const BUYER_MEDIA_URL_TTL_SECONDS = 60 * 60;
 const RATE_LIMIT = { bucket: 'buyer-media', limit: 60, windowSeconds: 60 };
 const MEDIA_BUCKET = process.env.SUPABASE_MEDIA_BUCKET || process.env.VITE_SUPABASE_MEDIA_BUCKET || 'horse-media';
+const WORKSPACE_UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 /**
- * Horse-media storage keys look like `<uploader-id>/horses/<horse-id>/media-<id>.<ext>`.
- * Shape check only -- authorization is the gallery-membership check below.
+ * Horse-media storage keys look like `<workspace-id>/horses/<horse-id>/media-<id>.<ext>`,
+ * in the canonical shape every service-role read requires (see
+ * canonicalObjectSegments). Shape only; authorization is below.
  */
 export function isHorseMediaStoragePath(value) {
-  if (typeof value !== 'string' || value.length === 0 || value.length > 500) {
+  const segments = canonicalObjectSegments(value);
+  if (!segments || segments.length !== 4) {
     return false;
   }
-  if (value.includes('..')) {
-    return false;
-  }
-  const segments = value.split('/');
-  if (segments.length !== 4) {
-    return false;
-  }
-  const [uploaderId, horsesSegment, , fileName] = segments;
-  if (!uploaderId || horsesSegment !== 'horses' || !fileName) {
-    return false;
-  }
-  return fileName.startsWith('media-');
+  const [workspaceId, horsesSegment, , fileName] = segments;
+  return WORKSPACE_UUID.test(workspaceId) && horsesSegment === 'horses' && fileName.startsWith('media-');
+}
+
+/**
+ * The workspace that owns the listing the share link resolved to, read by the
+ * server rather than taken from the gallery. The gallery is owner-editable
+ * JSON, so a path listed there proves nothing about whose file it is; the
+ * path's first segment must be this workspace for the server to sign it.
+ *
+ * share_path is not unique across workspaces, so this picks the row the way
+ * xbar_resolve_public_listing does (newest non-archived row for the path) and
+ * additionally pins it to the listing id that RPC returned. Anything else --
+ * no row, a lookup error, a different listing -- yields '' and nothing is
+ * signed.
+ */
+async function listingWorkspaceId(supabase, sharePath, listingId) {
+  if (!listingId) return '';
+  const { data, error } = await supabase
+    .from('shared_listings')
+    .select('workspace_id, listing_id')
+    .eq('share_path', sharePath)
+    .neq('state', 'Archived')
+    .order('updated_at', { ascending: false })
+    .limit(1)
+    .maybeSingle();
+  if (error || !data?.workspace_id || data.listing_id !== listingId) return '';
+  return String(data.workspace_id).toLowerCase();
 }
 
 /**
@@ -90,6 +110,10 @@ export async function resolveBuyerMediaUrl({
   }
 
   if (!isStoragePathInListingGallery(listing, storagePath)) {
+    return { ok: false, status: 403, message: 'This photo is not part of the shared listing.' };
+  }
+  const ownerWorkspace = await listingWorkspaceId(supabase, sharePath, listing?.sharedListing?.id);
+  if (!ownerWorkspace || storagePath.split('/')[0].toLowerCase() !== ownerWorkspace) {
     return { ok: false, status: 403, message: 'This photo is not part of the shared listing.' };
   }
 
