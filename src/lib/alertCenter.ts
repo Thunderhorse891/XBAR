@@ -1,4 +1,5 @@
 import type { OperationsPriorityItem } from './operationsPriority.js';
+import { localIsoDate } from './format.js';
 
 type AlertKind = OperationsPriorityItem['kind'];
 
@@ -62,7 +63,7 @@ export function buildAlertDigest(items: OperationsPriorityItem[], now = new Date
   // Every alert listed is counted in the summary, so a digest never lists an
   // alert under a subject that says "0 due soon".
   const withinMonth = dueThisMonthCount ? `, ${dueThisMonthCount} within 30 days` : '';
-  const dateStamp = now.toISOString().slice(0, 10);
+  const dateStamp = localIsoDate(now);
   const emailSubject = alerts.length
     ? `XBAR alerts: ${overdueCount} overdue, ${dueSoonCount} due soon${withinMonth}`
     : 'XBAR alerts: no open expiration alerts';

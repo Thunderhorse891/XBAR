@@ -7,7 +7,7 @@ import { EmptyState } from '@/components/EmptyState';
 import { ActionMenuButton } from '@/components/InteractionSystem';
 import { MetricCard, Panel, Pill } from '@/components/app-ui';
 import { DotsIcon } from '@/components/icons';
-import { formatDateLabel } from '@/lib/format';
+import { addLocalCalendarDays, formatDateLabel, localIsoDate } from '@/lib/format';
 import { useUiStore } from '@/store/useUiStore';
 import { useCloudStore } from '@/store/useCloudStore';
 import { useCurrentRoleCapability, useXbarStore } from '@/store/useXbarStore';
@@ -47,8 +47,10 @@ export default function Medical() {
   const vetDocCount = documents.filter(
     (document) => document.type === 'Vet Record' || document.type === 'Coggins',
   ).length;
-  const today = new Date().toISOString().slice(0, 10);
-  const soonCutoff = new Date(Date.now() + 14 * 86400000).toISOString().slice(0, 10);
+  // The rancher's calendar day: the UTC one turns a follow-up due tomorrow
+  // into "overdue" every evening west of UTC.
+  const today = localIsoDate();
+  const soonCutoff = localIsoDate(addLocalCalendarDays(new Date(), 14));
   const followUps = medicalEvents.flatMap((event) => {
     const due = event.details && 'followUpDue' in event.details ? event.details.followUpDue : undefined;
     return due ? [{ ...event, followUpDue: due }] : [];
@@ -66,7 +68,7 @@ export default function Medical() {
   });
   const [eventTitle, setEventTitle] = useState('Vet follow-up');
   const [eventBody, setEventBody] = useState('');
-  const [eventDate, setEventDate] = useState(new Date().toISOString().slice(0, 10));
+  const [eventDate, setEventDate] = useState(() => localIsoDate());
   const [eventType, setEventType] = useState<MedicalEventType>('Vet visit');
   const [eventError, setEventError] = useState('');
   const [timelineQuery, setTimelineQuery] = useState('');

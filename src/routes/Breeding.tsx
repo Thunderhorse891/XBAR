@@ -9,7 +9,7 @@ import { MetricCard, Panel, Pill } from '@/components/app-ui';
 import { billingPath } from '@/lib/billingRoutes';
 import { buildBreedingRevenueProfile, emptyBreedingEconomics } from '@/lib/breedingRevenue';
 import { buildBreedingProgram, type MareStatus } from '@/lib/breedingIntelligence';
-import { formatCompactCurrency, formatDateLabel } from '@/lib/format';
+import { formatCompactCurrency, formatDateLabel, localIsoDate } from '@/lib/format';
 import { breedingRevenueGate } from '@/lib/subscriptionGates';
 import { useCloudStore } from '@/store/useCloudStore';
 import { useUiStore } from '@/store/useUiStore';
@@ -52,7 +52,7 @@ export default function Breeding() {
   });
   const [eventTitle, setEventTitle] = useState('Breeding milestone');
   const [eventBody, setEventBody] = useState('');
-  const [eventDate, setEventDate] = useState(new Date().toISOString().slice(0, 10));
+  const [eventDate, setEventDate] = useState(() => localIsoDate());
   const [eventError, setEventError] = useState('');
   const [milestoneQuery, setMilestoneQuery] = useState('');
   const [pendingDelete, setPendingDelete] = useState<{ horseId: string; eventId: string; horseName: string } | null>(

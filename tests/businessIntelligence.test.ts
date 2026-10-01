@@ -5,7 +5,20 @@ import { CURRENT_COGGINS_DAYS, hasCurrentReadyDocument } from '../src/lib/docume
 import { createOwnershipRecord } from '../src/store/xbarStoreLogic.js';
 import type { DocumentRecord, ExpenseReceipt, HorseRecord, OwnershipRecord } from '../src/types/xbar.js';
 
-const now = new Date('2026-06-10T12:00:00Z');
+// Noon on June 10 on the local calendar: "today" for every assertion here, in
+// any zone. As a UTC instant it was already June 11 from UTC+12.
+const now = new Date(2026, 5, 10, 12, 0, 0);
+
+/*
+ * An exam `examDaysAgo` days before today, written down the way the module
+ * reads a stored timestamp — by its UTC calendar date. Anchored at UTC noon of
+ * the viewer's today, so a fraction of a day moves the time of the exam and
+ * never its date, whatever the zone.
+ */
+function writtenExamTime(examDaysAgo: number): string {
+  const todayNoonUtc = Date.UTC(now.getFullYear(), now.getMonth(), now.getDate(), 12);
+  return new Date(todayNoonUtc - examDaysAgo * 86_400_000).toISOString();
+}
 
 function horse(id: string, name: string, askPrice: number, status: HorseRecord['status'] = 'Sale Prep'): HorseRecord {
   return {
@@ -37,8 +50,7 @@ function cogginsDoc(
     type: 'Coggins',
     state,
     uploadedAt: now.toISOString(),
-    entities:
-      examDaysAgo === null ? {} : { examDate: new Date(now.getTime() - examDaysAgo * 86_400_000).toISOString() },
+    entities: examDaysAgo === null ? {} : { examDate: writtenExamTime(examDaysAgo) },
   } as DocumentRecord;
 }
 
@@ -53,7 +65,7 @@ function cogginsDoc(
  * measures diverge.
  */
 function dateOnlyCogginsDoc(horseId: string, examDaysAgo: number): DocumentRecord {
-  const examDate = new Date(now.getTime() - examDaysAgo * 86_400_000).toISOString().slice(0, 10);
+  const examDate = writtenExamTime(examDaysAgo).slice(0, 10);
   return {
     id: `doc-${horseId}-${examDate}`,
     horseId,
@@ -420,7 +432,7 @@ test('the expiry boundary does not move with the clock or the time zone', () => 
   // which is the property that was actually broken.
   for (const hour of [0, 6, 12, 18, 23]) {
     const sameDay = new Date(now);
-    sameDay.setUTCHours(hour, 0, 0, 0);
+    sameDay.setHours(hour, 0, 0, 0);
     assert.equal(
       hasCurrentReadyDocument([dateOnlyCogginsDoc('h1', CURRENT_COGGINS_DAYS)], CURRENT_COGGINS_DAYS, sameDay),
       true,

@@ -27,7 +27,8 @@ test('buyer offer form builds an explicit persisted offer patch', () => {
       followUpDate: '2026-07-07',
       existingNotes: 'Initial call went well.',
     },
-    new Date('2026-07-03T12:00:00Z'),
+    // Noon on 3 July on the seller's calendar, the day the offer is logged as.
+    new Date(2026, 6, 3, 12, 0, 0),
   );
 
   assert.equal(result.ok, true);

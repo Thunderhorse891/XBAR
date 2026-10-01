@@ -1,4 +1,5 @@
 import { createId, todayStamp } from '../lib/xbarRuntime.js';
+import { addLocalCalendarDays, localIsoDate } from '../lib/format.js';
 import type {
   AssetCondition,
   AssetStatus,
@@ -178,7 +179,7 @@ export function createOwnershipRecord(horse: HorseRecord): OwnershipRecord {
     legalOwner: horse.owner,
     transferStatus: 'Attention Required',
     pendingDocuments: ['Ownership memo', 'Registration proof'],
-    complianceDeadline: new Date(Date.now() + 14 * 24 * 60 * 60 * 1000).toISOString().slice(0, 10),
+    complianceDeadline: localIsoDate(addLocalCalendarDays(new Date(), 14)),
     confidence: computeOwnershipConfidence(proofRequirements),
     auditTrail: [
       `${todayStamp()} Ownership record created from horse record`,

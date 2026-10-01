@@ -13,7 +13,7 @@ import { OfferDecisionPanel } from '@/components/OfferDecisionPanel';
 import { MetricCard, Panel, Pill } from '@/components/app-ui';
 import { DotsIcon } from '@/components/icons';
 import { buildPublicShareUrl } from '@/lib/facebookSharing';
-import { formatCompactCurrency, formatDateLabel } from '@/lib/format';
+import { formatCompactCurrency, formatDateLabel, localIsoDate } from '@/lib/format';
 import { buildOfferDecision } from '@/lib/profitIntelligence';
 import { buildSaleHold } from '@/lib/saleTrustEngine';
 import { useUiStore } from '@/store/useUiStore';
@@ -53,7 +53,8 @@ export default function Sales() {
     ]),
   );
   const liveShareCount = saleHorses.filter((horse) => packetByHorseId[horse.id]?.buyerSafe).length;
-  const today = new Date().toISOString().slice(0, 10);
+  // The seller's calendar day, as the follow-up dates themselves are.
+  const today = localIsoDate();
   const overdueLeads = salesLeads.filter(
     (lead) => lead.stage !== 'Closed' && lead.nextFollowUp && lead.nextFollowUp <= today,
   );
@@ -63,7 +64,7 @@ export default function Sales() {
   const [selectedLeadId, setSelectedLeadId] = useState(salesLeads[0]?.id ?? '');
   const selectedLead = salesLeads.find((lead) => lead.id === selectedLeadId) ?? salesLeads[0];
   const [leadStage, setLeadStage] = useState(selectedLead?.stage ?? 'New');
-  const [leadLastTouch, setLeadLastTouch] = useState(selectedLead?.lastTouch ?? new Date().toISOString().slice(0, 10));
+  const [leadLastTouch, setLeadLastTouch] = useState(selectedLead?.lastTouch ?? localIsoDate());
   const [leadNextFollowUp, setLeadNextFollowUp] = useState(selectedLead?.nextFollowUp ?? '');
   const [leadOfferAmount, setLeadOfferAmount] = useState(
     selectedLead?.offerAmount ? String(selectedLead.offerAmount) : '',
@@ -177,7 +178,7 @@ export default function Sales() {
                 onSelect: () => {
                   const result = updateSalesLead(menuLead.id, {
                     stage: 'Qualified',
-                    lastTouch: new Date().toISOString().slice(0, 10),
+                    lastTouch: localIsoDate(),
                   });
                   pushToast({
                     title: result.ok ? 'Lead updated' : 'Lead update blocked',
@@ -192,7 +193,7 @@ export default function Sales() {
                 onSelect: () => {
                   const result = updateSalesLead(menuLead.id, {
                     stage: 'Offer',
-                    lastTouch: new Date().toISOString().slice(0, 10),
+                    lastTouch: localIsoDate(),
                   });
                   pushToast({
                     title: result.ok ? 'Lead updated' : 'Lead update blocked',

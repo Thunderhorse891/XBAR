@@ -1,11 +1,15 @@
 import type { BuyerRoomEvent, SalesLead } from '../types/xbar.js';
+import { addLocalCalendarDays, localIsoDate } from './format.js';
 
 export type FollowUpTiming = 'Overdue' | 'Today' | 'Upcoming' | 'Unscheduled';
 
 const dayMs = 24 * 60 * 60 * 1000;
 
+// The seller's own calendar day. The UTC date is tomorrow every evening west
+// of UTC, so a follow-up completed at 8:30pm in Chicago was recorded as done
+// the next day and "same day" work was scheduled for tomorrow.
 function dateStamp(date: Date) {
-  return date.toISOString().slice(0, 10);
+  return localIsoDate(date);
 }
 function startOfDay(date: Date) {
   return new Date(date.getFullYear(), date.getMonth(), date.getDate());
@@ -21,7 +25,7 @@ export function followUpTiming(lead: SalesLead, now = new Date()): FollowUpTimin
 }
 
 export function scheduleNextFollowUp(lead: SalesLead, days: number, now = new Date()) {
-  const next = new Date(startOfDay(now).getTime() + days * dayMs);
+  const next = addLocalCalendarDays(now, days);
   return { lastTouch: dateStamp(now), nextFollowUp: dateStamp(next), notes: lead.notes };
 }
 

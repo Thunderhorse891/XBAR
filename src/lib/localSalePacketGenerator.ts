@@ -349,6 +349,9 @@ export function buildLocalSalePacket(params: {
   now?: Date;
 }): LocalSalePacket {
   const now = params.now ?? new Date();
+  // UTC on purpose, unlike every other generated date: the buyer's verifier
+  // checks this stamp against the sealed `sealedAt` instant and cannot know the
+  // seller's zone, so the only date it can recompute is the UTC one.
   const generatedAt = now.toISOString().slice(0, 10);
   const releaseGate = buildBuyerPacketReleaseGate({
     horse: params.horse,

@@ -6,6 +6,7 @@ import { useUiStore } from '@/store/useUiStore';
 import { useXbarStore } from '@/store/useXbarStore';
 import { buyerFollowUpPath } from '@/lib/buyerRoutes';
 import { buildCareBoardRows, buildTransferGapRows } from '@/lib/dashboardOps';
+import { localIsoDate } from '@/lib/format';
 import { track, events } from '@/lib/telemetry';
 
 type TaskCategory = 'Documents' | 'Care' | 'Sales';
@@ -34,7 +35,9 @@ export default function TodayWork() {
   const [tab, setTab] = useState<'All' | TaskCategory>('All');
   // Dismissals persist per-day in localStorage: a dismissed task really stays
   // dismissed across reloads, and returns tomorrow if the record is still due.
-  const dismissKey = `xbar-care-dismissed-${new Date().toISOString().slice(0, 10)}`;
+  // Tomorrow on the rancher's calendar: keyed by the UTC day, every dismissal
+  // came back at 7pm in Chicago.
+  const dismissKey = `xbar-care-dismissed-${localIsoDate()}`;
   const [done, setDone] = useState<Set<string>>(() => {
     try {
       return new Set(JSON.parse(localStorage.getItem(dismissKey) ?? '[]') as string[]);
