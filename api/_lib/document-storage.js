@@ -128,6 +128,9 @@ export const RECORDED_PATH_REFUSED =
 export const RECORDED_FILE_MISSING =
   'This file could not be found in storage. Re-upload it (or rebuild the packet) to include it.';
 export const PACKET_FILE_NOT_STORED = 'No PDF is stored for this packet. Build it again to send it.';
+// Packets are built by the server, so there is nothing to re-upload.
+export const PACKET_PATH_REFUSED =
+  "This packet's stored PDF is not in this workspace, so it was not included. Build the packet again to send it.";
 export const RECORDED_FILE_TEMPORARILY_UNAVAILABLE =
   'Storage could not prepare this file just now. Try again in a minute; nothing needs re-uploading.';
 export const BUYER_FILE_UNAVAILABLE = 'file unavailable';
@@ -146,10 +149,18 @@ export const SELLER_FILE_UNREADABLE = 'could not be read from storage; re-upload
  * is reported as temporary -- telling a seller to re-upload files that exist
  * would have them duplicate uploads and packets for an outage.
  */
-export async function signRecordedObjects({ supabase, bucket, paths, workspaceId, ttlSeconds, emptyReason }) {
+export async function signRecordedObjects({
+  supabase,
+  bucket,
+  paths,
+  workspaceId,
+  ttlSeconds,
+  emptyReason,
+  refusedReason = RECORDED_PATH_REFUSED,
+}) {
   const results = paths.map((path) => {
     if (!path) return { unavailable: emptyReason ?? RECORDED_FILE_MISSING };
-    if (!isWorkspaceObjectPath({ path, workspaceId })) return { unavailable: RECORDED_PATH_REFUSED, refused: true };
+    if (!isWorkspaceObjectPath({ path, workspaceId })) return { unavailable: refusedReason, refused: true };
     return null;
   });
   const toSign = paths.filter((_, index) => results[index] === null);

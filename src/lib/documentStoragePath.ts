@@ -125,6 +125,12 @@ export function explainUnopenableCloudDocument(params: {
   if (namespace === params.viewerUserId.toLowerCase()) {
     return 'You added this file before shared ranch storage, so it was stored under your account and can no longer be opened from the cloud. Upload it again and it will be available to everyone on the ranch.';
   }
+  // Without this workspace's id, a namespace that is not the viewer's could be
+  // the ranch's own file that failed for another reason. Say nothing rather
+  // than send them after a teammate for it.
+  if (!params.workspaceId) {
+    return null;
+  }
   return 'This file was added before shared ranch storage, so it was stored under the account of the teammate who added it and can no longer be opened from the cloud. Ask them to upload it again and it will be available to everyone on the ranch.';
 }
 

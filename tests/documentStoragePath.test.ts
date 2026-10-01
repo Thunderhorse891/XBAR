@@ -191,19 +191,19 @@ test('an unresolved workspace still tells the viewer about their own old upload'
   assert.match(message, /You added this file/);
 });
 
-test('an unresolved workspace does not silence the explanation either', () => {
-  // The signed URL already failed. Had this object belonged to a workspace the
-  // viewer is in, membership would have granted it -- so a namespace that is
-  // neither theirs nor their workspace's is still a teammate's old upload, and
-  // saying nothing would leave them with the storage layer's own noise.
-  const message = explainUnopenableCloudDocument({
-    storagePath: `${uploaderId}/documents/horse-42/x.pdf`,
-    viewerUserId: viewerId,
-    workspaceId: null,
-    refusalStatus: 400,
-  });
-  assert.ok(message);
-  assert.match(message, /teammate who added it/);
+test("an unresolved workspace explains nothing about someone else's namespace", () => {
+  // With the workspace lookup failed, `<uuid>/...` that is not the viewer's id
+  // could be this ranch's own file that failed for some other reason. Telling
+  // them a teammate must re-upload it would be a plausible guess, and wrong.
+  assert.equal(
+    explainUnopenableCloudDocument({
+      storagePath: `${uploaderId}/documents/horse-42/x.pdf`,
+      viewerUserId: viewerId,
+      workspaceId: null,
+      refusalStatus: 400,
+    }),
+    null,
+  );
 });
 
 test('a transient storage failure is never explained as the old storage scheme', () => {

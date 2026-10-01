@@ -40,6 +40,7 @@ const {
   RECORDED_FILE_MISSING,
   RECORDED_FILE_TEMPORARILY_UNAVAILABLE,
   RECORDED_PATH_REFUSED,
+  PACKET_PATH_REFUSED,
 } = await import('../../api/_lib/document-storage.js');
 const { selectPacketDocuments } = await import('../../api/_lib/packet-selection.js');
 
@@ -302,8 +303,8 @@ test("export does not sign a packet path outside this workspace, and signs the w
   const byId = Object.fromEntries(response.body.salePackets.map((entry) => [entry.packetId, entry]));
   assert.ok(byId.own.downloadUrl);
   assert.equal(byId.forged.downloadUrl, '');
-  assert.equal(byId.forged.downloadUnavailable, RECORDED_PATH_REFUSED);
-  assert.equal(byId.climbing.downloadUnavailable, RECORDED_PATH_REFUSED);
+  assert.equal(byId.forged.downloadUnavailable, PACKET_PATH_REFUSED);
+  assert.equal(byId.climbing.downloadUnavailable, PACKET_PATH_REFUSED);
   assert.match(byId.unbuilt.downloadUnavailable, /No PDF is stored/);
   const refusal = audits.find((row) => row.action === 'storage.path_refused');
   assert.deepEqual(refusal.metadata.rows, ['packet:forged', 'packet:climbing']);
@@ -328,8 +329,8 @@ test('the saved-packet list does not sign a packet path outside this workspace',
   const byId = Object.fromEntries(response.body.packets.map((entry) => [entry.packetId, entry]));
   assert.ok(byId.own.downloadUrl);
   assert.equal(byId.forged.downloadUrl, '');
-  assert.equal(byId.forged.downloadUnavailable, RECORDED_PATH_REFUSED);
-  assert.equal(byId.climbing.downloadUnavailable, RECORDED_PATH_REFUSED);
+  assert.equal(byId.forged.downloadUnavailable, PACKET_PATH_REFUSED);
+  assert.equal(byId.climbing.downloadUnavailable, PACKET_PATH_REFUSED);
   assert.match(byId.unbuilt.downloadUnavailable, /No PDF is stored/);
 });
 
@@ -536,4 +537,10 @@ test('every photo path the client builds is one the server will sign for that wo
     buildMediaStoragePath({ workspaceId: 'not-a-uuid', horseId: 'h', objectId: 'media-1', originalFileName: 'a.jpg' }),
     null,
   );
+});
+
+test('a refused packet is told to be rebuilt, never re-uploaded', () => {
+  // Packets are server-built: there is no upload path for one.
+  assert.match(PACKET_PATH_REFUSED, /Build the packet again/);
+  assert.doesNotMatch(PACKET_PATH_REFUSED, /re-upload/i);
 });

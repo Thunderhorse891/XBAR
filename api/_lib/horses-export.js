@@ -3,7 +3,12 @@ import { requireWorkspaceAccess } from './supabase-admin.js';
 import { recordAuditEvent } from './audit.js';
 import { enforceRateLimit } from './rate-limit.js';
 import { applyCors } from './cors.js';
-import { PACKET_FILE_NOT_STORED, recordedDocumentPath, signRecordedObjects } from './document-storage.js';
+import {
+  PACKET_FILE_NOT_STORED,
+  PACKET_PATH_REFUSED,
+  recordedDocumentPath,
+  signRecordedObjects,
+} from './document-storage.js';
 
 // Full data export for one horse: profile, documents (with 1-hour signed
 // URLs for the original files), ownership records, reminders, and sale
@@ -103,6 +108,7 @@ export default async function handler(req, res) {
       workspaceId,
       ttlSeconds: SIGNED_URL_TTL_SECONDS,
       emptyReason: PACKET_FILE_NOT_STORED,
+      refusedReason: PACKET_PATH_REFUSED,
     }),
   ]);
   const documentExports = documentRows.map((doc, index) => {
