@@ -422,17 +422,20 @@ psql -v ON_ERROR_STOP=1 "$DATABASE_URL" -f supabase/checks/document-storage-live
 #    migration header.
 psql -1 -v ON_ERROR_STOP=1 "$DATABASE_URL" -f supabase/migrations/20260924134000_horse_media_private_signed_urls.sql
 
-# 11. Workspace-keyed storage only (audit F02). horse-media reads and writes
-#    follow the workspace named by the object's first path segment, like
-#    documents; the gallery-listing and uploader-keyed branches go, as do the
-#    legacy uploader-keyed horse-documents policies. Deploy the client that
-#    uploads media under the workspace id FIRST. Moves no data; check first
-#    that no object in either bucket still starts with a user id:
+# 11. Workspace-keyed storage (audit F02), in two phases.
+#    EXPAND first -- before the client that files photos under the workspace
+#    id is deployed. It closes the gallery-listing read and adds workspace
+#    reads and uploadMedia-gated writes, while keeping the uploader-keyed
+#    branches so a tab still running the previous bundle keeps working.
+psql -1 -v ON_ERROR_STOP=1 "$DATABASE_URL" -f supabase/migrations/20261001090000_workspace_keyed_storage_expand.sql
+#    Then deploy the client. CONTRACT only once it is live: it removes every
+#    uploader-keyed branch from horse-media and horse-documents. Moves no
+#    data; first confirm no object is still uploader-keyed:
 #      select bucket_id, count(*) from storage.objects
 #      where bucket_id in ('horse-media','horse-documents')
 #        and split_part(name,'/',1) not in (select id::text from public.workspaces)
 #      group by 1;
-psql -1 -v ON_ERROR_STOP=1 "$DATABASE_URL" -f supabase/migrations/20261001090000_workspace_keyed_storage_only.sql
+psql -1 -v ON_ERROR_STOP=1 "$DATABASE_URL" -f supabase/migrations/20261001090100_workspace_keyed_storage_contract.sql
 ```
 
 **(4) and (5) are prerequisites for billing, not optimizations to schedule

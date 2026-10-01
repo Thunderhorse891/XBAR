@@ -24,27 +24,27 @@
 /** Canonical Postgres `uuid` text, the only shape a workspace id has. */
 const WORKSPACE_ID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
+export function isWorkspaceId(value) {
+  return typeof value === 'string' && WORKSPACE_ID_PATTERN.test(value);
+}
+
 /**
  * Reduce one path component to something that cannot change the shape of the
  * path. A `/` here would silently add a segment, and `..` would be read as a
  * traversal by anything that later resolves the name as a path.
  */
 export function safeDocumentSegment(value, fallback) {
+  // Truncate BEFORE stripping leading dots: keeping the last 80 characters can
+  // expose a dot that was in the middle, and a segment that starts with one is
+  // not canonical (see canonicalObjectSegments), so the server would refuse to
+  // read back a file it wrote itself.
   const cleaned = String(value ?? '')
     .replace(/[^a-zA-Z0-9._-]+/g, '_')
-    .replace(/^\.+/, '')
-    .slice(-80);
+    .slice(-80)
+    .replace(/^\.+/, '');
   return cleaned || fallback;
 }
 
-/**
- * Build the object name, or throw.
- *
- * Throwing is deliberate. A server writer with no usable workspace id has
- * nowhere correct to put the file, and the two callers already answer a failed
- * upload with a 502 or a skip — both of which are better than writing bytes
- * that the ranch cannot read and will not know to re-upload.
- */
 /*
  * One rule for every object path the server reads with the service role.
  *
@@ -98,16 +98,23 @@ export function isWorkspaceObjectPath({ path, workspaceId }) {
 }
 
 /**
+ * Where a documents row says its file is. Rows written by the app's relational
+ * mirror keep it in `payload.storagePath` and leave the column empty; rows the
+ * server writes use the column. Every reader resolves it the same way, or one
+ * of them reports a stored file as absent.
+ */
+export function recordedDocumentPath(doc) {
+  const column = typeof doc?.storage_path === 'string' ? doc.storage_path : '';
+  const fromPayload = typeof doc?.payload?.storagePath === 'string' ? doc.payload.storagePath : '';
+  return column || fromPayload;
+}
+
+/**
  * The bulk endpoint's `storagePath` (a file the client already uploaded) and
  * every recorded `documents.storage_path` are held to the same rule.
  */
 export function mayUseClientStoragePath({ storagePath, workspaceId }) {
   return isWorkspaceObjectPath({ path: storagePath, workspaceId });
-}
-
-/** Recorded `sale_packets.packet_pdf_path`, same rule. */
-export function mayReadPacketPath({ packetPath, workspaceId }) {
-  return isWorkspaceObjectPath({ path: packetPath, workspaceId });
 }
 
 /*
@@ -122,6 +129,10 @@ export const RECORDED_FILE_MISSING =
   'This file could not be found in storage. Re-upload it (or rebuild the packet) to include it.';
 export const PACKET_FILE_NOT_STORED = 'No PDF is stored for this packet. Build it again to send it.';
 export const BUYER_FILE_UNAVAILABLE = 'file unavailable';
+// Packet assembly tells the SELLER what to fix in these words; the buyer's
+// cover shows BUYER_FILE_UNAVAILABLE instead (see packetOmissionSection).
+export const SELLER_FILE_REFUSED = 'not stored in this workspace; re-upload it to include it';
+export const SELLER_FILE_UNREADABLE = 'could not be read from storage; re-upload it to include it';
 
 /**
  * Sign recorded object paths for a caller acting in `workspaceId`.
@@ -155,6 +166,14 @@ export async function signRecordedObjects({ supabase, bucket, paths, workspaceId
   return results;
 }
 
+/**
+ * Build the object name, or throw.
+ *
+ * Throwing is deliberate. A server writer with no usable workspace id has
+ * nowhere correct to put the file, and the two callers already answer a failed
+ * upload with a 502 or a skip — both of which are better than writing bytes
+ * that the ranch cannot read and will not know to re-upload.
+ */
 export function documentObjectPath({ workspaceId, documentId, fileName, fallbackName = 'upload.bin' }) {
   if (typeof workspaceId !== 'string' || !WORKSPACE_ID_PATTERN.test(workspaceId)) {
     throw new Error('A document can only be stored under a valid workspace id.');

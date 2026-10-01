@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 
-import { packetOmissionSection, selectPacketDocuments } from '../../api/_lib/packet-selection.js';
+import { buyerFacingOmission, packetOmissionSection, selectPacketDocuments } from '../../api/_lib/packet-selection.js';
 
 /*
  * A sale packet that silently lacks a document is the failure this file exists
@@ -149,7 +149,7 @@ test('what the packet leaves out reaches the buyer, not just the seller', async 
 
   // Built after the download loop, or a file that failed to come out of
   // storage would be named to the seller and hidden from the buyer.
-  const loopAt = handler.indexOf('unavailable.push(`${doc.title} (${BUYER_FILE_UNAVAILABLE})`)');
+  const loopAt = handler.indexOf('unavailable.push(`${doc.title} (${SELLER_FILE_UNREADABLE})`)');
   const builtAt = handler.indexOf('const omissionSection = packetOmissionSection(unavailable);');
   assert.ok(loopAt > -1 && builtAt > loopAt, 'the section must be built after every omission is known');
 });
@@ -193,11 +193,33 @@ test('a document that failed to download is described as absent everywhere', asy
   }
 
   // And a failed download is still named to the buyer, so the two sets partition
-  // the selection rather than both dropping it -- in words a buyer can read,
-  // never a raw storage error.
+  // the selection rather than both dropping it -- with a fix the seller can act
+  // on, and never a raw storage error.
   assert.match(
     code,
-    /if \(error \|\| !data\) \{[\s\S]*?unavailable\.push\(`\$\{doc\.title\} \(\$\{BUYER_FILE_UNAVAILABLE\}\)`\);\s*continue;/,
+    /if \(error \|\| !data\) \{[\s\S]*?unavailable\.push\(`\$\{doc\.title\} \(\$\{SELLER_FILE_UNREADABLE\}\)`\);\s*continue;/,
   );
   assert.ok(!/unavailable\.push\([^)]*error\?\.message/.test(code), 'a storage error message reaches the buyer cover');
+});
+
+test('the seller is told how to fix a missing file; the buyer cover does not describe storage checks', async () => {
+  const { SELLER_FILE_REFUSED, SELLER_FILE_UNREADABLE, BUYER_FILE_UNAVAILABLE } =
+    await import('../../api/_lib/document-storage.js');
+  const seller = [
+    `Coggins (${SELLER_FILE_REFUSED})`,
+    `Health Certificate (${SELLER_FILE_UNREADABLE})`,
+    'Registration (no stored file -- upload it to include it)',
+  ];
+  // The seller's list keeps the reason and the fix.
+  assert.match(seller[0], /re-upload it/);
+  const section = packetOmissionSection(seller);
+  const cover = section.lines.join('\n');
+  assert.ok(!cover.includes(SELLER_FILE_REFUSED), 'the cover describes an internal storage check');
+  assert.ok(!cover.includes(SELLER_FILE_UNREADABLE), 'the cover describes an internal storage error');
+  assert.match(cover, new RegExp(`1\\. Coggins \\(${BUYER_FILE_UNAVAILABLE}\\)`));
+  assert.match(cover, new RegExp(`2\\. Health Certificate \\(${BUYER_FILE_UNAVAILABLE}\\)`));
+  // Every other reason reads the same to both.
+  assert.match(cover, /3\. Registration \(no stored file -- upload it to include it\)/);
+  // A title that merely mentions the words is left alone.
+  assert.equal(buyerFacingOmission('Notes on storage'), 'Notes on storage');
 });

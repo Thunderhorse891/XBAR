@@ -1434,12 +1434,25 @@ export const useXbarStore = create<XbarStore>()(
           return { ok: false, message: 'Storage limit reached for this plan. Upgrade before uploading more media.' };
         }
 
+        // Photos are filed under the ranch's cloud workspace. A signed-in
+        // account whose workspace has not been created yet (before the first
+        // cloud save) has nowhere to put them, and "check your connection"
+        // would send them looking for the wrong problem.
+        const uploadTarget = readIntakeIdentity();
+        if (uploadTarget.userId && !uploadTarget.workspaceId) {
+          return {
+            ok: false,
+            message:
+              'Your ranch workspace is still being set up in the cloud. Wait for the first sync to finish, then upload the photos again.',
+          };
+        }
+
         try {
           const results = await Promise.all(
             fileList.map(async (file) => {
               let uploadedAsset: Awaited<ReturnType<typeof uploadMediaAssetToCloud>> = null;
               try {
-                uploadedAsset = await uploadMediaAssetToCloud({ file, horseId });
+                uploadedAsset = await uploadMediaAssetToCloud({ file, horseId, target: uploadTarget });
               } catch (error) {
                 console.error('Cloud media upload failed.', error);
               }
@@ -1461,6 +1474,17 @@ export const useXbarStore = create<XbarStore>()(
               };
             }),
           );
+
+          // The same account and ranch must still be here to receive them; if
+          // not, the stored files stay orphaned in the ranch they were written
+          // for rather than being attached to a horse in another one.
+          if (intakeIdentityChanged(uploadTarget, readIntakeIdentity())) {
+            return {
+              ok: false,
+              message:
+                'The signed-in account changed while these photos were uploading, so they were not added. Sign in again and re-upload them.',
+            };
+          }
 
           // Only assets that actually stored (a real storagePath) are usable
           // photos. A metadata-only "upload" — cloud unavailable, missing session,

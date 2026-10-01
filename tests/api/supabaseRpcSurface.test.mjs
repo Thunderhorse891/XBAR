@@ -299,6 +299,7 @@ test('the verifier requires the non-anonymous grants too', () => {
     'xbar_commercial_limits(uuid)',
     'xbar_subscription_limits(uuid)',
     'xbar_accept_workspace_invitation(uuid, text)',
+    'xbar_has_workspace_capability(uuid, text)',
     'xbar_workspace_storage_bytes(uuid)',
   ]) {
     assert.ok(code.includes(`'${required}'`), `${required} should be required of its role`);

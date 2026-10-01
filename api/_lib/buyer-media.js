@@ -1,5 +1,5 @@
 import { readJsonBody, sendJson } from './http.js';
-import { canonicalObjectSegments } from './document-storage.js';
+import { canonicalObjectSegments, isWorkspaceId, isWorkspaceObjectPath } from './document-storage.js';
 import { getSupabaseAdmin } from './supabase-admin.js';
 import { enforceRateLimit } from './rate-limit.js';
 import { applyCors } from './cors.js';
@@ -29,7 +29,6 @@ import { buyerMediaSchema, parseBody } from './validation.js';
 export const BUYER_MEDIA_URL_TTL_SECONDS = 60 * 60;
 const RATE_LIMIT = { bucket: 'buyer-media', limit: 60, windowSeconds: 60 };
 const MEDIA_BUCKET = process.env.SUPABASE_MEDIA_BUCKET || process.env.VITE_SUPABASE_MEDIA_BUCKET || 'horse-media';
-const WORKSPACE_UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 /**
  * Horse-media storage keys look like `<workspace-id>/horses/<horse-id>/media-<id>.<ext>`,
@@ -42,7 +41,7 @@ export function isHorseMediaStoragePath(value) {
     return false;
   }
   const [workspaceId, horsesSegment, , fileName] = segments;
-  return WORKSPACE_UUID.test(workspaceId) && horsesSegment === 'horses' && fileName.startsWith('media-');
+  return isWorkspaceId(workspaceId) && horsesSegment === 'horses' && fileName.startsWith('media-');
 }
 
 /**
@@ -113,7 +112,7 @@ export async function resolveBuyerMediaUrl({
     return { ok: false, status: 403, message: 'This photo is not part of the shared listing.' };
   }
   const ownerWorkspace = await listingWorkspaceId(supabase, sharePath, listing?.sharedListing?.id);
-  if (!ownerWorkspace || storagePath.split('/')[0].toLowerCase() !== ownerWorkspace) {
+  if (!isWorkspaceObjectPath({ path: storagePath, workspaceId: ownerWorkspace })) {
     return { ok: false, status: 403, message: 'This photo is not part of the shared listing.' };
   }
 

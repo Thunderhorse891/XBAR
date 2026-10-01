@@ -159,7 +159,14 @@ test('the database capability check falls closed and is not callable anonymously
   // unknown role matches no VALUES row and so is refused.
   assert.match(body, /m\.status = 'active'/);
   assert.match(body, /m\.user_id = auth\.uid\(\)/);
-  assert.match(body, /role_grants\.capability = p_capability/);
+  assert.match(body, /join role_grants g on g\.role = m\.role/);
+  assert.match(body, /and g\.capability = p_capability/);
+  // The workspace owner holds what an Admin holds and nothing more: an unknown
+  // or misspelled capability is refused for the owner too.
+  assert.match(
+    body,
+    /exists \(select 1 from role_grants g where g\.role = 'Admin' and g\.capability = p_capability\)\s*and exists \(\s*select 1 from public\.workspaces w\s*where w\.id = p_workspace_id and w\.owner_user_id = auth\.uid\(\)/,
+  );
   assert.match(sql, /revoke all on function public\.xbar_has_workspace_capability\(uuid, text\) from public;/);
   assert.match(sql, /revoke all on function public\.xbar_has_workspace_capability\(uuid, text\) from anon;/);
   assert.ok(!/grant execute on function public\.xbar_has_workspace_capability[^;]*\banon\b/.test(sql));

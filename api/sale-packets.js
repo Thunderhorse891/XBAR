@@ -17,8 +17,9 @@ import { applyCors } from './_lib/cors.js';
 import { packetOmissionSection, selectPacketDocuments } from './_lib/packet-selection.js';
 import { sellerIdentity } from './_lib/workspace-identity.js';
 import {
-  BUYER_FILE_UNAVAILABLE,
   PACKET_FILE_NOT_STORED,
+  SELLER_FILE_REFUSED,
+  SELLER_FILE_UNREADABLE,
   isWorkspaceObjectPath,
   safeDocumentSegment,
   signRecordedObjects,
@@ -139,13 +140,14 @@ export default async function handler(req, res) {
     const requestedIds = Array.isArray(body.documentIds) ? body.documentIds.filter((id) => typeof id === 'string') : [];
     // storage_path is editable by any workspace manager and the download below
     // uses the service role, so only canonical paths under this workspace are
-    // read. A refused file is named on the cover in buyer-safe words and audited.
+    // read. A refused file is named to the seller with the fix, on the cover in
+    // buyer-safe words, and audited.
     const refusedDocumentIds = [];
     const { packetDocs, unavailable } = selectPacketDocuments(loaded.documents, requestedIds, MAX_PACKET_ATTACHMENTS, {
       refuse: (doc) => {
         if (isWorkspaceObjectPath({ path: doc.storage_path, workspaceId })) return null;
         refusedDocumentIds.push(doc.document_id);
-        return BUYER_FILE_UNAVAILABLE;
+        return SELLER_FILE_REFUSED;
       },
     });
     if (refusedDocumentIds.length) {
@@ -177,14 +179,15 @@ export default async function handler(req, res) {
     for (const doc of packetDocs) {
       const { data, error } = await supabase.storage.from(DOCUMENT_BUCKET).download(doc.storage_path);
       if (error || !data) {
-        // The cover a buyer reads says only that the file is unavailable; the
-        // storage error itself is for the operator, not the buyer.
+        // The seller is told to re-upload; the buyer's cover says only that the
+        // file is unavailable (packetOmissionSection); the storage error itself
+        // is for the operator.
         console.error('sale packet: stored document could not be downloaded', {
           workspaceId,
           documentId: doc.document_id,
           message: error?.message || 'no data',
         });
-        unavailable.push(`${doc.title} (${BUYER_FILE_UNAVAILABLE})`);
+        unavailable.push(`${doc.title} (${SELLER_FILE_UNREADABLE})`);
         continue;
       }
       includedDocs.push(doc);
@@ -437,7 +440,7 @@ export default async function handler(req, res) {
 }
 
 async function listPackets(res, access, horseId) {
-  const { supabase, workspaceId } = access;
+  const { supabase, workspaceId, user } = access;
   let query = supabase
     .from('sale_packets')
     .select('packet_id, horse_id, packet_pdf_path, watermark_text, shared_with_email, document_ids, status, created_at')
@@ -464,6 +467,17 @@ async function listPackets(res, access, horseId) {
     ttlSeconds: SIGNED_URL_TTL_SECONDS,
     emptyReason: PACKET_FILE_NOT_STORED,
   });
+  const refused = rows.filter((_, index) => signed[index].refused).map((row) => `packet:${row.packet_id}`);
+  if (refused.length) {
+    await recordAuditEvent(supabase, {
+      workspaceId,
+      actorUserId: user?.id,
+      action: 'storage.path_refused',
+      entityType: 'sale_packet',
+      entityId: horseId || '',
+      metadata: { rows: refused },
+    });
+  }
   const packets = rows.map((row, index) => ({
     packetId: row.packet_id,
     horseId: row.horse_id,

@@ -1148,7 +1148,7 @@ export async function loadWorkspaceBackupFromCloud() {
   } as const;
 }
 
-export async function uploadMediaAssetToCloud(params: { file: File; horseId: string }) {
+export async function uploadMediaAssetToCloud(params: { file: File; horseId: string; target: IntakeIdentity }) {
   const client = getSupabaseClient();
   if (!client) {
     return null;
@@ -1162,13 +1162,18 @@ export async function uploadMediaAssetToCloud(params: { file: File; horseId: str
   // Workspace first, like documents: the storage policy grants a photo to the
   // members of the workspace named by its first segment, and to no one else.
   // The earlier uploader-first key made a photo readable through any gallery
-  // that listed its path — and a gallery is something an owner can edit.
-  const accessProfile = await loadWorkspaceAccessProfile(session);
-  if (!isWorkspaceStorageKey(accessProfile.workspaceId)) {
+  // that listed its path -- and a gallery is something an owner can edit.
+  //
+  // The workspace is the one the batch started in (resolved once by the
+  // caller, not re-queried per file), and the file is written only while the
+  // same account is still signed in: a photo must never be filed under a ranch
+  // the uploader has just switched away from.
+  const { target } = params;
+  if (!isWorkspaceStorageKey(target.workspaceId) || session.user.id !== target.userId) {
     return null;
   }
   const fileName = `${createId('media')}.${documentFileExtension(params.file.name)}`;
-  const path = `${accessProfile.workspaceId.toLowerCase()}/horses/${sanitizeStorageSegment(params.horseId)}/${fileName}`;
+  const path = `${target.workspaceId.toLowerCase()}/horses/${sanitizeStorageSegment(params.horseId)}/${fileName}`;
   const { error } = await client.storage.from(supabaseConfig.mediaBucket).upload(path, params.file, {
     upsert: false,
     contentType: params.file.type || undefined,

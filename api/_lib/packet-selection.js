@@ -10,6 +10,8 @@
 // believed to carry is the one failure this whole path exists to prevent, and
 // the buyer is who finds out.
 
+import { BUYER_FILE_UNAVAILABLE, SELLER_FILE_REFUSED, SELLER_FILE_UNREADABLE } from './document-storage.js';
+
 /**
  * Split a horse's documents into the ones this endpoint can embed and a plain
  * list of what it could not, one line per omission.
@@ -78,12 +80,29 @@ export function selectPacketDocuments(documents, requestedIds, maxAttachments, {
  * @param {string[]} unavailable Reasons, already formatted "Title (why)".
  * @returns {{heading: string, lines: string[]} | null}
  */
+/*
+ * The omissions list serves two readers. The seller gets the reason and the
+ * fix ("not stored in this workspace; re-upload it"); the buyer reads the
+ * cover, which must not describe internal storage checks, so those reasons
+ * become "file unavailable" there. Every other reason (no file attached, over
+ * the packet limit) already reads correctly to both.
+ */
+const SELLER_ONLY_REASONS = [SELLER_FILE_REFUSED, SELLER_FILE_UNREADABLE];
+
+export function buyerFacingOmission(item) {
+  for (const reason of SELLER_ONLY_REASONS) {
+    const suffix = ` (${reason})`;
+    if (item.endsWith(suffix)) return `${item.slice(0, -suffix.length)} (${BUYER_FILE_UNAVAILABLE})`;
+  }
+  return item;
+}
+
 export function packetOmissionSection(unavailable) {
   if (!unavailable.length) return null;
   return {
     heading: 'Not Included In This Packet',
     lines: [
-      ...unavailable.map((item, index) => `${index + 1}. ${item}`),
+      ...unavailable.map((item, index) => `${index + 1}. ${buyerFacingOmission(item)}`),
       unavailable.length === 1
         ? 'Ask the seller to send this file separately.'
         : 'Ask the seller to send these files separately.',

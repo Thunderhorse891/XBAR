@@ -34,7 +34,7 @@ register(new URL('./fixtures/billingLoader.mjs', import.meta.url));
 const { __setBillingSupabase } = await import('./fixtures/billingSupabaseStub.mjs');
 const { default: exportHandler } = await import('../../api/_lib/horses-export.js');
 const { default: packetsHandler } = await import('../../api/sale-packets.js');
-const { mayReadPacketPath, mayUseClientStoragePath, RECORDED_FILE_MISSING, RECORDED_PATH_REFUSED } =
+const { isWorkspaceObjectPath, mayUseClientStoragePath, RECORDED_FILE_MISSING, RECORDED_PATH_REFUSED } =
   await import('../../api/_lib/document-storage.js');
 const { selectPacketDocuments } = await import('../../api/_lib/packet-selection.js');
 
@@ -279,11 +279,15 @@ test('the saved-packet list does not sign a packet path outside this workspace',
   const own = `${WORKSPACE}/horse-1/packet-1.pdf`;
   const foreign = `${OTHER_WORKSPACE}/horse-9/packet-9.pdf`;
   const climbing = `${WORKSPACE}/../${OTHER_WORKSPACE}/horse-9/packet-9.pdf`;
-  const { signed } = install({
+  const { signed, audits } = install({
     packets: [packet('own', own), packet('forged', foreign), packet('climbing', climbing), packet('unbuilt', null)],
   });
 
   const response = await call(packetsHandler, `/api/sale-packets?workspaceId=${WORKSPACE}`);
+
+  const refusal = audits.find((row) => row.action === 'storage.path_refused');
+  assert.ok(refusal, 'a refused packet path in the list is audited, like the export');
+  assert.deepEqual(refusal.metadata.rows, ['packet:forged', 'packet:climbing']);
 
   assert.equal(response.statusCode, 200);
   assert.deepEqual(signed, [`sale-packets:${own}`]);
@@ -297,7 +301,7 @@ test('the saved-packet list does not sign a packet path outside this workspace',
 
 test('a recorded path belongs to a workspace only in canonical form under that workspace', () => {
   for (const check of [
-    (path, workspaceId) => mayReadPacketPath({ packetPath: path, workspaceId }),
+    (path, workspaceId) => isWorkspaceObjectPath({ path, workspaceId }),
     (path, workspaceId) => mayUseClientStoragePath({ storagePath: path, workspaceId }),
   ]) {
     assert.equal(check(`${WORKSPACE}/horse-1/p.pdf`, WORKSPACE), true);
@@ -368,4 +372,74 @@ test('packet assembly wires the workspace rule into selection, ahead of every se
   assert.ok(download > rule, 'a download now happens before the rule');
   assert.equal(source.split('.download(').length - 1, 1, 'a second service-role download was added; guard it');
   assert.match(source.slice(select, download), /for \(const doc of packetDocs\)/);
+});
+
+test('every path the server writes passes the rule it reads with', async () => {
+  // A writer that can emit a path its own reader refuses turns a good file into
+  // a "not stored in this workspace" refusal and a false audit row. Reproduced
+  // with a long name whose 80-character tail began with a dot.
+  const { documentObjectPath, isWorkspaceObjectPath, safeDocumentSegment } =
+    await import('../../api/_lib/document-storage.js');
+  const hostile = [
+    `${'a'.repeat(25)}.${'y'.repeat(79)}`,
+    `${'b'.repeat(200)}..${'z'.repeat(79)}.pdf`,
+    '...',
+    '.hidden.pdf',
+    '../../etc/passwd',
+    '..\\..\\x',
+    '%2e%2e/%2e%2e',
+    'Bill of Sale (final).PDF',
+    'ñandú.jpg',
+    '',
+    ' ',
+  ];
+  for (const name of hostile) {
+    const documentPath = documentObjectPath({ workspaceId: WORKSPACE, documentId: name, fileName: name });
+    assert.ok(isWorkspaceObjectPath({ path: documentPath, workspaceId: WORKSPACE }), `document path ${documentPath}`);
+    // The packet writer: `${workspaceId}/${safeDocumentSegment(horseId, 'horse')}/${packetId}.pdf`.
+    const packetPath = `${WORKSPACE}/${safeDocumentSegment(name, 'horse')}/packet-1.pdf`;
+    assert.ok(isWorkspaceObjectPath({ path: packetPath, workspaceId: WORKSPACE }), `packet path ${packetPath}`);
+  }
+});
+
+test('export reads a file recorded only in the synced payload, like packet assembly does', async () => {
+  // Rows written by the app's mirror keep the path in payload.storagePath and
+  // leave the column empty. Reading only the column reported "No file is
+  // attached" for a file that exists and that sale packets include.
+  const own = `${WORKSPACE}/documents/horse-1/coggins.pdf`;
+  const { signed } = install({
+    documents: [{ document_id: 'mirrored', title: 'Coggins', storage_path: '', payload: { storagePath: own } }],
+  });
+
+  const response = await call(exportHandler, exportUrl);
+
+  assert.deepEqual(signed, [`horse-documents:${own}`]);
+  const [exported] = response.body.documents;
+  assert.ok(exported.downloadUrl);
+  assert.equal(exported.downloadUnavailable, undefined);
+});
+
+test('the photo uploader files under the batch workspace, only for the account that started it', async () => {
+  // The store module uses Vite's @/ alias and cannot run under node, so the
+  // call sites are pinned from source (see CLAUDE.md, repo notes).
+  const { readFile } = await import('node:fs/promises');
+  const uploader = await readFile(new URL('../../src/lib/cloudWorkspace.ts', import.meta.url), 'utf8');
+  const start = uploader.indexOf('export async function uploadMediaAssetToCloud(');
+  const body = uploader.slice(start, uploader.indexOf('\n}\n', start));
+  assert.match(body, /target: IntakeIdentity/);
+  assert.match(body, /!isWorkspaceStorageKey\(target\.workspaceId\) \|\| session\.user\.id !== target\.userId/);
+  assert.match(body, /const path = `\$\{target\.workspaceId\.toLowerCase\(\)\}\/horses\//);
+  // One workspace lookup per batch, not one per file.
+  assert.ok(!body.includes('loadWorkspaceAccessProfile('), 'the uploader re-resolves the workspace per file');
+
+  const store = await readFile(new URL('../../src/store/useXbarStore.ts', import.meta.url), 'utf8');
+  const media = store.slice(store.indexOf('uploadHorseMedia: async'));
+  const resolved = media.indexOf('const uploadTarget = readIntakeIdentity();');
+  const notReady = media.indexOf('if (uploadTarget.userId && !uploadTarget.workspaceId)');
+  const uploads = media.indexOf('uploadMediaAssetToCloud({ file, horseId, target: uploadTarget })');
+  const recheck = media.indexOf('if (intakeIdentityChanged(uploadTarget, readIntakeIdentity()))');
+  const commit = media.indexOf('const uploadedResults = results.filter');
+  assert.ok(resolved > -1 && notReady > resolved && uploads > notReady, 'resolve once, refuse honestly, then upload');
+  assert.ok(recheck > uploads && commit > recheck, 'the account is re-checked before photos are attached');
+  assert.match(media.slice(notReady, uploads), /still being set up in the cloud/);
 });

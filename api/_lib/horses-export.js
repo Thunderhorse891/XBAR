@@ -3,7 +3,7 @@ import { requireWorkspaceAccess } from './supabase-admin.js';
 import { recordAuditEvent } from './audit.js';
 import { enforceRateLimit } from './rate-limit.js';
 import { applyCors } from './cors.js';
-import { PACKET_FILE_NOT_STORED, signRecordedObjects } from './document-storage.js';
+import { PACKET_FILE_NOT_STORED, recordedDocumentPath, signRecordedObjects } from './document-storage.js';
 
 // Full data export for one horse: profile, documents (with 1-hour signed
 // URLs for the original files), ownership records, reminders, and sale
@@ -84,7 +84,7 @@ export default async function handler(req, res) {
   const documentSigned = await signRecordedObjects({
     supabase,
     bucket: DOCUMENT_BUCKET,
-    paths: documentRows.map((doc) => doc.storage_path || ''),
+    paths: documentRows.map(recordedDocumentPath),
     workspaceId,
     ttlSeconds: SIGNED_URL_TTL_SECONDS,
     emptyReason: 'No file is attached to this document.',

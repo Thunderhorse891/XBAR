@@ -222,12 +222,17 @@ test('a transferred workspace is never swept, in either bucket', () => {
   assert.deepEqual(documentPrefixesToPurge(plan), ['user-1', 'ws-solo']);
 });
 
-test('media is swept by uploader only, because that is how media is keyed', () => {
-  // horse-media is a public bucket and never had the shared-read problem that
-  // moved documents onto workspace paths, so a workspace prefix here would
-  // erase nothing today and be a loaded gun if that ever changed.
-  const plan = planAccountDeletion('user-1', [{ id: 'ws-solo', otherActiveMembers: [] }]);
-  assert.deepEqual(mediaPrefixesToPurge(plan), ['user-1']);
+test('media is swept under the purged workspace too, because photos are keyed to it', () => {
+  // Photos are written under `<workspace-id>/horses/...` (audit F02). Sweeping
+  // only the departing user's prefix left a purged ranch's photos in the
+  // bucket after the endpoint reported the account erased.
+  const plan = planAccountDeletion('user-1', [
+    { id: 'ws-solo', otherActiveMembers: [] },
+    { id: 'ws-shared', otherActiveMembers: [{ userId: 'user-2', role: 'Admin' }] },
+  ]);
+  assert.deepEqual(mediaPrefixesToPurge(plan), ['user-1', 'ws-solo']);
+  // A workspace someone else stays in is never swept.
+  assert.ok(!mediaPrefixesToPurge(plan).includes('ws-shared'));
 });
 
 test('an account owning nothing still has its own uploads erased', () => {

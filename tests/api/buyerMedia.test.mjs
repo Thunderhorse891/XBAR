@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { readFileSync } from 'node:fs';
+import { readdirSync, readFileSync } from 'node:fs';
 import path from 'node:path';
 
 import handler, {
@@ -407,14 +407,45 @@ test('the migration flips the bucket private with a workspace-scoped read policy
   assert.match(migration, /ROLLBACK/i);
 });
 
-test('the workspace-keyed storage migration removes every gallery and uploader-keyed branch', () => {
-  const migration = readFileSync(
-    path.join(process.cwd(), 'supabase', 'migrations', '20261001090000_workspace_keyed_storage_only.sql'),
-    'utf8',
+function readMigrationFile(name) {
+  return readFileSync(path.join(process.cwd(), 'supabase', 'migrations', name), 'utf8');
+}
+
+function policyBody(sql, name) {
+  const start = sql.indexOf(`create policy "${name}"`);
+  assert.ok(start > -1, `${name} is not created`);
+  const end = sql.indexOf(');\n', start);
+  return sql.slice(start, end);
+}
+
+const UPLOADER_BRANCH = /auth\.uid\(\)\)?(?:::text)? = split_part\(name/;
+
+test('the expand phase closes the gallery read and adds workspace writes, keeping old clients working', () => {
+  const expand = readMigrationFile('20261001090000_workspace_keyed_storage_expand.sql');
+  // A gallery listing no longer grants a read.
+  assert.ok(!expand.includes('jsonb_array_elements'), 'a gallery listing must not grant a read');
+  const select = policyBody(expand, 'horse media select workspace');
+  assert.match(select, /xbar_has_workspace_access\(split_part\(name, '\/', 1\)::uuid\)/);
+  // Writes follow the uploadMedia grant, on both ends of an update.
+  for (const name of ['horse media insert workspace', 'horse media update workspace']) {
+    const body = policyBody(expand, name);
+    assert.ok(!UPLOADER_BRANCH.test(body), `${name} must not take an uploader-keyed path`);
+    assert.match(body, /xbar_has_workspace_capability\(split_part\(name, '\/', 1\)::uuid, 'uploadMedia'\)/);
+  }
+  assert.equal(
+    (policyBody(expand, 'horse media update workspace').match(/'uploadMedia'/g) ?? []).length,
+    2,
+    'an update must be checked at the source and the destination',
   );
-  // No policy grants a file by gallery listing or by uploader id any more.
-  assert.ok(!migration.includes('jsonb_array_elements'), 'a gallery listing must not grant a read');
-  assert.ok(!/auth\.uid\(\)\)?::text = split_part/.test(migration), 'an uploader-keyed branch survived');
+  // Expand drops nothing an already-loaded client still uses.
+  for (const kept of ['horse media upload own', 'horse media update own', 'horse documents read own']) {
+    assert.ok(!expand.includes(`drop policy if exists "${kept}"`), `${kept} must survive until the contract phase`);
+  }
+  assert.ok(!expand.includes('to anon'));
+});
+
+test('the contract phase leaves no uploader-keyed branch in either private bucket', () => {
+  const contract = readMigrationFile('20261001090100_workspace_keyed_storage_contract.sql');
   for (const legacy of [
     'horse media upload own',
     'horse media update own',
@@ -422,16 +453,28 @@ test('the workspace-keyed storage migration removes every gallery and uploader-k
     'horse documents upload own',
     'horse documents update own',
   ]) {
-    assert.match(migration, new RegExp(`drop policy if exists "${legacy}" on storage\\.objects;`), legacy);
-    assert.ok(!migration.includes(`create policy "${legacy}"`), `${legacy} is recreated`);
+    assert.match(contract, new RegExp(`drop policy if exists "${legacy}" on storage\\.objects;`), legacy);
+    assert.ok(!contract.includes(`create policy "${legacy}"`), `${legacy} is recreated`);
   }
-  // Reads follow workspace membership; writes follow the uploadMedia grant.
-  assert.match(migration, /create policy "horse media select workspace"[\s\S]*?xbar_has_workspace_access\(split_part/);
-  assert.match(
-    migration,
-    /create policy "horse media insert workspace"[\s\S]*?xbar_has_workspace_capability\(split_part\(name, '\/', 1\)::uuid, 'uploadMedia'\)/,
-  );
-  assert.ok(!migration.includes('to anon'));
-  assert.match(migration, /^begin;/m);
-  assert.match(migration, /^commit;/m);
+  // The workspace policies that 20260912060000 builds WITH an uploader branch
+  // are rebuilt here without one, so the result does not depend on whether
+  // that deferred migration ever ran.
+  for (const name of [
+    'horse media select workspace',
+    'horse documents select workspace',
+    'horse documents update workspace',
+  ]) {
+    assert.ok(!UPLOADER_BRANCH.test(policyBody(contract, name)), `${name} still has an uploader-keyed branch`);
+  }
+  assert.ok(!UPLOADER_BRANCH.test(contract), 'an uploader-keyed branch survived somewhere in the contract phase');
+  // ...and those rebuilt policies are the only ones on the bucket that a later
+  // migration has touched: nothing after the contract phase re-adds a branch.
+  const later = readdirSync(path.join(process.cwd(), 'supabase', 'migrations'))
+    .filter((name) => name.endsWith('.sql') && name > '20261001090100_workspace_keyed_storage_contract.sql')
+    .map(readMigrationFile);
+  for (const sql of later) {
+    assert.ok(!/horse (media|documents) [a-z ]+"[\s\S]*?auth\.uid\(\)/.test(sql), 'a later migration re-adds one');
+  }
+  assert.match(contract, /^begin;/m);
+  assert.match(contract, /^commit;/m);
 });
