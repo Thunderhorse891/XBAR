@@ -1300,7 +1300,7 @@ export function canRestorePersistedState(raw: unknown): boolean {
       strings: ['id', 'watermark', 'createdAt', 'createdBy', 'status'],
       // Same reader, same refusal — a packet whose bytes are on the device is
       // reached through this key and nothing else.
-      optionalStrings: ['fileName', 'downloadUrl', 'localFileKey'],
+      optionalStrings: ['fileName', 'downloadUrl', 'serverPacketId', 'localFileKey'],
     },
     /*
      * `receipt.vendor.trim()` — Expenses.tsx:114 — was the only field checked,

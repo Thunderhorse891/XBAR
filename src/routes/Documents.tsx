@@ -7,7 +7,8 @@ import { Panel, Pill } from '@/components/app-ui';
 import { EmptyState } from '@/components/EmptyState';
 import { SalePacketWizard } from '@/components/SalePacketWizard';
 import { billingPath, billingPathForTier } from '@/lib/billingRoutes';
-import { openStoredFileInTab } from '@/lib/openStoredFile';
+import { openSalePacketInTab, openStoredFileInTab } from '@/lib/openStoredFile';
+import { serverPacketIdOf } from '@/lib/salePacketAccess';
 import { hasStoredFile, storedFileLabel } from '@/lib/storedFiles';
 import { formatDateTimeLabel } from '@/lib/format';
 import { downloadLegalHtml, legalDocuments, openPrintableLegalDocument } from '@/lib/legalDocuments';
@@ -61,6 +62,7 @@ export default function Documents() {
   const canEditHorses = useCurrentRoleCapability('editHorse');
   const canCreateHorses = useCurrentRoleCapability('createHorse');
   const session = useCloudStore((state) => state.session);
+  const workspaceId = useCloudStore((state) => state.workspaceId);
   const workspaceProfile = useXbarStore((state) => state.workspaceProfile);
   const currentUserName =
     session?.user?.user_metadata?.full_name ||
@@ -208,10 +210,14 @@ export default function Documents() {
 
   // Packets generated in the browser live in this device's vault, so their
   // address has to be created on demand — a `blob:` URL persisted at generation
-  // time would already be dead by the time this list rendered it.
+  // time would already be dead by the time this list rendered it. A cloud
+  // packet's saved link dies too, 72 hours on, so it is signed again on open.
   const openPacket = async (packet: SalePacketBuild) => {
     setOpeningPacketId(packet.id);
-    const result = await openStoredFileInTab(packet);
+    const result = await openSalePacketInTab(packet, {
+      workspaceId,
+      accessToken: session?.access_token ?? '',
+    });
     setOpeningPacketId('');
 
     if (!result.ok) {
@@ -1259,9 +1265,20 @@ export default function Documents() {
                           </div>
                         </div>
                         <div className="inline-actions" style={{ alignItems: 'center' }}>
-                          {/* Scheme-checked: a packet record can arrive in an imported backup, and
-                              a `javascript:` href navigates this origin when the link is clicked. */}
-                          {isNavigableFileUrl(packet.downloadUrl) ? (
+                          {/* A cloud packet is signed again on every open: the link saved
+                              when it was built dies after 72 hours. */}
+                          {serverPacketIdOf(packet) ? (
+                            <button
+                              className="button button--ghost button--compact"
+                              type="button"
+                              onClick={() => void openPacket(packet)}
+                              disabled={openingPacketId === packet.id}
+                            >
+                              {openingPacketId === packet.id ? 'Opening...' : 'Download PDF'}
+                            </button>
+                          ) : /* Scheme-checked: a packet record can arrive in an imported backup, and
+                              a `javascript:` href navigates this origin when the link is clicked. */
+                          isNavigableFileUrl(packet.downloadUrl) ? (
                             <a
                               className="button button--ghost button--compact"
                               href={packet.downloadUrl}

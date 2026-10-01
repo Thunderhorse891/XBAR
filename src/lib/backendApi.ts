@@ -1,4 +1,5 @@
 import { apiConfig } from '@/lib/platformConfig';
+import { readRefreshedPacket, type RefreshedPacketAccess } from '@/lib/salePacketAccess';
 
 /*
  * Client for the XBAR backend pipeline (Vercel serverless api/). These calls
@@ -112,4 +113,30 @@ export async function createSalePacketRemote(
   },
 ): Promise<BackendResult<RemoteSalePacket>> {
   return postJson<RemoteSalePacket>('/api/sale-packets', auth, input);
+}
+
+/**
+ * A fresh download link for a packet the cloud already built, by its server id.
+ *
+ * Signs the stored PDF again; it does not rebuild the packet, so it uses no
+ * packet from the plan. See `src/lib/salePacketAccess.ts` for why saved
+ * packets open this way instead of through the link saved at generation.
+ */
+export async function refreshSalePacketDownload(
+  auth: AuthParams,
+  serverPacketId: string,
+): Promise<RefreshedPacketAccess> {
+  try {
+    const query = new URLSearchParams({ workspaceId: auth.workspaceId, packetId: serverPacketId });
+    const response = await fetch(`${buildApiUrl('/api/sale-packets')}?${query.toString()}`, {
+      headers: { Authorization: `Bearer ${auth.accessToken}` },
+    });
+    const payload: unknown = await response.json().catch(() => ({}));
+    return readRefreshedPacket(payload, serverPacketId, response.ok);
+  } catch {
+    return {
+      ok: false,
+      message: 'The workspace service is unreachable. Try again, or check your connection.',
+    };
+  }
 }

@@ -54,7 +54,7 @@ export default async function handler(req, res) {
     if (!access.ok) {
       return sendJson(res, access.status, { ok: false, message: access.message });
     }
-    return listPackets(res, access, query.horseId || '');
+    return listPackets(res, access, query.horseId || '', query.packetId || '');
   }
 
   if (req.method !== 'POST') {
@@ -400,7 +400,18 @@ export default async function handler(req, res) {
   }
 }
 
-async function listPackets(res, access, horseId) {
+/*
+ * Saved packets, each signed afresh on every request.
+ *
+ * `packetId` narrows the list to one packet so the app can re-open a packet it
+ * saved earlier: the link returned at generation lives 72 hours, and a seller
+ * goes back to a packet long after that. Re-signing reads the stored PDF — it
+ * never re-assembles one, so it charges no packet against the plan — and it
+ * runs through the same workspace-access check and the same signing loop as
+ * the list, so a caller who has lost access to the workspace, or a packet that
+ * is no longer recorded in it, gets a refusal rather than a link.
+ */
+async function listPackets(res, access, horseId, packetId = '') {
   const { supabase, workspaceId } = access;
   let query = supabase
     .from('sale_packets')
@@ -411,10 +422,20 @@ async function listPackets(res, access, horseId) {
   if (horseId) {
     query = query.eq('horse_id', horseId);
   }
+  if (packetId) {
+    query = query.eq('packet_id', packetId);
+  }
 
   const { data, error } = await query;
   if (error) {
     return sendJson(res, 500, { ok: false, message: error.message });
+  }
+  if (packetId && !data?.length) {
+    return sendJson(res, 404, {
+      ok: false,
+      code: 'packet_not_found',
+      message: 'This sale packet is no longer stored in this workspace. Build a new one to send it.',
+    });
   }
 
   const packets = [];

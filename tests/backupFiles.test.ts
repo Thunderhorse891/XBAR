@@ -2623,7 +2623,16 @@ test('a packet download link cannot navigate this app to a script URL', async ()
   for (const route of ['src/routes/Documents.tsx', 'src/routes/SalePacketStudio.tsx']) {
     const source = await readFile(route, 'utf8');
     const code = source.replace(/\/\*[\s\S]*?\*\//g, '').replace(/\/\/[^\n]*/g, '');
-    assert.match(code, /\{isNavigableFileUrl\(packet\.downloadUrl\) \? \(/, `${route} must scheme-check the href`);
+    // The check may open the expression or follow the re-sign branch a cloud
+    // packet takes first; either way the href must sit inside its true branch.
+    const guard = code.search(/[{:]\s*isNavigableFileUrl\(packet\.downloadUrl\) \? \(/);
+    assert.ok(guard > -1, `${route} must scheme-check the href`);
+    const href = code.indexOf('href={packet.downloadUrl}');
+    assert.equal(code.split('href={packet.downloadUrl}').length, 2, `${route} must render one packet href`);
+    assert.ok(
+      href > guard && !code.slice(guard, href).includes(') : '),
+      `${route} must render the href only inside the scheme-checked branch`,
+    );
     assert.doesNotMatch(code, /\{packet\.downloadUrl \? \(/, `${route} must not render the link on truthiness alone`);
     assert.match(source, /import \{ isNavigableFileUrl \}/, `${route} must use the shared predicate`);
   }
