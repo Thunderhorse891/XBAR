@@ -1,0 +1,70 @@
+name: Storage policy contract
+
+on:
+  pull_request:
+    paths:
+      - 'supabase/migrations/**'
+      - 'supabase/checks/storage-fixture-schema.sql'
+      - 'supabase/checks/workspace-keyed-storage*.sql'
+      - '.github/workflows/storage-database.yml'
+  push:
+    branches: [main]
+    paths:
+      - 'supabase/migrations/**'
+      - 'supabase/checks/storage-fixture-schema.sql'
+      - 'supabase/checks/workspace-keyed-storage*.sql'
+      - '.github/workflows/storage-database.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+# Real RLS on a disposable Postgres, from production's 2026-10-01 storage
+# policies, through both phases of the workspace-keyed storage migration.
+jobs:
+  storage-database:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    services:
+      postgres:
+        image: postgres:17
+        env:
+          POSTGRES_PASSWORD: disposable-test-password
+          POSTGRES_DB: xbar_storage_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    env:
+      PGHOST: localhost
+      PGPORT: 5432
+      PGUSER: postgres
+      PGPASSWORD: disposable-test-password
+      PGDATABASE: xbar_storage_test
+    steps:
+      - uses: actions/checkout@v7
+      - name: Production starting state
+        run: psql -v ON_ERROR_STOP=1 -f supabase/checks/storage-fixture-schema.sql
+      - name: The starting state leaks, so the checks can see a leak
+        run: |
+          if psql -v ON_ERROR_STOP=1 -f supabase/checks/workspace-keyed-storage-expand.sql; then
+            echo 'The expand-window check passed on the pre-migration policies; it is not testing anything.'
+            exit 1
+          fi
+      - name: Expand, then the expand-window guarantees
+        run: |
+          psql -v ON_ERROR_STOP=1 -f supabase/migrations/20261001090000_workspace_keyed_storage_expand.sql
+          psql -v ON_ERROR_STOP=1 -f supabase/checks/workspace-keyed-storage-expand.sql
+      - name: Contract, then the final guarantees
+        run: |
+          psql -v ON_ERROR_STOP=1 -f supabase/migrations/20261001090100_workspace_keyed_storage_contract.sql
+          psql -v ON_ERROR_STOP=1 -f supabase/checks/workspace-keyed-storage.sql
+      - name: Re-applying either phase never reopens a branch
+        run: |
+          psql -v ON_ERROR_STOP=1 -f supabase/migrations/20261001090000_workspace_keyed_storage_expand.sql
+          psql -v ON_ERROR_STOP=1 -f supabase/migrations/20261001090100_workspace_keyed_storage_contract.sql
+          psql -v ON_ERROR_STOP=1 -f supabase/migrations/20261001090000_workspace_keyed_storage_expand.sql
+          psql -v ON_ERROR_STOP=1 -f supabase/checks/workspace-keyed-storage.sql

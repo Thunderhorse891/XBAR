@@ -34,8 +34,13 @@ register(new URL('./fixtures/billingLoader.mjs', import.meta.url));
 const { __setBillingSupabase } = await import('./fixtures/billingSupabaseStub.mjs');
 const { default: exportHandler } = await import('../../api/_lib/horses-export.js');
 const { default: packetsHandler } = await import('../../api/sale-packets.js');
-const { isWorkspaceObjectPath, mayUseClientStoragePath, RECORDED_FILE_MISSING, RECORDED_PATH_REFUSED } =
-  await import('../../api/_lib/document-storage.js');
+const {
+  isWorkspaceObjectPath,
+  mayUseClientStoragePath,
+  RECORDED_FILE_MISSING,
+  RECORDED_FILE_TEMPORARILY_UNAVAILABLE,
+  RECORDED_PATH_REFUSED,
+} = await import('../../api/_lib/document-storage.js');
 const { selectPacketDocuments } = await import('../../api/_lib/packet-selection.js');
 
 const WORKSPACE = '11111111-1111-4111-8111-111111111111';
@@ -242,16 +247,45 @@ test("export signs the workspace's own documents, and says which have no file or
   );
 });
 
-test('a failed signing batch marks every file missing instead of returning blank links', async () => {
+test('a storage outage is reported as temporary, not as files to re-upload', async () => {
+  // Telling a seller every file "could not be found" during an outage has them
+  // duplicate uploads and packets for files that exist.
   const own = `${WORKSPACE}/documents/horse-1/coggins.pdf`;
-  install({ documents: [doc('own', own)], signError: { message: 'storage down' } });
+  install({
+    documents: [doc('own', own)],
+    packets: [packet('p', `${WORKSPACE}/horse-1/p.pdf`)],
+    signError: { message: 'storage down' },
+  });
 
   const response = await call(exportHandler, exportUrl);
 
   assert.equal(response.statusCode, 200);
   const [exported] = response.body.documents;
   assert.equal(exported.downloadUrl, '');
-  assert.equal(exported.downloadUnavailable, RECORDED_FILE_MISSING);
+  assert.equal(exported.downloadUnavailable, RECORDED_FILE_TEMPORARILY_UNAVAILABLE);
+  assert.doesNotMatch(exported.downloadUnavailable, /re-upload it/i);
+  assert.equal(response.body.salePackets[0].downloadUnavailable, RECORDED_FILE_TEMPORARILY_UNAVAILABLE);
+});
+
+test('a signer that throws is the same outage, not a crash', async () => {
+  const { signRecordedObjects } = await import('../../api/_lib/document-storage.js');
+  const throwing = {
+    storage: {
+      from: () => ({
+        createSignedUrls: async () => {
+          throw new Error('network');
+        },
+      }),
+    },
+  };
+  const [result] = await signRecordedObjects({
+    supabase: throwing,
+    bucket: 'b',
+    paths: [`${WORKSPACE}/documents/x/f.pdf`],
+    workspaceId: WORKSPACE,
+    ttlSeconds: 60,
+  });
+  assert.deepEqual(result, { unavailable: RECORDED_FILE_TEMPORARILY_UNAVAILABLE });
 });
 
 test("export does not sign a packet path outside this workspace, and signs the workspace's own", async () => {
@@ -441,5 +475,23 @@ test('the photo uploader files under the batch workspace, only for the account t
   const commit = media.indexOf('const uploadedResults = results.filter');
   assert.ok(resolved > -1 && notReady > resolved && uploads > notReady, 'resolve once, refuse honestly, then upload');
   assert.ok(recheck > uploads && commit > recheck, 'the account is re-checked before photos are attached');
-  assert.match(media.slice(notReady, uploads), /still being set up in the cloud/);
+  const refusal = media.slice(notReady, uploads);
+  assert.match(refusal, /isRelationalCloudEnabled\(\)/, 'a build with workspace sync off must be told so');
+  assert.match(refusal, /has not connected your ranch workspace yet/);
+  assert.match(refusal, /turned off in this build/);
+});
+
+test('export says a device-only document is on the device, not that it has no file', async () => {
+  install({
+    documents: [
+      { document_id: 'vault', title: 'Coggins', storage_path: '', payload: { localFileKey: 'local-1' } },
+      { document_id: 'none', title: 'Notes', storage_path: '', payload: {} },
+    ],
+  });
+
+  const response = await call(exportHandler, exportUrl);
+
+  const byId = Object.fromEntries(response.body.documents.map((entry) => [entry.documentId, entry]));
+  assert.match(byId.vault.downloadUnavailable, /saved only on the device it was added from/);
+  assert.match(byId.none.downloadUnavailable, /No file is attached/);
 });

@@ -5,6 +5,7 @@ import {
   documentFileExtension,
   explainUnopenableCloudDocument,
   isWorkspaceStorageKey,
+  sanitizeDocumentPathSegment,
 } from '@/lib/documentStoragePath';
 import { createId, todayStamp } from '@/lib/xbarRuntime';
 import { WORKSPACE_SCHEMA_VERSION } from '@/store/xbarStoreHelpers';
@@ -111,14 +112,10 @@ type RelationalMembershipRow = {
 const userRoles: UserRole[] = ['Admin', 'Ranch Manager', 'Owner', 'Medical Lead', 'Sales Lead'];
 
 function sanitizeStorageSegment(value: string) {
-  return (
-    value
-      .toLowerCase()
-      .replace(/[^a-z0-9-]+/g, '-')
-      .replace(/-+/g, '-')
-      .replace(/^-|-$/g, '')
-      .slice(0, 80) || 'record'
-  );
+  // One segment rule for every client-written object path (see
+  // documentStoragePath.ts); a second copy could drift from the server's
+  // canonical-path check.
+  return sanitizeDocumentPathSegment(value, 'record');
 }
 
 function normalizeWorkspaceRole(value: unknown): UserRole | null {

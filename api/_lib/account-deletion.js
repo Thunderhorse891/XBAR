@@ -127,6 +127,20 @@ export function mediaPrefixesToPurge(plan) {
 }
 
 /**
+ * Which prefixes of the SALE-PACKET bucket an account deletion may erase.
+ *
+ * Packets are only ever written by the server, as `<workspace-id>/<horse>/...`,
+ * and each one embeds full copies of the horse's documents -- so leaving them
+ * would keep the Coggins and registration papers the deletion promised to
+ * erase. There is no uploader-keyed layout here, so only purged workspaces.
+ *
+ * @param {{ workspacesToPurge: string[] }} plan
+ */
+export function packetPrefixesToPurge(plan) {
+  return (plan?.workspacesToPurge ?? []).filter((prefix) => typeof prefix === 'string' && prefix.length > 0);
+}
+
+/**
  * Which of the planned purges are STILL private, moments before the delete.
  *
  * The plan is built before the account is removed, and the purge runs after.

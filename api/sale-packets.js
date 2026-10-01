@@ -208,7 +208,9 @@ export default async function handler(req, res) {
     const packetId = `packet-${randomUUID()}`;
     // horse_id is free text a manager can write, so it is reduced to a plain
     // segment: the server must never write a path that leaves its workspace.
-    const packetPath = `${workspaceId}/${safeDocumentSegment(horseId, 'horse')}/${packetId}.pdf`;
+    // Lowercase like every other writer: prefix sweeps (account deletion) and
+    // the storage census compare against workspaces.id::text, which is.
+    const packetPath = `${workspaceId.toLowerCase()}/${safeDocumentSegment(horseId, 'horse')}/${packetId}.pdf`;
     // The buyer-facing seller identity with quick-start placeholders removed —
     // a packet must never present an invented company/ranch as the seller.
     // Resolved BEFORE the seal: the seal authenticates this same filtered

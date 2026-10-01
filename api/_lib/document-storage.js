@@ -90,7 +90,7 @@ export function canonicalObjectSegments(path) {
  * Only when the path is canonical and lives under that workspace.
  */
 export function isWorkspaceObjectPath({ path, workspaceId }) {
-  if (typeof workspaceId !== 'string' || !WORKSPACE_ID_PATTERN.test(workspaceId)) {
+  if (!isWorkspaceId(workspaceId)) {
     return false;
   }
   const segments = canonicalObjectSegments(path);
@@ -128,6 +128,8 @@ export const RECORDED_PATH_REFUSED =
 export const RECORDED_FILE_MISSING =
   'This file could not be found in storage. Re-upload it (or rebuild the packet) to include it.';
 export const PACKET_FILE_NOT_STORED = 'No PDF is stored for this packet. Build it again to send it.';
+export const RECORDED_FILE_TEMPORARILY_UNAVAILABLE =
+  'Storage could not prepare this file just now. Try again in a minute; nothing needs re-uploading.';
 export const BUYER_FILE_UNAVAILABLE = 'file unavailable';
 // Packet assembly tells the SELLER what to fix in these words; the buyer's
 // cover shows BUYER_FILE_UNAVAILABLE instead (see packetOmissionSection).
@@ -139,8 +141,10 @@ export const SELLER_FILE_UNREADABLE = 'could not be read from storage; re-upload
  *
  * Returns one `{ url }` or `{ unavailable, refused? }` per input path, in order.
  * An empty path is "nothing stored", a non-canonical or foreign path is refused
- * (and flagged so the caller can audit it), and a path Storage cannot sign is
- * reported as missing — none of them come back as a bare empty link.
+ * (and flagged so the caller can audit it), a path Storage answers for but
+ * cannot sign is reported as missing, and a batch Storage could not run at all
+ * is reported as temporary -- telling a seller to re-upload files that exist
+ * would have them duplicate uploads and packets for an outage.
  */
 export async function signRecordedObjects({ supabase, bucket, paths, workspaceId, ttlSeconds, emptyReason }) {
   const results = paths.map((path) => {
@@ -150,9 +154,17 @@ export async function signRecordedObjects({ supabase, bucket, paths, workspaceId
   });
   const toSign = paths.filter((_, index) => results[index] === null);
   if (toSign.length) {
-    const { data, error } = await supabase.storage.from(bucket).createSignedUrls(toSign, ttlSeconds);
+    let data = null;
+    let batchFailed = false;
+    try {
+      const response = await supabase.storage.from(bucket).createSignedUrls(toSign, ttlSeconds);
+      data = response?.data;
+      batchFailed = Boolean(response?.error) || !Array.isArray(data);
+    } catch {
+      batchFailed = true;
+    }
     const byPath = new Map();
-    if (!error && Array.isArray(data)) {
+    if (!batchFailed) {
       for (const entry of data) {
         if (entry?.path && entry.signedUrl && !entry.error) byPath.set(entry.path, entry.signedUrl);
       }
@@ -160,7 +172,9 @@ export async function signRecordedObjects({ supabase, bucket, paths, workspaceId
     paths.forEach((path, index) => {
       if (results[index] !== null) return;
       const url = byPath.get(path);
-      results[index] = url ? { url } : { unavailable: RECORDED_FILE_MISSING };
+      if (url) results[index] = { url };
+      else
+        results[index] = { unavailable: batchFailed ? RECORDED_FILE_TEMPORARILY_UNAVAILABLE : RECORDED_FILE_MISSING };
     });
   }
   return results;

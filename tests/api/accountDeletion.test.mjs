@@ -7,6 +7,7 @@ import {
   confirmationSatisfied,
   documentPrefixesToPurge,
   mediaPrefixesToPurge,
+  packetPrefixesToPurge,
   pickSuccessorOwner,
   planAccountDeletion,
   loadAccountDeletionPlan,
@@ -250,12 +251,29 @@ test('a malformed plan sweeps nothing rather than the whole bucket', () => {
   assert.deepEqual(mediaPrefixesToPurge({ userId: undefined }), []);
 });
 
+test('sale packets of a purged workspace are swept, and never by user id or for a transferred one', () => {
+  // Every packet embeds full copies of the horse's documents. Leaving them in
+  // the bucket kept the papers the deletion promised to erase.
+  const plan = planAccountDeletion('user-1', [
+    { id: 'ws-solo', otherActiveMembers: [] },
+    { id: 'ws-shared', otherActiveMembers: [{ userId: 'user-2', role: 'Admin' }] },
+  ]);
+  assert.deepEqual(packetPrefixesToPurge(plan), ['ws-solo']);
+  assert.deepEqual(packetPrefixesToPurge({ userId: 'user-1', workspacesToPurge: ['', null] }), []);
+  assert.deepEqual(packetPrefixesToPurge(undefined), []);
+});
+
 test('the deletion endpoint actually uses those prefix lists', () => {
   // A rule nothing calls is not a fix. This pins the wiring, since the sweep
   // itself needs a live Supabase project to exercise end to end.
   const source = readFileSync(new URL('../../api/_lib/account-delete.js', import.meta.url), 'utf8');
   assert.ok(source.includes('documentPrefixesToPurge('), 'document prefixes are not used by the endpoint');
   assert.ok(source.includes('mediaPrefixesToPurge('), 'media prefixes are not used by the endpoint');
+  assert.match(
+    source,
+    /removeStoragePrefixes\(\s*supabase,\s*PACKET_BUCKET,\s*packetPrefixesToPurge\(\{ \.\.\.plan, workspacesToPurge: purgeable \}\),?\s*\)/,
+    'sale-packet PDFs of a purged workspace are not swept',
+  );
   assert.ok(!source.includes('removeUserStorage'), 'the uploader-only sweep is still present');
 
   /*
@@ -265,7 +283,9 @@ test('the deletion endpoint actually uses those prefix lists', () => {
    * rows, which is the worse half of the race rather than a fix for it.
    */
   assert.ok(
-    !source.includes('documentPrefixesToPurge(plan)') && !source.includes('mediaPrefixesToPurge(plan)'),
+    !source.includes('documentPrefixesToPurge(plan)') &&
+      !source.includes('mediaPrefixesToPurge(plan)') &&
+      !source.includes('packetPrefixesToPurge(plan)'),
     'the storage sweep must follow the re-check, not the plan it was built before the account was deleted',
   );
   assert.ok(

@@ -50,11 +50,15 @@ export function isHorseMediaStoragePath(value) {
  * JSON, so a path listed there proves nothing about whose file it is; the
  * path's first segment must be this workspace for the server to sign it.
  *
- * share_path is not unique across workspaces, so this picks the row the way
- * xbar_resolve_public_listing does (newest non-archived row for the path) and
- * additionally pins it to the listing id that RPC returned. Anything else --
- * no row, a lookup error, a different listing -- yields '' and nothing is
- * signed.
+ * Every non-archived row at this share path is read, not just the one the
+ * resolver would pick. The database refuses a live listing at a path another
+ * workspace already holds (xbar_shared_listing_path_owner_guard, migration
+ * 20261001090000), so these rows belong to one workspace; if they ever do not,
+ * which workspace the link means is ambiguous and nothing is signed. The
+ * listing the resolver returned must also be one of them.
+ *
+ * Anything else -- no rows, a lookup error, two workspaces, a listing id that
+ * is not among them -- yields '' and nothing is signed.
  */
 async function listingWorkspaceId(supabase, sharePath, listingId) {
   if (!listingId) return '';
@@ -62,12 +66,12 @@ async function listingWorkspaceId(supabase, sharePath, listingId) {
     .from('shared_listings')
     .select('workspace_id, listing_id')
     .eq('share_path', sharePath)
-    .neq('state', 'Archived')
-    .order('updated_at', { ascending: false })
-    .limit(1)
-    .maybeSingle();
-  if (error || !data?.workspace_id || data.listing_id !== listingId) return '';
-  return String(data.workspace_id).toLowerCase();
+    .neq('state', 'Archived');
+  if (error || !Array.isArray(data) || data.length === 0) return '';
+  const workspaces = new Set(data.map((row) => String(row?.workspace_id ?? '').toLowerCase()));
+  if (workspaces.size !== 1 || workspaces.has('')) return '';
+  if (!data.some((row) => row?.listing_id === listingId)) return '';
+  return [...workspaces][0];
 }
 
 /**

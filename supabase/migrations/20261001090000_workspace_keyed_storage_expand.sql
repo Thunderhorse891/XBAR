@@ -13,8 +13,26 @@
 -- Sales Lead) -- the people the app already lets upload photos.
 --
 -- What it keeps, until the CONTRACT phase (20261001090100): the uploader-keyed
--- `<user id>/...` read/write branches, so a browser tab still running the
--- previous bundle can upload and see its photo until it reloads.
+-- `<user id>/...` read and INSERT branches, so a browser tab still running the
+-- previous bundle can upload and see its photo until it reloads. Such a photo
+-- is visible only to its uploader in that window; production holds no media
+-- objects at the time of writing, so the window costs nobody an existing file.
+--
+-- What it drops now: the uploader-keyed UPDATE policies on both buckets. No
+-- client updates or moves an object in either bucket (uploads are insert-only,
+-- upsert false), and Postgres ORs permissive policies' USING and WITH CHECK
+-- clauses separately -- so beside a workspace UPDATE policy, an "update own"
+-- policy lets a member move a ranch file to `<their id>/...`, out of the ranch
+-- and into a path only they can read. Guarding one end of a move is guarding
+-- neither.
+--
+-- Share paths: a buyer link resolves by share_path alone, and nothing stopped
+-- two workspaces holding a live listing at the same path. Whichever row was
+-- newer won, so another ranch could publish at your link, and the server could
+-- not say with certainty which workspace a buyer's photo request belonged to.
+-- A trigger now refuses a non-archived listing whose share_path another
+-- workspace already holds. (A trigger rather than a unique index: one ranch
+-- may still hold two rows for a path, which the resolver already orders.)
 --
 -- xbar_has_workspace_capability is that role matrix in the database. It is a
 -- third copy of src/lib/permissions.ts (api/_lib/permissions.js is the second),
@@ -96,22 +114,44 @@ revoke all on function public.xbar_has_workspace_capability(uuid, text) from ano
 grant execute on function public.xbar_has_workspace_capability(uuid, text) to authenticated;
 
 -- horse-media read: the workspace named by the first segment. The gallery
--- branch is gone; the uploader branch stays until the contract phase.
+-- branch is gone. The uploader branch stays only while the uploader-keyed
+-- upload policy does -- i.e. until the contract phase -- so re-running this
+-- file after 20261001090100 cannot quietly put that branch back.
 drop policy if exists "horse media select workspace" on storage.objects;
-create policy "horse media select workspace" on storage.objects
-  for select to authenticated
-  using (
-    bucket_id = 'horse-media'
-    and (
-      case
-        when split_part(name, '/', 1) ~ '^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$'
-          then public.xbar_has_workspace_access(split_part(name, '/', 1)::uuid)
-        else false
-      end
-      -- Removed in 20261001090100 (contract phase).
-      or (select auth.uid())::text = split_part(name, '/', 1)
-    )
-  );
+do $media_read$
+begin
+  if exists (
+    select 1 from pg_policies
+    where schemaname = 'storage' and tablename = 'objects' and policyname = 'horse media upload own'
+  ) then
+    create policy "horse media select workspace" on storage.objects
+      for select to authenticated
+      using (
+        bucket_id = 'horse-media'
+        and (
+          case
+            when split_part(name, '/', 1) ~ '^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$'
+              then public.xbar_has_workspace_access(split_part(name, '/', 1)::uuid)
+            else false
+          end
+          -- Removed in 20261001090100 (contract phase).
+          or (select auth.uid())::text = split_part(name, '/', 1)
+        )
+      );
+  else
+    create policy "horse media select workspace" on storage.objects
+      for select to authenticated
+      using (
+        bucket_id = 'horse-media'
+        and case
+          when split_part(name, '/', 1) ~ '^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$'
+            then public.xbar_has_workspace_access(split_part(name, '/', 1)::uuid)
+          else false
+        end
+      );
+  end if;
+end;
+$media_read$;
 
 -- horse-media write: alongside the existing "horse media upload own" and
 -- "horse media update own", which the contract phase drops.
@@ -146,5 +186,45 @@ create policy "horse media update workspace" on storage.objects
       else false
     end
   );
+
+drop policy if exists "horse media update own" on storage.objects;
+drop policy if exists "horse documents update own" on storage.objects;
+
+-- One workspace per live share path ------------------------------------------
+
+create or replace function public.xbar_shared_listing_path_owner_guard()
+returns trigger
+language plpgsql
+security definer
+set search_path = public
+as $$
+begin
+  if coalesce(new.state, '') = 'Archived' then
+    return new;
+  end if;
+  -- Serialize writers of the same path, so two workspaces inserting at once
+  -- cannot both pass the check below.
+  perform pg_advisory_xact_lock(hashtextextended('xbar_share_path:' || coalesce(new.share_path, ''), 0));
+  if exists (
+    select 1 from public.shared_listings sl
+    where sl.share_path = new.share_path
+      and sl.workspace_id <> new.workspace_id
+      and sl.state <> 'Archived'
+  ) then
+    raise exception 'This share link is already in use by another workspace.'
+      using errcode = '23505', hint = 'Archive the other listing or publish under a different link.';
+  end if;
+  return new;
+end;
+$$;
+
+revoke all on function public.xbar_shared_listing_path_owner_guard() from public;
+revoke all on function public.xbar_shared_listing_path_owner_guard() from anon;
+revoke all on function public.xbar_shared_listing_path_owner_guard() from authenticated;
+
+drop trigger if exists xbar_shared_listing_path_owner_guard on public.shared_listings;
+create trigger xbar_shared_listing_path_owner_guard
+  before insert or update of share_path, state, workspace_id on public.shared_listings
+  for each row execute function public.xbar_shared_listing_path_owner_guard();
 
 commit;

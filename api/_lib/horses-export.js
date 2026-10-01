@@ -16,6 +16,10 @@ const SIGNED_URL_TTL_SECONDS = 3600;
 
 const RATE_LIMIT = { bucket: 'horses-export', limit: 12, windowSeconds: 60 };
 
+const DOCUMENT_HAS_NO_FILE = 'No file is attached to this document.';
+const DOCUMENT_ON_DEVICE_ONLY =
+  'This file is saved only on the device it was added from, not in the cloud, so it is not in this export. Upload it from that device to include it.';
+
 export default async function handler(req, res) {
   if (!applyCors(req, res, { methods: 'GET, OPTIONS' })) {
     return;
@@ -87,10 +91,15 @@ export default async function handler(req, res) {
     paths: documentRows.map(recordedDocumentPath),
     workspaceId,
     ttlSeconds: SIGNED_URL_TTL_SECONDS,
-    emptyReason: 'No file is attached to this document.',
+    emptyReason: DOCUMENT_HAS_NO_FILE,
   });
   const documentExports = documentRows.map((doc, index) => {
     const signed = documentSigned[index];
+    // A document kept only in the on-device vault has no cloud path, which is
+    // not the same as having no file: say where it is, as packet assembly does.
+    if (signed.unavailable === DOCUMENT_HAS_NO_FILE && doc.payload?.localFileKey) {
+      signed.unavailable = DOCUMENT_ON_DEVICE_ONLY;
+    }
     return {
       documentId: doc.document_id,
       title: doc.title,

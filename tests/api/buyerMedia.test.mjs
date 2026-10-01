@@ -51,7 +51,7 @@ function fakeSupabase({
   signError = null,
   postSignListing = listing,
   postSignRpcError = rpcError,
-  listingRow = { workspace_id: WORKSPACE_A, listing_id: LISTING_ID },
+  listingRows = [{ workspace_id: WORKSPACE_A, listing_id: LISTING_ID }],
   listingRowError = null,
 } = {}) {
   const calls = { rpc: [], sign: [], listingRows: [] };
@@ -65,9 +65,11 @@ function fakeSupabase({
           select: (columns) => ((query.columns = columns), chain),
           eq: (column, value) => (query.filters.push(['eq', column, value]), chain),
           neq: (column, value) => (query.filters.push(['neq', column, value]), chain),
-          order: (column, options) => ((query.order = [column, options]), chain),
-          limit: (count) => ((query.limit = count), chain),
-          maybeSingle: async () => ({ data: listingRowError ? null : listingRow, error: listingRowError }),
+          then: (resolve, reject) =>
+            Promise.resolve({ data: listingRowError ? null : listingRows, error: listingRowError }).then(
+              resolve,
+              reject,
+            ),
         };
         return chain;
       },
@@ -291,7 +293,7 @@ test("an approved gallery entry pointing at another workspace's photo signs noth
   // is not B's, so the service role must not sign it.
   const { client, calls } = fakeSupabase({
     listing: listingWithGallery([FOREIGN_PATH]),
-    listingRow: { workspace_id: WORKSPACE_B, listing_id: LISTING_ID },
+    listingRows: [{ workspace_id: WORKSPACE_B, listing_id: LISTING_ID }],
   });
   const result = await resolveBuyerMediaUrl({ ...baseArgs, supabase: client, storagePath: FOREIGN_PATH });
   assert.equal(result.ok, false);
@@ -299,7 +301,7 @@ test("an approved gallery entry pointing at another workspace's photo signs noth
   assert.deepEqual(calls.sign, []);
 });
 
-test('the owning workspace is read for the exact listing the share link resolved to', async () => {
+test('the owning workspace is read from every live row at the share path, not the newest one', async () => {
   const { client, calls } = fakeSupabase({ listing: listingWithGallery([GALLERY_PATH]) });
   assert.equal((await resolveBuyerMediaUrl({ ...baseArgs, supabase: client })).ok, true);
   const [lookup] = calls.listingRows;
@@ -308,17 +310,44 @@ test('the owning workspace is read for the exact listing the share link resolved
     ['eq', 'share_path', '/profiles/horse-abc'],
     ['neq', 'state', 'Archived'],
   ]);
-  assert.deepEqual(lookup.order, ['updated_at', { ascending: false }]);
-  assert.equal(lookup.limit, 1);
+  // No "newest row" choice to drift from the resolver's: updated_at is client
+  // written, and picking by it let two lookups choose different workspaces.
+  assert.equal(lookup.order, undefined);
+  assert.equal(lookup.limit, undefined);
+});
+
+test("two rows of the same ranch at one share path still sign that ranch's photo", async () => {
+  const { client, calls } = fakeSupabase({
+    listing: listingWithGallery([GALLERY_PATH]),
+    listingRows: [
+      { workspace_id: WORKSPACE_A, listing_id: 'listing-older' },
+      { workspace_id: WORKSPACE_A.toUpperCase(), listing_id: LISTING_ID },
+    ],
+  });
+  const result = await resolveBuyerMediaUrl({ ...baseArgs, supabase: client });
+  assert.equal(result.ok, true);
+  assert.equal(calls.sign.length, 1);
 });
 
 for (const [label, overrides] of [
-  ['a different listing row', { listingRow: { workspace_id: WORKSPACE_A, listing_id: 'listing-other' } }],
-  ['no listing row', { listingRow: null }],
+  [
+    'two workspaces at one share path',
+    // B copied A's share path and listing id. Which ranch the link means is
+    // ambiguous, so neither ranch's photo is signed through it.
+    {
+      listingRows: [
+        { workspace_id: WORKSPACE_A, listing_id: LISTING_ID },
+        { workspace_id: WORKSPACE_B, listing_id: LISTING_ID },
+      ],
+    },
+  ],
+  ['a resolved listing that is not among the rows', { listingRows: [{ workspace_id: WORKSPACE_A, listing_id: 'x' }] }],
+  ['no live rows', { listingRows: [] }],
+  ['a null result', { listingRows: null }],
   ['a lookup error', { listingRowError: new Error('db down') }],
-  ['a row without a workspace', { listingRow: { workspace_id: null, listing_id: LISTING_ID } }],
+  ['a row without a workspace', { listingRows: [{ workspace_id: null, listing_id: LISTING_ID }] }],
 ]) {
-  test(`${label} for the owning workspace signs nothing`, async () => {
+  test(`${label} signs nothing`, async () => {
     const { client, calls } = fakeSupabase({ listing: listingWithGallery([GALLERY_PATH]), ...overrides });
     const result = await resolveBuyerMediaUrl({ ...baseArgs, supabase: client });
     assert.equal(result.ok, false);
@@ -437,9 +466,16 @@ test('the expand phase closes the gallery read and adds workspace writes, keepin
     2,
     'an update must be checked at the source and the destination',
   );
-  // Expand drops nothing an already-loaded client still uses.
-  for (const kept of ['horse media upload own', 'horse media update own', 'horse documents read own']) {
+  // Expand drops nothing an already-loaded client still uses: it uploads
+  // (insert) and reads under its own id...
+  for (const kept of ['horse media upload own', 'horse documents read own', 'horse documents upload own']) {
     assert.ok(!expand.includes(`drop policy if exists "${kept}"`), `${kept} must survive until the contract phase`);
+  }
+  // ...but no client updates or moves an object, and an uploader-keyed UPDATE
+  // policy beside a workspace one lets a member move a ranch file out of the
+  // ranch (permissive USING and WITH CHECK are ORed separately).
+  for (const dropped of ['horse media update own', 'horse documents update own']) {
+    assert.match(expand, new RegExp(`drop policy if exists "${dropped}" on storage\\.objects;`), dropped);
   }
   assert.ok(!expand.includes('to anon'));
 });
@@ -477,4 +513,73 @@ test('the contract phase leaves no uploader-keyed branch in either private bucke
   }
   assert.match(contract, /^begin;/m);
   assert.match(contract, /^commit;/m);
+});
+
+test('the database refuses a live listing at a share path another workspace holds', () => {
+  const expand = readMigrationFile('20261001090000_workspace_keyed_storage_expand.sql');
+  const start = expand.indexOf('create or replace function public.xbar_shared_listing_path_owner_guard()');
+  assert.ok(start > -1, 'the share-path guard is missing');
+  const body = expand.slice(start, expand.indexOf('$$;', start));
+  assert.match(body, /security definer/, 'it must see other workspaces’ rows through RLS');
+  assert.match(body, /if coalesce\(new\.state, ''\) = 'Archived' then\s*return new;/);
+  assert.match(body, /pg_advisory_xact_lock\(/, 'two workspaces inserting at once could both pass');
+  assert.match(
+    body,
+    /sl\.share_path = new\.share_path\s*and sl\.workspace_id <> new\.workspace_id\s*and sl\.state <> 'Archived'/,
+  );
+  assert.match(body, /raise exception/);
+  assert.match(
+    expand,
+    /create trigger xbar_shared_listing_path_owner_guard\s*before insert or update of share_path, state, workspace_id on public\.shared_listings\s*for each row/,
+  );
+  for (const role of ['public', 'anon', 'authenticated']) {
+    assert.match(
+      expand,
+      new RegExp(`revoke all on function public\\.xbar_shared_listing_path_owner_guard\\(\\) from ${role};`),
+    );
+  }
+  // The resolver's own filter is the same "not archived" set the guard and the
+  // server lookup use.
+  const resolver = readMigrationFile('20260910173613_private_share_token_fail_closed.sql');
+  assert.match(resolver, /sl\.state <> 'Archived'/);
+});
+
+test('the runbook never applies the superseded document contract after the storage contract', () => {
+  // 20260912060000 rebuilds the document policies WITH the uploader branch, so
+  // following a runbook that ran it after 20261001090100 would silently undo
+  // the contract phase.
+  const readme = readFileSync(path.join(process.cwd(), 'README.md'), 'utf8');
+  const superseded = readme.indexOf('-f supabase/migrations/20260912060000_workspace_keyed_document_storage.sql');
+  const expand = readme.indexOf('-f supabase/migrations/20261001090000_workspace_keyed_storage_expand.sql');
+  const expandCheck = readme.indexOf('-f supabase/checks/workspace-keyed-storage-expand.sql');
+  const contract = readme.indexOf('-f supabase/migrations/20261001090100_workspace_keyed_storage_contract.sql');
+  const finalCheck = readme.indexOf('-f supabase/checks/workspace-keyed-storage.sql');
+  assert.ok(superseded > -1 && contract > -1, 'both must stay in the runbook');
+  assert.ok(superseded < expand, 'the superseded contract must come before step 11');
+  assert.ok(expand < expandCheck && expandCheck < contract && contract < finalCheck, 'expand, check, contract, check');
+  assert.equal(
+    readme.indexOf('-f supabase/migrations/20260912060000_workspace_keyed_document_storage.sql', superseded + 1),
+    -1,
+    'the superseded contract appears twice',
+  );
+});
+
+test('CI proves the storage policies under real RLS, through both phases', () => {
+  const workflow = readFileSync(path.join(process.cwd(), '.github', 'workflows', 'storage-database.yml'), 'utf8');
+  const order = [
+    '-f supabase/checks/storage-fixture-schema.sql',
+    '-f supabase/checks/workspace-keyed-storage-expand.sql',
+    '-f supabase/migrations/20261001090000_workspace_keyed_storage_expand.sql',
+    '-f supabase/checks/workspace-keyed-storage-expand.sql',
+    '-f supabase/migrations/20261001090100_workspace_keyed_storage_contract.sql',
+    '-f supabase/checks/workspace-keyed-storage.sql',
+  ];
+  let at = -1;
+  for (const step of order) {
+    const next = workflow.indexOf(step, at + 1);
+    assert.ok(next > at, `${step} is missing or out of order`);
+    at = next;
+  }
+  // The first expand-window check must be expected to FAIL on the old policies.
+  assert.match(workflow, /if psql -v ON_ERROR_STOP=1 -f supabase\/checks\/workspace-keyed-storage-expand\.sql; then/);
 });

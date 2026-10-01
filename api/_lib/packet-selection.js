@@ -64,22 +64,6 @@ export function selectPacketDocuments(documents, requestedIds, maxAttachments, {
   return { packetDocs, unavailable };
 }
 
-/**
- * The cover section naming what the packet does not contain, or null.
- *
- * Recording an omission in the API response told the SELLER. The buyer reads
- * the PDF, and the PDF said nothing — it listed what was included and stopped,
- * so a packet missing a Coggins looked exactly like one that never had a
- * requirement for it. That is the same silent omission one layer further out,
- * and the buyer is the party who cannot ask the database what happened.
- *
- * Wording follows the local renderer's "Not included in this packet" notice
- * deliberately: a seller who has seen both must not have to work out whether
- * they mean the same thing.
- *
- * @param {string[]} unavailable Reasons, already formatted "Title (why)".
- * @returns {{heading: string, lines: string[]} | null}
- */
 /*
  * The omissions list serves two readers. The seller gets the reason and the
  * fix ("not stored in this workspace; re-upload it"); the buyer reads the
@@ -97,6 +81,22 @@ export function buyerFacingOmission(item) {
   return item;
 }
 
+/**
+ * The cover section naming what the packet does not contain, or null.
+ *
+ * Recording an omission in the API response told the SELLER. The buyer reads
+ * the PDF, and the PDF said nothing — it listed what was included and stopped,
+ * so a packet missing a Coggins looked exactly like one that never had a
+ * requirement for it. That is the same silent omission one layer further out,
+ * and the buyer is the party who cannot ask the database what happened.
+ *
+ * Wording follows the local renderer's "Not included in this packet" notice
+ * deliberately: a seller who has seen both must not have to work out whether
+ * they mean the same thing.
+ *
+ * @param {string[]} unavailable Reasons, already formatted "Title (why)".
+ * @returns {{heading: string, lines: string[]} | null}
+ */
 export function packetOmissionSection(unavailable) {
   if (!unavailable.length) return null;
   return {

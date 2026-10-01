@@ -12,7 +12,7 @@ import {
   todayStamp,
 } from '@/lib/xbarRuntime';
 import { normalizeWorkspaceEmail, validateWorkspaceInvitation } from '@/lib/workspaceAccess';
-import { apiConfig, isSupabaseConfigured } from '@/lib/platformConfig';
+import { apiConfig, isRelationalCloudEnabled, isSupabaseConfigured } from '@/lib/platformConfig';
 import { useCloudStore } from '@/store/useCloudStore';
 import { hasRoleCapability } from '@/lib/permissions';
 import { hasHorsePhoto, isHorsePhotoAsset } from '@/lib/animalPassport';
@@ -1435,15 +1435,16 @@ export const useXbarStore = create<XbarStore>()(
         }
 
         // Photos are filed under the ranch's cloud workspace. A signed-in
-        // account whose workspace has not been created yet (before the first
-        // cloud save) has nowhere to put them, and "check your connection"
-        // would send them looking for the wrong problem.
+        // account with no workspace resolved has nowhere to put them, and
+        // "check your connection" would send them looking for the wrong
+        // problem -- so say which of the real causes it is.
         const uploadTarget = readIntakeIdentity();
         if (uploadTarget.userId && !uploadTarget.workspaceId) {
           return {
             ok: false,
-            message:
-              'Your ranch workspace is still being set up in the cloud. Wait for the first sync to finish, then upload the photos again.',
+            message: isRelationalCloudEnabled()
+              ? 'XBAR has not connected your ranch workspace yet. If you just signed up, wait for the first sync to finish; otherwise reload the page. Then upload the photos again.'
+              : 'Photo storage needs ranch workspace sync, which is turned off in this build, so no photo was stored.',
           };
         }
 
