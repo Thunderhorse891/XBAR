@@ -126,9 +126,9 @@ async function importWithEnv(overrides, tag) {
 
 let ipCounter = 0;
 
-function invoke(handler, { body = {}, token = 'token-admin', ip = `10.9.0.${++ipCounter}` } = {}) {
+function invoke(handler, { body = {}, token = 'token-admin', ip = `10.9.0.${++ipCounter}`, method = 'POST' } = {}) {
   const req = Readable.from([JSON.stringify(body)]);
-  req.method = 'POST';
+  req.method = method;
   req.url = '/api/stripe/checkout';
   req.headers = {
     'content-type': 'application/json',
@@ -414,4 +414,70 @@ test('refuses when Stripe is not configured', async () => {
   assert.equal(response.statusCode, 503);
   assert.match(response.body.message, /not configured/);
   assert.deepEqual(stripeScenario.calls, []);
+});
+
+/*
+ * Production offered annual billing with no annual price set (2026-10-02): the
+ * toggle appeared because managed billing was on, and a buyer who chose annual
+ * got "a configured Stripe price id are required" at the moment of paying. The
+ * screen now asks the server what it can sell before offering a cadence, and a
+ * cadence it cannot sell is refused in the buyer's terms.
+ */
+async function withEnv(overrides, action) {
+  const saved = Object.fromEntries(Object.keys(overrides).map((key) => [key, process.env[key]]));
+  for (const [key, value] of Object.entries(overrides)) {
+    if (value === undefined) delete process.env[key];
+    else process.env[key] = value;
+  }
+  try {
+    return await action();
+  } finally {
+    for (const [key, value] of Object.entries(saved)) {
+      if (value === undefined) delete process.env[key];
+      else process.env[key] = value;
+    }
+  }
+}
+
+test('GET says which plans and cadences can be sold, and names no price id', async () => {
+  const { default: handler } = await import('../../api/stripe/checkout.js');
+  const response = await invoke(handler, { method: 'GET', token: null });
+
+  assert.equal(response.statusCode, 200);
+  assert.equal(response.body.managed, true);
+  assert.deepEqual(response.body.sellable, {
+    monthly: { Starter: true, Professional: true, 'Ranch Ops': true, Enterprise: true },
+    annual: { Starter: false, Professional: true, 'Ranch Ops': true, Enterprise: false },
+  });
+  assert.doesNotMatch(JSON.stringify(response.body), /price_/, 'price ids stay on the server');
+  assert.equal(response.headers['cache-control'], 'no-store, max-age=0');
+});
+
+test('a value that is not a price id is not sellable', async () => {
+  const { default: handler } = await import('../../api/stripe/checkout.js');
+  const response = await withEnv({ STRIPE_PRICE_ID_ENTERPRISE_ANNUAL: 'prod_1Ent', STRIPE_PRICE_ID_STARTER: ' ' }, () =>
+    invoke(handler, { method: 'GET', token: null }),
+  );
+  assert.equal(response.body.sellable.annual.Enterprise, false, 'a product id cannot be checked out');
+  assert.equal(response.body.sellable.monthly.Starter, false, 'blank is not a price');
+});
+
+test('a paused deployment reports nothing as managed', async () => {
+  const pausedHandler = await importWithEnv({ MANAGED_BILLING_ENABLED: undefined }, 'paused-get');
+  const response = await invoke(pausedHandler, { method: 'GET', token: null });
+  assert.equal(response.statusCode, 200);
+  assert.equal(response.body.managed, false, 'the screen must not offer what a POST would refuse');
+});
+
+test("a cadence the deployment cannot sell is refused in the buyer's terms", async () => {
+  stripeScenario.reset();
+  supabaseFor();
+  const { default: handler } = await import('../../api/stripe/checkout.js');
+
+  const response = await invoke(handler, { body: { tier: 'Starter', workspaceId: 'ws_1', billingPeriod: 'annual' } });
+
+  assert.equal(response.statusCode, 409);
+  assert.equal(response.body.code, 'cadence_unavailable', 'coded, so the client never falls back to a payment link');
+  assert.equal(response.body.message, 'Annual billing is not available for Starter yet. Nothing was charged.');
+  assert.deepEqual(stripeScenario.calls, [], 'nothing billable is touched');
 });

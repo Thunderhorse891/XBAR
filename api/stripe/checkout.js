@@ -1,7 +1,7 @@
 import { serverManagedBillingEnabled } from '../_lib/managed-billing.js';
 import Stripe from 'stripe';
 import { readJsonBody, sendJson } from '../_lib/http.js';
-import { buildSubscriptionProfile, getStripePriceIdByTier } from '../_lib/subscription-plans.js';
+import { buildSubscriptionProfile, getStripePriceIdByTier, sellablePrices } from '../_lib/subscription-plans.js';
 import { checkoutBlockReason } from '../_lib/subscription-status.js';
 import {
   claimCheckoutLock,
@@ -53,8 +53,22 @@ function getTrustedReturnUrl(requestedReturnUrl) {
 }
 
 export default async function handler(req, res) {
-  if (!applyCors(req, res)) {
+  if (!applyCors(req, res, { methods: 'GET, POST, OPTIONS' })) {
     return;
+  }
+
+  /*
+   * What can be bought here, before anyone tries. Public and secret-free: it
+   * names plans and cadences, never price ids. `managed` is false whenever a
+   * POST would be refused outright, so the screen offers nothing it cannot sell.
+   */
+  if (req.method === 'GET') {
+    res.setHeader('Cache-Control', 'no-store, max-age=0');
+    return sendJson(res, 200, {
+      ok: true,
+      managed: managedBillingEnabled && Boolean(stripe),
+      sellable: sellablePrices(),
+    });
   }
 
   if (req.method !== 'POST') {
@@ -92,8 +106,17 @@ export default async function handler(req, res) {
   const seatCount = Number.isInteger(requestedSeatCount) ? Math.min(100, Math.max(1, requestedSeatCount)) : 1;
   const priceId = getStripePriceIdByTier(tier, billingPeriod);
 
-  if (!workspaceId || !priceId) {
-    return sendJson(res, 400, { ok: false, message: 'Workspace id and a configured Stripe price id are required.' });
+  if (!workspaceId) {
+    return sendJson(res, 400, { ok: false, message: 'Workspace id is required.' });
+  }
+  // A buyer can reach this with a cadence the deployment does not sell. Say so
+  // in their terms; the code keeps the client from falling back to a link.
+  if (!priceId) {
+    return sendJson(res, 409, {
+      ok: false,
+      code: 'cadence_unavailable',
+      message: `${billingPeriod === 'annual' ? 'Annual' : 'Monthly'} billing is not available for ${tier} yet. Nothing was charged.`,
+    });
   }
 
   const access = await requireWorkspaceAccess(accessToken, workspaceId);
