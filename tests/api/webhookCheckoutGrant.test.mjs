@@ -115,10 +115,21 @@ function deliver(event, { secret = WEBHOOK_SECRET } = {}) {
  * Scripted Supabase boundary. `order` records the cross-boundary call order
  * so the idempotency/ordering assertions are behavioral, not textual.
  */
-function supabaseFor({ processedEventIds = [], profileRow = null, rpcImpl = null } = {}) {
+function supabaseFor({
+  processedEventIds = [],
+  profileRow = null,
+  profileError = null,
+  rpcImpl = null,
+  billingCustomers = { data: [], error: null },
+} = {}) {
   const calls = { order: [], rpcParams: [] };
   const client = makeClient({
     tables: {
+      workspace_billing_customers: async (mode) => {
+        calls.order.push('customer-lookup');
+        assert.equal(mode, 'rows', 'every matching row is read, so two workspaces cannot hide behind one');
+        return billingCustomers;
+      },
       workspace_subscription_events: async (mode, ops) => {
         calls.order.push('events-check');
         const eqOp = ops.find(([name]) => name === 'eq');
@@ -127,7 +138,7 @@ function supabaseFor({ processedEventIds = [], profileRow = null, rpcImpl = null
       },
       workspace_subscription_profiles: async (mode) => {
         calls.order.push('profile-read');
-        if (mode === 'maybeSingle') return { data: profileRow, error: null };
+        if (mode === 'maybeSingle') return { data: profileRow, error: profileError };
         return { data: [], error: null };
       },
     },
@@ -334,4 +345,100 @@ test('a delivery with no signature is refused', async () => {
 
   assert.equal(response.statusCode, 400);
   assert.deepEqual(calls.order, []);
+});
+
+/*
+ * A subscription event with no workspace in its metadata is routed through
+ * `workspace_billing_customers`. That lookup used to discard its error, so a
+ * timeout read as "this customer has no workspace": the event was acknowledged
+ * with 200, nothing was written, and Stripe never redelivered it.
+ */
+function updatedEventWithoutWorkspace({ eventId }) {
+  return {
+    id: eventId,
+    object: 'event',
+    type: 'customer.subscription.updated',
+    created: Math.floor(Date.now() / 1000),
+    data: {
+      object: {
+        id: 'sub_test_1',
+        object: 'subscription',
+        status: 'active',
+        customer: 'cus_test_1',
+        metadata: {},
+        items: { data: [{ price: { id: PRICE_PRO_MONTHLY }, quantity: 1 }] },
+      },
+    },
+  };
+}
+
+test('a subscription event finds its workspace through the billing customer', async () => {
+  stripeScenario.calls = [];
+  stripeScenario.retrieveSubscription = async () => activeSubscription(PRICE_PRO_MONTHLY);
+  const calls = supabaseFor({ billingCustomers: { data: [{ workspace_id: 'ws_by_customer' }], error: null } });
+
+  const response = await deliver(updatedEventWithoutWorkspace({ eventId: 'evt_test_by_customer' }));
+
+  assert.equal(response.statusCode, 200);
+  assert.equal(calls.rpcParams.length, 1);
+  assert.equal(calls.rpcParams[0].p_workspace_id, 'ws_by_customer');
+  assert.equal(calls.rpcParams[0].p_billing_state, 'Active');
+});
+
+test('a customer with no workspace is acknowledged and changes nothing', async () => {
+  stripeScenario.calls = [];
+  const calls = supabaseFor({ billingCustomers: { data: [], error: null } });
+
+  const response = await deliver(updatedEventWithoutWorkspace({ eventId: 'evt_test_no_workspace' }));
+
+  assert.equal(response.statusCode, 200);
+  assert.deepEqual(calls.order, ['events-check', 'customer-lookup']);
+  assert.deepEqual(calls.rpcParams, []);
+  assert.deepEqual(stripeScenario.calls, []);
+});
+
+test('a failed customer lookup is retried by Stripe, not acknowledged as "no workspace"', async () => {
+  stripeScenario.calls = [];
+  const calls = supabaseFor({
+    billingCustomers: { data: null, error: { message: 'canceling statement due to statement timeout' } },
+  });
+
+  const response = await deliver(updatedEventWithoutWorkspace({ eventId: 'evt_test_lookup_timeout' }));
+
+  assert.ok(response.statusCode >= 500, `a non-2xx makes Stripe redeliver; got ${response.statusCode}`);
+  assert.deepEqual(calls.rpcParams, [], 'nothing is written on an unanswered lookup');
+  assert.deepEqual(stripeScenario.calls, [], 'no Stripe read for a workspace that was never resolved');
+  assert.doesNotMatch(
+    JSON.stringify(response.body),
+    /statement timeout/,
+    "the database's own text stays out of the body Stripe stores in its delivery log",
+  );
+});
+
+test('a customer linked to two workspaces is refused, not assigned to whichever row came first', async () => {
+  stripeScenario.calls = [];
+  const calls = supabaseFor({
+    billingCustomers: { data: [{ workspace_id: 'ws_a' }, { workspace_id: 'ws_b' }], error: null },
+  });
+
+  const response = await deliver(updatedEventWithoutWorkspace({ eventId: 'evt_test_two_workspaces' }));
+
+  assert.ok(response.statusCode >= 400, `the refusal must be a non-2xx; got ${response.statusCode}`);
+  assert.equal(response.body.ok, false);
+  assert.match(response.body.message, /more than one workspace/);
+  assert.deepEqual(calls.rpcParams, [], 'neither workspace is written');
+});
+
+test("a failed profile read keeps the database's text out of the response", async () => {
+  stripeScenario.calls = [];
+  stripeScenario.retrieveSubscription = async () => activeSubscription(PRICE_PRO_MONTHLY);
+  const calls = supabaseFor({
+    profileError: { message: 'relation "workspace_subscription_profiles" column "tier" does not exist' },
+  });
+
+  const response = await deliver(completedEvent({ eventId: 'evt_test_profile_read_error' }));
+
+  assert.ok(response.statusCode >= 400, 'still a non-2xx, so Stripe retries');
+  assert.deepEqual(calls.rpcParams, [], 'nothing is written without the stored tier');
+  assert.doesNotMatch(JSON.stringify(response.body), /relation|column|does not exist/);
 });

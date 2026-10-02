@@ -114,7 +114,13 @@ async function syncWorkspaceSubscription({
   // losing the purchased tier and its rate permanently rather than being marked
   // inactive. Throwing writes nothing and leaves the event for Stripe to retry.
   if (existingProfileError) {
-    throw new Error(`Could not read the existing subscription profile: ${existingProfileError.message}`);
+    // The database's text is logged, not thrown: the thrown message becomes the
+    // response body, which Stripe stores in its dashboard delivery log.
+    console.error('[stripe webhook] subscription profile read failed', {
+      workspaceId,
+      message: existingProfileError.message,
+    });
+    throw new Error('Could not read the existing subscription profile.');
   }
 
   // The asymmetry between granting and withdrawing access lives in
@@ -299,13 +305,50 @@ export default async function handler(req, res) {
 
       let resolvedWorkspaceId = directWorkspaceId;
       if (!resolvedWorkspaceId && customerId) {
+        /*
+         * A lookup that FAILED is not a customer with no workspace.
+         *
+         * Read as "no workspace", a timeout fell through to the 200 below: the
+         * cancellation (or renewal) was acknowledged, nothing was written, and
+         * Stripe never redelivered it. A non-2xx leaves it for Stripe's retry.
+         *
+         * `stripe_customer_id` is not unique, so more than one workspace is
+         * possible after a manual repair. Picking one would move a paid plan to
+         * whichever row came back first; the event is refused instead, and the
+         * failed delivery in Stripe's log is the signal to fix the mapping
+         * while Stripe is still retrying.
+         *
+         * Neither body carries the database's own error text: Stripe keeps the
+         * response in its dashboard delivery log.
+         */
         const supabase = getSupabaseAdmin();
-        const { data: billingCustomer } = await supabase
+        if (!supabase) {
+          return sendJson(res, 503, { ok: false, message: 'Supabase admin credentials are not configured.' });
+        }
+        const { data: billingCustomers, error: billingCustomerError } = await supabase
           .from('workspace_billing_customers')
           .select('workspace_id')
           .eq('stripe_customer_id', customerId)
-          .maybeSingle();
-        resolvedWorkspaceId = billingCustomer?.workspace_id || null;
+          .limit(2);
+        if (billingCustomerError) {
+          console.error('[stripe webhook] workspace lookup by customer failed', {
+            eventId: event.id,
+            customerId,
+            message: billingCustomerError.message,
+          });
+          return sendJson(res, 503, { ok: false, message: 'Could not look up the workspace for this customer.' });
+        }
+        if ((billingCustomers?.length ?? 0) > 1) {
+          console.error('[stripe webhook] customer is linked to more than one workspace', {
+            eventId: event.id,
+            customerId,
+          });
+          return sendJson(res, 409, {
+            ok: false,
+            message: 'This Stripe customer is linked to more than one workspace. Nothing was changed.',
+          });
+        }
+        resolvedWorkspaceId = billingCustomers?.[0]?.workspace_id || null;
       }
 
       if (resolvedWorkspaceId) {
