@@ -1,5 +1,7 @@
+import { gmailSmtpStatus, sendGmailEmail } from './gmail-smtp.js';
+
 // Outbound email with a pluggable provider: Resend (RESEND_API_KEY) or
-// SendGrid (SENDGRID_API_KEY). When neither is configured the caller gets
+// SendGrid (SENDGRID_API_KEY), then opt-in Gmail SMTP. When none is configured the caller gets
 // { ok: false, skipped: true } and should fall back to in-app notifications.
 
 // Trimmed: a key pasted with a trailing newline makes an invalid
@@ -9,7 +11,7 @@ function providerKey(name) {
 }
 
 export function isEmailConfigured() {
-  return Boolean(providerKey('RESEND_API_KEY') || providerKey('SENDGRID_API_KEY'));
+  return Boolean(providerKey('RESEND_API_KEY') || providerKey('SENDGRID_API_KEY') || gmailSmtpStatus().configured);
 }
 
 /** Extract the bare address from a From value that may be in "Name <addr>" form. */
@@ -141,13 +143,25 @@ export async function sendEmail({ to, subject, html, text, fromName, fromEmail, 
     return { ok: true, provider: 'sendgrid' };
   }
 
+  if (gmailSmtpStatus().enabled) {
+    return sendGmailEmail({
+      to,
+      subject,
+      html: brandedHtml,
+      text,
+      fromName: fromName || extractName(defaultFrom),
+      replyTo: replyToAddress,
+    });
+  }
   return { ok: false, skipped: true, message: 'No email provider configured.' };
 }
 
 function retryableRejection(response) {
   // A 429 explicitly declines the request. Transport failures and 5xx may be
   // ambiguous; permanent 4xx errors need a configuration/request correction.
-  if (response.status !== 429) return {};
+  if (response.status !== 429) {
+    return response.status >= 400 && response.status < 500 && response.status !== 408 ? { rejected: true } : {};
+  }
   const value = response.headers.get('retry-after');
   const seconds = Number(value);
   const retryAfterSeconds =
