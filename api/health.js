@@ -192,9 +192,7 @@ export default function handler(req, res) {
   reasons.push(...malformed);
 
   if (managedBillingTouched && !annualPriceIds) {
-    warnings.push(
-      'Annual billing is offered, but not every STRIPE_PRICE_ID_*_ANNUAL is set. Checkout refuses annual on those plans.',
-    );
+    warnings.push('Managed annual checkout is unavailable for plans missing STRIPE_PRICE_ID_*_ANNUAL.');
   }
   if (stripeMode === 'test' && process.env.VERCEL_ENV === 'production') {
     warnings.push('Production is using a Stripe TEST key. Checkout works, but no real payment is taken.');
