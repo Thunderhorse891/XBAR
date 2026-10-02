@@ -10,10 +10,11 @@ import { useUiStore } from '@/store/useUiStore';
 import { useXbarStore } from '@/store/useXbarStore';
 import './cleanEntryExperience.css';
 import './loginHero.css';
-import { canPresentThirdPartySignIn, canPresentPurchaseFlow } from '@/lib/nativePlatform';
+import { canPresentThirdPartySignIn, canPresentPurchaseFlow, publicSiteHref } from '@/lib/nativePlatform';
 import { presentableOAuthProviders } from '@/lib/authProviders';
 import { readBrowserStorage, removeBrowserStorage, writeBrowserStorage } from '@/lib/browserStorage';
 import { markCommandCenterEntry } from '@/lib/commandCenterEntry';
+import { SUPPORT_CONTACT } from '@/lib/legalDocuments';
 
 type AuthMode = 'signin' | 'signup';
 type BusyState = 'password' | 'google' | 'facebook' | 'apple' | 'reset' | 'code' | 'verify' | 'resend' | '';
@@ -642,6 +643,17 @@ export default function Login() {
               </div>
             )}
             {!confirmationEmail && canPresentPurchaseFlow() && <a href="/pricing">View plans</a>}
+            <nav aria-label="Legal and support">
+              <a href={publicSiteHref('/terms')} target="_blank" rel="noopener noreferrer">
+                Terms of Service
+              </a>
+              {' · '}
+              <a href={publicSiteHref('/privacy')} target="_blank" rel="noopener noreferrer">
+                Privacy Policy
+              </a>
+              {' · '}
+              <a href={`mailto:${SUPPORT_CONTACT.email}`}>Help &amp; support</a>
+            </nav>
             <span>© 2026 XBAR</span>
           </div>
         </section>
