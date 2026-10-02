@@ -1,3 +1,7 @@
+import Stripe from 'stripe';
+import { randomUUID } from 'node:crypto';
+import { claimCheckoutLock, renewCheckoutLock, releaseCheckoutLock } from './checkout-session.js';
+import { BILLING_UNVERIFIED, verifyAccountDeletionBilling } from './account-deletion-billing.js';
 import { readJsonBody, sendJson } from './http.js';
 import { getSupabaseAdmin } from './supabase-admin.js';
 import {
@@ -23,6 +27,9 @@ import { applyCors } from './cors.js';
 // auth delete (memberships cascade with it) -> storage sweep -> receipt
 // outcome. Any failure before the auth delete releases the holds and changes
 // nothing.
+
+const stripeSecretKey = process.env.STRIPE_SECRET_KEY?.trim() || '';
+const stripe = stripeSecretKey ? new Stripe(stripeSecretKey, { apiVersion: '2026-02-25.clover' }) : null;
 
 const RATE_LIMIT = { bucket: 'account-delete', limit: 5, windowSeconds: 300 };
 const DOCUMENT_BUCKET =
@@ -72,6 +79,10 @@ export default async function handler(req, res) {
     });
   }
 
+  const billingClaims = [];
+  const deletionToken = randomUUID();
+  let releaseHolds = null;
+  let accountDeleted = false;
   try {
     // Build the plan: for every owned workspace, look up its OTHER active members
     // so a shared workspace cannot be mistaken for private data to purge.
@@ -89,6 +100,15 @@ export default async function handler(req, res) {
       });
     }
 
+    // Serialize deletion with checkout AND other deletion requests before
+    // touching membership holds. A losing deletion must not replace or release
+    // the winning request's per-user hold.
+    for (const workspaceId of [...plan.workspacesToPurge].sort()) {
+      const token = await claimCheckoutLock(supabase, workspaceId);
+      if (!token) return sendJson(res, BILLING_UNVERIFIED.status, BILLING_UNVERIFIED);
+      billingClaims.push({ workspaceId, token });
+    }
+
     /*
      * Hold every owned workspace at the database before anything irreversible.
      *
@@ -98,7 +118,7 @@ export default async function handler(req, res) {
      * new member's access and records with it. Re-reading membership here
      * only narrowed that window (audit F03).
      *
-     * `xbar_hold_owned_workspaces_for_deletion` closes it. Under the same
+     * `xbar_hold_account_deletion_request` closes it. Under the same
      * per-workspace lock the seat trigger takes, it re-checks every owned
      * workspace for another active member (a NULL user_id counts as one) and,
      * only if all are private, records a hold that makes the database refuse
@@ -109,8 +129,9 @@ export default async function handler(req, res) {
      *
      * Unreadable is never private: any error refuses and changes nothing.
      */
-    const { data: hold, error: holdError } = await supabase.rpc('xbar_hold_owned_workspaces_for_deletion', {
+    const { data: hold, error: holdError } = await supabase.rpc('xbar_hold_account_deletion_request', {
       p_user_id: user.id,
+      p_request_token: deletionToken,
     });
     if (holdError || !hold || typeof hold.ok !== 'boolean') {
       if (holdError) console.error('account deletion: hold failed', { userId: user.id, message: holdError.message });
@@ -120,6 +141,7 @@ export default async function handler(req, res) {
       });
     }
     if (!hold.ok) {
+      if (hold.reason === 'deletion_in_progress') return sendJson(res, BILLING_UNVERIFIED.status, BILLING_UNVERIFIED);
       return sendJson(res, 409, {
         ok: false,
         code: 'shared_workspace_handoff_required',
@@ -128,13 +150,31 @@ export default async function handler(req, res) {
       });
     }
     const purgeable = heldWorkspaceIds(hold);
-    const releaseHolds = () =>
-      supabase.rpc('xbar_release_account_deletion_holds', { p_user_id: user.id }).then(
-        ({ error }) => {
-          if (error) console.error('account deletion: holds not released', { userId: user.id, message: error.message });
-        },
-        (error) => console.error('account deletion: holds not released', { userId: user.id, message: String(error) }),
-      );
+    releaseHolds = () =>
+      supabase
+        .rpc('xbar_release_account_deletion_request', { p_user_id: user.id, p_request_token: deletionToken })
+        .then(
+          ({ error }) => {
+            if (error)
+              console.error('account deletion: holds not released', { userId: user.id, message: error.message });
+          },
+          (error) => console.error('account deletion: holds not released', { userId: user.id, message: String(error) }),
+        );
+
+    // Ownership changing between planning and the hold cannot expand deletion
+    // beyond the workspaces whose checkout leases this request actually owns.
+    if (
+      purgeable.length !== billingClaims.length ||
+      purgeable.some((workspaceId) => !billingClaims.some((claim) => claim.workspaceId === workspaceId))
+    ) {
+      return sendJson(res, BILLING_UNVERIFIED.status, BILLING_UNVERIFIED);
+    }
+    // Check even while managed checkout is disabled: older Stripe subscriptions
+    // and cached payment pages can still exist.
+    for (const { workspaceId } of billingClaims) {
+      const billing = await verifyAccountDeletionBilling(supabase, workspaceId, stripe);
+      if (!billing.ok) return sendJson(res, billing.status, billing);
+    }
 
     /*
      * The receipt outlives the account (no foreign key), so what was deleted
@@ -147,7 +187,6 @@ export default async function handler(req, res) {
       .select('id')
       .single();
     if (receiptError || !receipt?.id) {
-      await releaseHolds();
       return sendJson(res, 502, { ok: false, message: 'Unable to start account deletion. Nothing was changed.' });
     }
     const finishReceipt = (fields) =>
@@ -174,7 +213,6 @@ export default async function handler(req, res) {
       .select('workspace_id, storage_path')
       .like('storage_path', `${user.id}/%`);
     if (sharedRefsError || !Array.isArray(sharedRefs)) {
-      await releaseHolds();
       await finishReceipt({ status: 'refused', failure: 'shared file references unreadable' });
       return sendJson(res, 502, {
         ok: false,
@@ -189,16 +227,34 @@ export default async function handler(req, res) {
      * leave the person still signed up but already locked out of every other
      * owner's ranch. Now a failure releases the holds and changes nothing.
      */
+    // Slow reads must not outlive the checkout fence. A lost lease preserves
+    // the account instead of deleting it beside a newly admitted purchase.
+    for (const { workspaceId, token } of billingClaims) {
+      if (!(await renewCheckoutLock(supabase, workspaceId, token))) {
+        await finishReceipt({ status: 'refused', failure: 'billing lease lost' });
+        return sendJson(res, BILLING_UNVERIFIED.status, BILLING_UNVERIFIED);
+      }
+    }
+    const { data: confirmed, error: confirmError } = await supabase.rpc('xbar_confirm_account_deletion_request', {
+      p_user_id: user.id,
+      p_request_token: deletionToken,
+      p_workspace_ids: purgeable,
+    });
+    if (confirmError || confirmed !== true) {
+      await finishReceipt({ status: 'refused', failure: 'deletion request fence lost' });
+      return sendJson(res, BILLING_UNVERIFIED.status, BILLING_UNVERIFIED);
+    }
     const { error: deleteUserError } = await supabase.auth.admin.deleteUser(user.id);
     if (deleteUserError) {
       console.error('account deletion: auth delete failed', { userId: user.id, message: deleteUserError.message });
-      await releaseHolds();
       await finishReceipt({ status: 'failed', failure: 'auth delete failed' });
       return sendJson(res, 502, {
         ok: false,
         message: 'Your account could not be deleted. Nothing was removed; try again.',
       });
     }
+
+    accountDeleted = true;
 
     /*
      * Account is gone -- now purge the workspaces that were held.
@@ -248,6 +304,11 @@ export default async function handler(req, res) {
     });
   } catch (error) {
     return sendJson(res, 500, { ok: false, message: `Account deletion failed: ${error.message}` });
+  } finally {
+    if (!accountDeleted && releaseHolds) await releaseHolds();
+    for (const { workspaceId, token } of billingClaims) {
+      await releaseCheckoutLock(supabase, workspaceId, token);
+    }
   }
 }
 
