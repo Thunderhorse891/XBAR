@@ -168,7 +168,9 @@ test('autosave sends the queue and forgets it only once the cloud has it', async
   const bootstrap = await readFile('src/components/CloudBootstrap.tsx', 'utf8');
   const saves = bootstrap.match(/saveWorkspaceBackupToCloud\([^)]*\)/g) ?? [];
   assert.equal(saves.length, 2, 'push-local and autosave');
-  for (const save of saves) assert.match(save, /\{ deletions \}/, `${save} must carry the queued deletions`);
+  for (const save of saves) {
+    assert.match(save, /\{\s*deletions\s*(?:,|\})/, `${save} must carry the queued deletions`);
+  }
   const acks = bootstrap.match(
     /if \((saved|result)\.ok && \1\.deletionsApplied\) acknowledgeCloudDeletions\(deletions\);/g,
   );
