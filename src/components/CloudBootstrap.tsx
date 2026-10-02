@@ -57,6 +57,13 @@ export function CloudBootstrap() {
    */
   const sawSessionRef = useRef(false);
   const lastPersistedSignatureRef = useRef('');
+  /*
+   * The copy this device last saved to, or loaded from, the cloud -- the
+   * baseline a save diffs against so it writes only what changed here (see
+   * src/lib/relationalDiff.ts). Null whenever this device's copy is not known
+   * to match the cloud's; a save then writes every record, as before.
+   */
+  const lastPersistedBackupRef = useRef<unknown>(null);
 
   useEffect(() => {
     let dispose: (() => void) | void;
@@ -81,6 +88,7 @@ export function CloudBootstrap() {
       // Whatever was loading was loading for somebody else.
       hydrationGateRef.current.retireInFlight();
       lastPersistedSignatureRef.current = serializeWorkspaceBackup(exportWorkspaceBackup());
+      lastPersistedBackupRef.current = null;
 
       /*
        * A workspace with no session to wait for is already settled.
@@ -165,9 +173,17 @@ export function CloudBootstrap() {
         ? ok
         : `${failed.length} of this device's files could not be moved to the cloud workspace and cannot be opened yet. They are retried automatically the next time this ranch loads.`;
 
-    const finish = (unlocked: boolean, state: 'idle' | 'error', message: string) => {
+    /*
+     * `matched`: the exact copy known to equal the cloud's -- captured BEFORE
+     * any await, never re-exported here. Exporting the live state at this
+     * point would fold in an edit made while vault files were being promoted,
+     * mark it as already in the cloud, and neither the diff nor the autosave
+     * signature would ever send it.
+     */
+    const finish = (unlocked: boolean, state: 'idle' | 'error', message: string, matched: unknown = null) => {
       if (!owns()) return;
-      lastPersistedSignatureRef.current = serializeWorkspaceBackup(exportWorkspaceBackup());
+      lastPersistedSignatureRef.current = serializeWorkspaceBackup(matched ?? exportWorkspaceBackup());
+      lastPersistedBackupRef.current = matched;
       setSyncState(state, message);
       // `unlocked` is false for `conflict-lock` and for a failed remote load.
       // Ready means hydration stopped; unlocked means it settled on a copy.
@@ -190,11 +206,14 @@ export function CloudBootstrap() {
 
       if (decision === 'import-remote' && remote.ok) {
         const imported = importWorkspaceBackup(remote.backup);
+        // Synchronously after the import: exactly the cloud copy, as installed.
+        const installed = imported.ok ? exportWorkspaceBackup() : null;
         if (imported.ok && remote.updatedAt) setLastSyncAt(remote.updatedAt);
         finish(
           imported.ok,
           imported.ok ? 'idle' : 'error',
           imported.ok ? 'Cloud workspace loaded safely.' : imported.message,
+          installed,
         );
         return;
       }
@@ -235,6 +254,7 @@ export function CloudBootstrap() {
           saved.ok || saved.retryable === true,
           saved.ok && promotionFailed.length === 0 ? 'idle' : 'error',
           saved.ok ? promotionMessage(promotionFailed, saved.message) : saved.message,
+          saved.ok ? local : null,
         );
         return;
       }
@@ -264,12 +284,13 @@ export function CloudBootstrap() {
           true,
           promoted.failed.length === 0 ? 'idle' : 'error',
           promotionMessage(promoted.failed, 'Cloud workspace connected.'),
+          local,
         );
         return;
       }
 
       if (decision === 'empty-ready') {
-        finish(true, 'idle', remote.ok ? 'Cloud workspace ready.' : remote.message);
+        finish(true, 'idle', remote.ok ? 'Cloud workspace ready.' : remote.message, remote.ok ? local : null);
         return;
       }
 
@@ -361,7 +382,10 @@ export function CloudBootstrap() {
        * acknowledged: a deletion made while the save is in flight is not in it.
        */
       const deletions = pendingCloudDeletions();
-      const result = await saveWorkspaceBackupToCloud(backup, { deletions });
+      const result = await saveWorkspaceBackupToCloud(backup, {
+        deletions,
+        baseline: lastPersistedBackupRef.current ?? undefined,
+      });
       if (result.ok && result.deletionsApplied) acknowledgeCloudDeletions(deletions);
       saving = false;
       if (disposed) return;
@@ -388,6 +412,9 @@ export function CloudBootstrap() {
           setWorkspaceAccessProfile(result.workspaceId, 'Admin');
         }
         lastPersistedSignatureRef.current = signature;
+        // The copy just saved -- not the live state, which may have moved on
+        // while the request was in flight and is not in the cloud yet.
+        lastPersistedBackupRef.current = backup;
         if (result.updatedAt) setLastSyncAt(result.updatedAt);
         setSyncState('idle', result.message);
       } else {

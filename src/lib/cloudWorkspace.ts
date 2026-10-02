@@ -14,6 +14,7 @@ import { isNavigableFileUrl } from '@/lib/navigableFileUrl';
 import { openLocalFile } from '@/lib/localFileVault';
 import { vaultOwnerId } from '@/lib/vaultOwner';
 import { idsToRemove, type CloudDeletion, type RowRemoval } from '@/lib/cloudDeletionQueue';
+import { changedRecords } from '@/lib/relationalDiff';
 import { subscriptionFromCloudRow } from '@/lib/cloudSubscription';
 import type { Session } from '@supabase/supabase-js';
 import type {
@@ -83,6 +84,12 @@ export type CloudSaveOptions = {
    * Only for an explicit "Push cloud" -- never for autosave or bootstrap.
    */
   replace?: boolean;
+  /**
+   * The copy this device last saved or loaded. Only records that differ from
+   * it are written (see `relationalDiff`); without it, every record is.
+   * Ignored by `replace`, which writes everything.
+   */
+  baseline?: unknown;
 };
 
 type CloudSaveResult = {
@@ -719,6 +726,12 @@ async function saveWorkspaceBackupToRelationalCloud(
     const workspaceId = await ensurePrimaryWorkspace(session, normalized);
     const updatedAt = normalized.exportedAt ?? new Date().toISOString();
     const workspace = normalized.workspace ?? {};
+    // Only what changed since this device's last saved or loaded copy is
+    // written, so an older copy never rewrites rows another device has since
+    // saved (see relationalDiff). A replace writes everything.
+    const baseline = options.replace ? undefined : (normalizeBackup(options.baseline)?.workspace ?? undefined);
+    const changed = <T extends { id?: unknown }>(current: T[] | undefined, before: T[] | undefined) =>
+      changedRecords(current ?? [], baseline ? (before ?? []) : undefined);
     const deletions = options.deletions ?? [];
     const removal = (table: string): RowRemoval =>
       options.replace
@@ -736,7 +749,7 @@ async function saveWorkspaceBackupToRelationalCloud(
       idColumn: 'horse_id',
       removal: removal('horses'),
       workspaceId,
-      rows: (workspace.horses ?? []).map((horse) => ({
+      rows: changed(workspace.horses, baseline?.horses).map((horse) => ({
         workspace_id: workspaceId,
         horse_id: horse.id,
         name: horse.name,
@@ -755,7 +768,7 @@ async function saveWorkspaceBackupToRelationalCloud(
       idColumn: 'document_id',
       removal: removal('documents'),
       workspaceId,
-      rows: (workspace.documents ?? []).map((document) => ({
+      rows: changed(workspace.documents, baseline?.documents).map((document) => ({
         workspace_id: workspaceId,
         document_id: document.id,
         horse_id: document.horseId ?? '',
@@ -782,7 +795,7 @@ async function saveWorkspaceBackupToRelationalCloud(
       idColumn: 'intake_batch_id',
       removal: removal('intake_batches'),
       workspaceId,
-      rows: (workspace.intakeBatches ?? []).map((batch) => ({
+      rows: changed(workspace.intakeBatches, baseline?.intakeBatches).map((batch) => ({
         workspace_id: workspaceId,
         intake_batch_id: batch.id,
         label: batch.label,
@@ -799,7 +812,7 @@ async function saveWorkspaceBackupToRelationalCloud(
       idColumn: 'ownership_record_id',
       removal: removal('ownership_records'),
       workspaceId,
-      rows: (workspace.ownershipRecords ?? []).map((record) => ({
+      rows: changed(workspace.ownershipRecords, baseline?.ownershipRecords).map((record) => ({
         workspace_id: workspaceId,
         ownership_record_id: record.id,
         horse_id: record.horseId,
@@ -816,7 +829,7 @@ async function saveWorkspaceBackupToRelationalCloud(
       idColumn: 'receipt_id',
       removal: removal('expense_receipts'),
       workspaceId,
-      rows: (workspace.expenseReceipts ?? []).map((receipt) => ({
+      rows: changed(workspace.expenseReceipts, baseline?.expenseReceipts).map((receipt) => ({
         workspace_id: workspaceId,
         receipt_id: receipt.id,
         horse_id: receipt.horseId ?? '',
@@ -835,7 +848,7 @@ async function saveWorkspaceBackupToRelationalCloud(
       idColumn: 'asset_id',
       removal: removal('ranch_assets'),
       workspaceId,
-      rows: (workspace.ranchAssets ?? []).map((asset) => ({
+      rows: changed(workspace.ranchAssets, baseline?.ranchAssets).map((asset) => ({
         workspace_id: workspaceId,
         asset_id: asset.id,
         name: asset.name,
@@ -853,7 +866,7 @@ async function saveWorkspaceBackupToRelationalCloud(
       idColumn: 'lead_id',
       removal: removal('sales_leads'),
       workspaceId,
-      rows: (workspace.salesLeads ?? []).map((lead) => ({
+      rows: changed(workspace.salesLeads, baseline?.salesLeads).map((lead) => ({
         workspace_id: workspaceId,
         lead_id: lead.id,
         horse_id: lead.horseId,
@@ -872,7 +885,7 @@ async function saveWorkspaceBackupToRelationalCloud(
       idColumn: 'listing_id',
       removal: removal('shared_listings'),
       workspaceId,
-      rows: (workspace.sharedListings ?? []).map((listing) => ({
+      rows: changed(workspace.sharedListings, baseline?.sharedListings).map((listing) => ({
         workspace_id: workspaceId,
         listing_id: listing.id,
         horse_id: listing.horseId,
