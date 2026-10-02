@@ -48,6 +48,10 @@
    *                 here clears 4.5:1 against white, because white is what sits
    *                 on top of it.
    */
+  /* Shared low-contrast divider on graphite navigation and hero surfaces. */
+  --workspace-photo-scrim: rgba(11, 13, 15, 0.86);
+  --workspace-dark-border: rgba(183, 188, 194, 0.18);
+
   --accent-edge: var(--xbar-blue);
   --accent-ink: #2868a9;
   --accent-ink-lift: #2f76bd;

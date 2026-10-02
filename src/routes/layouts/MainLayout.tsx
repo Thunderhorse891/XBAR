@@ -6,17 +6,16 @@ import {
   Calculator,
   CalendarClock,
   ChevronDown,
-  CircleHelp,
   ClipboardList,
   Coins,
   FileText,
   FolderOpen,
   Gauge,
-  Home,
   LayoutDashboard,
   type LucideIcon,
   Map,
   Plus,
+  Menu,
   Rocket,
   Search,
   Settings as SettingsIcon,
@@ -29,6 +28,8 @@ import {
   Wheat,
 } from 'lucide-react';
 import { ProgressRing, QuickCreateMenu } from '@/components/saas';
+import { HorsesIcon } from '@/components/icons';
+import { Sheet, SheetContent, SheetDescription, SheetTitle, SheetTrigger } from '@/components/ui/sheet';
 import { GlobalCreateDrawer, createActions } from '@/components/saas/flows';
 import { billingPath } from '@/lib/billingRoutes';
 import { buyerFollowUpPath } from '@/lib/buyerRoutes';
@@ -44,12 +45,12 @@ import { useEffectiveSubscription } from '@/hooks/useOwnerPreview';
 // renders at 250px, so it uses the 512px source to avoid upscaling. Both
 // beat the 1.53MB app icon this replaced.
 const XBAR_ICON = '/brand/apple-touch-icon.png';
-const XBAR_WATERMARK = '/brand/icon-512.png';
+const XBAR_WORDMARK = '/brand/xbar-wordmark.png';
 
 type NavItem = {
   label: string;
   path: string;
-  icon: LucideIcon;
+  icon: LucideIcon | typeof HorsesIcon;
   badgeKey?: 'docs' | 'transfers' | 'care' | 'expiring';
 };
 type NavGroup = { heading: string; items: NavItem[] };
@@ -60,7 +61,7 @@ const navGroups: NavGroup[] = [
     items: [
       { label: 'Dashboard', path: '/', icon: LayoutDashboard },
       { label: 'Care Tasks', path: '/today', icon: ClipboardList },
-      { label: 'Horses', path: '/horses', icon: Home },
+      { label: 'Horses', path: '/horses', icon: HorsesIcon },
       { label: 'Groups', path: '/herd-groups', icon: Users },
       { label: 'Pastures', path: '/pastures', icon: Map },
     ],
@@ -103,10 +104,10 @@ const navGroups: NavGroup[] = [
   },
 ];
 
-const mobileItems: { label: string; path: string; icon: LucideIcon }[] = [
+const mobileItems: { label: string; path: string; icon: LucideIcon | typeof HorsesIcon }[] = [
   { label: 'Home', path: '/', icon: LayoutDashboard },
   { label: 'Work', path: '/today', icon: ClipboardList },
-  { label: 'Horses', path: '/horses', icon: Home },
+  { label: 'Horses', path: '/horses', icon: HorsesIcon },
   { label: 'Sales', path: '/sales', icon: Gauge },
   { label: 'Documents', path: '/documents', icon: FolderOpen },
 ];
@@ -114,7 +115,7 @@ const mobileItems: { label: string; path: string; icon: LucideIcon }[] = [
 export default function MainLayout() {
   const navigate = useNavigate();
   const location = useLocation();
-  const [mode, setMode] = useState<'ops' | 'buyer'>('ops');
+  const [navigationOpen, setNavigationOpen] = useState(false);
 
   const documents = useXbarStore((state) => state.documents);
   const horses = useXbarStore((state) => state.horses);
@@ -183,24 +184,43 @@ export default function MainLayout() {
     if (result.ok) navigate('/login', { replace: true });
   }
 
-  function handleMode(next: 'ops' | 'buyer') {
-    setMode(next);
-    if (next === 'buyer') navigate(buyerFollowUpPath());
-  }
-
   const createItems = createActions.map((label) => ({ label, onSelect: () => openQuickCreate({ action: label }) }));
+
+  const renderNavigation = (label: string) => (
+    <nav className="xs-nav" aria-label={label}>
+      {navGroups.map((group) => (
+        <div key={group.heading}>
+          <div className="xs-nav__section">{group.heading}</div>
+          {group.items.map((item) => {
+            const Icon = item.icon;
+            const badge = item.badgeKey ? (badges[item.badgeKey] ?? 0) : 0;
+            return (
+              <NavLink
+                key={item.path}
+                to={item.path}
+                onClick={() => setNavigationOpen(false)}
+                end={item.path === '/'}
+                className={({ isActive }) => `xs-nav__item${isActive ? ' xs-nav__item--active' : ''}`}
+              >
+                <Icon width={17} height={17} className="xs-nav__icon" />
+                <span className="xs-nav__label">{item.label}</span>
+                {badge > 0 ? <span className="xs-nav__badge">{badge}</span> : null}
+              </NavLink>
+            );
+          })}
+        </div>
+      ))}
+    </nav>
+  );
 
   return (
     <div className="xs-shell">
       {/* ---------------------------------------------------------- Sidebar */}
-      <aside className="xs-sidebar">
-        <div className="xs-brand">
-          <img className="xs-brand__tile" src={XBAR_ICON} alt="XBAR" />
-          <span>
-            <span className="xs-brand__word">XBAR</span>
-            <span className="xs-brand__sub">Ranch records</span>
-          </span>
-        </div>
+      <div className="xs-sidebar" role="complementary" aria-label="Workspace sidebar">
+        <NavLink to="/" className="xs-brand" aria-label="XBAR dashboard">
+          <img className="xs-brand__wordmark" src={XBAR_WORDMARK} width="550" height="170" alt="XBAR" />
+          <span className="xs-brand__sub">Ranch workspace</span>
+        </NavLink>
 
         <button type="button" className="xs-workspace" onClick={() => navigate('/settings')}>
           <span className="xs-workspace__logo">{ranchInitials}</span>
@@ -217,36 +237,15 @@ export default function MainLayout() {
           <ProgressRing value={setupProgress} size={32} />
           <span className="xs-setupbar__body">
             <span className="xs-setupbar__top">{setupProgress}% set up</span>
-            <span className="xs-setupbar__sub">Finish getting started</span>
+            <span className="xs-setupbar__sub">
+              {setupProgress === 100 ? 'Workspace guide' : 'Finish getting started'}
+            </span>
           </span>
         </button>
 
-        <nav className="xs-nav" aria-label="Primary">
-          {navGroups.map((group) => (
-            <div key={group.heading}>
-              <div className="xs-nav__section">{group.heading}</div>
-              {group.items.map((item) => {
-                const Icon = item.icon;
-                const badge = item.badgeKey ? (badges[item.badgeKey] ?? 0) : 0;
-                return (
-                  <NavLink
-                    key={item.path}
-                    to={item.path}
-                    end={item.path === '/'}
-                    className={({ isActive }) => `xs-nav__item${isActive ? ' xs-nav__item--active' : ''}`}
-                  >
-                    <Icon size={17} className="xs-nav__icon" />
-                    <span className="xs-nav__label">{item.label}</span>
-                    {badge > 0 ? <span className="xs-nav__badge">{badge}</span> : null}
-                  </NavLink>
-                );
-              })}
-            </div>
-          ))}
-        </nav>
+        {renderNavigation('Primary')}
 
         <div className="xs-sidebar__footer">
-          <img className="xs-sidebar__wm" src={XBAR_WATERMARK} alt="" aria-hidden="true" />
           <div className="xs-ranchcard">
             <span className="xs-ranchcard__avatar">{ranchInitials}</span>
             <span>
@@ -254,24 +253,31 @@ export default function MainLayout() {
               <div className="xs-ranchcard__meta">{planTier} plan</div>
             </span>
           </div>
-          <div className="xs-version">XBAR Platform · v2.0</div>
+          <div className="xs-version">Your horses. Your records.</div>
         </div>
-      </aside>
+      </div>
 
       {/* -------------------------------------------------------------- Main */}
       <div className="xs-main">
         <header className="xs-topbar">
           <div className="xs-topbar__left">
-            <span className="xs-seasonchip">
-              <Sparkles size={14} /> {ranchName}
-            </span>
-            {notifications > 0 ? (
-              <span className="xs-weatherchip">
-                {notifications} need{notifications === 1 ? 's' : ''} attention
-              </span>
-            ) : (
-              <span className="xs-weatherchip">Everything looks good</span>
-            )}
+            <Sheet open={navigationOpen} onOpenChange={setNavigationOpen}>
+              <SheetTrigger asChild>
+                <button type="button" className="xs-iconbtn xs-mobile-menu" aria-label="Open navigation">
+                  <Menu size={20} />
+                </button>
+              </SheetTrigger>
+              <SheetContent side="left" className="xs-navigation-sheet">
+                <SheetTitle className="sr-only">Ranch navigation</SheetTitle>
+                <SheetDescription className="sr-only">Open any area of your ranch workspace.</SheetDescription>
+                <img className="xs-brand__wordmark" src={XBAR_WORDMARK} width="550" height="170" alt="XBAR" />
+                {renderNavigation('All sections')}
+              </SheetContent>
+            </Sheet>
+            <NavLink className="xs-mobile-brand" to="/" aria-label="XBAR dashboard">
+              <img src={XBAR_ICON} width="38" height="38" alt="" />
+            </NavLink>
+            <span className="xs-topbar__ranch">{ranchName}</span>
           </div>
 
           {/* Opens the command palette — real global search across horses,
@@ -290,23 +296,6 @@ export default function MainLayout() {
           <div className="xs-topbar__spacer" />
 
           <div className="xs-topbar__right">
-            <div className="xs-toggle" role="tablist" aria-label="Workspace mode">
-              <button
-                type="button"
-                className={`xs-toggle__btn${mode === 'ops' ? ' xs-toggle__btn--active' : ''}`}
-                onClick={() => handleMode('ops')}
-              >
-                Ranch work
-              </button>
-              <button
-                type="button"
-                className={`xs-toggle__btn${mode === 'buyer' ? ' xs-toggle__btn--active' : ''}`}
-                onClick={() => handleMode('buyer')}
-              >
-                Buyer view
-              </button>
-            </div>
-
             <QuickCreateMenu
               items={createItems}
               trigger={(open) => (
@@ -325,20 +314,12 @@ export default function MainLayout() {
               <Bell size={17} />
               {notifications > 0 ? <span className="xs-iconbtn__badge">{notifications}</span> : null}
             </button>
-            <button type="button" className="xs-iconbtn" aria-label="Help" onClick={() => setCommandPaletteOpen(true)}>
-              <CircleHelp size={17} />
-            </button>
-
-            <button type="button" className="xs-btn" onClick={() => navigate('/settings')}>
-              <Users size={15} /> Invite team
-            </button>
-            <button type="button" className="xs-btn xs-btn--brass" onClick={() => navigate(billingPath)}>
-              <Rocket size={15} /> Billing
-            </button>
-
             <QuickCreateMenu
               items={[
+                { label: 'Notifications', onSelect: () => navigate('/reminders') },
                 { label: 'Settings', onSelect: () => navigate('/settings') },
+                { label: 'Invite team', onSelect: () => navigate('/settings') },
+                { label: 'Help & search', onSelect: () => setCommandPaletteOpen(true) },
                 { label: 'Billing', onSelect: () => navigate(billingPath) },
                 ...(cloudSession
                   ? [{ label: 'Sign out', onSelect: () => void handleSignOut() }]
@@ -387,7 +368,7 @@ export default function MainLayout() {
                 end={path === '/'}
                 className={`xs-mobilebar__btn${active ? ' xs-mobilebar__btn--active' : ''}`}
               >
-                <Icon size={18} />
+                <Icon width={18} height={18} />
                 {label}
               </NavLink>
             );
