@@ -45,33 +45,19 @@ export function isHorseMediaStoragePath(value) {
 }
 
 /**
- * The workspace that owns the listing the share link resolved to, read by the
- * server rather than taken from the gallery. The gallery is owner-editable
- * JSON, so a path listed there proves nothing about whose file it is; the
- * path's first segment must be this workspace for the server to sign it.
+ * The workspace of the listing the share link resolved to, as the resolver
+ * returned it -- from the same row it returned the gallery from.
  *
- * Every non-archived row at this share path is read, not just the one the
- * resolver would pick. The database refuses a live listing at a path another
- * workspace already holds (xbar_shared_listing_path_owner_guard, migration
- * 20261001090000), so these rows belong to one workspace; if they ever do not,
- * which workspace the link means is ambiguous and nothing is signed. The
- * listing the resolver returned must also be one of them.
- *
- * Anything else -- no rows, a lookup error, two workspaces, a listing id that
- * is not among them -- yields '' and nothing is signed.
+ * The gallery is owner-editable JSON, so a path listed there proves nothing
+ * about whose file it is; the path's first segment must be this workspace for
+ * the server to sign it. Taking the workspace from the resolver's own row,
+ * rather than looking it up again by share path, means there is no second
+ * choice of row to disagree with the first. A resolver that does not return
+ * one (migration 20261001090000 not applied) yields '' and nothing is signed.
  */
-async function listingWorkspaceId(supabase, sharePath, listingId) {
-  if (!listingId) return '';
-  const { data, error } = await supabase
-    .from('shared_listings')
-    .select('workspace_id, listing_id')
-    .eq('share_path', sharePath)
-    .neq('state', 'Archived');
-  if (error || !Array.isArray(data) || data.length === 0) return '';
-  const workspaces = new Set(data.map((row) => String(row?.workspace_id ?? '').toLowerCase()));
-  if (workspaces.size !== 1 || workspaces.has('')) return '';
-  if (!data.some((row) => row?.listing_id === listingId)) return '';
-  return [...workspaces][0];
+export function listingWorkspaceId(listing) {
+  const workspaceId = listing?.sharedListing?.workspaceId;
+  return isWorkspaceId(workspaceId) ? workspaceId.toLowerCase() : '';
 }
 
 /**
@@ -115,8 +101,7 @@ export async function resolveBuyerMediaUrl({
   if (!isStoragePathInListingGallery(listing, storagePath)) {
     return { ok: false, status: 403, message: 'This photo is not part of the shared listing.' };
   }
-  const ownerWorkspace = await listingWorkspaceId(supabase, sharePath, listing?.sharedListing?.id);
-  if (!isWorkspaceObjectPath({ path: storagePath, workspaceId: ownerWorkspace })) {
+  if (!isWorkspaceObjectPath({ path: storagePath, workspaceId: listingWorkspaceId(listing) })) {
     return { ok: false, status: 403, message: 'This photo is not part of the shared listing.' };
   }
 
@@ -137,7 +122,10 @@ export async function resolveBuyerMediaUrl({
   if (recheckError || !currentListing) {
     return { ok: false, status: 404, message: 'This listing link is not valid or has been retired.' };
   }
-  if (!isStoragePathInListingGallery(currentListing, storagePath)) {
+  if (
+    !isStoragePathInListingGallery(currentListing, storagePath) ||
+    !isWorkspaceObjectPath({ path: storagePath, workspaceId: listingWorkspaceId(currentListing) })
+  ) {
     return { ok: false, status: 403, message: 'This photo is not part of the shared listing.' };
   }
 

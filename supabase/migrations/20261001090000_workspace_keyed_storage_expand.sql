@@ -18,21 +18,20 @@
 -- is visible only to its uploader in that window; production holds no media
 -- objects at the time of writing, so the window costs nobody an existing file.
 --
--- What it drops now: the uploader-keyed UPDATE policies on both buckets. No
--- client updates or moves an object in either bucket (uploads are insert-only,
--- upsert false), and Postgres ORs permissive policies' USING and WITH CHECK
--- clauses separately -- so beside a workspace UPDATE policy, an "update own"
--- policy lets a member move a ranch file to `<their id>/...`, out of the ranch
--- and into a path only they can read. Guarding one end of a move is guarding
--- neither.
+-- What it drops now: the uploader-keyed UPDATE policies on both buckets, and
+-- it adds no UPDATE policy for photos. No client renames or moves a stored
+-- photo (uploads are insert-only, upsert false), and an UPDATE on
+-- storage.objects is a move: beside a workspace policy, "update own" let a
+-- member move a ranch file to `<their id>/...` (Postgres ORs permissive USING
+-- and WITH CHECK separately), and any photo UPDATE grant lets a non-manager
+-- rename a ranch photo out from under its gallery -- a delete by another name,
+-- where DELETE is deliberately granted to no one.
 --
--- Share paths: a buyer link resolves by share_path alone, and nothing stopped
--- two workspaces holding a live listing at the same path. Whichever row was
--- newer won, so another ranch could publish at your link, and the server could
--- not say with certainty which workspace a buyer's photo request belonged to.
--- A trigger now refuses a non-archived listing whose share_path another
--- workspace already holds. (A trigger rather than a unique index: one ranch
--- may still hold two rows for a path, which the resolver already orders.)
+-- Buyer photos: the public listing resolver now also returns the listing's
+-- workspace id, from the same row it returns the gallery from. The server
+-- signs a buyer photo only when the photo lives under that workspace, so it
+-- never has to work out a second time which ranch a share link means. Buyers
+-- already receive that id as the first segment of every photo path.
 --
 -- xbar_has_workspace_capability is that role matrix in the database. It is a
 -- third copy of src/lib/permissions.ts (api/_lib/permissions.js is the second),
@@ -153,8 +152,8 @@ begin
 end;
 $media_read$;
 
--- horse-media write: alongside the existing "horse media upload own" and
--- "horse media update own", which the contract phase drops.
+-- horse-media insert: alongside the existing "horse media upload own", which
+-- the contract phase drops.
 drop policy if exists "horse media insert workspace" on storage.objects;
 create policy "horse media insert workspace" on storage.objects
   for insert to authenticated
@@ -167,64 +166,158 @@ create policy "horse media insert workspace" on storage.objects
     end
   );
 
+-- No UPDATE policy for photos (see header).
 drop policy if exists "horse media update workspace" on storage.objects;
-create policy "horse media update workspace" on storage.objects
-  for update to authenticated
-  using (
-    bucket_id = 'horse-media'
-    and case
-      when split_part(name, '/', 1) ~ '^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$'
-        then public.xbar_has_workspace_capability(split_part(name, '/', 1)::uuid, 'uploadMedia')
-      else false
-    end
-  )
-  with check (
-    bucket_id = 'horse-media'
-    and case
-      when split_part(name, '/', 1) ~ '^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$'
-        then public.xbar_has_workspace_capability(split_part(name, '/', 1)::uuid, 'uploadMedia')
-      else false
-    end
-  );
-
 drop policy if exists "horse media update own" on storage.objects;
 drop policy if exists "horse documents update own" on storage.objects;
 
--- One workspace per live share path ------------------------------------------
-
-create or replace function public.xbar_shared_listing_path_owner_guard()
-returns trigger
+-- Public listing resolver: return the listing's workspace -----------------
+-- Identical to 20260911003739 except for the added `workspaceId`. CREATE OR
+-- REPLACE keeps the function's existing grants.
+create or replace function public.xbar_resolve_public_listing_legacy(
+  p_share_path text,
+  p_share_token text default null
+)
+returns jsonb
 language plpgsql
 security definer
-set search_path = public
-as $$
+set search_path to 'public'
+as $function$
+declare
+  listing_row record;
+  horse_payload jsonb;
+  ownership_payload jsonb;
+  document_payloads jsonb;
 begin
-  if coalesce(new.state, '') = 'Archived' then
-    return new;
+  select
+    sl.workspace_id,
+    sl.listing_id,
+    sl.horse_id,
+    sl.share_path,
+    coalesce(nullif(sl.access_mode, ''), 'Private Token') as access_mode,
+    coalesce(sl.share_token, '') as share_token,
+    sl.state,
+    case
+      when jsonb_typeof(sl.payload) = 'object' then sl.payload
+      else '{}'::jsonb
+    end as payload
+  into listing_row
+  from public.shared_listings sl
+  where sl.share_path = p_share_path
+    and sl.state <> 'Archived'
+  order by sl.updated_at desc
+  limit 1;
+
+  if not found then
+    return null;
   end if;
-  -- Serialize writers of the same path, so two workspaces inserting at once
-  -- cannot both pass the check below.
-  perform pg_advisory_xact_lock(hashtextextended('xbar_share_path:' || coalesce(new.share_path, ''), 0));
-  if exists (
-    select 1 from public.shared_listings sl
-    where sl.share_path = new.share_path
-      and sl.workspace_id <> new.workspace_id
-      and sl.state <> 'Archived'
-  ) then
-    raise exception 'This share link is already in use by another workspace.'
-      using errcode = '23505', hint = 'Archive the other listing or publish under a different link.';
+
+  -- Release approval must belong to the row whose payload/token is used.
+  if coalesce(listing_row.state, '') <> 'Live'
+     or coalesce(listing_row.payload ->> 'releaseConfirmedAt', '') = ''
+     or coalesce(listing_row.payload ->> 'releaseConfirmedBy', '') = '' then
+    return null;
   end if;
-  return new;
+
+  -- An empty stored token is not a token to match against. Without the first
+  -- clause, a Private Token listing that never got one resolves for a caller
+  -- who supplies nothing.
+  if listing_row.access_mode <> 'Public Link'
+     and (listing_row.share_token = '' or coalesce(p_share_token, '') <> listing_row.share_token) then
+    return null;
+  end if;
+
+  select
+    (payload::jsonb
+      - 'medicalNotes'
+      - 'lastVetVisit'
+      - 'ownership'
+      - 'documentFacts'
+      - 'alerts'
+      - 'notes'
+    )
+    || jsonb_build_object(
+      'medicalNotes', '',
+      'lastVetVisit', '',
+      'ownership', '[]'::jsonb,
+      'documentFacts', '[]'::jsonb,
+      'alerts', '[]'::jsonb,
+      'notes', '[]'::jsonb
+    )
+  into horse_payload
+  from public.horses
+  where workspace_id = listing_row.workspace_id
+    and horse_id = listing_row.horse_id
+  limit 1;
+
+  if horse_payload is null then
+    return null;
+  end if;
+
+  select jsonb_build_object(
+    'id', ownership_record_id,
+    'horseId', horse_id,
+    'legalOwner', '',
+    'transferStatus', coalesce(nullif(transfer_status, ''), payload::jsonb ->> 'transferStatus', 'Pending Signatures'),
+    'pendingDocuments', '[]'::jsonb,
+    'complianceDeadline', coalesce(nullif(compliance_deadline, ''), payload::jsonb ->> 'complianceDeadline', ''),
+    'confidence', coalesce((payload::jsonb ->> 'confidence')::numeric, 0),
+    'auditTrail', '[]'::jsonb
+  ) into ownership_payload
+  from public.ownership_records
+  where workspace_id = listing_row.workspace_id
+    and horse_id = listing_row.horse_id
+  order by updated_at desc
+  limit 1;
+
+  select coalesce(
+    jsonb_agg(
+      jsonb_build_object(
+        'id', document_id,
+        'title', coalesce(nullif(title, ''), payload::jsonb ->> 'title', ''),
+        'type', coalesce(nullif(document_type, ''), payload::jsonb ->> 'type', 'Media Kit'),
+        'horseId', horse_id,
+        'uploadedBy', '',
+        'uploadedAt', coalesce(payload::jsonb ->> 'uploadedAt', ''),
+        'source', coalesce(nullif(source, ''), payload::jsonb ->> 'source', 'Manual Upload'),
+        'state', coalesce(nullif(state, ''), payload::jsonb ->> 'state', 'Ready'),
+        'confidence', confidence,
+        'duplicateRisk', coalesce(nullif(duplicate_risk, ''), payload::jsonb ->> 'duplicateRisk', 'Low'),
+        'extractedTextPreview', '',
+        'summary', coalesce(payload::jsonb ->> 'summary', ''),
+        'entities', coalesce(payload::jsonb -> 'entities', '{}'::jsonb),
+        'fileName', payload::jsonb ->> 'fileName',
+        'mimeType', payload::jsonb ->> 'mimeType',
+        'fileSizeBytes', payload::jsonb -> 'fileSizeBytes'
+      )
+      order by updated_at desc
+    ),
+    '[]'::jsonb
+  ) into document_payloads
+  from public.documents
+  where workspace_id = listing_row.workspace_id
+    and horse_id = listing_row.horse_id
+    and state = 'Ready';
+
+  return jsonb_build_object(
+    'horse', horse_payload,
+    'documents', coalesce(document_payloads, '[]'::jsonb),
+    'ownershipRecord', ownership_payload,
+    'sharedListing',
+      listing_row.payload
+      || jsonb_build_object(
+        'id', listing_row.listing_id,
+        'horseId', listing_row.horse_id,
+        'sharePath', listing_row.share_path,
+        'accessMode', listing_row.access_mode,
+        'shareToken', case when listing_row.access_mode = 'Private Token' then listing_row.share_token else '' end,
+        'state', listing_row.state,
+        -- The workspace of THIS row, set last so a payload key cannot stand in
+        -- for it. /api/buyer/media signs only photos filed under it.
+        'workspaceId', listing_row.workspace_id
+      )
+  );
 end;
-$$;
-
-revoke all on function public.xbar_shared_listing_path_owner_guard() from public;
-revoke all on function public.xbar_shared_listing_path_owner_guard() from anon;
-revoke all on function public.xbar_shared_listing_path_owner_guard() from authenticated;
-
-drop trigger if exists xbar_shared_listing_path_owner_guard on public.shared_listings;
-create trigger xbar_shared_listing_path_owner_guard
-  before insert or update of share_path, state, workspace_id on public.shared_listings
-  for each row execute function public.xbar_shared_listing_path_owner_guard();
+$function$;
 
 commit;

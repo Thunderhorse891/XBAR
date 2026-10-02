@@ -128,6 +128,7 @@ test('a teammate is told why an old document will not open for them', () => {
     storagePath: `${uploaderId}/documents/horse-42/document-abc.pdf`,
     viewerUserId: viewerId,
     workspaceId,
+    refusalStatus: 400,
   });
   assert.ok(message);
   assert.match(message, /teammate who added it/);
@@ -143,6 +144,7 @@ test('nothing is invented about a document in this workspace', () => {
       storagePath: `${workspaceId}/documents/horse-42/document-abc.pdf`,
       viewerUserId: viewerId,
       workspaceId,
+      refusalStatus: 400,
     }),
     null,
   );
@@ -156,7 +158,12 @@ test('the viewer is told their own pre-shared-storage upload must be uploaded ag
     `${viewerId}/documents/horse-42/document-abc.pdf`,
     `${viewerId.toUpperCase()}/documents/horse-42/document-abc.pdf`,
   ]) {
-    const message = explainUnopenableCloudDocument({ storagePath, viewerUserId: viewerId, workspaceId });
+    const message = explainUnopenableCloudDocument({
+      storagePath,
+      viewerUserId: viewerId,
+      workspaceId,
+      refusalStatus: 400,
+    });
     assert.ok(message, storagePath);
     assert.match(message, /You added this file/);
     assert.match(message, /Upload it again/);
@@ -166,7 +173,7 @@ test('the viewer is told their own pre-shared-storage upload must be uploaded ag
 test('a path with no workspace-shaped namespace explains nothing', () => {
   for (const path of ['', 'documents/horse-42/x.pdf', 'not-a-uuid/documents/x.pdf']) {
     assert.equal(
-      explainUnopenableCloudDocument({ storagePath: path, viewerUserId: viewerId, workspaceId }),
+      explainUnopenableCloudDocument({ storagePath: path, viewerUserId: viewerId, workspaceId, refusalStatus: 400 }),
       null,
       `expected ${path} to explain nothing`,
     );
@@ -178,21 +185,46 @@ test('an unresolved workspace still tells the viewer about their own old upload'
     storagePath: `${viewerId}/documents/horse-42/x.pdf`,
     viewerUserId: viewerId,
     workspaceId: null,
+    refusalStatus: 400,
   });
   assert.ok(message);
   assert.match(message, /You added this file/);
 });
 
-test('an unresolved workspace does not silence the explanation either', () => {
-  // The signed URL already failed. Had this object belonged to a workspace the
-  // viewer is in, membership would have granted it -- so a namespace that is
-  // neither theirs nor their workspace's is still a teammate's old upload, and
-  // saying nothing would leave them with the storage layer's own noise.
-  const message = explainUnopenableCloudDocument({
-    storagePath: `${uploaderId}/documents/horse-42/x.pdf`,
-    viewerUserId: viewerId,
-    workspaceId: null,
-  });
-  assert.ok(message);
-  assert.match(message, /teammate who added it/);
+test("an unresolved workspace explains nothing about someone else's namespace", () => {
+  // With the workspace lookup failed, `<uuid>/...` that is not the viewer's id
+  // could be this ranch's own file that failed for some other reason. Telling
+  // them a teammate must re-upload it would be a plausible guess, and wrong.
+  assert.equal(
+    explainUnopenableCloudDocument({
+      storagePath: `${uploaderId}/documents/horse-42/x.pdf`,
+      viewerUserId: viewerId,
+      workspaceId: null,
+      refusalStatus: 400,
+    }),
+    null,
+  );
+});
+
+test('a transient storage failure is never explained as the old storage scheme', () => {
+  // A 5xx or a network failure (no status) says nothing about where the file
+  // is filed; "upload it again" would have people create duplicates of files
+  // that open on a retry.
+  for (const refusalStatus of [undefined, 500, 502, 503, 0]) {
+    for (const storagePath of [`${viewerId}/documents/horse-42/x.pdf`, `${uploaderId}/documents/horse-42/x.pdf`]) {
+      assert.equal(
+        explainUnopenableCloudDocument({ storagePath, viewerUserId: viewerId, workspaceId, refusalStatus }),
+        null,
+        `${storagePath} at ${String(refusalStatus)}`,
+      );
+    }
+  }
+  assert.ok(
+    explainUnopenableCloudDocument({
+      storagePath: `${uploaderId}/documents/horse-42/x.pdf`,
+      viewerUserId: viewerId,
+      workspaceId,
+      refusalStatus: 404,
+    }),
+  );
 });

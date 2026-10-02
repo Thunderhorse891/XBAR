@@ -18,6 +18,7 @@ import { packetOmissionSection, selectPacketDocuments } from './_lib/packet-sele
 import { sellerIdentity } from './_lib/workspace-identity.js';
 import {
   PACKET_FILE_NOT_STORED,
+  PACKET_PATH_REFUSED,
   SELLER_FILE_REFUSED,
   SELLER_FILE_UNREADABLE,
   isWorkspaceObjectPath,
@@ -468,6 +469,7 @@ async function listPackets(res, access, horseId) {
     workspaceId,
     ttlSeconds: SIGNED_URL_TTL_SECONDS,
     emptyReason: PACKET_FILE_NOT_STORED,
+    refusedReason: PACKET_PATH_REFUSED,
   });
   const refused = rows.filter((_, index) => signed[index].refused).map((row) => `packet:${row.packet_id}`);
   if (refused.length) {
@@ -475,8 +477,10 @@ async function listPackets(res, access, horseId) {
       workspaceId,
       actorUserId: user?.id,
       action: 'storage.path_refused',
-      entityType: 'sale_packet',
-      entityId: horseId || '',
+      // Same labels as the export's event: the horse when the list was for one,
+      // otherwise the workspace the list was for.
+      entityType: horseId ? 'horse' : 'workspace',
+      entityId: horseId || workspaceId,
       metadata: { rows: refused },
     });
   }

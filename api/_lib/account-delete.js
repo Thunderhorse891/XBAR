@@ -177,26 +177,32 @@ export default async function handler(req, res) {
     // while the Settings screen promises those documents were erased. Which
     // prefixes are safe to sweep is decided in account-deletion.js, where the
     // rule that a transferred workspace is never swept can be tested.
-    await removeStoragePrefixes(
-      supabase,
-      DOCUMENT_BUCKET,
-      documentPrefixesToPurge({ ...plan, workspacesToPurge: purgeable }),
-    ).catch(() => {});
-    await removeStoragePrefixes(
-      supabase,
-      MEDIA_BUCKET,
-      mediaPrefixesToPurge({ ...plan, workspacesToPurge: purgeable }),
-    ).catch(() => {});
-    await removeStoragePrefixes(
-      supabase,
-      PACKET_BUCKET,
-      packetPrefixesToPurge({ ...plan, workspacesToPurge: purgeable }),
-    ).catch(() => {});
+    /*
+     * Each sweep reports what it could not finish rather than swallowing it.
+     * The account is already gone, so there is nothing to roll back -- but a
+     * response that says "erased" while packet PDFs full of Coggins and
+     * registration copies are still in the bucket is the silent success this
+     * codebase keeps paying for. Say so, log where, and let a person finish it.
+     */
+    const purge = { ...plan, workspacesToPurge: purgeable };
+    const leftovers = [];
+    for (const [bucket, prefixes] of [
+      [DOCUMENT_BUCKET, documentPrefixesToPurge(purge)],
+      [MEDIA_BUCKET, mediaPrefixesToPurge(purge)],
+      [PACKET_BUCKET, packetPrefixesToPurge(purge)],
+    ]) {
+      const failed = await removeStoragePrefixes(supabase, bucket, prefixes).catch(() => prefixes);
+      if (failed.length) leftovers.push({ bucket, prefixes: failed });
+    }
+    if (leftovers.length) {
+      console.error('account deletion: stored files could not all be removed', { userId: user.id, leftovers });
+    }
 
     return sendJson(res, 200, {
       ok: true,
       purgedWorkspaces: purgeable.length,
       transferredWorkspaces: plan.workspacesToTransfer.length,
+      storageCleanupComplete: leftovers.length === 0,
     });
   } catch (error) {
     return sendJson(res, 500, { ok: false, message: `Account deletion failed: ${error.message}` });
@@ -206,28 +212,37 @@ export default async function handler(req, res) {
 // Recursively collect every object under a prefix. Supabase Storage `list`
 // returns only the immediate children of a prefix and marks folders with a null
 // id, so nested upload paths (`${user}/horses/<id>/<file>`) require walking.
+// Returns false when a listing failed, so the caller can tell "nothing here"
+// from "could not look".
 async function listAllObjects(supabase, bucket, prefix, out) {
   let offset = 0;
   const pageSize = 100;
   for (;;) {
     const { data: entries, error } = await supabase.storage.from(bucket).list(prefix, { limit: pageSize, offset });
-    if (error || !entries?.length) break;
+    if (error) return false;
+    if (!entries?.length) return true;
     for (const entry of entries) {
       const path = `${prefix}/${entry.name}`;
       if (entry.id) out.push(path);
-      else await listAllObjects(supabase, bucket, path, out); // folder → recurse
+      else if (!(await listAllObjects(supabase, bucket, path, out))) return false; // folder → recurse
     }
-    if (entries.length < pageSize) break;
+    if (entries.length < pageSize) return true;
     offset += pageSize;
   }
 }
 
-async function removeStoragePrefixes(supabase, bucket, prefixes) {
+// Removes every object under each prefix; returns the prefixes it could not
+// fully clear (a listing or a removal failed).
+export async function removeStoragePrefixes(supabase, bucket, prefixes) {
+  const failed = [];
   for (const prefix of prefixes) {
     const paths = [];
-    await listAllObjects(supabase, bucket, prefix, paths);
+    let complete = await listAllObjects(supabase, bucket, prefix, paths);
     for (let i = 0; i < paths.length; i += 100) {
-      await supabase.storage.from(bucket).remove(paths.slice(i, i + 100));
+      const { error } = await supabase.storage.from(bucket).remove(paths.slice(i, i + 100));
+      if (error) complete = false;
     }
+    if (!complete) failed.push(prefix);
   }
+  return failed;
 }

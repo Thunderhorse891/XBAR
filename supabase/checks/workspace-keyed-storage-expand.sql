@@ -84,9 +84,14 @@ begin
     where bucket_id = 'horse-media' and name = media_ws;
   exception when insufficient_privilege then null;
   end;
+  begin
+    update storage.objects set name = workspace::text || '/horses/fixture/renamed.jpg'
+    where bucket_id = 'horse-media' and name = media_ws;
+  exception when insufficient_privilege then null;
+  end;
   reset role;
   if not exists (select 1 from storage.objects where bucket_id = 'horse-media' and name = media_ws)
-    then raise exception 'A member moved a ranch photo out of its workspace during the expand window'; end if;
+    then raise exception 'A member moved or renamed a ranch photo during the expand window'; end if;
 
   perform set_config('request.jwt.claim.sub', owner_id::text, true);
   set local role authenticated;

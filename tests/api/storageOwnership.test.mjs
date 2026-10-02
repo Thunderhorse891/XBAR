@@ -40,6 +40,7 @@ const {
   RECORDED_FILE_MISSING,
   RECORDED_FILE_TEMPORARILY_UNAVAILABLE,
   RECORDED_PATH_REFUSED,
+  PACKET_PATH_REFUSED,
 } = await import('../../api/_lib/document-storage.js');
 const { selectPacketDocuments } = await import('../../api/_lib/packet-selection.js');
 
@@ -302,8 +303,8 @@ test("export does not sign a packet path outside this workspace, and signs the w
   const byId = Object.fromEntries(response.body.salePackets.map((entry) => [entry.packetId, entry]));
   assert.ok(byId.own.downloadUrl);
   assert.equal(byId.forged.downloadUrl, '');
-  assert.equal(byId.forged.downloadUnavailable, RECORDED_PATH_REFUSED);
-  assert.equal(byId.climbing.downloadUnavailable, RECORDED_PATH_REFUSED);
+  assert.equal(byId.forged.downloadUnavailable, PACKET_PATH_REFUSED);
+  assert.equal(byId.climbing.downloadUnavailable, PACKET_PATH_REFUSED);
   assert.match(byId.unbuilt.downloadUnavailable, /No PDF is stored/);
   const refusal = audits.find((row) => row.action === 'storage.path_refused');
   assert.deepEqual(refusal.metadata.rows, ['packet:forged', 'packet:climbing']);
@@ -328,8 +329,8 @@ test('the saved-packet list does not sign a packet path outside this workspace',
   const byId = Object.fromEntries(response.body.packets.map((entry) => [entry.packetId, entry]));
   assert.ok(byId.own.downloadUrl);
   assert.equal(byId.forged.downloadUrl, '');
-  assert.equal(byId.forged.downloadUnavailable, RECORDED_PATH_REFUSED);
-  assert.equal(byId.climbing.downloadUnavailable, RECORDED_PATH_REFUSED);
+  assert.equal(byId.forged.downloadUnavailable, PACKET_PATH_REFUSED);
+  assert.equal(byId.climbing.downloadUnavailable, PACKET_PATH_REFUSED);
   assert.match(byId.unbuilt.downloadUnavailable, /No PDF is stored/);
 });
 
@@ -462,7 +463,8 @@ test('the photo uploader files under the batch workspace, only for the account t
   const body = uploader.slice(start, uploader.indexOf('\n}\n', start));
   assert.match(body, /target: IntakeIdentity/);
   assert.match(body, /!isWorkspaceStorageKey\(target\.workspaceId\) \|\| session\.user\.id !== target\.userId/);
-  assert.match(body, /const path = `\$\{target\.workspaceId\.toLowerCase\(\)\}\/horses\//);
+  assert.match(body, /buildMediaStoragePath\(\{\s*workspaceId: target\.workspaceId,/);
+  assert.match(body, /if \(!path\) \{\s*return null;/);
   // One workspace lookup per batch, not one per file.
   assert.ok(!body.includes('loadWorkspaceAccessProfile('), 'the uploader re-resolves the workspace per file');
 
@@ -471,7 +473,7 @@ test('the photo uploader files under the batch workspace, only for the account t
   const resolved = media.indexOf('const uploadTarget = readIntakeIdentity();');
   const notReady = media.indexOf('if (uploadTarget.userId && !uploadTarget.workspaceId)');
   const uploads = media.indexOf('uploadMediaAssetToCloud({ file, horseId, target: uploadTarget })');
-  const recheck = media.indexOf('if (intakeIdentityChanged(uploadTarget, readIntakeIdentity()))');
+  const recheck = media.indexOf('if (photoBatchIdentityChanged(uploadTarget, readIntakeIdentity()))');
   const commit = media.indexOf('const uploadedResults = results.filter');
   assert.ok(resolved > -1 && notReady > resolved && uploads > notReady, 'resolve once, refuse honestly, then upload');
   assert.ok(recheck > uploads && commit > recheck, 'the account is re-checked before photos are attached');
@@ -494,4 +496,51 @@ test('export says a device-only document is on the device, not that it has no fi
   const byId = Object.fromEntries(response.body.documents.map((entry) => [entry.documentId, entry]));
   assert.match(byId.vault.downloadUnavailable, /saved only on the device it was added from/);
   assert.match(byId.none.downloadUnavailable, /No file is attached/);
+});
+
+test('every photo path the client builds is one the server will sign for that workspace', async () => {
+  // The client and server sit in different modules; this drives the client's
+  // path builder (compiled by the test run) against the server's own check.
+  const { buildMediaStoragePath } = await import('../../.codex-test-dist/src/lib/documentStoragePath.js');
+  const { isHorseMediaStoragePath } = await import('../../api/_lib/buyer-media.js');
+  const hostile = [
+    'horse-1',
+    'Bella Rose',
+    '../../etc',
+    '.hidden',
+    '%2e%2e',
+    'a/b',
+    '',
+    '   ',
+    'ñandú',
+    'x'.repeat(200),
+  ];
+  for (const horseId of hostile) {
+    for (const objectId of ['media-123-abc', 'media_UPPER.1', '', '..', 'not-prefixed']) {
+      for (const originalFileName of ['photo.JPG', 'no-extension', 'evil.tar/../../x', '.jpg', 'a.b.c.png']) {
+        const path = buildMediaStoragePath({
+          workspaceId: WORKSPACE.toUpperCase(),
+          horseId,
+          objectId,
+          originalFileName,
+        });
+        assert.ok(isHorseMediaStoragePath(path), `the server would refuse ${path}`);
+        assert.ok(isWorkspaceObjectPath({ path, workspaceId: WORKSPACE }), `${path} is not under the workspace`);
+      }
+    }
+  }
+  assert.equal(
+    buildMediaStoragePath({ workspaceId: '', horseId: 'h', objectId: 'media-1', originalFileName: 'a.jpg' }),
+    null,
+  );
+  assert.equal(
+    buildMediaStoragePath({ workspaceId: 'not-a-uuid', horseId: 'h', objectId: 'media-1', originalFileName: 'a.jpg' }),
+    null,
+  );
+});
+
+test('a refused packet is told to be rebuilt, never re-uploaded', () => {
+  // Packets are server-built: there is no upload path for one.
+  assert.match(PACKET_PATH_REFUSED, /Build the packet again/);
+  assert.doesNotMatch(PACKET_PATH_REFUSED, /re-upload/i);
 });
