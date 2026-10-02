@@ -107,6 +107,9 @@ const REQUIRED_BY_ROLE = {
     // The horse-media write policies call it; without EXECUTE every photo
     // upload fails with "permission denied for function".
     'xbar_has_workspace_capability(uuid, text)',
+    // The horse staff-insert policy calls it so a staff member's upsert of an
+    // existing horse passes; without EXECUTE every staff save of a horse fails.
+    'xbar_record_exists(text, uuid, text)',
   ],
   service_role: [
     'xbar_workspace_storage_bytes(uuid)',

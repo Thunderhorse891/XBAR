@@ -464,6 +464,16 @@ psql -v ON_ERROR_STOP=1 "$DATABASE_URL" -f supabase/checks/account-deletion-hold
 #    Cleanup that did not finish stays on record:
 #      select user_id, status, storage_leftovers, requested_at
 #      from public.account_deletion_receipts where status <> 'complete';
+
+# 14. Staff saves reach the cloud (audit F04). Write policies per record
+#    table, following the role matrix, beside the existing manager policies;
+#    a guard limits a Medical Lead to a horse's medical and document fields;
+#    invited Admins can save the ranch profile. Additive only. Apply BEFORE
+#    deploying the client that lets staff saves through.
+psql -1 -v ON_ERROR_STOP=1 "$DATABASE_URL" -f supabase/migrations/20261002120000_staff_write_policies.sql
+#    Proven under real RLS in CI (.github/workflows/records-database.yml).
+#    staff-writes.sql deletes rows inside its rolled-back transaction; run it
+#    against a disposable database, not production.
 ```
 
 **(4) and (5) are prerequisites for billing, not optimizations to schedule

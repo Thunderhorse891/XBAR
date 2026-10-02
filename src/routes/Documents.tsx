@@ -636,7 +636,7 @@ export default function Documents() {
                   type="button"
                   className={`button button--ghost button--compact justify-start ${createHorseFromBatch ? 'border-[var(--emerald)] bg-[var(--emerald-soft)] text-[var(--emerald)]' : ''}`}
                   onClick={() => setCreateHorseFromBatch((current) => !current)}
-                  disabled={!canUploadDocuments || Boolean(horseId)}
+                  disabled={!canUploadDocuments || !canCreateHorses || Boolean(horseId)}
                 >
                   {createHorseFromBatch ? 'Create horse profiles' : 'Review only'}
                 </button>

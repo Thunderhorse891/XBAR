@@ -858,7 +858,11 @@ export const useXbarStore = create<XbarStore>()(
       createDocumentIntake: async (intakeInput) =>
         serializeDocumentIntake(async () => {
           const { files, horseId, source, uploadedBy, label, createHorseFromBatch } = intakeInput;
-          const deniedMessage = requireRoleCapability(get().currentRole, 'uploadDocuments');
+          // Creating horse profiles from a batch creates horses: it needs
+          // createHorse, not just the right to upload a paper.
+          const deniedMessage =
+            requireRoleCapability(get().currentRole, 'uploadDocuments') ??
+            (createHorseFromBatch ? requireRoleCapability(get().currentRole, 'createHorse') : undefined);
           if (deniedMessage) {
             return { ok: false, message: deniedMessage };
           }
@@ -2222,7 +2226,10 @@ export const useXbarStore = create<XbarStore>()(
         };
       },
       deleteHorse: (horseId) => {
-        const deniedMessage = requireRoleCapability(get().currentRole, 'editHorse');
+        // Deleting a horse takes its leads and receipts with it, so it needs the
+        // capability that creates horses (Admin, Ranch Manager) -- the same rule
+        // the database applies to the cloud delete.
+        const deniedMessage = requireRoleCapability(get().currentRole, 'createHorse');
         if (deniedMessage) return { ok: false, message: deniedMessage };
         const removedHorse = get().horses.find((h) => h.id === horseId);
         const before = get();

@@ -499,6 +499,8 @@ async function ensurePrimaryWorkspace(session: Session, backup: CloudWorkspaceBa
   if (ownedError) throw new WorkspaceSaveAccessError(ownedError.message);
 
   let workspaceId = '';
+  // The owner holds every Admin capability; a member is whatever their row says.
+  let memberRole = 'Admin';
   if (!ownedWorkspace?.id) {
     const { data: memberships, error: membershipError } = await client
       .from('workspace_memberships')
@@ -514,12 +516,14 @@ async function ensurePrimaryWorkspace(session: Session, backup: CloudWorkspaceBa
     }
     const membership = memberships?.[0];
     if (membership?.workspace_id) {
-      // Mirrors current server write policy; record access does not grant writes.
-      if (membership.role !== 'Admin') {
-        throw new WorkspaceSaveAccessError(
-          'Your ranch access is read-only. Ask the ranch administrator to save these changes.',
-        );
-      }
+      /*
+       * Staff save what their role may change (audit F04). The database decides
+       * table by table (20261002120000_staff_write_policies.sql), and a save
+       * writes only the records this device changed (relationalDiff), so a
+       * Medical Lead's treatment reaches the cloud without the save touching
+       * the sales or listing tables the role has no right to.
+       */
+      memberRole = typeof membership.role === 'string' ? membership.role : '';
       workspaceId = membership.workspace_id as string;
     } else if (
       backup.workspace?.workspaceMembers?.some(
@@ -587,6 +591,12 @@ async function ensurePrimaryWorkspace(session: Session, backup: CloudWorkspaceBa
     }
   }
 
+  // The ranch profile is the owner's and the Admins'. Anyone else's save skips
+  // it rather than failing on it -- and with it every record they did change.
+  if (memberRole !== 'Admin') {
+    return { workspaceId, role: memberRole };
+  }
+
   const { error: profileError } = await client.from('workspace_profiles').upsert(
     {
       workspace_id: workspaceId,
@@ -608,7 +618,7 @@ async function ensurePrimaryWorkspace(session: Session, backup: CloudWorkspaceBa
     throw new Error(profileError.message);
   }
 
-  return workspaceId;
+  return { workspaceId, role: memberRole };
 }
 
 async function replaceWorkspaceRows(params: {
@@ -723,7 +733,14 @@ async function saveWorkspaceBackupToRelationalCloud(
   let documentsPersisted = false;
 
   try {
-    const workspaceId = await ensurePrimaryWorkspace(session, normalized);
+    const { workspaceId, role } = await ensurePrimaryWorkspace(session, normalized);
+    // Push cloud deletes every cloud record this device lacks. That is the
+    // ranch administrator's call, never a staff save's.
+    if (options.replace && role !== 'Admin') {
+      throw new WorkspaceSaveAccessError(
+        'Only a ranch administrator can replace the cloud copy. Your changes are still on this device.',
+      );
+    }
     const updatedAt = normalized.exportedAt ?? new Date().toISOString();
     const workspace = normalized.workspace ?? {};
     // Only what changed since this device's last saved or loaded copy is
