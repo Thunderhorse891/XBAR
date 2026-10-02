@@ -288,10 +288,10 @@ export default function Login() {
       result.ok
         ? result.outcome === 'signed-in'
           ? 'Account created'
-          : 'Check your email'
+          : 'Choose your next step'
         : 'We could not create that account',
       result,
-      // Only the signed-in outcome created a session; the others are an inbox.
+      // Only the signed-in outcome created a session; the others still need a next step.
       result.outcome === 'signed-in' ? 'session' : 'notice',
       // The dedicated confirmation screen is the announcement; a toast would cover it.
       !(result.ok && result.outcome !== 'signed-in'),
@@ -434,9 +434,9 @@ export default function Login() {
           <div className="clean-auth-card__header">
             <p>{label}</p>
             <h1 ref={entryHeading} tabIndex={-1}>
-              {confirmationEmail ? 'Check your email' : title}
+              {confirmationEmail ? 'Choose your next step' : title}
             </h1>
-            <span>{confirmationEmail ? 'New accounts need email confirmation.' : description}</span>
+            <span>{confirmationEmail ? 'Sign in to an existing account, or confirm a new one.' : description}</span>
           </div>
 
           {/*
@@ -486,8 +486,8 @@ export default function Login() {
                 </button>
               </div>
               <p>
-                <strong>New to XBAR?</strong> Open the confirmation link in your email to continue. Check your spam
-                folder if it hasn’t arrived.
+                <strong>New to XBAR?</strong> Check your inbox and spam folder for a confirmation link. Open it to
+                continue if this is your first signup.
               </p>
               <div className="clean-confirmation__existing">
                 <p>
@@ -500,13 +500,13 @@ export default function Login() {
                   disabled={busy !== ''}
                   onClick={() => setMode('signin')}
                 >
-                  Back to sign in
+                  Go to sign in
                 </button>
               </div>
               <div className="clean-confirmation__resend">
                 <span>Still waiting for a new-account email?</span>
                 <button type="button" disabled={busy !== ''} onClick={() => void resendConfirmation()}>
-                  {busy === 'resend' ? 'Sending...' : 'Send it again'}
+                  {busy === 'resend' ? 'Sending...' : 'Request confirmation email'}
                 </button>
               </div>
               {messagePanel}
