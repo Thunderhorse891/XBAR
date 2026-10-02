@@ -11,6 +11,7 @@
 import type { HorseSex } from '../types/xbar.js';
 
 export interface RegistrationFields {
+  identityReviewRequired?: boolean;
   horseName?: string;
   registrationNumber?: string;
   registry?: string;
@@ -206,12 +207,21 @@ function labeledValue(text: string, labelPattern: string, stopGroup = STOP_GROUP
 }
 
 /** Registry-prefixed or bare registration number, e.g. "AQHA 5551234" or "X0123456". */
+const REGISTRATION_NUMBER_FIELD =
+  /\b(?:registration|reg\.?)\s*(?:no|number|#)?\.?\s*[:#-]?\s*([A-Z]{0,5}\s*-?\s*\d[\d\s-]{3,}\d[A-Z]*)/i;
+
+export function normalizeDocumentIdentityText(value: string) {
+  return value
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+
 function findRegistrationNumber(text: string): { number?: string; registry?: string } {
   // Labeled form keeps whatever token follows the label, so "AQHA1234567" is
   // preserved whole while a bare "5551234" stays numeric.
-  const labeled = text.match(
-    /\b(?:registration|reg\.?)\s*(?:no|number|#)?\.?\s*[:#-]?\s*([A-Z]{0,5}\s*-?\s*\d[\d\s-]{3,12}\d[A-Z]?)/i,
-  );
+  const labeled = text.match(REGISTRATION_NUMBER_FIELD);
   if (labeled) {
     const raw = labeled[1].replace(/[\s-]/g, '').toUpperCase();
     const prefix = raw.match(/^[A-Z]{2,5}/)?.[0];
@@ -444,7 +454,20 @@ export function extractRegistrationFields(rawText: string): RegistrationFields {
   const sire = findParent(parentText, 'sire');
   const dam = findParent(parentText, 'dam');
 
+  const subjectNames = new Set(
+    horseNames
+      .filter((name) => parentIndex < 0 || name.start < parentIndex)
+      .map((name) => normalizeDocumentIdentityText(name.value)),
+  );
+  const subjectIds = [...headText.matchAll(new RegExp(REGISTRATION_NUMBER_FIELD.source, 'gi'))].map((match) =>
+    findRegistrationNumber(match[0]),
+  );
+  const subjectRegistrations = new Set(subjectIds.map((entry) => entry.number).filter(Boolean));
+  const subjectRegistries = new Set(subjectIds.map((entry) => entry.registry).filter(Boolean));
+  const identityReviewRequired = subjectNames.size > 1 || subjectRegistrations.size > 1 || subjectRegistries.size > 1;
+
   const fields: RegistrationFields = {
+    identityReviewRequired: identityReviewRequired || undefined,
     horseName: horseName?.value,
     registrationNumber: own.number,
     registry: findRegistry(text, own.registry),

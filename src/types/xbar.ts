@@ -362,6 +362,8 @@ export interface DocumentRecord {
    * lib/documentIntelligence.ts describeDocumentCoverage.
    */
   processingNote?: string;
+  /** Conflicting subject fields require separate/corrected source papers. */
+  identityReviewRequired?: boolean;
   summary: string;
   entities: DocumentEntities;
   fileUrl?: string;

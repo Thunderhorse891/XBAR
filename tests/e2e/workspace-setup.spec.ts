@@ -562,3 +562,130 @@ test('a damaged PDF in a batch reports failure without losing the readable regis
   await expect(row).not.toContainText('match confidence');
   await expect(row).toContainText('Enter the details by hand below, or upload a clearer scan');
 });
+
+test('OCR identity: pixels naming a new subject cannot attach its paper to an existing sire', async ({
+  page,
+  context,
+}) => {
+  test.setTimeout(180_000);
+  await bootstrapWorkspace(page);
+  await seedHorse(page, 'SHINING SPARK');
+  const scan = await page.evaluate(() => {
+    const canvas = document.createElement('canvas');
+    canvas.width = 1800;
+    canvas.height = 800;
+    const ctx = canvas.getContext('2d')!;
+    ctx.fillStyle = 'white';
+    ctx.fillRect(0, 0, canvas.width, canvas.height);
+    ctx.fillStyle = 'black';
+    ctx.font = 'bold 64px Arial';
+    ctx.fillText('Registered Name: BLUE MOON', 60, 150);
+    ctx.fillText('Registration Number: 1234567', 60, 300);
+    ctx.fillText('Sex: Mare Color: Palomino', 60, 450);
+    ctx.fillText('Sire: SHINING SPARK 3344556', 60, 600);
+    return canvas.toDataURL('image/png').split(',')[1];
+  });
+  await page.getByRole('button', { name: 'Create', exact: true }).click();
+  await page.getByRole('menuitem', { name: 'Upload Document' }).click();
+  const drawer = page.getByRole('dialog', { name: 'Upload Document' });
+  await drawer
+    .locator('input[type="file"]')
+    .setInputFiles({ name: 'scan-subject.png', mimeType: 'image/png', buffer: Buffer.from(scan, 'base64') });
+  await drawer.getByRole('checkbox').uncheck();
+  await drawer.getByRole('button', { name: 'Upload for review' }).click();
+  await expect(page).toHaveURL(/\/documents/, { timeout: 120_000 });
+  const row = page.getByRole('group', { name: 'scan-subject review actions' });
+  await expect(row.locator('select')).toHaveValue('');
+  await expect(row).toContainText('BLUE MOON');
+  await row.getByRole('button', { name: 'New horse' }).click();
+  await expect(page.locator('.xs-objhead__name')).toHaveText('BLUE MOON');
+  await expect(page.locator('.xs-kv')).toContainText('1234567');
+  await expect(page.locator('.xs-kv')).toContainText('SHINING SPARK (3344556)');
+
+  const readState = (target: Page) =>
+    target.evaluate(async () => {
+      const modulePath = '/src/store/useXbarStore.ts';
+      const { useXbarStore } = await import(/* @vite-ignore */ modulePath);
+      const { horses, documents } = useXbarStore.getState();
+      return {
+        names: horses.map((horse: { name: string }) => horse.name).sort(),
+        documentHorse: horses.find((horse: { id: string }) => horse.id === documents[0]?.horseId)?.name,
+        documentState: documents[0]?.state,
+        subject: documents[0]?.entities.horseName,
+      };
+    });
+  const expected = {
+    names: ['BLUE MOON', 'SHINING SPARK'],
+    documentHorse: 'BLUE MOON',
+    documentState: 'Needs Review',
+    subject: 'BLUE MOON',
+  };
+  await expect.poll(() => readState(page)).toEqual(expected);
+  // A new page reloads persisted state without the first page's clean-start script.
+  const restored = await context.newPage();
+  await restored.goto('/app/documents');
+  await expect.poll(() => readState(restored)).toEqual(expected);
+  await restored.close();
+});
+
+test('OCR identity: conflicting review action refuses and a retry uses the corrected current herd', async ({
+  page,
+}) => {
+  await bootstrapWorkspace(page);
+  await seedHorse(page, 'BLUE MOON');
+  const setRegistration = async (value: string) => {
+    await page.getByRole('button', { name: 'Edit details' }).click();
+    const edit = page.getByRole('dialog', { name: 'Edit Horse' });
+    await edit.getByLabel('Registration number').fill(value);
+    await edit.getByRole('button', { name: 'Save changes' }).click();
+  };
+  await setRegistration('7654321');
+  await page.getByRole('button', { name: 'Create', exact: true }).click();
+  await page.getByRole('menuitem', { name: 'Upload Document' }).click();
+  const drawer = page.getByRole('dialog', { name: 'Upload Document' });
+  await drawer.locator('input[type="file"]').setInputFiles({
+    name: 'scan-conflict.txt',
+    mimeType: 'text/plain',
+    buffer: Buffer.from('Registered Name: BLUE MOON\nRegistration Number: 1234567'),
+  });
+  await drawer.getByRole('checkbox').uncheck();
+  // Cancelling before submission does not keep the selected file for a later upload.
+  await drawer.getByRole('button', { name: 'Cancel', exact: true }).click();
+  await page.getByRole('button', { name: 'Create', exact: true }).click();
+  await page.getByRole('menuitem', { name: 'Upload Document' }).click();
+  await expect(drawer.locator('input[type="file"]')).toHaveValue('');
+  await drawer.locator('input[type="file"]').setInputFiles({
+    name: 'scan-conflict.txt',
+    mimeType: 'text/plain',
+    buffer: Buffer.from('Registered Name: BLUE MOON\nRegistration Number: 1234567'),
+  });
+  await drawer.getByRole('button', { name: 'Upload for review' }).click();
+  await expect(page).toHaveURL(/\/documents/);
+  const row = page.getByRole('group', { name: 'scan-conflict review actions' });
+  await expect(row.locator('select')).toHaveValue('');
+  await row.getByRole('button', { name: 'New horse' }).click();
+  await expect(
+    page.getByText('This paper has conflicting or ambiguous horse identity.', { exact: false }),
+  ).toBeVisible();
+  await expect(row.locator('select')).toHaveValue('');
+  await expect(page).toHaveURL(/\/documents/);
+
+  // The review retry re-reads the herd rather than blindly choosing its first name match.
+  await seedHorse(page, 'BLUE MOON');
+  await setRegistration('1234567');
+  await page.getByRole('link', { name: 'Documents', exact: true }).click();
+  await row.getByRole('button', { name: 'New horse' }).click();
+  await expect(page).toHaveURL(/\/horses\//);
+  await expect(page.locator('.xs-kv')).toContainText('1234567');
+  const result = await page.evaluate(async () => {
+    const modulePath = '/src/store/useXbarStore.ts';
+    const { useXbarStore } = await import(/* @vite-ignore */ modulePath);
+    const { horses, documents } = useXbarStore.getState();
+    return {
+      count: horses.length,
+      linkedRegistration: horses.find((horse: { id: string }) => horse.id === documents[0].horseId)?.registrationNumber,
+      state: documents[0].state,
+    };
+  });
+  expect(result).toEqual({ count: 2, linkedRegistration: '1234567', state: 'Needs Review' });
+});
