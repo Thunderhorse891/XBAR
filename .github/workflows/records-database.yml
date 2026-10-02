@@ -1,0 +1,71 @@
+name: Record write policies
+
+on:
+  pull_request:
+    paths:
+      - 'supabase/migrations/**'
+      - 'supabase/checks/storage-fixture-schema.sql'
+      - 'supabase/checks/records-fixture-schema.sql'
+      - 'supabase/checks/staff-writes.sql'
+      - '.github/workflows/records-database.yml'
+  push:
+    branches: [main]
+    paths:
+      - 'supabase/migrations/**'
+      - 'supabase/checks/storage-fixture-schema.sql'
+      - 'supabase/checks/records-fixture-schema.sql'
+      - 'supabase/checks/staff-writes.sql'
+      - '.github/workflows/records-database.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+# Real RLS on a disposable Postgres: who may save which records (audit F04).
+jobs:
+  records-database:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    services:
+      postgres:
+        image: postgres:17
+        env:
+          POSTGRES_PASSWORD: disposable-test-password
+          POSTGRES_DB: xbar_records_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    env:
+      PGHOST: localhost
+      PGPORT: 5432
+      PGUSER: postgres
+      PGPASSWORD: disposable-test-password
+      PGDATABASE: xbar_records_test
+    steps:
+      - uses: actions/checkout@v7
+      - name: Production starting state
+        run: |
+          psql -v ON_ERROR_STOP=1 -f supabase/checks/storage-fixture-schema.sql
+          psql -v ON_ERROR_STOP=1 -f supabase/checks/records-fixture-schema.sql
+          # The capability matrix the policies call, as production has it.
+          psql -v ON_ERROR_STOP=1 -f supabase/migrations/20261001090000_workspace_keyed_storage_expand.sql
+      - name: Before the migration, a Medical Lead's treatment is refused
+        run: |
+          # Must fail, and on the refusal itself -- the defect this exists for.
+          if out=$(psql -v ON_ERROR_STOP=1 -f supabase/checks/staff-writes.sql 2>&1); then
+            echo 'The staff-write check passed on the manager-only policies; it is not testing anything.'
+            exit 1
+          fi
+          echo "$out" | grep -q 'new row violates row-level security policy for table "horses"' || {
+            echo "$out"
+            echo 'The check failed, but not on the refused staff save it exists to detect.'
+            exit 1
+          }
+      - name: Apply, then every role saves exactly what it may
+        run: |
+          psql -1 -v ON_ERROR_STOP=1 -f supabase/migrations/20261002120000_staff_write_policies.sql
+          psql -v ON_ERROR_STOP=1 -f supabase/checks/staff-writes.sql
