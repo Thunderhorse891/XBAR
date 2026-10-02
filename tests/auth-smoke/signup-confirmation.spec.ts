@@ -13,7 +13,7 @@ import { blockWebfonts, RECOVERY_EMAIL, stubGoTrueUser, userRecord } from './sup
 
 blockWebfonts();
 
-test('after signup the screen waits on the inbox instead of offering signup again', async ({ page }) => {
+test('after signup the screen offers next steps instead of claiming an email was sent', async ({ page }) => {
   /*
    * Supabase will not fail a signup for an address that already exists -- it
    * returns an obfuscated user with no identities and sends nothing -- so this
@@ -35,15 +35,15 @@ test('after signup the screen waits on the inbox instead of offering signup agai
   await page.getByLabel('Password', { exact: true }).fill('a-brand-new-password');
   await page.getByRole('button', { name: 'Create Account' }).click();
 
-  await expect(page.getByRole('heading', { name: 'Check your email' })).toBeVisible();
+  await expect(page.getByRole('heading', { name: 'Choose your next step' })).toBeVisible();
   await expect(page.locator('.clean-confirmation__address strong')).toHaveText(RECOVERY_EMAIL);
   await expect(page.getByRole('heading', { name: 'Create Account', exact: true })).toHaveCount(0);
   await expect(page.locator('.clean-login-visual')).toBeHidden();
-  await expect(page.getByRole('heading', { name: 'Check your email' })).toBeFocused();
+  await expect(page.getByRole('heading', { name: 'Choose your next step' })).toBeFocused();
   for (const width of [390, 1440]) {
     await page.setViewportSize({ width, height: 900 });
-    await expect(page.getByRole('heading', { name: 'Check your email' })).toBeInViewport();
-    await expect(page.getByRole('button', { name: 'Back to sign in' })).toBeInViewport();
+    await expect(page.getByRole('heading', { name: 'Choose your next step' })).toBeInViewport();
+    await expect(page.getByRole('button', { name: 'Go to sign in' })).toBeInViewport();
     await page.screenshot({ path: `test-results/confirmation-${width}.png`, fullPage: true });
   }
 
@@ -58,8 +58,8 @@ test('after signup the screen waits on the inbox instead of offering signup agai
   await expect(page.getByLabel('Password', { exact: true })).toHaveCount(0);
 
   // What it offers instead, both of which are correct here.
-  await expect(page.getByRole('button', { name: 'Send it again' })).toBeEnabled();
-  await expect(page.getByRole('button', { name: 'Back to sign in' })).toBeVisible();
+  await expect(page.getByRole('button', { name: 'Request confirmation email' })).toBeEnabled();
+  await expect(page.getByRole('button', { name: 'Go to sign in' })).toBeVisible();
 
   /*
    * And outcomes still reach the SCREEN here, not only a toast.
@@ -88,7 +88,7 @@ test('after signup the screen waits on the inbox instead of offering signup agai
     });
   });
 
-  await page.getByRole('button', { name: 'Send it again' }).click();
+  await page.getByRole('button', { name: 'Request confirmation email' }).click();
 
   /*
    * Scoped to the callout deliberately. The toast renders the same sentence,
@@ -119,7 +119,7 @@ test('the confirmation state hands back a way to correct the address', async ({ 
   await page.getByLabel('Email or User ID').fill('typo@xbar.test');
   await page.getByLabel('Password', { exact: true }).fill('a-brand-new-password');
   await page.getByRole('button', { name: 'Create Account' }).click();
-  await expect(page.getByRole('heading', { name: 'Check your email' })).toBeVisible({ timeout: 30_000 });
+  await expect(page.getByRole('heading', { name: 'Choose your next step' })).toBeVisible({ timeout: 30_000 });
 
   /*
    * A mistyped address is the likeliest reason the email never arrives, and
@@ -148,8 +148,43 @@ test('the confirmation state hands back a way to correct the address', async ({ 
   // And the other way out still works.
   await page.getByLabel('Password', { exact: true }).fill('a-brand-new-password');
   await page.getByRole('button', { name: 'Create Account' }).click();
-  await expect(page.getByRole('heading', { name: 'Check your email' })).toBeVisible();
-  await page.getByRole('button', { name: 'Back to sign in' }).click();
+  await expect(page.getByRole('heading', { name: 'Choose your next step' })).toBeVisible();
+  await page.getByRole('button', { name: 'Go to sign in' }).click();
   await expect(page.getByRole('button', { name: 'Sign In', exact: true })).toBeVisible();
-  await expect(page.getByRole('heading', { name: /Check / })).toHaveCount(0);
+  await expect(page.getByRole('heading', { name: 'Choose your next step' })).toHaveCount(0);
+});
+
+// Keep the same visible response for both no-session results. Learning whether
+// an address already exists is not a prerequisite for giving useful next steps.
+test('new and existing accounts receive identical next steps without losing sign-in recovery', async ({ page }) => {
+  const rendered: string[] = [];
+  for (const identities of [[], [{ id: 'signup-email-identity', provider: 'email' }]]) {
+    await page.route('**/auth/v1/signup*', async (route) => {
+      await route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify({
+          ...userRecord(),
+          identities,
+          ...(identities.length ? { email_confirmed_at: null, confirmed_at: null, last_sign_in_at: null } : {}),
+        }),
+      });
+    });
+    await stubGoTrueUser(page);
+    await page.goto('/app/login?mode=signup');
+    await page.getByLabel('Email or User ID').fill(RECOVERY_EMAIL);
+    await page.getByLabel('Password', { exact: true }).fill('a-brand-new-password');
+    await page.getByRole('button', { name: 'Create Account' }).click();
+
+    await expect(page.getByRole('heading', { name: 'Choose your next step' })).toBeVisible();
+    await expect(page.getByText('Sign in to an existing account, or confirm a new one.')).toBeVisible();
+    await expect(page.getByRole('heading', { name: 'Check your email' })).toHaveCount(0);
+    rendered.push(await page.locator('.clean-auth-card').innerText());
+    await page.getByRole('button', { name: 'Go to sign in' }).click();
+    await expect(page.getByLabel('Email or User ID')).toHaveValue(RECOVERY_EMAIL);
+    await expect(page.getByLabel('Password', { exact: true })).toHaveValue('');
+    await expect(page.getByRole('button', { name: 'Forgot password?' })).toBeEnabled();
+    await page.unroute('**/auth/v1/signup*');
+  }
+  expect(rendered[0]).toBe(rendered[1]);
 });

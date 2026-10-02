@@ -687,9 +687,16 @@ test('the signup confirmation surface never asserts an email that may not exist'
    * account, and precisely the claim that stranded the owner in the first
    * place. The store message was already neutral; the panel contradicted it.
    */
-  for (const claim of ['Confirm your email', 'Confirm {confirmationEmail}', 'activate the account']) {
+  for (const claim of [
+    'Confirm your email',
+    'Confirm {confirmationEmail}',
+    'activate the account',
+    'Check your email',
+  ]) {
     assert.equal(login.includes(claim), false, `the signup surface asserts a confirmation exists: ${claim}`);
   }
+  assert.match(login, /Choose your next step/, 'the shared heading must not send every signup to an inbox');
+  assert.match(login, /Request confirmation email/, 'resend must describe a request, not claim prior delivery');
   // It must still cover BOTH branches rather than going silent.
   assert.match(login, /New to XBAR\?/, 'the new-account branch must be named');
   assert.match(login, /No new confirmation email is sent\./, 'the existing-account branch must be named');
