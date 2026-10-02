@@ -17,6 +17,7 @@ const routes = [
   'ownership-chain',
   'documents',
   'expiring',
+  'reminders',
   'equipment',
   'expenses',
   'reports',

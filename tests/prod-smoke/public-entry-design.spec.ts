@@ -55,7 +55,13 @@ for (const width of [1440, 390]) {
       await expect(menu).toBeHidden();
       await expect(summary).toBeFocused();
       await summary.click();
-      await page.locator('main h1').click();
+      // The open overlay intentionally covers the heading. Tap the visible
+      // page below it instead of asking Playwright to click through the menu.
+      const menuBox = await menu.boundingBox();
+      expect(menuBox).not.toBeNull();
+      const outsideY = menuBox!.y + menuBox!.height + 8;
+      expect(outsideY).toBeLessThan(900);
+      await page.mouse.click(4, outsideY);
       await expect(menu).toBeHidden();
       await summary.click();
       await menu.getByRole('link', { name: 'Sign in', exact: true }).click();

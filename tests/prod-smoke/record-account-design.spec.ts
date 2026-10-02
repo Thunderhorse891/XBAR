@@ -105,6 +105,11 @@ for (const viewport of [
     const profileUrl = new URL(page.url()).pathname;
 
     await expect(page.locator('.xs-objhead__name')).toHaveCSS('color', 'rgb(245, 242, 236)');
+    for (const chip of await page.locator('.xs-objhead .xs-chip').all()) {
+      await expect(chip).toHaveCSS('color', 'rgb(11, 13, 15)');
+      await expect(chip).toHaveCSS('background-color', 'rgb(245, 242, 236)');
+      await expect(chip).toHaveCSS('font-size', '13px');
+    }
     await expect(page.getByRole('button', { name: 'Edit details', exact: true })).toBeVisible();
     await expect(page.getByRole('button', { name: 'Build Sale Packet', exact: true })).toBeVisible();
     await expect(page.getByRole('button', { name: 'Move', exact: true })).toBeHidden();

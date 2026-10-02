@@ -35,7 +35,7 @@ for (const viewport of [
     }
     await expect(page.locator('[data-sonner-toast]')).toHaveCount(0);
     await page.screenshot({ path: info.outputPath(`workspace-before-horse-${viewport.name}.png`) });
-    for (const route of ['horses', 'documents', 'reports', 'billing']) {
+    for (const route of ['horses', 'documents', 'reports', 'billing', 'reminders']) {
       await page.goto(`/app/${route}`);
       await expect(page.locator('main.xs-page').getByRole('heading').first()).toBeVisible();
       await page.screenshot({ path: info.outputPath(`workspace-before-${route}-${viewport.name}.png`) });

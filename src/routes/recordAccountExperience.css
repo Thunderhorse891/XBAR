@@ -103,6 +103,15 @@
   align-items: flex-start;
 }
 
+/* Light-surface status inks cannot sit directly on the graphite hero.
+   Keep every explicit status label on an opaque, high-contrast surface. */
+.record-profile .xs-objhead .xs-chip {
+  background: var(--xbar-warm-white);
+  color: var(--xbar-black);
+  border-color: var(--xbar-silver);
+  font-size: var(--type-small);
+}
+
 .record-profile .xs-tabbar {
   max-width: 100%;
   min-width: 0;

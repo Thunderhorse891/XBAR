@@ -36,7 +36,7 @@ h6 {
   overflow-wrap: anywhere;
 }
 
-.xs-shell :is(h1, .page-title, .xs-title, .xs-page-title, .xs-objhead__name),
+.xs-shell .xs-page :is(h1, .page-title, .xs-title, .xs-page-title, .xs-objhead__name),
 .clean-entry-shell h1,
 .checkout-route h1 {
   font-family: var(--font-ui);
@@ -46,7 +46,7 @@ h6 {
   letter-spacing: var(--type-heading-tracking);
 }
 
-.xs-shell :is(h2, .panel__title, .xs-card__title, .xs-section-title),
+.xs-shell .xs-page :is(h2, .panel__title, .xs-card__title, .xs-section-title),
 .clean-entry-shell h2,
 .checkout-route h2 {
   font-family: var(--font-ui);
@@ -56,7 +56,7 @@ h6 {
   letter-spacing: var(--type-heading-tracking);
 }
 
-.xs-shell :is(h3, h4),
+.xs-shell .xs-page :is(h3, h4),
 .clean-entry-shell :is(h3, h4),
 .checkout-route :is(h3, h4) {
   font-family: var(--font-ui);
@@ -66,7 +66,7 @@ h6 {
   letter-spacing: var(--type-heading-tracking);
 }
 
-.xs-shell .xs-hero__headline,
+.xs-shell .xs-page .xs-hero__headline,
 .clean-entry-shell .clean-login-visual h2 {
   font-size: var(--type-hero-title);
 }
