@@ -20,6 +20,7 @@ import { buildSaleHold } from '@/lib/saleTrustEngine';
 import { buildPacketCredential } from '@/lib/localSalePacketGenerator';
 import { toPacketDisclosure } from '@/lib/salePacketDisclosure';
 import { onWorkspaceSettled, vaultOwnerId } from '@/lib/vaultOwner';
+import { clearCloudDeletions, queueCloudDeletions } from '@/lib/cloudDeletionQueue';
 import { readRecordsOwner, rememberRecordsOwner } from '@/lib/recordsOwner';
 import { featureGate } from '@/lib/commercialEngine';
 import { hasActivePaidPlan, isCurrentPaidPlan } from '@/lib/subscriptionDecision';
@@ -250,6 +251,8 @@ export const useXbarStore = create<XbarStore>()(
         // Replace every data slice with the empty initial state. Actions are not
         // part of initialState, so they are preserved by the shallow merge.
         set({ ...initialState });
+        // The queued ids named records that are gone from this device now.
+        clearCloudDeletions();
       },
       updateWorkspaceProfile: (patch) => {
         const deniedMessage = requireRoleCapability(get().currentRole, 'manageSettings');
@@ -1894,6 +1897,7 @@ export const useXbarStore = create<XbarStore>()(
           ranchAssets: state.ranchAssets.filter((a) => a.id !== assetId),
           auditEvents: [auditEvent, ...state.auditEvents].slice(0, 500),
         });
+        queueCloudDeletions([{ table: 'ranch_assets', id: assetId }]);
         return { ok: true, message: `${asset.name} removed from equipment.` };
       },
       addHorseNote: (horseId, note) => {
@@ -2221,6 +2225,7 @@ export const useXbarStore = create<XbarStore>()(
         const deniedMessage = requireRoleCapability(get().currentRole, 'editHorse');
         if (deniedMessage) return { ok: false, message: deniedMessage };
         const removedHorse = get().horses.find((h) => h.id === horseId);
+        const before = get();
         set((state) => {
           const horses = state.horses.filter((h) => h.id !== horseId);
           // Cascade the horse's financial records so the ledger and the Money
@@ -2246,6 +2251,17 @@ export const useXbarStore = create<XbarStore>()(
             ].slice(0, 500),
           };
         });
+        // A cloud save no longer deletes what this device merely lacks, so the
+        // deletion has to be queued -- the horse and the rows it cascaded to.
+        queueCloudDeletions([
+          { table: 'horses', id: horseId },
+          ...before.salesLeads
+            .filter((lead) => lead.horseId === horseId)
+            .map((lead) => ({ table: 'sales_leads' as const, id: lead.id })),
+          ...before.expenseReceipts
+            .filter((receipt) => receipt.horseId === horseId)
+            .map((receipt) => ({ table: 'expense_receipts' as const, id: receipt.id })),
+        ]);
         return { ok: true, message: 'Horse removed from records.', id: horseId };
       },
       updateMedicalEvent: (horseId, eventId, patch) => {
@@ -3002,6 +3018,9 @@ export const useXbarStore = create<XbarStore>()(
         }
         const nextState = restorePersistedState(payload);
         set(nextState);
+        // A pull or a restore replaces the records wholesale; deletions queued
+        // against the set it replaced are not this one's to apply.
+        clearCloudDeletions();
         /*
          * These records now belong to whoever imported them, and only this
          * marker can say so later. A cloud import REPLACES the local-only

@@ -97,6 +97,9 @@ for (const scenario of [
     writes.length = 0;
     saving = true;
     await page.getByRole('button', { name: 'Push cloud', exact: true }).click();
+    // Push cloud replaces the cloud copy, so it asks first (audit F01).
+    await page.getByRole('checkbox', { name: 'I want the cloud to match this device.' }).check();
+    await page.getByRole('button', { name: 'Push and replace cloud', exact: true }).click();
     if (scenario !== 'shared-save') {
       await expect(page.getByText('Cloud sync failed', { exact: true })).toBeVisible();
       expect(writes).toEqual([]);

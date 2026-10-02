@@ -1,5 +1,6 @@
 import { useEffect, useRef } from 'react';
 import { createLatestWriteGate } from '@/lib/authBootstrap';
+import { acknowledgeCloudDeletions, pendingCloudDeletions } from '@/lib/cloudDeletionQueue';
 import { loadWorkspaceBackupFromCloud, saveWorkspaceBackupToCloud } from '@/lib/cloudWorkspace';
 import { decideCloudReconciliation, serializeWorkspaceBackup } from '@/lib/cloudSyncPolicy';
 import { promoteLocalVaultFiles } from '@/lib/workspacePromotion';
@@ -175,6 +176,10 @@ export function CloudBootstrap() {
 
     const hydrate = async () => {
       const local = exportWorkspaceBackup();
+      // Captured with `local`, before any await: a deletion made while the cloud
+      // copy loads is not reflected in `local`, so it must not be acknowledged
+      // by a push of `local`. It stays queued for the first autosave instead.
+      const deletions = pendingCloudDeletions();
       setSyncState('syncing', 'Reconciling this ranch with cloud records...');
       const remote = await loadWorkspaceBackupFromCloud();
       if (!owns()) return;
@@ -195,7 +200,8 @@ export function CloudBootstrap() {
       }
 
       if (decision === 'push-local') {
-        const saved = await saveWorkspaceBackupToCloud(local);
+        const saved = await saveWorkspaceBackupToCloud(local, { deletions });
+        if (saved.ok && saved.deletionsApplied) acknowledgeCloudDeletions(deletions);
         if (!owns()) return;
         if (saved.ok && saved.updatedAt) setLastSyncAt(saved.updatedAt);
         if (saved.ok && saved.workspaceId && saved.workspaceId !== workspaceId) {
@@ -344,7 +350,16 @@ export function CloudBootstrap() {
       if (signature === lastPersistedSignatureRef.current) return;
       saving = true;
       setSyncState('syncing', 'Saving ranch changes to cloud...');
-      const result = await saveWorkspaceBackupToCloud(backup);
+      /*
+       * Only what a person deleted is deleted. This device's copy can be older
+       * than the cloud's -- another phone, or a server-side import, may have
+       * added rows since it loaded -- so a row it lacks is not a row to remove.
+       * The queue is captured before the request and only that capture is
+       * acknowledged: a deletion made while the save is in flight is not in it.
+       */
+      const deletions = pendingCloudDeletions();
+      const result = await saveWorkspaceBackupToCloud(backup, { deletions });
+      if (result.ok && result.deletionsApplied) acknowledgeCloudDeletions(deletions);
       saving = false;
       if (disposed) return;
       /*
