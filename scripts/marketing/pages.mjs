@@ -7,7 +7,7 @@ import { esc, APP_LOGIN, APP_SIGNUP, SITE_ORIGIN } from './render.mjs';
 import { marketingPlans } from './pricing-data.mjs';
 import { cinematicHome } from './home.mjs';
 
-export const CONTENT_UPDATED = '2026-07-13';
+export const CONTENT_UPDATED = '2026-10-02';
 
 const signup = (plan) => `${APP_SIGNUP}${plan ? `&plan=${encodeURIComponent(plan)}` : ''}`;
 
@@ -220,10 +220,10 @@ const pricing = {
       mainEntity: [
         {
           '@type': 'Question',
-          name: 'Can I start before cloud sync is configured?',
+          name: 'Do I need an account to use XBAR?',
           acceptedAnswer: {
             '@type': 'Answer',
-            text: 'Yes. XBAR has a local-first workspace, so you can evaluate the system and begin organizing records before enabling cloud services.',
+            text: 'Yes. Create an XBAR account and complete workspace setup to use the hosted app. You can view the product tour and fictional sample sale packet without an account.',
           },
         },
         {
@@ -256,11 +256,12 @@ const pricing = {
 
 <section class="section section--flush">
   <div class="wrap">
+    <p class="intro">Monthly billing is available. Annual billing is not currently offered. Prices below are in USD; review the total and recurring billing details in Stripe before subscribing.</p>
     <div class="plans">
       ${marketingPlans
         .map(
           (plan) => `<article class="plan${plan.featured ? ' plan--featured' : ''}">
-        ${plan.featured ? '<span class="plan__badge">Most chosen</span>' : ''}
+        ${plan.featured ? '<span class="plan__badge">Professional</span>' : ''}
         <h2 style="font-family:var(--font-ui);font-size:20px">${esc(plan.tier)}</h2>
         <p class="plan__fit">${esc(plan.fit)}</p>
         <p class="plan__price">$${plan.monthlyRate}<small>/month</small></p>
@@ -282,7 +283,6 @@ const pricing = {
         <thead><tr><th scope="col">Capacity</th>${marketingPlans.map((plan) => `<th scope="col">${esc(plan.tier)}</th>`).join('')}</tr></thead>
         <tbody>
           <tr><th scope="row">Monthly price</th>${marketingPlans.map((plan) => `<td>$${plan.monthlyRate}</td>`).join('')}</tr>
-          <tr><th scope="row">Annual price (2 months free)</th>${marketingPlans.map((plan) => `<td>$${plan.annualRate}</td>`).join('')}</tr>
           <tr><th scope="row">Horses</th>${marketingPlans.map((plan) => `<td>${plan.limits.horseLimit.toLocaleString('en-US')}</td>`).join('')}</tr>
           <tr><th scope="row">Team seats</th>${marketingPlans.map((plan) => `<td>${plan.limits.seatLimit}</td>`).join('')}</tr>
           <tr><th scope="row">Client seats</th>${marketingPlans.map((plan) => `<td>${plan.limits.sharedAccessSeatLimit}</td>`).join('')}</tr>
@@ -299,14 +299,14 @@ const pricing = {
   <div class="wrap">
     <h2>Pricing questions</h2>
     <div class="faq" style="margin-top:22px">
-      <details><summary>Can I start before cloud sync is configured?</summary><p>Yes. XBAR has a local-first workspace, so you can evaluate the system and begin organizing records before enabling cloud services.</p></details>
+      <details><summary>Do I need an account to use XBAR?</summary><p>Yes. Create an XBAR account and complete workspace setup to use the hosted app. You can view the <a href="/demo">product tour</a> and fictional sample sale packet without an account.</p></details>
       <details><summary>What happens to my records if I change plans?</summary><p>Your records stay intact. Plans change capacity and collaboration access; they do not erase the operating history you built.</p></details>
       <details><summary>Is XBAR only for large operations?</summary><p>No. Starter is designed for a smaller records-driven operation. Professional and Ranch Ops add the collaboration, sale-readiness, and capacity larger programs need.</p></details>
       <details><summary>How does checkout work?</summary><p>A workspace owner reviews the plan inside XBAR and completes the plan change through secure Stripe checkout.</p></details>
     </div>
   </div>
 </section>
-${ctaBlock('Try it with your own records.', 'Create a workspace, upload a few documents, and see the review pipeline work before you pick a plan.')}`,
+${ctaBlock('Try it with your own records.', 'Create an account, set up your workspace, and review the access and plan options shown in XBAR.')}`,
 };
 
 /* ------------------------------------------------------------ solutions */
@@ -831,9 +831,9 @@ const demo = {
   <div>
     <p class="kicker">Product tour</p>
     <h1>Inspect the product before you register.</h1>
-    <p class="lead">No form, no email gate. This page walks the core workflow — and because XBAR is local-first, creating a workspace to try it with your own documents costs nothing and requires no cloud account.</p>
+    <p class="lead">No account is needed to view this tour. Explore example screens and a fictional sale packet below. To use the hosted app with your own records, create an XBAR account and complete workspace setup.</p>
     <div class="hero-actions">
-      <a class="btn btn--primary" href="${APP_SIGNUP}" rel="nofollow">Open a local-first workspace</a>
+      <a class="btn btn--primary" href="${APP_SIGNUP}" rel="nofollow">Create an account</a>
       <a class="btn" href="/samples/sample-sale-packet.html">View the sample sale packet</a>
     </div>
   </div>
@@ -863,12 +863,11 @@ const demo = {
 <section class="section">
   <div class="wrap">
     <h2>Real screens, start to finish</h2>
-    <p class="intro">Every image on this page is a screenshot of the shipped application, captured by scripting the real workflow — workspace setup, the global Create flow, and the resulting records.</p>
+    <p class="intro">These example screens were captured from the application using a browser-local demonstration workspace. The hosted app starts with account signup; its sign-in and setup screens may differ from these examples.</p>
     <div class="grid grid--2">
-      ${productShot('app-workspace-setup.jpg', 'Screenshot of the XBAR workspace setup form with business, ranch, owner, and location fields', 'Local-first workspace setup — no cloud account required to start.')}
+      ${productShot('app-workspace-setup.jpg', 'Screenshot of the XBAR workspace setup form with business, ranch, owner, and location fields', 'Example workspace setup. In the hosted app, create an account before setting up your workspace.')}
       ${productShot('app-quick-create-horse.jpg', 'Screenshot of the XBAR global Create drawer adding a horse named Example Doc Bar', 'The global Create flow — every action persists to the real record store.')}
       ${productShot('app-dashboard.jpg', 'Screenshot of the XBAR dashboard after workspace setup showing ranch status and getting-started guidance', 'The dashboard reflecting real workspace state.')}
-      ${productShot('app-login.jpg', 'Screenshot of the XBAR sign-in screen with local-first workspace option', 'Sign-in — cloud sync is optional and additive.')}
     </div>
   </div>
 </section>
@@ -886,15 +885,15 @@ const demo = {
 <section class="section">
   <div class="wrap">
     <h2>4 · Then try it with your own records</h2>
-    <p class="intro">XBAR starts as a local-first workspace in your browser: create it, add a horse, upload a document, and watch the review pipeline work — before any plan decision or cloud configuration.</p>
+    <p class="intro">Create an account, complete workspace setup, then review the access and plan options shown in the app. When your workspace is ready, add a horse and upload a document for review.</p>
     <div class="grid grid--3">
-      <div class="card"><h3>Create a workspace</h3><p>One click, runs in your browser, no credit card.</p></div>
+      <div class="card"><h3>Create an account &amp; workspace</h3><p>Sign up with your email, follow any confirmation instructions, and complete workspace setup.</p></div>
       <div class="card"><h3>Add a horse &amp; upload a document</h3><p>Watch OCR extract details and the review queue ask for your confirmation.</p></div>
       <div class="card"><h3>Check the record</h3><p>See gaps, care signals, and sale-readiness computed from what you actually added.</p></div>
     </div>
   </div>
 </section>
-${ctaBlock('The tour is the product.', 'Everything shown here is shipped behavior — open a workspace and verify it yourself.')}`,
+${ctaBlock('Ready to use your own records?', 'Create an account to set up your workspace and review the available plans.')}`,
 };
 
 /* ------------------------------------------------------------- legal */
@@ -911,6 +910,7 @@ export function legalPage(doc, path) {
   <p class="kicker">Legal</p>
   <h1>${esc(doc.title)}</h1>
   <p class="article-meta">Last updated ${esc(doc.lastUpdated)}</p>
+  <nav aria-label="Legal documents"><a href="/terms">Terms of Service</a> · <a href="/privacy">Privacy Policy</a></nav>
   <div class="callout">${esc(doc.notice)}</div>
   ${doc.sections
     .map(
