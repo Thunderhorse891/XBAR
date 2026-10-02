@@ -1,12 +1,23 @@
 import { useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { ArrowRight, Check, CheckCircle2, Plus } from 'lucide-react';
+import { ArrowRight, CheckCircle2, EyeOff, Plus } from 'lucide-react';
 import { ActionButton, Card, PageHead, SlideOverDrawer, StatusChip } from '@/components/saas';
 import { useUiStore } from '@/store/useUiStore';
 import { useXbarStore } from '@/store/useXbarStore';
 import { buyerFollowUpPath } from '@/lib/buyerRoutes';
 import { buildCareBoardRows, buildTransferGapRows } from '@/lib/dashboardOps';
 import { track, events } from '@/lib/telemetry';
+import { formatDateLabel, localIsoDate } from '@/lib/format';
+import {
+  LEGACY_DISMISS_PREFIX,
+  SNOOZE_CHOICES,
+  TASK_DEFERRALS_KEY,
+  addLocalDays,
+  deferTask,
+  isDeferred,
+  readDeferrals,
+  type TaskDeferrals,
+} from '@/lib/taskDeferrals';
 
 type TaskCategory = 'Documents' | 'Care' | 'Sales';
 type Task = {
@@ -32,20 +43,24 @@ export default function TodayWork() {
   const expenseReceipts = useXbarStore((s) => s.expenseReceipts);
   const salesLeads = useXbarStore((s) => s.salesLeads);
   const [tab, setTab] = useState<'All' | TaskCategory>('All');
-  // Dismissals persist per-day in localStorage: a dismissed task really stays
-  // dismissed across reloads, and returns tomorrow if the record is still due.
-  const dismissKey = `xbar-care-dismissed-${new Date().toISOString().slice(0, 10)}`;
-  const [done, setDone] = useState<Set<string>>(() => {
+  // A task is completed by fixing its record, which clears it for everyone.
+  // Hiding or snoozing one only defers it on this device, until a chosen local
+  // day, and says so (audit F09).
+  const today = localIsoDate();
+  const [deferrals, setDeferrals] = useState<TaskDeferrals>(() => {
     try {
-      return new Set(JSON.parse(localStorage.getItem(dismissKey) ?? '[]') as string[]);
+      for (const key of Object.keys(localStorage)) {
+        if (key.startsWith(LEGACY_DISMISS_PREFIX)) localStorage.removeItem(key);
+      }
+      return readDeferrals(localStorage.getItem(TASK_DEFERRALS_KEY), localIsoDate());
     } catch {
-      return new Set();
+      return {};
     }
   });
   const [open, setOpen] = useState<Task | null>(null);
   const toast = (m: string) => pushToast({ title: 'Care Tasks', message: m, tone: 'success' });
 
-  const tasks = useMemo<Task[]>(() => {
+  const allTasks = useMemo<Task[]>(() => {
     const out: Task[] = [];
     buildTransferGapRows(horses, ownershipRecords, documents).forEach((g) =>
       out.push({
@@ -102,18 +117,42 @@ export default function TodayWork() {
           due: l.nextFollowUp ?? 'Soon',
         }),
       );
-    return out.filter((t) => !done.has(t.id));
-  }, [horses, documents, ownershipRecords, expenseReceipts, salesLeads, done]);
+    return out;
+  }, [horses, documents, ownershipRecords, expenseReceipts, salesLeads]);
+  const tasks = allTasks.filter((t) => !isDeferred(deferrals, t.id, today));
+  const hiddenCount = allTasks.length - tasks.length;
 
   const filtered = tab === 'All' ? tasks : tasks.filter((t) => t.category === tab);
-  const markDone = (id: string) => {
-    setDone((cur) => {
-      const next = new Set(cur).add(id);
-      localStorage.setItem(dismissKey, JSON.stringify([...next]));
+  const writeDeferrals = (next: TaskDeferrals) => {
+    try {
+      if (Object.keys(next).length) localStorage.setItem(TASK_DEFERRALS_KEY, JSON.stringify(next));
+      else localStorage.removeItem(TASK_DEFERRALS_KEY);
+    } catch {
+      // Storage unavailable (private mode): the deferral holds for this visit only.
+    }
+  };
+  const defer = (task: Task, days: number, kind: 'hide' | 'snooze') => {
+    const until = addLocalDays(today, days);
+    setDeferrals((cur) => {
+      const next = deferTask(cur, task.id, until);
+      writeDeferrals(next);
       return next;
     });
+    track(kind === 'hide' ? events.taskDismissed : events.taskSnoozed, {
+      id: task.id,
+      category: task.category,
+      until,
+    });
     setOpen(null);
-    toast('Dismissed for today — it comes back tomorrow if the record is still due');
+    toast(
+      kind === 'hide'
+        ? 'Hidden on this device until tomorrow. It clears for everyone once the record is fixed.'
+        : `Snoozed on this device until ${formatDateLabel(until)}. It clears for everyone once the record is fixed.`,
+    );
+  };
+  const showHidden = () => {
+    setDeferrals({});
+    writeDeferrals({});
   };
 
   return (
@@ -161,6 +200,11 @@ export default function TodayWork() {
               ))}
             </div>
             <span style={{ flex: 1 }} />
+            {hiddenCount > 0 ? (
+              <button type="button" className="xs-fchip" onClick={showHidden}>
+                {hiddenCount} hidden · Show
+              </button>
+            ) : null}
             <span className="xs-card__sub">
               {filtered.length} task{filtered.length === 1 ? '' : 's'}
             </span>
@@ -197,8 +241,14 @@ export default function TodayWork() {
                   <div className="xs-task__right" onClick={(e) => e.stopPropagation()}>
                     <span className="xs-task__due">{t.due}</span>
                     <div className="xs-task__quick">
-                      <button type="button" className="xs-quickbtn" title="Mark done" onClick={() => markDone(t.id)}>
-                        <CheckCircle2 size={15} />
+                      <button
+                        type="button"
+                        className="xs-quickbtn"
+                        title="Hide for today on this device"
+                        aria-label="Hide for today on this device"
+                        onClick={() => defer(t, 1, 'hide')}
+                      >
+                        <EyeOff size={15} />
                       </button>
                       <button type="button" className="xs-quickbtn" title="Open" onClick={() => setOpen(t)}>
                         <ArrowRight size={15} />
@@ -220,23 +270,17 @@ export default function TodayWork() {
         footer={
           open ? (
             <>
-              <ActionButton
-                onClick={() => {
-                  toast('Snoozed');
-                  setOpen(null);
-                }}
-              >
-                Snooze
-              </ActionButton>
+              <ActionButton onClick={() => defer(open, 1, 'hide')}>Hide for today</ActionButton>
               <ActionButton
                 variant="primary"
-                icon={<Check size={15} />}
+                icon={<ArrowRight size={15} />}
                 onClick={() => {
-                  track(events.taskCompleted, { id: open.id, category: open.category });
-                  markDone(open.id);
+                  const to = open.to;
+                  setOpen(null);
+                  navigate(to);
                 }}
               >
-                Mark Done
+                Fix it now
               </ActionButton>
             </>
           ) : null
@@ -265,18 +309,23 @@ export default function TodayWork() {
                 {open.detail}
               </p>
             )}
+            <p className="xs-muted" style={{ fontSize: 13 }}>
+              This task clears for everyone once its record is fixed. Snoozing only hides it on this device.
+            </p>
             <div className="xs-field">
-              <button
-                type="button"
-                className="xs-fieldbtn"
-                onClick={() => {
-                  const to = open.to;
-                  setOpen(null);
-                  navigate(to);
-                }}
-              >
-                Open linked record
-              </button>
+              <span className="xs-section-label">Snooze until</span>
+              <div className="xs-fchips">
+                {SNOOZE_CHOICES.map((choice) => (
+                  <button
+                    key={choice.days}
+                    type="button"
+                    className="xs-fchip"
+                    onClick={() => defer(open, choice.days, 'snooze')}
+                  >
+                    {choice.label}
+                  </button>
+                ))}
+              </div>
             </div>
           </>
         ) : null}
