@@ -452,6 +452,18 @@ psql -v ON_ERROR_STOP=1 "$DATABASE_URL" -f supabase/checks/workspace-keyed-stora
 psql -1 -v ON_ERROR_STOP=1 "$DATABASE_URL" -f supabase/migrations/20261002090000_seat_reservation_consumed_on_accept.sql
 #    Prove it with the real trigger and acceptance RPC (all rolled back):
 psql -v ON_ERROR_STOP=1 "$DATABASE_URL" -f supabase/checks/seat-reservation.sql
+
+# 13. Account deletion is decided at the database (audit F03). Adds the
+#    deletion hold (a hold refuses new members while the owner's account is
+#    deleted, under the seat lock) and the durable deletion receipt. Additive:
+#    two tables, three service-role functions, two triggers. Apply BEFORE
+#    deploying the /api/account-delete that calls the hold RPC -- without it,
+#    account deletion refuses with "Nothing was changed".
+psql -1 -v ON_ERROR_STOP=1 "$DATABASE_URL" -f supabase/migrations/20261002100000_account_deletion_hold.sql
+psql -v ON_ERROR_STOP=1 "$DATABASE_URL" -f supabase/checks/account-deletion-hold.sql
+#    Cleanup that did not finish stays on record:
+#      select user_id, status, storage_leftovers, requested_at
+#      from public.account_deletion_receipts where status <> 'complete';
 ```
 
 **(4) and (5) are prerequisites for billing, not optimizations to schedule
