@@ -7,7 +7,7 @@ import { buyerFollowUpPath } from '@/lib/buyerRoutes';
 import { localIsoDate } from '@/lib/format';
 import { useUiStore } from '@/store/useUiStore';
 import { useXbarStore } from '@/store/useXbarStore';
-import { parseReceiptQuantity } from '@/store/xbarStoreLogic';
+import { PRICED_BY_UNIT_CATEGORIES, parseReceiptQuantity } from '@/store/xbarStoreLogic';
 import { events, track } from '@/lib/telemetry';
 import type {
   AssetCategory,
@@ -173,7 +173,6 @@ const EXPENSE_CATEGORIES: ExpenseCategory[] = [
   'Travel',
 ];
 // Receipts bought by the unit, whose price per unit Costs tracks per supplier.
-const FEED_PRICED_CATEGORIES: ReadonlySet<ExpenseCategory> = new Set(['Feed', 'Supplements', 'Bedding']);
 const MEDICAL_EVENT_TYPES: MedicalEventType[] = [
   'Vet visit',
   'Vaccine',
@@ -319,8 +318,8 @@ export function GlobalCreateDrawer() {
     }
     const category = (f.cat as ExpenseCategory) ?? 'Feed';
     // Only feed-type receipts carry a quantity; the store refuses half a pair.
-    const qtyText = FEED_PRICED_CATEGORIES.has(category) ? (f.qty ?? '').trim() : '';
-    const unit = FEED_PRICED_CATEGORIES.has(category) ? (f.unit ?? '').trim() : '';
+    const qtyText = PRICED_BY_UNIT_CATEGORIES.has(category) ? (f.qty ?? '').trim() : '';
+    const unit = PRICED_BY_UNIT_CATEGORIES.has(category) ? (f.unit ?? '').trim() : '';
     setBusy(true);
     const result = await addExpenseReceipt({
       title: desc,
@@ -651,7 +650,7 @@ export function GlobalCreateDrawer() {
           <Text label="Amount" placeholder="$" value={f.amt ?? ''} onChange={set('amt')} />
           <Pick label="Category" value={f.cat ?? 'Feed'} onChange={set('cat')} options={EXPENSE_CATEGORIES} />
           <Text label="Purchase date" type="date" value={f.date ?? todayIso()} onChange={set('date')} />
-          {FEED_PRICED_CATEGORIES.has((f.cat as ExpenseCategory) ?? 'Feed') ? (
+          {PRICED_BY_UNIT_CATEGORIES.has((f.cat as ExpenseCategory) ?? 'Feed') ? (
             <>
               <Text label="Quantity (optional)" placeholder="e.g. 40" value={f.qty ?? ''} onChange={set('qty')} />
               <Text

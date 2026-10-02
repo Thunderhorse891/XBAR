@@ -26,18 +26,17 @@ export default function Reminders() {
   const [filter, setFilter] = useState<ReminderFilter>('All');
   const [query, setQuery] = useState('');
 
-  const briefing = useMemo(
-    () =>
-      buildOperationsPriorities({
-        careRows: buildCareBoardRows(horses, documents, expenseReceipts),
-        transferRows: buildTransferGapRows(horses, ownershipRecords, documents),
-        documents,
-        salesLeads,
-        horseNames: Object.fromEntries(horses.map((horse) => [horse.id, horse.name])),
-        expiringDocuments: expiryReminderItems(buildExpiryRadar(documents, horses)),
-      }),
-    [documents, expenseReceipts, horses, ownershipRecords, salesLeads],
-  );
+  const briefing = useMemo(() => {
+    const careRows = buildCareBoardRows(horses, documents, expenseReceipts);
+    return buildOperationsPriorities({
+      careRows,
+      transferRows: buildTransferGapRows(horses, ownershipRecords, documents),
+      documents,
+      salesLeads,
+      horseNames: Object.fromEntries(horses.map((horse) => [horse.id, horse.name])),
+      expiringDocuments: expiryReminderItems(buildExpiryRadar(documents, horses), careRows),
+    });
+  }, [documents, expenseReceipts, horses, ownershipRecords, salesLeads]);
 
   const digest = useMemo(() => buildAlertDigest(briefing.items), [briefing.items]);
   const revenueRisk = useMemo(

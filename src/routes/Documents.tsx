@@ -29,6 +29,7 @@ import {
   computeHeroStatus,
   computeStageBuckets,
   computeStageCounts,
+  stageFromParam,
   type PipelineStage,
 } from '@/features/documents/pipeline';
 
@@ -90,15 +91,19 @@ export default function Documents() {
   const fileInputRef = useRef<HTMLInputElement | null>(null);
 
   const uploadOpen = searchParams.get('upload') === '1';
+  // ?stage= opens a named stage, e.g. Processing for an upload still being read.
+  const requestedStage = stageFromParam(searchParams.get('stage'));
   const [activeStage, setActiveStage] = useState<PipelineStage>(
-    uploadOpen || (documents.length === 0 && canUploadDocuments) ? 'Upload' : 'Review',
+    uploadOpen ? 'Upload' : (requestedStage ?? (documents.length === 0 && canUploadDocuments ? 'Upload' : 'Review')),
   );
 
   useEffect(() => {
     if (uploadOpen) {
       setActiveStage('Upload');
+    } else if (requestedStage) {
+      setActiveStage(requestedStage);
     }
-  }, [uploadOpen]);
+  }, [uploadOpen, requestedStage]);
 
   // Stage buckets — each document lives in exactly one workflow stage.
   const stageBuckets = useMemo(

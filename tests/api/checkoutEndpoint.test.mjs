@@ -217,6 +217,8 @@ const FALLBACK_ORIGIN = 'https://xbar-horse-management-app.vercel.app';
 function expectedSessionParams({ tier, priceId, seatCount, billingPeriod, customerId, userId = 'user_admin' }) {
   return {
     mode: 'subscription',
+    // Pinned: a delayed method would complete Checkout before it settles.
+    payment_method_types: ['card'],
     customer: customerId,
     line_items: [{ price: priceId, quantity: seatCount }],
     success_url: `${FALLBACK_ORIGIN}?checkout=success`,
