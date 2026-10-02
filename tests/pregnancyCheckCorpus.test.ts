@@ -3,6 +3,7 @@ import { readFile } from 'node:fs/promises';
 import test from 'node:test';
 import { breedingEntryDetails } from '../src/lib/breedingEntry.js';
 import {
+  buildBreedingProgram,
   buildMareBreedingState,
   currentPregnancyOutcome,
   pregnancyCheckOutcome,
@@ -113,6 +114,54 @@ test("the audit's mare reads as open on the program screen, not in foal", () => 
   assert.equal(buildMareBreedingState(mare('Negative — mare is not pregnant'), now).status, 'open');
   assert.equal(buildMareBreedingState(mare('Confirmed positive, strong heartbeat'), now).status, 'in-foal');
   assert.equal(buildMareBreedingState(mare('No heartbeat detected, recheck'), now).status, 'bred-awaiting-check');
+});
+
+test('time since a cover is not a pregnancy: near term needs a confirmed check', () => {
+  // Covered 320 days ago -- foaling would be ~20 days out if she took.
+  const now = new Date('2027-02-15T12:00:00Z');
+  const cover = {
+    id: 'cover',
+    date: '2026-04-01',
+    title: 'Bred to Thunder',
+    summary: '',
+    owner: 'Vet',
+    category: 'Breeding',
+    details: { recordType: 'breeding' },
+  } as TimelineEvent;
+  const economics = { studFee: 0, bookedMares: 1, breedingCosts: 0, mareProductionValue: 0, foalProjectedValue: 18000 };
+  const mare = (checks: TimelineEvent[]) =>
+    ({
+      id: 'm1',
+      name: 'Glory',
+      sex: 'Mare',
+      breedingTimeline: [...checks, cover],
+      breedingEconomics: economics,
+    }) as unknown as HorseRecord;
+
+  for (const [label, checks] of [
+    ['no check at all', []],
+    ['only an awaiting-result check', [check('Ultrasound', 'Sample sent to lab', 'pending', '2026-04-20')]],
+    [
+      'only an unreadable note',
+      [check('Pregnancy check', 'Heartbeat seen but fluid noted, possibly open', undefined, '2026-04-20')],
+    ],
+  ] as Array<[string, TimelineEvent[]]>) {
+    const state = buildMareBreedingState(mare(checks), now);
+    assert.equal(state.status, 'bred-awaiting-check', label);
+    assert.match(state.actionLabel, /^Confirm pregnancy for Glory \(foaling would be due /, label);
+    const program = buildBreedingProgram([mare(checks)], now);
+    assert.equal(program.inFoal, 0, `${label}: not counted in foal`);
+    assert.equal(program.nearTerm, 0, `${label}: not counted near term`);
+    assert.equal(program.projectedProgramValue, 0, `${label}: no foal value promised`);
+  }
+
+  // The same mare with a confirmed check is near term, and counted.
+  const confirmed = mare([check('Ultrasound', '', 'in-foal', '2026-04-20')]);
+  assert.equal(buildMareBreedingState(confirmed, now).status, 'near-term');
+  const program = buildBreedingProgram([confirmed], now);
+  assert.equal(program.inFoal, 1);
+  assert.equal(program.nearTerm, 1);
+  assert.equal(program.projectedProgramValue, 18000);
 });
 
 test('an entry says what it is, and a check says its result, or it is refused', () => {

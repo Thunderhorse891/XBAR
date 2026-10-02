@@ -371,13 +371,14 @@ export function buildMareBreedingState(horse: HorseRecord, now: Date = new Date(
   // hand her a foaling-kit action months late — surface her for resolution.
   const isOverdueFoaling = daysToFoaling < GESTATION_MEAN_DAYS - GESTATION_LATE_DAYS;
 
-  // A mare counts as "in foal" only with a positive check, or once she is
-  // visibly near term. Bred-but-unconfirmed stays "awaiting check" — the
-  // overdue diagnostics surface the gap instead of overstating the program.
+  // A mare counts as "in foal" -- and so as near term -- only with a positive
+  // check. Elapsed time since a cover is not a pregnancy: an unconfirmed cover
+  // 320 days ago is as likely to have slipped or never taken, so it stays
+  // "awaiting check" and is left out of the in-foal count and program value.
   let status: MareStatus;
   if (isOverdueFoaling) {
     status = 'bred-awaiting-check';
-  } else if (daysToFoaling <= NEAR_TERM_WINDOW_DAYS) {
+  } else if (confirmed && daysToFoaling <= NEAR_TERM_WINDOW_DAYS) {
     status = 'near-term';
   } else if (confirmed) {
     status = 'in-foal';
@@ -393,6 +394,9 @@ export function buildMareBreedingState(horse: HorseRecord, now: Date = new Date(
     actionLabel = `Record foaling outcome for ${horse.name} (past due ${isoDate(expectedFoaling)})`;
   } else if (status === 'near-term') {
     actionLabel = `Prepare foaling kit for ${horse.name} (due ${isoDate(expectedFoaling)})`;
+  } else if (daysToFoaling <= NEAR_TERM_WINDOW_DAYS) {
+    // Unconfirmed, but foaling would be close if she took: confirming is urgent.
+    actionLabel = `Confirm pregnancy for ${horse.name} (foaling would be due ${isoDate(expectedFoaling)})`;
   } else if (overdueCheckpoints.length) {
     actionLabel = `${horse.name}: ${overdueCheckpoints[0]!.label} overdue`;
   } else if (status === 'bred-awaiting-check') {
