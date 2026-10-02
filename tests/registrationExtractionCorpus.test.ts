@@ -20,6 +20,7 @@ import { extractRegistrationFields } from '../src/lib/registrationExtraction.js'
  */
 
 type ExtractionCase = {
+  review?: boolean;
   id: string;
   text: string;
   name?: string;
@@ -29,6 +30,61 @@ type ExtractionCase = {
 };
 
 const CORPUS: ExtractionCase[] = [
+  {
+    id: 'registration-long-id',
+    text: 'Registered Name: BLUE MOON\nRegistration Number: 12345678901234567',
+    name: 'BLUE MOON',
+    reg: '12345678901234567',
+  },
+  {
+    id: 'subject-names-conflict',
+    text: 'Registered Name: BLUE MOON\nRegistration Number: 1234567\nRegistered Name: RED SUN\nRegistration Number: 7654321',
+    name: 'BLUE MOON',
+    review: true,
+  },
+  {
+    id: 'subject-numbers-conflict',
+    text: 'Registered Name: BLUE MOON\nRegistration Number: 1234567\nRegistration Number: 7654321',
+    name: 'BLUE MOON',
+    review: true,
+  },
+  {
+    id: 'same-subject-repeated',
+    text: 'Registered Name: BLUE MOON\nRegistration Number: 1234567\nRegistered Name: BLUE MOON\nRegistration Number: 1234567',
+    name: 'BLUE MOON',
+    review: false,
+  },
+  {
+    id: 'same-registration-prefix-repeat',
+    text: 'Registered Name: BLUE MOON\nRegistration Number: AQHA1234567\nReg No: 1234567',
+    name: 'BLUE MOON',
+    review: false,
+  },
+  {
+    id: 'same-name-punctuation-repeat',
+    text: 'Registered Name: BLUE-MOON\nRegistration Number: 1234567\nHorse Name: BLUE MOON',
+    name: 'BLUE-MOON',
+    review: false,
+  },
+  {
+    id: 'same-number-other-registry',
+    text: 'Registered Name: BLUE MOON\nRegistration Number: AQHA1234567\nRegistration Number: APHA1234567',
+    name: 'BLUE MOON',
+    review: true,
+  },
+  // Identifiers are evidence, so suffixes must not be silently dropped.
+  {
+    id: 'registration-suffix-aa',
+    text: 'Registered Name: BLUE MOON\nRegistration Number: 1234567AA',
+    name: 'BLUE MOON',
+    reg: '1234567AA',
+  },
+  {
+    id: 'registration-suffix-ab',
+    text: 'Registered Name: BLUE MOON\nRegistration Number: 1234567AB\nSex: Mare',
+    name: 'BLUE MOON',
+    reg: '1234567AB',
+  },
   // --- original #222 defects (separator junk) ---
   { id: 'pipe-lead', text: 'Registered Name | BERRY PEACHY CHIC Reg No 539882319930', name: 'BERRY PEACHY CHIC' },
   { id: 'rule-underscore', text: 'Registered Name ___ BLUE VALENTINE DOT COM', name: 'BLUE VALENTINE DOT COM' },
@@ -179,13 +235,14 @@ test('the extraction corpus holds, every row', () => {
   for (const row of CORPUS) {
     const fields = extractRegistrationFields(row.text);
     const actual = {
+      review: fields.identityReviewRequired ?? false,
       name: fields.horseName,
       reg: fields.registrationNumber,
       sire: fields.sire,
       dam: fields.dam,
     };
 
-    for (const key of ['name', 'reg', 'sire', 'dam'] as const) {
+    for (const key of ['name', 'reg', 'sire', 'dam', 'review'] as const) {
       if (!(key in row)) continue;
       if (actual[key] !== row[key]) {
         failures.push(`${row.id} -> ${key}: got ${JSON.stringify(actual[key])}, want ${JSON.stringify(row[key])}`);

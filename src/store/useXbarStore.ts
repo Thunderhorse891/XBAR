@@ -3,6 +3,7 @@ import { create } from 'zustand';
 import { createJSONStorage, persist } from 'zustand/middleware';
 import {
   buildDocumentRecord,
+  resolveDocumentHorseMatch,
   buildSubscriptionForTier,
   createId,
   createShareAccessToken,
@@ -1035,6 +1036,7 @@ export const useXbarStore = create<XbarStore>()(
                 };
               }),
             );
+            const currentHorses = get().horses;
             let createdHorseBundles =
               !selectedHorse && createHorseFromBatch
                 ? Array.from(
@@ -1060,12 +1062,16 @@ export const useXbarStore = create<XbarStore>()(
                         return null;
                       }
 
-                      const duplicateHorse = state.horses.some(
-                        (horse) =>
-                          horse.name === horseInput.name ||
-                          (horseInput.registrationNumber && horse.registrationNumber === horseInput.registrationNumber),
+                      const resolution = resolveDocumentHorseMatch(
+                        currentHorses,
+                        groupedDocuments.map((document) => document.extractedTextPreview).join('\n'),
+                        {
+                          horseName: horseInput.name,
+                          registrationNumber: horseInput.registrationNumber,
+                          registry: horseInput.registry,
+                        },
                       );
-                      if (duplicateHorse) {
+                      if (resolution.match || resolution.needsReview) {
                         return null;
                       }
 
@@ -1073,7 +1079,10 @@ export const useXbarStore = create<XbarStore>()(
                     })
                     .filter((bundle): bundle is NonNullable<typeof bundle> => Boolean(bundle))
                 : [];
-            const availableHorseSlots = Math.max(0, entitledUsage(state.subscription).horseLimit - state.horses.length);
+            const availableHorseSlots = Math.max(
+              0,
+              entitledUsage(state.subscription).horseLimit - currentHorses.length,
+            );
             const omittedHorseCount = Math.max(0, createdHorseBundles.length - availableHorseSlots);
             createdHorseBundles = createdHorseBundles.slice(0, availableHorseSlots);
 
@@ -1244,6 +1253,14 @@ export const useXbarStore = create<XbarStore>()(
           return { ok: false, message: 'Document not found.' };
         }
 
+        if (document.identityReviewRequired) {
+          return {
+            ok: false,
+            message:
+              'This file contains conflicting horse identities. Upload separate or corrected papers before approving.',
+          };
+        }
+
         const nextHorseId = horseId ?? document.horseId;
         if (!nextHorseId) {
           return { ok: false, message: 'Choose a horse before approving this document.' };
@@ -1260,12 +1277,6 @@ export const useXbarStore = create<XbarStore>()(
           state: 'Ready',
           confidence: Math.max(document.confidence, 0.92),
           duplicateRisk: document.duplicateRisk === 'Possible Duplicate' ? 'Review' : document.duplicateRisk,
-          entities: {
-            ...document.entities,
-            horseName: matchedHorse.name,
-            ownerName: document.entities.ownerName ?? matchedHorse.owner,
-            registrationNumber: document.entities.registrationNumber ?? matchedHorse.registrationNumber,
-          },
           summary: `${document.title} is approved and attached to ${matchedHorse.name}.`,
         };
 
@@ -1296,21 +1307,34 @@ export const useXbarStore = create<XbarStore>()(
         if (!document) {
           return { ok: false, message: 'Document not found.' };
         }
+        if (document.identityReviewRequired) {
+          return {
+            ok: false,
+            message:
+              'This file contains conflicting horse identities. Upload separate or corrected papers before approving.',
+          };
+        }
+
         if (document.horseId) {
           return { ok: false, message: 'This document is already linked to a horse.' };
         }
 
-        // Don't create a duplicate: if a horse matching this paper's registration
-        // number or name already exists, attach the document to it instead.
-        const norm = (value: string | undefined) => (value ?? '').trim().toUpperCase().replace(/\s+/g, ' ');
+        // Re-check current profiles with the same fail-closed identity rule as
+        // upload. A paper left in review can outlive changes to the herd.
         const proposed = buildHorseInputFromDocuments([document], state.workspaceProfile);
-        const extractedReg = norm(document.entities.registrationNumber);
-        const proposedName = norm(proposed?.name);
-        const existingHorse = state.horses.find((horse) => {
-          const regMatch = Boolean(extractedReg) && norm(horse.registrationNumber) === extractedReg;
-          const nameMatch = Boolean(proposedName) && norm(horse.name) === proposedName;
-          return regMatch || nameMatch;
-        });
+        const resolution = resolveDocumentHorseMatch(
+          state.horses,
+          `${document.title} ${document.extractedTextPreview}`,
+          { ...document.entities, horseName: document.entities.horseName || proposed?.name },
+        );
+        if (resolution.needsReview) {
+          return {
+            ok: false,
+            message:
+              'This paper has conflicting or ambiguous horse identity. Compare the source and choose the horse explicitly before approving it.',
+          };
+        }
+        const existingHorse = resolution.match?.horse;
         if (existingHorse) {
           set((current) => {
             const nextDocuments = current.documents.map((item) =>

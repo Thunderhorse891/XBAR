@@ -501,8 +501,8 @@ export function extractRegistrationFields(text) {
   const registration = captureField(
     nameFamily.headText,
     [
-      /registration\s*(?:no|number|#)\.?\s*[:#-]?\s*([A-Z]{0,4}[\s-]?\d{4,10}[A-Z]?)/i,
-      /reg\.?\s*(?:no|#)\.?\s*[:#-]?\s*([A-Z]{0,4}[\s-]?\d{4,10}[A-Z]?)/i,
+      /registration\s*(?:no|number|#)\.?\s*[:#-]?\s*([A-Z]{0,4}[\s-]?\d{4,}[A-Z]*)/i,
+      /reg\.?\s*(?:no|#)\.?\s*[:#-]?\s*([A-Z]{0,4}[\s-]?\d{4,}[A-Z]*)/i,
     ],
     { uppercase: true, maxLength: 20 },
   );
@@ -584,7 +584,7 @@ export function extractCogginsFields(text) {
 
   const registration = captureField(
     text,
-    [/registration\s*(?:no|number|#)\.?\s*[:#-]?\s*([A-Z]{0,4}[\s-]?\d{4,10}[A-Z]?)/i],
+    [/registration\s*(?:no|number|#)\.?\s*[:#-]?\s*([A-Z]{0,4}[\s-]?\d{4,}[A-Z]*)/i],
     { uppercase: true, maxLength: 20 },
   );
   if (registration) fields.registrationNumber = { ...registration, value: registration.value.replace(/\s+/g, '') };
@@ -657,7 +657,7 @@ export function extractTransferFields(text) {
 
   const registration = captureField(
     text,
-    [/registration\s*(?:no|number|#)\.?\s*[:#-]?\s*([A-Z]{0,4}[\s-]?\d{4,10}[A-Z]?)/i],
+    [/registration\s*(?:no|number|#)\.?\s*[:#-]?\s*([A-Z]{0,4}[\s-]?\d{4,}[A-Z]*)/i],
     { uppercase: true, maxLength: 20 },
   );
   if (registration) fields.registrationNumber = { ...registration, value: registration.value.replace(/\s+/g, '') };
@@ -701,18 +701,33 @@ export function detectMultipleHorses(text) {
   // way. Pinned by the "two separator-formatted names" pipeline test.
   const explicitPattern = "horse(?:['’]s)?\\s+name|registered\\s+name|animal\\s+name|name\\s+of\\s+horse";
   for (const match of source.matchAll(new RegExp(`\\b(?:${explicitPattern})\\b`, 'gi'))) {
-    const value = labeledField(source.slice(match.index), explicitPattern)?.value?.toLowerCase();
+    const rawName = labeledField(source.slice(match.index), explicitPattern)?.value;
+    const value = rawName
+      ?.toLowerCase()
+      .replace(/[^a-z0-9]+/g, ' ')
+      .replace(/\s+/g, ' ')
+      .trim();
     if (value) names.add(value);
   }
 
   const registrations = new Set();
-  const regMatches = source.matchAll(/registration\s*(?:no|number|#)\.?\s*[:#-]?\s*([A-Z]{0,4}[\s-]?\d{4,10}[A-Z]?)/gi);
+  const regMatches = source.matchAll(/registration\s*(?:no|number|#)\.?\s*[:#-]?\s*([A-Z]{0,4}[\s-]?\d{4,}[A-Z]*)/gi);
   for (const match of regMatches) {
     registrations.add(cleanValue(match[1], { uppercase: true }).replace(/\s+/g, ''));
   }
 
+  const numbers = new Set();
+  const registries = new Set();
+  for (const value of registrations) {
+    const compact = value.replace(/[\s-]/g, '').toUpperCase();
+    const registry = REGISTRIES.map((entry) => entry.toUpperCase()).find(
+      (entry) => compact.startsWith(entry) && /^\d/.test(compact.slice(entry.length)),
+    );
+    numbers.add(registry ? compact.slice(registry.length) : compact);
+    if (registry) registries.add(registry);
+  }
   return {
-    multiple: names.size > 1 || registrations.size > 1,
+    multiple: names.size > 1 || numbers.size > 1 || registries.size > 1,
     horseNames: [...names],
     registrationNumbers: [...registrations],
   };
