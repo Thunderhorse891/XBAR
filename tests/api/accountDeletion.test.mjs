@@ -14,6 +14,7 @@ import {
   heldWorkspaceIds,
   pathsStillReferenced,
 } from '../../api/_lib/account-deletion.js';
+import { verifyAccountDeletionBilling } from '../../api/_lib/account-deletion-billing.js';
 
 test('confirmation requires the exact account email (trimmed, case-insensitive)', () => {
   assert.equal(confirmationSatisfied('rancher@example.com', 'rancher@example.com'), true);
@@ -165,7 +166,10 @@ function deletionFixture(t) {
     const scenario = state.scenario;
     state.calls.push(`${method} ${url.pathname}`);
     const reply = (data, status = 200) =>
-      new Response(JSON.stringify(data), { status, headers: { 'Content-Type': 'application/json' } });
+      new Response(status === 204 ? null : JSON.stringify(data), {
+        status,
+        headers: { 'Content-Type': 'application/json' },
+      });
     const failure = () => reply({ message: 'Fixture database failure', code: 'XX000' }, 400);
 
     if (url.pathname === '/auth/v1/user') return reply({ id: FIXTURE_USER, email: 'owner@example.invalid' });
@@ -175,17 +179,57 @@ function deletionFixture(t) {
       return scenario === 'members'
         ? failure()
         : reply(scenario === 'transfer' ? [{ user_id: '22222222-2222-4222-8222-222222222222', role: 'Admin' }] : []);
-    if (url.pathname === '/rest/v1/rpc/xbar_hold_owned_workspaces_for_deletion') {
+    if (url.pathname === '/rest/v1/rpc/xbar_hold_account_deletion_request') {
+      state.deletionToken = JSON.parse(init.body).p_request_token;
+      assert.match(state.deletionToken, /^[0-9a-f-]{36}$/);
       if (scenario === 'hold') return failure();
       if (scenario === 'joined') return reply({ ok: false, shared: ['ws1'], held: [] });
+      if (scenario === 'ownership-changed') return reply({ ok: true, shared: [], held: ['ws1', 'ws-new'] });
       return reply({ ok: true, shared: [], held: ['ws1'] });
     }
-    if (url.pathname === '/rest/v1/rpc/xbar_release_account_deletion_holds') return reply(1);
+    if (url.pathname === '/rest/v1/rpc/xbar_release_account_deletion_request') {
+      assert.equal(JSON.parse(init.body).p_request_token, state.deletionToken);
+      return reply(1);
+    }
+    if (url.pathname === '/rest/v1/rpc/xbar_confirm_account_deletion_request') {
+      assert.equal(JSON.parse(init.body).p_request_token, state.deletionToken);
+      assert.deepEqual(JSON.parse(init.body).p_workspace_ids, ['ws1']);
+      if (scenario === 'fence-error') return failure();
+      return reply(scenario !== 'fence-lost');
+    }
+    if (url.pathname === '/rest/v1/workspace_subscription_profiles') return reply(null);
     if (url.pathname === '/rest/v1/account_deletion_receipts' && method === 'POST')
       return scenario === 'receipt' ? failure() : reply({ id: 'receipt-1' }, 201);
     if (url.pathname === '/rest/v1/account_deletion_receipts' && method === 'PATCH') {
       state.receiptUpdates.push(JSON.parse(init.body));
       return reply(null, 204);
+    }
+    if (url.pathname === '/rest/v1/rpc/xbar_claim_checkout_lock') {
+      state.claimToken = JSON.parse(init.body).p_token;
+      return scenario === 'billing-lock' ? reply(false) : reply(true);
+    }
+    if (url.pathname === '/rest/v1/workspace_billing_customers' && method === 'GET') {
+      if (scenario === 'billing-read') return failure();
+      if (scenario === 'billing-missing') return reply(null);
+      return reply({
+        workspace_id: 'ws1',
+        stripe_customer_id: scenario === 'billing-active' ? 'cus_active' : '',
+        stripe_subscription_id: scenario === 'billing-active' ? 'sub_active' : '',
+      });
+    }
+    if (url.pathname === '/rest/v1/workspace_billing_customers' && method === 'PATCH') {
+      assert.equal(
+        url.searchParams.get('checkout_lock_token'),
+        `eq.${state.claimToken}`,
+        'only our lease may be changed',
+      );
+      const fields = JSON.parse(init.body);
+      if (fields.checkout_lock_token === null) {
+        state.calls.push('billing-lease-release');
+        return reply(null, 204);
+      }
+      state.calls.push('billing-lease-renew');
+      return reply(scenario === 'billing-lease-lost' ? [] : [{ workspace_id: 'ws1' }]);
     }
     if (url.pathname === '/rest/v1/documents' && method === 'GET')
       return scenario === 'refs'
@@ -249,6 +293,13 @@ test('every refusal before the auth delete changes nothing irreversible', async 
     joined: 409, // someone joined before the hold -- the race, refused at the database
     receipt: 502, // no durable receipt, so no deletion
     refs: 502, // shared file references unreadable
+    'billing-lock': 503, // checkout is in flight
+    'billing-read': 503, // billing mapping unreadable
+    'billing-missing': 503, // a claimed row must exist
+    'billing-lease-lost': 503, // another request took over during a slow read
+    'fence-lost': 503,
+    'fence-error': 503,
+    'ownership-changed': 503, // newly owned workspaces were never leased
   };
   for (const [scenario, status] of Object.entries(expectations)) {
     state.scenario = scenario;
@@ -269,10 +320,10 @@ test('every refusal before the auth delete changes nothing irreversible', async 
       assert.equal(response.body.code, 'shared_workspace_handoff_required');
     }
     // A hold that was placed is always lifted again on the way out.
-    const held = state.calls.includes('POST /rest/v1/rpc/xbar_hold_owned_workspaces_for_deletion');
+    const held = state.calls.includes('POST /rest/v1/rpc/xbar_hold_account_deletion_request');
     const placed = held && !['hold', 'joined'].includes(scenario);
     assert.equal(
-      state.calls.includes('POST /rest/v1/rpc/xbar_release_account_deletion_holds'),
+      state.calls.includes('POST /rest/v1/rpc/xbar_release_account_deletion_request'),
       placed,
       `${scenario}: holds released exactly when they were placed`,
     );
@@ -295,7 +346,7 @@ test('a failed auth delete removes nothing, releases the holds and records the f
     !state.calls.some((call) => call.includes('/storage/')),
     'no file was swept for an account that still exists',
   );
-  assert.ok(state.calls.includes('POST /rest/v1/rpc/xbar_release_account_deletion_holds'));
+  assert.ok(state.calls.includes('POST /rest/v1/rpc/xbar_release_account_deletion_request'));
   assert.equal(state.receiptUpdates.at(-1)?.status, 'failed');
   assert.doesNotMatch(JSON.stringify(response.body), /Fixture auth failure/, 'provider text stays in the log');
 });
@@ -313,9 +364,14 @@ test('a completed deletion keeps files another ranch still uses and records the 
   assert.equal(response.body.storageCleanupComplete, true);
   assert.deepEqual(state.removed, [`${FIXTURE_USER}/documents/mine.pdf`], 'only the file no surviving ranch points at');
   assert.equal(state.receiptUpdates.at(-1)?.status, 'complete');
-  const holdAt = state.calls.indexOf('POST /rest/v1/rpc/xbar_hold_owned_workspaces_for_deletion');
+  const holdAt = state.calls.indexOf('POST /rest/v1/rpc/xbar_hold_account_deletion_request');
   const deleteAt = state.calls.indexOf(`DELETE /auth/v1/admin/users/${FIXTURE_USER}`);
   assert.ok(holdAt > -1 && deleteAt > holdAt, 'the database hold comes before the auth delete');
+  const claimAt = state.calls.indexOf('POST /rest/v1/rpc/xbar_claim_checkout_lock');
+  const billingAt = state.calls.indexOf('GET /rest/v1/workspace_billing_customers');
+  const renewAt = state.calls.indexOf('billing-lease-renew');
+  assert.ok(claimAt > -1 && holdAt > claimAt && billingAt > holdAt && renewAt > billingAt && deleteAt > renewAt);
+  assert.ok(state.calls.indexOf('billing-lease-release') > deleteAt);
 });
 
 test('a purged private workspace has its documents erased, not orphaned', () => {
@@ -412,7 +468,7 @@ test('the deletion endpoint actually uses those prefix lists', () => {
    * reads an emptied table and can only widen the purge -- the ordering bug
    * that shipped in the first version.
    */
-  const holdAt = source.indexOf("supabase.rpc('xbar_hold_owned_workspaces_for_deletion'");
+  const holdAt = source.indexOf("supabase.rpc('xbar_hold_account_deletion_request'");
   const deleteUserAt = source.indexOf('await supabase.auth.admin.deleteUser(');
   assert.ok(holdAt > 0 && deleteUserAt > 0, 'precondition: both calls were found');
   assert.ok(holdAt < deleteUserAt, 'the hold must be placed before deleteUser');
@@ -422,7 +478,8 @@ test('the deletion endpoint actually uses those prefix lists', () => {
     source,
     /if \(holdError \|\| !hold \|\| typeof hold\.ok !== 'boolean'\) \{[\s\S]*?return sendJson\(res, 502,/,
   );
-  assert.match(source, /if \(!hold\.ok\) \{\s*return sendJson\(res, 409,/);
+  assert.match(source, /if \(!hold\.ok\) \{[\s\S]*?code: 'shared_workspace_handoff_required'/);
+  assert.match(source, /hold.reason === 'deletion_in_progress'/);
 
   // Nothing is removed ahead of the auth delete: memberships cascade with it.
   assert.doesNotMatch(source, /from\('workspace_memberships'\)\s*\.delete\(\)/);
@@ -514,4 +571,231 @@ test('the deletion response says when stored files were left behind', () => {
   assert.ok(!/removeStoragePrefixes\([^)]*\)\s*\.catch\(\(\) => \{\}\)/.test(source), 'a sweep failure is swallowed');
   const client = readFileSync(new URL('../../src/store/useCloudStore.ts', import.meta.url), 'utf8');
   assert.match(client, /payload\.storageCleanupComplete === false/);
+});
+
+// Regression: deleting Supabase records does not stop Stripe billing.
+test('a linked subscription is checked before account deletion removes its recovery path', async (t) => {
+  const state = deletionFixture(t);
+  const { default: handler } = await import('../../api/_lib/account-delete.js');
+  state.scenario = 'billing-active';
+  const response = await deleteAccount(handler, 'fixture-billing-active');
+  assert.ok(response.status >= 400, 'billing that has not been verified must prevent deletion');
+  assert.ok(!state.calls.some((call) => call.startsWith('DELETE ')), 'account and billing mapping must survive');
+});
+
+function billingReviewFixture({
+  row,
+  rowError,
+  profile = null,
+  profileError = null,
+  subscriptions = [],
+  sessions = [],
+  invoices = [],
+  schedules = [],
+  malformed,
+  fail,
+} = {}) {
+  const calls = [];
+  const billingRow =
+    row === undefined ? { workspace_id: 'ws1', stripe_customer_id: 'cus1', stripe_subscription_id: '' } : row;
+  const query = {
+    select() {
+      return this;
+    },
+    eq() {
+      return this;
+    },
+    async single() {
+      return { data: billingRow, error: rowError ?? null };
+    },
+  };
+  const profileQuery = {
+    select() {
+      return this;
+    },
+    eq() {
+      return this;
+    },
+    async maybeSingle() {
+      return { data: profile, error: profileError };
+    },
+  };
+  const supabase = { from: (table) => (table === 'workspace_subscription_profiles' ? profileQuery : query) };
+  const list = (kind, data) => async (params) => {
+    calls.push({ kind, params });
+    assert.equal(params.customer, 'cus1');
+    if (fail === kind) throw new Error('Provider unavailable');
+    if (malformed?.kind === kind) return malformed.response;
+    return typeof data === 'function' ? data(params, calls) : { data, has_more: false };
+  };
+  const stripe = {
+    subscriptions: { list: list('subscriptions', subscriptions) },
+    checkout: { sessions: { list: list('sessions', sessions) } },
+    invoices: { list: list('invoices', invoices) },
+    subscriptionSchedules: { list: list('schedules', schedules) },
+  };
+  return { calls, verify: () => verifyAccountDeletionBilling(supabase, 'ws1', stripe) };
+}
+
+for (const status of ['active', 'trialing', 'past_due', 'unpaid', 'paused', 'incomplete', '', 'new_unknown_status']) {
+  test(`deletion preserves the billing recovery path for ${status || 'missing'} Stripe status`, async () => {
+    const fixture = billingReviewFixture({ subscriptions: [{ id: 'sub1', status, cancel_at_period_end: true }] });
+    assert.equal((await fixture.verify()).code, 'billing_pending');
+    assert.equal(fixture.calls[0].params.status, 'all');
+  });
+}
+
+for (const status of ['canceled', 'incomplete_expired']) {
+  test(`a settled ${status} subscription allows account deletion without mutating Stripe`, async () => {
+    const fixture = billingReviewFixture({
+      row: { workspace_id: 'ws1', stripe_customer_id: 'cus1', stripe_subscription_id: 'sub1' },
+      subscriptions: [{ id: 'sub1', status }],
+      schedules: [{ id: 'sched1', status: 'released' }],
+    });
+    assert.deepEqual(await fixture.verify(), { ok: true });
+    assert.deepEqual(
+      fixture.calls.map(({ kind }) => kind),
+      ['subscriptions', 'sessions', 'invoices', 'invoices', 'schedules', 'subscriptions'],
+    );
+    assert.deepEqual(
+      fixture.calls.filter(({ kind }) => kind === 'invoices').map(({ params }) => params.status),
+      ['open', 'draft'],
+    );
+  });
+}
+
+test('an unfinished checkout blocks deletion before its webhook has written a subscription id', async () => {
+  assert.equal(
+    (await billingReviewFixture({ sessions: [{ id: 'cs1', status: 'open', mode: 'subscription' }] }).verify()).code,
+    'billing_pending',
+  );
+});
+
+for (const scenario of [
+  { invoices: [{ id: 'in1', status: 'open' }] },
+  { invoices: (params) => ({ data: params.status === 'draft' ? [{ id: 'in1' }] : [], has_more: false }) },
+  { schedules: [{ id: 'sched1', status: 'not_started' }] },
+  { schedules: [{ id: 'sched1', status: 'active' }] },
+  { schedules: [{ id: 'sched1', status: 'unknown' }] },
+]) {
+  test(`unsettled invoices or future billing block deletion: ${JSON.stringify(scenario)}`, async () => {
+    assert.equal((await billingReviewFixture(scenario).verify()).code, 'billing_pending');
+  });
+}
+
+test('a hosted checkout completing between the two lists still blocks deletion', async () => {
+  const fixture = billingReviewFixture({
+    subscriptions: (_params, calls) => ({
+      data:
+        calls.filter(({ kind }) => kind === 'subscriptions').length > 1 ? [{ id: 'sub_late', status: 'active' }] : [],
+      has_more: false,
+    }),
+  });
+  assert.equal((await fixture.verify()).code, 'billing_pending');
+});
+
+test('a paying sibling on page two is not mistaken for a settled customer', async () => {
+  const fixture = billingReviewFixture({
+    subscriptions: (params) =>
+      params.starting_after
+        ? { data: [{ id: 'sub_live', status: 'active' }], has_more: false }
+        : { data: [{ id: 'sub_old', status: 'canceled' }], has_more: true },
+  });
+  assert.equal((await fixture.verify()).code, 'billing_pending');
+  assert.equal(fixture.calls[1].params.starting_after, 'sub_old');
+});
+
+for (const kind of ['subscriptions', 'sessions', 'invoices', 'schedules']) {
+  test(`an unreadable ${kind} list preserves the account`, async () => {
+    assert.equal((await billingReviewFixture({ fail: kind }).verify()).code, 'billing_unverified');
+  });
+  for (const response of [null, {}, { data: [], has_more: true }, { data: [null], has_more: false }]) {
+    test(`malformed or incomplete ${kind} response refuses: ${JSON.stringify(response)}`, async () => {
+      assert.equal((await billingReviewFixture({ malformed: { kind, response } }).verify()).code, 'billing_unverified');
+    });
+  }
+}
+
+test('a subscription list beyond the paging budget cannot authorize deletion', async () => {
+  // A complete API-shaped page on every call, always with another page unread.
+  const endless = billingReviewFixture({
+    subscriptions: (_params, calls) => ({ data: [{ id: `sub_${calls.length}`, status: 'canceled' }], has_more: true }),
+  });
+  assert.equal((await endless.verify()).code, 'billing_unverified');
+  assert.equal(endless.calls.length, 10);
+});
+
+for (const row of [
+  null,
+  {},
+  { workspace_id: 'other' },
+  { workspace_id: 'ws1', stripe_customer_id: '', stripe_subscription_id: 'sub1' },
+  { workspace_id: 'ws1', stripe_customer_id: 'cus1', stripe_subscription_id: 'sub_missing' },
+]) {
+  test(`an incomplete or mismatched billing mapping refuses deletion: ${JSON.stringify(row)}`, async () => {
+    assert.equal((await billingReviewFixture({ row }).verify()).code, 'billing_unverified');
+  });
+}
+
+test('an empty, verified billing row needs no Stripe key and makes no Stripe call', async () => {
+  const fixture = billingReviewFixture({
+    row: { workspace_id: 'ws1', stripe_customer_id: '', stripe_subscription_id: '' },
+  });
+  assert.deepEqual(await fixture.verify(), { ok: true });
+  assert.deepEqual(fixture.calls, []);
+});
+
+test('a competing deletion that loses the billing lease never touches the winner’s membership hold', async (t) => {
+  const state = deletionFixture(t);
+  const { default: handler } = await import('../../api/_lib/account-delete.js');
+  state.scenario = 'billing-lock';
+  const response = await deleteAccount(handler, 'fixture-competing-delete');
+  assert.equal(response.status, 503);
+  assert.ok(state.calls.includes('POST /rest/v1/rpc/xbar_claim_checkout_lock'));
+  assert.ok(
+    !state.calls.some((call) => /xbar_(hold_account_deletion_request|release_account_deletion_request)/.test(call)),
+    'a losing deletion must not alter another request’s holds',
+  );
+  assert.ok(!state.calls.some((call) => call.startsWith('DELETE ')));
+});
+
+for (const profile of [
+  { billing_state: 'Active' },
+  { billing_state: 'Past Due' },
+  { billing_state: 'Inactive', payload: { subscriptionRecoverable: true } },
+  { billing_state: 'Inactive', payload: { billingState: 'Active' } },
+]) {
+  test(`a missing Stripe mapping cannot erase positive billing evidence: ${JSON.stringify(profile)}`, async () => {
+    const row = { workspace_id: 'ws1', stripe_customer_id: '', stripe_subscription_id: '' };
+    assert.equal((await billingReviewFixture({ row, profile }).verify()).code, 'billing_unverified');
+  });
+}
+for (const profile of [
+  null,
+  { billing_state: 'Manual Billing' },
+  { billing_state: 'Inactive', payload: { trial: { startedAt: '2026-10-01' } } },
+]) {
+  test(`a never-paid, manual or first-party trial workspace is not trapped by the billing guard: ${JSON.stringify(profile)}`, async () => {
+    const row = { workspace_id: 'ws1', stripe_customer_id: '', stripe_subscription_id: '' };
+    assert.deepEqual(await billingReviewFixture({ row, profile }).verify(), { ok: true });
+  });
+}
+test('an unreadable profile or recoverable billing payload cannot masquerade as a never-paid workspace', async () => {
+  const row = { workspace_id: 'ws1', stripe_customer_id: '', stripe_subscription_id: '' };
+  assert.equal(
+    (await billingReviewFixture({ row, profileError: { message: 'database failure' } }).verify()).code,
+    'billing_unverified',
+  );
+  assert.equal(
+    (await billingReviewFixture({ row: { ...row, entitlement_payload: { subscriptionRecoverable: true } } }).verify())
+      .code,
+    'billing_unverified',
+  );
+});
+
+test('expired deletion A cannot clear replacement B’s membership fence', async (t) => {
+  deletionFixture(t);
+  const { default: handler } = await import('../../api/_lib/account-delete.js');
+  const { assertDeletionRace } = await import('./fixtures/accountDeletionRace.mjs');
+  await assertDeletionRace(t, handler);
 });
