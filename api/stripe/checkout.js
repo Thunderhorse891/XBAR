@@ -426,6 +426,18 @@ export default async function handler(req, res) {
        */
       session = await stripe.checkout.sessions.create({
         mode: 'subscription',
+        /*
+         * Cards only, pinned here rather than left to the dashboard.
+         *
+         * The webhook grants access when Checkout completes and the
+         * subscription reads `active`. A card settles before that, so the two
+         * agree. A delayed method (ACH, SEPA, Bacs) can complete Checkout with
+         * an `active` subscription whose first payment then fails days later,
+         * leaving paid access with nothing collected. Enabling one in the
+         * dashboard would silently switch that on; this keeps it off until the
+         * webhook handles settlement (audit F12).
+         */
+        payment_method_types: ['card'],
         customer: stripeCustomerId,
         line_items: [
           {
