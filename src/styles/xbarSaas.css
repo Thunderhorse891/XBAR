@@ -2412,6 +2412,7 @@ aside.xs-drawer .xs-drawer__sub {
   transform: translateY(-50%);
   width: 172px;
   height: 172px;
+  border-radius: 24px;
   object-fit: contain;
   pointer-events: none;
 }

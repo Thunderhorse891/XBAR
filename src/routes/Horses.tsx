@@ -5,7 +5,6 @@ import { ActionMenuButton } from '@/components/InteractionSystem';
 import { EmptyState } from '@/components/EmptyState';
 import { HorseMediaPreview } from '@/components/HorseMediaPreview';
 import { primaryHorseMedia } from '@/lib/horseMedia';
-import { SalePacketSlots } from '@/components/SalePacketSlots';
 import { Pill, ProgressBar, SurfaceTabs } from '@/components/app-ui';
 import { DotsIcon } from '@/components/icons';
 import { buildPublicShareUrl } from '@/lib/facebookSharing';
@@ -796,8 +795,12 @@ export default function Horses() {
                       <div className="horse-card__body">
                         <div className="horse-card__metric-band">
                           <div className="horse-card__metric">
-                            <span>Sale readiness</span>
-                            <strong>{formatPercent(readiness)}</strong>
+                            <span>{showSaleSignals ? 'Documents' : 'Sale readiness'}</span>
+                            <strong>
+                              {showSaleSignals
+                                ? `${packet.saleSlots.filter((slot) => slot.status === 'ready').length}/${packet.saleSlots.length}`
+                                : formatPercent(readiness)}
+                            </strong>
                           </div>
                           <div className="horse-card__metric">
                             <span>{valueLabel}</span>
@@ -845,17 +848,6 @@ export default function Horses() {
                             </div>
                           </div>
                         )}
-
-                        <div className="horse-card__packet">
-                          <div className="horse-card__packet-head">
-                            <span>Release evidence</span>
-                            <strong>
-                              {packet.saleSlots.filter((slot) => slot.status === 'ready').length}/
-                              {packet.saleSlots.length}
-                            </strong>
-                          </div>
-                          <SalePacketSlots slots={packet.saleSlots} compact />
-                        </div>
 
                         <div className="horse-card__footer">
                           <div className="status-inline">

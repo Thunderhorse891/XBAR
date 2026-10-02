@@ -29,6 +29,10 @@ async function addHorse(page: Page) {
 }
 
 async function screenshot(page: Page, info: TestInfo, name: string) {
+  for (const close of await page.getByRole('button', { name: 'Close toast', exact: true }).all()) {
+    if (await close.isVisible()) await close.click();
+  }
+  await expect(page.locator('[data-sonner-toast]')).toHaveCount(0);
   await page.screenshot({ path: info.outputPath(`workspace-${name}.png`), fullPage: true });
 }
 
@@ -67,15 +71,54 @@ test('desktop workspace preserves brand, horse creation and navigation', async (
   await expect(page.getByRole('link', { name: 'Horse record' })).toBeVisible();
   await page.getByRole('link', { name: 'Horse record' }).click();
   await expect(page.locator('.xs-objhead__name')).toHaveText(/copper canyon/i);
-  // Bright test photo checks that identity text stays readable over the hardest image background.
-  await page.locator('input[type="file"][accept="image/*"]').setInputFiles({
-    name: 'bright-contrast-fixture.png',
-    mimeType: 'image/png',
-    buffer: Buffer.from(
-      'iVBORw0KGgoAAAANSUhEUgAAAAIAAAACCAIAAAD91JpzAAAADklEQVR4nGP4DwYMEAoAU7oL9ZisIGcAAAAASUVORK5CYII=',
-      'base64',
-    ),
-  });
+  // Seed a previously saved legacy photo reference for contrast QA. This local
+  // bundle deliberately has no cloud upload service; it must not claim upload success.
+  const photoUrl = 'https://fixture.xbar.test/bright.png';
+  await page.route(photoUrl, (route) =>
+    route.fulfill({
+      contentType: 'image/png',
+      body: Buffer.from(
+        'iVBORw0KGgoAAAANSUhEUgAAAAIAAAACCAIAAAD91JpzAAAADklEQVR4nGP4DwYMEAoAU7oL9ZisIGcAAAAASUVORK5CYII=',
+        'base64',
+      ),
+    }),
+  );
+  await page.evaluate(
+    (url) =>
+      new Promise<void>((resolve, reject) => {
+        const request = indexedDB.open('xbar-workspace', 1);
+        request.onerror = () => reject(request.error);
+        request.onsuccess = () => {
+          const db = request.result;
+          const transaction = db.transaction('persist', 'readwrite');
+          const store = transaction.objectStore('persist');
+          const record = store.get('xbar-live-workspace');
+          record.onsuccess = () => {
+            const workspace = JSON.parse(record.result as string);
+            if (workspace.state.horses.length !== 1) {
+              transaction.abort();
+              return;
+            }
+            workspace.state.horses[0].profileImage = url;
+            store.put(JSON.stringify(workspace), 'xbar-live-workspace');
+          };
+          transaction.oncomplete = () => {
+            db.close();
+            resolve();
+          };
+          transaction.onerror = () => {
+            db.close();
+            reject(transaction.error);
+          };
+          transaction.onabort = () => {
+            db.close();
+            reject(new Error('Fixture transaction aborted'));
+          };
+        };
+      }),
+    photoUrl,
+  );
+  await page.reload();
   await expect(page.locator('.xs-objhead__avatar-img')).toBeVisible();
   await page
     .getByRole('navigation', { name: 'Primary', exact: true })
@@ -126,6 +169,15 @@ test('mobile all-sections navigation closes, restores focus, and preserves recor
     .click();
   await expect(page.getByRole('heading', { name: 'Horses', exact: true })).toBeVisible();
   await noPageOverflow(page);
+  const segments = page.locator('.surface-tabs--wrap');
+  for (const name of ['Stud', 'Show String', 'Retired', 'All']) {
+    const filter = segments.getByRole('tab', { name, exact: true });
+    await filter.click();
+    await expect(filter).toHaveAttribute('aria-selected', 'true');
+  }
+  const filtersBox = await segments.boundingBox();
+  const searchBox = await page.getByRole('textbox', { name: 'Search horse records' }).boundingBox();
+  expect(searchBox!.y).toBeGreaterThanOrEqual(filtersBox!.y + filtersBox!.height);
   await screenshot(page, info, 'horses-mobile');
   await page.getByRole('button', { name: 'Account menu' }).click();
   await expect(page.getByRole('menuitem', { name: 'Notifications' })).toBeVisible();
@@ -160,4 +212,9 @@ test('touch feedback honors reduced motion and narrow screens', async ({ page })
   await page.keyboard.press('Escape');
   await expect(page.getByRole('dialog', { name: 'Add Horse' })).toBeHidden();
   await expect(page).toHaveURL(/\/app$/);
+  await page.emulateMedia({ reducedMotion: 'no-preference' });
+  await firstStep.hover();
+  await expect(firstStep).not.toHaveCSS('transform', 'none');
+  await page.emulateMedia({ reducedMotion: 'reduce' });
+  await expect(firstStep).toHaveCSS('transform', 'none');
 });

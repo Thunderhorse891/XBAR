@@ -349,3 +349,35 @@
     padding: 16px;
   }
 }
+
+.hc-workspace .horse-card__image-fallback {
+  justify-content: flex-start;
+  padding-top: 56px;
+  gap: 6px;
+}
+
+.hc-workspace .horse-card__image-fallback .horse-media-fallback__mark {
+  width: 50px;
+  height: 50px;
+  flex: none;
+}
+
+.hc-workspace .horse-card__footer {
+  flex-direction: column;
+  align-items: stretch;
+  gap: 14px;
+}
+
+.hc-workspace .horse-card__footer .inline-actions {
+  justify-content: flex-start;
+  flex-wrap: wrap;
+}
+
+/* Wrapped segment filters must occupy their real height above search. */
+.hc-workspace .surface-tabs--wrap {
+  height: auto;
+  min-height: 44px;
+  flex-wrap: wrap;
+  justify-content: flex-start;
+  gap: 6px;
+}
