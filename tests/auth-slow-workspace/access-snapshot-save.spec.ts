@@ -71,6 +71,9 @@ test('pushing an old ranch snapshot cannot recreate a removed member or reopen a
   await expect(page.getByText('removed@xbar.test', { exact: true })).toBeVisible();
   await expect(page.getByText('revoked@xbar.test', { exact: true })).toBeVisible();
   await page.getByRole('button', { name: 'Push cloud', exact: true }).click();
+  // Push cloud replaces the cloud copy, so it asks first (audit F01).
+  await page.getByRole('checkbox', { name: 'I want the cloud to match this device.' }).check();
+  await page.getByRole('button', { name: 'Push and replace cloud', exact: true }).click();
   await expect(page.getByText('Cloud sync complete', { exact: true })).toBeVisible();
   expect(profileWrites).toBeGreaterThan(0);
   expect(accessWrites).toEqual([]);

@@ -13,6 +13,7 @@ import { getSupabaseClient } from '@/lib/supabaseClient';
 import { isNavigableFileUrl } from '@/lib/navigableFileUrl';
 import { openLocalFile } from '@/lib/localFileVault';
 import { vaultOwnerId } from '@/lib/vaultOwner';
+import { idsToRemove, type CloudDeletion, type RowRemoval } from '@/lib/cloudDeletionQueue';
 import { subscriptionFromCloudRow } from '@/lib/cloudSubscription';
 import type { Session } from '@supabase/supabase-js';
 import type {
@@ -74,11 +75,34 @@ type RelationalMirrorResult = {
   documentsPersisted?: boolean;
 };
 
+export type CloudSaveOptions = {
+  /** Records a person deleted on this device; see `cloudDeletionQueue`. */
+  deletions?: readonly CloudDeletion[];
+  /**
+   * Make the cloud match this device exactly, removing every row it lacks.
+   * Only for an explicit "Push cloud" -- never for autosave or bootstrap.
+   */
+  replace?: boolean;
+};
+
 type CloudSaveResult = {
   ok: boolean;
   message: string;
   updatedAt?: string;
   workspaceId?: string;
+  /*
+   * Whether the deletions sent with this save are now in the cloud copy every
+   * device loads. Only then may a caller forget them: a relational save that
+   * failed part-way may never have reached the table a deletion was for.
+   */
+  deletionsApplied?: boolean;
+  /*
+   * Not saved, but nothing to settle by hand either: the relational write
+   * failed after the legacy snapshot landed, so the work is safe and the next
+   * save simply tries again. A caller that would otherwise lock autosave on
+   * `ok: false` keeps it running for this one.
+   */
+  retryable?: boolean;
   /*
    * Whether the RELATIONAL rows were written, which is not the same question as
    * `ok`. With the snapshot fallback enabled a rejected relational save still
@@ -593,26 +617,34 @@ async function replaceWorkspaceRows(params: {
   idColumn: string;
   workspaceId: string;
   rows: Record<string, unknown>[];
+  removal: RowRemoval;
 }) {
   const client = getSupabaseClient();
   if (!client) {
     throw new Error('Supabase is not configured for this build.');
   }
 
-  const { table, idColumn, workspaceId, rows } = params;
-  const { data: existingRows, error: existingError } = await client
-    .from(table)
-    .select(idColumn)
-    .eq('workspace_id', workspaceId);
-
-  if (existingError) {
-    throw new Error(existingError.message);
-  }
-
+  const { table, idColumn, workspaceId, rows, removal } = params;
   const nextIds = new Set(rows.map((row) => String(row[idColumn])));
-  const staleIds = ((existingRows ?? []) as unknown as Array<Record<string, unknown>>)
-    .map((row) => String(row[idColumn] ?? ''))
-    .filter((id) => id && !nextIds.has(id));
+
+  // Only a Push cloud (`absent`) reads what the cloud holds; an ordinary save
+  // deletes the ids a person deleted and nothing else -- see RowRemoval.
+  let existingIds: string[] = [];
+  if (removal.mode === 'absent') {
+    const { data: existingRows, error: existingError } = await client
+      .from(table)
+      .select(idColumn)
+      .eq('workspace_id', workspaceId);
+
+    if (existingError) {
+      throw new Error(existingError.message);
+    }
+
+    existingIds = ((existingRows ?? []) as unknown as Array<Record<string, unknown>>).map((row) =>
+      String(row[idColumn] ?? ''),
+    );
+  }
+  const staleIds = idsToRemove(removal, nextIds, existingIds);
 
   if (staleIds.length) {
     const { error: deleteError } = await client
@@ -669,6 +701,7 @@ async function saveWorkspaceSnapshotToCloud(backup: unknown, session: Session, u
 async function saveWorkspaceBackupToRelationalCloud(
   backup: unknown,
   session: Session,
+  options: CloudSaveOptions,
 ): Promise<RelationalMirrorResult> {
   const normalized = normalizeBackup(backup);
   if (!normalized) {
@@ -686,6 +719,14 @@ async function saveWorkspaceBackupToRelationalCloud(
     const workspaceId = await ensurePrimaryWorkspace(session, normalized);
     const updatedAt = normalized.exportedAt ?? new Date().toISOString();
     const workspace = normalized.workspace ?? {};
+    const deletions = options.deletions ?? [];
+    const removal = (table: string): RowRemoval =>
+      options.replace
+        ? { mode: 'absent' }
+        : {
+            mode: 'listed',
+            ids: deletions.filter((entry) => entry.table === table).map((entry) => entry.id),
+          };
 
     // Access changes use explicit cloud operations. An old ranch snapshot must
     // never re-create members or reopen accepted/revoked invitations.
@@ -693,6 +734,7 @@ async function saveWorkspaceBackupToRelationalCloud(
     await replaceWorkspaceRows({
       table: 'horses',
       idColumn: 'horse_id',
+      removal: removal('horses'),
       workspaceId,
       rows: (workspace.horses ?? []).map((horse) => ({
         workspace_id: workspaceId,
@@ -711,6 +753,7 @@ async function saveWorkspaceBackupToRelationalCloud(
     await replaceWorkspaceRows({
       table: 'documents',
       idColumn: 'document_id',
+      removal: removal('documents'),
       workspaceId,
       rows: (workspace.documents ?? []).map((document) => ({
         workspace_id: workspaceId,
@@ -737,6 +780,7 @@ async function saveWorkspaceBackupToRelationalCloud(
     await replaceWorkspaceRows({
       table: 'intake_batches',
       idColumn: 'intake_batch_id',
+      removal: removal('intake_batches'),
       workspaceId,
       rows: (workspace.intakeBatches ?? []).map((batch) => ({
         workspace_id: workspaceId,
@@ -753,6 +797,7 @@ async function saveWorkspaceBackupToRelationalCloud(
     await replaceWorkspaceRows({
       table: 'ownership_records',
       idColumn: 'ownership_record_id',
+      removal: removal('ownership_records'),
       workspaceId,
       rows: (workspace.ownershipRecords ?? []).map((record) => ({
         workspace_id: workspaceId,
@@ -769,6 +814,7 @@ async function saveWorkspaceBackupToRelationalCloud(
     await replaceWorkspaceRows({
       table: 'expense_receipts',
       idColumn: 'receipt_id',
+      removal: removal('expense_receipts'),
       workspaceId,
       rows: (workspace.expenseReceipts ?? []).map((receipt) => ({
         workspace_id: workspaceId,
@@ -787,6 +833,7 @@ async function saveWorkspaceBackupToRelationalCloud(
     await replaceWorkspaceRows({
       table: 'ranch_assets',
       idColumn: 'asset_id',
+      removal: removal('ranch_assets'),
       workspaceId,
       rows: (workspace.ranchAssets ?? []).map((asset) => ({
         workspace_id: workspaceId,
@@ -804,6 +851,7 @@ async function saveWorkspaceBackupToRelationalCloud(
     await replaceWorkspaceRows({
       table: 'sales_leads',
       idColumn: 'lead_id',
+      removal: removal('sales_leads'),
       workspaceId,
       rows: (workspace.salesLeads ?? []).map((lead) => ({
         workspace_id: workspaceId,
@@ -822,6 +870,7 @@ async function saveWorkspaceBackupToRelationalCloud(
     await replaceWorkspaceRows({
       table: 'shared_listings',
       idColumn: 'listing_id',
+      removal: removal('shared_listings'),
       workspaceId,
       rows: (workspace.sharedListings ?? []).map((listing) => ({
         workspace_id: workspaceId,
@@ -1007,7 +1056,10 @@ async function loadWorkspaceBackupFromRelationalCloud(session: Session) {
   } as const;
 }
 
-export async function saveWorkspaceBackupToCloud(backup: unknown): Promise<CloudSaveResult> {
+export async function saveWorkspaceBackupToCloud(
+  backup: unknown,
+  options: CloudSaveOptions = {},
+): Promise<CloudSaveResult> {
   const client = getSupabaseClient();
   if (!client) {
     return { ok: false, message: 'Supabase is not configured for this build.' };
@@ -1020,7 +1072,7 @@ export async function saveWorkspaceBackupToCloud(backup: unknown): Promise<Cloud
 
   const updatedAt = new Date().toISOString();
   if (isRelationalCloudEnabled()) {
-    const relational = await saveWorkspaceBackupToRelationalCloud(backup, session);
+    const relational = await saveWorkspaceBackupToRelationalCloud(backup, session, options);
     if (relational.ok) {
       if (isSnapshotFallbackEnabled()) {
         const snapshot = await saveWorkspaceSnapshotToCloud(backup, session, updatedAt);
@@ -1032,6 +1084,7 @@ export async function saveWorkspaceBackupToCloud(backup: unknown): Promise<Cloud
           updatedAt,
           workspaceId: relational.workspaceId,
           relationalRowsPersisted: relational.documentsPersisted === true,
+          deletionsApplied: true,
         };
       }
 
@@ -1041,6 +1094,7 @@ export async function saveWorkspaceBackupToCloud(backup: unknown): Promise<Cloud
         updatedAt,
         workspaceId: relational.workspaceId,
         relationalRowsPersisted: relational.documentsPersisted === true,
+        deletionsApplied: true,
       };
     }
 
@@ -1056,10 +1110,18 @@ export async function saveWorkspaceBackupToCloud(backup: unknown): Promise<Cloud
     const snapshot = await saveWorkspaceSnapshotToCloud(backup, session, updatedAt);
     if (snapshot.ok) {
       /*
+       * NOT a success. The snapshot is a safety copy, but every device loads
+       * the RELATIONAL tables first (`loadWorkspaceBackupFromCloud`), and those
+       * are what this save failed to write -- part-way, possibly: the tables go
+       * up one statement at a time. Reporting `ok` here told the rancher the
+       * ranch was saved while the next device to open it loaded the older, or
+       * half-written, relational copy. It is reported as failed so autosave
+       * keeps the change and retries, and the snapshot is mentioned so nobody
+       * thinks the work is gone.
+       *
        * `relationalRowsPersisted` is the DOCUMENTS question, not the `ok`
-       * question, and on this path the answer is usually no: the snapshot
-       * landed and the rancher's work is safe, which is what `ok` is about,
-       * while nothing a caller reads from `documents` has moved.
+       * question, and on this path the answer is usually no: nothing a caller
+       * reads from `documents` has moved.
        *
        * Usually, but not always. The relational save is a sequence of
        * statements rather than a transaction, so the documents upsert can
@@ -1070,8 +1132,9 @@ export async function saveWorkspaceBackupToCloud(backup: unknown): Promise<Cloud
        * forwarded rather than assumed either way.
        */
       return {
-        ok: true,
-        message: `Relational workspace unavailable. Saved a legacy snapshot instead. ${relational.message}`,
+        ok: false,
+        retryable: true,
+        message: `Cloud save incomplete: ${relational.message} A backup copy was saved; your changes stay on this device and will retry.`,
         updatedAt,
         relationalRowsPersisted: relational.documentsPersisted === true,
       };
@@ -1090,7 +1153,9 @@ export async function saveWorkspaceBackupToCloud(backup: unknown): Promise<Cloud
     return { ok: false, message: snapshot.message, updatedAt };
   }
 
-  return { ok: true, message: 'Cloud sync complete. Legacy snapshot updated.', updatedAt };
+  // Snapshot-only builds store the whole workspace as one document, so the
+  // device's copy -- deletions and all -- is what was written.
+  return { ok: true, message: 'Cloud sync complete. Legacy snapshot updated.', updatedAt, deletionsApplied: true };
 }
 
 export async function loadWorkspaceBackupFromCloud() {
