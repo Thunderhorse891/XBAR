@@ -170,7 +170,9 @@ test('sales renders the buyer follow-up sales surface', async ({ page }) => {
 
 test('billing page shows tier cards', async ({ page }) => {
   await bootstrapWorkspace(page);
-  await page.getByRole('button', { name: 'Billing' }).click();
+  await page.getByRole('button', { name: 'Account menu', exact: true }).click();
+  await page.getByRole('menuitem', { name: 'Billing', exact: true }).click();
+  await expect(page.getByRole('menu')).toBeHidden();
   await expect(page.getByRole('heading', { name: 'Review Billing' })).toBeVisible();
   await expect(page.locator('.checkout-plan')).toHaveCount(4);
 });
