@@ -166,7 +166,8 @@ export type XbarStore = {
   ) => ActionResult;
   addBreedingEvent: (
     horseId: string,
-    event: Pick<HorseNote, 'title' | 'body' | 'author'> & { date: string },
+    // kind and result are what the entry IS, chosen by the person (audit F07).
+    event: Pick<HorseNote, 'title' | 'body' | 'author'> & { date: string; kind: string; result?: string },
   ) => ActionResult;
   updateBreedingEconomics: (horseId: string, economics: BreedingEconomics) => ActionResult;
   deleteBreedingEvent: (horseId: string, eventId: string) => ActionResult;

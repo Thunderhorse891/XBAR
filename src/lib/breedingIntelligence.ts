@@ -163,22 +163,75 @@ function latestByRecordType(
     .sort((a, b) => (a.date < b.date ? 1 : -1))[0];
 }
 
-function positivePregnancyCheck(events: TimelineEvent[], afterISO: string): boolean {
-  return events.some((event) => {
-    if (resolveRecordType(event) !== 'pregnancy-check' || event.date < afterISO) return false;
-    const result = outcomeText(event);
-    // A check is only positive if it is not also an explicit open/negative.
-    if (/\bopen\b|negative|not.?in.?foal|barren|empty/.test(result)) return false;
-    return /in.?foal|positive|confirmed|pregnant|heartbeat/.test(result);
-  });
+/*
+ * What one pregnancy check says (audit F07).
+ *
+ * A check logged through the form carries its result as a choice -- 'in-foal',
+ * 'open' or 'pending' -- and that choice is the answer; the note beside it is
+ * context. Everything else (older free-text entries, OCR records) is read the
+ * way a person would read it, and anything a person would call unclear stays
+ * unknown rather than being guessed:
+ *
+ *   - a positive word that is negated in its own clause does not count:
+ *     "no heartbeat", "not yet confirmed", "mare is not pregnant";
+ *   - "confirmed open" is open, and "negative for twins" is not a negative;
+ *   - positive and negative wording in the same entry is unknown.
+ *
+ * Text matching used to read "Pregnancy check -- Negative, mare is not
+ * pregnant" as in foal, because "pregnant" matched before anything looked at
+ * the "not" in front of it.
+ */
+export type PregnancyCheckOutcome = 'positive' | 'negative' | 'unknown';
+
+const NEGATIVE_WORDING =
+  /\bopen\b|\bnegative\b(?!\s+for\s+twins?)|not.?in.?foal|not.?pregnant|\bbarren\b|\bempty\b|\bslipped\b|\blost\b|\bresorb/;
+const POSITIVE_WORDING =
+  /in.?foal|\bpositive\b|\bconfirmed\b(?!\s+(?:open|negative|empty|barren))|\bpregnant\b|heartbeat|\bsingle(?:ton)?\s+(?:pregnancy|embryo|vesicle)/g;
+const CLAUSE_NEGATION = /\b(?:no|not|without|never|isn'?t|wasn'?t|yet to be)\b/;
+
+export function pregnancyCheckOutcome(event: TimelineEvent): PregnancyCheckOutcome {
+  // Restored backups can carry any JSON here; only a string is a result.
+  const rawResult: unknown = breedingDetails(event)?.result;
+  const structured = typeof rawResult === 'string' ? rawResult.trim().toLowerCase() : '';
+  if (structured === 'in-foal') return 'positive';
+  if (structured === 'open') return 'negative';
+  if (structured === 'pending') return 'unknown';
+
+  // An OCR or imported result is still the most specific text there is.
+  const text = (structured || `${event.status ?? ''} ${event.title} ${event.summary}`).toLowerCase();
+  const negative = NEGATIVE_WORDING.test(text);
+  let positive = false;
+  for (const match of text.matchAll(POSITIVE_WORDING)) {
+    const clause =
+      text
+        .slice(0, match.index)
+        .split(/[.;,:!?\n\u2013\u2014]|\s-\s/)
+        .pop() ?? '';
+    if (!CLAUSE_NEGATION.test(clause)) positive = true;
+  }
+  if (negative && positive) return 'unknown';
+  if (negative) return 'negative';
+  if (positive) return 'positive';
+  return 'unknown';
 }
 
-function negativePregnancyCheck(events: TimelineEvent[], afterISO: string): boolean {
-  return events.some((event) => {
-    if (resolveRecordType(event) !== 'pregnancy-check' || event.date < afterISO) return false;
-    const result = outcomeText(event);
-    return /\bopen\b|negative|not.?in.?foal|barren|empty/.test(result);
-  });
+/*
+ * Where the mare stands after a cover: the latest check that said something
+ * definite. A later re-check overrides an earlier one -- open at 14 days and in
+ * foal at 16 is in foal; in foal at 16 and open at 45 is a loss -- and a check
+ * still awaiting its result does not erase what the last real result said.
+ * Same-day checks resolve to the one entered last (the timeline is newest-first).
+ */
+export function currentPregnancyOutcome(events: TimelineEvent[], afterISO: string): PregnancyCheckOutcome {
+  const checks = events
+    .map((event, order) => ({ event, order }))
+    .filter(({ event }) => resolveRecordType(event) === 'pregnancy-check' && event.date >= afterISO)
+    .sort((a, b) => (a.event.date === b.event.date ? a.order - b.order : a.event.date < b.event.date ? 1 : -1));
+  for (const { event } of checks) {
+    const outcome = pregnancyCheckOutcome(event);
+    if (outcome !== 'unknown') return outcome;
+  }
+  return 'unknown';
 }
 
 // Live-foal-guarantee: a confirmed cover is "covered"; a recorded live
@@ -272,8 +325,9 @@ export function buildMareBreedingState(horse: HorseRecord, now: Date = new Date(
     };
   }
 
-  // Open again if a check came back negative.
-  if (negativePregnancyCheck(events, breeding.date)) {
+  // Open again if the latest definite check came back negative.
+  const pregnancy = currentPregnancyOutcome(events, breeding.date);
+  if (pregnancy === 'negative') {
     return {
       ...base,
       status: 'open',
@@ -307,7 +361,7 @@ export function buildMareBreedingState(horse: HorseRecord, now: Date = new Date(
   const windowEnd = addDays(bredOn, GESTATION_LATE_DAYS);
   const daysToFoaling = Math.ceil((expectedFoaling.getTime() - now.getTime()) / DAY_MS);
 
-  const confirmed = positivePregnancyCheck(events, breeding.date);
+  const confirmed = pregnancy === 'positive';
 
   // Once "now" is past the latest viable foaling date (GESTATION_LATE_DAYS)
   // with no foaling or negative check recorded, the record is stale: the mare

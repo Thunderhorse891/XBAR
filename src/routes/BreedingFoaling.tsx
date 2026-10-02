@@ -2,6 +2,7 @@ import { useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { CalendarPlus, Plus, Sprout } from 'lucide-react';
 import { ActionButton, Card, PageHead, StatusChip } from '@/components/saas';
+import { buildMareBreedingState } from '@/lib/breedingIntelligence';
 import { useUiStore } from '@/store/useUiStore';
 import { useXbarStore } from '@/store/useXbarStore';
 
@@ -20,12 +21,12 @@ export default function BreedingFoaling() {
       mares.map((m) => {
         // Newest event first (addBreedingEvent prepends) reflects current status.
         const latest = m.breedingTimeline[0];
-        const statusText = latest ? `${latest.status ?? ''} ${latest.title ?? ''}`.toLowerCase() : '';
-        // Only a confirmed, still-active pregnancy counts as in foal — exclude
-        // foaling outcomes and open/negative checks (both contain "foal").
-        const inFoal =
-          /(in foal|confirmed|pregnan|positive)/.test(statusText) &&
-          !/(not in foal|open|foaled|lost|slipped|negative|weaned)/.test(statusText);
+        // In foal is decided where the Breeding screen decides it: the recorded
+        // result of the latest definite check (audit F07). This page used to
+        // keep its own word match over the latest title, so "Pregnancy check"
+        // read as in foal whatever the result said.
+        const state = buildMareBreedingState(m);
+        const inFoal = state.status === 'in-foal' || state.status === 'near-term';
         return {
           id: m.id,
           mare: m.name,
