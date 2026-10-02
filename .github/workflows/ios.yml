@@ -3,7 +3,7 @@ name: iOS native
 on:
   pull_request:
   push:
-    branches: [main]
+    branches: [main, codex/go-live-readiness]
   workflow_dispatch:
 
 permissions:
@@ -17,7 +17,14 @@ jobs:
   native:
     # Standard macOS runners are free for this public repository. No signing,
     # upload, paid runner, production secret or deployment occurs here.
-    if: github.event.repository.private == false
+    # Validate this internal readiness branch directly even when newer main
+    # changes prevent GitHub from creating a pull_request merge ref. Skip its
+    # duplicate PR run; other branches and forks still use pull_request checks.
+    if: >-
+      github.event.repository.private == false &&
+      (github.event_name != 'pull_request' ||
+       github.event.pull_request.head.repo.full_name != github.repository ||
+       github.head_ref != 'codex/go-live-readiness')
     # The standard Intel image has 14 GB RAM; the 7 GB ARM image repeatedly
     # stalled during simulator boot before any application test could run.
     runs-on: macos-26-intel
