@@ -673,7 +673,12 @@ test('OCR identity: conflicting review action refuses and a retry uses the corre
   // The review retry re-reads the herd rather than blindly choosing its first name match.
   await seedHorse(page, 'BLUE MOON');
   await setRegistration('1234567');
-  await page.getByRole('link', { name: 'Documents', exact: true }).click();
+  // The review-count badge makes this link's accessible name 'Documents 1'.
+  // Keep the navigation target exact while allowing its live count.
+  await page
+    .getByRole('navigation', { name: 'Primary' })
+    .getByRole('link', { name: /^Documents(?:\s+\d+)?$/ })
+    .click();
   await row.getByRole('button', { name: 'New horse' }).click();
   await expect(page).toHaveURL(/\/horses\//);
   await expect(page.locator('.xs-kv')).toContainText('1234567');
