@@ -1813,6 +1813,15 @@ export const useXbarStore = create<XbarStore>()(
         if (!lead) {
           return { ok: false, message: 'Lead not found.' };
         }
+        // Money received on a sale feeds "collected" and "profit banked" (audit
+        // F08). The close-out form validates it fully; this is the backstop for
+        // any other caller.
+        if (
+          patch.amountReceived !== undefined &&
+          !(Number.isFinite(patch.amountReceived) && patch.amountReceived >= 0)
+        ) {
+          return { ok: false, message: 'Amount received must be $0 or more.' };
+        }
 
         const nextOfferStatus = patch.offerStatus ?? lead.offerStatus;
         if (nextOfferStatus && ['Accepted', 'Deposit Due', 'Deposit Paid'].includes(nextOfferStatus)) {
