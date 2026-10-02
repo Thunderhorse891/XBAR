@@ -96,14 +96,35 @@ export const subscriptionPlans = {
 export function getStripePriceIdByTier(tier, billingPeriod = 'monthly') {
   const period = billingPeriod === 'annual' ? 'annual' : 'monthly';
   const suffix = period === 'annual' ? '_ANNUAL' : '';
+  // Trimmed, as /api/health reads them: a pasted newline would otherwise reach
+  // Stripe as part of the id and match no incoming price either.
   const envMap = {
-    Starter: process.env[`STRIPE_PRICE_ID_STARTER${suffix}`] || '',
-    Professional: process.env[`STRIPE_PRICE_ID_PROFESSIONAL${suffix}`] || '',
-    'Ranch Ops': process.env[`STRIPE_PRICE_ID_RANCH_OPS${suffix}`] || '',
-    Enterprise: process.env[`STRIPE_PRICE_ID_ENTERPRISE${suffix}`] || '',
+    Starter: process.env[`STRIPE_PRICE_ID_STARTER${suffix}`]?.trim() || '',
+    Professional: process.env[`STRIPE_PRICE_ID_PROFESSIONAL${suffix}`]?.trim() || '',
+    'Ranch Ops': process.env[`STRIPE_PRICE_ID_RANCH_OPS${suffix}`]?.trim() || '',
+    Enterprise: process.env[`STRIPE_PRICE_ID_ENTERPRISE${suffix}`]?.trim() || '',
   };
 
   return envMap[tier] || '';
+}
+
+const PRICE_ID_SHAPE = /^price_[A-Za-z0-9_]+$/;
+
+/**
+ * Which plan and cadence pairs this deployment can actually sell: a price id
+ * that is set and is a price id. The billing screen reads this before it offers
+ * a cadence, so a buyer is never walked to a checkout that refuses them -- which
+ * is what production did with annual on 2026-10-02 (no annual price ids, toggle
+ * shown anyway, a technical error at the moment of paying).
+ */
+export function sellablePrices() {
+  const sellable = { monthly: {}, annual: {} };
+  for (const tier of Object.keys(subscriptionPlans)) {
+    for (const period of ['monthly', 'annual']) {
+      sellable[period][tier] = PRICE_ID_SHAPE.test(getStripePriceIdByTier(tier, period));
+    }
+  }
+  return sellable;
 }
 
 /**

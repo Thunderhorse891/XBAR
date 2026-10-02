@@ -220,7 +220,11 @@ test('an old session without cadence metadata is closed before replacement', asy
 
 test('missing annual configuration never falls back to a monthly checkout', async () => {
   const app = await fixture({ noAnnual: true });
-  assert.equal((await app.request('Professional', 'annual')).status, 400);
+  const response = await app.request('Professional', 'annual');
+  // Refused in the buyer's terms, and coded so the client never falls back to a
+  // payment link either.
+  assert.equal(response.status, 409);
+  assert.equal(response.code, 'cadence_unavailable');
   assert.equal(app.sessions.length, 0);
   assert.deepEqual(app.events, []);
 });
