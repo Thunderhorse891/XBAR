@@ -36,6 +36,11 @@ final class AppUITests: XCTestCase {
         XCTAssertFalse(webView.buttons["Facebook"].exists)
         email.tap()
         email.typeText("native-smoke@example.invalid")
+        // WKWebView can publish an intermediate accessibility value after
+        // typeText returns. Require the complete value within a bounded wait;
+        // never retype missing characters or accept a truncated address.
+        expectation(for: NSPredicate(format: "value == %@", "native-smoke@example.invalid"), evaluatedWith: email)
+        waitForExpectations(timeout: 10)
         XCTAssertEqual(email.value as? String, "native-smoke@example.invalid")
         expectation(for: NSPredicate(format: "enabled == true"), evaluatedWith: emailCode)
         waitForExpectations(timeout: 10)
