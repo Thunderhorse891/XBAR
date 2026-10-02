@@ -133,7 +133,7 @@ test('what still works but deserves saying is a warning, not an outage', async (
   const noAnnual = await health({ ...READY, STRIPE_PRICE_ID_ENTERPRISE_ANNUAL: undefined });
   assert.equal(noAnnual.statusCode, 200);
   assert.equal(noAnnual.body.subsystems.stripeAnnualPriceIds, false);
-  assert.match(warnings(noAnnual), /Checkout refuses annual on those plans/);
+  assert.match(warnings(noAnnual), /Managed annual checkout is unavailable/);
 
   const testKey = await health({ ...READY, STRIPE_SECRET_KEY: 'sk_test_51AbCdEf', VERCEL_ENV: 'production' });
   assert.equal(testKey.statusCode, 200);
@@ -145,4 +145,16 @@ test('what still works but deserves saying is a warning, not an outage', async (
 
   const defaultSender = await health({ ...READY, EMAIL_FROM_ADDRESS: undefined });
   assert.match(warnings(defaultSender), /EMAIL_FROM_ADDRESS is not set/);
+});
+
+test('missing annual prices warn about unavailable managed checkout without saying it is offered', async () => {
+  const values = { ...READY };
+  for (const tier of ['STARTER', 'PROFESSIONAL', 'RANCH_OPS', 'ENTERPRISE'])
+    delete values[`STRIPE_PRICE_ID_${tier}_ANNUAL`];
+  const response = await health(values);
+  assert.equal(response.statusCode, 200, 'monthly checkout stays configured');
+  assert.equal(response.body.subsystems.stripeAnnualPriceIds, false);
+  assert.match(warnings(response), /STRIPE_PRICE_ID_\*_ANNUAL/);
+  assert.doesNotMatch(warnings(response), /annual billing is offered/i);
+  assert.match(warnings(response), /Managed annual checkout is unavailable/);
 });

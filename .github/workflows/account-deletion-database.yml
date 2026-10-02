@@ -1,0 +1,47 @@
+name: account-deletion-database
+
+on:
+  pull_request:
+    paths:
+      - 'api/_lib/account-delet*.js'
+      - 'supabase/migrations/*account_deletion*.sql'
+      - 'supabase/checks/account-deletion*.sql'
+      - '.github/workflows/account-deletion-database.yml'
+  push:
+    branches: [main]
+    paths:
+      - 'supabase/migrations/*account_deletion*.sql'
+      - 'supabase/checks/account-deletion*.sql'
+      - '.github/workflows/account-deletion-database.yml'
+
+jobs:
+  account-deletion-database:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: deletion_test
+        ports: ['5432:5432']
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    env:
+      PGHOST: localhost
+      PGPORT: 5432
+      PGDATABASE: deletion_test
+      PGUSER: postgres
+      PGPASSWORD: postgres
+    steps:
+      - uses: actions/checkout@v7
+      - name: Load isolated deletion schema and both protocol generations
+        run: |
+          psql -v ON_ERROR_STOP=1 -f supabase/checks/account-deletion-fixture-schema.sql
+          psql -v ON_ERROR_STOP=1 -f supabase/migrations/20261002100000_account_deletion_hold.sql
+          psql -v ON_ERROR_STOP=1 -f supabase/migrations/20261002182226_account_deletion_request_fence.sql
+      - name: Prove request ownership, fail-closed legacy handling and ownership fence
+        run: psql -v ON_ERROR_STOP=1 -f supabase/checks/account-deletion-request-fence.sql

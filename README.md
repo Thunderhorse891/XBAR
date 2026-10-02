@@ -474,6 +474,17 @@ psql -1 -v ON_ERROR_STOP=1 "$DATABASE_URL" -f supabase/migrations/20261002120000
 #    Proven under real RLS in CI (.github/workflows/records-database.yml).
 #    staff-writes.sql deletes rows inside its rolled-back transaction; run it
 #    against a disposable database, not production.
+
+# 15. DRAFT RELEASE GATE: request-token account-deletion fence and billing
+#    safeguards. Requires explicit production migration approval. Drain/stop
+#    deletion requests first; old deletion handlers deliberately refuse after
+#    this migration until the matching handler is deployed. Read
+#    docs/ACCOUNT-DELETION-BILLING-SAFETY.md before applying or rolling back.
+#    The command is documented for approved rollout; it has NOT been applied.
+psql -1 -v ON_ERROR_STOP=1 "$DATABASE_URL" -f supabase/migrations/20261002182226_account_deletion_request_fence.sql
+#    Run this proof only on an approved disposable database. It supersedes the
+#    legacy account-deletion-hold.sql check after the protocol upgrade.
+psql -v ON_ERROR_STOP=1 "$DISPOSABLE_DATABASE_URL" -f supabase/checks/account-deletion-request-fence.sql
 ```
 
 **(4) and (5) are prerequisites for billing, not optimizations to schedule
