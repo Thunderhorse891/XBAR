@@ -1,6 +1,5 @@
 import { useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Lock } from 'lucide-react';
 import { EmptyState } from '@/components/EmptyState';
 import { useDayKey } from '@/hooks/useDayKey';
 import { MetricCard, Panel, Pill } from '@/components/app-ui';
@@ -16,6 +15,7 @@ import { useUiStore } from '@/store/useUiStore';
 import { useXbarStore } from '@/store/useXbarStore';
 import './operationsExperience.css';
 import './reportsExperience.css';
+import './recordAccountExperience.css';
 import { canPresentPurchaseFlow } from '@/lib/nativePlatform';
 
 /*
@@ -141,21 +141,18 @@ export default function Reports() {
   // gating decision three lines up.
   if (horses.length === 0 && expenseReceipts.length === 0 && salesLeads.length === 0 && documents.length === 0) {
     return (
-      <div className="ops-experience reports-experience">
-        <section className="ops-hero ops-hero--solo" aria-labelledby="reports-title">
+      <div className="record-account record-reports reports-experience">
+        <header className="record-page-header" aria-labelledby="reports-title">
           <div>
-            <div className="ops-kicker">Ranch reporting</div>
-            <h1 id="reports-title">Know what the herd is worth</h1>
-            <p>
-              Cost per horse, break-even, what is waiting on documents, and where the spend is going — in one report you
-              can hand to a banker or an accountant.
-            </p>
+            <div className="record-kicker">Ranch records</div>
+            <h1 id="reports-title">Reports</h1>
+            <p>Readiness, costs and sale value.</p>
           </div>
-        </section>
-        <Panel title="Nothing to report yet" description="Add horses and log receipts to see the numbers here.">
+        </header>
+        <Panel title="Nothing to report yet">
           <EmptyState
             title="No horses on record"
-            description="The report is built from your horses, receipts, documents and offers. Add a horse to get started."
+            description="Add a horse to start your report."
             action={
               <button className="button button--primary" type="button" onClick={() => navigate('/horses')}>
                 Add a horse
@@ -168,96 +165,51 @@ export default function Reports() {
   }
 
   return (
-    <div className="ops-experience reports-experience">
-      <section className="ops-hero" aria-labelledby="reports-title">
+    <div className="record-account record-reports reports-experience">
+      <header className="record-page-header" aria-labelledby="reports-title">
         <div>
-          <div className="ops-kicker">Ranch reporting</div>
-          <h1 id="reports-title">Know what the herd is worth</h1>
-          <p>
-            Cost per horse, break-even, what is waiting on documents, and where the spend is going. Export it and hand
-            it to a banker, an accountant or a partner.
-          </p>
-          <div className="ops-hero__actions">
-            {locked ? (
-              // Guideline 3.1.1 forbids the call to action, not just the
-              // charge. The locked explanation above stays; only the button
-              // that invites a purchase goes.
-              canPresentPurchaseFlow() ? (
-                <button className="button button--primary" type="button" onClick={() => navigate(billingPath)}>
-                  Unlock with Ranch Ops
-                </button>
-              ) : null
-            ) : (
-              <>
-                <button
-                  className="button button--primary"
-                  type="button"
-                  onClick={handlePdf}
-                  disabled={exporting === 'pdf'}
-                >
-                  {exporting === 'pdf' ? 'Creating PDF…' : 'Download PDF report'}
-                </button>
-                <button className="button button--ghost" type="button" onClick={handleCsv}>
-                  Export spreadsheet
-                </button>
-              </>
-            )}
-          </div>
+          <div className="record-kicker">Ranch records</div>
+          <h1 id="reports-title">Reports</h1>
+          <p>Readiness, costs and sale value.</p>
+          {!locked ? (
+            <div className="record-page-header__actions">
+              <button
+                className="button button--primary"
+                type="button"
+                onClick={handlePdf}
+                disabled={exporting === 'pdf'}
+              >
+                {exporting === 'pdf' ? 'Creating PDF…' : 'Download PDF report'}
+              </button>
+              <button className="button button--ghost" type="button" onClick={handleCsv}>
+                Export spreadsheet
+              </button>
+            </div>
+          ) : null}
         </div>
-        {locked ? (
-          <div className="ops-hero__ledger" aria-label="Ranch reporting is a Ranch Ops feature">
-            <span>Ranch Ops</span>
-            <strong className="report-locked__headline">
-              <Lock size={22} aria-hidden="true" /> Locked
-            </strong>
-            <small>Cost per horse, break-even, margin and spend trends — with PDF and spreadsheet export.</small>
-          </div>
-        ) : (
-          <div className="ops-hero__ledger" aria-label="Money summary">
+        {!locked ? (
+          <div className="record-report-total" aria-label="Money summary">
             <span>Invested to date</span>
             <strong>{formatCompactCurrency(report.money.investedToDate)}</strong>
-            {/* Invested-to-date now includes what the horses cost to buy, so the
-                split is shown here — otherwise the headline cannot be
-                reconciled against the receipts a rancher has on file. */}
             <small>
-              {formatCompactCurrency(report.money.acquisitionCost)} in purchases ·{' '}
-              {formatCompactCurrency(report.money.receiptSpend)} in spend · {formatCurrency(report.money.monthlyBurn)}
-              /mo
+              {formatCompactCurrency(report.money.acquisitionCost)} purchases ·{' '}
+              {formatCompactCurrency(report.money.receiptSpend)} recorded spend
             </small>
-            <div className="ops-hero__mini-grid">
-              <div>
-                <span>Listed</span>
-                <b>{formatCompactCurrency(report.money.listedValue)}</b>
-              </div>
-              <div>
-                <span>Held up</span>
-                <b>{formatCompactCurrency(report.money.valueAtRisk)}</b>
-              </div>
-            </div>
+            <small>
+              {formatCurrency(report.money.monthlyBurn)}/mo · {formatCompactCurrency(report.money.listedValue)} listed
+            </small>
           </div>
-        )}
-      </section>
+        ) : null}
+      </header>
 
       {locked ? (
-        <Panel
-          className="ops-panel"
-          title="Unlock ranch reporting"
-          description="Cost per horse, break-even and margin, what is holding each sale up, and where the spend is going — with PDF and spreadsheet export."
-        >
-          <EmptyState
-            title={locked}
-            description="Ranch Ops turns the records you already keep into the numbers a banker, an accountant or a partner asks for."
-            // Same locked state as the hero button above, so it gets the same
-            // answer. Leaving this one lit while gating that one would put two
-            // different answers to one question on a single screen.
-            action={
-              canPresentPurchaseFlow() ? (
-                <button className="button button--primary" type="button" onClick={() => navigate(billingPath)}>
-                  See Ranch Ops
-                </button>
-              ) : null
-            }
-          />
+        <Panel className="ops-panel" title="Financial reports" description={locked}>
+          <p className="record-muted">Cost, margin and exports are included with Ranch Ops.</p>
+          {canPresentPurchaseFlow() ? (
+            <button className="button button--primary" type="button" onClick={() => navigate(billingPath)}>
+              See Ranch Ops
+            </button>
+          ) : null}
         </Panel>
       ) : (
         <>
@@ -306,11 +258,7 @@ export default function Reports() {
           </div>
 
           {report.risk.items.length > 0 ? (
-            <Panel
-              className="ops-panel"
-              title="What is holding up a sale"
-              description="Listed dollars a buyer cannot close on today, largest first."
-            >
+            <Panel className="ops-panel" title="Sale blockers" description="Largest asking prices first.">
               <div className="report-risk">
                 {report.risk.items.map((item) => (
                   <div className="report-risk__row" key={item.horseId}>
@@ -332,86 +280,91 @@ export default function Reports() {
             </Panel>
           ) : null}
 
-          <Panel
-            className="ops-panel"
-            title="Cost and margin by horse"
-            description="What each horse has cost, what it burns per month, and the lowest price worth taking."
-          >
-            <div className="report-table-scroll">
-              <table className="report-table">
-                <thead>
-                  <tr>
-                    <th scope="col">Horse</th>
-                    <th scope="col" className="report-table__num">
-                      Invested
-                    </th>
-                    <th scope="col" className="report-table__num">
-                      Per month
-                    </th>
-                    <th scope="col" className="report-table__num">
-                      Asking
-                    </th>
-                    <th scope="col" className="report-table__num">
-                      Break-even
-                    </th>
-                    <th scope="col" className="report-table__num">
-                      Margin
-                    </th>
-                    <th scope="col" className="report-table__num">
-                      Floor
-                    </th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {report.horses.map((horse) => (
-                    <tr
-                      key={horse.horseId}
-                      onClick={() => navigate(`/horses/${horse.horseId}`)}
-                      onKeyDown={(event) => {
-                        if (event.key === 'Enter' || event.key === ' ') {
-                          event.preventDefault();
-                          navigate(`/horses/${horse.horseId}`);
-                        }
-                      }}
-                      tabIndex={0}
-                      role="link"
-                      aria-label={`${horse.horseName}, open profile`}
-                    >
-                      <th scope="row">
-                        <span className="report-table__name">{horse.horseName}</span>
-                        <span className="report-table__meta">{horse.status}</span>
+          <details className="record-disclosure">
+            <summary>
+              Cost and margin by horse <span>{report.horseCount} horses</span>
+            </summary>
+            <Panel
+              className="ops-panel"
+              title="Cost and margin by horse"
+              description="Purchase cost, recorded spend and asking price."
+            >
+              <div className="report-table-scroll">
+                <table className="report-table">
+                  <thead>
+                    <tr>
+                      <th scope="col">Horse</th>
+                      <th scope="col" className="report-table__num">
+                        Invested
                       </th>
-                      <td className="report-table__num">{formatCurrency(horse.investedToDate)}</td>
-                      <td className="report-table__num">{formatCurrency(horse.monthlyBurn)}</td>
-                      {/* Showing $0 would read as "worth nothing" rather than
+                      <th scope="col" className="report-table__num">
+                        Per month
+                      </th>
+                      <th scope="col" className="report-table__num">
+                        Asking
+                      </th>
+                      <th scope="col" className="report-table__num">
+                        Break-even
+                      </th>
+                      <th scope="col" className="report-table__num">
+                        Margin
+                      </th>
+                      <th scope="col" className="report-table__num">
+                        Floor
+                      </th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {report.horses.map((horse) => (
+                      <tr
+                        key={horse.horseId}
+                        onClick={() => navigate(`/horses/${horse.horseId}`)}
+                        onKeyDown={(event) => {
+                          if (event.key === 'Enter' || event.key === ' ') {
+                            event.preventDefault();
+                            navigate(`/horses/${horse.horseId}`);
+                          }
+                        }}
+                        tabIndex={0}
+                        role="link"
+                        aria-label={`${horse.horseName}, open profile`}
+                      >
+                        <th scope="row">
+                          <span className="report-table__name">{horse.horseName}</span>
+                          <span className="report-table__meta">{horse.status}</span>
+                        </th>
+                        <td className="report-table__num">{formatCurrency(horse.investedToDate)}</td>
+                        <td className="report-table__num">{formatCurrency(horse.monthlyBurn)}</td>
+                        {/* Showing $0 would read as "worth nothing" rather than
                       "no price yet", and the three derived columns are
                       meaningless without an asking price. But "not listed" is a
                       different statement from "no price", and this report counts
                       Sale Prep, Market Ready and Buyer Review as inventory — so
                       saying "not listed for sale" under a summary that just
                       counted the horse as listed contradicted itself. */}
-                      {horse.askPrice > 0 ? (
-                        <>
-                          <td className="report-table__num">{formatCurrency(horse.askPrice)}</td>
-                          <td className="report-table__num">{formatCurrency(horse.breakEvenPrice)}</td>
-                          <td className="report-table__num">
-                            <Pill tone={horse.projectedMargin >= 0 ? 'emerald' : 'rose'}>
-                              {formatCurrency(horse.projectedMargin)} · {horse.marginPercent}%
-                            </Pill>
+                        {horse.askPrice > 0 ? (
+                          <>
+                            <td className="report-table__num">{formatCurrency(horse.askPrice)}</td>
+                            <td className="report-table__num">{formatCurrency(horse.breakEvenPrice)}</td>
+                            <td className="report-table__num">
+                              <Pill tone={horse.projectedMargin >= 0 ? 'emerald' : 'rose'}>
+                                {formatCurrency(horse.projectedMargin)} · {horse.marginPercent}%
+                              </Pill>
+                            </td>
+                            <td className="report-table__num">{formatCurrency(horse.safeDiscountFloor)}</td>
+                          </>
+                        ) : (
+                          <td className="report-table__num report-table__muted" colSpan={4}>
+                            {horse.saleInventory ? 'Asking price not set' : 'Not listed for sale'}
                           </td>
-                          <td className="report-table__num">{formatCurrency(horse.safeDiscountFloor)}</td>
-                        </>
-                      ) : (
-                        <td className="report-table__num report-table__muted" colSpan={4}>
-                          {horse.saleInventory ? 'Asking price not set' : 'Not listed for sale'}
-                        </td>
-                      )}
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          </Panel>
+                        )}
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </Panel>
+          </details>
         </>
       )}
 
@@ -419,7 +372,7 @@ export default function Reports() {
         {locked ? null : (
           <Panel
             className="ops-panel"
-            title="Where the spend goes"
+            title="Spending"
             description={`${formatCurrency(report.money.receiptSpend)} of recorded spend across ${report.categories.length} categor${report.categories.length === 1 ? 'y' : 'ies'}.`}
           >
             {report.categories.length ? (
@@ -442,7 +395,7 @@ export default function Reports() {
               <EmptyState
                 compact
                 title="No receipts logged"
-                description="Upload receipts to see where the money goes and what each horse costs."
+                description="Log a receipt to track spending."
                 action={
                   <button className="button button--ghost" type="button" onClick={() => navigate('/expenses')}>
                     Log a receipt

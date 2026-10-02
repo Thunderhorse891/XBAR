@@ -1,0 +1,427 @@
+/* Record and account screens share the approved graphite / silver workspace.
+   All rules are scoped: route loading must not restyle another screen. */
+.record-account {
+  min-width: 0;
+  color: var(--xbar-text);
+  font-family: var(--font-ui);
+  font-size: var(--type-body, 0.9375rem);
+}
+
+.record-profile,
+.record-reports {
+  display: grid;
+  gap: 20px;
+}
+
+.record-account .record-page-header,
+.record-profile .xs-objhead,
+.record-billing .checkout-panel--plans > .checkout-heading {
+  border: 1px solid var(--workspace-dark-border);
+  border-radius: 18px;
+  background: linear-gradient(120deg, var(--xbar-black), var(--xbar-gunmetal));
+  color: var(--xbar-warm-white);
+  box-shadow: var(--xbar-shadow-card);
+  padding: clamp(22px, 3vw, 34px);
+}
+
+.record-account .record-page-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 24px;
+}
+
+.record-account .record-page-header h1,
+.record-profile .xs-objhead__name,
+.record-billing .checkout-heading h1 {
+  margin: 0;
+  font-family: var(--font-ui);
+  font-size: var(--type-page-title, clamp(1.75rem, 2.4vw, 2.25rem));
+  font-weight: var(--type-heading-weight, 600);
+  line-height: var(--type-heading-leading, 1.15);
+  letter-spacing: var(--type-heading-tracking, -0.025em);
+  color: var(--xbar-warm-white);
+}
+
+.record-account .record-kicker,
+.record-billing .checkout-panel--plans > .checkout-heading p {
+  margin: 0 0 8px;
+  color: var(--xbar-silver);
+  font-size: 0.6875rem;
+  font-weight: 600;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+}
+
+.record-account .record-page-header p,
+.record-profile .xs-objhead__meta,
+.record-billing .checkout-panel--plans > .checkout-heading span {
+  margin: 8px 0 0;
+  color: var(--xbar-silver);
+  font-size: var(--type-body, 0.9375rem);
+  line-height: 1.55;
+}
+
+.record-account .record-page-header__actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  margin-top: 20px;
+}
+
+.record-account .record-page-header .button--primary,
+.record-profile .xs-objhead__actions > .xs-btn--primary {
+  background: linear-gradient(var(--xbar-warm-white), var(--xbar-silver));
+  border-color: var(--xbar-silver);
+  color: var(--xbar-black);
+  box-shadow: none;
+}
+
+.record-account .record-page-header .button--ghost,
+.record-profile .xs-objhead__actions > .xs-btn:not(.xs-btn--primary) {
+  border-color: var(--xbar-steel);
+  background: transparent;
+  color: var(--xbar-warm-white);
+}
+
+.record-profile .xs-objhead {
+  gap: 24px;
+  align-items: center;
+}
+
+.record-profile .xs-objhead__id > div {
+  min-width: 0;
+}
+
+.record-profile .xs-objhead__avatar {
+  width: 88px;
+  height: 88px;
+}
+
+.record-profile .xs-objhead__actions {
+  align-items: flex-start;
+}
+
+.record-profile .xs-tabbar {
+  max-width: 100%;
+  min-width: 0;
+  margin: 0;
+  scroll-padding: 12px;
+}
+
+.record-profile .xs-tabbar__tab {
+  min-height: 44px;
+}
+
+.record-profile .xs-back {
+  justify-self: start;
+}
+
+.record-more-actions {
+  flex-basis: 100%;
+  color: var(--xbar-silver);
+}
+
+.record-more-actions summary {
+  cursor: pointer;
+  padding: 8px 0;
+  font-size: var(--type-small, 0.8125rem);
+}
+
+.record-more-actions__items {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  padding-top: 4px;
+}
+
+.record-account .record-disclosure {
+  min-width: 0;
+  border: 1px solid var(--xbar-border);
+  border-radius: var(--xbar-radius);
+  background: var(--xbar-surface);
+  color: var(--xbar-text);
+  box-shadow: var(--xbar-shadow-card);
+}
+
+.record-account .record-disclosure > summary {
+  padding: 17px 20px;
+  cursor: pointer;
+  font-size: var(--type-subheading, 1rem);
+  font-weight: var(--type-heading-weight, 600);
+  line-height: 1.4;
+  overflow-wrap: anywhere;
+}
+
+.record-account .record-disclosure > summary span {
+  margin-left: 8px;
+  color: var(--xbar-text-muted);
+  font-size: var(--type-small, 0.8125rem);
+  font-weight: 400;
+  white-space: nowrap;
+}
+
+.record-account .record-disclosure[open] > summary {
+  border-bottom: 1px solid var(--xbar-border);
+}
+
+.record-account .record-disclosure > .xs-card,
+.record-account .record-disclosure > .ops-panel {
+  border: 0;
+  border-radius: 0 0 var(--xbar-radius) var(--xbar-radius);
+  margin: 0;
+  box-shadow: none;
+}
+
+.record-account summary:focus-visible {
+  outline: 2px solid var(--accent-edge);
+  outline-offset: 3px;
+  border-radius: 6px;
+}
+
+.record-account .record-muted {
+  margin: 0 0 16px;
+  color: var(--xbar-text-muted);
+  font-size: var(--type-small, 0.8125rem);
+}
+
+.record-account .record-report-total {
+  display: grid;
+  gap: 7px;
+  min-width: 0;
+  padding-left: 24px;
+  border-left: 1px solid var(--workspace-dark-border);
+}
+
+.record-account .record-report-total span,
+.record-account .record-report-total small {
+  color: var(--xbar-silver);
+  font-size: var(--type-small, 0.8125rem);
+}
+
+.record-account .record-report-total strong {
+  color: var(--xbar-warm-white);
+  font-size: var(--type-hero-title, clamp(2rem, 3.6vw, 3rem));
+  font-weight: var(--type-heading-weight, 600);
+  line-height: var(--type-heading-leading, 1.15);
+  letter-spacing: var(--type-heading-tracking, -0.025em);
+}
+
+.record-reports .ops-metric-grid,
+.record-reports .ops-workspace {
+  margin: 0;
+}
+
+.record-reports .ops-panel,
+.record-reports .ops-metric-card.metric-card {
+  min-width: 0;
+  border-color: var(--xbar-border);
+  border-radius: var(--xbar-radius);
+  background: var(--xbar-surface);
+  color: var(--xbar-text);
+  box-shadow: var(--xbar-shadow-card);
+}
+
+.record-reports .panel__title,
+.record-profile .xs-card__title,
+.record-billing .checkout-heading h2,
+.record-billing .checkout-trial h2 {
+  font-family: var(--font-ui);
+  font-size: var(--type-section-title, clamp(1.125rem, 1.5vw, 1.375rem));
+  font-weight: var(--type-heading-weight, 600);
+  line-height: var(--type-heading-leading, 1.15);
+  letter-spacing: var(--type-heading-tracking, -0.025em);
+}
+
+.record-reports .report-bar__fill {
+  background: var(--xbar-gunmetal);
+}
+
+.record-reports .ops-panel .button--block {
+  width: 100%;
+  margin-top: 14px;
+}
+
+.record-billing {
+  --checkout-ink: var(--xbar-text);
+  --checkout-muted: var(--xbar-text-muted);
+  --checkout-line: var(--xbar-border);
+  --checkout-blue: var(--accent-ink);
+}
+
+.record-billing .checkout-grid {
+  grid-template-columns: minmax(0, 1fr) minmax(280px, 330px);
+  gap: 20px;
+}
+
+.record-billing .checkout-panel {
+  min-width: 0;
+  border-color: var(--xbar-border);
+  border-radius: var(--xbar-radius);
+  background: var(--xbar-surface);
+  box-shadow: var(--xbar-shadow-card);
+}
+
+.record-billing .checkout-panel--plans {
+  padding: 0;
+  border: 0;
+  background: transparent;
+  box-shadow: none;
+  align-content: start;
+}
+
+.record-billing .checkout-panel--payment {
+  gap: 14px;
+  padding: 22px;
+}
+
+.record-billing .checkout-plan {
+  align-content: start;
+  gap: 12px;
+  border-radius: var(--xbar-radius);
+  padding: 20px;
+}
+
+.record-billing .checkout-plan--selected {
+  border-color: var(--accent-edge);
+  box-shadow: inset 0 3px 0 var(--accent-edge);
+}
+
+.record-billing .checkout-plan__price {
+  flex-wrap: wrap;
+}
+
+.record-billing .checkout-plan__price strong,
+.record-billing .checkout-total strong {
+  font-weight: var(--type-heading-weight, 600);
+  letter-spacing: var(--type-heading-tracking, -0.025em);
+}
+
+.record-billing .checkout-trial {
+  border-color: var(--xbar-border);
+  border-radius: var(--xbar-radius);
+  background: var(--xbar-surface);
+  box-shadow: inset 3px 0 0 var(--accent-edge);
+}
+
+.record-billing .record-plan-details summary {
+  cursor: pointer;
+  font-size: var(--type-small, 0.8125rem);
+  font-weight: 600;
+  padding: 5px 0;
+}
+
+.record-billing .record-plan-details .checkout-plan__features {
+  margin-top: 10px;
+  padding-top: 10px;
+  border-top-color: var(--xbar-border);
+}
+
+.record-billing .checkout-card-box {
+  padding: 14px;
+  gap: 8px;
+}
+
+.record-billing .checkout-card-box__top {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px 12px;
+}
+
+.record-billing .checkout-card-box__top strong {
+  color: var(--xbar-text);
+}
+
+.record-billing .record-billing-details {
+  box-shadow: none;
+  border-radius: 8px;
+}
+
+.record-billing .record-billing-details > summary {
+  padding: 12px;
+  font-size: var(--type-small, 0.8125rem);
+}
+
+.record-billing .checkout-status-list {
+  padding: 10px;
+}
+
+.record-billing .checkout-status-list div {
+  flex-wrap: wrap;
+}
+
+.record-billing .checkout-primary-action:disabled,
+.record-billing .checkout-plan button:disabled {
+  color: var(--xbar-text-muted);
+  background: var(--xbar-surface-cool);
+}
+
+@media (max-width: 1100px) {
+  .record-billing .checkout-grid {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .record-billing .checkout-panel--payment {
+    position: static;
+  }
+}
+
+@media (max-width: 720px) {
+  .record-profile .xs-objhead,
+  .record-account .record-page-header,
+  .record-billing .checkout-panel--plans > .checkout-heading {
+    padding: 22px;
+  }
+
+  .record-profile .xs-objhead__id {
+    align-items: flex-start;
+    gap: 14px;
+  }
+
+  .record-profile .xs-objhead__avatar {
+    width: 64px;
+    height: 64px;
+  }
+
+  .record-profile .xs-objhead__actions {
+    width: 100%;
+  }
+
+  .record-profile .xs-objhead__actions > .xs-btn {
+    flex: 1 1 auto;
+    min-height: 44px;
+  }
+
+  .record-account .record-report-total {
+    width: 100%;
+    padding: 18px 0 0;
+    border-left: 0;
+    border-top: 1px solid var(--workspace-dark-border);
+  }
+
+  .record-reports .ops-metric-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .record-reports .ops-workspace--columns {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .record-billing .checkout-plan-list {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
+.record-profile .xs-passport-id__code {
+  font-family: var(--font-ui);
+  font-variant-numeric: tabular-nums;
+}
+
+.record-billing .checkout-plan h3 {
+  font-family: var(--font-ui);
+  font-size: var(--type-subheading, 1rem);
+  font-weight: var(--type-heading-weight, 600);
+  line-height: var(--type-heading-leading, 1.15);
+  letter-spacing: var(--type-heading-tracking, -0.025em);
+}

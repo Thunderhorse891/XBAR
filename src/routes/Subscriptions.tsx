@@ -46,6 +46,7 @@ import { useUiStore } from '@/store/useUiStore';
 import { useCurrentRoleCapability, useWorkspaceReady, useXbarStore } from '@/store/useXbarStore';
 import type { SubscriptionProfile, SubscriptionTier } from '@/types/xbar';
 import './checkoutExperience.css';
+import './recordAccountExperience.css';
 
 const tiers: SubscriptionTier[] = ['Starter', 'Professional', 'Ranch Ops', 'Enterprise'];
 
@@ -697,7 +698,7 @@ export default function Subscriptions() {
         key={tier}
       >
         <div>
-          <span>{highlighted ? 'Selected tier' : 'Operational tier'}</span>
+          <span>{paidCurrent ? 'Current plan' : setupCurrent ? 'Setup' : highlighted ? 'Selected' : 'Plan'}</span>
           <h3>{tier}</h3>
           <p>{profile.fit}</p>
         </div>
@@ -709,16 +710,14 @@ export default function Subscriptions() {
           <li>{formatLimit(config.limits.horseLimit, 'horses')}</li>
           <li>{formatLimit(config.limits.salePacketLimit, 'sale packets')}</li>
         </ul>
-        {/* Seat, document and storage quotas are already included in this
-            canonical feature copy; show each once in the comparison card.
-            What the tier includes, not just how much of it. Rendered whatever
-            the billing configuration is: being unable to buy a plan is no
-            reason to stop showing what it contains. */}
-        <ul className="checkout-plan__features">
-          {config.featureFlags.map((feature) => (
-            <li key={feature}>{feature}</li>
-          ))}
-        </ul>
+        <details className="record-plan-details">
+          <summary>Plan details</summary>
+          <ul className="checkout-plan__features">
+            {config.featureFlags.map((feature) => (
+              <li key={feature}>{feature}</li>
+            ))}
+          </ul>
+        </details>
         {paidCurrent || setupCurrent ? (
           <button
             type="button"
@@ -756,16 +755,13 @@ export default function Subscriptions() {
   };
 
   return (
-    <section className="checkout-route checkout-route--embedded">
+    <section className="checkout-route checkout-route--embedded record-account record-billing">
       <div className="checkout-grid">
         <section className="checkout-panel checkout-panel--plans" aria-labelledby="checkout-title">
           <div className="checkout-heading">
             <p>Billing</p>
             <h1 id="checkout-title">Review Billing</h1>
-            <span>
-              Choose the tier that fits your workflow. Plans change only after checkout succeeds — nothing here changes
-              your workspace on its own.
-            </span>
+            <span>Compare plans. Your plan changes only after checkout succeeds.</span>
           </div>
 
           {checkoutReturnState === 'confirming' && (
@@ -913,11 +909,7 @@ export default function Subscriptions() {
                 <span>Billing</span>
                 <strong>Billing not configured yet</strong>
               </div>
-              <p>
-                Payment is not set up for this deployment, so no plan can be purchased here and no payment details are
-                collected. Every tier below is still shown in full so you can compare what they include. Your workspace
-                and current plan are unchanged.
-              </p>
+              <p>No purchases or payment details are accepted here. Your workspace and current plan are unchanged.</p>
             </div>
           ) : selectedReadiness.mode === 'external' ? (
             <div className="checkout-card-box" aria-label="Billing details">
@@ -933,68 +925,54 @@ export default function Subscriptions() {
                 web to subscribe" is exactly such a direction, which is what an
                 earlier version of this sentence said. Current plan state only.
               */}
-              <p>
-                Subscriptions are not sold in the app. Every tier is shown in full so you can compare what they include,
-                and your workspace and current plan are unchanged.
-              </p>
+              <p>Subscriptions are not sold in the app. Your workspace and current plan are unchanged.</p>
             </div>
           ) : (
             <div className="checkout-card-box" aria-label="Secure payment details">
               <div className="checkout-card-box__top">
-                <span>Card details</span>
+                <span>Payment</span>
                 <strong>Secure checkout</strong>
-              </div>
-              <label>
-                <span>Card number</span>
-                <div>Entered on the next secure step</div>
-              </label>
-              <div className="checkout-card-box__row">
-                <label>
-                  <span>Expiration</span>
-                  <div>Next step</div>
-                </label>
-                <label>
-                  <span>CVC</span>
-                  <div>Next step</div>
-                </label>
               </div>
               <p>Your card details are handled by the payment processor. XBAR never stores raw card numbers.</p>
             </div>
           )}
 
-          <div className="checkout-status-list" aria-label="Billing details">
-            {selectedCheckoutConfigured ? (
-              <>
-                <div>
-                  <span>Billing</span>
-                  <strong>{billingPeriod === 'annual' ? 'Annual' : 'Monthly'}</strong>
-                </div>
-                <div>
-                  <span>Payment</span>
-                  <strong>Handled at checkout</strong>
-                </div>
-                <div>
-                  <span>Receipt</span>
-                  <strong>After checkout</strong>
-                </div>
-              </>
-            ) : (
-              <>
-                <div>
-                  <span>Checkout</span>
-                  <strong>Not configured</strong>
-                </div>
-                <div>
-                  <span>Activation</span>
-                  <strong>Not available in app</strong>
-                </div>
-                <div>
-                  <span>Workspace</span>
-                  <strong>No plan change</strong>
-                </div>
-              </>
-            )}
-          </div>
+          <details className="record-disclosure record-billing-details">
+            <summary>Billing details</summary>
+            <div className="checkout-status-list" aria-label="Billing details">
+              {selectedCheckoutConfigured ? (
+                <>
+                  <div>
+                    <span>Billing</span>
+                    <strong>{billingPeriod === 'annual' ? 'Annual' : 'Monthly'}</strong>
+                  </div>
+                  <div>
+                    <span>Payment</span>
+                    <strong>Handled at checkout</strong>
+                  </div>
+                  <div>
+                    <span>Receipt</span>
+                    <strong>After checkout</strong>
+                  </div>
+                </>
+              ) : (
+                <>
+                  <div>
+                    <span>Checkout</span>
+                    <strong>Not configured</strong>
+                  </div>
+                  <div>
+                    <span>Activation</span>
+                    <strong>Not available in app</strong>
+                  </div>
+                  <div>
+                    <span>Workspace</span>
+                    <strong>No plan change</strong>
+                  </div>
+                </>
+              )}
+            </div>
+          </details>
 
           {billingPortalAction ? (
             <button

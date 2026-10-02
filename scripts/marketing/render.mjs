@@ -27,12 +27,10 @@ export function esc(value) {
 
 // Top-level links plus two rich dropdown menus. Dropdowns are native
 // <details> elements, so they work without JavaScript; /site.js enhances
-// them (hover-open on fine pointers, outside-click and Escape to close,
-// one open at a time).
+// them (outside-click and Escape to close, one open at a time).
 const NAV_LINKS = [
   { href: '/features', label: 'Features' },
   { href: '/pricing', label: 'Pricing' },
-  { href: `mailto:${SUPPORT_EMAIL}`, label: 'Help & support' },
 ];
 const NAV_MENUS = [
   {
@@ -95,11 +93,15 @@ function header(currentPath) {
   return `<header class="site-header">
   <div class="wrap">
     <a class="brand" href="/" aria-label="XBAR home">
-      <img src="/brand/apple-touch-icon.png" alt="" width="30" height="30" />
-      <span>XBAR<small>Horse records &amp; sales</small></span>
-    </a>${
-      currentPath === '/'
-        ? `
+      <img src="/brand/xbar-wordmark.png" alt="XBAR" width="550" height="170" />
+    </a>
+    <nav class="site-nav" aria-label="Primary">
+      ${NAV_LINKS.map((item) => navLink(item, currentPath)).join('\n      ')}
+      ${NAV_MENUS.map((menu) => navMenu(menu, currentPath)).join('\n      ')}
+      <a href="${APP_LOGIN}" rel="nofollow">Sign in</a>
+    </nav>
+    <a class="site-support" href="mailto:${SUPPORT_EMAIL}">Help &amp; support</a>
+    <a class="btn btn--primary site-signup" href="${APP_SIGNUP}" rel="nofollow">Create your workspace</a>
     <details class="landing-mobile-nav">
       <summary>Menu <i class="nav-caret" aria-hidden="true"></i></summary>
       <nav aria-label="Mobile primary">
@@ -107,20 +109,7 @@ function header(currentPath) {
         <a href="${APP_LOGIN}" rel="nofollow">Sign in</a>
         <a href="${APP_SIGNUP}" rel="nofollow">Create your workspace</a>
       </nav>
-    </details>`
-        : ''
-    }
-    <nav class="site-nav" aria-label="Primary">
-      ${NAV_LINKS.map((item) => navLink(item, currentPath)).join('\n      ')}
-      ${NAV_MENUS.map((menu) => navMenu(menu, currentPath)).join('\n      ')}
-      ${NAV_MENUS.map(
-        (menu) =>
-          `<a class="nav-mobile-link" href="${menu.root}"${currentPath === menu.root || currentPath.startsWith(`${menu.root}/`) ? ' aria-current="page"' : ''}>${esc(menu.label)}</a>`,
-      ).join('\n      ')}
-      <a href="/demo"${currentPath === '/demo' ? ' aria-current="page"' : ''}>Product tour</a>
-      <a href="${APP_LOGIN}" rel="nofollow">Sign in</a>
-    </nav>
-    <a class="btn btn--primary" href="${APP_SIGNUP}" rel="nofollow">Create your workspace</a>
+    </details>
   </div>
 </header>`;
 }
@@ -129,8 +118,8 @@ function footer() {
   return `<footer class="site-footer">
   <div class="wrap">
     <div>
-      <a class="brand" href="/"><img src="/brand/apple-touch-icon.png" alt="" width="30" height="30" /><span>XBAR</span></a>
-      <p>One trusted operational record for every horse — documents, ownership, care, and sale-ready buyer packets.</p>
+      <a class="brand" href="/" aria-label="XBAR home"><img src="/brand/xbar-wordmark.png" alt="XBAR" width="550" height="170" /></a>
+      <p>Horse records, documents, and the next handoff. Together in XBAR.</p>
       <p>Need help? <a href="mailto:${SUPPORT_EMAIL}">${SUPPORT_EMAIL}</a></p>
     </div>
     <div>
@@ -237,17 +226,18 @@ export function renderPage(page, { landingScript = '/landing/motion.js' } = {}) 
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
     <link
-      href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,400;9..144,500;9..144,600;9..144,700&family=Outfit:wght@400;500;600;700;800;900&display=swap"
+      href="https://fonts.googleapis.com/css2?family=Outfit:wght@400;500;600;700;800;900&display=swap"
       rel="stylesheet"
     />
-    <link rel="stylesheet" href="/site.css" />${isLanding ? '\n    <link rel="stylesheet" href="/brand/xbar-brand-tokens.css" /><link rel="stylesheet" href="/landing.css" />' : ''}
+    <link rel="stylesheet" href="/brand/xbar-brand-tokens.css" />
+    <link rel="stylesheet" href="/site.css" />${isLanding ? '\n    <link rel="stylesheet" href="/landing.css" />' : ''}
+    <link rel="stylesheet" href="/typography.css" />
     <link rel="icon" type="image/png" href="/brand/xbar-favicon.png" />
     <link rel="apple-touch-icon" href="/brand/apple-touch-icon.png" />
     <script type="application/ld+json">${JSON.stringify(baseJsonLd)}</script>
     <script defer src="/site.js"></script>${isLanding ? `\n    <script type="module" src="${esc(landingScript)}"></script>` : ''}
   </head>
   <body${isLanding ? ' class="landing-page"' : ''}>
-    <div class="bg-fx" aria-hidden="true"><i class="bg-fx__grid"></i><i class="bg-fx__aurora"></i><i class="bg-fx__aurora bg-fx__aurora--warm"></i></div>
     <a class="skip-link" href="#main">Skip to content</a>
     ${header(page.path)}
     <main id="main">
