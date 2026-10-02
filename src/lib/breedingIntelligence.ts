@@ -174,7 +174,9 @@ function latestByRecordType(
  *
  *   - a positive word that is negated in its own clause does not count:
  *     "no heartbeat", "not yet confirmed", "mare is not pregnant";
- *   - "confirmed open" is open, and "negative for twins" is not a negative;
+ *   - "confirmed" asserts whatever follows it in its clause: "confirmed open"
+ *     and "confirmed not pregnant" are open; bare "confirmed" is in foal;
+ *   - "negative for twins" is not a negative;
  *   - positive and negative wording in the same entry is unknown.
  *
  * Text matching used to read "Pregnancy check -- Negative, mare is not
@@ -186,8 +188,9 @@ export type PregnancyCheckOutcome = 'positive' | 'negative' | 'unknown';
 const NEGATIVE_WORDING =
   /\bopen\b|\bnegative\b(?!\s+for\s+twins?)|not.?in.?foal|not.?pregnant|\bbarren\b|\bempty\b|\bslipped\b|\blost\b|\bresorb/;
 const POSITIVE_WORDING =
-  /in.?foal|\bpositive\b|\bconfirmed\b(?!\s+(?:open|negative|empty|barren))|\bpregnant\b|heartbeat|\bsingle(?:ton)?\s+(?:pregnancy|embryo|vesicle)/g;
+  /in.?foal|\bpositive\b|\bconfirmed\b|\bpregnant\b|heartbeat|\bsingle(?:ton)?\s+(?:pregnancy|embryo|vesicle)/g;
 const CLAUSE_NEGATION = /\b(?:no|not|without|never|isn'?t|wasn'?t|yet to be)\b/;
+const CLAUSE_BREAK = /[.;,:!?\n\u2013\u2014]|\s-\s/;
 
 export function pregnancyCheckOutcome(event: TimelineEvent): PregnancyCheckOutcome {
   // Restored backups can carry any JSON here; only a string is a result.
@@ -202,12 +205,15 @@ export function pregnancyCheckOutcome(event: TimelineEvent): PregnancyCheckOutco
   const negative = NEGATIVE_WORDING.test(text);
   let positive = false;
   for (const match of text.matchAll(POSITIVE_WORDING)) {
-    const clause =
-      text
-        .slice(0, match.index)
-        .split(/[.;,:!?\n\u2013\u2014]|\s-\s/)
-        .pop() ?? '';
-    if (!CLAUSE_NEGATION.test(clause)) positive = true;
+    const before = text.slice(0, match.index).split(CLAUSE_BREAK).pop() ?? '';
+    if (CLAUSE_NEGATION.test(before)) continue;
+    // "Confirmed" is not a result on its own; it confirms what follows it. Only
+    // with nothing negating or negative after it in its clause is it in foal.
+    if (match[0] === 'confirmed') {
+      const after = text.slice((match.index ?? 0) + match[0].length).split(CLAUSE_BREAK)[0] ?? '';
+      if (CLAUSE_NEGATION.test(after) || NEGATIVE_WORDING.test(after)) continue;
+    }
+    positive = true;
   }
   if (negative && positive) return 'unknown';
   if (negative) return 'negative';

@@ -52,6 +52,11 @@ const corpus: Array<[string, TimelineEvent, PregnancyCheckOutcome]> = [
   ['mare is not pregnant', check('Scan', 'Mare is not pregnant'), 'negative'],
   // Phrases that read the opposite way to their loudest word.
   ['confirmed open', check('Vet check', 'Confirmed open'), 'negative'],
+  ['confirmed not pregnant', check('Recheck', 'Confirmed not pregnant'), 'negative'],
+  ['confirmed not in foal', check('Recheck', 'Confirmed not in foal'), 'negative'],
+  ['confirmed she is not pregnant', check('Recheck', 'Confirmed she is not pregnant'), 'negative'],
+  ['bare confirmed is in foal', check('Pregnancy check', 'Confirmed'), 'positive'],
+  ['confirmed, single pregnancy', check('Ultrasound', 'Confirmed single pregnancy, negative for twins'), 'positive'],
   ['single pregnancy, negative for twins', check('Ultrasound', 'Single pregnancy, negative for twins'), 'positive'],
   // Plain results.
   ['empty', check('Preg check', 'Empty'), 'negative'],
@@ -82,6 +87,9 @@ test('the latest definite check decides, so a re-check can reverse an earlier on
   assert.equal(currentPregnancyOutcome([inFoal16, open14], BRED), 'positive', 'open at 14, in foal at 16');
   assert.equal(currentPregnancyOutcome([open45, inFoal16], BRED), 'negative', 'in foal at 16, lost by 45');
   assert.equal(currentPregnancyOutcome([pending60, inFoal16], BRED), 'positive', 'a pending re-check erases nothing');
+  // A free-text re-check that confirms a loss overrides the earlier positive.
+  const lost = check('Recheck', 'Confirmed not pregnant', undefined, '2026-05-20');
+  assert.equal(currentPregnancyOutcome([lost, inFoal16], BRED), 'negative', 'confirmed not pregnant at 50');
   // Same day: the timeline is newest-first, so the entry made last wins.
   const morning = check('Scan', '', 'open', '2026-05-01');
   const afternoon = check('Rescan', '', 'in-foal', '2026-05-01');
