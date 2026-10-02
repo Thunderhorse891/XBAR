@@ -81,3 +81,18 @@ test('runs the reminder pass and reports the scan on a valid cron call', async (
   assert.equal(payload.checked, 0);
   assert.equal(payload.emailed, 0);
 });
+
+test('a partial reminder failure returns non-success HTTP status', async () => {
+  // A selected workspace reaches an unsupported lookup in the synthetic DB.
+  // The processor catches it as a per-workspace failure rather than throwing.
+  const date = new Date().toISOString().slice(0, 10);
+  __setTrialBoundary({
+    admin: 'fake',
+    listRows: [{ workspace_id: 'synthetic-ws', billing_state: 'Inactive', payload: { trial_end: date } }],
+  });
+  const { res, payload } = await callHandler();
+  assert.equal(res.statusCode, 500);
+  assert.equal(payload.ok, false);
+  assert.equal(payload.failures.length, 1);
+  assert.equal(payload.emailed, 0);
+});
