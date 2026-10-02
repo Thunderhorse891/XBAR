@@ -1,4 +1,5 @@
 #!/usr/bin/env node
+import { isEmailConfigured } from '../api/_lib/email.js';
 // Go-live preflight: report which production subsystems are configured, what
 // each missing value keeps switched off, and (optionally) probe a deployed
 // instance's /api/health to compare intent against reality.
@@ -53,14 +54,22 @@ const groups = [
     ],
   },
   {
-    title: 'Outbound email (reminders, invitations)',
-    unlocks: 'Emailed care reminders and invitation delivery. Without a provider, reminders stay in-app only.',
-    required: [{ name: 'EMAIL_FROM_ADDRESS', note: 'verified sender' }],
+    title: 'Application email (welcome, trial, payment-failed, packets, reminders)',
+    unlocks:
+      'Application emails. Supabase Auth confirmation/reset/invitation email uses separate SMTP settings. Without a provider, care reminders stay in-app only.',
+    required: [],
     optional: [
       { name: 'RESEND_API_KEY', note: 'either this…' },
       { name: 'SENDGRID_API_KEY', note: '…or this' },
+      { name: 'EMAIL_FROM_ADDRESS', note: 'verified sender for Resend/SendGrid' },
+      { name: 'GMAIL_SMTP_ENABLED', note: 'exactly true opts into low-volume Gmail' },
+      { name: 'GMAIL_SMTP_USER', note: 'Gmail sender account' },
+      { name: 'GMAIL_SMTP_APP_PASSWORD', note: 'dedicated App Password; never print' },
     ],
-    enabled: () => isSet('EMAIL_FROM_ADDRESS') && (isSet('RESEND_API_KEY') || isSet('SENDGRID_API_KEY')),
+    enabled: () => isEmailConfigured(),
+    extra: [
+      'Configured is not delivery proof. Gmail shares personal-account limits and may be blocked; verify only with an approved test recipient.',
+    ],
   },
   {
     title: 'Daily reminders cron',

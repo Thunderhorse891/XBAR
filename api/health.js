@@ -1,3 +1,5 @@
+import { isEmailConfigured } from './_lib/email.js';
+import { gmailSmtpStatus } from './_lib/gmail-smtp.js';
 import { sendJson } from './_lib/http.js';
 import { clientManagedBillingEnabled, serverManagedBillingEnabled } from './_lib/managed-billing.js';
 import { readLegacyPriceIds } from './_lib/subscription-plans.js';
@@ -72,7 +74,7 @@ export default function handler(req, res) {
     managedBilling,
     clientManagedBilling,
     paymentLinks,
-    email: hasEnv('RESEND_API_KEY') || hasEnv('SENDGRID_API_KEY'),
+    email: isEmailConfigured(),
     remindersCron: Boolean(process.env.CRON_SECRET),
   };
   /*
@@ -197,11 +199,20 @@ export default function handler(req, res) {
   if (stripeMode === 'test' && process.env.VERCEL_ENV === 'production') {
     warnings.push('Production is using a Stripe TEST key. Checkout works, but no real payment is taken.');
   }
+  const gmail = gmailSmtpStatus();
+  const gmailSelected = gmail.enabled && !hasEnv('RESEND_API_KEY') && !hasEnv('SENDGRID_API_KEY');
+  if (gmailSelected) {
+    warnings.push(
+      gmail.configured
+        ? 'Gmail SMTP is configured but unverified. It sends as the configured Gmail account, shares its daily limits, and may be blocked by Google. Inbox delivery and Supabase Auth SMTP must be tested separately.'
+        : 'Gmail SMTP is enabled but requires a valid GMAIL_SMTP_USER and 16-letter GMAIL_SMTP_APP_PASSWORD. No Gmail messages can be sent.',
+    );
+  }
   if (!subsystems.email) {
     warnings.push(
-      'No email provider is configured (RESEND_API_KEY or SENDGRID_API_KEY). Welcome, trial, payment-failed and packet emails are not sent.',
+      'No email provider is configured (RESEND_API_KEY, SENDGRID_API_KEY or opt-in Gmail SMTP). Welcome, trial, payment-failed and packet emails are not sent.',
     );
-  } else if (!hasEnv('EMAIL_FROM_ADDRESS')) {
+  } else if (!gmailSelected && !hasEnv('EMAIL_FROM_ADDRESS')) {
     warnings.push(
       'EMAIL_FROM_ADDRESS is not set, so email goes out from no-reply@xbar.app. That domain must be verified with the email provider or every send is rejected.',
     );
