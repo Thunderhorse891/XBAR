@@ -22,6 +22,7 @@ import type {
   HorseRecord,
   OwnershipProofRequirement,
   OwnershipRecord,
+  TimelineEvent,
 } from '../src/types/xbar.js';
 
 // The sale readiness score is recomputed from what is on file, never stored.
@@ -94,15 +95,28 @@ const ownership = (verified: number, transferStatus: OwnershipRecord['transferSt
 
 const currentCoggins = () => doc('Coggins', { entities: { examDate: '2026-03-01' } });
 const transferFile = () => doc('Transfer Packet');
-const careReceipts = () => [receipt('Wormer', '2026-06-01'), receipt('Dental Float', '2026-02-01')];
+// Care is what was done to the horse, logged as a health record (audit F06).
+// A receipt is spending: it used to stand in for care here, and no longer can.
+const careEvent = (status: 'Deworming' | 'Dental', date: string) =>
+  ({
+    id: `care-${status}-${date}`,
+    date,
+    title: status,
+    summary: '',
+    owner: 'Vet',
+    category: 'Medical',
+    status,
+  }) as TimelineEvent;
+const careTimeline = () => [careEvent('Deworming', '2026-06-01'), careEvent('Dental', '2026-02-01')];
+const cared = (medicalTimeline: TimelineEvent[] = careTimeline()) => makeHorse({ medicalTimeline });
 
 const gateClear = { allowed: true, nextAction: 'Release buyer packet.' };
 
 function complete(overrides: Partial<Parameters<typeof buildSaleReadinessScore>[0]> = {}) {
   return buildSaleReadinessScore({
-    horse: makeHorse(),
+    horse: cared(),
     documents: [currentCoggins(), transferFile()],
-    receipts: careReceipts(),
+    receipts: [],
     ownershipRecord: ownership(4, 'Clear'),
     releaseGate: gateClear,
     now: NOW,
@@ -133,7 +147,7 @@ test('a horse with every record on file scores 100 and can generate a proof pack
 
 test('each gap names the score it reaches — "Add a current Coggins to reach 85"', () => {
   const readiness = complete({
-    horse: makeHorse({ profileImage: '' }),
+    horse: makeHorse({ profileImage: '', medicalTimeline: careTimeline() }),
     documents: [transferFile()],
   });
 
@@ -164,7 +178,11 @@ test('a stale Coggins is a renewal and one in review is an approval, not a fresh
 
 test('identity earns partial credit and names what is missing', () => {
   const readiness = complete({
-    horse: makeHorse({ bloodline: { sire: '', dam: '' } as HorseRecord['bloodline'], microchipId: '' }),
+    horse: makeHorse({
+      bloodline: { sire: '', dam: '' } as HorseRecord['bloodline'],
+      microchipId: '',
+      medicalTimeline: careTimeline(),
+    }),
   });
   const identity = readiness.components.find((component) => component.key === 'identity');
 
@@ -177,19 +195,23 @@ test('identity earns partial credit and names what is missing', () => {
 });
 
 test('care counts deworming and dental float from the care board, and says which to log', () => {
-  const none = complete({ receipts: [] });
+  const none = complete({ horse: cared([]) });
   assert.equal(none.components.find((c) => c.key === 'care')?.earned, 0);
   assert.equal(none.actions[0]?.label, 'Log a deworming and a dental float');
-  assert.equal(none.actions[0]?.logCategory, 'Wormer');
+  assert.equal(none.actions[0]?.careType, 'Deworming');
 
-  const dentalDue = complete({ receipts: [receipt('Wormer', '2026-06-01')] });
+  const dentalDue = complete({ horse: cared([careEvent('Deworming', '2026-06-01')]) });
   assert.equal(dentalDue.components.find((c) => c.key === 'care')?.earned, 7.5);
   assert.equal(dentalDue.actions[0]?.label, 'Log a dental float');
-  assert.equal(dentalDue.actions[0]?.logCategory, 'Dental Float');
+  assert.equal(dentalDue.actions[0]?.careType, 'Dental');
   assert.equal(dentalDue.actions[0]?.target, 'care');
 
-  const otherHorse = complete({ receipts: careReceipts().map((r) => ({ ...r, horseId: 'someone-else' })) });
-  assert.equal(otherHorse.components.find((c) => c.key === 'care')?.earned, 0, 'another horse’s wormer does not count');
+  // A purchase is not care: receipts for both, with nothing given, earn nothing.
+  const bought = complete({
+    horse: cared([]),
+    receipts: [receipt('Wormer', '2026-06-01'), receipt('Dental Float', '2026-02-01')],
+  });
+  assert.equal(bought.components.find((c) => c.key === 'care')?.earned, 0, 'buying a wormer is not worming');
 });
 
 test('the ownership chain earns full credit only when every proof is verified and the transfer is Clear', () => {
@@ -222,7 +244,10 @@ test('the proof packet follows the release gate the generated packet prints', ()
   assert.equal(blocked.proofPacketBlocker, 'Release gate: Health cert: No health certification is attached yet.');
 
   // And a clear gate is not enough below the threshold.
-  const low = complete({ horse: makeHorse({ profileImage: '' }), documents: [transferFile()] });
+  const low = complete({
+    horse: makeHorse({ profileImage: '', medicalTimeline: careTimeline() }),
+    documents: [transferFile()],
+  });
   assert.equal(low.proofPacketReady, false);
   assert.match(low.proofPacketBlocker ?? '', /Reach 85/);
 
@@ -348,7 +373,7 @@ test('every roster readiness figure is the computed score, and a private listing
 });
 
 test('the profile suggests the next step from the computed score, never the stored blockers', async () => {
-  const fresh = complete({ documents: [], receipts: [], ownershipRecord: undefined });
+  const fresh = complete({ documents: [], horse: cared([]), ownershipRecord: undefined });
   const top = fresh.topActions[0]!;
   assert.equal(readinessNextStep(fresh, 'COPPER CANYON'), `${top.label} to reach ${top.reach}`);
 
@@ -367,7 +392,7 @@ test('the profile suggests the next step from the computed score, never the stor
 
 test('"every record is in place" is said only when every record is', async () => {
   // At 85 the packet can go out, but Care records at 0 of 15 is not "every record".
-  const noCare = complete({ receipts: [] });
+  const noCare = complete({ horse: cared([]) });
   assert.equal(noCare.score, 85);
   assert.equal(noCare.proofPacketReady, true);
   const headline = readinessHeadline(noCare);
@@ -394,12 +419,14 @@ test('a readiness step the current role cannot finish is shown as such', async (
     // Waiting on a file still being read ends in approving it.
     'processing-documents': 'reviewDocuments',
     'add-photo': 'uploadMedia',
-    care: 'manageAssets',
+    // Care is a health record now (audit F06), so it takes manageMedical.
+    care: 'manageMedical',
     ownership: 'manageOwnership',
   });
   const can = (role: Parameters<typeof hasRoleCapability>[0], target: keyof typeof READINESS_ACTION_CAPABILITY) =>
     hasRoleCapability(role, READINESS_ACTION_CAPABILITY[target]);
-  assert.equal(can('Owner', 'care'), false, 'an Owner cannot log the care receipt');
+  assert.equal(can('Sales Lead', 'care'), false, 'a Sales Lead cannot log a health record');
+  assert.equal(can('Medical Lead', 'care'), true, 'the Medical Lead can close the care gap');
   assert.equal(can('Ranch Manager', 'review-documents'), false, 'a Ranch Manager cannot approve documents');
   assert.equal(can('Ranch Manager', 'care'), true);
   for (const target of Object.keys(READINESS_ACTION_CAPABILITY) as Array<keyof typeof READINESS_ACTION_CAPABILITY>) {
@@ -409,6 +436,15 @@ test('a readiness step the current role cannot finish is shown as such', async (
   const card = await readFile('src/components/SaleReadinessCard.tsx', 'utf8');
   assert.match(card, /hasRoleCapability\(currentRole, READINESS_ACTION_CAPABILITY\[action\.target\]\)/);
   assert.match(card, /disabled=\{!allowed\(action\)/);
+  // The care step opens a health record of the right type, never an expense:
+  // logging a receipt could not close a care gap (audit F06).
+  assert.match(
+    card,
+    /case 'care':[\s\S]*?openQuickCreate\(\{ action: 'Add Health Record', horseId, medicalType: action\.careType \?\? 'Deworming' \}\);/,
+  );
+  assert.doesNotMatch(card, /\/expenses\?log=/);
+  const flows = await readFile('src/components/saas/flows.tsx', 'utf8');
+  assert.match(flows, /MEDICAL_EVENT_TYPES\.find\(\(type\) => type === request\.medicalType\)/);
 });
 
 test('the profile header says "for sale" from the listing, not the stored score', async () => {

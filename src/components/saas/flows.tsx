@@ -357,6 +357,13 @@ export function GlobalCreateDrawer() {
     finish(result, destination);
   };
 
+  // A preset from the opener (e.g. "Log a deworming") counts only if it is a
+  // real record type; the person's own choice in the form always wins.
+  const presetMedicalType = MEDICAL_EVENT_TYPES.find((type) => type === request.medicalType);
+  const healthRecordType = ((f.type as MedicalEventType | undefined) ??
+    presetMedicalType ??
+    'Vet visit') as MedicalEventType;
+
   const submitHealthRecord = () => {
     const title = (f.title ?? '').trim();
     const notes = (f.notes ?? '').trim();
@@ -373,7 +380,7 @@ export function GlobalCreateDrawer() {
       body: notes,
       author: actor,
       date: (f.date ?? '').trim() || todayIso(),
-      type: (f.type as MedicalEventType) ?? 'Vet visit',
+      type: healthRecordType,
     });
     finish(result.ok ? { ok: true, message: 'Health record saved to the horse timeline' } : result, '/medical');
   };
@@ -561,12 +568,7 @@ export function GlobalCreateDrawer() {
       body = (
         <div className="xs-form">
           {horsePicker}
-          <Pick
-            label="Record type"
-            value={f.type ?? 'Vet visit'}
-            onChange={set('type')}
-            options={MEDICAL_EVENT_TYPES}
-          />
+          <Pick label="Record type" value={healthRecordType} onChange={set('type')} options={MEDICAL_EVENT_TYPES} />
           <Text label="Title" placeholder="e.g. Spring vaccines" value={f.title ?? ''} onChange={set('title')} />
           <Text label="Date" type="date" value={f.date ?? todayIso()} onChange={set('date')} />
           <Area

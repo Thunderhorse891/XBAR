@@ -729,33 +729,36 @@ test('a health certificate is dated by the certificate, never by a vaccination p
 });
 
 test('a Coggins is left out of reminders only when the care board raises one for that horse', () => {
-  // The care board reads the newest Ready Coggins by exam date, falling back
-  // to the upload date. A newer paper with no exam date (or a mistyped future
-  // one) reads as current there, while the radar still holds last year's
-  // expired Coggins. Dropping it then would leave the horse with no Coggins
-  // reminder at all.
+  /*
+   * The invariant: a horse whose Coggins has lapsed always has a Coggins
+   * reminder -- from the care board or from the radar, never neither.
+   *
+   * This test used to pin the care board reading a newer paper with no exam
+   * date (or a mistyped future one) as CURRENT, by falling back to its upload
+   * date, and then relied on the radar to keep the reminder alive. Audit F06
+   * named that fallback a defect: an upload date says when the paper reached
+   * XBAR, not when the horse was tested. The board now ignores both papers,
+   * measures from the expired exam and raises it itself -- so the reminder
+   * still exists, once.
+   */
   const expired = coggins('h1', '2025-05-01');
   const undatedNewer = coggins('h1', undefined, { uploadedAt: '2026-06-01T00:00:00Z' });
-  const documents = [expired, undatedNewer];
-  const careBoard = careBoardFor(documents);
-  const cogginsSignal = careBoard
-    .find((row) => row.horseId === 'h1')
-    ?.signals.find((signal) => signal.key === 'coggins');
-  assert.equal(cogginsSignal?.status, 'clear', 'the care board raises nothing for this Coggins');
-
-  const radar = buildExpiryRadar(documents, horses, NOW);
-  assert.deepEqual(
-    expiryReminderItems(radar, careBoard).map((item) => item.id),
-    [`expiry-${expired.id}`],
-  );
-
   const typo = coggins('h1', '2062-05-01');
-  const withTypo = [expired, typo];
-  assert.deepEqual(
-    expiryReminderItems(buildExpiryRadar(withTypo, horses, NOW), careBoardFor(withTypo)).map((item) => item.id),
-    [`expiry-${expired.id}`],
-    'a mistyped future exam does not silence the real expiry either',
-  );
+  for (const [label, documents] of [
+    ['a newer paper with no exam date', [expired, undatedNewer]],
+    ['a mistyped future exam', [expired, typo]],
+  ] as const) {
+    const careBoard = careBoardFor([...documents]);
+    const cogginsSignal = careBoard
+      .find((row) => row.horseId === 'h1')
+      ?.signals.find((signal) => signal.key === 'coggins');
+    assert.equal(cogginsSignal?.status, 'due', `${label} does not make a lapsed Coggins current`);
+    assert.deepEqual(
+      expiryReminderItems(buildExpiryRadar([...documents], horses, NOW), careBoard).map((item) => item.id),
+      [],
+      `${label}: the care board carries the reminder, so the radar does not repeat it`,
+    );
+  }
 
   // When the care board does raise it, one reminder is enough.
   assert.deepEqual(expiryReminderItems(buildExpiryRadar([expired], horses, NOW), careBoardFor([expired])), []);
