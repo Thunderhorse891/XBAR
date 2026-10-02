@@ -80,12 +80,15 @@ jobs:
             -destination "platform=iOS Simulator,id=$IOS_SIMULATOR_ID" -derivedDataPath ios/DerivedData \
             CODE_SIGN_IDENTITY=- build-for-testing
       - name: Boot the matching iOS Simulator
-        timeout-minutes: 7
+        timeout-minutes: 12
         run: |
           set -euo pipefail
           xcrun simctl boot "$IOS_SIMULATOR_ID"
           open -a Simulator
-          python3 -c 'import subprocess,sys; subprocess.run(["xcrun","simctl","bootstatus",sys.argv[1],"-b"],check=True,timeout=300)' "$IOS_SIMULATOR_ID"
+          # Run 37069276314 finished first-boot OS migration at 6m20s, beyond
+          # the old five-minute process deadline. Bound infrastructure startup
+          # separately; a successful boot and the unchanged XCTest are required.
+          python3 -c 'import subprocess,sys; subprocess.run(["xcrun","simctl","bootstatus",sys.argv[1],"-b"],check=True,timeout=600)' "$IOS_SIMULATOR_ID"
       - name: Exercise the real WKWebView in iOS Simulator
         timeout-minutes: 7
         run: |
