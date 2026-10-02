@@ -228,8 +228,11 @@ export function CloudBootstrap() {
           promotionFailed = promoted.failed;
         }
 
+        // `retryable`: the relational write failed but the snapshot landed.
+        // Locking autosave there would contradict the "will retry" the
+        // message promises; autosave is what retries it.
         finish(
-          saved.ok,
+          saved.ok || saved.retryable === true,
           saved.ok && promotionFailed.length === 0 ? 'idle' : 'error',
           saved.ok ? promotionMessage(promotionFailed, saved.message) : saved.message,
         );

@@ -190,6 +190,15 @@ test('the actions that remove synced records queue them, and wholesale replaceme
 test('a relational save that failed is not reported as saved because a snapshot landed', async () => {
   const cloud = await readFile('src/lib/cloudWorkspace.ts', 'utf8');
   const fallback = cloud.slice(cloud.indexOf('NOT a success.'), cloud.indexOf('NOT a success.') + 2000);
-  assert.match(fallback, /return \{\s*ok: false,\s*message: `Cloud save incomplete:/);
+  assert.match(fallback, /return \{\s*ok: false,\s*retryable: true,\s*message: `Cloud save incomplete:/);
   assert.doesNotMatch(cloud, /Saved a legacy snapshot instead/);
+});
+
+test('a save that only reached the snapshot keeps autosave retrying instead of locking it', async () => {
+  // The message says the change "will retry"; locking autosave on first load
+  // would make that untrue, and nothing else retries it.
+  const cloud = await readFile('src/lib/cloudWorkspace.ts', 'utf8');
+  assert.match(cloud, /ok: false,\s*retryable: true,\s*message: `Cloud save incomplete:/);
+  const bootstrap = await readFile('src/components/CloudBootstrap.tsx', 'utf8');
+  assert.match(bootstrap, /finish\(\s*saved\.ok \|\| saved\.retryable === true,/);
 });

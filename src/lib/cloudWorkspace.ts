@@ -97,6 +97,13 @@ type CloudSaveResult = {
    */
   deletionsApplied?: boolean;
   /*
+   * Not saved, but nothing to settle by hand either: the relational write
+   * failed after the legacy snapshot landed, so the work is safe and the next
+   * save simply tries again. A caller that would otherwise lock autosave on
+   * `ok: false` keeps it running for this one.
+   */
+  retryable?: boolean;
+  /*
    * Whether the RELATIONAL rows were written, which is not the same question as
    * `ok`. With the snapshot fallback enabled a rejected relational save still
    * reports success once the legacy snapshot lands, and callers that care about
@@ -1126,6 +1133,7 @@ export async function saveWorkspaceBackupToCloud(
        */
       return {
         ok: false,
+        retryable: true,
         message: `Cloud save incomplete: ${relational.message} A backup copy was saved; your changes stay on this device and will retry.`,
         updatedAt,
         relationalRowsPersisted: relational.documentsPersisted === true,
