@@ -10,6 +10,7 @@ import { hasHorsePhoto, identityCompleteness } from './animalPassport.js';
 import { buildCareBoardRows } from './dashboardOps.js';
 import {
   CURRENT_COGGINS_DAYS,
+  documentExamTime,
   hasCurrentReadyDocument,
   hasResolvedDocumentMissingCurrentDate,
   isCurrentDatedDocument,
@@ -41,7 +42,7 @@ export const PROOF_PACKET_THRESHOLD = 85;
 export type ReadinessComponentKey = 'identity' | 'coggins' | 'transfer' | 'media' | 'care' | 'ownership';
 
 export type ReadinessActionTarget =
-  'edit-horse' | 'upload-document' | 'review-documents' | 'add-photo' | 'care' | 'ownership';
+  'edit-horse' | 'upload-document' | 'review-documents' | 'processing-documents' | 'add-photo' | 'care' | 'ownership';
 
 /**
  * The capability each action's destination enforces, so a step the current
@@ -54,6 +55,8 @@ export const READINESS_ACTION_CAPABILITY: Record<ReadinessActionTarget, RoleCapa
   'edit-horse': 'editHorse',
   'upload-document': 'uploadDocuments',
   'review-documents': 'reviewDocuments',
+  // A file still being read is shown under Processing; the step ends in approving it.
+  'processing-documents': 'reviewDocuments',
   'add-photo': 'uploadMedia',
   care: 'manageAssets',
   ownership: 'manageOwnership',
@@ -122,6 +125,20 @@ export type ReleaseGateVerdict = { allowed: boolean; nextAction: string };
 /** Credit for an ownership chain whose proofs are verified but not yet marked Clear. */
 const OWNERSHIP_UNCLEARED_CAP = 12;
 
+/*
+ * Only a Needs Review or Matched paper can be approved: those are exactly what
+ * the Documents review queue holds (computeStageBuckets). A Queued paper is
+ * still being read and sits under Processing with nothing to approve, so the
+ * step for it is to wait, not "Approve". A test holds the two in step.
+ */
+function awaitsApproval(document: Pick<DocumentRecord, 'state'>): boolean {
+  return document.state === 'Needs Review' || document.state === 'Matched';
+}
+
+function stillBeingRead(document: Pick<DocumentRecord, 'state'>): boolean {
+  return document.state === 'Queued';
+}
+
 function round1(value: number) {
   return Math.round(value * 10) / 10;
 }
@@ -180,11 +197,25 @@ export function buildSaleReadinessScore(params: {
    */
   const cogginsInReview =
     !cogginsCurrent &&
+    coggins.some((document) => awaitsApproval(document) && isCurrentDatedDocument(document, CURRENT_COGGINS_DAYS, now));
+  /*
+   * An upload still being read may be the renewal: wait for it rather than ask
+   * for a duplicate. Its exam date may not be read yet; one already read as
+   * out of the window would not help, so it doesn't count.
+   */
+  const cogginsReading =
+    !cogginsCurrent &&
+    !cogginsInReview &&
     coggins.some(
-      (document) => !isDocumentReady(document) && isCurrentDatedDocument(document, CURRENT_COGGINS_DAYS, now),
+      (document) =>
+        stillBeingRead(document) &&
+        (documentExamTime(document) === null || isCurrentDatedDocument(document, CURRENT_COGGINS_DAYS, now)),
     );
   const cogginsStale =
-    !cogginsCurrent && !cogginsInReview && hasResolvedDocumentMissingCurrentDate(coggins, CURRENT_COGGINS_DAYS, now);
+    !cogginsCurrent &&
+    !cogginsInReview &&
+    !cogginsReading &&
+    hasResolvedDocumentMissingCurrentDate(coggins, CURRENT_COGGINS_DAYS, now);
   components.push({
     key: 'coggins',
     label: 'Coggins',
@@ -196,15 +227,21 @@ export function buildSaleReadinessScore(params: {
         ? 'The Coggins on file is past 12 months or has no exam date.'
         : cogginsInReview
           ? 'A current Coggins is on file but still waiting in review.'
-          : coggins.length
-            ? 'The Coggins on file has no exam date XBAR can use.'
-            : 'No Coggins on file.',
+          : cogginsReading
+            ? 'A Coggins upload is still being read — it can be approved once it reaches review.'
+            : coggins.length
+              ? 'The Coggins on file has no exam date XBAR can use.'
+              : 'No Coggins on file.',
   });
   if (!cogginsCurrent) {
     actions.push({
       key: 'coggins',
-      label: cogginsInReview ? 'Approve the Coggins in review' : 'Add a current Coggins',
-      target: cogginsInReview ? 'review-documents' : 'upload-document',
+      label: cogginsInReview
+        ? 'Approve the Coggins in review'
+        : cogginsReading
+          ? 'Let the Coggins finish reading, then approve it'
+          : 'Add a current Coggins',
+      target: cogginsInReview ? 'review-documents' : cogginsReading ? 'processing-documents' : 'upload-document',
       gain: WEIGHTS.coggins,
     });
   }
@@ -214,6 +251,8 @@ export function buildSaleReadinessScore(params: {
     (document) => document.type === 'Transfer Packet' || document.type === 'Bill of Sale',
   );
   const transferPresent = transferDocs.some(isDocumentReady);
+  const transferInReview = !transferPresent && transferDocs.some(awaitsApproval);
+  const transferReading = !transferPresent && !transferInReview && transferDocs.some(stillBeingRead);
   components.push({
     key: 'transfer',
     label: 'Transfer file',
@@ -221,15 +260,21 @@ export function buildSaleReadinessScore(params: {
     max: WEIGHTS.transfer,
     detail: transferPresent
       ? 'A reviewed transfer packet or bill of sale is on file.'
-      : transferDocs.length
+      : transferInReview
         ? 'A transfer file is on file but still waiting in review.'
-        : 'No transfer packet or bill of sale on file.',
+        : transferReading
+          ? 'A transfer file upload is still being read — it can be approved once it reaches review.'
+          : 'No transfer packet or bill of sale on file.',
   });
   if (!transferPresent) {
     actions.push({
       key: 'transfer',
-      label: transferDocs.length ? 'Approve the transfer file in review' : 'Add the transfer file',
-      target: transferDocs.length ? 'review-documents' : 'upload-document',
+      label: transferInReview
+        ? 'Approve the transfer file in review'
+        : transferReading
+          ? 'Let the transfer file finish reading, then approve it'
+          : 'Add the transfer file',
+      target: transferInReview ? 'review-documents' : transferReading ? 'processing-documents' : 'upload-document',
       gain: WEIGHTS.transfer,
     });
   }

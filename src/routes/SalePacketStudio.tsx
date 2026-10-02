@@ -1,32 +1,15 @@
 import { useMemo, useState } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
-import { FileText, Plus, Upload } from 'lucide-react';
+import { FileText, Plus } from 'lucide-react';
 import { ActionButton, Card, PageHead, StatusChip } from '@/components/saas';
 import { SalePacketWizard } from '@/components/SalePacketWizard';
 import { useXbarStore } from '@/store/useXbarStore';
 import { useUiStore } from '@/store/useUiStore';
 import { openStoredFileInTab } from '@/lib/openStoredFile';
-import type { DocumentType, SalePacketBuild } from '@/types/xbar';
+import type { SalePacketBuild } from '@/types/xbar';
 import { isNavigableFileUrl } from '@/lib/navigableFileUrl';
 import { buildSaleReadinessScore } from '@/lib/saleReadinessScore';
 import { buildBuyerPacketReleaseGate } from '@/lib/buyerPacketReleaseGate';
-
-const REQUIRED = [
-  { id: 'coggins', label: 'Coggins (negative)' },
-  { id: 'health', label: 'Health certificate' },
-  { id: 'registration', label: 'Registration papers' },
-  { id: 'bos', label: 'Bill of sale' },
-  { id: 'photos', label: 'Sale photos' },
-];
-
-// Map a stored document type onto the required-document slot it satisfies.
-const DOC_TYPE_TO_REQ: Partial<Record<DocumentType, string>> = {
-  Coggins: 'coggins',
-  'Vet Record': 'health',
-  Registration: 'registration',
-  'Bill of Sale': 'bos',
-  'Media Kit': 'photos',
-};
 
 function formatDate(value: string) {
   const date = new Date(value);
@@ -65,11 +48,12 @@ export default function SalePacketStudio() {
     () =>
       horses.map((horse) => {
         const readyDocs = documents.filter((d) => d.horseId === horse.id && d.state === 'Ready');
-        const presentSlots = new Set(readyDocs.map((d) => DOC_TYPE_TO_REQ[d.type]).filter(Boolean));
-        const missing = REQUIRED.filter((slot) => !presentSlots.has(slot.id));
-        // The computed sale readiness score decides "blocked", the same answer
-        // the horse profile gives. The stored `readiness.blockers` are set when a
-        // horse is created and never cleared, so every horse read as blocked.
+        // The computed sale readiness score decides the row, the same answer the
+        // horse profile gives: its verdict is the release gate the generated
+        // packet prints. The stored `readiness.blockers` are set when a horse is
+        // created and never cleared, so every horse read as blocked; a separate
+        // checklist here disagreed with the gate (it wanted a bill of sale the
+        // gate doesn't, and the wizard can draft), so there is none.
         const ownershipRecord = ownershipRecords.find((record) => record.horseId === horse.id);
         const score = buildSaleReadinessScore({
           horse,
@@ -83,12 +67,8 @@ export default function SalePacketStudio() {
           }),
         });
         const blockers = score.proofPacketBlocker ? [score.proofPacketBlocker] : [];
-        const state: 'Ready' | 'Needs Review' | 'Blocked' = blockers.length
-          ? 'Blocked'
-          : missing.length
-            ? 'Needs Review'
-            : 'Ready';
-        return { horse, readyDocs, missing, blockers, state };
+        const state: 'Ready' | 'Blocked' = score.proofPacketReady ? 'Ready' : 'Blocked';
+        return { horse, readyDocs, blockers, state };
       }),
     [horses, documents, expenseReceipts, ownershipRecords],
   );
@@ -132,7 +112,7 @@ export default function SalePacketStudio() {
       <PageHead
         eyebrow="Selling"
         title="Sale Packets"
-        subtitle={`${readyCount} of ${horses.length} horses have every required document approved${blockedCount ? ` · ${blockedCount} blocked` : ''}.`}
+        subtitle={`${readyCount} of ${horses.length} horses are ready for a proof packet${blockedCount ? ` · ${blockedCount} blocked` : ''}.`}
         actions={
           <ActionButton variant="primary" icon={<Plus size={15} />} onClick={() => openWizard()}>
             Build packet
@@ -142,33 +122,19 @@ export default function SalePacketStudio() {
 
       <Card title="Horse readiness">
         <div className="xs-mlist">
-          {readiness.map(({ horse, missing, blockers, state, readyDocs }) => (
+          {readiness.map(({ horse, blockers, state, readyDocs }) => (
             <div key={horse.id} className="xs-mrow">
               <span className="xs-mrow__main" style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
                 <span className="xs-mrow__title">{horse.name}</span>
                 <span className="xs-mrow__meta">
                   {readyDocs.length} approved document{readyDocs.length === 1 ? '' : 's'}
-                  {blockers.length
-                    ? ` · ${blockers[0]}`
-                    : missing.length
-                      ? ` · missing: ${missing.map((m) => m.label).join(', ')}`
-                      : ' · all required documents approved'}
+                  {blockers.length ? ` · ${blockers[0]}` : ' · ready for a proof packet'}
                 </span>
               </span>
-              <StatusChip tone={state === 'Ready' ? 'success' : state === 'Needs Review' ? 'warning' : 'danger'}>
-                {state}
-              </StatusChip>
+              <StatusChip tone={state === 'Ready' ? 'success' : 'danger'}>{state}</StatusChip>
               {state === 'Blocked' ? (
                 <ActionButton size="sm" onClick={() => navigate(`/horses/${horse.id}`)}>
                   Fix on record
-                </ActionButton>
-              ) : state === 'Needs Review' ? (
-                <ActionButton
-                  size="sm"
-                  icon={<Upload size={14} />}
-                  onClick={() => navigate(`/documents?upload=1&horse=${horse.id}`)}
-                >
-                  Upload
                 </ActionButton>
               ) : null}
               <ActionButton size="sm" variant="primary" onClick={() => openWizard(horse.id)}>
