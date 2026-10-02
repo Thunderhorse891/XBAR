@@ -707,7 +707,7 @@ export default function Subscriptions() {
         </div>
         <ul>
           <li>{formatLimit(config.limits.horseLimit, 'horses')}</li>
-          <li>{formatLimit(config.limits.salePacketLimit, 'sale packets')}</li>
+          <li>{formatLimit(config.limits.salePacketLimit, 'sale packets')} every 30 days</li>
         </ul>
         {/* Seat, document and storage quotas are already included in this
             canonical feature copy; show each once in the comparison card.

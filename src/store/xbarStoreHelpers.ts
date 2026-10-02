@@ -51,6 +51,7 @@ import type {
   WorkspaceMemberRecord,
   WorkspaceProfile,
 } from '@/types/xbar';
+import { salePacketsInWindow } from '@/lib/salePacketAllowance';
 import type { ExpenseReceiptInput, NewHorseInput } from '@/store/xbarStoreLogic';
 import type { PersistedXbarState, XbarStore } from '@/store/xbarStoreTypes';
 
@@ -1840,7 +1841,7 @@ export function restorePersistedState(raw: unknown): PersistedXbarState {
             horseLimit: usage.horseLimit ?? initialState.subscription.usage.horseLimit,
             documentsProcessed: documents.filter((document) => document.state !== 'Archived').length,
             documentLimit: usage.documentLimit ?? usage.ocrLimit ?? initialState.subscription.usage.documentLimit,
-            salePacketsGenerated: salePacketBuilds.length,
+            salePacketsGenerated: salePacketsInWindow(salePacketBuilds),
             salePacketLimit: usage.salePacketLimit ?? initialState.subscription.usage.salePacketLimit,
             sharedAccessSeatsUsed:
               usage.sharedAccessSeatsUsed ??
