@@ -7,9 +7,10 @@
 // `workspace_subscription_events` with a synthetic `stripe_event_id` of the
 // form `xbar:lifecycle:<kind>:<workspace-or-user>:<dedupe-key>`. That column
 // is UNIQUE, so the claim is atomic: a 23505 conflict means the email was
-// already sent (or is being sent) and the caller skips. A send that fails
-// DELETES the claim row so the next run retries — a claim is only kept when
-// the provider confirmed the send.
+// accepted or in progress. Acceptance is recorded separately in payload.
+// Only a skipped request or explicit provider rejection releases the claim.
+// Transport failures/5xx can happen after acceptance: retain those claims
+// for operator reconciliation rather than risk duplicate mail.
 //
 // Why this table: the billing webhook writes it append-only and never
 // updates or deletes rows, so flags stored here survive the subscription
@@ -38,38 +39,87 @@ function isUniqueViolation(error) {
   return error?.code === '23505';
 }
 
-// Atomic claim. Returns { claimed: true } when this caller won the race,
-// { claimed: false, alreadySent: true } when the email already went out.
+// A UNIQUE conflict alone proves only that a request was claimed, not sent.
+// Legacy claims without a delivery state are also uncertain and fail closed.
 export async function claimLifecycleEmail(supabase, { key, workspaceId, eventType, payload }) {
-  const { error } = await supabase.from('workspace_subscription_events').insert({
-    workspace_id: workspaceId || null,
-    stripe_event_id: key,
-    event_type: `${EVENT_TYPE_PREFIX}${eventType}`,
-    payload: payload || {},
-  });
-  if (!error) return { claimed: true };
-  if (isUniqueViolation(error)) return { claimed: false, alreadySent: true };
-  throw new Error(`Could not claim lifecycle email send: ${error.message}`);
+  const { data, error } = await supabase
+    .from('workspace_subscription_events')
+    .insert({
+      workspace_id: workspaceId || null,
+      stripe_event_id: key,
+      event_type: `${EVENT_TYPE_PREFIX}${eventType}`,
+      payload: { ...payload, delivery_state: 'pending' },
+    })
+    .select('stripe_event_id')
+    .single();
+  if (!error && data?.stripe_event_id === key) return { claimed: true };
+  if (isUniqueViolation(error)) {
+    const { data: prior, error: readError } = await supabase
+      .from('workspace_subscription_events')
+      .select('stripe_event_id, payload')
+      .eq('stripe_event_id', key)
+      .maybeSingle();
+    if (readError || prior?.stripe_event_id !== key) throw new Error('Could not verify lifecycle email claim.');
+    const alreadySent = prior.payload?.delivery_state === 'accepted';
+    return { claimed: false, alreadySent, pending: !alreadySent };
+  }
+  throw new Error(`Could not claim lifecycle email send: ${error?.message || 'insert returned no matching row'}`);
 }
 
 export async function releaseLifecycleEmail(supabase, key) {
-  const { error } = await supabase.from('workspace_subscription_events').delete().eq('stripe_event_id', key);
-  if (error) {
-    throw new Error(`Could not release lifecycle email claim: ${error.message}`);
+  const { data, error } = await supabase
+    .from('workspace_subscription_events')
+    .delete()
+    .eq('stripe_event_id', key)
+    .eq('payload->>delivery_state', 'pending')
+    .select('stripe_event_id');
+  if (error || data?.length !== 1 || data[0].stripe_event_id !== key) {
+    throw new Error(`Could not release lifecycle email claim: ${error?.message || 'no matching pending row'}`);
   }
+}
+
+function existingClaimResult(claim) {
+  return claim.alreadySent
+    ? { ok: true, sent: false, alreadySent: true }
+    : {
+        ok: false,
+        sent: false,
+        pending: true,
+        message: 'Email delivery is pending or uncertain; reconcile the provider result before retrying.',
+      };
+}
+
+async function recordAcceptance(supabase, key) {
+  const { data: prior, error: readError } = await supabase
+    .from('workspace_subscription_events')
+    .select('payload')
+    .eq('stripe_event_id', key)
+    .maybeSingle();
+  if (readError || prior?.payload?.delivery_state !== 'pending')
+    throw new Error('Pending email claim could not be verified.');
+  const { data, error } = await supabase
+    .from('workspace_subscription_events')
+    .update({ payload: { ...prior.payload, delivery_state: 'accepted', accepted_at: new Date().toISOString() } })
+    .eq('stripe_event_id', key)
+    .eq('payload->>delivery_state', 'pending')
+    .select('stripe_event_id');
+  if (error || data?.length !== 1 || data[0].stripe_event_id !== key)
+    throw new Error('Email acceptance could not be saved.');
 }
 
 // Operations contact first, owner fallback — the same recipient rule the
 // daily reminder job uses.
 export async function resolveLifecycleRecipient(supabase, workspaceId) {
-  const [{ data: workspace }, { data: profile }] = await Promise.all([
+  const [{ data: workspace, error: workspaceError }, { data: profile, error: profileError }] = await Promise.all([
     supabase.from('workspaces').select('id, name, owner_user_id').eq('id', workspaceId).maybeSingle(),
     supabase.from('workspace_profiles').select('operations_email').eq('workspace_id', workspaceId).maybeSingle(),
   ]);
+  if (workspaceError || profileError) throw new Error('Could not read the lifecycle email recipient.');
   let email = profile?.operations_email || '';
   let userId = workspace?.owner_user_id || null;
   if (!email && userId) {
-    const { data: owner } = await supabase.auth.admin.getUserById(userId);
+    const { data: owner, error: ownerError } = await supabase.auth.admin.getUserById(userId);
+    if (ownerError) throw new Error('Could not read the lifecycle email owner.');
     email = owner?.user?.email || '';
   }
   return { email, userId, ranchName: workspace?.name || '' };
@@ -80,32 +130,28 @@ async function sendOrRelease(supabase, { key, to, email, sendEmailFn = realSendE
     await releaseLifecycleEmail(supabase, key);
     return { ok: false, skipped: true, message: 'No recipient email available; claim released.' };
   }
-  // A THROWN send must release the claim exactly like a returned failure:
-  // otherwise the claim persists, the next run reads "already sent", and the
-  // email is silently burned without ever going out.
   let result;
   try {
     result = await sendEmailFn({ to, subject: email.subject, html: email.html, text: email.text });
-  } catch (error) {
-    await releaseLifecycleEmail(supabase, key);
-    return {
-      ok: false,
-      message: `Email send threw; claim released for retry: ${error instanceof Error ? error.message : 'unknown error'}`,
-    };
+    if (result?.ok) {
+      await recordAcceptance(supabase, key);
+      return { ok: true, sent: true };
+    }
+  } catch {
+    // No receipt is not proof of no send. This also covers accepted mail whose
+    // database receipt failed; never reopen that claim for automatic retries.
+    return existingClaimResult({ pending: true });
   }
-  if (result.ok) {
-    return { ok: true, sent: true };
+  if (!result?.skipped && !result?.rejected && !result?.retryable) {
+    return existingClaimResult({ pending: true });
   }
-  // A skipped send (no provider configured) or a failed send must not keep
-  // the claim: keeping it would burn the one shot at this email, and the
-  // next run would believe it already went out.
   await releaseLifecycleEmail(supabase, key);
   return {
     ok: false,
     skipped: Boolean(result.skipped),
     message: result.skipped
-      ? 'Email provider not configured; claim released so a later run retries.'
-      : `Email send failed; claim released for retry: ${result.message}`,
+      ? 'Email was not sent; claim released so a later run can retry.'
+      : `Email request was rejected; claim released for retry: ${result.message}`,
   };
 }
 
@@ -124,7 +170,7 @@ export async function sendWelcomeForUser({ supabase, user, sendEmailFn = realSen
     payload: { user_id: user.id, email: user.email },
   });
   if (!claim.claimed) {
-    return { ok: true, sent: false, alreadySent: true };
+    return existingClaimResult(claim);
   }
   const recipientName = String(user.user_metadata?.full_name || user.user_metadata?.name || '')
     .trim()
@@ -199,47 +245,38 @@ export async function processTrialReminders({ supabase, nowIso, sendEmailFn = re
         payload: { trial_end: item.trialEndDate, kind: item.kind },
       });
       if (!claim.claimed) {
-        alreadySent += 1;
+        const prior = existingClaimResult(claim);
+        if (prior.alreadySent) alreadySent += 1;
+        else failures.push({ workspaceId: item.workspaceId, kind: item.kind, message: prior.message });
         continue;
       }
-      if (!recipientCache.has(item.workspaceId)) {
-        recipientCache.set(item.workspaceId, await resolveLifecycleRecipient(supabase, item.workspaceId));
-      }
-      const recipient = recipientCache.get(item.workspaceId);
-      const email =
-        item.kind === 'ending-soon'
-          ? buildTrialEndingEmail({
-              ranchName: recipient.ranchName,
-              trialEndDate: item.trialEndDate,
-              daysLeft: item.daysLeft,
-            })
-          : buildTrialExpiredEmail({ ranchName: recipient.ranchName });
-      if (!recipient.email) {
-        await releaseLifecycleEmail(supabase, item.key);
-        skipped += 1;
-        continue;
-      }
-      const result = await sendEmailFn({
-        to: recipient.email,
-        subject: email.subject,
-        html: email.html,
-        text: email.text,
-      });
-      if (result.ok) {
-        emailed += 1;
-      } else {
-        await releaseLifecycleEmail(supabase, item.key);
-        if (result.skipped) {
-          skipped += 1;
-        } else {
-          failures.push({ workspaceId: item.workspaceId, kind: item.kind, message: result.message });
+      let recipient;
+      let email;
+      try {
+        if (!recipientCache.has(item.workspaceId)) {
+          recipientCache.set(item.workspaceId, await resolveLifecycleRecipient(supabase, item.workspaceId));
         }
+        recipient = recipientCache.get(item.workspaceId);
+        email =
+          item.kind === 'ending-soon'
+            ? buildTrialEndingEmail({
+                ranchName: recipient.ranchName,
+                trialEndDate: item.trialEndDate,
+                daysLeft: item.daysLeft,
+              })
+            : buildTrialExpiredEmail({ ranchName: recipient.ranchName });
+      } catch (lookupError) {
+        // We own this claim and no send has started. Only this case is safe
+        // to release; the outer catch must never release another worker's row.
+        await releaseLifecycleEmail(supabase, item.key);
+        throw lookupError;
       }
+      const result = await sendOrRelease(supabase, { key: item.key, to: recipient.email, email, sendEmailFn });
+      if (result.sent) emailed += 1;
+      else if (result.alreadySent) alreadySent += 1;
+      else if (result.skipped) skipped += 1;
+      else failures.push({ workspaceId: item.workspaceId, kind: item.kind, message: result.message });
     } catch (jobError) {
-      // The claim is released here too: this catch only runs when no send was
-      // confirmed (a confirmed send is followed by nothing that can throw),
-      // so keeping the claim would burn the email.
-      await releaseLifecycleEmail(supabase, item.key).catch(() => {});
       failures.push({
         workspaceId: item.workspaceId,
         kind: item.kind,
@@ -247,7 +284,15 @@ export async function processTrialReminders({ supabase, nowIso, sendEmailFn = re
       });
     }
   }
-  return { ok: true, checked: (rows || []).length, selected: selected.length, emailed, alreadySent, skipped, failures };
+  return {
+    ok: failures.length === 0,
+    checked: (rows || []).length,
+    selected: selected.length,
+    emailed,
+    alreadySent,
+    skipped,
+    failures,
+  };
 }
 
 // DUNNING — invoice.payment_failed. One email per INVOICE (each failed
@@ -298,7 +343,7 @@ export async function handleInvoicePaymentFailed({
     payload: { invoice_id: invoiceId, customer_id: customerId, stripe_event_id: eventId || null },
   });
   if (!claim.claimed) {
-    return { ok: true, sent: false, alreadySent: true };
+    return existingClaimResult(claim);
   }
   const recipient = await resolveLifecycleRecipient(supabase, workspaceId).catch(async (lookupError) => {
     // A failed recipient lookup must not burn the claim.
@@ -313,25 +358,5 @@ export async function handleInvoicePaymentFailed({
   }
   const planName = invoice?.lines?.data?.[0]?.price?.nickname || invoice?.lines?.data?.[0]?.description || '';
   const email = buildPaymentFailedEmail({ ranchName: recipient.ranchName, planName, billingPortalUrl });
-  let result;
-  try {
-    result = await sendEmailFn({ to: recipient.email, subject: email.subject, html: email.html, text: email.text });
-  } catch (sendError) {
-    await releaseLifecycleEmail(supabase, key);
-    return {
-      ok: false,
-      message: `Dunning email send threw; claim released: ${sendError instanceof Error ? sendError.message : 'unknown error'}`,
-    };
-  }
-  if (result.ok) {
-    return { ok: true, sent: true };
-  }
-  await releaseLifecycleEmail(supabase, key);
-  return {
-    ok: false,
-    skipped: Boolean(result.skipped),
-    message: result.skipped
-      ? 'Email provider not configured; claim released so a later failed attempt retries.'
-      : `Dunning email send failed; claim released: ${result.message}`,
-  };
+  return sendOrRelease(supabase, { key, to: recipient.email, email, sendEmailFn });
 }

@@ -445,9 +445,9 @@ export default async function handler(req, res) {
      * customer is not emailed on every retry).
      *
      * A failed send returns a non-2xx so Stripe retries the delivery; the
-     * billing replay guard above already dedupes by event id, and the dunning
-     * claim is released on failure, so a retry re-sends rather than
-     * double-sends.
+     * billing replay guard above already dedupes by event id, and a dunning
+     * claim is released only after a known non-send. Ambiguous attempts stay
+     * pending for reconciliation, so webhook retries cannot duplicate mail.
      */
     if (event.type === 'invoice.payment_failed') {
       const supabaseForDunning = getSupabaseAdmin();

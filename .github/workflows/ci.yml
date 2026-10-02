@@ -58,6 +58,15 @@ jobs:
       - name: Production smoke test (built dist)
         run: npm run test:prod-smoke
 
+      - name: Upload workspace design review screenshots
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: workspace-design-review
+          path: test-results/**/workspace-*.png
+          if-no-files-found: ignore
+          retention-days: 7
+
       # The whole ./tests/e2e suite, not a grep of it. This used to run a
       # hand-listed subset of the same config, so the rest of the suite could
       # rot unnoticed -- and did: `documents shows an empty state on a fresh

@@ -14,7 +14,7 @@ import type {
   SubscriptionTier,
 } from '../types/xbar.js';
 import { describeDocumentCoverage, fullCoverage, readDocumentWithCoverage } from './documentIntelligence.js';
-import { extractRegistrationFields } from './registrationExtraction.js';
+import { extractRegistrationFields, normalizeDocumentIdentityText } from './registrationExtraction.js';
 
 const GIGABYTE = 1024 * 1024 * 1024;
 const BASE36_ALPHABET = 'abcdefghijklmnopqrstuvwxyz0123456789';
@@ -196,16 +196,12 @@ export function normalizeStorage(value: number) {
 }
 
 function normalizeToken(value: string) {
-  return value
-    .toLowerCase()
-    .replace(/[^a-z0-9]+/g, ' ')
-    .replace(/\s+/g, ' ')
-    .trim();
+  return normalizeDocumentIdentityText(value);
 }
 
 function includesNormalized(haystack: string, needle: string) {
   const normalizedNeedle = normalizeToken(needle);
-  return normalizedNeedle.length >= 3 && haystack.includes(normalizedNeedle);
+  return normalizedNeedle.length >= 3 && ` ${normalizeToken(haystack)} `.includes(` ${normalizedNeedle} `);
 }
 
 export function estimateStorageGb(files: File[]) {
@@ -270,15 +266,8 @@ async function readFileTextSnippet(file: File) {
   try {
     return await readDocumentWithCoverage(file);
   } catch {
-    return { text: '', coverage: fullCoverage() };
+    return { text: '', coverage: { ...fullCoverage(), readFailed: true } };
   }
-}
-
-function extractFirstMatch(haystack: string, candidates: string[]) {
-  return [...candidates]
-    .filter((candidate) => Boolean(candidate))
-    .sort((left, right) => right.length - left.length)
-    .find((candidate) => includesNormalized(haystack, candidate));
 }
 
 function extractLabeledText(haystack: string, labels: string[]) {
@@ -345,28 +334,18 @@ function extractTransferStatus(haystack: string, type: DocumentType) {
   return 'Pending Signatures';
 }
 
-function buildKnownOwners(horses: HorseRecord[]) {
-  return Array.from(new Set(horses.flatMap((horse) => [horse.owner, horse.ownerEntity]).filter(Boolean)));
-}
-
-function extractDocumentEntities(params: {
-  fileName: string;
-  previewText: string;
-  inferredType: DocumentType;
-  horses: HorseRecord[];
-}) {
-  const { fileName, previewText, inferredType, horses } = params;
+function extractDocumentEntities(params: { fileName: string; previewText: string; inferredType: DocumentType }) {
+  const { fileName, previewText, inferredType } = params;
   const haystack = `${fileName} ${previewText}`;
-  // Filename metadata can help match an existing record, but is not a field
-  // on the paper: a file called Dam Good must not start a parent section.
-  const registration = extractRegistrationFields(previewText);
+  // Only a subject field can supply horse identity. A known name mentioned
+  // in an owner, parent, veterinarian or filename is not the paper's subject.
+  // Coggins forms also use a plain "Horse:" label; route that explicit label
+  // through the existing field-boundary parser rather than scanning for names.
+  const registration = extractRegistrationFields(previewText.replace(/(^|\n)\s*horse\s*[:#]\s*/gi, '$1Horse Name: '));
 
   return {
-    horseName:
-      extractFirstMatch(
-        haystack,
-        horses.flatMap((horse) => [horse.name, horse.barnName]),
-      ) ?? registration.horseName,
+    identityReviewRequired: registration.identityReviewRequired,
+    horseName: registration.horseName,
     registrationNumber: registration.registrationNumber,
     registry: registration.registry,
     sex: registration.sex,
@@ -377,13 +356,12 @@ function extractDocumentEntities(params: {
     sireRegistration: registration.sireRegistration,
     dam: registration.dam,
     damRegistration: registration.damRegistration,
-    ownerName:
-      extractFirstMatch(haystack, buildKnownOwners(horses)) ?? registration.ownerName ?? extractOwnerName(haystack),
+    ownerName: registration.ownerName ?? extractOwnerName(previewText),
     examDate: inferredType === 'Vet Record' || inferredType === 'Coggins' ? extractExamDate(haystack) : undefined,
     veterinarian:
       inferredType === 'Vet Record' || inferredType === 'Coggins' ? extractVeterinarian(haystack) : undefined,
     transferStatus: extractTransferStatus(haystack, inferredType),
-  } satisfies DocumentEntities;
+  } satisfies DocumentEntities & { identityReviewRequired?: boolean };
 }
 
 export type HorseMatchResult = {
@@ -392,30 +370,73 @@ export type HorseMatchResult = {
   reason: string;
 };
 
+function registrationIdentity(value: string | undefined) {
+  const compact = (value ?? '').replace(/[\s-]/g, '').toUpperCase();
+  if (!compact) return { number: '', registry: '' };
+  const parsed = extractRegistrationFields(`Registration Number: ${compact}`);
+  // The field parser can recognize a prefix of an unfamiliar identifier. It
+  // may normalize a stored id only when it consumed that id in full.
+  if (`${parsed.registry ?? ''}${parsed.registrationNumber ?? ''}` === compact) {
+    return { number: parsed.registrationNumber ?? compact, registry: parsed.registry ?? '' };
+  }
+  return { number: compact, registry: '' };
+}
+
+function registrationKey(value: string | undefined) {
+  return registrationIdentity(value).number;
+}
+
+export function conflictingDocumentIdentities(entities: DocumentEntities[]) {
+  const names = new Set(entities.map((entry) => normalizeToken(entry.horseName ?? '')).filter(Boolean));
+  const registrations = new Set(entities.map((entry) => registrationKey(entry.registrationNumber)).filter(Boolean));
+  const registries = new Set(
+    entities
+      .map((entry) => normalizeToken(entry.registry || registrationIdentity(entry.registrationNumber).registry))
+      .filter(Boolean),
+  );
+  return names.size > 1 || registrations.size > 1 || registries.size > 1;
+}
+
+function horseIdentityConflicts(horse: HorseRecord, entities?: DocumentEntities) {
+  const name = entities?.horseName && normalizeToken(entities.horseName);
+  const registration = registrationKey(entities?.registrationNumber);
+  const storedRegistration = registrationKey(horse.registrationNumber || horse.aqhaNumber);
+  const storedRegistry =
+    horse.registry ||
+    registrationIdentity(horse.registrationNumber).registry ||
+    registrationIdentity(horse.aqhaNumber).registry;
+  return Boolean(
+    (name && horse.name && name !== normalizeToken(horse.name) && name !== normalizeToken(horse.barnName || '')) ||
+    (registration && storedRegistration && registration !== storedRegistration) ||
+    (entities?.registry && storedRegistry && normalizeToken(entities.registry) !== normalizeToken(storedRegistry)),
+  );
+}
+
 function scoreHorseMatch(horse: HorseRecord, search: string, entities?: DocumentEntities) {
+  if (horseIdentityConflicts(horse, entities)) return null;
   let confidence = 0;
   let reason = '';
 
   const exactChecks: Array<[string | undefined, number, string]> = [
     [
       entities?.horseName && normalizeToken(entities.horseName) === normalizeToken(horse.name) ? horse.name : undefined,
-      0.99,
+      0.97,
       'Extracted horse name matches profile',
     ],
     [
-      entities?.registrationNumber &&
-      normalizeToken(entities.registrationNumber) === normalizeToken(horse.registrationNumber)
-        ? horse.registrationNumber
+      entities?.horseName && normalizeToken(entities.horseName) === normalizeToken(horse.barnName || '')
+        ? horse.barnName
         : undefined,
-      0.98,
-      'Extracted registration number matches profile',
+      0.83,
+      'Extracted horse name matches barn name',
     ],
     [
-      entities?.ownerName && normalizeToken(entities.ownerName) === normalizeToken(horse.owner)
-        ? horse.owner
+      entities?.registrationNumber &&
+      registrationKey(entities.registrationNumber) === registrationKey(horse.registrationNumber || horse.aqhaNumber)
+        ? entities.registrationNumber
         : undefined,
-      0.91,
-      'Extracted owner name matches profile',
+      0.99,
+      'Extracted registration number matches profile',
     ],
   ];
 
@@ -431,12 +452,13 @@ function scoreHorseMatch(horse: HorseRecord, search: string, entities?: Document
     [horse.registrationNumber, 0.95, 'Registration number appears in the document'],
     [horse.aqhaNumber, 0.94, 'Registry number appears in the document'],
     [horse.barnName, 0.83, 'Barn name appears in the document'],
-    [horse.owner, 0.78, 'Owner reference appears in the document'],
-    [horse.ownerEntity, 0.73, 'Owner entity appears in the document'],
   ];
 
   searchChecks.forEach(([value, nextConfidence, nextReason]) => {
-    if (includesNormalized(search, value) && nextConfidence > confidence) {
+    // Legacy callers without extracted fields can still request suggestions.
+    // Actual intake/review supplies entities and must never turn a raw mention
+    // into automatic identity after the structured parser refused it.
+    if (!entities && includesNormalized(search, value) && nextConfidence > confidence) {
       confidence = nextConfidence;
       reason = nextReason;
     }
@@ -455,6 +477,26 @@ export function rankHorseMatches(horses: HorseRecord[], haystack: string, entiti
     .slice(0, 3);
 }
 
+/** Use the same identity decision during intake and the review-stage retry. */
+export function resolveDocumentHorseMatch(horses: HorseRecord[], haystack: string, entities: DocumentEntities) {
+  const candidates = rankHorseMatches(horses, haystack, entities);
+  const registrationMatches = candidates.filter((candidate) => candidate.confidence === 0.99);
+  // Registered names and barn aliases are different namespaces. Their score
+  // must not decide which of two viable horses the paper belongs to.
+  const match =
+    registrationMatches.length === 1 ? registrationMatches[0] : candidates.length === 1 ? candidates[0] : undefined;
+  const conflictingIdentity = horses.some((horse) => {
+    const sameName =
+      entities.horseName &&
+      [horse.name, horse.barnName].some((name) => name && normalizeToken(entities.horseName!) === normalizeToken(name));
+    const sameRegistration =
+      entities.registrationNumber &&
+      registrationKey(entities.registrationNumber) === registrationKey(horse.registrationNumber || horse.aqhaNumber);
+    return (sameName || sameRegistration) && horseIdentityConflicts(horse, entities);
+  });
+  return { match, needsReview: !match && (candidates.length > 0 || conflictingIdentity) };
+}
+
 export async function buildDocumentRecord(params: {
   file: File;
   uploadedBy: string;
@@ -466,17 +508,18 @@ export async function buildDocumentRecord(params: {
   const { file, uploadedBy, source, selectedHorse, horses, existingDocuments } = params;
   const { text: previewText, coverage } = await readFileTextSnippet(file);
   const inferredType = guessDocumentType(file.name);
-  const extractedEntities = extractDocumentEntities({
+  const { identityReviewRequired, ...extractedEntities } = extractDocumentEntities({
     fileName: file.name,
     previewText,
     inferredType,
-    horses,
   });
-  const candidateMatches = selectedHorse
-    ? [{ horse: selectedHorse, confidence: 0.99, reason: 'Document was manually attached during upload' }]
-    : rankHorseMatches(horses, `${file.name} ${previewText}`, extractedEntities);
-
-  const matchedHorse = candidateMatches[0]?.horse;
+  const bestMatch = selectedHorse
+    ? { horse: selectedHorse, confidence: 0.99, reason: 'Document was manually attached during upload' }
+    : identityReviewRequired
+      ? undefined
+      : resolveDocumentHorseMatch(horses, `${file.name} ${previewText}`, extractedEntities).match;
+  const matchedHorse = bestMatch?.horse;
+  const identityConflict = matchedHorse && horseIdentityConflicts(matchedHorse, extractedEntities);
   const exactTitleDuplicate = existingDocuments.some(
     (document) => normalizeToken(document.title) === normalizeToken(file.name.replace(/\.[^.]+$/, '')),
   );
@@ -490,26 +533,12 @@ export async function buildDocumentRecord(params: {
   );
   const duplicateRisk = exactTitleDuplicate ? 'Possible Duplicate' : sameHorseDuplicate ? 'Review' : 'Low';
 
-  const entities: DocumentEntities = {
-    horseName: extractedEntities.horseName ?? matchedHorse?.name,
-    registrationNumber: extractedEntities.registrationNumber ?? matchedHorse?.registrationNumber,
-    registry: extractedEntities.registry ?? (matchedHorse?.registry || undefined),
-    sex: extractedEntities.sex ?? matchedHorse?.sex,
-    color: extractedEntities.color ?? (matchedHorse?.color || undefined),
-    breed: extractedEntities.breed ?? (matchedHorse?.breed || undefined),
-    foaledOn: extractedEntities.foaledOn ?? (matchedHorse?.foaledOn || undefined),
-    sire: extractedEntities.sire ?? (matchedHorse?.bloodline?.sire || undefined),
-    sireRegistration: extractedEntities.sireRegistration,
-    dam: extractedEntities.dam ?? (matchedHorse?.bloodline?.dam || undefined),
-    damRegistration: extractedEntities.damRegistration,
-    ownerName: extractedEntities.ownerName ?? matchedHorse?.owner,
-    examDate: extractedEntities.examDate,
-    veterinarian: extractedEntities.veterinarian,
-    transferStatus: extractedEntities.transferStatus,
-  };
+  // These are facts read from this document. Copying missing fields from the
+  // matched profile made review claim the scan contained facts it never read.
+  const entities: DocumentEntities = extractedEntities;
   const entityCount = Object.values(entities).filter(Boolean).length;
 
-  let confidence = candidateMatches[0]?.confidence ?? 0.54;
+  let confidence = bestMatch?.confidence ?? 0.54;
   confidence = Math.max(confidence, 0.48 + entityCount * 0.07);
   if (duplicateRisk === 'Review') {
     confidence -= 0.08;
@@ -522,11 +551,11 @@ export async function buildDocumentRecord(params: {
   let state: DocumentRecord['state'] = 'Needs Review';
   if (duplicateRisk === 'Possible Duplicate') {
     state = 'Needs Review';
-  } else if (confidence >= 0.8 && matchedHorse) {
+  } else if (confidence >= 0.8 && matchedHorse && !identityConflict && !identityReviewRequired) {
     state = 'Matched';
   }
 
-  const matchReason = candidateMatches[0]?.reason?.toLowerCase() ?? 'the upload engine found a weak candidate match';
+  const matchReason = bestMatch?.reason?.toLowerCase() ?? 'the upload engine found a weak candidate match';
   const trustLabel = `${Math.round(confidence * 100)}% match`;
 
   return {
@@ -542,10 +571,20 @@ export async function buildDocumentRecord(params: {
     duplicateRisk,
     extractedTextPreview: previewText,
     // Empty unless the reader stopped short of the whole file.
-    processingNote: describeDocumentCoverage(coverage),
-    summary: matchedHorse
-      ? `${inferredType} matched to ${matchedHorse.name} with ${trustLabel} based on ${matchReason}.`
-      : `${inferredType} added to the queue and needs manual assignment before it can be attached to a horse profile.`,
+    identityReviewRequired,
+    processingNote: [
+      describeDocumentCoverage(coverage),
+      identityReviewRequired
+        ? 'Conflicting horse identities were read from this file. Upload separate papers for each horse before approving.'
+        : '',
+    ]
+      .filter(Boolean)
+      .join(' '),
+    summary: identityConflict
+      ? `${inferredType} was manually attached to ${matchedHorse?.name}, but the extracted identity conflicts. Compare the source before approving.`
+      : matchedHorse
+        ? `${inferredType} matched to ${matchedHorse.name} with ${trustLabel} based on ${matchReason}.`
+        : `${inferredType} added to the queue and needs manual assignment before it can be attached to a horse profile.`,
     entities,
   } satisfies DocumentRecord;
 }

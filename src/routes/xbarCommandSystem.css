@@ -104,7 +104,7 @@ main.flex.flex-col {
 
 .page-title,
 .panel__title,
-h1,
+h1:not(.xs-hero__headline),
 h2,
 h3 {
   color: #0d1420 !important;
@@ -126,7 +126,6 @@ h3 {
 
 .eyebrow,
 .panel__eyebrow,
-.horse-card__kicker,
 [class*='uppercase'][class*='tracking'] {
   color: #1466d8 !important;
   font-weight: 800 !important;

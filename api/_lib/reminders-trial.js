@@ -38,7 +38,7 @@ export default async function handler(req, res) {
 
   try {
     const result = await processTrialReminders({ supabase, nowIso: new Date().toISOString() });
-    return sendJson(res, 200, result);
+    return sendJson(res, result.ok ? 200 : 500, result);
   } catch (error) {
     return sendJson(res, 500, {
       ok: false,

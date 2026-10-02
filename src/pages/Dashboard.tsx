@@ -10,7 +10,6 @@ import {
   Sparkles,
   Stethoscope,
   Upload,
-  Users,
 } from 'lucide-react';
 import { HorsesIcon } from '@/components/icons';
 import { ActionButton } from '@/components/saas';
@@ -172,9 +171,6 @@ export default function Dashboard() {
                 Add first horse
               </ActionButton>
               <ActionButton onClick={() => navigate('/documents?upload=1')}>Upload documents</ActionButton>
-              <ActionButton variant="ghost" onClick={() => navigate('/getting-started')}>
-                Getting started
-              </ActionButton>
             </div>
           </div>
         </section>
@@ -257,21 +253,6 @@ export default function Dashboard() {
                 Add horse
               </ActionButton>
             </div>
-            <div className="xs-intel__sec">
-              <div className="xs-intel__sec-label">Quick add</div>
-              <div className="xs-intel__qc">
-                <ActionButton
-                  size="sm"
-                  icon={<HorsesIcon width={14} height={14} />}
-                  onClick={() => navigate('/horses?new=1')}
-                >
-                  Horse
-                </ActionButton>
-                <ActionButton size="sm" icon={<Upload size={14} />} onClick={() => navigate('/documents?upload=1')}>
-                  Documents
-                </ActionButton>
-              </div>
-            </div>
           </div>
         </div>
       </div>
@@ -352,22 +333,6 @@ export default function Dashboard() {
       <>Everything looks good across {horses.length} horses.</>
     );
 
-  const workItems = [
-    ...transferGaps.map((g) => ({
-      id: `t-${g.horseId}`,
-      title: `Finish ownership documents — ${g.horseName}`,
-      chip: 'Documents',
-      to: `/horses/${g.horseId}`,
-    })),
-    ...careDue.map((c) => ({
-      id: `c-${c.horseId}`,
-      title: `Take care of — ${c.horseName}`,
-      chip: 'Care',
-      to: `/horses/${c.horseId}`,
-    })),
-    ...reviewQueue.map((d) => ({ id: `d-${d.id}`, title: `Check ${d.title}`, chip: 'Documents', to: '/documents' })),
-  ].slice(0, 5);
-
   const iconFor = (k: Signal['icon']) =>
     k === 'coins' ? (
       <Coins size={20} />
@@ -397,7 +362,8 @@ export default function Dashboard() {
           <div className="xs-hero__eyebrow">
             <Sparkles size={13} /> {ranchName} · Dashboard
           </div>
-          <h1 className="xs-hero__headline">{heroLine}</h1>
+          <h1 className="xs-hero__headline">Your ranch at a glance.</h1>
+          <p className="xs-hero__status">{heroLine}</p>
           <p className="xs-hero__sub">
             {openItems > 0
               ? `${openItems} thing${openItems === 1 ? '' : 's'} need attention. Start with what's most likely to hold up a sale or a horse's care.`
@@ -405,7 +371,7 @@ export default function Dashboard() {
           </p>
           <div className="xs-hero__actions">
             <ActionButton variant="primary" icon={<ArrowRight size={15} />} onClick={() => navigate(primary.to)}>
-              Start here
+              Review priority
             </ActionButton>
             <ActionButton onClick={() => navigate('/horses')}>Horses</ActionButton>
             <ActionButton variant="ghost" onClick={() => navigate('/reports')}>
@@ -471,35 +437,6 @@ export default function Dashboard() {
               </span>
             </button>
           ))}
-
-          {workItems.length ? (
-            <>
-              <div className="xs-sectlabel" style={{ marginTop: 26 }}>
-                <span className="xs-sectlabel__title">Today's tasks</span>
-                <button type="button" className="xs-card__link" onClick={() => navigate('/today')}>
-                  {workItems.length} to do
-                </button>
-              </div>
-              <div className="xs-card" style={{ padding: '6px 18px' }}>
-                <div className="xs-workmini">
-                  {workItems.map((w) => (
-                    <div
-                      key={w.id}
-                      className="xs-workmini__row"
-                      role="button"
-                      tabIndex={0}
-                      onClick={() => navigate(w.to)}
-                      onKeyDown={(e) => e.key === 'Enter' && navigate(w.to)}
-                    >
-                      <span className="xs-chip xs-chip--neutral">{w.chip}</span>
-                      <span className="xs-workmini__title">{w.title}</span>
-                      <ArrowRight size={15} className="xs-muted" />
-                    </div>
-                  ))}
-                </div>
-              </div>
-            </>
-          ) : null}
         </div>
 
         <div className="xs-intel">
@@ -553,27 +490,6 @@ export default function Dashboard() {
             <div className="xs-intel__line">
               <CalendarClock size={14} />
               <span>{formatCompactCurrency(budget.total)} spent this month</span>
-            </div>
-          </div>
-          <div className="xs-intel__sec">
-            <div className="xs-intel__sec-label">Quick add</div>
-            <div className="xs-intel__qc">
-              <ActionButton size="sm" icon={<Plus size={14} />} onClick={() => navigate('/today')}>
-                Task
-              </ActionButton>
-              <ActionButton
-                size="sm"
-                icon={<HorsesIcon width={14} height={14} />}
-                onClick={() => navigate('/horses?new=1')}
-              >
-                Horse
-              </ActionButton>
-              <ActionButton size="sm" icon={<Upload size={14} />} onClick={() => navigate('/documents?upload=1')}>
-                Documents
-              </ActionButton>
-              <ActionButton size="sm" icon={<Users size={14} />} onClick={() => navigate(buyerFollowUpPath())}>
-                Buyer
-              </ActionButton>
             </div>
           </div>
         </div>

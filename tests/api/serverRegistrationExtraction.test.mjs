@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 import { readFileSync } from 'node:fs';
 
-import { extractRegistrationFields } from '../../api/_lib/document-extraction.js';
+import { extractRegistrationFields, detectMultipleHorses } from '../../api/_lib/document-extraction.js';
 
 /*
  * The server reads horse names the way a person would -- same contract as the
@@ -25,6 +25,61 @@ import { extractRegistrationFields } from '../../api/_lib/document-extraction.js
  */
 
 const CORPUS = [
+  {
+    id: 'registration-long-id',
+    text: 'Registered Name: BLUE MOON\nRegistration Number: 12345678901234567',
+    name: 'BLUE MOON',
+    reg: '12345678901234567',
+  },
+  {
+    id: 'subject-names-conflict',
+    text: 'Registered Name: BLUE MOON\nRegistration Number: 1234567\nRegistered Name: RED SUN\nRegistration Number: 7654321',
+    name: 'BLUE MOON',
+    review: true,
+  },
+  {
+    id: 'subject-numbers-conflict',
+    text: 'Registered Name: BLUE MOON\nRegistration Number: 1234567\nRegistration Number: 7654321',
+    name: 'BLUE MOON',
+    review: true,
+  },
+  {
+    id: 'same-subject-repeated',
+    text: 'Registered Name: BLUE MOON\nRegistration Number: 1234567\nRegistered Name: BLUE MOON\nRegistration Number: 1234567',
+    name: 'BLUE MOON',
+    review: false,
+  },
+  {
+    id: 'same-registration-prefix-repeat',
+    text: 'Registered Name: BLUE MOON\nRegistration Number: AQHA1234567\nReg No: 1234567',
+    name: 'BLUE MOON',
+    review: false,
+  },
+  {
+    id: 'same-name-punctuation-repeat',
+    text: 'Registered Name: BLUE-MOON\nRegistration Number: 1234567\nHorse Name: BLUE MOON',
+    name: 'BLUE-MOON',
+    review: false,
+  },
+  {
+    id: 'same-number-other-registry',
+    text: 'Registered Name: BLUE MOON\nRegistration Number: AQHA1234567\nRegistration Number: APHA1234567',
+    name: 'BLUE MOON',
+    review: true,
+  },
+  // Identifiers are evidence, so suffixes must not be silently dropped.
+  {
+    id: 'registration-suffix-aa',
+    text: 'Registered Name: BLUE MOON\nRegistration Number: 1234567AA',
+    name: 'BLUE MOON',
+    reg: '1234567AA',
+  },
+  {
+    id: 'registration-suffix-ab',
+    text: 'Registered Name: BLUE MOON\nRegistration Number: 1234567AB\nSex: Mare',
+    name: 'BLUE MOON',
+    reg: '1234567AB',
+  },
   // --- original #222 defects (separator junk) ---
   { id: 'pipe-lead', text: 'Registered Name | BERRY PEACHY CHIC Reg No 539882319930', name: 'BERRY PEACHY CHIC' },
   { id: 'rule-underscore', text: 'Registered Name ___ BLUE VALENTINE DOT COM', name: 'BLUE VALENTINE DOT COM' },
@@ -175,13 +230,14 @@ test('the server extraction corpus holds, every row', () => {
   for (const row of CORPUS) {
     const fields = extractRegistrationFields(row.text);
     const actual = {
+      review: detectMultipleHorses(row.text).multiple,
       name: fields.name?.value,
       reg: fields.registrationNumber?.value,
       sire: fields.sire?.value,
       dam: fields.dam?.value,
     };
 
-    for (const key of ['name', 'reg', 'sire', 'dam']) {
+    for (const key of ['name', 'reg', 'sire', 'dam', 'review']) {
       if (!(key in row)) continue;
       if (actual[key] !== row[key]) {
         failures.push(`${row.id} -> ${key}: got ${JSON.stringify(actual[key])}, want ${JSON.stringify(row[key])}`);
@@ -210,9 +266,9 @@ function parseBrowserCorpus(source) {
     const to = i + 1 < idMatches.length ? idMatches[i + 1].index : body.length;
     const slice = body.slice(from, to);
     const row = {};
-    for (const key of ['name', 'reg', 'sire', 'dam']) {
-      const match = slice.match(new RegExp(`\\b${key}:\\s*(?:'([^']*)'|(undefined))`));
-      if (match) row[key] = match[2] === 'undefined' ? undefined : match[1];
+    for (const key of ['name', 'reg', 'sire', 'dam', 'review']) {
+      const match = slice.match(new RegExp(`\\b${key}:\\s*(?:'([^']*)'|(undefined)|(true|false))`));
+      if (match) row[key] = match[3] ? match[3] === 'true' : match[2] === 'undefined' ? undefined : match[1];
     }
     rows[idMatches[i][1]] = row;
   }
@@ -241,7 +297,7 @@ test('the server corpus stays in step with the browser corpus', () => {
   const mismatches = [];
   for (const row of CORPUS) {
     const expected = browser[row.id];
-    for (const key of ['name', 'reg', 'sire', 'dam']) {
+    for (const key of ['name', 'reg', 'sire', 'dam', 'review']) {
       const inServer = key in row;
       const inBrowser = key in expected;
       if (inServer !== inBrowser) {

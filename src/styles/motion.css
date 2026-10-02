@@ -130,8 +130,55 @@
   box-shadow: 0 0 0 3px hsl(var(--ring, 211 62% 41%) / 0.35);
 }
 
+/* Workspace controls react immediately; movement is opt-in at OS level.
+   Only interactive cards lift. Static data surfaces never look clickable. */
+@media (prefers-reduced-motion: no-preference) {
+  .xs-btn:not(:disabled),
+  .xs-iconbtn,
+  .xs-avatar,
+  .xs-nav__item,
+  .xs-mobilebar__btn,
+  .xs-tabbar__tab,
+  .xs-ribbon__item {
+    transition:
+      transform var(--motion-fast) var(--ease-standard),
+      background var(--motion-fast) var(--ease-standard),
+      border-color var(--motion-fast) var(--ease-standard),
+      box-shadow var(--motion-fast) var(--ease-standard);
+  }
+
+  .xs-btn:not(:disabled):active,
+  .xs-iconbtn:active,
+  .xs-avatar:active,
+  .xs-nav__item:active,
+  .xs-mobilebar__btn:active,
+  .xs-tabbar__tab:active,
+  .xs-ribbon__item:active {
+    transform: scale(var(--motion-press));
+  }
+
+  .xs-signal,
+  .hc-workspace .horse-card {
+    transition:
+      transform var(--motion-base) var(--ease-emphasized),
+      box-shadow var(--motion-base) var(--ease-emphasized),
+      border-color var(--motion-fast) var(--ease-standard);
+  }
+
+  .xs-signal:hover,
+  .hc-workspace .horse-card:hover {
+    transform: translateY(var(--motion-lift));
+    box-shadow: var(--xbar-shadow-lift);
+  }
+
+  .xs-signal:active {
+    transform: translateY(0) scale(0.995);
+  }
+}
+
 /* One comprehensive guard: honor the OS "reduce motion" setting everywhere. */
 @media (prefers-reduced-motion: reduce) {
+  .xs-navigation-sheet[data-state],
   .motion-lift,
   .motion-press,
   .motion-in,
@@ -141,6 +188,10 @@
     animation: none !important;
     transition: none !important;
   }
+  .xs-signal:hover,
+  .hc-workspace .horse-card:hover,
+  .hc-workspace .horse-card:hover .horse-card__image,
+  .hc-path:hover,
   .motion-lift:hover,
   .motion-lift:active,
   .motion-press:active,

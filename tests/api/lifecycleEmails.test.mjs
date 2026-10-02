@@ -32,7 +32,7 @@ import {
  *  - the trial-state field contract shared with the trial-mechanics build,
  *  - the trigger windows (no early, no late, no paid-workspace emails),
  *  - idempotency: a claim that already exists never sends twice, and a
- *    failed send releases its claim so the next run retries.
+ *    known non-send releases its claim while ambiguous outcomes stay pending.
  */
 
 // ---------------------------------------------------------------------------
@@ -64,6 +64,11 @@ function makeFakeSupabase({
   workspaces = [],
   workspaceProfiles = [],
   ownerEmails = {},
+  insertNoRow = false,
+  updateNoRow = false,
+  deleteNoRow = false,
+  recipientReadError = false,
+  claimReadError = false,
 } = {}) {
   const tables = {
     workspace_subscription_profiles: profiles,
@@ -74,7 +79,11 @@ function makeFakeSupabase({
   const claims = new Map();
 
   function runSelect(table, filters, orderBy, limitN) {
-    let rows = (tables[table] || []).filter((row) => filters.every(([col, val]) => row[col] === val));
+    let rows = (table === 'workspace_subscription_events' ? [...claims.values()] : tables[table] || []).filter((row) =>
+      filters.every(
+        ([col, val]) => (col === 'payload->>delivery_state' ? row.payload?.delivery_state : row[col]) === val,
+      ),
+    );
     if (orderBy) {
       const [col, asc] = orderBy;
       rows = [...rows].sort((a, b) => (a[col] < b[col] ? (asc ? -1 : 1) : a[col] > b[col] ? (asc ? 1 : -1) : 0));
@@ -84,7 +93,34 @@ function makeFakeSupabase({
   }
 
   function from(table) {
-    const state = { filters: [], orderBy: null, limitN: null, deleting: false };
+    const state = { filters: [], orderBy: null, limitN: null, deleting: false, inserted: null, patch: null };
+    function result() {
+      if (
+        !state.inserted &&
+        !state.deleting &&
+        !state.patch &&
+        ((recipientReadError && table === 'workspaces') ||
+          (claimReadError && table === 'workspace_subscription_events'))
+      )
+        return { data: null, error: { message: 'synthetic read failure' } };
+
+      if (state.inserted) {
+        const row = state.inserted;
+        if (claims.has(row.stripe_event_id)) return { data: null, error: { code: '23505', message: 'duplicate' } };
+        if (insertNoRow) return { data: null, error: null };
+        claims.set(row.stripe_event_id, row);
+        return { data: row, error: null };
+      }
+      const rows = runSelect(table, state.filters, state.orderBy, state.limitN);
+      if (state.deleting) {
+        if (deleteNoRow) return { data: [], error: null };
+        for (const row of rows) claims.delete(row.stripe_event_id);
+      } else if (state.patch) {
+        if (updateNoRow) return { data: [], error: null };
+        for (const row of rows) Object.assign(row, state.patch);
+      }
+      return { data: rows, error: null };
+    }
     const api = {
       select() {
         return api;
@@ -106,27 +142,24 @@ function makeFakeSupabase({
         return api;
       },
       async maybeSingle() {
-        return { data: runSelect(table, state.filters)[0] ?? null, error: null };
+        const response = result();
+        return { ...response, data: Array.isArray(response.data) ? (response.data[0] ?? null) : response.data };
       },
-      async insert(row) {
-        if (table === 'workspace_subscription_events') {
-          if (claims.has(row.stripe_event_id)) {
-            return { error: { code: '23505', message: 'duplicate key value violates unique constraint' } };
-          }
-          claims.set(row.stripe_event_id, row);
-          return { error: null };
-        }
-        throw new Error(`insert not stubbed for ${table}`);
+      async single() {
+        return api.maybeSingle();
+      },
+      insert(row) {
+        assert.equal(table, 'workspace_subscription_events');
+        state.inserted = row;
+        return api;
+      },
+      update(patch) {
+        state.patch = patch;
+        return api;
       },
       then(resolve, reject) {
         try {
-          if (state.deleting) {
-            const key = state.filters.find(([col]) => col === 'stripe_event_id')?.[1];
-            if (key) claims.delete(key);
-            resolve({ error: null });
-          } else {
-            resolve({ data: runSelect(table, state.filters, state.orderBy, state.limitN), error: null });
-          }
+          resolve(result());
         } catch (error) {
           reject(error);
         }
@@ -151,7 +184,7 @@ function makeFakeSupabase({
 
 const okSender = async () => ({ ok: true });
 const skippedSender = async () => ({ ok: false, skipped: true });
-const failingSender = async () => ({ ok: false, message: 'boom' });
+const failingSender = async () => ({ ok: false, rejected: true, message: 'explicit provider rejection' });
 
 // ---------------------------------------------------------------------------
 // Copy
@@ -346,7 +379,8 @@ test('claim is atomic: second claim loses, release reopens', async () => {
     payload: {},
   });
   assert.equal(second.claimed, false);
-  assert.equal(second.alreadySent, true);
+  assert.equal(second.alreadySent, false);
+  assert.equal(second.pending, true);
   await releaseLifecycleEmail(supabase, 'xbar:lifecycle:welcome:user:u1');
   const third = await claimLifecycleEmail(supabase, {
     key: 'xbar:lifecycle:welcome:user:u1',
@@ -396,7 +430,7 @@ test('welcome with no provider configured releases the claim for a later run', a
   assert.equal(supabase.claims.size, 0);
 });
 
-test('a throwing sender releases the claim instead of burning the email', async () => {
+test('ambiguous sends keep their claim and cannot automatically resend', async () => {
   const throwingSender = async () => {
     throw new Error('network down');
   };
@@ -404,10 +438,14 @@ test('a throwing sender releases the claim instead of burning the email', async 
   const user = { id: 'u1', email: 'erin@example.com' };
   const result = await sendWelcomeForUser({ supabase, user, sendEmailFn: throwingSender });
   assert.equal(result.ok, false);
-  assert.match(result.message, /threw/);
-  assert.equal(supabase.claims.size, 0, 'claim released after throw');
+  assert.match(result.message, /reconcil/i);
+  assert.equal(supabase.claims.size, 1, 'ambiguous acceptance must not retry');
+  const repeat = await sendWelcomeForUser({ supabase, user, sendEmailFn: okSender });
+  assert.equal(repeat.ok, false);
+  assert.equal(repeat.pending, true);
+  assert.notEqual(repeat.alreadySent, true);
 
-  // And the trial cron releases the claim when the sender throws, too.
+  // The trial cron also retains claims after ambiguous transport failures.
   const supabase2 = makeFakeSupabase({
     profiles: [{ workspace_id: 'ws-1', billing_state: 'Inactive', payload: { trial_end: '2026-10-07' } }],
     workspaces: [{ id: 'ws-1', name: 'Still Haven', owner_user_id: 'u1' }],
@@ -420,7 +458,8 @@ test('a throwing sender releases the claim instead of burning the email', async 
   });
   assert.equal(cronResult.emailed, 0);
   assert.equal(cronResult.failures.length, 1);
-  assert.equal(supabase2.claims.size, 0, 'cron claim released after throw');
+  assert.equal(cronResult.ok, false);
+  assert.equal(supabase2.claims.size, 1, 'ambiguous cron claim retained');
 });
 
 // ---------------------------------------------------------------------------
@@ -706,4 +745,136 @@ test('dunning with no email provider releases the claim', async () => {
   assert.equal(result.ok, false);
   assert.equal(result.skipped, true);
   assert.equal(supabase.claims.size, 0);
+});
+
+test('unverified claim writes cannot send; unverified acceptance cannot report success', async () => {
+  const user = { id: 'synthetic-user', email: 'synthetic@example.test' };
+  let sends = 0;
+  const sender = async () => {
+    sends += 1;
+    return { ok: true };
+  };
+  await assert.rejects(
+    sendWelcomeForUser({ supabase: makeFakeSupabase({ insertNoRow: true }), user, sendEmailFn: sender }),
+    /claim/i,
+  );
+  assert.equal(sends, 0);
+  const supabase = makeFakeSupabase({ updateNoRow: true });
+  const first = await sendWelcomeForUser({ supabase, user, sendEmailFn: sender });
+  assert.equal(first.ok, false);
+  assert.equal(first.pending, true);
+  assert.equal(supabase.claims.size, 1);
+  const repeat = await sendWelcomeForUser({ supabase, user, sendEmailFn: sender });
+  assert.equal(repeat.ok, false);
+  assert.equal(sends, 1);
+});
+
+test('a concurrent welcome reports pending rather than already sent', async () => {
+  const supabase = makeFakeSupabase();
+  const user = { id: 'synthetic-user', email: 'synthetic@example.test' };
+  let complete;
+  let started;
+  const began = new Promise((resolve) => {
+    started = resolve;
+  });
+  const first = sendWelcomeForUser({
+    supabase,
+    user,
+    sendEmailFn: async () => {
+      started();
+      return new Promise((resolve) => {
+        complete = resolve;
+      });
+    },
+  });
+  await began;
+  const second = await sendWelcomeForUser({ supabase, user, sendEmailFn: okSender });
+  assert.equal(second.ok, false);
+  assert.equal(second.pending, true);
+  assert.notEqual(second.alreadySent, true);
+  complete({ ok: true });
+  assert.equal((await first).ok, true);
+});
+
+test('dunning does not repeat an ambiguous provider acceptance', async () => {
+  const supabase = makeFakeSupabase({
+    billingCustomers: [{ stripe_customer_id: 'cus_1', workspace_id: 'ws-1' }],
+    workspaces: [{ id: 'ws-1', owner_user_id: 'u1' }],
+    ownerEmails: { u1: 'synthetic@example.test' },
+  });
+  let sends = 0;
+  const args = {
+    supabase,
+    stripe: null,
+    invoice: { id: 'in_1', customer: 'cus_1' },
+    eventId: 'evt_1',
+    sendEmailFn: async () => {
+      sends += 1;
+      return { ok: false, message: 'provider 503 after acceptance is unknown' };
+    },
+  };
+  assert.equal((await handleInvoicePaymentFailed(args)).ok, false);
+  const retry = await handleInvoicePaymentFailed(args);
+  assert.equal(retry.ok, false);
+  assert.equal(retry.pending, true);
+  assert.equal(sends, 1);
+});
+
+test('a failed release is surfaced rather than claiming a retry is available', async () => {
+  const supabase = makeFakeSupabase({ deleteNoRow: true });
+  await assert.rejects(
+    sendWelcomeForUser({
+      supabase,
+      user: { id: 'synthetic-user', email: 'synthetic@example.test' },
+      sendEmailFn: skippedSender,
+    }),
+    /release/i,
+  );
+});
+
+test('pending and accepted claims are read before unavailable recipients', async () => {
+  const workspaces = [{ id: 'ws-1', owner_user_id: 'u1' }];
+  const ownerEmails = { u1: 'synthetic@example.test' };
+  const supabase = makeFakeSupabase({
+    profiles: [{ workspace_id: 'ws-1', billing_state: 'Inactive', payload: { trial_end: '2026-10-07' } }],
+    workspaces,
+    ownerEmails,
+  });
+  const args = { supabase, nowIso: '2026-10-05T12:00:00Z', sendEmailFn: async () => ({ ok: false }) };
+  assert.equal((await processTrialReminders(args)).ok, false);
+  ownerEmails.u1 = '';
+  const pending = await processTrialReminders(args);
+  assert.equal(pending.ok, false);
+  assert.equal(pending.failures.length, 1);
+  assert.equal(pending.skipped, 0);
+  const claim = [...supabase.claims.values()][0];
+  claim.payload.delivery_state = 'accepted';
+  const accepted = await processTrialReminders(args);
+  assert.equal(accepted.ok, true);
+  assert.equal(accepted.alreadySent, 1);
+});
+
+test('recipient query errors release only a newly acquired claim', async () => {
+  const supabase = makeFakeSupabase({
+    recipientReadError: true,
+    profiles: [{ workspace_id: 'ws-1', billing_state: 'Inactive', payload: { trial_end: '2026-10-07' } }],
+  });
+  const result = await processTrialReminders({
+    supabase,
+    nowIso: '2026-10-05T12:00:00Z',
+    sendEmailFn: async () => {
+      assert.fail('must not send');
+    },
+  });
+  assert.equal(result.ok, false);
+  assert.equal(result.failures.length, 1);
+  assert.equal(supabase.claims.size, 0);
+});
+
+test('failed conflict reads never release an existing claim', async () => {
+  const supabase = makeFakeSupabase({ claimReadError: true });
+  const user = { id: 'synthetic-user', email: 'synthetic@example.test' };
+  await sendWelcomeForUser({ supabase, user, sendEmailFn: async () => ({ ok: false }) });
+  await assert.rejects(sendWelcomeForUser({ supabase, user, sendEmailFn: okSender }), /verify/);
+  assert.equal(supabase.claims.size, 1);
 });

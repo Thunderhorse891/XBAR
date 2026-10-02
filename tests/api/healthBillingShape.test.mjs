@@ -24,6 +24,9 @@ const HEALTH_ENV = [
   'RESEND_API_KEY',
   'SENDGRID_API_KEY',
   'EMAIL_FROM_ADDRESS',
+  'GMAIL_SMTP_ENABLED',
+  'GMAIL_SMTP_USER',
+  'GMAIL_SMTP_APP_PASSWORD',
   'CRON_SECRET',
   'VERCEL_ENV',
   ...['STARTER', 'PROFESSIONAL', 'RANCH_OPS', 'ENTERPRISE'].flatMap((tier) => [
@@ -133,7 +136,7 @@ test('what still works but deserves saying is a warning, not an outage', async (
   const noAnnual = await health({ ...READY, STRIPE_PRICE_ID_ENTERPRISE_ANNUAL: undefined });
   assert.equal(noAnnual.statusCode, 200);
   assert.equal(noAnnual.body.subsystems.stripeAnnualPriceIds, false);
-  assert.match(warnings(noAnnual), /Checkout refuses annual on those plans/);
+  assert.match(warnings(noAnnual), /Managed annual checkout is unavailable/);
 
   const testKey = await health({ ...READY, STRIPE_SECRET_KEY: 'sk_test_51AbCdEf', VERCEL_ENV: 'production' });
   assert.equal(testKey.statusCode, 200);
@@ -145,4 +148,36 @@ test('what still works but deserves saying is a warning, not an outage', async (
 
   const defaultSender = await health({ ...READY, EMAIL_FROM_ADDRESS: undefined });
   assert.match(warnings(defaultSender), /EMAIL_FROM_ADDRESS is not set/);
+});
+
+test('missing annual prices warn about unavailable managed checkout without saying it is offered', async () => {
+  const values = { ...READY };
+  for (const tier of ['STARTER', 'PROFESSIONAL', 'RANCH_OPS', 'ENTERPRISE'])
+    delete values[`STRIPE_PRICE_ID_${tier}_ANNUAL`];
+  const response = await health(values);
+  assert.equal(response.statusCode, 200, 'monthly checkout stays configured');
+  assert.equal(response.body.subsystems.stripeAnnualPriceIds, false);
+  assert.match(warnings(response), /STRIPE_PRICE_ID_\*_ANNUAL/);
+  assert.doesNotMatch(warnings(response), /annual billing is offered/i);
+  assert.match(warnings(response), /Managed annual checkout is unavailable/);
+});
+
+test('Gmail readiness is opt-in and does not claim verified delivery', async () => {
+  const gmail = {
+    ...READY,
+    RESEND_API_KEY: undefined,
+    EMAIL_FROM_ADDRESS: undefined,
+    GMAIL_SMTP_ENABLED: 'true',
+    GMAIL_SMTP_USER: 'synthetic@gmail.com',
+    GMAIL_SMTP_APP_PASSWORD: 'abcdefghijklmnop',
+  };
+  const configured = await health(gmail);
+  assert.equal(configured.body.subsystems.email, true);
+  assert.match(warnings(configured), /Gmail SMTP is configured but unverified/);
+  assert.doesNotMatch(warnings(configured), /no-reply@xbar.app/);
+  const missingPassword = await health({ ...gmail, GMAIL_SMTP_APP_PASSWORD: undefined });
+  assert.equal(missingPassword.body.subsystems.email, false);
+  assert.match(warnings(missingPassword), /Gmail SMTP is enabled but requires/);
+  assert.ok(!JSON.stringify(configured.body).includes(gmail.GMAIL_SMTP_APP_PASSWORD));
+  assert.ok(!JSON.stringify(configured.body).includes(gmail.GMAIL_SMTP_USER));
 });

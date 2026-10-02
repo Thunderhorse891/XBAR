@@ -148,3 +148,52 @@ test('the cinematic pilot is homepage-only and keeps real prices and static acti
     );
   }
 });
+
+test('public launch pricing publishes monthly billing without unavailable annual offers', async () => {
+  const { marketingPages } = (await load('scripts/marketing/pages.mjs')) as { marketingPages: MarketingPage[] };
+  const pricing = marketingPages.find((page) => page.path === '/pricing')!;
+  assert.match(pricing.body, /Monthly billing is available/);
+  assert.match(pricing.body, /Annual billing is not currently offered/);
+  assert.doesNotMatch(pricing.body, /Annual price|2 months free/);
+  assert.doesNotMatch(pricing.body, /before cloud sync is configured|before enabling cloud services/);
+});
+
+test('the ungated tour distinguishes example screens from account signup', async () => {
+  const { marketingPages } = (await load('scripts/marketing/pages.mjs')) as { marketingPages: MarketingPage[] };
+  const demo = marketingPages.find((page) => page.path === '/demo')!;
+  assert.match(demo.body, /No account is needed to view this tour/);
+  assert.match(demo.body, /create an XBAR account/);
+  assert.match(demo.body, /href="\/app\/login\?mode=signup"[^>]*>Create an account/);
+  assert.doesNotMatch(
+    demo.body,
+    /requires no cloud account|no cloud account required|Open a local-first workspace|One click, runs in your browser/,
+  );
+});
+
+test('every public page exposes the approved support contact in navigation and footer', async () => {
+  const { marketingPages } = (await load('scripts/marketing/pages.mjs')) as { marketingPages: MarketingPage[] };
+  const { renderPage, SUPPORT_EMAIL } = await load('scripts/marketing/render.mjs');
+  const { SUPPORT_CONTACT } = await import('../src/lib/legalDocuments.js');
+  assert.equal(
+    SUPPORT_EMAIL.toLowerCase(),
+    SUPPORT_CONTACT.email.toLowerCase(),
+    'support contact must match legal documents',
+  );
+  for (const page of marketingPages) {
+    const html = renderPage(page);
+    assert.match(html, /<header[\s\S]*?href="mailto:xbarje@gmail.com"[^>]*>Help &amp; support/);
+    assert.match(html, /<footer[\s\S]*?href="mailto:xbarje@gmail.com"/);
+  }
+});
+
+test('public legal pages retain review notices and cross-link the existing policies', async () => {
+  const { legalPage } = await load('scripts/marketing/pages.mjs');
+  const { getLegalDocument } = await import('../src/lib/legalDocuments.js');
+  for (const id of ['terms', 'privacy'] as const) {
+    const doc = getLegalDocument(id);
+    const page = legalPage(doc, `/${id}`);
+    assert.ok(page.body.includes(doc.notice), 'review status must not disappear in presentation cleanup');
+    assert.match(page.body, /href="\/terms"/);
+    assert.match(page.body, /href="\/privacy"/);
+  }
+});

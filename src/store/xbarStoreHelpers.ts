@@ -11,6 +11,7 @@ import {
 } from '@/data/xbarPlatform';
 import {
   buildSharePath,
+  conflictingDocumentIdentities,
   createId,
   createShareAccessToken,
   deriveSharedAccessSnapshot,
@@ -1049,6 +1050,7 @@ export function canRestorePersistedState(raw: unknown): boolean {
     // siblings, which is what makes it easy to miss.
     documents: {
       objects: ['entities'],
+      optionalBooleans: ['identityReviewRequired'],
       /*
        * `document.title.trim()` — useXbarStore.ts:842, beside optional-chained
        * siblings, which is what makes it easy to miss — plus the five scalars
@@ -2068,7 +2070,9 @@ export function buildHorseInputFromDocuments(
 ): NewHorseInput | null {
   // A filename or fallback match is not evidence read from a paper. Keep
   // unreadable uploads in review instead of inventing a horse from scan-001.
+  if (documents.some((document) => document.identityReviewRequired)) return null;
   const readableDocuments = documents.filter((document) => document.extractedTextPreview?.trim());
+  if (conflictingDocumentIdentities(readableDocuments.map((document) => document.entities))) return null;
   const horseName = readableDocuments.map((document) => document.entities.horseName?.trim()).find(Boolean) ?? '';
   const registrationNumber =
     readableDocuments.map((document) => document.entities.registrationNumber?.trim()).find(Boolean) ?? '';
@@ -2146,12 +2150,6 @@ export function createHorseFromDocuments(documents: DocumentRecord[], workspaceP
     // Creating the profile attaches the source; it is not document approval.
     state: document.state === 'Ready' ? ('Ready' as const) : ('Needs Review' as const),
     duplicateRisk: document.duplicateRisk === 'Possible Duplicate' ? 'Review' : document.duplicateRisk,
-    entities: {
-      ...document.entities,
-      horseName: document.entities.horseName ?? horse.name,
-      ownerName: document.entities.ownerName ?? horse.owner,
-      registrationNumber: document.entities.registrationNumber ?? horse.registrationNumber,
-    },
     summary: `${document.title} is attached to ${horse.name}.${document.state === 'Ready' ? '' : ' Review the source before approving its facts.'}`,
   }));
   const promotedHorse = readyDocuments.reduce(

@@ -219,7 +219,8 @@ test('a sign-out broadcast that outruns its storage removal is still applied', a
   await second.route(/\/rest\/v1\//, workspaceRest);
   await second.route('**/auth/v1/logout*', (route) => route.fulfill({ status: 204, body: '' }));
   await second.goto('/app/settings');
-  await second.getByRole('button', { name: 'Sign out', exact: true }).click();
+  await second.getByRole('button', { name: 'Account menu', exact: true }).click();
+  await second.getByRole('menuitem', { name: 'Sign out', exact: true }).click();
   await expect.poll(() => readStoredAccessToken(second), { timeout: 30_000 }).toBe('');
 
   // The first tab must follow the account out rather than keep showing its
