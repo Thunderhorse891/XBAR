@@ -686,15 +686,16 @@ test('two accounts sharing a browser do not share a vault namespace', async () =
    * `'local'` was treated as proof of a single owner, on the reasoning that a
    * browser profile holds exactly one local-only workspace. That is true of
    * signed-OUT use and false the moment relational sync is disabled:
-   * `loadWorkspaceAccessProfile` returns `workspaceId: null` for every
-   * signed-in account, so two people signing into the same browser both owned
+   * The normal `loadWorkspaceAccessProfile` call returns `workspaceId: null`
+   * (the separate entitlement-only read does not publish workspace identity),
+   * so two people signing into the same browser both owned
    * `'local'` — each became the other's owner. Reads, exports and packet
    * attachments all passed the ownership check, and the sweep deleted the other
    * account's files as its own orphans.
    */
   assert.match(
     cloud,
-    /if \(!isRelationalCloudEnabled\(\)\) \{\s*return \{\s*workspaceId: null,/,
+    /if \(!isRelationalCloudEnabled\(\) && !options\.forEntitlements\) \{\s*return \{\s*workspaceId: null,/,
     'a signed-in account really does arrive with no workspace id — this is what makes the fallback load-bearing',
   );
 

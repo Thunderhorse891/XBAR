@@ -15,7 +15,7 @@ import { openLocalFile } from '@/lib/localFileVault';
 import { vaultOwnerId } from '@/lib/vaultOwner';
 import { idsToRemove, type CloudDeletion, type RowRemoval } from '@/lib/cloudDeletionQueue';
 import { changedRecords } from '@/lib/relationalDiff';
-import { subscriptionFromCloudRow } from '@/lib/cloudSubscription';
+import { baselineCloudSubscription, subscriptionFromCloudRow, withCloudSubscription } from '@/lib/cloudSubscription';
 import type { Session } from '@supabase/supabase-js';
 import type {
   DocumentRecord,
@@ -124,6 +124,7 @@ type WorkspaceAccessProfile = {
   workspaceId: string | null;
   workspaceRole: UserRole;
   source: 'workspace-owner' | 'workspace-membership' | 'session';
+  lookupFailed?: boolean;
 };
 
 type RelationalWorkspaceRow = {
@@ -248,7 +249,10 @@ async function acceptPendingWorkspaceInvitation(session: Session) {
   };
 }
 
-export async function loadWorkspaceAccessProfile(sessionOverride?: Session | null): Promise<WorkspaceAccessProfile> {
+export async function loadWorkspaceAccessProfile(
+  sessionOverride?: Session | null,
+  options: { forEntitlements?: boolean } = {},
+): Promise<WorkspaceAccessProfile> {
   const session = sessionOverride ?? (await getActiveSession());
   if (!session?.user) {
     return {
@@ -258,7 +262,7 @@ export async function loadWorkspaceAccessProfile(sessionOverride?: Session | nul
     };
   }
 
-  if (!isRelationalCloudEnabled()) {
+  if (!isRelationalCloudEnabled() && !options.forEntitlements) {
     return {
       workspaceId: null,
       workspaceRole: resolveSessionRole(session),
@@ -282,6 +286,10 @@ export async function loadWorkspaceAccessProfile(sessionOverride?: Session | nul
     .eq('workspace_key', 'primary')
     .maybeSingle();
 
+  if (options.forEntitlements && ownedWorkspaceError) {
+    return { workspaceId: null, workspaceRole: resolveSessionRole(session), source: 'session', lookupFailed: true };
+  }
+
   if (!ownedWorkspaceError && ownedWorkspace?.id) {
     return {
       workspaceId: ownedWorkspace.id as string,
@@ -290,7 +298,9 @@ export async function loadWorkspaceAccessProfile(sessionOverride?: Session | nul
     };
   }
 
-  const acceptedInvitation = await acceptPendingWorkspaceInvitation(session);
+  // A billing read may resolve snapshot-only accounts, but must not accept an
+  // invitation or change membership as a side effect of reading entitlements.
+  const acceptedInvitation = options.forEntitlements ? null : await acceptPendingWorkspaceInvitation(session);
   if (acceptedInvitation?.workspaceId) {
     return {
       workspaceId: acceptedInvitation.workspaceId,
@@ -319,6 +329,7 @@ export async function loadWorkspaceAccessProfile(sessionOverride?: Session | nul
     workspaceId: null,
     workspaceRole: 'Admin',
     source: 'session',
+    ...(options.forEntitlements ? { lookupFailed: Boolean(membershipError) } : {}),
   };
 }
 
@@ -1079,9 +1090,11 @@ async function loadWorkspaceBackupFromRelationalCloud(session: Session) {
     return { ok: false, message: 'No relational workspace records are stored for this account yet.' } as const;
   }
 
+  const authoritativeSubscription = subscriptionFromCloudRow(subscriptionResult.data) ?? baselineCloudSubscription();
   return {
     ok: true,
-    backup,
+    backup: withCloudSubscription(backup, authoritativeSubscription),
+    authoritativeSubscription,
     updatedAt: backup.exportedAt ?? '',
   } as const;
 }
@@ -1225,9 +1238,28 @@ export async function loadWorkspaceBackupFromCloud() {
     return { ok: false, message: 'No cloud workspace has been saved for this account yet.' } as const;
   }
 
+  // A snapshot preserves ranch records, not the authority to grant a plan.
+  // It can still say Starter after an operator grant, or paid after cancellation.
+  // Read the same canonical row as relational loading before trusting either.
+  const access = await loadWorkspaceAccessProfile(session, { forEntitlements: true });
+  if (access.lookupFailed) {
+    return {
+      ok: false,
+      message: 'The cloud workspace could not be verified. Your local records are unchanged.',
+    } as const;
+  }
+  // Legacy snapshot-only accounts may not own a relational workspace yet.
+  // Their records still load, with baseline access rather than a snapshot grant.
+  const subscription = access.workspaceId
+    ? await refreshWorkspaceSubscriptionProfile(access.workspaceId)
+    : { ok: true as const, profile: null };
+  if (!subscription.ok) return subscription;
+  const authoritativeSubscription = subscription.profile ?? baselineCloudSubscription();
+
   return {
     ok: true,
-    backup: data.payload,
+    backup: withCloudSubscription(data.payload, authoritativeSubscription),
+    authoritativeSubscription,
     updatedAt: typeof data.updated_at === 'string' ? data.updated_at : '',
   } as const;
 }

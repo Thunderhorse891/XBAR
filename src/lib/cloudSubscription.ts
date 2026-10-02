@@ -74,3 +74,34 @@ export function subscriptionFromCloudRow(
   // says; an expired or absent one leaves the profile exactly as computed.
   return applyTrialToProfile(profile);
 }
+
+/** Billing and limits are authoritative; usage belongs to the records on this device. */
+export function mergeCloudSubscription(current: unknown, authoritative: SubscriptionProfile): SubscriptionProfile {
+  return {
+    ...authoritative,
+    usage: {
+      ...authoritative.usage,
+      ...record(record(current).usage),
+      ...subscriptionTierConfig[authoritative.tier].limits,
+    },
+  };
+}
+
+/** Replace only server-controlled subscription data; ranch records stay untouched. */
+export function withCloudSubscription<T>(backup: T, subscription: SubscriptionProfile): T {
+  if (!backup || typeof backup !== 'object' || Array.isArray(backup)) return backup;
+  const envelope = backup as Record<string, unknown>;
+  const workspace = envelope.workspace;
+  if (workspace && typeof workspace === 'object' && !Array.isArray(workspace)) {
+    return {
+      ...envelope,
+      workspace: { ...workspace, subscription: mergeCloudSubscription(record(workspace).subscription, subscription) },
+    } as T;
+  }
+  return { ...envelope, subscription: mergeCloudSubscription(envelope.subscription, subscription) } as T;
+}
+
+/** No canonical row is the ordinary unpaid setup state, never a snapshot grant. */
+export function baselineCloudSubscription(): SubscriptionProfile {
+  return subscriptionFromCloudRow({ tier: 'Starter', billing_state: 'Manual Billing', monthly_rate: 0 })!;
+}

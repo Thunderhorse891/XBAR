@@ -2,6 +2,7 @@ import { useEffect, useRef } from 'react';
 import { createLatestWriteGate } from '@/lib/authBootstrap';
 import { acknowledgeCloudDeletions, pendingCloudDeletions } from '@/lib/cloudDeletionQueue';
 import { loadWorkspaceBackupFromCloud, saveWorkspaceBackupToCloud } from '@/lib/cloudWorkspace';
+import { mergeCloudSubscription, withCloudSubscription } from '@/lib/cloudSubscription';
 import { decideCloudReconciliation, serializeWorkspaceBackup } from '@/lib/cloudSyncPolicy';
 import { promoteLocalVaultFiles } from '@/lib/workspacePromotion';
 import { vaultOwnerId } from '@/lib/vaultOwner';
@@ -147,7 +148,14 @@ export function CloudBootstrap() {
     if (hydrationKeyRef.current === hydrationKey) return;
     hydrationKeyRef.current = hydrationKey;
     setAutosaveReady(false, false);
-    const owns = hydrationGateRef.current.begin();
+    const ticketOwns = hydrationGateRef.current.begin();
+    const owns = () => {
+      const current = useCloudStore.getState();
+      // Auth publishes a new identity before React retires this effect. A
+      // delayed previous-account response must not win during that interval.
+      // workspaceReady may temporarily be false for a same-user token refresh.
+      return ticketOwns() && current.session?.user.id === session.user.id && current.workspaceId === workspaceId;
+    };
 
     /*
      * A promotion that only half-moved the files must say so.
@@ -191,7 +199,7 @@ export function CloudBootstrap() {
     };
 
     const hydrate = async () => {
-      const local = exportWorkspaceBackup();
+      let local = exportWorkspaceBackup();
       // Captured with `local`, before any await: a deletion made while the cloud
       // copy loads is not reflected in `local`, so it must not be acknowledged
       // by a push of `local`. It stays queued for the first autosave instead.
@@ -199,6 +207,15 @@ export function CloudBootstrap() {
       setSyncState('syncing', 'Reconciling this ranch with cloud records...');
       const remote = await loadWorkspaceBackupFromCloud();
       if (!owns()) return;
+      if (remote.ok) {
+        // Entitlements are server-owned, independent of any ranch-data conflict.
+        // Updating only this field preserves local horses/documents and prevents
+        // a stale Starter snapshot from trapping an already-granted owner.
+        useXbarStore.setState((current) => ({
+          subscription: mergeCloudSubscription(current.subscription, remote.authoritativeSubscription),
+        }));
+        local = withCloudSubscription(local, remote.authoritativeSubscription);
+      }
       const decision = decideCloudReconciliation({
         local,
         ...(remote.ok ? { remote: remote.backup } : { remoteError: remote.message }),
