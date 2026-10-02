@@ -1606,7 +1606,7 @@ test('a record that installs but crashes the route it lands on is refused', asyn
    */
   assert.match(
     ownershipEntry,
-    /optionalStrings: \['documentTitle', 'linkedAt', 'verifiedAt', 'verifiedBy'\]/,
+    /optionalStrings: \[\s*'documentTitle',\s*'linkedAt',\s*'verifiedAt',\s*'verifiedBy',\s*'reviewAttestedAt',\s*'reviewedSourceKey',?\s*\]/,
     "requirement.documentTitle ?? 'Linked document' is a bare React child",
   );
   assert.match(

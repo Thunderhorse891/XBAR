@@ -278,7 +278,9 @@ test('manifest reports the real document and proof counts', () => {
   const credential = buildSaleCredential(input());
   assert.ok(credential.manifest.some((line) => line.includes('Proof documents sealed: 2')));
   assert.ok(
-    credential.manifest.some((line) => line.includes('Verified proofs: Bill of sale, Registration certificate')),
+    credential.manifest.some((line) =>
+      line.includes('Human-reviewed ownership sources: Bill of sale, Registration certificate'),
+    ),
   );
 });
 
@@ -422,7 +424,8 @@ test('no verified proofs reads as guidance, not a negative', () => {
   assert.ok(
     credential.manifest.some(
       (line) =>
-        line === 'Ownership proofs: none verified at seal time — confirm the underlying documents with the seller',
+        line ===
+        'Ownership sources: no human review recorded at seal time — confirm the originals and title with the seller',
     ),
     `proof line missing from manifest: ${JSON.stringify(credential.manifest)}`,
   );

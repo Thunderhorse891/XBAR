@@ -119,7 +119,7 @@ function str(value: unknown): string {
 export function toPacketDisclosure(
   horse: HorseRecord,
   ownershipRecord?: OwnershipRecord,
-  workspaceProfile?: WorkspaceProfile,
+  _workspaceProfile?: WorkspaceProfile,
 ): PacketDisclosure {
   return {
     identity: {
@@ -144,7 +144,7 @@ export function toPacketDisclosure(
     },
     ownership: {
       legalOwner: str(ownershipRecord?.legalOwner) || str(horse.owner),
-      ownerEntity: str(horse.ownerEntity) || str(workspaceProfile?.defaultOwnerEntity),
+      ownerEntity: str(horse.ownerEntity),
       transferStatus: str(ownershipRecord?.transferStatus) || 'Not provided',
       pendingDocuments: ownershipRecord?.pendingDocuments ?? [],
       complianceDeadline: str(ownershipRecord?.complianceDeadline),

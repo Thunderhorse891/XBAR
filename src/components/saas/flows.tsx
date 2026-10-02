@@ -353,7 +353,12 @@ export function GlobalCreateDrawer() {
     // When exactly one horse was created, land on its new profile so the
     // extracted registration facts are immediately visible.
     const createdHorseIds = (result as { createdHorseIds?: string[] }).createdHorseIds ?? [];
-    const destination = createdHorseIds.length === 1 ? `/horses/${createdHorseIds[0]}` : '/documents';
+    const duplicateCount = (result as { duplicateCount?: number }).duplicateCount ?? 0;
+    const destination = duplicateCount
+      ? '/documents?stage=Review'
+      : createdHorseIds.length === 1
+        ? `/horses/${createdHorseIds[0]}`
+        : '/documents';
     finish(result, destination);
   };
 

@@ -21,7 +21,54 @@
 
 import { createHash } from 'node:crypto';
 
-export const SERVER_SALE_CREDENTIAL_VERSION = 1;
+/** Seller-recorded attestations only. Never describes XBAR as the reviewer. */
+export function ownershipReviewSummary(ownershipRecord, documents = []) {
+  const requirements = Array.isArray(ownershipRecord?.payload?.proofRequirements)
+    ? ownershipRecord.payload.proofRequirements
+    : [];
+  if (!requirements.length)
+    return 'No human source review is recorded. XBAR does not independently verify legal ownership.';
+  const reviewed = requirements.filter((item) => {
+    const doc = documents.find((document) => document.document_id === item.documentId && document.state === 'Ready');
+    const source = doc?.payload;
+    if (
+      !source ||
+      source.id !== doc.document_id ||
+      source.horseId !== doc.horse_id ||
+      source.type !== doc.document_type ||
+      source.identityReviewRequired ||
+      (source.duplicateRisk === 'Possible Duplicate' && !source.duplicateReviewedAt) ||
+      source.processingNote?.trim()
+    )
+      return false;
+    // Identical ordered fields to ownershipDocumentReviewKey on the client.
+    const sourceKey = createHash('sha256')
+      .update(
+        JSON.stringify([
+          source.id,
+          source.horseId ?? '',
+          source.type,
+          source.contentSha256 ?? '',
+          source.storagePath ?? '',
+          source.localFileKey ?? '',
+          source.fileUrl ?? '',
+          source.extractedTextPreview,
+        ]),
+      )
+      .digest('hex');
+    return (
+      item.status === 'verified' &&
+      typeof item.verifiedBy === 'string' &&
+      item.verifiedBy.trim() &&
+      item.verifiedAt &&
+      item.reviewAttestedAt &&
+      item.reviewedSourceKey === sourceKey
+    );
+  }).length;
+  return `${reviewed} of ${requirements.length} ownership source reviews recorded by the seller's team. XBAR does not independently verify legal ownership.`;
+}
+
+export const SERVER_SALE_CREDENTIAL_VERSION = 2;
 
 /** Deterministic JSON: object keys sorted, arrays kept in caller order. */
 function canonicalStringify(value) {
@@ -53,6 +100,7 @@ export function buildServerCredentialPayload({
   horseId,
   context,
   ownershipRecord,
+  reviewDocuments,
   documents,
   sealedAt,
   sellerIdentity,
@@ -92,6 +140,7 @@ export function buildServerCredentialPayload({
     transfer: {
       status: str(ownershipRecord?.transfer_status),
       complianceDeadline: str(ownershipRecord?.compliance_deadline),
+      reviewSummary: ownershipReviewSummary(ownershipRecord, reviewDocuments ?? documents),
     },
     health: {
       lastCogginsDate: str(health.lastCogginsDate),

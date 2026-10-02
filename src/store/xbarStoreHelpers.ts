@@ -1118,6 +1118,10 @@ export function canRestorePersistedState(raw: unknown): boolean {
          * fix.
          */
         'processingNote',
+        'contentSha256',
+        'duplicateOfId',
+        'duplicateReason',
+        'duplicateReviewedAt',
         /*
          * `localFileKey` was excluded as "only compared or passed through",
          * and that was wrong in the way this table keeps being wrong: passed
@@ -1202,7 +1206,14 @@ export function canRestorePersistedState(raw: unknown): boolean {
          */
         proofRequirements: {
           strings: ['id', 'kind', 'label', 'status'],
-          optionalStrings: ['documentTitle', 'linkedAt', 'verifiedAt', 'verifiedBy'],
+          optionalStrings: [
+            'documentTitle',
+            'linkedAt',
+            'verifiedAt',
+            'verifiedBy',
+            'reviewAttestedAt',
+            'reviewedSourceKey',
+          ],
         },
         /*
          * `auditEvents` is optional too, and `auditEvents: [null]` threw on
@@ -2075,12 +2086,10 @@ export function buildHorseInputFromDocuments(
   const horseName = readableDocuments.map((document) => document.entities.horseName?.trim()).find(Boolean) ?? '';
   const registrationNumber =
     readableDocuments.map((document) => document.entities.registrationNumber?.trim()).find(Boolean) ?? '';
-  const ownerName =
-    readableDocuments.map((document) => document.entities.ownerName?.trim()).find(Boolean) ??
-    workspaceProfile.defaultOwnerName.trim() ??
-    '';
-  const ownerEntity =
-    workspaceProfile.defaultOwnerEntity.trim() || workspaceProfile.businessName.trim() || ownerName || '';
+  // Intake may record a name read from the source; the workspace's default
+  // owner/business is not evidence that they own this particular horse.
+  const ownerName = readableDocuments.map((document) => document.entities.ownerName?.trim()).find(Boolean) ?? '';
+  const ownerEntity = '';
 
   /*
    * The paper's own title, cleaned of file clutter, when its text carried no
@@ -2119,8 +2128,8 @@ export function buildHorseInputFromDocuments(
     segment: 'Sale Prospect',
     status: 'Sale Prep',
     sex: guessHorseSexFromDocuments(documents),
-    owner: ownerName || 'Pending Owner',
-    ownerEntity: ownerEntity || 'Pending Entity',
+    owner: ownerName,
+    ownerEntity,
     aqhaNumber: isAqha ? registrationNumber : '',
     registrationNumber,
     registry,
@@ -2143,12 +2152,14 @@ export function createHorseFromDocuments(documents: DocumentRecord[], workspaceP
   }
 
   const horse = createHorseRecord(horseInput, workspaceProfile);
+  // OCR cannot assert ownership shares or legal authority, even when it reads a name.
+  horse.ownership = [];
   const readyDocuments = documents.map((document) => ({
     ...document,
     horseId: horse.id,
     // Creating the profile attaches the source; it is not document approval.
     state: document.state === 'Ready' ? ('Ready' as const) : ('Needs Review' as const),
-    duplicateRisk: document.duplicateRisk === 'Possible Duplicate' ? 'Review' : document.duplicateRisk,
+    duplicateRisk: document.duplicateRisk,
     summary: `${document.title} is attached to ${horse.name}.${document.state === 'Ready' ? '' : ' Review the source before approving its facts.'}`,
   }));
   const promotedHorse = readyDocuments.reduce(

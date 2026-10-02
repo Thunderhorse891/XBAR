@@ -21,13 +21,15 @@ export async function loadHorseContext(supabase, workspaceId, horseId) {
       .maybeSingle(),
     supabase
       .from('documents')
-      .select('document_id, title, document_type, state, storage_path, mime_type, extracted_data, payload, created_at')
+      .select(
+        'document_id, horse_id, title, document_type, state, storage_path, mime_type, extracted_data, payload, created_at',
+      )
       .eq('workspace_id', workspaceId)
       .eq('horse_id', horseId)
       .order('created_at', { ascending: false }),
     supabase
       .from('ownership_records')
-      .select('legal_owner, transfer_status, compliance_deadline')
+      .select('legal_owner, transfer_status, compliance_deadline, payload')
       .eq('workspace_id', workspaceId)
       .eq('horse_id', horseId)
       .order('updated_at', { ascending: false })
@@ -67,7 +69,7 @@ export async function loadHorseContext(supabase, workspaceId, horseId) {
       status: horse.status,
     },
     owner: {
-      name: ownershipRecord?.legal_owner || horse.owner_name || profile?.default_owner_name || '',
+      name: ownershipRecord?.legal_owner || horse.owner_name || '',
     },
     workspace: {
       businessName: profile?.business_name || '',
