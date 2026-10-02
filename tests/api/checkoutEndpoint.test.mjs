@@ -58,16 +58,47 @@ const stripeScenario = {
   createdSessions: [],
   subscriptions: [],
   openSessions: [],
+  priceOverrides: {},
+  priceError: null,
   reset() {
     this.calls = [];
     this.createdCustomers = [];
     this.createdSessions = [];
     this.subscriptions = [];
     this.openSessions = [];
+    this.priceOverrides = {};
+    this.priceError = null;
   },
 };
 
+const stripePriceAmounts = {
+  price_starter_m: 1200,
+  price_pro_m: 2900,
+  price_pro_a: 29000,
+  price_ranch_m: 7900,
+  price_ranch_a: 79000,
+  price_ent_m: 19900,
+};
+
 __setBillingStripe({
+  prices: {
+    retrieve: async (id) => {
+      stripeScenario.calls.push(['prices.retrieve', id]);
+      if (stripeScenario.priceError) throw stripeScenario.priceError;
+      return {
+        id,
+        active: true,
+        type: 'recurring',
+        currency: 'usd',
+        billing_scheme: 'per_unit',
+        unit_amount: stripePriceAmounts[id],
+        transform_quantity: null,
+        recurring: { interval: id.endsWith('_a') ? 'year' : 'month', interval_count: 1, usage_type: 'licensed' },
+        product: { id: 'prod_xbar', active: true },
+        ...stripeScenario.priceOverrides,
+      };
+    },
+  },
   customers: {
     create: async (params) => {
       stripeScenario.calls.push(['customers.create', params]);
@@ -480,4 +511,106 @@ test("a cadence the deployment cannot sell is refused in the buyer's terms", asy
   assert.equal(response.body.code, 'cadence_unavailable', 'coded, so the client never falls back to a payment link');
   assert.equal(response.body.message, 'Annual billing is not available for Starter yet. Nothing was charged.');
   assert.deepEqual(stripeScenario.calls, [], 'nothing billable is touched');
+});
+
+test('a stale $499 Stripe price cannot be sold as the advertised $199 Enterprise plan', async () => {
+  stripeScenario.reset();
+  stripeScenario.priceOverrides = { unit_amount: 49900 };
+  const calls = supabaseFor();
+  const response = await invoke(fullHandler, { body: { tier: 'Enterprise', workspaceId: 'ws_1' } });
+  assert.equal(response.statusCode, 503);
+  assert.equal(response.body.code, 'price_unavailable');
+  assert.match(response.body.message, /price could not be verified/i);
+  assert.deepEqual(stripeScenario.createdCustomers, []);
+  assert.deepEqual(stripeScenario.createdSessions, []);
+  assert.deepEqual(calls.upserts, [], 'no billing identity or purchase is recorded');
+});
+
+for (const [label, overrides] of [
+  ['wrong currency', { currency: 'cad' }],
+  [
+    'annual price for monthly selection',
+    { recurring: { interval: 'year', interval_count: 1, usage_type: 'licensed' } },
+  ],
+  ['multi-month interval', { recurring: { interval: 'month', interval_count: 3, usage_type: 'licensed' } }],
+  ['metered billing', { recurring: { interval: 'month', interval_count: 1, usage_type: 'metered' } }],
+  ['one-time price', { type: 'one_time', recurring: null }],
+  ['tiered amount', { billing_scheme: 'tiered', unit_amount: null }],
+  ['transformed quantity', { transform_quantity: { divide_by: 5, round: 'up' } }],
+  ['inactive price', { active: false }],
+  ['inactive product', { product: { id: 'prod_xbar', active: false } }],
+  ['deleted product', { product: { id: 'prod_xbar', deleted: true } }],
+  ['unexpanded product', { product: 'prod_xbar' }],
+  ['wrong price identity', { id: 'price_other' }],
+  ['missing amount', { unit_amount: null }],
+]) {
+  test(`checkout refuses ${label} before Stripe or billing writes`, async () => {
+    stripeScenario.reset();
+    stripeScenario.priceOverrides = overrides;
+    const calls = supabaseFor();
+    const response = await invoke(fullHandler, { body: { tier: 'Enterprise', workspaceId: 'ws_1' } });
+    assert.equal(response.statusCode, 503);
+    assert.equal(response.body.code, 'price_unavailable');
+    assert.deepEqual(stripeScenario.createdCustomers, []);
+    assert.deepEqual(stripeScenario.createdSessions, []);
+    assert.deepEqual(calls.upserts, []);
+  });
+}
+
+test('a failed Stripe price lookup fails closed without exposing provider details', async () => {
+  stripeScenario.reset();
+  stripeScenario.priceError = new Error('No such price: price_private_diagnostic');
+  supabaseFor();
+  const response = await invoke(fullHandler, { body: { tier: 'Enterprise', workspaceId: 'ws_1' } });
+  assert.equal(response.statusCode, 503);
+  assert.equal(response.body.code, 'price_unavailable');
+  assert.doesNotMatch(JSON.stringify(response.body), /price_private_diagnostic/);
+  assert.deepEqual(stripeScenario.createdSessions, []);
+});
+
+test('reusing an unfinished checkout also requires a freshly verified price', async () => {
+  stripeScenario.reset();
+  stripeScenario.priceOverrides = { unit_amount: 49900 };
+  stripeScenario.openSessions = [reusableEnterpriseSession()];
+  supabaseFor({
+    billingRow: { stripe_customer_id: 'cus_existing', stripe_subscription_id: '', entitlement_payload: {} },
+  });
+  const response = await invoke(fullHandler, { body: { tier: 'Enterprise', workspaceId: 'ws_1' } });
+  assert.equal(response.statusCode, 503);
+  assert.equal(response.body.code, 'price_unavailable');
+  assert.equal(response.body.url, undefined);
+  assert.deepEqual(stripeScenario.createdSessions, []);
+  assert.deepEqual(stripeScenario.calls, [['prices.retrieve', PRICES.Enterprise.monthly]]);
+});
+
+function reusableEnterpriseSession() {
+  return {
+    id: 'cs_stale',
+    status: 'open',
+    mode: 'subscription',
+    url: 'https://checkout.stripe.com/stale',
+    metadata: {
+      workspace_id: 'ws_1',
+      workspace_tier: 'Enterprise',
+      workspace_seats: '1',
+      workspace_billing_period: 'monthly',
+      workspace_price_id: PRICES.Enterprise.monthly,
+    },
+  };
+}
+
+test('an unchanged correctly priced Enterprise checkout is reused without a second session or billing write', async () => {
+  stripeScenario.reset();
+  stripeScenario.openSessions = [reusableEnterpriseSession()];
+  const calls = supabaseFor({
+    billingRow: { stripe_customer_id: 'cus_existing', stripe_subscription_id: '', entitlement_payload: {} },
+  });
+  const response = await invoke(fullHandler, { body: { tier: 'Enterprise', workspaceId: 'ws_1' } });
+  assert.equal(response.statusCode, 200);
+  assert.equal(response.body.url, 'https://checkout.stripe.com/stale');
+  assert.equal(response.body.sessionId, 'cs_stale');
+  assert.deepEqual(stripeScenario.createdCustomers, []);
+  assert.deepEqual(stripeScenario.createdSessions, []);
+  assert.deepEqual(calls.upserts, []);
+  assert.deepEqual(stripeScenario.calls[0], ['prices.retrieve', PRICES.Enterprise.monthly]);
 });
