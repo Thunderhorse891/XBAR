@@ -20,7 +20,9 @@ import { enforceRateLimit } from '../_lib/rate-limit.js';
 
 const RATE_LIMIT = { bucket: 'checkout', limit: 10, windowSeconds: 60 };
 
-const stripeSecretKey = process.env.STRIPE_SECRET_KEY || '';
+// Trimmed for the reason given in api/stripe/webhook.js: a pasted newline in
+// the key becomes an invalid Authorization header.
+const stripeSecretKey = process.env.STRIPE_SECRET_KEY?.trim() || '';
 const stripe = stripeSecretKey ? new Stripe(stripeSecretKey, { apiVersion: '2026-02-25.clover' }) : null;
 const managedBillingEnabled = serverManagedBillingEnabled();
 

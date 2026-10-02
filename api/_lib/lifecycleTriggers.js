@@ -30,6 +30,7 @@ import {
 } from './lifecycleEmails.js';
 import { sendEmail as realSendEmail } from './email.js';
 import { readTrialFromPayload } from './trial-status.js';
+import { invoiceSubscriptionId } from './stripe-objects.js';
 
 const EVENT_TYPE_PREFIX = 'xbar.lifecycle.';
 
@@ -273,13 +274,14 @@ export async function handleInvoicePaymentFailed({
     .eq('stripe_customer_id', customerId)
     .maybeSingle();
   let workspaceId = billingCustomer?.workspace_id || null;
-  if (!workspaceId && invoice?.subscription && stripe) {
+  // invoiceSubscriptionId reads the current location
+  // (parent.subscription_details.subscription) as well as the pre-2025
+  // `invoice.subscription`, which a current payload no longer carries.
+  const subscriptionId = invoiceSubscriptionId(invoice);
+  if (!workspaceId && subscriptionId && stripe) {
     try {
-      const subscriptionId = typeof invoice.subscription === 'string' ? invoice.subscription : invoice.subscription?.id;
-      if (subscriptionId) {
-        const subscription = await stripe.subscriptions.retrieve(subscriptionId);
-        workspaceId = subscription?.metadata?.workspace_id || null;
-      }
+      const subscription = await stripe.subscriptions.retrieve(subscriptionId);
+      workspaceId = subscription?.metadata?.workspace_id || null;
     } catch {
       // A failed lookup is not a reason to skip dunning; fall through to the
       // unresolved-workspace path below.

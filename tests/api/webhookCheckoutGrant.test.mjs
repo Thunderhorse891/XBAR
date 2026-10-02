@@ -204,6 +204,72 @@ test('a completed checkout writes the purchased tier and an Active billing state
   assert.equal(params.p_profile.usage.horseLimit, 30, 'Professional capacity, not the Starter baseline');
 });
 
+/*
+ * Audit F14: on the pinned API (2026-02-25.clover) a subscription's period end
+ * lives on its items. Reading the old top-level field stored a blank renewal
+ * date for every current purchase while the write itself succeeded.
+ */
+test('a current-shape subscription stores its renewal date from the line item', async () => {
+  stripeScenario.calls = [];
+  stripeScenario.retrieveSubscription = async () => ({
+    id: 'sub_test_1',
+    status: 'active',
+    customer: 'cus_test_1',
+    items: { data: [{ price: { id: PRICE_PRO_MONTHLY }, quantity: 1, current_period_end: 1793000000 }] },
+  });
+  const calls = supabaseFor();
+
+  const response = await deliver(completedEvent({ eventId: 'evt_test_item_period' }));
+
+  assert.equal(response.statusCode, 200);
+  const [params] = calls.rpcParams;
+  assert.equal(params.p_profile.renewalDate, new Date(1793000000 * 1000).toISOString().slice(0, 10));
+});
+
+test('an event without a period end keeps the renewal date already on file', async () => {
+  stripeScenario.calls = [];
+  stripeScenario.retrieveSubscription = async () => ({
+    id: 'sub_test_1',
+    status: 'active',
+    customer: 'cus_test_1',
+    items: { data: [{ price: { id: PRICE_PRO_MONTHLY }, quantity: 1 }] },
+  });
+  const calls = supabaseFor({ profileRow: { tier: 'Professional', payload: { renewalDate: '2026-11-02' } } });
+
+  const response = await deliver(completedEvent({ eventId: 'evt_test_no_period' }));
+
+  assert.equal(response.statusCode, 200);
+  const [params] = calls.rpcParams;
+  assert.equal(params.p_profile.renewalDate, '2026-11-02', 'not knowing the date is not a reason to erase it');
+});
+
+/*
+ * Audit F14: repricing replaces STRIPE_PRICE_ID_*. A customer still billed on
+ * the old price must stay entitled -- the webhook refuses an entitling event
+ * whose price it cannot place, so without the approved-legacy table a price
+ * change would lock out paying customers at their next renewal.
+ */
+test('a subscriber on an approved legacy price keeps the plan they pay for', async () => {
+  const previous = process.env.STRIPE_LEGACY_PRICE_IDS;
+  process.env.STRIPE_LEGACY_PRICE_IDS = 'price_pro_2025=Professional:annual';
+  try {
+    stripeScenario.calls = [];
+    stripeScenario.retrieveSubscription = async () => activeSubscription('price_pro_2025');
+    const calls = supabaseFor();
+
+    const response = await deliver(completedEvent({ eventId: 'evt_test_legacy_price' }));
+
+    assert.equal(response.statusCode, 200);
+    const [params] = calls.rpcParams;
+    assert.equal(params.p_tier, 'Professional');
+    assert.equal(params.p_billing_state, 'Active');
+    assert.equal(params.p_profile.billingPeriod, 'annual', 'the legacy entry carries its cadence');
+  } finally {
+    if (previous === undefined) delete process.env.STRIPE_LEGACY_PRICE_IDS;
+    else process.env.STRIPE_LEGACY_PRICE_IDS = previous;
+  }
+});
+
 test('an annual purchase grants the tier through the annual price id', async () => {
   stripeScenario.calls = [];
   stripeScenario.retrieveSubscription = async () => activeSubscription(PRICE_PRO_ANNUAL, { quantity: 3 });

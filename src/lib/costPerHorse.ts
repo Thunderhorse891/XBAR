@@ -576,7 +576,13 @@ export type PaybackPlan = {
  */
 export function paybackPlan(subscription: SubscriptionProfile): PaybackPlan {
   if (hasActivePaidPlan(subscription)) {
-    return { tier: subscription.tier, monthlyRate: subscription.monthlyRate, paying: true };
+    // An annual subscriber pays annualRate once a year, so a twelfth of it is
+    // what the plan costs them a month -- not the monthly list rate on file.
+    const annual = subscription.billingPeriod === 'annual' && (subscription.annualRate ?? 0) > 0;
+    const monthlyRate = annual
+      ? Math.round(((subscription.annualRate as number) / 12) * 100) / 100
+      : subscription.monthlyRate;
+    return { tier: subscription.tier, monthlyRate, paying: true };
   }
   return { tier: subscription.tier, monthlyRate: subscriptionTierConfig[subscription.tier].monthlyRate, paying: false };
 }

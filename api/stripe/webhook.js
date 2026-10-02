@@ -8,6 +8,7 @@ import {
 } from '../_lib/subscription-status.js';
 import { collectStripePages } from '../_lib/checkout-session.js';
 import { getSupabaseAdmin } from '../_lib/supabase-admin.js';
+import { subscriptionPeriodEnd } from '../_lib/stripe-objects.js';
 import { handleInvoicePaymentFailed } from '../_lib/lifecycleTriggers.js';
 
 export const config = {
@@ -16,8 +17,12 @@ export const config = {
   },
 };
 
-const stripeSecretKey = process.env.STRIPE_SECRET_KEY || '';
-const webhookSecret = process.env.STRIPE_WEBHOOK_SECRET || '';
+// Trimmed: a value pasted with a trailing newline puts the newline in the
+// Authorization header (ERR_INVALID_CHAR, seen in production on 2026-09-28) or
+// in the HMAC key, where it fails every signature. /api/health reads them the
+// same way, so what it calls well-formed is what these use.
+const stripeSecretKey = process.env.STRIPE_SECRET_KEY?.trim() || '';
+const webhookSecret = process.env.STRIPE_WEBHOOK_SECRET?.trim() || '';
 const stripe = stripeSecretKey ? new Stripe(stripeSecretKey, { apiVersion: '2026-02-25.clover' }) : null;
 
 /*
@@ -164,6 +169,13 @@ async function syncWorkspaceSubscription({
     nextProfile.billingPeriod = storedPeriod === 'monthly' || storedPeriod === 'annual' ? storedPeriod : null;
   }
 
+  // The same rule for the renewal date: an event that does not carry a period
+  // end does not know the date, so it must not write a blank over a known one.
+  if (!nextProfile.renewalDate) {
+    const storedRenewal = existingProfile?.payload?.renewalDate;
+    if (typeof storedRenewal === 'string' && storedRenewal) nextProfile.renewalDate = storedRenewal;
+  }
+
   /*
    * One trial per workspace, ever: the trial record lives in the payload and
    * buildSubscriptionProfile does not know about it, so writing the fresh
@@ -287,7 +299,7 @@ export default async function handler(req, res) {
           subscriptionId,
           priceId: lineItem?.price?.id || '',
           status: subscription.status,
-          currentPeriodEnd: subscription.current_period_end,
+          currentPeriodEnd: subscriptionPeriodEnd(subscription, lineItem),
           quantity: lineItem?.quantity || 1,
           eventId: event.id,
           eventType: event.type,
@@ -415,7 +427,7 @@ export default async function handler(req, res) {
           subscriptionId: effective.id || payload.id,
           priceId: effectiveLineItem?.price?.id || '',
           status: effective.status,
-          currentPeriodEnd: effective.current_period_end,
+          currentPeriodEnd: subscriptionPeriodEnd(effective, effectiveLineItem),
           quantity: effectiveLineItem?.quantity || 1,
           eventId: event.id,
           eventType: event.type,

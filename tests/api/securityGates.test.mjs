@@ -214,9 +214,11 @@ test('a half-configured managed stack is still unhealthy, with or without links'
     assert.equal(response.statusCode, 503, `partial managed billing must fail readiness (links: ${withLinks})`);
     assert.equal(response.body.checks.billingReady, false);
     assert.match(response.body.reasons.join(' '), /STRIPE_WEBHOOK_SECRET/);
-    assert.equal(
-      'warnings' in response.body,
-      false,
+    // Other warnings may stand (no email provider, no annual prices); the one
+    // that must not is the claim that billing runs on links alone.
+    assert.doesNotMatch(
+      (response.body.warnings ?? []).join(' '),
+      /hosted Stripe payment links only/,
       'the link-only warning must not appear once the managed stack is in play',
     );
   }
