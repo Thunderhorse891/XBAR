@@ -191,11 +191,27 @@ export async function checkSeatCapacity(supabase, workspaceId, incomingCount, li
   return { ok: true, used };
 }
 
-export async function checkSalePacketCapacity(supabase, workspaceId, incomingCount, limits) {
+/*
+ * The sale packet allowance renews (audit F11). It used to count every packet
+ * the workspace had ever generated, so a Professional subscriber who kept paying
+ * hit packet 31 once and was refused forever -- a lifetime ceiling on a monthly
+ * price. It now counts packets generated in the last 30 days.
+ *
+ * Only generation is counted: a packet is one sale_packets row, keyed by its
+ * packet id, so reopening, re-signing or resending an existing packet adds no
+ * row and uses nothing. The client mirrors the window in
+ * src/lib/salePacketAllowance.ts; tests/api/salePacketAllowance.test.mjs keeps
+ * the two from drifting.
+ */
+export const SALE_PACKET_WINDOW_DAYS = 30;
+
+export async function checkSalePacketCapacity(supabase, workspaceId, incomingCount, limits, now = new Date()) {
+  const windowStart = new Date(now.getTime() - SALE_PACKET_WINDOW_DAYS * 24 * 60 * 60 * 1000).toISOString();
   const { count, error } = await supabase
     .from('sale_packets')
     .select('packet_id', { count: 'exact', head: true })
-    .eq('workspace_id', workspaceId);
+    .eq('workspace_id', workspaceId)
+    .gte('created_at', windowStart);
 
   if (error) return usageUnavailable('sale packet count');
 
@@ -203,7 +219,7 @@ export async function checkSalePacketCapacity(supabase, workspaceId, incomingCou
   if (used + incomingCount > limits.salePacketLimit) {
     return {
       ok: false,
-      message: `This packet would exceed the plan's ${limits.salePacketLimit} sale packet limit (${used} generated). Upgrade to continue.`,
+      message: `This packet would exceed the plan's ${limits.salePacketLimit} sale packets per ${SALE_PACKET_WINDOW_DAYS} days (${used} generated in the last ${SALE_PACKET_WINDOW_DAYS} days). The allowance renews as earlier packets pass ${SALE_PACKET_WINDOW_DAYS} days, and reopening or resending a packet never uses it. Upgrade for more.`,
     };
   }
   return { ok: true, used };
