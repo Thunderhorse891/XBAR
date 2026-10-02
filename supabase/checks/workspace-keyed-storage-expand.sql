@@ -31,6 +31,12 @@ begin
   insert into public.workspaces (id, owner_user_id, workspace_key) values
     (workspace, owner_id, workspace::text),
     (other_workspace, outsider_id, other_workspace::text);
+  -- Production's seat-limit trigger refuses memberships in a workspace with no
+  -- plan, so this check could not run where README step 11 runs it.
+  insert into public.workspace_profiles (workspace_id) values (workspace), (other_workspace);
+  insert into public.workspace_subscription_profiles (workspace_id, tier, billing_state) values
+    (workspace, 'Enterprise', 'Manual Billing'),
+    (other_workspace, 'Enterprise', 'Manual Billing');
   insert into public.workspace_memberships (workspace_id, user_id, email, role, status) values
     (workspace, sales_id, sales_id::text || '@example.invalid', 'Sales Lead', 'active'),
     (workspace, medical_id, medical_id::text || '@example.invalid', 'Medical Lead', 'active'),
