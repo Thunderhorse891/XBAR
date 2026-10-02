@@ -1,5 +1,6 @@
 import { sendJson } from './_lib/http.js';
 import { clientManagedBillingEnabled, serverManagedBillingEnabled } from './_lib/managed-billing.js';
+import { readLegacyPriceIds } from './_lib/subscription-plans.js';
 
 /*
  * Liveness/readiness probe for uptime monitoring and load balancers.
@@ -9,6 +10,24 @@ import { clientManagedBillingEnabled, serverManagedBillingEnabled } from './_lib
 
 function hasEnv(name) {
   return Boolean(process.env[name]?.trim());
+}
+
+/*
+ * Shapes, not just presence (audit F13). A value can be set and still be
+ * useless: a product id pasted where a price id belongs, a payment-link URL in a
+ * price variable, a publishable key in the secret slot. Every one of those read
+ * as configured and failed only when a customer tried to pay. Nothing here
+ * calls Stripe -- this endpoint must stay cheap enough to poll -- so it proves
+ * the values are the right KIND of value; `npm run preflight` and a controlled
+ * purchase prove they are the right account's.
+ */
+const SECRET_KEY_SHAPE = /^(?:sk|rk)_(live|test)_[A-Za-z0-9_]+$/;
+const WEBHOOK_SECRET_SHAPE = /^whsec_[A-Za-z0-9+/=_-]+$/;
+const PRICE_ID_SHAPE = /^price_[A-Za-z0-9_]+$/;
+const PRICE_TIERS = ['STARTER', 'PROFESSIONAL', 'RANCH_OPS', 'ENTERPRISE'];
+
+function envValue(name) {
+  return process.env[name]?.trim() || '';
 }
 
 export default function handler(req, res) {
@@ -36,6 +55,9 @@ export default function handler(req, res) {
     'VITE_STRIPE_PAYMENT_LINK_RANCH_OPS',
     'VITE_STRIPE_PAYMENT_LINK_ENTERPRISE',
   ].some(hasEnv);
+  const secretKey = envValue('STRIPE_SECRET_KEY');
+  const stripeMode = SECRET_KEY_SHAPE.exec(secretKey)?.[1] ?? null;
+  const annualPriceIds = PRICE_TIERS.every((tier) => hasEnv(`STRIPE_PRICE_ID_${tier}_ANNUAL`));
   const subsystems = {
     supabaseAdmin: Boolean(
       (process.env.SUPABASE_URL || process.env.VITE_SUPABASE_URL) && process.env.SUPABASE_SERVICE_ROLE_KEY,
@@ -43,10 +65,14 @@ export default function handler(req, res) {
     stripeBilling: Boolean(process.env.STRIPE_SECRET_KEY),
     stripeWebhook: Boolean(process.env.STRIPE_WEBHOOK_SECRET),
     stripePriceIds,
+    stripeAnnualPriceIds: annualPriceIds,
+    // Whether the secret key is a LIVE key. Not a secret, and exactly what an
+    // operator needs to see: stripeBilling true with this false is a test key.
+    stripeLiveKey: stripeMode === 'live',
     managedBilling,
     clientManagedBilling,
     paymentLinks,
-    email: Boolean(process.env.RESEND_API_KEY || process.env.SENDGRID_API_KEY),
+    email: hasEnv('RESEND_API_KEY') || hasEnv('SENDGRID_API_KEY'),
     remindersCron: Boolean(process.env.CRON_SECRET),
   };
   /*
@@ -127,7 +153,63 @@ export default function handler(req, res) {
     );
   }
 
-  const ok = billingReady;
+  /*
+   * Malformed values make billing unready whatever else is set: each one
+   * fails at the customer's moment of payment, not before.
+   */
+  const malformed = [];
+  if (secretKey && !stripeMode) {
+    malformed.push('STRIPE_SECRET_KEY is set but is not a Stripe secret key (sk_live_, sk_test_ or rk_...).');
+  }
+  const webhookSecret = envValue('STRIPE_WEBHOOK_SECRET');
+  if (webhookSecret && !WEBHOOK_SECRET_SHAPE.test(webhookSecret)) {
+    malformed.push('STRIPE_WEBHOOK_SECRET is set but is not a webhook signing secret (whsec_...).');
+  }
+  const priceOwners = new Map();
+  for (const tier of PRICE_TIERS) {
+    for (const name of [`STRIPE_PRICE_ID_${tier}`, `STRIPE_PRICE_ID_${tier}_ANNUAL`]) {
+      const value = envValue(name);
+      if (!value) continue;
+      if (!PRICE_ID_SHAPE.test(value)) {
+        malformed.push(`${name} is set but is not a Stripe price id (price_...).`);
+        continue;
+      }
+      priceOwners.set(value, [...(priceOwners.get(value) ?? []), name]);
+    }
+  }
+  // One id under two names resolves to whichever tier is checked first, so a
+  // buyer of one plan would be entitled to the other.
+  for (const names of priceOwners.values()) {
+    if (names.length > 1) malformed.push(`${names.join(' and ')} hold the same price id; each plan needs its own.`);
+  }
+  const legacy = readLegacyPriceIds();
+  for (const error of legacy.errors) malformed.push(`STRIPE_LEGACY_PRICE_IDS: ${error}`);
+  for (const priceId of legacy.entries.keys()) {
+    if (priceOwners.has(priceId)) {
+      malformed.push(`STRIPE_LEGACY_PRICE_IDS lists ${priceId}, which is also a current price; list it in one place.`);
+    }
+  }
+  reasons.push(...malformed);
+
+  if (managedBillingTouched && !annualPriceIds) {
+    warnings.push(
+      'Annual billing is offered, but not every STRIPE_PRICE_ID_*_ANNUAL is set. Checkout refuses annual on those plans.',
+    );
+  }
+  if (stripeMode === 'test' && process.env.VERCEL_ENV === 'production') {
+    warnings.push('Production is using a Stripe TEST key. Checkout works, but no real payment is taken.');
+  }
+  if (!subsystems.email) {
+    warnings.push(
+      'No email provider is configured (RESEND_API_KEY or SENDGRID_API_KEY). Welcome, trial, payment-failed and packet emails are not sent.',
+    );
+  } else if (!hasEnv('EMAIL_FROM_ADDRESS')) {
+    warnings.push(
+      'EMAIL_FROM_ADDRESS is not set, so email goes out from no-reply@xbar.app. That domain must be verified with the email provider or every send is rejected.',
+    );
+  }
+
+  const ok = billingReady && malformed.length === 0;
 
   res.setHeader('Cache-Control', 'no-store, max-age=0');
   return sendJson(res, ok ? 200 : 503, {
@@ -136,7 +218,7 @@ export default function handler(req, res) {
     timestamp: new Date().toISOString(),
     subsystems,
     checks: {
-      billingReady,
+      billingReady: ok,
     },
     ...(reasons.length ? { reasons } : {}),
     ...(warnings.length ? { warnings } : {}),

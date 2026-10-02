@@ -68,7 +68,10 @@ export default function Subscriptions() {
   // months free). The server fails closed when an annual price id is not
   // configured, so selecting annual before Stripe is set up cannot sell the
   // wrong period — checkout refuses instead.
-  const [billingPeriod, setBillingPeriod] = useState<'monthly' | 'annual'>('monthly');
+  //
+  // It opens on the cadence the workspace already pays (audit F14): an annual
+  // subscriber who lands here is shown annual prices, not monthly ones.
+  const [billingPeriod, setBillingPeriod] = useState<'monthly' | 'annual'>(subscription.billingPeriod ?? 'monthly');
   // After a lapse, `tier` is the baseline the workspace fell back to, so
   // recommending from it offers Professional to someone who just lost
   // Enterprise. purchasedTier is what they had.
@@ -937,7 +940,7 @@ export default function Subscriptions() {
               <>
                 <div>
                   <span>Billing</span>
-                  <strong>Monthly</strong>
+                  <strong>{billingPeriod === 'annual' ? 'Annual' : 'Monthly'}</strong>
                 </div>
                 <div>
                   <span>Payment</span>

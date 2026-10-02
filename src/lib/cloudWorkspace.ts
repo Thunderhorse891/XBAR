@@ -349,7 +349,7 @@ export async function refreshWorkspaceSubscriptionProfile(
 
   const { data, error } = await client
     .from('workspace_subscription_profiles')
-    .select('tier, billing_state, monthly_rate, payload, updated_at')
+    .select('tier, billing_state, monthly_rate, billing_period, payload, updated_at')
     .eq('workspace_id', workspaceId)
     .maybeSingle();
 
@@ -958,7 +958,7 @@ async function loadWorkspaceBackupFromRelationalCloud(session: Session) {
     client.from('shared_listings').select('payload, updated_at').eq('workspace_id', workspaceId),
     client
       .from('workspace_subscription_profiles')
-      .select('tier, billing_state, monthly_rate, payload, updated_at')
+      .select('tier, billing_state, monthly_rate, billing_period, payload, updated_at')
       .eq('workspace_id', workspaceId)
       .maybeSingle(),
     client.from('workspace_profiles').select('payload, updated_at').eq('workspace_id', workspaceId).maybeSingle(),

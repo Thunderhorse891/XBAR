@@ -52,10 +52,14 @@ test('startManagedCheckout receives the live tier, workspace, token, and billing
   );
 
   // The annual toggle is state, not a constant: pin that the selected period
-  // is what is sent, so flipping to annual cannot silently buy monthly.
+  // is what is sent, so flipping to annual cannot silently buy monthly. It
+  // opens on the cadence already paid, and on monthly only when that is
+  // unknown (audit F14: an annual subscriber used to land on monthly prices).
   assert.ok(
-    source.includes("const [billingPeriod, setBillingPeriod] = useState<'monthly' | 'annual'>('monthly');"),
-    'the billing period must be selectable state defaulting to monthly',
+    source.includes(
+      "const [billingPeriod, setBillingPeriod] = useState<'monthly' | 'annual'>(subscription.billingPeriod ?? 'monthly');",
+    ),
+    'the billing period must be selectable state opening on the purchased cadence',
   );
   assert.ok(!args.includes("billingPeriod: 'monthly'"), 'the period sent must be the selected one, not a constant');
 });

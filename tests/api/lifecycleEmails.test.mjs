@@ -640,6 +640,43 @@ test('dunning resolves workspace from the subscription metadata fallback', async
   assert.match(sent[0].text, /Billing page in XBAR/);
 });
 
+/*
+ * Audit F14: the pinned Stripe API (2026-02-25.clover) names an invoice's
+ * subscription under parent.subscription_details.subscription; the top-level
+ * `invoice.subscription` the fallback used to read is absent on a current
+ * payload, so the fallback silently never ran.
+ */
+test('dunning resolves the workspace from a current-shape invoice', async () => {
+  const supabase = makeFakeSupabase({
+    workspaces: [{ id: 'ws-9', name: 'Still Haven', owner_user_id: 'u1' }],
+    ownerEmails: { u1: 'owner@example.com' },
+  });
+  const retrieved = [];
+  const stripe = {
+    subscriptions: {
+      retrieve: async (id) => {
+        retrieved.push(id);
+        return { metadata: { workspace_id: 'ws-9' } };
+      },
+    },
+  };
+  const result = await handleInvoicePaymentFailed({
+    supabase,
+    stripe,
+    invoice: {
+      id: 'in_10',
+      customer: 'cus_10',
+      parent: { type: 'subscription_details', subscription_details: { subscription: 'sub_10' } },
+    },
+    eventId: 'evt_10',
+    billingPortalUrl: '',
+    sendEmailFn: okSender,
+  });
+  assert.deepEqual(retrieved, ['sub_10'], 'the subscription is read from where the current API puts it');
+  assert.equal(result.ok, true);
+  assert.equal(result.sent, true);
+});
+
 test('dunning refuses honestly when the workspace cannot be resolved', async () => {
   const supabase = makeFakeSupabase();
   const result = await handleInvoicePaymentFailed({

@@ -107,6 +107,59 @@ export function getStripePriceIdByTier(tier, billingPeriod = 'monthly') {
 }
 
 /**
+ * Approved historical prices: ids no longer offered to new buyers that existing
+ * subscribers are still billed on (audit F14).
+ *
+ * Repricing replaces a STRIPE_PRICE_ID_* value. Without this table every
+ * customer still on the old price stops resolving to a tier, and the webhook
+ * refuses an entitling event whose price it cannot place -- so a paying
+ * customer would lose access on their next renewal because of a price change
+ * they never saw.
+ *
+ *   STRIPE_LEGACY_PRICE_IDS="price_old1=Professional:monthly, price_old2=Ranch Ops:annual"
+ *
+ * Read for entitlement only. Checkout never sells these: getStripePriceIdByTier
+ * does not consult this table. An entry that cannot be read exactly -- unknown
+ * tier, unknown period, not a price id, or one id given two meanings -- is left
+ * out and reported, never mapped to a guess. /api/health reports the errors.
+ */
+const LEGACY_PRICE_ENTRY = /^(price_[A-Za-z0-9_]+)=([^:]+):(monthly|annual)$/;
+
+export function readLegacyPriceIds(raw = process.env.STRIPE_LEGACY_PRICE_IDS) {
+  const entries = new Map();
+  const errors = [];
+  const conflicted = new Set();
+  for (const part of String(raw ?? '').split(',')) {
+    const entry = part.trim();
+    if (!entry) continue;
+    const match = LEGACY_PRICE_ENTRY.exec(entry);
+    if (!match) {
+      errors.push(`"${entry}" is not price_id=Tier:monthly|annual.`);
+      continue;
+    }
+    const [, priceId, rawTier, period] = match;
+    const tier = rawTier.trim();
+    if (!isKnownTier(tier)) {
+      errors.push(`"${entry}" names an unknown tier "${tier}".`);
+      continue;
+    }
+    const existing = entries.get(priceId);
+    if (existing && (existing.tier !== tier || existing.period !== period)) {
+      errors.push(`${priceId} is listed with two different meanings; it is ignored until one is removed.`);
+      conflicted.add(priceId);
+      continue;
+    }
+    entries.set(priceId, { tier, period });
+  }
+  for (const priceId of conflicted) entries.delete(priceId);
+  return { entries, errors };
+}
+
+function legacyPrice(priceId) {
+  return readLegacyPriceIds().entries.get(priceId) ?? null;
+}
+
+/**
  * Resolve a Stripe price id to a tier, or null when it matches none.
  *
  * Checks both monthly and annual price ids: the webhook must recognize an
@@ -124,7 +177,9 @@ export function findTierByPriceId(priceId) {
     Object.keys(subscriptionPlans).find(
       (tier) =>
         getStripePriceIdByTier(tier, 'monthly') === normalized || getStripePriceIdByTier(tier, 'annual') === normalized,
-    ) || null
+    ) ||
+    legacyPrice(normalized)?.tier ||
+    null
   );
 }
 
@@ -147,7 +202,7 @@ export function findBillingPeriodByPriceId(priceId) {
     if (getStripePriceIdByTier(tier, 'monthly') === normalized) return 'monthly';
     if (getStripePriceIdByTier(tier, 'annual') === normalized) return 'annual';
   }
-  return null;
+  return legacyPrice(normalized)?.period ?? null;
 }
 
 /** Retained name; the decision itself lives in subscription-status.js. */

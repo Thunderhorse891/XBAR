@@ -39,12 +39,21 @@ export function subscriptionFromCloudRow(
     trialValue && typeof trialValue === 'object' && !Array.isArray(trialValue)
       ? (trialValue as Record<string, unknown>).startedAt
       : undefined;
+  // Audit F14: the server records the cadence (column and payload) and the
+  // annual price, and this mapper used to drop both, so an annual subscriber's
+  // billing screen read as monthly. The column wins; the payload covers rows
+  // read without it. Anything else is unknown, not monthly.
+  const period = row.billing_period ?? payload.billingPeriod;
+  const billingPeriod = period === 'monthly' || period === 'annual' ? period : undefined;
+  const annualRate = nonnegative(payload.annualRate);
 
   const profile: SubscriptionProfile = {
     tier,
     purchasedTier,
     billingState,
     monthlyRate: nonnegative(row.monthly_rate),
+    ...(billingPeriod ? { billingPeriod } : {}),
+    ...(annualRate > 0 ? { annualRate } : {}),
     renewalDate: typeof payload.renewalDate === 'string' ? payload.renewalDate : '',
     ...(recoverable == null ? {} : { subscriptionRecoverable: typeof recoverable === 'boolean' ? recoverable : true }),
     ...(typeof trialStart === 'string' && trialStart.length > 0 ? { trialStart } : {}),
