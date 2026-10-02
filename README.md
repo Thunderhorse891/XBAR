@@ -444,6 +444,14 @@ psql -v ON_ERROR_STOP=1 "$DATABASE_URL" -f supabase/checks/workspace-keyed-stora
 psql -1 -v ON_ERROR_STOP=1 "$DATABASE_URL" -f supabase/migrations/20261001090100_workspace_keyed_storage_contract.sql
 #    Prove the final state under real RLS (synthetic users, all rolled back):
 psql -v ON_ERROR_STOP=1 "$DATABASE_URL" -f supabase/checks/workspace-keyed-storage.sql
+
+# 12. Seat reservations (audit F05). Accepting an invitation no longer counts
+#    its own reservation as a second seat, so the last reserved seat on a plan
+#    can be accepted; seat checks are serialized per workspace. CREATE OR
+#    REPLACE of the trigger function only -- no data, no new grants.
+psql -1 -v ON_ERROR_STOP=1 "$DATABASE_URL" -f supabase/migrations/20261002090000_seat_reservation_consumed_on_accept.sql
+#    Prove it with the real trigger and acceptance RPC (all rolled back):
+psql -v ON_ERROR_STOP=1 "$DATABASE_URL" -f supabase/checks/seat-reservation.sql
 ```
 
 **(4) and (5) are prerequisites for billing, not optimizations to schedule

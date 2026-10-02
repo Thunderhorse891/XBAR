@@ -182,3 +182,46 @@ test('plans are not sold as buyer seats, which no limit actually counts', () => 
     assert.doesNotMatch(contents, /buyer seats/i, `${file} still advertises buyer seats`);
   }
 });
+
+/*
+ * Audit F05: the last reserved seat on a plan could not be accepted.
+ *
+ * Accepting an invitation inserts the active membership while that invitation
+ * is still pending, and the membership check counted every pending invitation
+ * -- the reservation AND the seat it reserved. 4 members + 1 reservation on a
+ * 5-seat plan evaluated 4 + 1 + 1 and refused the invited fifth person.
+ * supabase/checks/seat-reservation.sql proves the behaviour against the real
+ * database; this pins the two lines it depends on in both copies of the
+ * function, so a schema rewrite cannot quietly put the double count back.
+ */
+test('accepting a reserved seat consumes the reservation instead of counting it twice', () => {
+  const migration = readFileSync(
+    path.join(repoRoot, 'supabase/migrations/20261002090000_seat_reservation_consumed_on_accept.sql'),
+    'utf8',
+  );
+  const schema = readFileSync(path.join(repoRoot, 'supabase/production-schema.sql'), 'utf8');
+  const functionOf = (source) => {
+    const start = source.indexOf('create or replace function public.xbar_enforce_workspace_seat_limits()');
+    assert.ok(start > -1, 'the seat function must be defined');
+    return source.slice(start, source.indexOf('$$;', start) + 3);
+  };
+
+  const fromMigration = functionOf(migration);
+  assert.equal(functionOf(schema), fromMigration, 'production-schema.sql must carry the migrated function verbatim');
+
+  const membershipBranch = fromMigration.slice(fromMigration.indexOf("elsif TG_TABLE_NAME = 'workspace_memberships'"));
+  const pendingCounts = membershipBranch.match(/from public\.workspace_invitations[\s\S]*?;/g) ?? [];
+  assert.equal(pendingCounts.length, 2, 'seat and shared-access counts');
+  for (const count of pendingCounts) {
+    assert.match(
+      count,
+      /lower\(btrim\(email\)\) <> lower\(btrim\(coalesce\(new\.email, ''\)\)\)/,
+      'the pending invitation for the accepting email is the seat being taken, not another one',
+    );
+  }
+  assert.match(
+    fromMigration,
+    /perform pg_advisory_xact_lock\(hashtextextended\('xbar-seats:' \|\| target_workspace_id::text, 0\)\);/,
+    'seat checks are serialized per workspace, so concurrent acceptances cannot overfill',
+  );
+});
