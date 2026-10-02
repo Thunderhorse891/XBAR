@@ -10,6 +10,8 @@
 // believed to carry is the one failure this whole path exists to prevent, and
 // the buyer is who finds out.
 
+import { BUYER_FILE_UNAVAILABLE, SELLER_FILE_REFUSED, SELLER_FILE_UNREADABLE } from './document-storage.js';
+
 /**
  * Split a horse's documents into the ones this endpoint can embed and a plain
  * list of what it could not, one line per omission.
@@ -21,7 +23,7 @@
  * @param {number} maxAttachments Hard cap on documents in one packet.
  * @returns {{packetDocs: Array<object>, unavailable: string[]}}
  */
-export function selectPacketDocuments(documents, requestedIds, maxAttachments) {
+export function selectPacketDocuments(documents, requestedIds, maxAttachments, { refuse } = {}) {
   const requestedSet = requestedIds.length ? new Set(requestedIds) : null;
   let packetDocs = requestedSet ? documents.filter((doc) => requestedSet.has(doc.document_id)) : documents.slice();
   const unavailable = [];
@@ -42,6 +44,16 @@ export function selectPacketDocuments(documents, requestedIds, maxAttachments) {
   }
   packetDocs = packetDocs.filter((doc) => doc.storage_path);
 
+  // A stored file the server will not read (see isWorkspaceObjectPath) is
+  // named before the cap is applied, so it never takes a slot from a real one.
+  if (refuse) {
+    packetDocs = packetDocs.filter((doc) => {
+      const reason = refuse(doc);
+      if (reason) unavailable.push(`${doc.title} (${reason})`);
+      return !reason;
+    });
+  }
+
   if (packetDocs.length > maxAttachments) {
     for (const doc of packetDocs.slice(maxAttachments)) {
       unavailable.push(`${doc.title} (over the ${maxAttachments}-document packet limit)`);
@@ -50,6 +62,23 @@ export function selectPacketDocuments(documents, requestedIds, maxAttachments) {
   }
 
   return { packetDocs, unavailable };
+}
+
+/*
+ * The omissions list serves two readers. The seller gets the reason and the
+ * fix ("not stored in this workspace; re-upload it"); the buyer reads the
+ * cover, which must not describe internal storage checks, so those reasons
+ * become "file unavailable" there. Every other reason (no file attached, over
+ * the packet limit) already reads correctly to both.
+ */
+const SELLER_ONLY_REASONS = [SELLER_FILE_REFUSED, SELLER_FILE_UNREADABLE];
+
+export function buyerFacingOmission(item) {
+  for (const reason of SELLER_ONLY_REASONS) {
+    const suffix = ` (${reason})`;
+    if (item.endsWith(suffix)) return `${item.slice(0, -suffix.length)} (${BUYER_FILE_UNAVAILABLE})`;
+  }
+  return item;
 }
 
 /**
@@ -73,7 +102,7 @@ export function packetOmissionSection(unavailable) {
   return {
     heading: 'Not Included In This Packet',
     lines: [
-      ...unavailable.map((item, index) => `${index + 1}. ${item}`),
+      ...unavailable.map((item, index) => `${index + 1}. ${buyerFacingOmission(item)}`),
       unavailable.length === 1
         ? 'Ask the seller to send this file separately.'
         : 'Ask the seller to send these files separately.',

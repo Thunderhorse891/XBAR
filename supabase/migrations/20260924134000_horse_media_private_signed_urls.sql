@@ -55,6 +55,17 @@
 -- yet is readable by the uploader only -- the same posture documents have.
 
 -- 1. The bucket goes private. Public URLs stop resolving the moment this runs.
+-- SUPERSEDED once 20261001090000 has run. Re-running this file after it would
+-- put back a read branch that migration and 20261001090100 remove (the gallery-listing read on horse-media),
+-- reopening audit F02. Refuse rather than do that quietly.
+do $superseded$
+begin
+  if to_regprocedure('public.xbar_has_workspace_capability(uuid, text)') is not null then
+    raise exception 'Superseded by 20261001090000/20261001090100; re-running this migration would reopen a cross-workspace photo read.';
+  end if;
+end;
+$superseded$;
+
 update storage.buckets
 set public = false
 where id = 'horse-media';

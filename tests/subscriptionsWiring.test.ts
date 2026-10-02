@@ -22,6 +22,12 @@ import test from 'node:test';
 
 const source = readFileSync('src/routes/Subscriptions.tsx', 'utf8');
 
+test('trial verification disables both actions and guards programmatic clicks', () => {
+  assert.equal((source.match(/disabled=\{trialVerificationBlocked \|\|/g) ?? []).length, 2);
+  assert.ok(source.includes('if (trialVerificationBlocked) return;'));
+  assert.ok(source.includes('Checking trial eligibility…'));
+});
+
 function beginCheckoutBody(): string {
   const start = source.indexOf('const beginCheckout = async (tier: SubscriptionTier) => {');
   assert.ok(start >= 0, 'beginCheckout must exist');

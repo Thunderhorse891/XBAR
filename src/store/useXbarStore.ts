@@ -12,7 +12,7 @@ import {
   todayStamp,
 } from '@/lib/xbarRuntime';
 import { normalizeWorkspaceEmail, validateWorkspaceInvitation } from '@/lib/workspaceAccess';
-import { apiConfig, isSupabaseConfigured } from '@/lib/platformConfig';
+import { apiConfig, isRelationalCloudEnabled, isSupabaseConfigured } from '@/lib/platformConfig';
 import { useCloudStore } from '@/store/useCloudStore';
 import { hasRoleCapability } from '@/lib/permissions';
 import { hasHorsePhoto, isHorsePhotoAsset } from '@/lib/animalPassport';
@@ -50,6 +50,8 @@ import {
   createAuditEvent,
   createOwnershipRecord,
   intakeIdentityChanged,
+  photoBatchIdentityChanged,
+  isStoragePolicyRefusal,
   normalizeOwnershipRecord,
   validateExpenseReceiptInput,
   summarizeBatch,
@@ -1434,13 +1436,32 @@ export const useXbarStore = create<XbarStore>()(
           return { ok: false, message: 'Storage limit reached for this plan. Upgrade before uploading more media.' };
         }
 
+        // Photos are filed under the ranch's cloud workspace. A signed-in
+        // account with no workspace resolved has nowhere to put them, and
+        // "check your connection" would send them looking for the wrong
+        // problem -- so say which of the real causes it is.
+        const uploadTarget = readIntakeIdentity();
+        if (uploadTarget.userId && !uploadTarget.workspaceId) {
+          return {
+            ok: false,
+            message: isRelationalCloudEnabled()
+              ? 'XBAR has not connected your ranch workspace yet. If you just signed up, wait for the first sync to finish; otherwise reload the page. Then upload the photos again.'
+              : 'Photo storage needs ranch workspace sync, which is turned off in this build, so no photo was stored.',
+          };
+        }
+
+        // A storage policy refusal is not a connection problem: it means this
+        // role may not upload photos to this ranch (or the ranch's photo
+        // storage is not set up), and retrying will not change it.
+        let refusedByStoragePolicy = false;
         try {
           const results = await Promise.all(
             fileList.map(async (file) => {
               let uploadedAsset: Awaited<ReturnType<typeof uploadMediaAssetToCloud>> = null;
               try {
-                uploadedAsset = await uploadMediaAssetToCloud({ file, horseId });
+                uploadedAsset = await uploadMediaAssetToCloud({ file, horseId, target: uploadTarget });
               } catch (error) {
+                if (isStoragePolicyRefusal(error)) refusedByStoragePolicy = true;
                 console.error('Cloud media upload failed.', error);
               }
               return {
@@ -1462,6 +1483,17 @@ export const useXbarStore = create<XbarStore>()(
             }),
           );
 
+          // The same account and ranch must still be here to receive them; if
+          // not, the stored files stay orphaned in the ranch they were written
+          // for rather than being attached to a horse in another one.
+          if (photoBatchIdentityChanged(uploadTarget, readIntakeIdentity())) {
+            return {
+              ok: false,
+              message:
+                'The signed-in account changed while these photos were uploading, so they were not added. Sign in again and re-upload them.',
+            };
+          }
+
           // Only assets that actually stored (a real storagePath) are usable
           // photos. A metadata-only "upload" — cloud unavailable, missing session,
           // or a bucket error — has no renderable image, so it must not become a
@@ -1473,7 +1505,9 @@ export const useXbarStore = create<XbarStore>()(
           if (uploadedAssets.length === 0) {
             return {
               ok: false,
-              message: 'Photo upload failed — no image was stored. Check your connection and try again.',
+              message: refusedByStoragePolicy
+                ? "Photo upload was refused by this ranch's storage permissions, so no image was stored. Ask the ranch owner to check your role."
+                : 'Photo upload failed — no image was stored. Check your connection and try again.',
             };
           }
 

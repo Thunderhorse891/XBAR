@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { readFileSync } from 'node:fs';
+import { readdirSync, readFileSync } from 'node:fs';
 
 import { hasRoleCapability, requireRoleCapability } from '../../api/_lib/permissions.js';
 
@@ -94,4 +94,80 @@ test('the roles the CSV import path depends on are the ones it claims', () => {
 
   assert.equal(hasRoleCapability('Owner', 'editHorse'), true);
   assert.equal(hasRoleCapability('Sales Lead', 'editHorse'), true);
+});
+
+/*
+ * The database copy. xbar_has_workspace_capability carries the same matrix as
+ * VALUES rows so storage and table policies can ask "may this member do X?"
+ * instead of "is this member an Admin?". It is the copy that RLS enforces, so
+ * a grant there that the client withholds is reachable straight from the
+ * browser with the anon key. The LATEST migration that defines the function is
+ * the one in force, so that is the one compared.
+ */
+function latestCapabilityFunctionSql() {
+  const dir = new URL('../../supabase/migrations/', import.meta.url);
+  const files = readdirSync(dir)
+    .filter((name) => name.endsWith('.sql'))
+    .sort();
+  let latest = null;
+  for (const name of files) {
+    const sql = readFileSync(new URL(name, dir), 'utf8');
+    if (/create or replace function public\.xbar_has_workspace_capability\(/.test(sql)) latest = { name, sql };
+  }
+  assert.ok(latest, 'a migration must define xbar_has_workspace_capability');
+  return latest;
+}
+
+function parseSqlCapabilityRows(sql) {
+  const start = sql.indexOf('create or replace function public.xbar_has_workspace_capability(');
+  const end = sql.indexOf('$$;', start);
+  const body = sql.slice(start, end);
+  const entries = {};
+  for (const [, role, capability] of body.matchAll(/\('([^']+)',\s*'([^']+)'\)/g)) {
+    (entries[role] ??= []).push(capability);
+  }
+  for (const role of Object.keys(entries)) entries[role].sort();
+  assert.ok(Object.keys(entries).length > 0, 'the SQL capability rows must not parse empty');
+  return entries;
+}
+
+test('the database capability matrix matches the client one exactly', () => {
+  const client = parseRoleCapabilityMap('../../src/lib/permissions.ts');
+  const { name, sql } = latestCapabilityFunctionSql();
+  const database = parseSqlCapabilityRows(sql);
+
+  // Escalation direction first: a database grant the client withholds.
+  for (const [role, capabilities] of Object.entries(database)) {
+    for (const capability of capabilities) {
+      assert.ok(
+        client[role]?.includes(capability),
+        `${name} grants ${role} the capability ${capability}, which the client does not`,
+      );
+    }
+  }
+  assert.deepEqual(Object.keys(database).sort(), Object.keys(client).sort(), `${name} must define the same roles`);
+  for (const role of Object.keys(client)) {
+    assert.deepEqual(database[role], client[role], `${name}: role ${role} must carry identical capabilities`);
+  }
+});
+
+test('the database capability check falls closed and is not callable anonymously', () => {
+  const { sql } = latestCapabilityFunctionSql();
+  const start = sql.indexOf('create or replace function public.xbar_has_workspace_capability(');
+  const body = sql.slice(start, sql.indexOf('$$;', start));
+  // Only an active membership counts, and only for the signed-in caller; an
+  // unknown role matches no VALUES row and so is refused.
+  assert.match(body, /m\.status = 'active'/);
+  assert.match(body, /m\.user_id = auth\.uid\(\)/);
+  assert.match(body, /join role_grants g on g\.role = m\.role/);
+  assert.match(body, /and g\.capability = p_capability/);
+  // The workspace owner holds what an Admin holds and nothing more: an unknown
+  // or misspelled capability is refused for the owner too.
+  assert.match(
+    body,
+    /exists \(select 1 from role_grants g where g\.role = 'Admin' and g\.capability = p_capability\)\s*and exists \(\s*select 1 from public\.workspaces w\s*where w\.id = p_workspace_id and w\.owner_user_id = auth\.uid\(\)/,
+  );
+  assert.match(sql, /revoke all on function public\.xbar_has_workspace_capability\(uuid, text\) from public;/);
+  assert.match(sql, /revoke all on function public\.xbar_has_workspace_capability\(uuid, text\) from anon;/);
+  assert.ok(!/grant execute on function public\.xbar_has_workspace_capability[^;]*\banon\b/.test(sql));
 });

@@ -1,3 +1,10 @@
+-- SUPERSEDED STATE. This check describes the database right after
+-- 20260912060000, while uploader-keyed objects stayed readable by their
+-- uploader. 20261001090100 (README step 11) removes that on purpose, after
+-- which this script's legacy-access assertions fail on a CORRECT database --
+-- do not "fix" that by restoring the policies. The final state is checked by
+-- supabase/checks/workspace-keyed-storage.sql.
+--
 -- Administrative connection only. Synthetic auth users have no credentials;
 -- every user, workspace, membership, document and storage object is rolled back.
 -- Exercises real RLS under authenticated, not service-role bypass.

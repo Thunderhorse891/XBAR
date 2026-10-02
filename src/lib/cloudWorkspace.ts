@@ -1,6 +1,11 @@
 import { apiConfig, isRelationalCloudEnabled, isSnapshotFallbackEnabled, supabaseConfig } from '@/lib/platformConfig';
 import { publicShareEventToBuyerRoomEvent, type PublicShareEventRow } from '@/lib/buyerDealRoom';
-import { buildDocumentStoragePath, explainUnopenableCloudDocument } from '@/lib/documentStoragePath';
+import {
+  buildDocumentStoragePath,
+  buildMediaStoragePath,
+  explainUnopenableCloudDocument,
+  isWorkspaceStorageKey,
+} from '@/lib/documentStoragePath';
 import { createId, todayStamp } from '@/lib/xbarRuntime';
 import { WORKSPACE_SCHEMA_VERSION } from '@/store/xbarStoreHelpers';
 import { intakeIdentityChanged, type IntakeIdentity } from '@/store/xbarStoreLogic';
@@ -104,17 +109,6 @@ type RelationalMembershipRow = {
 };
 
 const userRoles: UserRole[] = ['Admin', 'Ranch Manager', 'Owner', 'Medical Lead', 'Sales Lead'];
-
-function sanitizeStorageSegment(value: string) {
-  return (
-    value
-      .toLowerCase()
-      .replace(/[^a-z0-9-]+/g, '-')
-      .replace(/-+/g, '-')
-      .replace(/^-|-$/g, '')
-      .slice(0, 80) || 'record'
-  );
-}
 
 function normalizeWorkspaceRole(value: unknown): UserRole | null {
   return typeof value === 'string' && userRoles.includes(value as UserRole) ? (value as UserRole) : null;
@@ -461,7 +455,6 @@ async function ensurePrimaryWorkspace(session: Session, backup: CloudWorkspaceBa
   const updatedAt = backup.exportedAt ?? new Date().toISOString();
   const workspaceName = profile?.ranchName?.trim() || 'Primary Ranch';
   const businessName = profile?.businessName?.trim() || 'XBAR';
-  const membershipRole = resolveSessionRole(session);
 
   // Match the workspace used by reads. A teammate must not bootstrap a new
   // personally owned ranch from the shared ranch's snapshot. Lookup failures
@@ -533,6 +526,10 @@ async function ensurePrimaryWorkspace(session: Session, backup: CloudWorkspaceBa
 
     workspaceId = workspaceRow.id as string;
 
+    // This branch has established personal workspace ownership. Owner is the
+    // client-access role, not the ranch administrator, and Starter has no
+    // client seats. Do not derive this owner membership from session metadata.
+    const membershipRole = 'Admin';
     const { error: membershipError } = await client.from('workspace_memberships').upsert(
       {
         workspace_id: workspaceId,
@@ -1140,7 +1137,7 @@ export async function loadWorkspaceBackupFromCloud() {
   } as const;
 }
 
-export async function uploadMediaAssetToCloud(params: { file: File; horseId: string }) {
+export async function uploadMediaAssetToCloud(params: { file: File; horseId: string; target: IntakeIdentity }) {
   const client = getSupabaseClient();
   if (!client) {
     return null;
@@ -1151,9 +1148,28 @@ export async function uploadMediaAssetToCloud(params: { file: File; horseId: str
     return null;
   }
 
-  const extension = params.file.name.includes('.') ? params.file.name.split('.').pop() : 'bin';
-  const fileName = `${createId('media')}.${extension}`;
-  const path = `${session.user.id}/horses/${sanitizeStorageSegment(params.horseId)}/${fileName}`;
+  // Workspace first, like documents: the storage policy grants a photo to the
+  // members of the workspace named by its first segment, and to no one else.
+  // The earlier uploader-first key made a photo readable through any gallery
+  // that listed its path -- and a gallery is something an owner can edit.
+  //
+  // The workspace is the one the batch started in (resolved once by the
+  // caller, not re-queried per file), and the file is written only while the
+  // same account is still signed in: a photo must never be filed under a ranch
+  // the uploader has just switched away from.
+  const { target } = params;
+  if (!isWorkspaceStorageKey(target.workspaceId) || session.user.id !== target.userId) {
+    return null;
+  }
+  const path = buildMediaStoragePath({
+    workspaceId: target.workspaceId,
+    horseId: params.horseId,
+    objectId: createId('media'),
+    originalFileName: params.file.name,
+  });
+  if (!path) {
+    return null;
+  }
   const { error } = await client.storage.from(supabaseConfig.mediaBucket).upload(path, params.file, {
     upsert: false,
     contentType: params.file.type || undefined,
@@ -1185,9 +1201,8 @@ export const HORSE_MEDIA_SIGNED_URL_TTL_SECONDS = 15 * 60;
 /**
  * Mint a short-lived signed URL for a horse-media object.
  *
- * The caller must be signed in and entitled to read the object under the
- * bucket's storage policies (the uploader, or a member of the workspace whose
- * horse references it). Returns null when the client is unavailable, the
+ * The caller must be signed in and a member of the workspace the object's
+ * path is filed under (its first segment); the storage policy enforces it. Returns null when the client is unavailable, the
  * session is missing, or storage refuses -- the render layer treats null as
  * "no image" and shows its fallback, never a broken link.
  */
@@ -1441,6 +1456,7 @@ export async function getDocumentAccessUrl(
       storagePath: document.storagePath,
       viewerUserId: session.user.id,
       workspaceId: accessProfile.workspaceId,
+      refusalStatus: (error as { status?: number } | null)?.status,
     });
     return {
       ok: false,

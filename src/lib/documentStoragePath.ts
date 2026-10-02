@@ -81,24 +81,35 @@ export function buildDocumentStoragePath(params: {
 }
 
 /**
- * Why a teammate cannot open a document that is plainly listed in front of them.
+ * Why someone cannot open a document that is plainly listed in front of them.
  *
- * Only called once a signed-URL request has already been refused, which is what
- * makes the answer knowable: the caller is not the uploader (their own legacy
- * objects still open) and is not a member of the namespace the object sits in
- * (membership would have granted the URL). A file in that position was stored
- * under the uploader-keyed scheme this release replaced, and re-uploading it is
- * the one thing that fixes it.
+ * Only called once a signed-URL request has already been refused. Every
+ * readable object is filed under its workspace (migration 20261001090100
+ * removed the uploader-keyed read branch), so an object whose first segment is
+ * a user id -- the scheme this app used before shared ranch storage -- opens
+ * for no one, its uploader included, and re-uploading it is the one fix. A
+ * namespace that is neither this workspace nor the viewer is treated the same
+ * way: had it been a workspace the viewer belongs to, membership would have
+ * granted the URL.
  *
- * Returns `null` when the path gives no such explanation, so the caller falls
- * back to reporting what the storage layer actually said rather than inventing
- * a reason.
+ * Returns `null` for this workspace's own objects, so the caller reports what
+ * the storage layer actually said rather than inventing a reason.
  */
 export function explainUnopenableCloudDocument(params: {
   storagePath: string;
   viewerUserId: string;
   workspaceId: string | null | undefined;
+  /*
+   * The HTTP status Storage refused with. Only a 4xx is a refusal about this
+   * object; a 5xx or a network failure says nothing about the storage scheme,
+   * and telling someone to re-upload a file that would open on a retry has
+   * them create duplicates.
+   */
+  refusalStatus: number | undefined;
 }): string | null {
+  if (typeof params.refusalStatus !== 'number' || params.refusalStatus < 400 || params.refusalStatus >= 500) {
+    return null;
+  }
   // Compared case-insensitively on both sides: a uuid means the same thing in
   // either case, and treating one spelling as a stranger's namespace would tell
   // someone their own file belongs to a teammate.
@@ -106,10 +117,44 @@ export function explainUnopenableCloudDocument(params: {
   if (!isWorkspaceStorageKey(namespace)) {
     return null;
   }
-  if (namespace === params.viewerUserId.toLowerCase() || namespace === (params.workspaceId ?? '').toLowerCase()) {
-    // Their own legacy upload, or this workspace's own object. Whatever went
-    // wrong, it was not the old storage scheme, so say nothing about it.
+  if (namespace === (params.workspaceId ?? '').toLowerCase()) {
+    // This workspace's own object. Whatever went wrong, it was not the old
+    // storage scheme, so say nothing about it.
     return null;
   }
-  return 'This file was uploaded before shared document storage, so only the teammate who uploaded it can open it. Ask them to upload it again and it will be available to everyone on the ranch.';
+  if (namespace === params.viewerUserId.toLowerCase()) {
+    return 'You added this file before shared ranch storage, so it was stored under your account and can no longer be opened from the cloud. Upload it again and it will be available to everyone on the ranch.';
+  }
+  // Without this workspace's id, a namespace that is not the viewer's could be
+  // the ranch's own file that failed for another reason. Say nothing rather
+  // than send them after a teammate for it.
+  if (!params.workspaceId) {
+    return null;
+  }
+  return 'This file was added before shared ranch storage, so it was stored under the account of the teammate who added it and can no longer be opened from the cloud. Ask them to upload it again and it will be available to everyone on the ranch.';
+}
+
+/**
+ * Where a horse photo is stored: `<workspace>/horses/<horse>/media-<id>.<ext>`.
+ *
+ * The server signs a buyer photo only when the path has exactly this canonical
+ * shape (api/_lib/buyer-media.js isHorseMediaStoragePath) and lives under the
+ * listing's workspace, so the shape is built here, beside the document path,
+ * where a test can drive it against the server's own check. Refuses (null)
+ * without a real workspace id, for the same reason buildDocumentStoragePath
+ * does: there is no correct place to put the file.
+ */
+export function buildMediaStoragePath(params: {
+  workspaceId: string | null | undefined;
+  horseId: string;
+  objectId: string;
+  originalFileName: string;
+}): string | null {
+  if (!isWorkspaceStorageKey(params.workspaceId)) {
+    return null;
+  }
+  const horseSegment = sanitizeDocumentPathSegment(params.horseId, 'record');
+  const objectSegment = sanitizeDocumentPathSegment(params.objectId, 'photo');
+  const fileStem = objectSegment.startsWith('media-') ? objectSegment : `media-${objectSegment}`;
+  return `${params.workspaceId.toLowerCase()}/horses/${horseSegment}/${fileStem}.${documentFileExtension(params.originalFileName)}`;
 }

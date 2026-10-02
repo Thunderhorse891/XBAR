@@ -56,9 +56,10 @@ export function getClientIp(req) {
 async function checkUpstash(key, limit, windowSeconds) {
   const url = process.env.UPSTASH_REDIS_REST_URL;
   const token = process.env.UPSTASH_REDIS_REST_TOKEN;
-  if (!url || !token) {
+  if (!url && !token) {
     return null;
   }
+  if (!url || !token) throw new Error('Shared rate limiter configuration is incomplete.');
 
   const response = await fetch(`${url.replace(/\/$/, '')}/pipeline`, {
     method: 'POST',
@@ -70,15 +71,25 @@ async function checkUpstash(key, limit, windowSeconds) {
       ['INCR', key],
       ['EXPIRE', key, windowSeconds, 'NX'],
     ]),
+    signal: AbortSignal.timeout(3000),
   });
 
   if (!response.ok) {
-    // Fail open: never let a rate-limiter outage take down the endpoint.
-    return { ok: true, remaining: limit, retryAfterSeconds: 0 };
+    throw new Error('Shared rate limiter is unavailable.');
   }
 
   const results = await response.json();
-  const count = Number(Array.isArray(results) ? results[0]?.result : 0) || 0;
+  const count = results?.[0]?.result;
+  if (
+    !Array.isArray(results) ||
+    results.length !== 2 ||
+    results.some((result) => result.error) ||
+    !Number.isSafeInteger(count) ||
+    count < 1 ||
+    ![0, 1].includes(results[1]?.result)
+  ) {
+    throw new Error('Shared rate limiter returned an invalid result.');
+  }
   const ok = count <= limit;
   return {
     ok,
@@ -121,8 +132,12 @@ export async function enforceRateLimit(req, res, { bucket, limit, windowSeconds 
   try {
     result = (await checkUpstash(key, limit, windowSeconds)) || checkMemory(key, limit, windowSeconds);
   } catch {
-    // Fail open on any limiter error.
-    result = { ok: true, remaining: limit, retryAfterSeconds: 0 };
+    res.setHeader('Retry-After', '30');
+    sendJson(res, 503, {
+      ok: false,
+      message: 'Request protection is temporarily unavailable. Please try again shortly.',
+    });
+    return false;
   }
 
   res.setHeader('X-RateLimit-Limit', String(limit));

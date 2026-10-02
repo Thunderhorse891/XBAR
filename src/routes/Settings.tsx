@@ -250,7 +250,7 @@ export default function Settings() {
       message: cleared
         ? result.message
         : `${result.message} This browser would not remove the files stored on this device; close other XBAR tabs and clear this site's data to finish removing them.`,
-      tone: cleared ? 'success' : 'warning',
+      tone: cleared && !result.incomplete ? 'success' : 'warning',
     });
     navigate('/login', { replace: true });
   };

@@ -115,16 +115,29 @@ export function documentPrefixesToPurge(plan) {
 /**
  * Which prefixes of the MEDIA bucket an account deletion may erase.
  *
- * Horse media is still keyed to whoever uploaded it -- `horse-media` is a
- * public bucket, so it never had the shared-read problem that moved documents
- * onto workspace paths -- which makes the departing account's own prefix the
- * only one that applies. A workspace id here would erase nothing today and
- * would be a loaded gun if media ever moved.
+ * Same two shapes as documents: `<user-id>/horses/...` from before photos were
+ * keyed to the workspace, and `<workspace-id>/horses/...` for every photo
+ * since. The same safety argument applies -- only purged workspaces, which by
+ * definition have no other active member, never a transferred one.
  *
- * @param {{ userId: string }} plan
+ * @param {{ userId: string, workspacesToPurge: string[] }} plan
  */
 export function mediaPrefixesToPurge(plan) {
-  return typeof plan?.userId === 'string' && plan.userId ? [plan.userId] : [];
+  return documentPrefixesToPurge(plan);
+}
+
+/**
+ * Which prefixes of the SALE-PACKET bucket an account deletion may erase.
+ *
+ * Packets are only ever written by the server, as `<workspace-id>/<horse>/...`,
+ * and each one embeds full copies of the horse's documents -- so leaving them
+ * would keep the Coggins and registration papers the deletion promised to
+ * erase. There is no uploader-keyed layout here, so only purged workspaces.
+ *
+ * @param {{ workspacesToPurge: string[] }} plan
+ */
+export function packetPrefixesToPurge(plan) {
+  return (plan?.workspacesToPurge ?? []).filter((prefix) => typeof prefix === 'string' && prefix.length > 0);
 }
 
 /**

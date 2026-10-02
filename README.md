@@ -170,6 +170,17 @@ reported, never faked.
 
 ### Supabase migration rollout and recorded deployment
 
+September 28 update: the billing-period, trial, private-media, trial-history,
+invalid-date and atomic-event corrections are applied on `xbar-records` as
+`20260928153909_xbar_launch_billing_trial_private_media_reconciliation`.
+The internal trial grant correction is recorded as
+`20260928154229_trial_helper_private`. See
+[the repair record](docs/launch-repair-20260928.md) for the six source files,
+verification and recovery boundaries. Do not replay those files merely because
+their original filenames do not appear individually in the hosted ledger.
+Run `supabase/checks/launch-readiness.sql` for a read-only schema check;
+`/api/health` checks configuration and does not prove schema compatibility.
+
 On `xbar-records` (`uxvwfepyothlakhqazwv`), the Supabase migration ledger checked
 on September 10, 2026 records steps 1–5 below as applied on September 4. Step 6
 was applied on September 10 as `20260910173613_private_share_token_fail_closed`;
@@ -356,6 +367,11 @@ psql "$DATABASE_URL" -f supabase/migrations/20260924120000_billing_period.sql
 #     change that wrote it.
 psql "$DATABASE_URL" -f supabase/migrations/20260924223000_preserve_trial_in_event_rpc.sql
 
+# Merge trial history from the actual conflict row, not an earlier read.
+# Validate the trial-event-database CI contract and obtain explicit production
+# migration approval before applying. The Python/schema fixtures are CI-only.
+psql -v ON_ERROR_STOP=1 "$DATABASE_URL" -f supabase/migrations/20260926003000_atomic_trial_event_merge.sql
+
 # 10. EXPAND before deploying the workspace-path client. Retains uploader paths
 #    for older app versions. Includes authenticated RLS checks with rolled-back
 #    fixtures. Run atomically so a failed assertion rolls back policy changes.
@@ -367,6 +383,16 @@ psql -1 -v ON_ERROR_STOP=1 "$DATABASE_URL" -f supabase/migrations/20260912055000
 #     to Professional in the database triggers. A trial only ever raises a
 #     baseline workspace — paid and comped tiers are untouched.
 psql "$DATABASE_URL" -f supabase/migrations/20260924130000_trial_entitlement.sql
+
+# Reject impossible trial dates without aborting database capacity checks.
+# Validate both supabase/checks/trial-*.sql files on a disposable database
+# first. Production application still requires the owner's explicit approval.
+psql -v ON_ERROR_STOP=1 "$DATABASE_URL" -f supabase/migrations/20260926000000_trial_dates_fail_closed.sql
+
+# Internal trial predicate: remove Supabase's default public execution grants.
+psql -v ON_ERROR_STOP=1 "$DATABASE_URL" -f supabase/migrations/20260928120000_trial_helper_private.sql
+psql -v ON_ERROR_STOP=1 "$DATABASE_URL" -f supabase/migrations/20260928163000_reminder_email_delivery_claims.sql
+psql -v ON_ERROR_STOP=1 "$DATABASE_URL" -f supabase/migrations/20260928170000_reminder_declined_retry.sql
 # Prove it on a throwaway database rather than trusting the diff. Load the
 # migration first, then:
 #   psql "$THROWAWAY_URL" -f supabase/checks/trial-entitlement.sql
@@ -374,14 +400,19 @@ psql "$DATABASE_URL" -f supabase/migrations/20260924130000_trial_entitlement.sql
 # with the owner's explicit approval (production engineering contract §15).
 ```
 
-**Stop after expansion while older production clients remain.** The live project
-has completed this phase. See [storage rollout evidence](docs/DOCUMENT-STORAGE-ROLLOUT.md).
-The separate contract phase below removes legacy uploads. Run it only after the
-workspace-path client and file upload/download behavior have been verified and
-older upload clients retired; it is not the next automatic deployment command.
+**The uploader-keyed contract for documents is now part of step 11.** The live
+project completed the document-storage expansion; see
+[storage rollout evidence](docs/DOCUMENT-STORAGE-ROLLOUT.md). `20260912060000` was
+the original contract phase for documents. Step 11's contract
+(`20261001090100`) supersedes it and removes the same uploader-keyed branches
+from both buckets. **Never run it after step 11:** it rebuilds the document
+policies WITH the uploader branch and would silently undo that contract. On a
+database that has had neither, running it is optional and only ever before
+step 11; once step 11 has begun it refuses to run. Its check script describes
+that intermediate state and nothing later.
 
 ```sh
-# Deferred contract phase: existing legacy files remain uploader-readable.
+# Superseded by step 11. Optional, and only BEFORE step 11's contract.
 psql -1 -v ON_ERROR_STOP=1 "$DATABASE_URL" -f supabase/migrations/20260912060000_workspace_keyed_document_storage.sql
 psql -v ON_ERROR_STOP=1 "$DATABASE_URL" -f supabase/checks/document-storage-live-rollback.sql
 ```
@@ -395,6 +426,24 @@ psql -v ON_ERROR_STOP=1 "$DATABASE_URL" -f supabase/checks/document-storage-live
 #    resolving the moment it runs, and rollback instructions live in the
 #    migration header.
 psql -1 -v ON_ERROR_STOP=1 "$DATABASE_URL" -f supabase/migrations/20260924134000_horse_media_private_signed_urls.sql
+
+# 11. Workspace-keyed storage (audit F02), in two phases.
+#    EXPAND first -- before the client that files photos under the workspace
+#    id is deployed. It closes the gallery-listing read and adds workspace
+#    reads and uploadMedia-gated writes, while keeping the uploader-keyed
+#    branches so a tab still running the previous bundle keeps working.
+psql -1 -v ON_ERROR_STOP=1 "$DATABASE_URL" -f supabase/migrations/20261001090000_workspace_keyed_storage_expand.sql
+psql -v ON_ERROR_STOP=1 "$DATABASE_URL" -f supabase/checks/workspace-keyed-storage-expand.sql
+#    Then deploy the client. CONTRACT only once it is live: it removes every
+#    uploader-keyed branch from horse-media and horse-documents. Moves no
+#    data; first confirm no object is still uploader-keyed:
+#      select bucket_id, count(*) from storage.objects
+#      where bucket_id in ('horse-media','horse-documents')
+#        and split_part(name,'/',1) not in (select id::text from public.workspaces)
+#      group by 1;
+psql -1 -v ON_ERROR_STOP=1 "$DATABASE_URL" -f supabase/migrations/20261001090100_workspace_keyed_storage_contract.sql
+#    Prove the final state under real RLS (synthetic users, all rolled back):
+psql -v ON_ERROR_STOP=1 "$DATABASE_URL" -f supabase/checks/workspace-keyed-storage.sql
 ```
 
 **(4) and (5) are prerequisites for billing, not optimizations to schedule

@@ -7,6 +7,7 @@ import {
   confirmationSatisfied,
   documentPrefixesToPurge,
   mediaPrefixesToPurge,
+  packetPrefixesToPurge,
   pickSuccessorOwner,
   planAccountDeletion,
   loadAccountDeletionPlan,
@@ -222,12 +223,17 @@ test('a transferred workspace is never swept, in either bucket', () => {
   assert.deepEqual(documentPrefixesToPurge(plan), ['user-1', 'ws-solo']);
 });
 
-test('media is swept by uploader only, because that is how media is keyed', () => {
-  // horse-media is a public bucket and never had the shared-read problem that
-  // moved documents onto workspace paths, so a workspace prefix here would
-  // erase nothing today and be a loaded gun if that ever changed.
-  const plan = planAccountDeletion('user-1', [{ id: 'ws-solo', otherActiveMembers: [] }]);
-  assert.deepEqual(mediaPrefixesToPurge(plan), ['user-1']);
+test('media is swept under the purged workspace too, because photos are keyed to it', () => {
+  // Photos are written under `<workspace-id>/horses/...` (audit F02). Sweeping
+  // only the departing user's prefix left a purged ranch's photos in the
+  // bucket after the endpoint reported the account erased.
+  const plan = planAccountDeletion('user-1', [
+    { id: 'ws-solo', otherActiveMembers: [] },
+    { id: 'ws-shared', otherActiveMembers: [{ userId: 'user-2', role: 'Admin' }] },
+  ]);
+  assert.deepEqual(mediaPrefixesToPurge(plan), ['user-1', 'ws-solo']);
+  // A workspace someone else stays in is never swept.
+  assert.ok(!mediaPrefixesToPurge(plan).includes('ws-shared'));
 });
 
 test('an account owning nothing still has its own uploads erased', () => {
@@ -245,12 +251,30 @@ test('a malformed plan sweeps nothing rather than the whole bucket', () => {
   assert.deepEqual(mediaPrefixesToPurge({ userId: undefined }), []);
 });
 
+test('sale packets of a purged workspace are swept, and never by user id or for a transferred one', () => {
+  // Every packet embeds full copies of the horse's documents. Leaving them in
+  // the bucket kept the papers the deletion promised to erase.
+  const plan = planAccountDeletion('user-1', [
+    { id: 'ws-solo', otherActiveMembers: [] },
+    { id: 'ws-shared', otherActiveMembers: [{ userId: 'user-2', role: 'Admin' }] },
+  ]);
+  assert.deepEqual(packetPrefixesToPurge(plan), ['ws-solo']);
+  assert.deepEqual(packetPrefixesToPurge({ userId: 'user-1', workspacesToPurge: ['', null] }), []);
+  assert.deepEqual(packetPrefixesToPurge(undefined), []);
+});
+
 test('the deletion endpoint actually uses those prefix lists', () => {
   // A rule nothing calls is not a fix. This pins the wiring, since the sweep
   // itself needs a live Supabase project to exercise end to end.
   const source = readFileSync(new URL('../../api/_lib/account-delete.js', import.meta.url), 'utf8');
   assert.ok(source.includes('documentPrefixesToPurge('), 'document prefixes are not used by the endpoint');
   assert.ok(source.includes('mediaPrefixesToPurge('), 'media prefixes are not used by the endpoint');
+  assert.match(
+    source,
+    /\[PACKET_BUCKET, packetPrefixesToPurge\(purge\)\]/,
+    'sale-packet PDFs of a purged workspace are not swept',
+  );
+  assert.match(source, /const purge = \{ \.\.\.plan, workspacesToPurge: purgeable \};/);
   assert.ok(!source.includes('removeUserStorage'), 'the uploader-only sweep is still present');
 
   /*
@@ -260,7 +284,9 @@ test('the deletion endpoint actually uses those prefix lists', () => {
    * rows, which is the worse half of the race rather than a fix for it.
    */
   assert.ok(
-    !source.includes('documentPrefixesToPurge(plan)') && !source.includes('mediaPrefixesToPurge(plan)'),
+    !source.includes('documentPrefixesToPurge(plan)') &&
+      !source.includes('mediaPrefixesToPurge(plan)') &&
+      !source.includes('packetPrefixesToPurge(plan)'),
     'the storage sweep must follow the re-check, not the plan it was built before the account was deleted',
   );
   assert.ok(
@@ -352,4 +378,47 @@ test('malformed membership rows cannot smuggle a workspace back into the purge',
 
 test('a planned id that is not a string is never purged', () => {
   assert.deepEqual(workspacesStillPrivate([null, '', 42, 'ws-real'], []), ['ws-real']);
+});
+
+test('a storage sweep reports every prefix it could not clear, instead of claiming success', async () => {
+  const { removeStoragePrefixes } = await import('../../api/_lib/account-delete.js');
+  const removed = [];
+  const fake = (behaviour) => ({
+    storage: {
+      from: () => ({
+        list: async (prefix) => {
+          if (behaviour.listFails?.includes(prefix)) return { data: null, error: { message: 'timeout' } };
+          if (prefix === 'ws-a')
+            return {
+              data: [
+                { name: 'p.pdf', id: '1' },
+                { name: 'horse-1', id: null },
+              ],
+              error: null,
+            };
+          if (prefix === 'ws-a/horse-1') return { data: [{ name: 'q.pdf', id: '2' }], error: null };
+          return { data: [], error: null };
+        },
+        remove: async (paths) => {
+          removed.push(...paths);
+          return behaviour.removeFails ? { data: null, error: { message: 'denied' } } : { data: paths, error: null };
+        },
+      }),
+    },
+  });
+
+  assert.deepEqual(await removeStoragePrefixes(fake({}), 'b', ['ws-a', 'ws-empty']), []);
+  assert.deepEqual(removed, ['ws-a/p.pdf', 'ws-a/horse-1/q.pdf']);
+  // A listing that fails part-way is "could not look", not "nothing here".
+  assert.deepEqual(await removeStoragePrefixes(fake({ listFails: ['ws-a/horse-1'] }), 'b', ['ws-a']), ['ws-a']);
+  assert.deepEqual(await removeStoragePrefixes(fake({ listFails: ['ws-a'] }), 'b', ['ws-a', 'ws-empty']), ['ws-a']);
+  assert.deepEqual(await removeStoragePrefixes(fake({ removeFails: true }), 'b', ['ws-a']), ['ws-a']);
+});
+
+test('the deletion response says when stored files were left behind', () => {
+  const source = readFileSync(new URL('../../api/_lib/account-delete.js', import.meta.url), 'utf8');
+  assert.match(source, /storageCleanupComplete: leftovers\.length === 0/);
+  assert.ok(!/removeStoragePrefixes\([^)]*\)\s*\.catch\(\(\) => \{\}\)/.test(source), 'a sweep failure is swallowed');
+  const client = readFileSync(new URL('../../src/store/useCloudStore.ts', import.meta.url), 'utf8');
+  assert.match(client, /payload\.storageCleanupComplete === false/);
 });

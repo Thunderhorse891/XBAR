@@ -104,6 +104,9 @@ const REQUIRED_BY_ROLE = {
     'xbar_commercial_limits(uuid)',
     'xbar_subscription_limits(uuid)',
     'xbar_accept_workspace_invitation(uuid, text)',
+    // The horse-media write policies call it; without EXECUTE every photo
+    // upload fails with "permission denied for function".
+    'xbar_has_workspace_capability(uuid, text)',
   ],
   service_role: ['xbar_workspace_storage_bytes(uuid)'],
 };

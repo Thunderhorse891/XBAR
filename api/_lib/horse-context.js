@@ -2,6 +2,8 @@
 // packet cover sheets: horse identity, owner/workspace profile, and the
 // latest compliance dates pulled from attached documents.
 
+import { recordedDocumentPath } from './document-storage.js';
+
 export async function loadHorseContext(supabase, workspaceId, horseId) {
   const [{ data: horse }, { data: profile }, { data: documents }, { data: ownership }] = await Promise.all([
     supabase
@@ -41,7 +43,7 @@ export async function loadHorseContext(supabase, workspaceId, horseId) {
   // columns, so normalize both shapes into one.
   const docs = (documents || []).map((doc) => ({
     ...doc,
-    storage_path: doc.storage_path || doc.payload?.storagePath || '',
+    storage_path: recordedDocumentPath(doc),
     mime_type: doc.mime_type || doc.payload?.mimeType || '',
     extracted_data:
       doc.extracted_data && Object.keys(doc.extracted_data).length ? doc.extracted_data : doc.payload?.entities || {},

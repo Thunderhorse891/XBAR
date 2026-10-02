@@ -5,6 +5,8 @@ import {
   buildHorseEnrichmentFromEntities,
   composeParentField,
   intakeIdentityChanged,
+  photoBatchIdentityChanged,
+  isStoragePolicyRefusal,
   summarizeBatch,
   validateAssetPatch,
   validateHorseNoteInput,
@@ -314,4 +316,27 @@ test('a local-only intake, signed out at both ends, still commits', () => {
     false,
     'local-first use has no identity to change, and must not be blocked by this check',
   );
+});
+
+test('a photo batch is kept through a profile reload, and dropped for a real account change', () => {
+  const target = { userId: 'user-a', workspaceId: 'ws-a' };
+  // Same account, access profile momentarily blank after a token refresh: the
+  // photos are already filed under ws-a and must be attached, not stranded.
+  assert.equal(photoBatchIdentityChanged(target, { userId: 'user-a', workspaceId: '' }), false);
+  assert.equal(photoBatchIdentityChanged(target, { userId: 'user-a', workspaceId: 'ws-a' }), false);
+  // A different ranch, a different account, or a sign-out is a change.
+  assert.equal(photoBatchIdentityChanged(target, { userId: 'user-a', workspaceId: 'ws-b' }), true);
+  assert.equal(photoBatchIdentityChanged(target, { userId: 'user-b', workspaceId: 'ws-a' }), true);
+  assert.equal(photoBatchIdentityChanged(target, { userId: '', workspaceId: '' }), true);
+  // Document intake keeps its stricter rule: a blank workspace is a change there.
+  assert.equal(intakeIdentityChanged(target, { userId: 'user-a', workspaceId: '' }), true);
+});
+
+test('a storage policy refusal is told apart from a connection failure', () => {
+  assert.equal(isStoragePolicyRefusal({ status: 403, message: 'new row violates row-level security policy' }), true);
+  assert.equal(isStoragePolicyRefusal({ statusCode: '403', message: 'Unauthorized' }), true);
+  assert.equal(isStoragePolicyRefusal({ status: 400, message: 'new row violates row-level security policy' }), true);
+  assert.equal(isStoragePolicyRefusal({ status: 500, message: 'Internal Server Error' }), false);
+  assert.equal(isStoragePolicyRefusal(new TypeError('Failed to fetch')), false);
+  assert.equal(isStoragePolicyRefusal(null), false);
 });
