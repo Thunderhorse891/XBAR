@@ -2,6 +2,7 @@ import { serverManagedBillingEnabled } from '../_lib/managed-billing.js';
 import Stripe from 'stripe';
 import { readJsonBody, sendJson } from '../_lib/http.js';
 import { buildSubscriptionProfile, getStripePriceIdByTier, sellablePrices } from '../_lib/subscription-plans.js';
+import { verifyCheckoutPrice } from '../_lib/checkout-price.js';
 import { checkoutBlockReason } from '../_lib/subscription-status.js';
 import {
   claimCheckoutLock,
@@ -214,6 +215,18 @@ export default async function handler(req, res) {
             : blockReason === 'subscription_recoverable'
               ? 'This workspace already has a subscription that can be reactivated. Update the payment method in the billing portal instead of starting a new plan.'
               : 'This workspace has a subscription on file whose status could not be confirmed. Check it in the billing portal before starting a new plan.',
+      });
+    }
+
+    // A configured ID proves nothing about what Stripe will actually charge.
+    // Revalidate before both new sessions and reuse, and before any Stripe write.
+    // Prices are immutable: a successful check pins the amount/cadence of this ID.
+    if (!(await verifyCheckoutPrice(stripe, { tier, billingPeriod, priceId }))) {
+      return sendJson(res, 503, {
+        ok: false,
+        code: 'price_unavailable',
+        message:
+          'This plan’s checkout price could not be verified. Checkout is unavailable while billing is corrected. No payment session was created.',
       });
     }
 
