@@ -1,6 +1,52 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
+import { brandAssetPath } from '../src/lib/brandAssets.js';
+import { reportBrandAssetPaths } from '../src/lib/reportBranding.js';
+
+test('public and application typography share one shipped font and heading scale', async () => {
+  const typography = withoutComments(await readFile('src/styles/typography.css', 'utf8'));
+  const entry = await readFile('src/main.tsx', 'utf8');
+  const shell = await readFile('index.html', 'utf8');
+  const build = await readFile('scripts/build-marketing.mjs', 'utf8');
+  assert.match(typography, /--font-ui:\s*'Outfit'/);
+  assert.match(typography, /--font-display:\s*var\(--font-ui\)/);
+  for (const token of ['page-title', 'hero-title', 'section-title', 'subheading', 'body', 'small']) {
+    assert.ok(typography.includes(`--type-${token}:`), `${token} needs a shared scale token`);
+  }
+  assert.match(entry, /import '\.\/styles\/typography\.css';/);
+  assert.ok(build.includes("'typography.css'"), 'marketing must ship the same source stylesheet');
+  assert.ok(!shell.includes('family=Fraunces'), 'application must load the one interface family');
+  const commands = withoutComments(await readFile('src/routes/xbarCommandSystem.css', 'utf8'));
+  assert.ok(
+    !/h1:not\(\.xs-hero__headline\),\s*h2,\s*h3/.test(commands),
+    'workspace headings must not leak into auth pages',
+  );
+});
+
+test('mobile auth grid and its breakpoint live in the same stylesheet', async () => {
+  const shared = withoutComments(await readFile('src/routes/cleanEntryExperience.css', 'utf8'));
+  const hero = withoutComments(await readFile('src/routes/loginHero.css', 'utf8'));
+  assert.match(
+    shared,
+    /@media \(max-width: 900px\)\s*\{\s*\.clean-login-layout\s*\{[^}]*grid-template-columns: minmax\(0, 1fr\)/,
+    'the mobile one-column rule must travel with the shared two-column grid',
+  );
+  assert.ok(!/\.clean-login-layout\s*\{/.test(hero), 'login art CSS must not compete for grid sizing');
+});
+
+test('working cards never paint a decorative film above their text', async () => {
+  const metal = withoutComments(await readFile('src/routes/metalBrandSystem.css', 'utf8'));
+  assert.ok(
+    !/\.(?:panel|metric-card|horse-card|table-shell)::after/.test(metal),
+    'full-card foreground sheen lowers contrast even with reduced motion',
+  );
+});
+
+test('operational route heroes use the shared page-title heading level', async () => {
+  const component = await readFile('src/components/CommandBrief.tsx', 'utf8');
+  assert.match(component, /<h1 className="command-brief__entity">\{entity\}<\/h1>/);
+});
 
 /*
  * The brand layer, checked by measurement rather than by eye.
@@ -142,4 +188,46 @@ test('sign-in brand images reserve their real shape and keep the rim light', asy
   );
   assert.ok(watermark.length > 0, 'the watermark rule must be findable');
   assert.ok(!/grayscale\(/.test(watermark), 'the brand mark must not be desaturated on the sign-in panel');
+});
+
+// JSX and exported image constants are not rewritten by Vite's HTML asset pass.
+// Keep every entry/shell call site on the shared deployment-aware resolver.
+test('entry and shell artwork do not escape the GitHub Pages deployment base', async () => {
+  const consumers = [
+    'src/routes/Login.tsx',
+    'src/routes/ResetPassword.tsx',
+    'src/routes/SetupWorkspace.tsx',
+    'src/routes/layouts/MainLayout.tsx',
+    'src/pages/Dashboard.tsx',
+    'src/routes/Reminders.tsx',
+  ];
+  for (const file of consumers) {
+    const source = await readFile(file, 'utf8');
+    assert.doesNotMatch(source, /['"`]\/brand\//, `${file} must not request artwork at the host root`);
+    assert.match(source, /brandAssetPath\(/, `${file} must use the shared asset resolver`);
+  }
+});
+
+for (const base of ['/', '/XBAR/', '/XBAR']) {
+  test(`supplied artwork resolves with deployment base ${base}`, async () => {
+    const prefix = base === '/' ? '/' : '/XBAR/';
+    const names = ['xbar-wordmark.png', 'xbar-report-horse.png', 'apple-touch-icon.png', 'icon-512.png'];
+    for (const name of names) {
+      assert.equal(brandAssetPath(name, base), `${prefix}brand/${name}`);
+      const bytes = await readFile(`public/brand/${name}`);
+      assert.equal(bytes.subarray(0, 8).toString('hex'), '89504e470d0a1a0a', `${name} remains supplied PNG artwork`);
+    }
+    assert.deepEqual(
+      reportBrandAssetPaths(base),
+      ['xbar-report-horse.png', 'xbar-report-mark.png', 'xbar-report-watermark.png'].map(
+        (name) => `${prefix}brand/${name}`,
+      ),
+    );
+  });
+}
+
+test('artwork defaults to the root without a Vite environment', () => {
+  assert.equal(brandAssetPath('xbar-wordmark.png'), '/brand/xbar-wordmark.png');
+  assert.equal(brandAssetPath('xbar-wordmark.png', ''), '/brand/xbar-wordmark.png');
+  assert.equal(reportBrandAssetPaths()[0], '/brand/xbar-report-horse.png');
 });

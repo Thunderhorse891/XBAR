@@ -23,6 +23,7 @@ import { canPresentPurchaseFlow } from '@/lib/nativePlatform';
 import { buildSaleReadinessScore, readinessNextStep } from '@/lib/saleReadinessScore';
 import { buildBuyerPacketReleaseGate } from '@/lib/buyerPacketReleaseGate';
 import { SaleReadinessCard } from '@/components/SaleReadinessCard';
+import './recordAccountExperience.css';
 
 // Stagger index for the motion system; the CSS var drives each child's delay.
 const motionIndex = (index: number): CSSProperties => ({ ['--motion-index' as string]: index }) as CSSProperties;
@@ -202,7 +203,7 @@ export default function AnimalProfile() {
     animal.sale?.listingState !== 'Hold' && (animal.segment === 'Sale Prospect' || hasActiveListing(animal));
 
   return (
-    <>
+    <div className="record-account record-profile">
       <button type="button" className="xs-back" onClick={() => navigate('/horses')}>
         <ArrowLeft size={14} /> Horses
       </button>
@@ -246,7 +247,7 @@ export default function AnimalProfile() {
             onChange={onPhotoSelected}
           />
           <div>
-            <div className="xs-objhead__name">{animal.name}</div>
+            <h1 className="xs-objhead__name">{animal.name}</h1>
             <div className="xs-objhead__meta">
               {animal.breed || 'Horse'} · {animal.sex} · {animal.age} yrs · {location}
             </div>
@@ -283,48 +284,54 @@ export default function AnimalProfile() {
           </ActionButton>
           <ActionButton
             size="sm"
-            icon={<Move size={14} />}
-            onClick={() => openQuickCreate({ action: 'Move Horse', horseId: animal.id })}
-          >
-            Move
-          </ActionButton>
-          <ActionButton
-            size="sm"
-            icon={<HeartPulse size={14} />}
-            onClick={() => openQuickCreate({ action: 'Add Health Record', horseId: animal.id })}
-          >
-            Add Health
-          </ActionButton>
-          <ActionButton size="sm" icon={<Upload size={14} />} onClick={() => navigate('/documents')}>
-            Upload Doc
-          </ActionButton>
-          {canUploadMedia && !photoUrl ? (
-            <ActionButton
-              size="sm"
-              icon={<Camera size={14} />}
-              onClick={() => photoInputRef.current?.click()}
-              disabled={uploadingPhoto}
-            >
-              {uploadingPhoto ? 'Uploading…' : 'Add Photo'}
-            </ActionButton>
-          ) : null}
-          <ActionButton
-            size="sm"
             variant="primary"
             icon={<FileText size={14} />}
             onClick={() => navigate('/sale-packets')}
           >
             Build Sale Packet
           </ActionButton>
+          <details className="record-more-actions">
+            <summary>More actions</summary>
+            <div className="record-more-actions__items">
+              <ActionButton
+                size="sm"
+                icon={<Move size={14} />}
+                onClick={() => openQuickCreate({ action: 'Move Horse', horseId: animal.id })}
+              >
+                Move
+              </ActionButton>
+              <ActionButton
+                size="sm"
+                icon={<HeartPulse size={14} />}
+                onClick={() => openQuickCreate({ action: 'Add Health Record', horseId: animal.id })}
+              >
+                Add Health
+              </ActionButton>
+              <ActionButton size="sm" icon={<Upload size={14} />} onClick={() => navigate('/documents')}>
+                Upload Doc
+              </ActionButton>
+              {canUploadMedia && !photoUrl ? (
+                <ActionButton
+                  size="sm"
+                  icon={<Camera size={14} />}
+                  onClick={() => photoInputRef.current?.click()}
+                  disabled={uploadingPhoto}
+                >
+                  {uploadingPhoto ? 'Uploading…' : 'Add Photo'}
+                </ActionButton>
+              ) : null}
+            </div>
+          </details>
         </div>
       </div>
 
-      <div className="xs-tabbar">
+      <div className="xs-tabbar" aria-label="Horse record sections">
         {TABS.map((t) => (
           <button
             key={t}
             type="button"
             className={`xs-tabbar__tab${tab === t ? ' xs-tabbar__tab--active' : ''}`}
+            aria-pressed={tab === t}
             onClick={() => setTab(t)}
           >
             {t}
@@ -334,13 +341,6 @@ export default function AnimalProfile() {
 
       {tab === 'Overview' ? (
         <>
-          {saleReadiness ? (
-            <SaleReadinessCard
-              horseId={animal.id}
-              readiness={saleReadiness}
-              onAddPhoto={canUploadMedia ? () => photoInputRef.current?.click() : undefined}
-            />
-          ) : null}
           <div className="xs-grid-2">
             <Card title="Identity">
               <dl className="xs-kv">
@@ -387,9 +387,9 @@ export default function AnimalProfile() {
                 <dd>{animal.segment}</dd>
               </dl>
             </Card>
-            <Card title="What to do next">
+            <Card title="Next step">
               <div className="xs-nba">
-                <div className="xs-nba__label">Suggested next step</div>
+                <div className="xs-nba__label">Keep the record current</div>
                 <div className="xs-nba__title">
                   {saleReadiness
                     ? readinessNextStep(saleReadiness, animal.name)
@@ -405,12 +405,12 @@ export default function AnimalProfile() {
                     <StatusChip tone={identityTone}>{identity.percent}%</StatusChip>
                   </div>
                   <p className="xs-muted" style={{ fontSize: 12.5, margin: '4px 0 0' }}>
-                    Add to complete the buyer-ready passport: {identity.missing.join(', ')}.
+                    Missing: {identity.missing.join(', ')}.
                   </p>
                 </div>
               ) : (
                 <p className="xs-muted" style={{ fontSize: 12.5, marginTop: 10 }}>
-                  Passport identity is complete — every core field is on file.
+                  All core identity fields are on file.
                 </p>
               )}
               <div className="xs-toolbar" style={{ marginTop: 12 }}>
@@ -427,24 +427,32 @@ export default function AnimalProfile() {
                     Open Care Tasks
                   </ActionButton>
                 )}
-                <ActionButton size="sm" variant="primary" onClick={() => navigate('/sale-packets')}>
-                  Open Sale Packets
+                <ActionButton size="sm" onClick={() => setTab('Ready to Sell')}>
+                  Sale readiness
                 </ActionButton>
               </div>
             </Card>
           </div>
+          {saleReadiness ? (
+            <details className="record-disclosure">
+              <summary>
+                Sale readiness details <span>{saleReadiness.score}/100</span>
+              </summary>
+              <SaleReadinessCard
+                horseId={animal.id}
+                readiness={saleReadiness}
+                onAddPhoto={canUploadMedia ? () => photoInputRef.current?.click() : undefined}
+              />
+            </details>
+          ) : null}
           {profitGate ? (
             <Card title="Money">
-              <div className="xs-nba">
-                <div className="xs-nba__label">Ranch Ops</div>
-                <div className="xs-nba__title">See this horse's profit, margin, and safe sale price</div>
-              </div>
               <p className="xs-muted" style={{ fontSize: 12.5, margin: '8px 0 12px' }}>
                 {profitGate}
               </p>
               {canPresentPurchaseFlow() ? (
                 <ActionButton size="sm" variant="primary" onClick={() => navigate(billingPath)}>
-                  Upgrade to Ranch Ops
+                  View Ranch Ops
                 </ActionButton>
               ) : null}
             </Card>
@@ -741,6 +749,6 @@ export default function AnimalProfile() {
           )}
         </Card>
       ) : null}
-    </>
+    </div>
   );
 }

@@ -55,6 +55,10 @@ jobs:
         # sources are temporarily broken (e.g. an unsigned upstream repo).
         run: npx playwright install --with-deps chromium || npx playwright install chromium
 
+      # Use the existing /XBAR/ build before prod-smoke rebuilds for the web.
+      - name: GitHub Pages brand assets (built dist)
+        run: npx playwright test --config=playwright.pages.config.ts
+
       - name: Production smoke test (built dist)
         run: npm run test:prod-smoke
 

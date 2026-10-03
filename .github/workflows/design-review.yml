@@ -1,0 +1,60 @@
+name: design baseline
+
+on:
+  pull_request:
+    paths:
+      - 'src/**'
+      - 'scripts/marketing/**'
+      - 'scripts/build-marketing.mjs'
+      - 'tests/design-review/**'
+      - 'playwright.design.config.ts'
+      - '.github/workflows/design-review.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  before-images:
+    if: startsWith(github.head_ref, 'design/')
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    steps:
+      - name: Checkout capture driver
+        uses: actions/checkout@v7
+        with:
+          path: review-tools
+      - name: Checkout exact pre-design source
+        uses: actions/checkout@v7
+        with:
+          ref: ${{ github.event.pull_request.base.sha }}
+          path: baseline
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 24
+          cache: npm
+          cache-dependency-path: baseline/package-lock.json
+      - name: Install baseline dependencies
+        working-directory: baseline
+        run: npm ci
+      - name: Copy isolated capture driver
+        run: |
+          mkdir -p baseline/tests/design-review
+          cp review-tools/playwright.design.config.ts baseline/playwright.design.config.ts
+          cp review-tools/tests/design-review/baseline.spec.ts baseline/tests/design-review/baseline.spec.ts
+      - name: Build baseline with no cloud account access
+        working-directory: baseline
+        run: npm run build:local
+      - name: Install browser
+        working-directory: baseline
+        run: npx playwright install --with-deps chromium || npx playwright install chromium
+      - name: Capture baseline desktop and phone views
+        working-directory: baseline
+        run: npx playwright test --config=playwright.design.config.ts
+      - name: Save exact baseline screenshots
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: workspace-design-before-${{ github.event.pull_request.base.sha }}
+          path: baseline/test-results/**/workspace-before-*.png
+          if-no-files-found: error
+          retention-days: 7

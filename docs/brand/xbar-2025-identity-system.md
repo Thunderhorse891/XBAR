@@ -26,7 +26,7 @@ Assets added:
 - `public/brand/xbar-app-icon.png`
 - `public/brand/xbar-icon-mark.png`
 - `public/brand/xbar-favicon.png`
-- `src/components/BrandMark.tsx`
+- `src/components/BrandMark.tsx` (historical prototype, since removed; current surfaces use the supplied artwork directly)
 
 ### Concept 2: Horizon Bar
 
@@ -261,7 +261,7 @@ Visual motif:
 
 ## First Components To Redesign
 
-1. `src/components/BrandMark.tsx`
+1. `src/components/BrandMark.tsx` (removed; no remaining consumers to redesign)
 2. `src/routes/Login.tsx`
 3. `src/routes/layouts/MainLayout.tsx`
 4. `src/pages/Dashboard.tsx`

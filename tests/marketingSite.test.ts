@@ -197,3 +197,37 @@ test('public legal pages retain review notices and cross-link the existing polic
     assert.match(page.body, /href="\/privacy"/);
   }
 });
+
+test('every public page carries the supplied wordmark and shared typography', async () => {
+  const { marketingPages } = (await load('scripts/marketing/pages.mjs')) as { marketingPages: MarketingPage[] };
+  const { renderPage } = await load('scripts/marketing/render.mjs');
+  for (const page of marketingPages) {
+    const html = renderPage(page);
+    assert.match(html, /<header[\s\S]*?src="\/brand\/xbar-wordmark.png"/);
+    assert.match(html, /<footer[\s\S]*?src="\/brand\/xbar-wordmark.png"/);
+    assert.match(html, /href="\/brand\/xbar-brand-tokens.css"/);
+    assert.match(html, /href="\/typography.css"/);
+    assert.ok(html.indexOf('/typography.css') > html.indexOf('/site.css'), 'shared type loads after page styling');
+    assert.doesNotMatch(html, /family=Fraunces|<span>XBAR(?:<|$)/, 'artwork cannot be replaced by a typed logo');
+    assert.match(html, /<details class="landing-mobile-nav">/, 'every public page has a native phone menu');
+  }
+});
+
+test('progressive public details retain all feature and pricing information in static HTML', async () => {
+  const { marketingPages } = (await load('scripts/marketing/pages.mjs')) as { marketingPages: MarketingPage[] };
+  const { marketingPlans } = (await load('scripts/marketing/pricing-data.mjs')) as { marketingPlans: MarketingPlan[] };
+  const { esc } = await load('scripts/marketing/render.mjs');
+  const features = marketingPages.find((page) => page.path === '/features')!;
+  const pricing = marketingPages.find((page) => page.path === '/pricing')!;
+  assert.equal((features.body.match(/class="feature-group"/g) ?? []).length, 6);
+  assert.match(features.body, /<details class="feature-group" open>/);
+  assert.match(features.body, /<summary><h2>Ownership &amp; transfer integrity<\/h2><\/summary>/);
+  assert.match(features.body, /create an account/i);
+  assert.doesNotMatch(features.body, /evaluate the full system before enabling cloud services/);
+  assert.equal((pricing.body.match(/<summary>Included tools<\/summary>/g) ?? []).length, marketingPlans.length);
+  for (const plan of marketingPlans) {
+    for (const feature of plan.features) assert.ok(pricing.body.includes(esc(feature)), `${plan.tier}: ${feature}`);
+    assert.ok(pricing.body.includes(`${plan.limits.horseLimit.toLocaleString('en-US')} horses`));
+  }
+  assert.match(pricing.body, /Monthly billing is available\. Annual billing is not currently offered\./);
+});

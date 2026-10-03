@@ -70,32 +70,13 @@ body::before {
     inset 0 -1px 0 rgba(96, 124, 154, 0.14) !important;
 }
 
-/* The sheen overlays below are absolutely positioned with inset: 0 — their
-   hosts MUST establish a positioning context, or the gradients anchor to the
-   viewport and wash out the sidebar (the "white film on the left panel" bug). */
+/* Keep decorative edge lines anchored to the card. Working text must never
+   sit beneath a full-card sheen; the silver material stays in the background. */
 .panel,
 .metric-card,
 .horse-card,
 .table-shell {
   position: relative;
-}
-
-.panel::after,
-.metric-card::after,
-.horse-card::after,
-.table-shell::after {
-  content: '';
-  position: absolute;
-  inset: 0;
-  pointer-events: none;
-  border-radius: inherit;
-  background: linear-gradient(
-    120deg,
-    rgba(255, 255, 255, 0.5),
-    transparent 24%,
-    transparent 76%,
-    rgba(24, 168, 255, 0.05)
-  );
 }
 
 .panel::before,

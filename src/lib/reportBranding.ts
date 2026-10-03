@@ -1,9 +1,10 @@
+import { brandAssetBase, brandAssetPath } from './brandAssets.js';
+
 export type ReportBranding = { logo: Uint8Array; mark: Uint8Array; watermark: Uint8Array };
 
 export function reportBrandAssetPaths(base = '/') {
-  const prefix = base.endsWith('/') ? base : `${base}/`;
-  return ['xbar-report-horse.png', 'xbar-report-mark.png', 'xbar-report-watermark.png'].map(
-    (name) => `${prefix}brand/${name}`,
+  return ['xbar-report-horse.png', 'xbar-report-mark.png', 'xbar-report-watermark.png'].map((name) =>
+    brandAssetPath(name, base),
   );
 }
 
@@ -21,7 +22,7 @@ function isPng(bytes: Uint8Array) {
 
 /** Keep the originals usable after a successful export, even without a service worker. */
 export async function loadReportBranding(
-  base = (import.meta as ImportMeta & { env?: { BASE_URL?: string } }).env?.BASE_URL || '/',
+  base = brandAssetBase,
   fetchAsset: typeof fetch = fetch,
   cache?: Pick<Cache, 'match' | 'put'>,
 ): Promise<ReportBranding> {

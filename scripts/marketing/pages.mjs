@@ -20,7 +20,7 @@ function ctaBlock(heading, copy) {
     <p class="intro" style="margin-inline:auto">${esc(copy)}</p>
     <div class="hero-actions">
       <a class="btn btn--primary" href="${signup('Professional')}" rel="nofollow">Create your workspace</a>
-      <a class="btn" href="/demo">Take the product tour</a>
+      <a class="btn" href="/demo">Product tour</a>
     </div>
   </div>
 </section>`;
@@ -43,7 +43,7 @@ function recordShot(eager = false) {
   return productShot(
     'app-horse-record.jpg',
     'Screenshot of a horse record in XBAR showing identity details, ownership, care signals, and suggested next steps for a newly added mare',
-    'The real product: a horse record captured from a live XBAR workspace with example data — <a href="/demo">see the full tour</a>.',
+    'XBAR with example data. <a href="/demo">Product tour</a>.',
     { eager },
   );
 }
@@ -111,79 +111,85 @@ const features = {
 <section class="hero hero--solo wrap section--flush">
   <div>
     <p class="kicker">Features</p>
-    <h1>Every module answers a real operating question.</h1>
-    <p class="lead">XBAR is organized around the moments that decide whether a horse can be trusted, transferred, shown, or sold — not around generic dashboards.</p>
+    <h1>The record, from start to sale.</h1>
+    <p class="lead">Documents, ownership, care, and buyer handoffs. Explore the tools for each step.</p>
   </div>
 </section>
 
-<section class="section">
+<section class="section section--flush">
   <div class="wrap">
-    <h2>Documents &amp; OCR intake</h2>
+    <details class="feature-group" open><summary><h2>Documents &amp; OCR intake</h2></summary>
     <p class="intro">Can I find and prove this record when it matters?</p>
     <div class="grid grid--3">
       <div class="card"><h3>On-device OCR</h3><p>Uploads are read locally in your browser — registration papers, Coggins, vet records, and bills of sale become searchable text without your files leaving the device for extraction.</p></div>
       <div class="card"><h3>Review queue</h3><p>Extracted details land in a review queue. A person confirms the document type, the horse it belongs to, and the extracted facts before anything joins the permanent record.</p></div>
       <div class="card"><h3>Duplicate &amp; gap detection</h3><p>XBAR flags likely duplicates on intake and shows which required documents are missing per horse, so gaps are visible instead of discovered mid-sale.</p></div>
     </div>
+    </details>
   </div>
 </section>
 
-<section class="section">
+<section class="section section--flush">
   <div class="wrap">
-    <h2>Ownership &amp; transfer integrity</h2>
+    <details class="feature-group"><summary><h2>Ownership &amp; transfer integrity</h2></summary>
     <p class="intro">Who legally owns this horse, and is anything blocking a transfer?</p>
     <div class="grid grid--3">
       <div class="card"><h3>Ownership record per horse</h3><p>Legal owner, co-owner stakes, and owner entity stay attached to the horse, with the source documents linked as proof.</p></div>
       <div class="card"><h3>Transfer status &amp; deadlines</h3><p>Track transfer posture — clear, pending signatures, registry review, or attention required — plus compliance deadlines before they block a sale.</p></div>
       <div class="card"><h3>Audit log</h3><p>Proof links, verifications, and status changes are recorded with who and when, so the ownership story holds up under buyer scrutiny.</p></div>
     </div>
+    </details>
   </div>
 </section>
 
-<section class="section">
+<section class="section section--flush">
   <div class="wrap">
-    <h2>Sale readiness &amp; buyer workflow</h2>
+    <details class="feature-group"><summary><h2>Sale readiness &amp; buyer workflow</h2></summary>
     <p class="intro">Can I hand a serious buyer trustworthy documentation today?</p>
     <div class="grid grid--3">
       <div class="card"><h3>Watermarked sale packets</h3><p>Bundle a horse’s approved documents into a print-ready, watermarked buyer packet with identity, ownership, care disclosures, and a release-gate summary. <a href="/samples/sample-sale-packet.html">See a sample packet →</a></p></div>
       <div class="card"><h3>Release gate</h3><p>Packets are scored before release: hard blockers (like unresolved transfers) and warnings are listed explicitly instead of silently shipped to a buyer.</p></div>
       <div class="card"><h3>Buyer follow-up &amp; shared profiles</h3><p>Track inquiries, offers, and follow-ups per buyer, and share buyer-facing horse profiles built only from approved records — internal notes never leak into the public view.</p></div>
     </div>
+    </details>
   </div>
 </section>
 
-<section class="section">
+<section class="section section--flush">
   <div class="wrap">
-    <h2>Care &amp; daily operations</h2>
+    <details class="feature-group"><summary><h2>Care &amp; daily operations</h2></summary>
     <p class="intro">What needs attention today, and what does this horse cost to keep?</p>
     <div class="grid grid--3">
       <div class="card"><h3>Care board</h3><p>Coggins, vaccination, deworming, dental, and farrier signals per horse — due, watch, or current — computed from the records themselves.</p></div>
       <div class="card"><h3>Health &amp; breeding records</h3><p>Log vet visits, treatments, and breeding events against each horse, with reminders derived from what is actually recorded.</p></div>
       <div class="card"><h3>Expenses &amp; receipts</h3><p>Receipt intake with cost categories per horse and ranch level, so the operating ledger reflects what the operation really spends.</p></div>
     </div>
+    </details>
   </div>
 </section>
 
-<section class="section">
+<section class="section section--flush">
   <div class="wrap">
-    <h2>Ranch &amp; team</h2>
+    <details class="feature-group"><summary><h2>Ranch &amp; team</h2></summary>
     <p class="intro">Can the whole team work from one system?</p>
     <div class="grid grid--3">
       <div class="card"><h3>Herds, pastures &amp; feed</h3><p>Herd groups, pasture assignments, and feed &amp; supply tracking sit beside the horse records they support.</p></div>
       <div class="card"><h3>Equipment &amp; assets</h3><p>Trucks, trailers, tack, and tools with condition and service tracking.</p></div>
       <div class="card"><h3>Roles &amp; invitations</h3><p>Invite team members with scoped roles, and give buyers controlled access to shared records — never the internal workspace.</p></div>
     </div>
+    </details>
   </div>
 </section>
 
-<section class="section">
+<section class="section section--flush">
   <div class="wrap">
-    <h2>Platform</h2>
+    <details class="feature-group"><summary><h2>Platform</h2></summary>
     <div class="grid grid--3">
-      <div class="card"><h3>Local-first</h3><p>XBAR starts as a local-first workspace in your browser — evaluate the full system before enabling cloud services.</p></div>
-      <div class="card"><h3>Cloud sync &amp; mobile</h3><p>Optional cloud authentication, workspace sync, and document storage, with iOS and Android apps built from the same product.</p></div>
+      <div class="card"><h3>Your workspace</h3><p>Create an account and set up your ranch to use the hosted app. The product tour is available without an account.</p></div>
+      <div class="card"><h3>Connected records</h3><p>Cloud sign-in, workspace sync, and document storage keep the hosted workspace connected.</p></div>
       <div class="card"><h3>Security posture</h3><p>Strict content-security policy, rate-limited APIs, workspace-scoped row-level security, and idempotent billing webhooks.</p></div>
     </div>
+    </details>
   </div>
 </section>
 ${ctaBlock('See the workflow end to end.', 'The product tour walks the document pipeline from upload to watermarked buyer packet.')}`,
@@ -249,8 +255,8 @@ const pricing = {
 <section class="hero hero--solo wrap section--flush">
   <div>
     <p class="kicker">Pricing</p>
-    <h1>Simple plans. Published limits. No hidden capacity math.</h1>
-    <p class="lead">Every plan protects the core horse record. Higher tiers add collaboration, buyer sharing, and more document and storage capacity — and the limits below are the same ones the application enforces.</p>
+    <h1>Choose your room to grow.</h1>
+    <p class="lead">Start with the horses and people in your operation. Compare capacity and included tools below.</p>
   </div>
 </section>
 
@@ -262,10 +268,11 @@ const pricing = {
         .map(
           (plan) => `<article class="plan${plan.featured ? ' plan--featured' : ''}">
         ${plan.featured ? '<span class="plan__badge">Professional</span>' : ''}
-        <h2 style="font-family:var(--font-ui);font-size:20px">${esc(plan.tier)}</h2>
+        <h2>${esc(plan.tier)}</h2>
         <p class="plan__fit">${esc(plan.fit)}</p>
         <p class="plan__price">$${plan.monthlyRate}<small>/month</small></p>
-        <ul>${plan.features.map((feature) => `<li>${esc(feature)}</li>`).join('')}</ul>
+        <p class="plan-capacity">${plan.limits.horseLimit.toLocaleString('en-US')} horses · ${plan.limits.seatLimit} ${plan.limits.seatLimit === 1 ? 'team seat' : 'team seats'}</p>
+        <details class="plan-details"><summary>Included tools</summary><ul>${plan.features.map((feature) => `<li>${esc(feature)}</li>`).join('')}</ul></details>
         <a class="btn${plan.featured ? ' btn--primary' : ''}" href="${signup(plan.tier)}" rel="nofollow">Choose ${esc(plan.tier)}</a>
       </article>`,
         )
@@ -332,7 +339,7 @@ function solutionPage({ path, slug, title, description, h1, lead, sections, faq 
     <p class="lead">${esc(lead)}</p>
     <div class="hero-actions">
       <a class="btn btn--primary" href="${signup('Professional')}" rel="nofollow">Create your workspace</a>
-      <a class="btn" href="/demo">Take the product tour</a>
+      <a class="btn" href="/demo">Product tour</a>
     </div>
   </div>
 </section>
@@ -371,8 +378,8 @@ const solutionsIndex = {
 <section class="hero hero--solo wrap section--flush">
   <div>
     <p class="kicker">Solutions</p>
-    <h1>Built for the operations where documents decide the deal.</h1>
-    <p class="lead">From a single broodmare program to a multi-rider barn, XBAR gives every horse one record your team and your buyers can trust. Pick the path that matches your operation.</p>
+    <h1>Built around your operation.</h1>
+    <p class="lead">Breeding programs, sale barns, trainers, and ranches. Find the workflow that fits.</p>
   </div>
 </section>
 <section class="section section--flush">
@@ -606,8 +613,8 @@ const resourcesIndex = {
 <section class="hero hero--solo wrap section--flush">
   <div>
     <p class="kicker">Resources</p>
-    <h1>Operational guides for horse records and sale readiness.</h1>
-    <p class="lead">Written by the team that builds XBAR’s record workflows. Practical, checklist-driven, and honest about what software can and cannot verify for you.</p>
+    <h1>Keep the paperwork moving.</h1>
+    <p class="lead">Practical checklists for horse records, sale preparation, and ownership transfers.</p>
   </div>
 </section>
 <section class="section section--flush">
@@ -830,7 +837,7 @@ const demo = {
 <section class="hero hero--solo wrap section--flush">
   <div>
     <p class="kicker">Product tour</p>
-    <h1>Inspect the product before you register.</h1>
+    <h1>Take a look inside.</h1>
     <p class="lead">No account is needed to view this tour. Explore example screens and a fictional sale packet below. To use the hosted app with your own records, create an XBAR account and complete workspace setup.</p>
     <div class="hero-actions">
       <a class="btn btn--primary" href="${APP_SIGNUP}" rel="nofollow">Create an account</a>

@@ -1,3 +1,4 @@
+import { brandAssetPath } from '@/lib/brandAssets';
 import { useMemo, useState } from 'react';
 import { NavLink, Outlet, useLocation, useNavigate } from 'react-router-dom';
 import {
@@ -44,8 +45,8 @@ import { useEffectiveSubscription } from '@/hooks/useOwnerPreview';
 // 40KB touch icon for the 38px brand tile; the faded sidebar watermark
 // renders at 250px, so it uses the 512px source to avoid upscaling. Both
 // beat the 1.53MB app icon this replaced.
-const XBAR_ICON = '/brand/apple-touch-icon.png';
-const XBAR_WORDMARK = '/brand/xbar-wordmark.png';
+const XBAR_ICON = brandAssetPath('apple-touch-icon.png');
+const XBAR_WORDMARK = brandAssetPath('xbar-wordmark.png');
 
 type NavItem = {
   label: string;

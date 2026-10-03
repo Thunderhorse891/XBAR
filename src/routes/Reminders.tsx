@@ -1,8 +1,6 @@
+import { brandAssetPath } from '@/lib/brandAssets';
 import { useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { EmptyState } from '@/components/EmptyState';
-import { TaskItem } from '@/components/InteractionSystem';
-import { MetricCard, Panel, Pill } from '@/components/app-ui';
 import { kindCopy } from '@/features/reminders/helpers';
 import type { ReminderFilter, ReminderKind } from '@/features/reminders/types';
 import { buildAlertDigest, buildAlertMailto } from '@/lib/alertCenter';
@@ -12,8 +10,7 @@ import { buildExpiryRadar, expiryReminderItems } from '@/lib/documentExpiry';
 import { formatCompactCurrency, formatDateLabel } from '@/lib/format';
 import { buildOperationsPriorities } from '@/lib/operationsPriority';
 import { useXbarStore } from '@/store/useXbarStore';
-import './operationsExperience.css';
-import './priorityExperience.css';
+import './remindersExperience.css';
 
 export default function Reminders() {
   const navigate = useNavigate();
@@ -66,75 +63,191 @@ export default function Reminders() {
   const filters: ReminderFilter[] = ['All', 'Care', 'Ownership', 'Documents', 'Sales'];
 
   return (
-    <div className="ops-experience">
-      <section className="ops-hero ops-hero--reminders" aria-labelledby="reminders-title">
-        <div>
-          <div className="ops-kicker">Daily operations</div>
-          <h1 id="reminders-title">Run today before today runs you</h1>
-          <p>
-            Automated expiration and action alerts for Coggins, wormer, dental, transfer files, documents, and buyer
-            follow-up. This queue is the reason a barn stops relying on paper calendars.
-          </p>
-          <div className="ops-hero__actions">
+    <div className="reminders-page">
+      <header className="reminders-header" aria-labelledby="reminders-title">
+        <div className="reminders-header__copy">
+          <p className="reminders-kicker">Daily operations</p>
+          <h1 id="reminders-title">Reminders</h1>
+          <p>Care, documents, transfers, and buyer follow-ups in one work queue.</p>
+          <div className="reminders-actions">
             <button
-              className="button button--primary"
+              className="reminders-button reminders-button--light"
               type="button"
               onClick={() => briefing.top[0] && navigate(briefing.top[0].route)}
               disabled={!briefing.top.length}
             >
               Start first priority
             </button>
-            <a className="button button--ghost" href={buildAlertMailto(digest, workspaceProfile.operationsEmail)}>
+            <a
+              className="reminders-button reminders-button--on-dark"
+              href={buildAlertMailto(digest, workspaceProfile.operationsEmail)}
+            >
               Email alert digest
             </a>
-            <button className="button button--ghost" type="button" onClick={() => navigate('/medical')}>
+            <button
+              className="reminders-button reminders-button--on-dark"
+              type="button"
+              onClick={() => navigate('/medical')}
+            >
               Open health
             </button>
           </div>
         </div>
-        <div className="ops-hero__ledger" aria-label="Daily operations summary">
-          <span>Due now</span>
-          <strong>{briefing.dueCount}</strong>
-          <small>
-            {briefing.overdueCount} overdue | {briefing.thisWeekCount} due this week
-          </small>
-          <div className="ops-hero__mini-grid">
-            <div>
-              <span>Care</span>
-              <b>{careCount}</b>
-            </div>
-            <div>
-              <span>Transfer</span>
-              <b>{ownershipCount}</b>
-            </div>
-          </div>
+        <img
+          className="reminders-header__art"
+          src={brandAssetPath('xbar-report-horse.png')}
+          width="1672"
+          height="941"
+          alt=""
+          aria-hidden="true"
+        />
+      </header>
+
+      <dl className="reminders-metrics" aria-label="Daily operations summary">
+        <div>
+          <dt>Due</dt>
+          <dd>{briefing.dueCount}</dd>
+          <dd className="reminders-metric-detail">Needs attention first</dd>
         </div>
+        <div>
+          <dt>Overdue</dt>
+          <dd>{briefing.overdueCount}</dd>
+          <dd className="reminders-metric-detail">Past the planned date</dd>
+        </div>
+        <div>
+          <dt>This week</dt>
+          <dd>{briefing.thisWeekCount}</dd>
+          <dd className="reminders-metric-detail">Today through seven days</dd>
+        </div>
+        <div>
+          <dt>On watch</dt>
+          <dd>{briefing.watchCount}</dd>
+          <dd className="reminders-metric-detail">Upcoming work to review</dd>
+        </div>
+      </dl>
+
+      <section className="reminders-panel" aria-labelledby="reminders-queue-title">
+        <div className="reminders-section-heading">
+          <div>
+            <h2 id="reminders-queue-title">Work queue</h2>
+            <p>
+              {careCount} care items · {ownershipCount} transfer items
+            </p>
+          </div>
+          <span className="reminders-count" role="status" aria-live="polite">
+            {filteredReminders.length} shown
+          </span>
+        </div>
+        <div className="reminders-toolbar">
+          <label>
+            <span>Search reminders</span>
+            <input
+              value={query}
+              onChange={(event) => setQuery(event.target.value)}
+              placeholder="Horse, document, transfer, or buyer"
+              type="search"
+            />
+          </label>
+          <label>
+            <span>Reminder type</span>
+            <select
+              value={filter}
+              onChange={(event) => setFilter(event.target.value as ReminderFilter)}
+              aria-label="Filter reminder type"
+            >
+              {filters.map((item) => (
+                <option key={item} value={item}>
+                  {item}
+                </option>
+              ))}
+            </select>
+          </label>
+        </div>
+        {filteredReminders.length ? (
+          <div className="reminders-list">
+            {filteredReminders.map((reminder) => (
+              <article key={reminder.id} className="reminders-item">
+                <div className="reminders-item__copy">
+                  <div className="reminders-item__heading">
+                    <h3>{reminder.title}</h3>
+                    <span
+                      className={`reminders-status reminders-status--${reminder.urgency.toLowerCase()}`}
+                      data-timing={reminder.timing}
+                      aria-label={`${reminder.urgency === 'Due' ? 'Urgent' : reminder.urgency === 'Watch' ? 'High' : 'Low'} priority: ${reminder.timing}`}
+                    >
+                      {reminder.timing}
+                    </span>
+                  </div>
+                  <p>{reminder.detail}</p>
+                  <ul className="reminders-meta" aria-label="Reminder details">
+                    <li>{reminder.kind}</li>
+                    <li>{reminder.horseName ?? 'Ranch-wide'}</li>
+                    {reminder.dueDate && <li>Due {formatDateLabel(reminder.dueDate)}</li>}
+                  </ul>
+                </div>
+                <div className="reminders-item__actions">
+                  <button
+                    className="reminders-button reminders-button--primary"
+                    type="button"
+                    onClick={() => navigate(reminder.route)}
+                  >
+                    {reminder.kind === 'Care'
+                      ? 'Add care event'
+                      : reminder.kind === 'Ownership'
+                        ? 'Review transfer'
+                        : reminder.kind === 'Documents'
+                          ? 'Review document'
+                          : 'Open lead'}
+                  </button>
+                  {reminder.horseId && (
+                    <button
+                      className="reminders-button"
+                      type="button"
+                      onClick={() => navigate(`/horses/${reminder.horseId}`)}
+                    >
+                      View horse
+                    </button>
+                  )}
+                </div>
+              </article>
+            ))}
+          </div>
+        ) : reminders.length ? (
+          <div className="reminders-empty">
+            <h3>No reminders match</h3>
+            <p>Adjust the search or filter.</p>
+          </div>
+        ) : (
+          <div className="reminders-empty">
+            <h3>No urgent work in the queue</h3>
+            <p>
+              Care, transfer, document, and buyer follow-up reminders appear here automatically as your records change.
+            </p>
+          </div>
+        )}
       </section>
 
-      <section className="priority-briefing" aria-labelledby="alert-title">
-        <div className="priority-briefing__heading">
+      <section className="reminders-panel" aria-labelledby="alert-title">
+        <div className="reminders-section-heading">
           <div>
-            <span className="ops-kicker">Automated alert center</span>
             <h2 id="alert-title">Expiration and action alerts</h2>
+            <p>
+              {digest.alerts.length
+                ? `${digest.overdueCount} overdue and ${digest.dueSoonCount} due today or this week${digest.dueThisMonthCount ? `, plus ${digest.dueThisMonthCount} within 30 days` : ''}.`
+                : 'No expiration alerts are open right now.'}
+            </p>
           </div>
-          <p>
-            {digest.alerts.length
-              ? `${digest.overdueCount} overdue and ${digest.dueSoonCount} due today or this week${
-                  digest.dueThisMonthCount ? `, plus ${digest.dueThisMonthCount} within 30 days` : ''
-                }.`
-              : 'No expiration alerts are open right now.'}
-          </p>
         </div>
         {digest.alerts.length ? (
-          <div className="priority-grid">
+          <div className="reminders-card-grid">
             {digest.alerts.slice(0, 3).map((alert) => (
-              <button key={alert.id} className="priority-card" type="button" onClick={() => navigate(alert.route)}>
-                <span className="priority-card__index">
+              <button key={alert.id} className="reminders-card" type="button" onClick={() => navigate(alert.route)}>
+                <span className="reminders-card__label">
                   {alert.severity === 'critical' ? 'Critical alert' : 'Watch alert'}
                 </span>
                 <strong>{alert.title}</strong>
                 <p>{alert.detail}</p>
-                <span className="priority-card__meta">
+                <span className="reminders-card__meta">
                   <span>{alert.kind}</span>
                   <span>{alert.timing}</span>
                   <span>{alert.horseName ?? 'Ranch-wide'}</span>
@@ -143,233 +256,128 @@ export default function Reminders() {
             ))}
           </div>
         ) : (
-          <EmptyState
-            compact
-            title="Alerts are clear"
-            description="Coggins, wormer, dental, transfer, document, and follow-up alerts will appear automatically as dates age."
-          />
+          <p className="reminders-note">
+            Coggins, wormer, dental, transfer, document, and follow-up alerts appear automatically as dates age.
+          </p>
         )}
       </section>
 
-      <section className="priority-briefing" aria-labelledby="revenue-title">
-        <div className="priority-briefing__heading">
-          <div>
-            <span className="ops-kicker">Sale Readiness</span>
-            <h2 id="revenue-title">Sale value blocked by documents</h2>
-          </div>
-          <p>
-            {revenueRisk.items.length
-              ? `${formatCompactCurrency(revenueRisk.valueAtRisk)} of ${formatCompactCurrency(revenueRisk.totalListedValue)} listed value cannot close today. Each blocker below has a one-click fix.`
-              : revenueRisk.totalListedValue > 0
-                ? `All ${formatCompactCurrency(revenueRisk.totalListedValue)} of listed value is document-ready for buyers.`
-                : 'List a horse with an asking price and XBAR will track what stands between it and a closed sale.'}
-          </p>
-        </div>
-        {revenueRisk.items.length ? (
-          <div className="priority-grid">
-            {revenueRisk.items.slice(0, 3).map((item) => (
-              <button
-                key={item.horseId}
-                className="priority-card"
-                type="button"
-                onClick={() => navigate(item.actionRoute)}
-              >
-                <span className="priority-card__index">
-                  {item.askPrice > 0 ? `${formatCompactCurrency(item.askPrice)} blocked` : 'Sale prep blocked'}
-                </span>
-                <strong>{item.actionLabel}</strong>
-                <p>{item.blockers.join(' · ')}</p>
-                <span className="priority-card__meta">
-                  <span>Revenue</span>
-                  <span>{item.horseName}</span>
-                </span>
-              </button>
-            ))}
-          </div>
-        ) : null}
-        {spendAnomalies.length ? (
-          <div className="priority-grid" style={{ marginTop: 12 }}>
-            {spendAnomalies.slice(0, 2).map((anomaly) => (
-              <button
-                key={anomaly.category}
-                className="priority-card"
-                type="button"
-                onClick={() => navigate(anomaly.actionRoute)}
-              >
-                <span className="priority-card__index">Spend running {anomaly.deltaPercent}% above trend</span>
-                <strong>{anomaly.actionLabel}</strong>
-                <p>
-                  {anomaly.category}: {formatCompactCurrency(anomaly.monthTotal)} this month vs{' '}
-                  {formatCompactCurrency(anomaly.trailingAverage)} trailing average.
-                </p>
-                <span className="priority-card__meta">
-                  <span>Spend control</span>
-                  <span>Ranch-wide</span>
-                </span>
-              </button>
-            ))}
-          </div>
-        ) : null}
-      </section>
-
-      <section className="priority-briefing" aria-labelledby="briefing-title">
-        <div className="priority-briefing__heading">
-          <div>
-            <span className="ops-kicker">First three moves</span>
-            <h2 id="briefing-title">Today's ranch briefing</h2>
-          </div>
-          <p>
+      <details className="reminders-disclosure">
+        <summary>
+          Today's ranch briefing <span>{briefing.top.length} priorities</span>
+        </summary>
+        <div className="reminders-disclosure__body">
+          <p className="reminders-note">
             {briefing.top.length
               ? 'These actions carry the most immediate operational risk or value.'
               : 'No urgent work is waiting. The ranch is clear for today.'}
           </p>
+          {briefing.top.length ? (
+            <div className="reminders-card-grid">
+              {briefing.top.map((item, index) => (
+                <button key={item.id} className="reminders-card" type="button" onClick={() => navigate(item.route)}>
+                  <span className="reminders-card__label">Priority {index + 1}</span>
+                  <strong>{item.title}</strong>
+                  <p>{item.detail}</p>
+                  <span className="reminders-card__meta">
+                    <span>{item.kind}</span>
+                    <span>{item.timing}</span>
+                    <span>{item.horseName ?? 'Ranch-wide'}</span>
+                  </span>
+                </button>
+              ))}
+            </div>
+          ) : (
+            <p className="reminders-note">
+              New care, document, ownership, and sales priorities will appear here automatically.
+            </p>
+          )}
         </div>
-        {briefing.top.length ? (
-          <div className="priority-grid">
-            {briefing.top.map((item, index) => (
-              <button key={item.id} className="priority-card" type="button" onClick={() => navigate(item.route)}>
-                <span className="priority-card__index">Priority {index + 1}</span>
-                <strong>{item.title}</strong>
-                <p>{item.detail}</p>
-                <span className="priority-card__meta">
-                  <span>{item.kind}</span>
-                  <span>{item.timing}</span>
-                  <span>{item.horseName ?? 'Ranch-wide'}</span>
-                </span>
-              </button>
-            ))}
-          </div>
-        ) : (
-          <EmptyState
-            compact
-            title="Today's work is clear"
-            description="New care, document, ownership, and sales priorities will appear here automatically."
-          />
-        )}
-      </section>
+      </details>
 
-      <div className="ops-metric-grid">
-        <MetricCard
-          label="Due"
-          value={String(briefing.dueCount)}
-          detail="Needs attention first"
-          tone={briefing.dueCount ? 'rose' : 'emerald'}
-          className="ops-metric-card"
-        />
-        <MetricCard
-          label="Overdue"
-          value={String(briefing.overdueCount)}
-          detail="Past the planned date"
-          tone={briefing.overdueCount ? 'rose' : 'emerald'}
-          className="ops-metric-card"
-        />
-        <MetricCard
-          label="This week"
-          value={String(briefing.thisWeekCount)}
-          detail="Today through seven days"
-          tone={briefing.thisWeekCount ? 'amber' : 'emerald'}
-          className="ops-metric-card"
-        />
-        <MetricCard
-          label="On watch"
-          value={String(briefing.watchCount)}
-          detail="Not urgent, not ignored"
-          tone={briefing.watchCount ? 'amber' : 'emerald'}
-          className="ops-metric-card"
-        />
-      </div>
-
-      <section className="ops-panel">
-        <div className="ops-section-heading">
-          <div>
-            <span className="section-eyebrow">Full work queue</span>
-            <h2>Every open operational item</h2>
-          </div>
-          <Pill tone="blue">{filteredReminders.length} shown</Pill>
+      <details className="reminders-disclosure">
+        <summary>
+          Sale readiness and spending{' '}
+          <span>
+            {revenueRisk.items.length} blocked sales · {spendAnomalies.length} spend alerts
+          </span>
+        </summary>
+        <div className="reminders-disclosure__body">
+          <h2 id="revenue-title">Sale value blocked by documents</h2>
+          <p className="reminders-note">
+            {revenueRisk.items.length
+              ? `${formatCompactCurrency(revenueRisk.valueAtRisk)} of ${formatCompactCurrency(revenueRisk.totalListedValue)} listed value cannot close today. Review the blockers below.`
+              : revenueRisk.totalListedValue > 0
+                ? `All ${formatCompactCurrency(revenueRisk.totalListedValue)} of listed value is document-ready for buyers.`
+                : 'List a horse with an asking price and XBAR will track what stands between it and a closed sale.'}
+          </p>
+          {revenueRisk.items.length ? (
+            <div className="reminders-card-grid">
+              {revenueRisk.items.slice(0, 3).map((item) => (
+                <button
+                  key={item.horseId}
+                  className="reminders-card"
+                  type="button"
+                  onClick={() => navigate(item.actionRoute)}
+                >
+                  <span className="reminders-card__label">
+                    {item.askPrice > 0 ? `${formatCompactCurrency(item.askPrice)} blocked` : 'Sale prep blocked'}
+                  </span>
+                  <strong>{item.actionLabel}</strong>
+                  <p>{item.blockers.join(' · ')}</p>
+                  <span className="reminders-card__meta">
+                    <span>Revenue</span>
+                    <span>{item.horseName}</span>
+                  </span>
+                </button>
+              ))}
+            </div>
+          ) : null}
+          {spendAnomalies.length ? (
+            <div className="reminders-card-grid">
+              {spendAnomalies.slice(0, 2).map((anomaly) => (
+                <button
+                  key={anomaly.category}
+                  className="reminders-card"
+                  type="button"
+                  onClick={() => navigate(anomaly.actionRoute)}
+                >
+                  <span className="reminders-card__label">Spend running {anomaly.deltaPercent}% above trend</span>
+                  <strong>{anomaly.actionLabel}</strong>
+                  <p>
+                    {anomaly.category}: {formatCompactCurrency(anomaly.monthTotal)} this month vs{' '}
+                    {formatCompactCurrency(anomaly.trailingAverage)} trailing average.
+                  </p>
+                  <span className="reminders-card__meta">
+                    <span>Spend control</span>
+                    <span>Ranch-wide</span>
+                  </span>
+                </button>
+              ))}
+            </div>
+          ) : null}
         </div>
-        <div className="ops-toolbar ops-toolbar--wide">
-          <label className="ops-search">
-            <span className="sr-only">Search reminders</span>
-            <input
-              value={query}
-              onChange={(event) => setQuery(event.target.value)}
-              placeholder="Search horse, document, transfer, sale lead..."
-            />
-          </label>
-          <select
-            value={filter}
-            onChange={(event) => setFilter(event.target.value as ReminderFilter)}
-            aria-label="Filter reminder type"
-          >
-            {filters.map((item) => (
-              <option key={item} value={item}>
-                {item}
-              </option>
-            ))}
-          </select>
-        </div>
-        {filteredReminders.length ? (
-          <div className="xbar-task-list">
-            {filteredReminders.map((reminder) => (
-              <TaskItem
-                key={reminder.id}
-                title={reminder.title}
-                detail={`${reminder.detail} | ${reminder.kind} | ${reminder.horseName ?? 'Ranch-wide'}${reminder.dueDate ? ` | ${formatDateLabel(reminder.dueDate)}` : ''}`}
-                status={reminder.timing}
-                priority={reminder.urgency === 'Due' ? 'urgent' : reminder.urgency === 'Watch' ? 'high' : 'low'}
-                onActivate={() => navigate(reminder.route)}
-                action={
-                  <div className="inline-actions">
-                    <button
-                      className="button button--primary button--compact"
-                      type="button"
-                      onClick={() => navigate(reminder.route)}
-                    >
-                      {reminder.kind === 'Care'
-                        ? 'Add care event'
-                        : reminder.kind === 'Ownership'
-                          ? 'Review transfer'
-                          : reminder.kind === 'Documents'
-                            ? 'Review document'
-                            : 'Open lead'}
-                    </button>
-                    {reminder.horseId && (
-                      <button
-                        className="button button--ghost button--compact"
-                        type="button"
-                        onClick={() => navigate(`/horses/${reminder.horseId}`)}
-                      >
-                        View horse
-                      </button>
-                    )}
-                  </div>
-                }
-              />
-            ))}
-          </div>
-        ) : reminders.length ? (
-          <EmptyState compact title="No reminders match" description="Adjust the search or filter." />
-        ) : (
-          <EmptyState
-            title="No urgent work in the queue"
-            description="When care records age, transfer files go missing, documents need approval, or buyers need follow-up, the work will land here."
-          />
-        )}
-      </section>
+      </details>
 
-      <div className="ops-workspace ops-workspace--columns">
-        {(['Care', 'Ownership', 'Documents', 'Sales'] as ReminderKind[]).map((kind) => {
-          const count = reminders.filter((reminder) => reminder.kind === kind).length;
-          return (
-            <Panel key={kind} title={kind} meta={<Pill tone={count ? 'blue' : 'slate'}>{count}</Pill>}>
-              <p className="ops-panel-copy">{kindCopy(kind)}</p>
-              <button className="button button--ghost button--compact" type="button" onClick={() => setFilter(kind)}>
-                Show {kind.toLowerCase()}
-              </button>
-            </Panel>
-          );
-        })}
-      </div>
+      <details className="reminders-disclosure">
+        <summary>About reminder types</summary>
+        <div className="reminders-disclosure__body reminders-type-grid">
+          {(['Care', 'Ownership', 'Documents', 'Sales'] as ReminderKind[]).map((kind) => {
+            const count = reminders.filter((reminder) => reminder.kind === kind).length;
+            return (
+              <section key={kind}>
+                <h3>
+                  {kind} <span className="reminders-count">{count}</span>
+                </h3>
+                <p className="reminders-note">{kindCopy(kind)}</p>
+                <button className="reminders-button" type="button" onClick={() => setFilter(kind)}>
+                  Show {kind.toLowerCase()}
+                </button>
+              </section>
+            );
+          })}
+        </div>
+      </details>
     </div>
   );
 }

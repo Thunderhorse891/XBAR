@@ -67,7 +67,7 @@ export function CommandBrief({
       <div className="command-brief__main">
         <span className="command-brief__eyebrow">{eyebrow}</span>
         <div className="command-brief__entity-row">
-          <h2 className="command-brief__entity">{entity}</h2>
+          <h1 className="command-brief__entity">{entity}</h1>
           {status && (
             <span className={`command-brief__status command-brief__status--${status.tone}`}>{status.label}</span>
           )}

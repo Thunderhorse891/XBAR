@@ -1,6 +1,6 @@
+import { brandAssetPath } from '@/lib/brandAssets';
 import { type FormEvent, useMemo, useState } from 'react';
 import { Navigate, useLocation, useNavigate, useSearchParams } from 'react-router-dom';
-import { XbarMark } from '@/components/BrandMark';
 import { billingPathForTier } from '@/lib/billingRoutes';
 import { applyWorkspaceProfileDefaults } from '@/lib/workspaceSetupDefaults';
 import { saveWorkspaceBackupToCloud } from '@/lib/cloudWorkspace';
@@ -10,13 +10,6 @@ import { useUiStore } from '@/store/useUiStore';
 import { useWorkspaceHydrated, useWorkspaceReady, useXbarStore } from '@/store/useXbarStore';
 import './cleanEntryExperience.css';
 import { canPresentPurchaseFlow } from '@/lib/nativePlatform';
-
-const setupStages = [
-  { label: 'Ranch identity', value: 'Business and ranch name' },
-  { label: 'Primary contact', value: 'Manager and ops email' },
-  { label: 'Ownership defaults', value: 'Owner and entity' },
-  { label: 'Home location', value: 'Barn and pasture' },
-] as const;
 
 export default function SetupWorkspace() {
   const navigate = useNavigate();
@@ -81,8 +74,8 @@ export default function SetupWorkspace() {
   const cloudWorkspaceRequired = supabaseReady && status === 'signed-in' && !workspaceId;
 
   const accessLabel = useMemo(() => {
-    if (!supabaseReady) return 'Browser trial';
-    return status === 'signed-in' ? 'Cloud ready' : 'Sign-in pending';
+    if (!supabaseReady) return 'Browser workspace';
+    return status === 'signed-in' ? 'Account connected' : 'Sign-in pending';
   }, [status, supabaseReady]);
 
   if (!workspaceHydrated) {
@@ -209,13 +202,14 @@ export default function SetupWorkspace() {
       <div className="clean-setup-layout">
         <section className="clean-auth-card clean-auth-card--intro" aria-labelledby="setup-title">
           <div className="clean-brand">
-            <span className="clean-brand__mark" aria-hidden="true">
-              <XbarMark tone="mono" />
-            </span>
-            <span>
-              <strong>XBAR</strong>
-              <small>{accessLabel}</small>
-            </span>
+            <img
+              className="clean-brand__wordmark"
+              src={brandAssetPath('xbar-wordmark.png')}
+              width="550"
+              height="170"
+              alt="XBAR"
+            />
+            <small>{accessLabel}</small>
           </div>
 
           {status === 'signed-in' ? (
@@ -240,26 +234,25 @@ export default function SetupWorkspace() {
           <div className="clean-auth-card__header">
             <p>Workspace setup</p>
             <h1 id="setup-title">Configure Workspace</h1>
-            <span>Set up your ranch details before adding horses, documents, owners, care, and sale packets.</span>
+            <span>A home for your horses and their records.</span>
           </div>
 
-          <ol className="clean-step-list" aria-label="Setup steps">
-            {setupStages.map((stage, index) => (
-              <li key={stage.label}>
-                <span>{String(index + 1).padStart(2, '0')}</span>
-                <strong>{stage.label}</strong>
-                <small>{stage.value}</small>
-              </li>
-            ))}
-          </ol>
+          <img
+            className="clean-setup-art"
+            src={brandAssetPath('xbar-report-horse.png')}
+            width="1672"
+            height="941"
+            alt="XBAR metallic horse artwork"
+          />
+          <p className="clean-auth-hint">Start with your ranch. Add records when you’re ready.</p>
         </section>
 
         <section className="clean-auth-card clean-auth-card--wide" aria-label="Create workspace">
           <form className="clean-form clean-setup-form" onSubmit={handleSubmit}>
             <div className="clean-auth-card__header">
-              <p>Required first</p>
-              <h2>Your ranch details.</h2>
-              <span>Everything else can be edited later in Account Settings.</span>
+              <p>Start here</p>
+              <h2>Your ranch details</h2>
+              <span>You can update these later in Account Settings.</span>
             </div>
 
             <div className="clean-form-grid">
@@ -296,41 +289,54 @@ export default function SetupWorkspace() {
                   placeholder="ops@yourranch.com"
                 />
               </label>
-              <label className="clean-field">
-                <span>Default owner</span>
-                <input
-                  value={form.defaultOwnerName}
-                  onChange={(event) => setForm((current) => ({ ...current, defaultOwnerName: event.target.value }))}
-                  placeholder="Legal owner"
-                />
-              </label>
-              <label className="clean-field">
-                <span>Owner entity</span>
-                <input
-                  value={form.defaultOwnerEntity}
-                  onChange={(event) => setForm((current) => ({ ...current, defaultOwnerEntity: event.target.value }))}
-                  placeholder="Owner entity"
-                />
-              </label>
-              <label className="clean-field">
-                <span>Home barn</span>
-                <input
-                  value={form.defaultBarn}
-                  onChange={(event) => setForm((current) => ({ ...current, defaultBarn: event.target.value }))}
-                  placeholder="Barn A"
-                />
-              </label>
-              <label className="clean-field">
-                <span>Default pasture</span>
-                <input
-                  value={form.defaultPasture}
-                  onChange={(event) => setForm((current) => ({ ...current, defaultPasture: event.target.value }))}
-                  placeholder="Pasture 1"
-                />
-              </label>
             </div>
 
-            {formError ? <div className="clean-form-error">{formError}</div> : null}
+            <details className="clean-setup-details">
+              <summary>
+                More details <span>Optional</span>
+              </summary>
+              <p className="clean-auth-hint">Set ownership and location defaults for new records.</p>
+              <div className="clean-form-grid">
+                <label className="clean-field">
+                  <span>Default owner</span>
+                  <input
+                    value={form.defaultOwnerName}
+                    onChange={(event) => setForm((current) => ({ ...current, defaultOwnerName: event.target.value }))}
+                    placeholder="Legal owner"
+                  />
+                </label>
+                <label className="clean-field">
+                  <span>Owner entity</span>
+                  <input
+                    value={form.defaultOwnerEntity}
+                    onChange={(event) => setForm((current) => ({ ...current, defaultOwnerEntity: event.target.value }))}
+                    placeholder="Owner entity"
+                  />
+                </label>
+                <label className="clean-field">
+                  <span>Home barn</span>
+                  <input
+                    value={form.defaultBarn}
+                    onChange={(event) => setForm((current) => ({ ...current, defaultBarn: event.target.value }))}
+                    placeholder="Barn A"
+                  />
+                </label>
+                <label className="clean-field">
+                  <span>Default pasture</span>
+                  <input
+                    value={form.defaultPasture}
+                    onChange={(event) => setForm((current) => ({ ...current, defaultPasture: event.target.value }))}
+                    placeholder="Pasture 1"
+                  />
+                </label>
+              </div>
+            </details>
+
+            {formError ? (
+              <div className="clean-form-error" role="alert">
+                {formError}
+              </div>
+            ) : null}
 
             <div className="clean-action-stack">
               <button className="clean-primary-button" type="submit" disabled={saving || signingOut}>
