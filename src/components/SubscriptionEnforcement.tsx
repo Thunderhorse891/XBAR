@@ -1,4 +1,7 @@
 import { useEffect } from 'react';
+import { UpgradePrompt } from './UpgradePrompt';
+import { requestFeatureUpgrade } from '../store/useUpgradeStore';
+import { featureGate } from '../lib/commercialEngine';
 import '@/lib/subscriptionPlans';
 import {
   documentIntakeGate,
@@ -35,6 +38,7 @@ export function SubscriptionEnforcement() {
           (listing) => listing.horseId === horseId && listing.state !== 'Archived',
         );
         const blocked = removingExistingListing ? null : sharedListingGate(enforcedSubscriptionSnapshot());
+        if (blocked) requestFeatureUpgrade('buyerDealRoom');
         return blocked ? { ok: false, message: blocked } : toggleSharedListing(horseId);
       },
       createDocumentIntake: async (input) => {
@@ -61,15 +65,19 @@ export function SubscriptionEnforcement() {
         return blocked ? { ok: false, message: blocked } : createHorseFromDocument(documentId);
       },
       createSalePacketBuild: (input) => {
-        const blocked = packetExportGate(enforcedSubscriptionSnapshot());
+        const subscription = enforcedSubscriptionSnapshot();
+        const blocked = packetExportGate(subscription);
+        if (blocked && featureGate(subscription, 'packetExport')) requestFeatureUpgrade('packetExport');
         return blocked ? { ok: false, message: blocked } : createSalePacketBuild(input);
       },
       inviteWorkspaceMember: async (email, role) => {
-        const blocked = teamInviteGate(enforcedSubscriptionSnapshot());
+        const subscription = enforcedSubscriptionSnapshot();
+        const blocked = teamInviteGate(subscription);
+        if (blocked && featureGate(subscription, 'teamInvites')) requestFeatureUpgrade('teamInvites');
         return blocked ? { ok: false, message: blocked } : inviteWorkspaceMember(email, role);
       },
     });
   }, [workspaceHydrated]);
 
-  return null;
+  return <UpgradePrompt />;
 }

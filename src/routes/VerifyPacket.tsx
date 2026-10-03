@@ -18,7 +18,7 @@ function Row({ label, value }: { label: string; value: string }) {
   return (
     <div className="verify-fact">
       <span className="verify-fact__label">{label}</span>
-      <span className="verify-fact__value">{value}</span>
+      <span className="verify-fact__value break-words">{value}</span>
     </div>
   );
 }
@@ -123,17 +123,42 @@ export default function VerifyPacket() {
                */}
               <Row
                 label="Presented by"
-                value={[
-                  result.facts.sellerBusinessName || result.facts.sellerRanchName || 'A horse seller',
-                  result.facts.sellerBusinessName && result.facts.sellerRanchName
-                    ? `(${result.facts.sellerRanchName})`
-                    : '',
-                ]
-                  .filter(Boolean)
-                  .join(' ')}
+                value={
+                  result.seal.version >= 3
+                    ? result.facts.sellerDisplayName || 'A horse seller'
+                    : [
+                        result.facts.sellerBusinessName || result.facts.sellerRanchName || 'A horse seller',
+                        result.facts.sellerBusinessName && result.facts.sellerRanchName
+                          ? `(${result.facts.sellerRanchName})`
+                          : '',
+                      ]
+                        .filter(Boolean)
+                        .join(' ')
+                }
               />
+              <Row label="Seller" value={result.facts.sellerName || ''} />
+              <Row label="Email" value={result.facts.sellerEmail || ''} />
+              <Row label="Phone" value={result.facts.sellerPhone || ''} />
+              <Row label="Website" value={result.facts.sellerWebsite || ''} />
               <Row label="Documents sealed" value={String(result.facts.documents.length)} />
             </div>
+            {result.facts.sellerLogoDataUrl && (
+              <figure className="my-4">
+                <img
+                  src={result.facts.sellerLogoDataUrl}
+                  alt={`${result.facts.sellerDisplayName || 'Seller'} logo at sealing`}
+                  className="max-h-24 max-w-full object-contain object-left"
+                />
+                <figcaption className="verify-note">
+                  Seller logo recorded when this packet was sealed. Compare it with the logo on your packet.
+                </figcaption>
+                {result.facts.sellerLogoDigest && (
+                  <p className="verify-fine">
+                    Logo fingerprint (SHA-256): <code>{result.facts.sellerLogoDigest}</code>
+                  </p>
+                )}
+              </figure>
+            )}
             {result.facts.documents.length > 0 && (
               <ul className="verify-docs">
                 {result.facts.documents.map((doc, index) => (

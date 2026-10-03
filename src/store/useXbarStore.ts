@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react';
+import { normalizePacketWebsite, validatePacketProfile } from '../../api/_lib/packet-branding.js';
 import { create } from 'zustand';
 import { createJSONStorage, persist } from 'zustand/middleware';
 import {
@@ -316,7 +317,16 @@ export const useXbarStore = create<XbarStore>()(
         }
 
         const current = get();
-        const nextProfile = restoreWorkspaceProfile({ ...current.workspaceProfile, ...patch });
+        const merged = { ...current.workspaceProfile, ...patch };
+        try {
+          validatePacketProfile(merged);
+        } catch (error) {
+          return { ok: false, message: error instanceof Error ? error.message : 'Ranch branding is invalid.' };
+        }
+        const nextProfile = restoreWorkspaceProfile({
+          ...merged,
+          ...(merged.website !== undefined ? { website: normalizePacketWebsite(merged.website) } : {}),
+        });
         const workspaceMembers = current.workspaceMembers.map((member, index) =>
           index === 0 && member.source === 'Owner'
             ? {

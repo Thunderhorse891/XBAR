@@ -25,6 +25,8 @@ declare module '*/api/_lib/pdf.js' {
     sections: PdfSection[];
     footer?: string;
     letterhead?: string;
+    /** Customer-supplied inline PNG/JPEG, separate from XBAR's artwork. */
+    customerLogoDataUrl?: string;
     continuationHeaders?: boolean;
     branding?: { logo: Uint8Array; mark: Uint8Array; watermark: Uint8Array };
     reference?: string;

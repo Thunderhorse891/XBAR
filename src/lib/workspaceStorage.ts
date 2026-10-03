@@ -454,6 +454,89 @@ function notifyPersistFailure(name: string) {
   }
 }
 
+/** The outcome of one exact persistence write, captured synchronously after a
+ * store action. Awaiting it never confuses a later save with the user's save. */
+export interface WorkspacePersistReceipt {
+  name: string;
+  completed: Promise<boolean>;
+}
+let latestPersistReceipt: WorkspacePersistReceipt | null = null;
+
+export function getWorkspacePersistReceipt(): WorkspacePersistReceipt | null {
+  return latestPersistReceipt;
+}
+
+async function persistWorkspaceValue(name: string, value: string): Promise<boolean> {
+  if (name === LEGACY_KEY) {
+    const indexed = await readIndexedValue(name);
+    const legacy = indexed.value === null ? readLegacyValue(name) : null;
+    const existingValue = indexed.value ?? legacy?.value ?? null;
+    /*
+     * Deliberately a stricter bar than the flag above, and the difference is
+     * not an oversight — the two answer different questions.
+     *
+     * `workspaceReadFailure` guards an irreversible delete, so ANY doubt has
+     * to count. This guards a write, and refusing a write is not free: the
+     * refusal lasts the whole session, so demanding the same certainty
+     * bricked a browser whose IndexedDB is permanently unreadable. Its
+     * fallback answers cleanly every time, hydration is willing to run on
+     * that answer, and yet no edit could ever be saved.
+     *
+     * So a write is blocked on uncertainty only when NO store could answer.
+     * A working store reporting "nothing here" is an answer, and the write
+     * lands there — it cannot destroy what we just successfully read.
+     */
+    const existingReadFailed = indexed.value !== null ? false : indexed.failed && (legacy?.failed ?? false);
+
+    if (shouldDeferUnhydratedWorkspaceWrite(workspaceReadFailure, existingValue, existingReadFailed)) {
+      // Withheld, not failed silently — the app must stop looking saved.
+      notifyPersistFailure(name);
+      return false;
+    }
+    if (shouldProtectMeaningfulWorkspaceWrite(existingValue, value)) {
+      return false;
+    }
+  }
+
+  const persisted = await writeIndexedValue(name, value);
+  if (!persisted) {
+    if (writeLegacyValue(name, value)) {
+      /*
+       * The fallback now holds a newer workspace than the primary store, and
+       * the marker is the read path's ONLY way to find that out — so a
+       * fallback whose marker did not land is not a saved workspace. It is
+       * the exact quota case that makes this likely: the value fits, the
+       * marker does not, and the next load then hands back the older primary
+       * copy as authoritative and overwrites this one.
+       *
+       * The value is deliberately left in place rather than rolled back: it
+       * is still the newest copy of the workspace, and deleting it to keep
+       * the stores tidy would be the loss itself. What changes is that the
+       * app stops claiming the write succeeded.
+       */
+      if (!markFallbackAhead(name, true)) {
+        notifyPersistFailure(name);
+        return false;
+      }
+      return true;
+    } else {
+      // Both stores refused. The app carries on with the workspace in memory,
+      // which is the right behaviour — losing the current session's work on
+      // top of a storage failure helps nobody — but it must not look saved.
+      notifyPersistFailure(name);
+    }
+    return false;
+  }
+
+  // The primary store has caught up, so it is authoritative again.
+  markFallbackAhead(name, false);
+
+  if (name === LEGACY_KEY) {
+    removeLegacyValue(name);
+  }
+  return true;
+}
+
 export const workspaceStateStorage: StateStorage = {
   async getItem(name) {
     const indexed = await readIndexedValue(name);
@@ -532,70 +615,10 @@ export const workspaceStateStorage: StateStorage = {
 
     return legacy.value;
   },
-  async setItem(name, value) {
-    if (name === LEGACY_KEY) {
-      const indexed = await readIndexedValue(name);
-      const legacy = indexed.value === null ? readLegacyValue(name) : null;
-      const existingValue = indexed.value ?? legacy?.value ?? null;
-      /*
-       * Deliberately a stricter bar than the flag above, and the difference is
-       * not an oversight — the two answer different questions.
-       *
-       * `workspaceReadFailure` guards an irreversible delete, so ANY doubt has
-       * to count. This guards a write, and refusing a write is not free: the
-       * refusal lasts the whole session, so demanding the same certainty
-       * bricked a browser whose IndexedDB is permanently unreadable. Its
-       * fallback answers cleanly every time, hydration is willing to run on
-       * that answer, and yet no edit could ever be saved.
-       *
-       * So a write is blocked on uncertainty only when NO store could answer.
-       * A working store reporting "nothing here" is an answer, and the write
-       * lands there — it cannot destroy what we just successfully read.
-       */
-      const existingReadFailed = indexed.value !== null ? false : indexed.failed && (legacy?.failed ?? false);
-
-      if (shouldDeferUnhydratedWorkspaceWrite(workspaceReadFailure, existingValue, existingReadFailed)) {
-        // Withheld, not failed silently — the app must stop looking saved.
-        notifyPersistFailure(name);
-        return;
-      }
-      if (shouldProtectMeaningfulWorkspaceWrite(existingValue, value)) {
-        return;
-      }
-    }
-
-    const persisted = await writeIndexedValue(name, value);
-    if (!persisted) {
-      if (writeLegacyValue(name, value)) {
-        /*
-         * The fallback now holds a newer workspace than the primary store, and
-         * the marker is the read path's ONLY way to find that out — so a
-         * fallback whose marker did not land is not a saved workspace. It is
-         * the exact quota case that makes this likely: the value fits, the
-         * marker does not, and the next load then hands back the older primary
-         * copy as authoritative and overwrites this one.
-         *
-         * The value is deliberately left in place rather than rolled back: it
-         * is still the newest copy of the workspace, and deleting it to keep
-         * the stores tidy would be the loss itself. What changes is that the
-         * app stops claiming the write succeeded.
-         */
-        if (!markFallbackAhead(name, true)) notifyPersistFailure(name);
-      } else {
-        // Both stores refused. The app carries on with the workspace in memory,
-        // which is the right behaviour — losing the current session's work on
-        // top of a storage failure helps nobody — but it must not look saved.
-        notifyPersistFailure(name);
-      }
-      return;
-    }
-
-    // The primary store has caught up, so it is authoritative again.
-    markFallbackAhead(name, false);
-
-    if (name === LEGACY_KEY) {
-      removeLegacyValue(name);
-    }
+  setItem(name, value) {
+    const completed = persistWorkspaceValue(name, value);
+    latestPersistReceipt = { name, completed };
+    return completed.then(() => undefined);
   },
   async removeItem(name) {
     await removeIndexedValue(name);
