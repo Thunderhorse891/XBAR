@@ -189,7 +189,9 @@ export default function AnimalProfile() {
   const activeDocumentFacts = animal.documentFacts.filter((fact) =>
     documents.some(
       (document) =>
-        document.id === fact.sourceDocumentId && document.horseId === animal.id && document.state !== 'Archived',
+        document.id === fact.sourceDocumentId &&
+        (document.horseId === animal.id || (!document.horseId && animal.documents.includes(document.id))) &&
+        document.state !== 'Archived',
     ),
   );
   const packetReady = saleReadiness?.proofPacketReady ?? false;

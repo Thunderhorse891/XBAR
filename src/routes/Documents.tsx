@@ -153,18 +153,21 @@ export default function Documents() {
   const applyExtractedFacts = (document: DocumentRecord) => {
     const targetId = reviewAssignments[document.id] ?? document.horseId ?? '';
     const horse = horses.find((item) => item.id === targetId);
-    if (!horse || inspectDocumentHorseIdentity(document, horse).conflictReason) {
+    const identityReview = horse && inspectDocumentHorseIdentity(document, horse);
+    if (!horse || !identityReview || identityReview.conflictReason || identityReview.missingIdentityReason) {
       pushToast({
-        title: 'Pick a horse first',
-        message: 'Choose a horse that matches the original document before applying its facts.',
+        title: identityReview?.missingIdentityReason ? 'Source identity missing' : 'Facts need review',
+        message:
+          identityReview?.conflictReason ||
+          identityReview?.missingIdentityReason ||
+          'Choose a horse that matches the original document before applying its facts.',
         tone: 'warning',
       });
       return;
     }
-    // Copy every fact the paper extracted (name, reg #, registry, owner, color,
-    // breed, foaled date, sire, dam) onto the horse — filling only empty fields
-    // so verified data is never overwritten.
-    const { patch, applied } = buildHorseEnrichmentFromEntities(document.entities, horse);
+    // Re-read facts from the original. Legacy cached entities may contain fields
+    // copied from a selected profile that never appeared in this source.
+    const { patch, applied } = buildHorseEnrichmentFromEntities(identityReview.sourceEntities, horse);
     if (!applied.length) {
       pushToast({
         title: 'Nothing new to apply',

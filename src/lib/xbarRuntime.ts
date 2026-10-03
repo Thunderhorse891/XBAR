@@ -365,7 +365,7 @@ function extractTransferStatus(haystack: string, type: DocumentType) {
   return 'Pending Signatures';
 }
 
-function extractDocumentEntities(params: { fileName: string; previewText: string; inferredType: DocumentType }) {
+export function extractDocumentEntities(params: { fileName: string; previewText: string; inferredType: DocumentType }) {
   const { fileName, previewText, inferredType } = params;
   const haystack = `${fileName} ${previewText}`;
   // Only a subject field can supply horse identity. A known name mentioned

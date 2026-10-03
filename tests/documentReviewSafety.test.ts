@@ -729,3 +729,21 @@ test('all supported adjacent identity and metadata fields remain outside chip ev
     }
   }
 });
+
+test('missing readable source identity is distinct from a source contradiction', () => {
+  for (const text of ['CERTIFICATE OF REGISTRATION', 'CERTIFICATE OF REGISTRATION\nOwner: Taylor Ranch\nColor: Bay']) {
+    const source = document({ extractedTextPreview: text });
+    const screen = inspectDocumentHorseIdentity(source, horse);
+    assert.equal(screen.conflictReason, undefined);
+    assert.match(screen.missingIdentityReason ?? '', /no .*identity/i);
+    assert.equal(assessOwnershipDocument(source, horse, 'registration_certificate').status, 'missing_identity');
+  }
+  for (const text of ['Registered Name: DESERT DAISY', 'Registration Number: 7001111', 'Microchip: 982000123456789']) {
+    const screen = inspectDocumentHorseIdentity(document({ extractedTextPreview: text }), {
+      ...horse,
+      microchipId: '982000123456789',
+    });
+    assert.equal(screen.conflictReason, undefined, text);
+    assert.equal(screen.missingIdentityReason, undefined, text);
+  }
+});

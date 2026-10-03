@@ -61,3 +61,47 @@ test('ineligible approved originals route to replacement upload, not back to Pro
     /packetDocumentAction\(\s*selectedRecord\?\.horseId \?\? '',\s*ownershipRepairDocuments\(assessments\)/,
   );
 });
+
+test('profile facts preserve one-way legacy links but exclude archived and other-horse sources', () => {
+  const profileText = readFileSync('src/routes/AnimalProfile.tsx', 'utf8');
+  const profile = ts.createSourceFile(
+    'AnimalProfile.tsx',
+    profileText,
+    ts.ScriptTarget.Latest,
+    true,
+    ts.ScriptKind.TSX,
+  );
+  let initializer: ts.Expression | undefined;
+  const visit = (node: ts.Node) => {
+    if (ts.isVariableDeclaration(node) && node.name.getText(profile) === 'activeDocumentFacts')
+      initializer = node.initializer;
+    ts.forEachChild(node, visit);
+  };
+  visit(profile);
+  assert.ok(initializer, 'Profile must derive its visible document facts');
+  const javascript = ts.transpileModule(`const actual = ${initializer.getText(profile)};`, {
+    compilerOptions: { target: ts.ScriptTarget.ES2022 },
+  }).outputText;
+  const visible = new Function('animal', 'documents', `${javascript}\nreturn actual;`);
+  const facts = ['direct', 'legacy', 'archived', 'foreign', 'unlinked', 'missing'].map((id) => ({
+    id,
+    sourceDocumentId: id,
+  }));
+  const animal = { id: 'horse-a', documents: ['legacy', 'archived', 'foreign'], documentFacts: facts };
+  const documents = [
+    { id: 'direct', horseId: 'horse-a', state: 'Ready' },
+    { id: 'legacy', state: 'Ready' },
+    { id: 'archived', state: 'Archived' },
+    { id: 'foreign', horseId: 'horse-b', state: 'Ready' },
+    { id: 'unlinked', state: 'Ready' },
+  ];
+  assert.deepEqual(
+    visible(animal, documents).map((fact: { id: string }) => fact.id),
+    ['direct', 'legacy'],
+  );
+  documents[1].state = 'Archived';
+  assert.deepEqual(
+    visible(animal, documents).map((fact: { id: string }) => fact.id),
+    ['direct'],
+  );
+});

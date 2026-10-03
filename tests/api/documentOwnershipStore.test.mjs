@@ -245,3 +245,158 @@ test('approval rejects all conflicting chip list identities and preserves the pe
     assert.equal(useXbarStore.getState().horses[0].microchipId, target.microchipId, separator);
   }
 });
+
+test('approval refuses cached facts with missing source identity without calling it a contradiction', () => {
+  for (const entities of [source.entities, { color: 'Bay', ownerName: 'Unsupported Owner' }]) {
+    const pending = { ...source, state: 'Needs Review', extractedTextPreview: 'CERTIFICATE OF REGISTRATION', entities };
+    useXbarStore.setState({ documents: [pending] });
+    const before = structuredClone({
+      horses: useXbarStore.getState().horses,
+      ownershipRecords: useXbarStore.getState().ownershipRecords,
+    });
+    const result = useXbarStore.getState().reviewDocument(pending.id, horse.id);
+    assert.equal(result.ok, false);
+    assert.match(result.message, /no .*identity|identity.*not.*read|identity.*missing/i);
+    assert.doesNotMatch(result.message, /conflict|contradict/i);
+    assert.deepEqual(useXbarStore.getState().documents, [pending]);
+    assert.deepEqual(useXbarStore.getState().horses, before.horses);
+    assert.deepEqual(useXbarStore.getState().ownershipRecords, before.ownershipRecords);
+  }
+});
+
+test('identity-free manual attachment without cached facts does not promote facts or readiness', () => {
+  const pending = {
+    ...source,
+    horseId: undefined,
+    type: 'Transfer Packet',
+    state: 'Needs Review',
+    extractedTextPreview: 'Care notes for manual review.',
+    entities: {},
+  };
+  useXbarStore.setState({ documents: [pending] });
+  const result = useXbarStore.getState().reviewDocument(pending.id, horse.id);
+  assert.equal(result.ok, true);
+  assert.equal(useXbarStore.getState().documents[0].horseId, horse.id);
+  assert.deepEqual(useXbarStore.getState().horses[0], { ...horse, documents: [...horse.documents, source.id] });
+  assert.deepEqual(useXbarStore.getState().ownershipRecords, [record]);
+  assert.equal(useXbarStore.getState().linkOwnershipProof(record.id, requirement.id, pending.id).ok, false);
+});
+
+test('approval uses source-read facts and supports source-only registration or chip identity', () => {
+  const target = { ...horse, microchipId: '982000123456789' };
+  for (const text of [
+    source.extractedTextPreview,
+    'CERTIFICATE OF REGISTRATION\nRegistration Number: 7001111',
+    'Microchip: 982000123456789',
+  ]) {
+    const pending = {
+      ...source,
+      state: 'Needs Review',
+      extractedTextPreview: text,
+      entities: { ...source.entities, color: 'Bay', ownerName: 'Unsupported Owner' },
+    };
+    useXbarStore.setState({ horses: [target], documents: [pending] });
+    assert.equal(useXbarStore.getState().reviewDocument(pending.id, target.id).ok, true, text);
+    const facts = useXbarStore.getState().horses[0].documentFacts;
+    assert.equal(
+      facts.some((fact) => ['color', 'ownerName'].includes(fact.label)),
+      false,
+      text,
+    );
+    assert.equal(
+      facts.some((fact) => fact.label === 'horseName'),
+      text.includes('Registered Name:'),
+      text,
+    );
+  }
+});
+
+test('Apply facts executes its source identity gate and applies only source-read facts', async () => {
+  const { readFile } = await import('node:fs/promises');
+  const ts = await import('typescript');
+  const { runInNewContext } = await import('node:vm');
+  const { inspectDocumentHorseIdentity } = await import('../../src/lib/ownershipDocumentReview.ts');
+  const { buildHorseEnrichmentFromEntities } = await import('../../src/store/xbarStoreLogic.ts');
+  const route = await readFile('src/routes/Documents.tsx', 'utf8');
+  const handler = route.slice(
+    route.indexOf('  const applyExtractedFacts ='),
+    route.indexOf('  const createHorseFromReview ='),
+  );
+  assert.ok(handler.includes('const applyExtractedFacts ='));
+  const executable = ts.transpileModule(`${handler}\napplyExtractedFacts`, {
+    compilerOptions: { target: ts.ScriptTarget.ES2022 },
+  }).outputText;
+  for (const [text, expectedColor] of [
+    ['CERTIFICATE OF REGISTRATION', undefined],
+    [source.extractedTextPreview, undefined],
+    [`${source.extractedTextPreview}\nColor: Black`, 'Black'],
+    ['Registration Number: 7001111\nColor: Black', 'Black'],
+    ['Microchip: 982000123456789\nColor: Black', 'Black'],
+  ]) {
+    const target = { ...horse, owner: '', color: '', microchipId: '982000123456789' };
+    const updates = [];
+    const toasts = [];
+    const apply = runInNewContext(executable, {
+      horses: [target],
+      reviewAssignments: {},
+      inspectDocumentHorseIdentity,
+      buildHorseEnrichmentFromEntities,
+      updateHorse: (id, patch) => {
+        updates.push({ id, patch });
+        return { ok: true };
+      },
+      pushToast: (toast) => toasts.push(toast),
+      recordAuditEvent: () => {},
+      currentUserName: 'Tester',
+    });
+    apply({
+      ...source,
+      extractedTextPreview: text,
+      entities: { ...source.entities, color: 'Bay', ownerName: 'Unsupported Owner' },
+    });
+    assert.equal(updates.length, expectedColor ? 1 : 0, text);
+    if (expectedColor) assert.deepEqual(updates[0], { id: target.id, patch: { color: expectedColor } });
+    else assert.equal(toasts.length, 1);
+  }
+});
+
+test('approval preserves freshly read clinical and transfer facts but ignores cached or filename-only facts', () => {
+  for (const [type, text, expected] of [
+    [
+      'Vet Record',
+      'Exam Date: 2026-10-02\nVeterinarian: Dr Avery Smith',
+      { examDate: '2026-10-02', veterinarian: 'Dr Avery Smith' },
+    ],
+    [
+      'Coggins',
+      'Exam Date: 2026-10-03\nVeterinarian: Dr Avery Smith',
+      { examDate: '2026-10-03', veterinarian: 'Dr Avery Smith' },
+    ],
+    ['Vet Record', 'Clinical notes only.', {}],
+    ['Transfer Packet', 'TRANSFER OF OWNERSHIP\nStatus: AQHA review', { transferStatus: 'AQHA Review' }],
+  ]) {
+    const pending = {
+      ...source,
+      title: '2030-01-01 Dr Filename Name',
+      state: 'Needs Review',
+      type,
+      extractedTextPreview: `${text}\nRegistered Name: DESERT DAISY`,
+      entities: {
+        ...source.entities,
+        examDate: '2031-01-01',
+        veterinarian: 'Dr Cached Name',
+        transferStatus: 'Clear',
+        color: 'Bay',
+        ownerName: 'Unsupported Owner',
+      },
+    };
+    useXbarStore.setState({ horses: [horse], documents: [pending] });
+    assert.equal(useXbarStore.getState().reviewDocument(pending.id, horse.id).ok, true, text);
+    const facts = Object.fromEntries(
+      useXbarStore.getState().horses[0].documentFacts.map((fact) => [fact.label, fact.value]),
+    );
+    for (const key of ['examDate', 'veterinarian', 'transferStatus', 'color', 'ownerName']) {
+      assert.equal(facts[key], expected[key], `${type}: ${key}`);
+    }
+  }
+});

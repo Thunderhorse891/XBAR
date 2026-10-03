@@ -597,3 +597,77 @@ test('grouped sources with equivalent microchip formatting still create one prof
   assert.equal(useXbarStore.getState().ownershipRecords.length, 1);
   assert.ok(useXbarStore.getState().documents.every((document) => document.horseId === result.createdHorseIds[0]));
 });
+
+for (const existingMatch of [false, true]) {
+  test(`identity-free source cannot promote cached entities into ${existingMatch ? 'an existing attachment' : 'new horse and ownership records'}`, async () => {
+    await intake([paper('BLUE MOON', '1234567')], false);
+    const document = {
+      ...useXbarStore.getState().documents[0],
+      title: 'BLUE MOON registration',
+      extractedTextPreview: 'CERTIFICATE OF REGISTRATION',
+      entities: { horseName: 'BLUE MOON', registrationNumber: '1234567', ownerName: 'Unsupported Owner', color: 'Bay' },
+    };
+    const existing = horse('BLUE MOON', '1234567');
+    const { createOwnershipRecord } = await import('../../src/store/xbarStoreLogic.ts');
+    useXbarStore.setState({
+      documents: [document],
+      horses: existingMatch ? [existing] : [],
+      ownershipRecords: existingMatch ? [createOwnershipRecord(existing)] : [],
+    });
+    const before = structuredClone(
+      Object.fromEntries(
+        ['horses', 'ownershipRecords', 'documents', 'subscription'].map((key) => [key, useXbarStore.getState()[key]]),
+      ),
+    );
+    for (let attempt = 0; attempt < 2; attempt += 1) {
+      const result = useXbarStore.getState().createHorseFromDocument(document.id);
+      assert.equal(result.ok, false);
+      assert.match(result.message, /no .*identity|identity.*not.*read|identity.*missing/i);
+      assert.doesNotMatch(result.message, /conflict|contradict/i);
+      for (const key of ['horses', 'ownershipRecords', 'documents', 'subscription']) {
+        assert.deepEqual(useXbarStore.getState()[key], before[key]);
+      }
+    }
+  });
+}
+
+test('registration-only source can find an existing profile but cannot create a name from stale cache', async () => {
+  await intake([paper('BLUE MOON', '1234567')], false);
+  const document = {
+    ...useXbarStore.getState().documents[0],
+    extractedTextPreview: 'CERTIFICATE OF REGISTRATION\nRegistration Number: 1234567',
+    entities: { horseName: 'BLUE MOON', registrationNumber: '1234567', ownerName: 'Unsupported Owner' },
+  };
+  useXbarStore.setState({ documents: [document] });
+  assert.equal(useXbarStore.getState().createHorseFromDocument(document.id).ok, false);
+  assert.deepEqual(useXbarStore.getState().horses, []);
+  assert.deepEqual(useXbarStore.getState().ownershipRecords, []);
+  assert.deepEqual(useXbarStore.getState().documents, [document]);
+  const existing = horse('BLUE MOON', '1234567');
+  useXbarStore.setState({ horses: [existing] });
+  assert.equal(useXbarStore.getState().createHorseFromDocument(document.id).ok, true);
+  assert.equal(useXbarStore.getState().documents[0].horseId, existing.id);
+  assert.deepEqual(useXbarStore.getState().ownershipRecords, []);
+  assert.equal(useXbarStore.getState().horses[0].owner, existing.owner);
+});
+
+test('creation takes fresh source facts and never promotes an unsupported cached legal owner', async () => {
+  await intake([paper('BLUE MOON', '1234567')], false);
+  const document = {
+    ...useXbarStore.getState().documents[0],
+    entities: {
+      horseName: 'BLUE MOON',
+      registrationNumber: '1234567',
+      ownerName: 'Unsupported Owner',
+      color: 'Bay',
+      sire: 'Unsupported Sire',
+    },
+  };
+  useXbarStore.setState({ documents: [document] });
+  assert.equal(useXbarStore.getState().createHorseFromDocument(document.id).ok, true);
+  const created = useXbarStore.getState().horses[0];
+  assert.equal(created.owner, '');
+  assert.equal(created.color, '');
+  assert.equal(created.bloodline.sire, '');
+  assert.equal(useXbarStore.getState().ownershipRecords[0].legalOwner, '');
+});

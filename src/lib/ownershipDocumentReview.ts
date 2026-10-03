@@ -12,7 +12,13 @@ import {
   normalizePedigreeValue,
   registrationFieldLabelPattern,
 } from './registrationExtraction.js';
-import { horseIdentityConflicts, registrationKey, hasDocumentSourceHeading, inferDocumentType } from './xbarRuntime.js';
+import {
+  extractDocumentEntities,
+  horseIdentityConflicts,
+  registrationKey,
+  hasDocumentSourceHeading,
+  inferDocumentType,
+} from './xbarRuntime.js';
 import { extractionProducedNothing } from './documentIntelligence.js';
 import { hasStoredFile } from './storedFiles.js';
 import { documentDuplicateNeedsReview } from './documentDuplicates.js';
@@ -127,13 +133,21 @@ function sourceMicrochipKeys(value: string): string[] {
 
 /** The same source identity screen for document movement, approval and ownership.
  * Cached entities in older backups may have been filled from the selected horse;
- * they cannot override contradictory identity still present in the original text.
- * No readable identity is an explicit manual assignment, not proof of ownership.
+ * they cannot replace missing identity or override contradictory source identity.
+ * Only fresh source fields may be promoted. Identity-free manual attachments
+ * remain separate from extracted facts and ownership evidence.
  */
-export function inspectDocumentHorseIdentity(document: DocumentRecord, horse: HorseRecord) {
-  const sourceIdentity = extractRegistrationFields(
+export function inspectDocumentHorseIdentity(document: DocumentRecord, horse?: HorseRecord) {
+  const { identityReviewRequired: sourceIdentityReviewRequired, ...sourceIdentity } = extractRegistrationFields(
     document.extractedTextPreview.replace(/(^|\n)\s*horse\s*[:#]\s*/gi, '$1Horse Name: '),
   );
+  // Reuse intake's canonical fact reader, but a filename is not source evidence.
+  const sourceEntities = extractDocumentEntities({
+    fileName: '',
+    previewText: document.extractedTextPreview,
+    inferredType: document.type,
+  });
+  delete sourceEntities.identityReviewRequired;
   // Read the whole labeled field independent of status wording or wrapping.
   // Only a paragraph break, another chip label, or an explicit neighboring
   // field ends it; unfamiliar/malformed continuation is evidence, not absence.
@@ -174,16 +188,21 @@ export function inspectDocumentHorseIdentity(document: DocumentRecord, horse: Ho
       return key && !sourceChips.includes(key) && !(grouped && sourceChips.includes(grouped));
     });
   });
-  const storedChip = horse.microchipId && (microchipKey(horse.microchipId.trim()) ?? normalize(horse.microchipId));
+  const storedChip = horse?.microchipId && (microchipKey(horse.microchipId.trim()) ?? normalize(horse.microchipId));
   const conflictReason =
-    document.identityReviewRequired || sourceIdentity.identityReviewRequired || unparsedChipEvidence
+    document.identityReviewRequired || sourceIdentityReviewRequired || unparsedChipEvidence
       ? 'The source contains ambiguous horse identities. Upload separate or corrected papers.'
-      : ownershipIdentityConflicts(horse, document.entities) || ownershipIdentityConflicts(horse, sourceIdentity)
+      : horse &&
+          (ownershipIdentityConflicts(horse, document.entities) || ownershipIdentityConflicts(horse, sourceIdentity))
         ? 'The readable source or extracted identity conflicts with the selected horse. Choose the correct horse or upload corrected papers.'
         : new Set(sourceChips).size > 1 || (storedChip && sourceChips.some((chip) => chip !== storedChip))
           ? 'The source microchip conflicts with this horse. Review the original and correct the record.'
           : undefined;
-  return { sourceIdentity, sourceChips, conflictReason };
+  const missingIdentityReason =
+    !sourceIdentity.horseName && !registrationKey(sourceIdentity.registrationNumber) && !sourceChips.length
+      ? 'No horse identity was read from the source. Upload readable identifying text before creating a horse or approving extracted facts.'
+      : undefined;
+  return { sourceIdentity, sourceEntities, sourceChips, conflictReason, missingIdentityReason };
 }
 
 /** A content/identity screen, never a legal opinion or automatic verification. */
