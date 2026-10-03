@@ -137,3 +137,23 @@ test('malformed timestamp cannot hide an older valid care record', () => {
   assert.equal(signal([h], 'wormer').status, 'clear');
   assert.equal(signal([horse([care('Dental', `${day(-1)}Tgarbage`)])], 'dental').status, 'due');
 });
+
+test('Medical initializes logged care on the local calendar day', async () => {
+  const { readFile } = await import('node:fs/promises');
+  const medical = await readFile('src/routes/Medical.tsx', 'utf8');
+  assert.match(medical, /\[eventDate, setEventDate\] = useState\(\(\) => localIsoDate\(\)\)/);
+  const previousTz = process.env.TZ;
+  process.env.TZ = 'America/Los_Angeles';
+  try {
+    const { localIsoDate } = await import('../src/lib/format.js');
+    const evening = new Date('2026-10-03T02:00:00Z');
+    const date = localIsoDate(evening);
+    assert.equal(date, '2026-10-02');
+    const rows = buildCareBoardRows([horse([care('Deworming', date), care('Dental', date)])], [], [], evening);
+    assert.equal(rows[0]?.signals.find((item) => item.key === 'wormer')?.status, 'clear');
+    assert.equal(rows[0]?.signals.find((item) => item.key === 'dental')?.status, 'clear');
+  } finally {
+    if (previousTz === undefined) delete process.env.TZ;
+    else process.env.TZ = previousTz;
+  }
+});

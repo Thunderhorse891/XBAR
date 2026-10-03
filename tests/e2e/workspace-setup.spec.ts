@@ -1040,32 +1040,37 @@ test('complementary source papers create one durable horse record without copyin
   await restored.close();
 });
 
-for (const careType of ['Deworming', 'Dental'] as const) {
-  test(`packet care link records the requested ${careType} type`, async ({ page }) => {
-    await bootstrapWorkspace(page);
-    await seedHorse(page, 'Care Link Horse');
-    const horseId = new URL(page.url()).pathname.split('/').at(-1)!;
-    await page.evaluate(
-      async ({ horseId, careType }) => {
-        const modulePath = '/src/lib/salePacketGuidance.ts';
-        const { packetReadinessAction } = await import(/* @vite-ignore */ modulePath);
-        const repair = packetReadinessAction({ target: 'care', careType }, horseId);
-        window.history.pushState({}, '', `/app${repair.to}`);
-        window.dispatchEvent(new PopStateEvent('popstate'));
-      },
-      { horseId, careType },
-    );
-    await expect(page.getByLabel('Event type', { exact: true })).toHaveValue(careType);
-    await expect(page.getByLabel('Horse', { exact: true })).toHaveValue(horseId);
-    await page.getByLabel('Event title', { exact: true }).fill(`${careType} completed`);
-    await page.getByLabel('Care note', { exact: true }).fill('Completed care recorded for this test horse.');
-    await page.getByRole('button', { name: 'Save care event', exact: true }).click();
-    const recorded = await page.evaluate(async (horseId) => {
-      const modulePath = '/src/store/useXbarStore.ts';
-      const { useXbarStore } = await import(/* @vite-ignore */ modulePath);
-      return useXbarStore.getState().horses.find((horse: { id: string }) => horse.id === horseId)?.medicalTimeline[0]
-        ?.status;
-    }, horseId);
-    expect(recorded).toBe(careType);
-  });
-}
+test.describe('local-evening packet care repairs', () => {
+  test.use({ timezoneId: 'America/Los_Angeles' });
+  for (const careType of ['Deworming', 'Dental'] as const) {
+    test(`packet care link records the requested ${careType} type`, async ({ page }) => {
+      await page.clock.setFixedTime(new Date('2026-10-03T02:00:00Z'));
+      await bootstrapWorkspace(page);
+      await seedHorse(page, 'Care Link Horse');
+      const horseId = new URL(page.url()).pathname.split('/').at(-1)!;
+      await page.evaluate(
+        async ({ horseId, careType }) => {
+          const modulePath = '/src/lib/salePacketGuidance.ts';
+          const { packetReadinessAction } = await import(/* @vite-ignore */ modulePath);
+          const repair = packetReadinessAction({ target: 'care', careType }, horseId);
+          window.history.pushState({}, '', `/app${repair.to}`);
+          window.dispatchEvent(new PopStateEvent('popstate'));
+        },
+        { horseId, careType },
+      );
+      await expect(page.getByLabel('Event date', { exact: true })).toHaveValue('2026-10-02');
+      await expect(page.getByRole('combobox', { name: 'Event type', exact: true })).toHaveValue(careType);
+      await expect(page.getByRole('combobox', { name: 'Horse', exact: true })).toHaveValue(horseId);
+      await page.getByLabel('Event title', { exact: true }).fill(`${careType} completed`);
+      await page.getByLabel('Care note', { exact: true }).fill('Completed care recorded for this test horse.');
+      await page.getByRole('button', { name: 'Save care event', exact: true }).click();
+      const recorded = await page.evaluate(async (horseId) => {
+        const modulePath = '/src/store/useXbarStore.ts';
+        const { useXbarStore } = await import(/* @vite-ignore */ modulePath);
+        return useXbarStore.getState().horses.find((horse: { id: string }) => horse.id === horseId)?.medicalTimeline[0]
+          ?.status;
+      }, horseId);
+      expect(recorded).toBe(careType);
+    });
+  }
+});

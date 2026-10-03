@@ -7,7 +7,7 @@ import { EmptyState } from '@/components/EmptyState';
 import { ActionMenuButton } from '@/components/InteractionSystem';
 import { MetricCard, Panel, Pill } from '@/components/app-ui';
 import { DotsIcon } from '@/components/icons';
-import { formatDateLabel } from '@/lib/format';
+import { formatDateLabel, localIsoDate } from '@/lib/format';
 import { useUiStore } from '@/store/useUiStore';
 import { useCloudStore } from '@/store/useCloudStore';
 import { useCurrentRoleCapability, useXbarStore } from '@/store/useXbarStore';
@@ -66,7 +66,7 @@ export default function Medical() {
   });
   const [eventTitle, setEventTitle] = useState('Vet follow-up');
   const [eventBody, setEventBody] = useState('');
-  const [eventDate, setEventDate] = useState(new Date().toISOString().slice(0, 10));
+  const [eventDate, setEventDate] = useState(() => localIsoDate());
   const [eventType, setEventType] = useState<MedicalEventType>(
     () => medicalEventTypes.find((type) => type === searchParams.get('type')) ?? 'Vet visit',
   );
