@@ -17,6 +17,7 @@ import { canSubmitHorseCreate, horseCreateFieldErrors } from '@/lib/horseCreateG
 import { proposeHorseNameRepairs } from '@/lib/horseNameRepair';
 import { buildSaleReadinessScore } from '@/lib/saleReadinessScore';
 import { buildBuyerPacketReleaseGate } from '@/lib/buyerPacketReleaseGate';
+import { vaultOwnerId } from '@/lib/vaultOwner';
 import './horsesCommand.css';
 
 function createHorseFormDefaults(params: {
@@ -74,6 +75,8 @@ export default function Horses() {
   const toggleSharedListing = useXbarStore((state) => state.toggleSharedListing);
   const recordSharedChannel = useXbarStore((state) => state.recordSharedChannel);
   const addHorse = useXbarStore((state) => state.addHorse);
+  const archiveHorse = useXbarStore((state) => state.archiveHorse);
+  const restoreHorse = useXbarStore((state) => state.restoreHorse);
   const workspaceProfile = useXbarStore((state) => state.workspaceProfile);
   const pushToast = useUiStore((state) => state.pushToast);
   const openRightDrawer = useUiStore((state) => state.openRightDrawer);
@@ -102,13 +105,16 @@ export default function Horses() {
   );
 
   const createOpen = searchParams.get('new') === '1';
+  const showingArchived = searchParams.get('archived') === '1';
+  const archivedCount = horses.filter((horse) => Boolean(horse.archive)).length;
+  const urlSearch = searchParams.get('search') ?? '';
   const activeSharedHorseIds = new Set(
     sharedListings.filter((listing) => listing.state !== 'Archived').map((listing) => listing.horseId),
   );
 
   useEffect(() => {
-    setSearch(searchParams.get('search') ?? '');
-  }, [searchParams]);
+    setSearch(urlSearch);
+  }, [urlSearch]);
 
   const setNewHorseParam = (open: boolean) => {
     const nextParams = new URLSearchParams(searchParams);
@@ -155,7 +161,7 @@ export default function Horses() {
         .toLowerCase()
         .includes(search.trim().toLowerCase());
     const matchesSegment = segmentFilter === 'All' || horse.segment === segmentFilter;
-    return matchesSearch && matchesSegment;
+    return matchesSearch && matchesSegment && Boolean(horse.archive) === showingArchived;
   });
 
   const commandPackets = horses.map((horse) => ({
@@ -197,6 +203,34 @@ export default function Horses() {
     } finally {
       setTogglingListingId(null);
     }
+  };
+
+  const handleRestore = (horseId: string, archiveId: string, expectedOwnerId?: string) => {
+    const result = restoreHorse(horseId, archiveId, expectedOwnerId);
+    pushToast({
+      title: result.ok ? 'Horse restored' : 'Restore blocked',
+      message: result.message,
+      tone: result.ok ? 'success' : 'error',
+    });
+  };
+
+  const handleArchive = (horseId: string) => {
+    const archiveOwnerId = vaultOwnerId();
+    const result = archiveHorse(horseId);
+    const archiveId = result.archiveId;
+    pushToast({
+      title: result.ok ? 'Horse archived' : 'Archive blocked',
+      message: result.message,
+      tone: result.ok ? 'success' : 'error',
+      duration: result.ok ? 10000 : 4000,
+      action:
+        result.ok && archiveId
+          ? {
+              label: 'Undo',
+              onClick: () => handleRestore(horseId, archiveId, archiveOwnerId),
+            }
+          : undefined,
+    });
   };
 
   /*
@@ -301,6 +335,16 @@ export default function Horses() {
             : []),
           { id: 'open-sales', label: 'Open Sales', onSelect: () => navigate('/sales') },
           { id: 'open-proof', label: 'Open Documents', onSelect: () => navigate('/documents') },
+          ...(canEditHorse
+            ? [
+                {
+                  id: 'archive-restore',
+                  label: menuHorse.archive ? 'Restore horse' : 'Archive from roster',
+                  onSelect: () =>
+                    menuHorse.archive ? handleRestore(menuHorse.id, menuHorse.archive.id) : handleArchive(menuHorse.id),
+                },
+              ]
+            : []),
         ]
       : [];
 
@@ -705,6 +749,28 @@ export default function Horses() {
 
       {horses.length > 0 ? (
         <>
+          <div className="inline-actions" role="group" aria-label="Horse roster visibility">
+            {[false, true].map((archived) => (
+              <button
+                key={String(archived)}
+                type="button"
+                className={`button button--${showingArchived === archived ? 'primary' : 'ghost'} button--compact`}
+                aria-pressed={showingArchived === archived}
+                onClick={() => {
+                  const next = new URLSearchParams(searchParams);
+                  if (archived) next.set('archived', '1');
+                  else next.delete('archived');
+                  setSearchParams(next);
+                }}
+              >
+                {archived ? `Archived (${archivedCount})` : `Active (${horses.length - archivedCount})`}
+              </button>
+            ))}
+          </div>
+          <p className="panel__hint">
+            Archiving hides a horse from the active roster. Records, care reminders, buyer packets, and plan usage are
+            retained. Restore any time from Archived.
+          </p>
           <section className="portfolio-toolbar">
             <div className="portfolio-toolbar__controls">
               <SurfaceTabs
@@ -903,8 +969,18 @@ export default function Horses() {
               </div>
             ) : (
               <EmptyState
-                title="No horses match these filters"
-                description="Adjust filters, clear search, or create a new horse record."
+                title={
+                  showingArchived && !archivedCount
+                    ? 'No archived horses'
+                    : !showingArchived && archivedCount === horses.length
+                      ? 'Your horses are in Archived'
+                      : 'No horses match these filters'
+                }
+                description={
+                  showingArchived
+                    ? 'Archived horses stay here until you restore them. Adjust filters if a record is missing.'
+                    : 'Check Archived to restore a horse, or adjust your search and filters.'
+                }
                 action={
                   <button
                     className="button button--primary button--compact"
@@ -978,8 +1054,18 @@ export default function Horses() {
             </div>
           ) : (
             <EmptyState
-              title="No horses match these filters"
-              description="Adjust filters, clear search, or create a horse record."
+              title={
+                showingArchived && !archivedCount
+                  ? 'No archived horses'
+                  : !showingArchived && archivedCount === horses.length
+                    ? 'Your horses are in Archived'
+                    : 'No horses match these filters'
+              }
+              description={
+                showingArchived
+                  ? 'Archived horses stay here until you restore them. Adjust filters if a record is missing.'
+                  : 'Check Archived to restore a horse, or adjust your search and filters.'
+              }
               action={
                 <button
                   className="button button--primary button--compact"

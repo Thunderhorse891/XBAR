@@ -63,6 +63,7 @@ export default function AnimalProfile() {
   const openQuickCreate = useUiStore((s) => s.openQuickCreate);
   const pushToast = useUiStore((s) => s.pushToast);
   const uploadHorseMedia = useXbarStore((s) => s.uploadHorseMedia);
+  const restoreHorse = useXbarStore((s) => s.restoreHorse);
   const currentRole = useXbarStore((s) => s.currentRole);
   const expenseReceipts = useXbarStore((s) => s.expenseReceipts);
   const salesLeads = useXbarStore((s) => s.salesLeads);
@@ -214,6 +215,26 @@ export default function AnimalProfile() {
       <button type="button" className="xs-back" onClick={() => navigate('/horses')}>
         <ArrowLeft size={14} /> Horses
       </button>
+
+      {animal.archive ? (
+        <div className="panel" role="status">
+          <p>This horse is archived from the roster. Its records, reminders, and buyer packets are retained.</p>
+          {hasRoleCapability(currentRole, 'editHorse') ? (
+            <ActionButton
+              onClick={() => {
+                const result = restoreHorse(animal.id, animal.archive!.id);
+                pushToast({
+                  title: result.ok ? 'Horse restored' : 'Restore blocked',
+                  message: result.message,
+                  tone: result.ok ? 'success' : 'error',
+                });
+              }}
+            >
+              Restore horse
+            </ActionButton>
+          ) : null}
+        </div>
+      ) : null}
 
       <div className="xs-objhead">
         <div className="xs-objhead__id">
