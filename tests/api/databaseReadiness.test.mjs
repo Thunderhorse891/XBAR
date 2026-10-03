@@ -1,9 +1,22 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { readFileSync } from 'node:fs';
-import { checkDatabaseEvidence, loadBaseline, validateLedgerMap } from '../../scripts/database-readiness.mjs';
+import { readFileSync, mkdtempSync, writeFileSync, rmSync, existsSync, statSync, symlinkSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import path from 'node:path';
+import { spawnSync } from 'node:child_process';
+import {
+  checkDatabaseEvidence,
+  loadBaseline,
+  validateLedgerMap,
+  sourceDigest,
+} from '../../scripts/database-readiness.mjs';
 
-const baseline = loadBaseline();
+// Read fixtures without aborting all refusal tests when the baseline is stale.
+// Freshness remains an explicit failing test and checkDatabaseEvidence gate.
+const baseline = JSON.parse(readFileSync('supabase/checks/release-catalog.expected.json', 'utf8'));
+test('committed baseline must match the current source digest and required migrations', () => {
+  assert.deepEqual(loadBaseline(), baseline);
+});
 const stamp = '2026-09-28T14:00:00Z';
 const now = Date.parse(stamp);
 const valid = () => ({
@@ -169,4 +182,147 @@ test('batch IDs alone, altered SQL metadata, duplicates and a different project 
   const drift = bundled();
   drift.catalog.buckets['horse-media'] = true;
   assert.equal(checkBundled(drift).ok, false, 'matching batches cannot hide actual catalog drift');
+});
+
+test('incomplete split, stronger contract, changed historical source and held migrations remain blocked', () => {
+  const unresolved = [
+    '20260924134000',
+    '20260925180000',
+    '20260928150000',
+    '20261001090000',
+    '20261001090100',
+    '20261003021000',
+  ];
+  const hosted = ['20261002011346', '20261002012750', '20261002014528', '20261002205713'];
+  for (const version of unresolved) {
+    assert.ok(
+      ledgerMap.batches.every((batch) => Object.keys(batch.sourceFiles).every((file) => !file.startsWith(version))),
+    );
+    const evidence = bundled();
+    evidence.migrationVersions = evidence.migrationVersions.filter((v) => v !== version).concat(hosted);
+    const result = checkBundled(evidence);
+    assert.equal(result.ok, false);
+    assert.ok(result.failures.includes(`Missing migration ledger version: ${version}`));
+  }
+});
+
+test('every reviewed October alias requires exact hosted SQL metadata, not similar SQL or a ledger ID alone', () => {
+  const october = ledgerMap.batches.filter((batch) => batch.version.startsWith('202610'));
+  assert.equal(october.length, 4);
+  for (const batch of october) {
+    const evidence = bundled();
+    const record = evidence.migrationRecords.find((row) => row.version === batch.version);
+    record.statementsSha256 = '0'.repeat(64);
+    const sourceVersion = Object.keys(batch.sourceFiles)[0].split('_')[0];
+    assert.ok(checkBundled(evidence).failures.includes(`Missing migration ledger version: ${sourceVersion}`));
+  }
+});
+
+test('map-only baseline candidate refuses catalog, grants and required-version drift', async () => {
+  const { validateBaselineCandidate } = await import('../../scripts/database-readiness.mjs');
+  const candidate = { ...structuredClone(baseline), sourceDigest: 'a'.repeat(64) };
+  assert.deepEqual(validateBaselineCandidate(candidate, baseline), candidate);
+  for (const mutate of [
+    (value) => {
+      value.catalog.functions = {};
+    },
+    (value) => {
+      value.catalog.tableGrants = {};
+    },
+    (value) => {
+      value.requiredVersions.pop();
+    },
+  ]) {
+    const changed = structuredClone(candidate);
+    mutate(changed);
+    assert.throws(() => validateBaselineCandidate(changed, baseline), /differs beyond the source digest/);
+  }
+});
+
+test('baseline candidate CLI refuses non-synthetic targets, overwrite, and wrong PostgreSQL identity', () => {
+  const directory = mkdtempSync(path.join(tmpdir(), 'xbar-baseline-refusal-'));
+  try {
+    const marker = path.join(directory, 'queried');
+    const output = path.join(directory, 'candidate.json');
+    const original = readFileSync('supabase/checks/release-catalog.expected.json', 'utf8');
+    writeFileSync(
+      path.join(directory, 'psql'),
+      `#!/bin/sh
+touch "$QUERY_MARKER"
+printf '%s\\n' "$FAKE_IDENTITY"
+`,
+      { mode: 0o700 },
+    );
+    for (const [url, target, identity, queried] of [
+      ['postgresql://postgres@db.example.com/xbar_ci', output, {}, false],
+      ['postgresql://postgres@localhost/xbar_ci', output, {}, false],
+      ['postgresql://postgres@127.0.0.1/production', output, {}, false],
+      ['postgresql://postgres@127.0.0.1/xbar_ci', 'supabase/checks/release-catalog.expected.json', {}, false],
+      ['postgresql://postgres@127.0.0.1/xbar_ci', output, { major: 16, database: 'xbar_ci' }, true],
+      ['postgresql://postgres@127.0.0.1/xbar_ci', output, { major: 17, database: 'production' }, true],
+    ]) {
+      const result = spawnSync(process.execPath, ['scripts/database-readiness.mjs', '--baseline-candidate', target], {
+        encoding: 'utf8',
+        env: {
+          ...process.env,
+          PATH: `${directory}${path.delimiter}${process.env.PATH}`,
+          TEST_DATABASE_URL: url,
+          QUERY_MARKER: marker,
+          FAKE_IDENTITY: JSON.stringify(identity),
+        },
+      });
+      assert.equal(result.status, 1, result.stderr);
+      assert.equal(existsSync(marker), queried);
+      assert.equal(existsSync(output), false);
+      assert.equal(readFileSync('supabase/checks/release-catalog.expected.json', 'utf8'), original);
+      if (existsSync(marker)) rmSync(marker);
+    }
+  } finally {
+    rmSync(directory, { recursive: true, force: true });
+  }
+});
+
+test('mocked PG17 candidate export preserves the baseline and refuses existing files and symlinks', () => {
+  // A CLI unit fixture only; this is not real PostgreSQL baseline evidence.
+  const directory = mkdtempSync(path.join(tmpdir(), 'xbar-baseline-export-'));
+  const original = readFileSync('supabase/checks/release-catalog.expected.json', 'utf8');
+  try {
+    writeFileSync(
+      path.join(directory, 'psql'),
+      `#!/bin/sh
+sql=$(cat)
+case "$sql" in
+  *server_version_num*) printf '%s\\n' '{"major":17,"database":"xbar_ci"}' ;;
+  *) printf '%s\\n' "$FAKE_CATALOG" ;;
+esac
+`,
+      { mode: 0o700 },
+    );
+    const env = {
+      ...process.env,
+      PATH: `${directory}${path.delimiter}${process.env.PATH}`,
+      TEST_DATABASE_URL: 'postgresql://postgres@127.0.0.1/xbar_ci',
+      FAKE_CATALOG: JSON.stringify(baseline.catalog),
+    };
+    const output = path.join(directory, 'candidate.json');
+    const run = (target) =>
+      spawnSync(process.execPath, ['scripts/database-readiness.mjs', '--baseline-candidate', target], {
+        env,
+        encoding: 'utf8',
+      });
+    const result = run(output);
+    assert.equal(result.status, 0, result.stderr);
+    const bytes = readFileSync(output, 'utf8');
+    assert.deepEqual(JSON.parse(bytes), { ...baseline, sourceDigest: sourceDigest() });
+    assert.equal(statSync(output).mode & 0o777, 0o600);
+    assert.equal(run(output).status, 1, 'existing candidate must not be overwritten');
+    assert.equal(readFileSync(output, 'utf8'), bytes);
+    const link = path.join(directory, 'candidate-link.json');
+    symlinkSync(output, link);
+    assert.equal(run(link).status, 1, 'symlink target must not be overwritten');
+    assert.equal(readFileSync(output, 'utf8'), bytes);
+    assert.equal(readFileSync('supabase/checks/release-catalog.expected.json', 'utf8'), original);
+  } finally {
+    rmSync(directory, { recursive: true, force: true });
+  }
 });

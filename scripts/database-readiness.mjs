@@ -75,6 +75,17 @@ export function loadBaseline() {
   }
   return baseline;
 }
+// Exporting a map-only baseline candidate must not silently accept catalog or
+// required-migration changes. The ordinary comparison remains a failing gate
+// until a reviewer commits this separately generated candidate.
+export function validateBaselineCandidate(candidate, committed) {
+  if (
+    !isDeepStrictEqual(candidate.catalog, committed.catalog) ||
+    !isDeepStrictEqual(candidate.requiredVersions, committed.requiredVersions)
+  )
+    throw new Error('Baseline candidate differs beyond the source digest; review schema changes separately.');
+  return candidate;
+}
 export function compareCatalog(actual, expected) {
   const failures = [];
   if (!actual || typeof actual !== 'object' || Array.isArray(actual)) return ['Database catalog is missing.'];
@@ -157,20 +168,43 @@ export function inspectCatalog(url) {
 if (process.argv[1] && import.meta.url === pathToFileURL(path.resolve(process.argv[1])).href) {
   try {
     const [mode, output] = process.argv.slice(2);
-    if (mode === '--baseline') {
+    if (mode === '--baseline' || mode === '--baseline-candidate') {
       loadLedgerMap();
       const url = process.env.TEST_DATABASE_URL;
       if (!url || !['127.0.0.1', 'localhost', 'postgres'].includes(new URL(url).hostname)) {
         throw new Error('Baseline generation requires an isolated local test database.');
       }
-      const baseline = { sourceDigest: sourceDigest(), requiredVersions, catalog: inspectCatalog(url) };
-      if (output !== '--write') {
-        if (!isDeepStrictEqual(baseline, loadBaseline()))
-          throw new Error('Migrated database differs from the committed release baseline.');
-        console.log('Migrated PostgreSQL catalog matches the release baseline.');
+      if (mode === '--baseline-candidate') {
+        const parsed = new URL(url);
+        if (
+          parsed.hostname !== '127.0.0.1' ||
+          parsed.pathname !== '/xbar_ci' ||
+          !output ||
+          path.resolve(output) === path.join(root, baselinePath)
+        )
+          throw new Error('Candidate export requires synthetic local xbar_ci and a separate output file.');
+        const [identity] = query(
+          "select jsonb_build_object('major', current_setting('server_version_num')::int / 10000, 'database', current_database());",
+          url,
+        );
+        if (identity?.major !== 17 || identity?.database !== 'xbar_ci')
+          throw new Error('Candidate export requires synthetic PostgreSQL 17 xbar_ci.');
+        const baseline = validateBaselineCandidate(
+          { sourceDigest: sourceDigest(), requiredVersions, catalog: inspectCatalog(url) },
+          JSON.parse(read(baselinePath)),
+        );
+        writeFileSync(output, `${JSON.stringify(baseline, null, 2)}\n`, { mode: 0o600, flag: 'wx' });
+        console.log('Exported map-only baseline candidate; original comparison gate remains unchanged.');
       } else {
-        writeFileSync(path.join(root, baselinePath), `${JSON.stringify(baseline, null, 2)}\n`);
-        console.log('Generated local catalog baseline; review its diff before committing.');
+        const baseline = { sourceDigest: sourceDigest(), requiredVersions, catalog: inspectCatalog(url) };
+        if (output !== '--write') {
+          if (!isDeepStrictEqual(baseline, loadBaseline()))
+            throw new Error('Migrated database differs from the committed release baseline.');
+          console.log('Migrated PostgreSQL catalog matches the release baseline.');
+        } else {
+          writeFileSync(path.join(root, baselinePath), `${JSON.stringify(baseline, null, 2)}\n`);
+          console.log('Generated local catalog baseline; review its diff before committing.');
+        }
       }
     } else if (mode === '--inspect' && output) {
       const sourceRef = process.env.XBAR_DATABASE_SOURCE_REF;
@@ -217,7 +251,7 @@ if (process.argv[1] && import.meta.url === pathToFileURL(path.resolve(process.ar
       if (!result.ok) process.exitCode = 1;
     } else
       throw new Error(
-        'Use --baseline [--write] for local CI or --inspect <evidence.json> for read-only Supabase inspection.',
+        'Use --baseline [--write], --baseline-candidate <output.json> for local CI, or --inspect <evidence.json> for read-only Supabase inspection.',
       );
   } catch (error) {
     // Do not print a URL parse exception that could contain connection credentials.
