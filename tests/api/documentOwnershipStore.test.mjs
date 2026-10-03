@@ -846,3 +846,165 @@ test('source-clear approval refreshes newly supported facts, ignores entity key 
   assert.deepEqual(useXbarStore.getState().documents[0].entities, {});
   assert.equal(useXbarStore.getState().auditEvents.length, auditCount);
 });
+
+test('reapproval rebuilds this source’s derived facts while preserving canonical horse fields and unrelated facts', () => {
+  const fact = (label, value, extra = {}) => ({
+    id: `${source.id}-${label}`,
+    sourceDocumentId: source.id,
+    label,
+    value,
+    confidence: 0.6,
+    ...extra,
+  });
+  const unrelated = {
+    ...fact('color', 'Gray', { decision: 'Accepted' }),
+    id: `${source.id}-similar-color`,
+    sourceDocumentId: `${source.id}-similar`,
+  };
+  const target = {
+    ...horse,
+    color: 'Owner-confirmed Bay',
+    owner: 'Confirmed Owner',
+    bloodline: { ...horse.bloodline, sire: 'CONFIRMED STALLION', dam: 'CONFIRMED MARE' },
+    documentFacts: [
+      unrelated,
+      fact('horseName', horse.name, { decision: 'Accepted' }),
+      fact('color', 'Bay', { decision: 'Accepted' }),
+      fact('ownerName', 'Unsupported Owner'),
+      fact('sire', 'Unsupported Stallion'),
+      fact('examDate', '2025-01-01'),
+      fact('veterinarian', 'Dr Old Reader', { decision: 'Rejected' }),
+    ],
+  };
+  const clinical = {
+    ...source,
+    type: 'Vet Record',
+    state: 'Needs Review',
+    confidence: 0.94,
+    extractedTextPreview:
+      'VETERINARY EXAM\nExam Date: 2026-10-03\nVeterinarian: Dr Avery Smith\nRegistered Name: DESERT DAISY\nRegistration Number: 7001111\nColor: Black',
+  };
+  useXbarStore.setState({ horses: [target], documents: [clinical] });
+  assert.equal(useXbarStore.getState().reviewDocument(source.id, horse.id).ok, true);
+  const updated = useXbarStore.getState().horses[0];
+  const facts = updated.documentFacts.filter((item) => item.sourceDocumentId === source.id);
+  const byLabel = Object.fromEntries(facts.map((item) => [item.label, item]));
+  assert.equal(byLabel.color.value, 'Black');
+  assert.equal(byLabel.color.decision, undefined, 'A stale accepted value cannot accept a replacement value');
+  assert.equal(byLabel.ownerName, undefined);
+  assert.equal(byLabel.sire, undefined);
+  assert.equal(byLabel.examDate.value, '2026-10-03');
+  assert.equal(byLabel.veterinarian.value, 'Dr Avery Smith');
+  assert.equal(byLabel.veterinarian.decision, undefined, 'A rejected old value cannot reject its replacement');
+  assert.equal(byLabel.horseName.decision, 'Accepted', 'The same source fact retains its human decision');
+  assert.ok(facts.every((item) => item.confidence === clinical.confidence));
+  assert.equal(new Set(facts.map((item) => item.id)).size, facts.length);
+  assert.deepEqual(
+    updated.documentFacts.filter((item) => item.sourceDocumentId !== source.id),
+    [unrelated],
+  );
+  for (const key of ['name', 'registrationNumber', 'owner', 'color', 'bloodline'])
+    assert.deepEqual(updated[key], target[key], key);
+  const beforeRepeat = structuredClone(updated.documentFacts);
+  assert.equal(useXbarStore.getState().reviewDocument(source.id, horse.id).ok, true);
+  assert.deepEqual(useXbarStore.getState().horses[0].documentFacts, beforeRepeat);
+  useXbarStore.getState().decideDocumentFact(horse.id, `${source.id}-color`, 'Rejected');
+  assert.equal(useXbarStore.getState().reviewDocument(source.id, horse.id).ok, true);
+  assert.equal(
+    useXbarStore.getState().horses[0].documentFacts.find((item) => item.id === `${source.id}-color`).decision,
+    'Rejected',
+  );
+});
+
+test('readable identity-free manual approval removes only its obsolete derived claims', () => {
+  const stale = {
+    id: `${source.id}-ownerName`,
+    sourceDocumentId: source.id,
+    label: 'ownerName',
+    value: 'Unsupported Owner',
+    confidence: 0.9,
+  };
+  const unrelated = { ...stale, id: 'other-ownerName', sourceDocumentId: 'other', value: 'Other source owner' };
+  const target = { ...horse, documentFacts: [stale, unrelated] };
+  const manual = {
+    ...source,
+    state: 'Needs Review',
+    extractedTextPreview: 'Care notes for manual filing.',
+    entities: {},
+  };
+  useXbarStore.setState({ horses: [target], documents: [manual] });
+  assert.equal(useXbarStore.getState().reviewDocument(source.id, horse.id).ok, true);
+  assert.deepEqual(useXbarStore.getState().horses[0].documentFacts, [unrelated]);
+  assert.equal(useXbarStore.getState().horses[0].owner, target.owner);
+});
+
+test('failed or conflicting source review never removes existing derived facts', () => {
+  const priorFact = {
+    id: `${source.id}-color`,
+    sourceDocumentId: source.id,
+    label: 'color',
+    value: 'Bay',
+    confidence: 0.9,
+  };
+  const target = { ...horse, documentFacts: [priorFact] };
+  for (const extractedTextPreview of ['', 'Registered Name: OTHER HORSE\nRegistration Number: 9999999']) {
+    const pending = { ...source, state: 'Needs Review', extractedTextPreview };
+    useXbarStore.setState({ horses: [target], documents: [pending] });
+    assert.equal(useXbarStore.getState().reviewDocument(source.id, horse.id).ok, false);
+    assert.deepEqual(useXbarStore.getState().horses, [target]);
+    assert.deepEqual(useXbarStore.getState().documents, [pending]);
+  }
+});
+
+test('the shared approval and intake promotion helper preserves facts on failed reads and rebuilds matched sources', async () => {
+  const { readFile } = await import('node:fs/promises');
+  const ts = await import('typescript');
+  const { runInNewContext } = await import('node:vm');
+  const { inspectDocumentHorseIdentity } = await import('../../src/lib/ownershipDocumentReview.ts');
+  const { extractionProducedNothing } = await import('../../src/lib/documentIntelligence.ts');
+  const { promoteDocument } = await import('../../src/store/xbarStoreHelpers.ts');
+  const storeSource = await readFile('src/store/useXbarStore.ts', 'utf8');
+  const helper = storeSource.slice(
+    storeSource.indexOf('function promoteSourceDocument('),
+    storeSource.indexOf('/**\n * The subscription a gate INSIDE'),
+  );
+  assert.ok(helper.includes('function promoteSourceDocument('));
+  assert.match(storeSource, /matchedDocuments\.reduce\(promoteSourceDocument, horse\)/);
+  const executable = ts.transpileModule(`${helper}\npromoteSourceDocument`, {
+    compilerOptions: { target: ts.ScriptTarget.ES2022 },
+  }).outputText;
+  const promote = runInNewContext(executable, {
+    inspectDocumentHorseIdentity,
+    extractionProducedNothing,
+    promoteDocument,
+  });
+  const priorFact = {
+    id: `${source.id}-color`,
+    sourceDocumentId: source.id,
+    label: 'color',
+    value: 'Bay',
+    confidence: 0.6,
+  };
+  const target = { ...horse, documents: [source.id], documentFacts: [priorFact] };
+  const matched = {
+    ...source,
+    state: 'Matched',
+    extractedTextPreview: `${source.extractedTextPreview}\nColor: Black`,
+    confidence: 0.95,
+  };
+  for (const failed of [
+    { ...matched, processingNote: 'This file could not be read.' },
+    { ...matched, extractedTextPreview: '' },
+    { ...matched, extractedTextPreview: 'Registered Name: OTHER HORSE' },
+  ]) {
+    assert.deepEqual(
+      JSON.parse(JSON.stringify(promote(target, failed))),
+      JSON.parse(JSON.stringify(target)),
+      'Failed/conflicting reads do not mutate the already-linked horse',
+    );
+  }
+  const promoted = promote(target, matched);
+  assert.equal(promoted.documentFacts.find((fact) => fact.id === priorFact.id).value, 'Black');
+  assert.equal(promoted.documentFacts.find((fact) => fact.id === priorFact.id).confidence, matched.confidence);
+  assert.equal(promoted.color, target.color);
+});

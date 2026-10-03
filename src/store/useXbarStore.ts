@@ -20,6 +20,7 @@ import { hasRoleCapability } from '@/lib/permissions';
 import { hasHorsePhoto, isHorsePhotoAsset } from '@/lib/animalPassport';
 import { groupDocumentBatchCandidates } from '@/lib/documentBatchIdentity';
 import { flagDocumentDuplicates, documentDuplicateNeedsReview, fingerprintDocument } from '@/lib/documentDuplicates';
+import { extractionProducedNothing } from '@/lib/documentIntelligence';
 import {
   assessOwnershipDocument,
   documentWithFreshSource,
@@ -113,13 +114,40 @@ import {
   syncDerivedValues,
 } from '@/store/xbarStoreHelpers';
 
-/** Attach manual sources without promoting unverified facts or readiness. */
+/** Rebuild one readable source's derived claims without changing canonical horse data. */
 function promoteSourceDocument(horse: HorseRecord, document: DocumentRecord): HorseRecord {
   const review = inspectDocumentHorseIdentity(document, horse);
-  if (review.conflictReason || review.missingIdentityReason) {
+  if (
+    review.conflictReason ||
+    !document.extractedTextPreview.trim() ||
+    extractionProducedNothing(document.processingNote)
+  ) {
     return { ...horse, documents: [...new Set([...horse.documents, document.id])] };
   }
-  return promoteDocument(horse, { ...document, entities: review.sourceEntities });
+  // A fixed source cache is insufficient while its previously promoted values
+  // remain on the horse. Replace only this source's derived facts, never other
+  // sources or the user's canonical horse fields.
+  const sourceFacts = horse.documentFacts.filter((fact) => fact.sourceDocumentId === document.id);
+  const refreshedHorse = {
+    ...horse,
+    documentFacts: horse.documentFacts.filter((fact) => fact.sourceDocumentId !== document.id),
+  };
+  if (review.missingIdentityReason) {
+    return { ...refreshedHorse, documents: [...new Set([...horse.documents, document.id])] };
+  }
+  const promoted = promoteDocument(refreshedHorse, { ...document, entities: review.sourceEntities });
+  return {
+    ...promoted,
+    documentFacts: promoted.documentFacts.map((fact) => {
+      if (fact.sourceDocumentId !== document.id) return fact;
+      // Preserve human decisions only for an unchanged claim. An acceptance or
+      // rejection of an old value must not silently carry onto its replacement.
+      const previous = sourceFacts.find(
+        (prior) => prior.id === fact.id && prior.label === fact.label && prior.value === fact.value,
+      );
+      return previous?.decision ? { ...fact, decision: previous.decision } : fact;
+    }),
+  };
 }
 
 /**
