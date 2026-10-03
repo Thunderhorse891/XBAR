@@ -15,7 +15,9 @@ async function setupHorse(page: Page) {
   const drawer = page.getByRole('dialog', { name: 'Add Horse', exact: true });
   await drawer.getByPlaceholder('e.g. THR Copper Canyon').fill('Blue Dolly');
   await drawer.getByRole('button', { name: 'Add Horse', exact: true }).click();
-  await expect(page.locator('.xs-objhead__name')).toContainText(/blue dolly/i);
+  const heading = page.locator('.xs-objhead__name');
+  await expect(heading).toHaveText('BLUE DOLLY');
+  return { name: (await heading.innerText()).trim(), id: new URL(page.url()).pathname.split('/').at(-1)! };
 }
 
 async function navigate(page: Page, path: string) {
@@ -29,24 +31,24 @@ for (const width of [1440, 390]) {
   test(`horse quick review retains filters, scroll and keyboard focus at ${width}px`, async ({ page }) => {
     await page.setViewportSize({ width, height: 850 });
     await page.emulateMedia({ reducedMotion: 'reduce' });
-    await setupHorse(page);
+    const horse = await setupHorse(page);
     await navigate(page, '/horses');
     await page.getByRole('textbox', { name: 'Search horse records' }).fill('Blue');
-    const title = page.getByRole('button', { name: 'Quick review Blue Dolly', exact: true });
+    const title = page.getByRole('button', { name: `Quick review ${horse.name}`, exact: true });
     await title.scrollIntoViewIfNeeded();
     await title.focus();
     const before = await page.evaluate(() => window.scrollY);
     await title.press('Enter');
-    await expect(page.getByRole('dialog', { name: 'Blue Dolly', exact: true })).toBeVisible();
+    await expect(page.getByRole('dialog', { name: horse.name, exact: true })).toBeVisible();
     await expect(page).toHaveURL(/\/horses\?search=Blue$/);
     await page.keyboard.press('Escape');
-    await expect(page.getByRole('dialog', { name: 'Blue Dolly', exact: true })).toHaveCount(0);
+    await expect(page.getByRole('dialog', { name: horse.name, exact: true })).toHaveCount(0);
     await expect(title).toBeFocused();
     await expect(page.getByRole('textbox', { name: 'Search horse records' })).toHaveValue('Blue');
     expect(await page.evaluate(() => window.scrollY)).toBe(before);
     await title.click();
     await page
-      .getByRole('dialog', { name: 'Blue Dolly', exact: true })
+      .getByRole('dialog', { name: horse.name, exact: true })
       .getByRole('button', { name: 'Close', exact: true })
       .click();
     await expect(title).toBeFocused();
@@ -54,15 +56,16 @@ for (const width of [1440, 390]) {
 }
 
 test('dashboard missing documents opens the matching horses and a contextual upload', async ({ page }) => {
-  await setupHorse(page);
+  const horse = await setupHorse(page);
   await navigate(page, '/');
   await page.getByRole('button', { name: /Missing documents/ }).click();
   await expect(page).toHaveURL(/\/horses\?documents=missing$/);
   await expect(page.getByRole('heading', { name: 'Sale document gaps' })).toBeVisible();
-  await page.getByRole('link', { name: /Upload .*papers for Blue Dolly/ }).click();
+  await page.getByRole('link', { name: new RegExp(`^Upload .*papers for ${horse.name}$`) }).click();
   await expect(page).toHaveURL(/\/documents\?.*horse=.*requirement=aqha-papers/);
-  await expect(page.getByLabel('Attach to horse')).toHaveValue(/horse-/);
-  await expect(page.getByRole('status').filter({ hasText: /Blue Dolly/ })).toContainText(/papers/);
+  expect(new URL(page.url()).searchParams.get('horse')).toBe(horse.id);
+  await expect(page.getByLabel('Attach to horse')).toHaveValue(horse.id);
+  await expect(page.getByRole('status').filter({ hasText: horse.name })).toContainText(/papers/);
   await expect(page.getByRole('tab', { name: /Upload/ })).toHaveAttribute('aria-selected', 'true');
 });
 

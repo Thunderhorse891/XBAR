@@ -1,7 +1,7 @@
 // Content for every public marketing page. All claims here are grounded in
 // shipped product behavior (see src/) or the published tier configuration —
 // no invented customers, testimonials, or statistics. Product imagery is real:
-// screenshots captured from the shipped app by capture-product-screenshots.mjs.
+// screenshots captured from the running app with explicitly fictional fixtures.
 
 import { esc, APP_LOGIN, APP_SIGNUP, SITE_ORIGIN } from './render.mjs';
 import { marketingPlans } from './pricing-data.mjs';
@@ -26,14 +26,14 @@ function ctaBlock(heading, copy) {
 </section>`;
 }
 
-// Real product imagery: screenshots captured from the shipped application by
-// scripts/capture-product-screenshots.mjs (a scripted run of the actual
-// local-first workflow with example data). Never replace these with mockups.
-function productShot(file, alt, caption, { eager = false } = {}) {
+// Real product imagery: captures of the running preview with fictional
+// browser-local records. Signature screenshots are from CI run37142424448
+// at cb76f11. Never replace them with imagined interfaces.
+function productShot(file, alt, caption, { eager = false, width = 1440, height = 900 } = {}) {
   return `<figure class="shot">
   <div class="shot-frame">
     <div class="shot-chrome" aria-hidden="true"><span></span><span></span><span></span><em class="shot-url">xbar — live workspace</em></div>
-    <img src="/brand/screenshots/${file}" alt="${esc(alt)}" width="1440" height="900" ${eager ? 'fetchpriority="high"' : 'loading="lazy"'} />
+    <img src="/brand/screenshots/${file}" alt="${esc(alt)}" width="${width}" height="${height}" ${eager ? 'fetchpriority="high"' : 'loading="lazy"'} />
   </div>
   <figcaption>${caption}</figcaption>
 </figure>`;
@@ -41,10 +41,10 @@ function productShot(file, alt, caption, { eager = false } = {}) {
 
 function recordShot(eager = false) {
   return productShot(
-    'app-horse-record.jpg',
-    'Screenshot of a horse record in XBAR showing identity details, ownership, care signals, and suggested next steps for a newly added mare',
-    'The real product: a horse record captured from a live XBAR workspace with example data — <a href="/demo">see the full tour</a>.',
-    { eager },
+    'app-horse-roster-signature.png',
+    'XBAR horse roster showing search, filters, document gaps, and quick-review actions',
+    'Actual XBAR preview interface with fictional example records — <a href="/demo">see the full tour</a>.',
+    { eager, width: 1440, height: 1272 },
   );
 }
 
@@ -821,9 +821,9 @@ const transferChecklist = {
 
 const demo = {
   path: '/demo',
-  title: 'XBAR Product Tour — See the Record, Pipeline & Sale Packet | XBAR',
+  title: 'XBAR Product Tour — Horses, Priorities & Sale Packets | XBAR',
   description:
-    'Walk through XBAR before you register: the horse record layout, the five-step document pipeline, the ownership view, and a real sample of the watermarked buyer sale packet XBAR generates.',
+    'Explore XBAR before you register: the searchable horse roster, actionable ranch priorities, the document workflow, and a fictional example of the buyer sale packet.',
   changefreq: 'monthly',
   priority: '0.8',
   body: `
@@ -841,40 +841,32 @@ const demo = {
 
 <section class="section">
   <div class="wrap">
-    <h2>1 · The horse record</h2>
-    <p class="intro">Every horse resolves to one record: identity, ownership, care signals, documents, and sale readiness. This is a real screenshot of the shipped product, captured from a live workspace with example data.</p>
+    <h2>1 · Your horse roster</h2>
+    <p class="intro">Search and filter your horses, see document gaps, and open a quick review without losing your place. This capture comes from the running preview with fictional example records.</p>
     ${recordShot()}
   </div>
 </section>
 
 <section class="section">
   <div class="wrap">
-    <h2>2 · The document pipeline</h2>
+    <h2>2 · Priorities with a next step</h2>
+    <p class="intro">Missing documents and readiness signals lead to the records and actions that need attention. This is the actual preview dashboard in a browser-local demonstration workspace, not customer data.</p>
+    ${productShot('app-dashboard-signature.png', 'XBAR dashboard with actionable horse and document priorities', 'Actual preview dashboard with fictional example records.', { width: 1440, height: 1214 })}
+  </div>
+</section>
+
+<section class="section">
+  <div class="wrap">
+    <h2>3 · The document pipeline</h2>
     <p class="intro">Documents follow one path. OCR runs on your device; a person approves everything before it becomes part of the record.</p>
     ${pipelineSteps()}
-    ${productShot(
-      'app-documents.jpg',
-      'Screenshot of the XBAR documents page showing the five-stage pipeline: upload, OCR processing, review, ownership, and share',
-      'The documents pipeline as it ships — upload through buyer-safe share.',
-    )}
+
   </div>
 </section>
 
 <section class="section">
   <div class="wrap">
-    <h2>Real screens, start to finish</h2>
-    <p class="intro">These example screens were captured from the application using a browser-local demonstration workspace. The hosted app starts with account signup; its sign-in and setup screens may differ from these examples.</p>
-    <div class="grid grid--2">
-      ${productShot('app-workspace-setup.jpg', 'Screenshot of the XBAR workspace setup form with business, ranch, owner, and location fields', 'Example workspace setup. In the hosted app, create an account before setting up your workspace.')}
-      ${productShot('app-quick-create-horse.jpg', 'Screenshot of the XBAR global Create drawer adding a horse named Example Doc Bar', 'The global Create flow — every action persists to the real record store.')}
-      ${productShot('app-dashboard.jpg', 'Screenshot of the XBAR dashboard after workspace setup showing ranch status and getting-started guidance', 'The dashboard reflecting real workspace state.')}
-    </div>
-  </div>
-</section>
-
-<section class="section">
-  <div class="wrap">
-    <h2>3 · The sale packet — a real sample</h2>
+    <h2>4 · The sale packet — a real sample</h2>
     <p class="intro">This is not a mock-up: the sample below is generated in the same print-ready format the application produces, using a clearly-labeled fictional horse. Identity, ownership posture, care disclosures, release-gate results, and included proof documents — watermarked, with the buyer-verification notice XBAR stamps on every packet.</p>
     <div class="hero-actions">
       <a class="btn btn--primary" href="/samples/sample-sale-packet.html">Open the sample sale packet</a>
@@ -884,7 +876,7 @@ const demo = {
 
 <section class="section">
   <div class="wrap">
-    <h2>4 · Then try it with your own records</h2>
+    <h2>5 · Then try it with your own records</h2>
     <p class="intro">Create an account, complete workspace setup, then review the access and plan options shown in the app. When your workspace is ready, add a horse and upload a document for review.</p>
     <div class="grid grid--3">
       <div class="card"><h3>Create an account &amp; workspace</h3><p>Sign up with your email, follow any confirmation instructions, and complete workspace setup.</p></div>

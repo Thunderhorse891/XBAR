@@ -26,6 +26,8 @@ async function addHorse(page: Page) {
   await drawer.getByPlaceholder('e.g. THR Copper Canyon').fill('Copper Canyon');
   await drawer.getByRole('button', { name: 'Add Horse', exact: true }).click();
   await expect(page.locator('.xs-objhead__name')).toHaveText(/copper canyon/i);
+  await expect(page.locator('.xs-objhead__meta')).toContainText('Age not recorded');
+  await expect(page.locator('.xs-objhead__meta')).not.toContainText('0 yrs');
 }
 
 async function screenshot(page: Page, info: TestInfo, name: string) {
@@ -74,6 +76,8 @@ test('desktop workspace preserves brand, horse creation and navigation', async (
   await expect(page.getByRole('link', { name: 'Horse record' })).toBeVisible();
   await page.getByRole('link', { name: 'Horse record' }).click();
   await expect(page.locator('.xs-objhead__name')).toHaveText(/copper canyon/i);
+  await expect(page.locator('.xs-objhead__meta')).toContainText('Age not recorded');
+  await expect(page.locator('.xs-objhead__meta')).not.toContainText('0 yrs');
   // Seed a previously saved legacy photo reference for contrast QA. This local
   // bundle deliberately has no cloud upload service; it must not claim upload success.
   const photoUrl = 'https://fixture.xbar.test/bright.png';
@@ -151,7 +155,7 @@ test('mobile all-sections navigation closes, restores focus, and preserves recor
   await menu.click();
   const navigation = page.getByRole('dialog', { name: 'Ranch navigation' });
   await expect(navigation).toBeVisible();
-  await expect(navigation).toHaveCSS('background-color', 'rgb(11, 13, 15)');
+  await expect(navigation).toHaveCSS('background-color', 'rgb(23, 27, 32)');
   await expect(navigation.getByRole('link', { name: 'Horses', exact: true })).toHaveCSS('color', 'rgb(245, 242, 236)');
   await screenshot(page, info, 'navigation-mobile');
   await navigation.getByRole('link', { name: 'Documents', exact: true }).click();

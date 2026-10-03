@@ -1,3 +1,4 @@
+import { readFileSync } from 'node:fs';
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import { buildHorseDocumentActions, horseAgeLabel } from '../src/lib/horseDocumentActions.js';
@@ -238,4 +239,14 @@ test('dated evidence that needs renewal can be viewed or replaced without claimi
   assert.equal(action.action, 'View Coggins');
   assert.equal(new URL(action.uploadPath, 'https://fixture.test').searchParams.get('upload'), '1');
   assert.equal(new URL(action.uploadPath, 'https://fixture.test').searchParams.get('horse'), horses[0].id);
+});
+
+test('record header uses the same unknown-age presentation as the roster', () => {
+  const profile = readFileSync('src/routes/AnimalProfile.tsx', 'utf8');
+  const header = profile.slice(
+    profile.indexOf('className="xs-objhead__meta"'),
+    profile.indexOf('className="xs-passport-id"'),
+  );
+  assert.match(header, /horseAgeLabel\(animal\)/);
+  assert.doesNotMatch(header, /\{animal\.age\} yrs/);
 });

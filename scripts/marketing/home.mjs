@@ -77,8 +77,8 @@ export function cinematicHome(plans) {
   </div>
   <figure class="landing-product" data-landing-reveal>
     <div class="landing-product-bar"><span><i aria-hidden="true"></i> Your horse’s record</span><a href="/demo">View the product tour</a></div>
-    ${deferredImage('<img src="/brand/screenshots/app-horse-record.jpg" width="1440" height="900" loading="lazy" alt="XBAR horse profile with identity, ownership, care details, and next steps" />', 1440, 900)}
-    <figcaption>Actual XBAR interface, shown with example data.</figcaption>
+    ${deferredImage('<img src="/brand/screenshots/app-horse-roster-signature.png" width="1440" height="1272" loading="lazy" alt="XBAR horse roster with search, filters, document gaps, and quick-review actions" />', 1440, 1272)}
+    <figcaption>Actual XBAR preview, shown with fictional example data.</figcaption>
   </figure>
   <div class="landing-capabilities">
     <article data-landing-reveal><svg viewBox="0 0 32 32" fill="none" aria-hidden="true"><path d="M9 4h10l6 6v18H9zM19 4v7h6M13 16h8M13 21h8" /></svg><h3>A home for every paper</h3><p>Registration, ownership, and care documents stay connected to the horse they describe.</p><a href="/features">Explore document tools</a></article>
