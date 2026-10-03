@@ -144,6 +144,11 @@ export function inspectDocumentHorseIdentity(document: DocumentRecord, horse: Ho
     span = span.split(
       /\b(?:date|dob|born|foaled|owner|sire|dam|registration|reg|colou?r|breed|sex|height|weight|batch|lot|invoice|phone)\b[^:#=\r\n]{0,30}[:#=]/i,
     )[0];
+    // OCR may omit field punctuation. A named numeric field followed by its
+    // value is still a boundary, including on a flattened single line.
+    span = span.split(
+      /\b(?:registration|reg\.?|phone|batch|lot|invoice)(?:\s+(?:number|no\.?))?\s+(?=[+]?(?:[a-z]{0,5})\d)/i,
+    )[0];
     chipSpans.push(span);
   }
   const sourceChips = chipSpans
@@ -175,7 +180,7 @@ export function inspectDocumentHorseIdentity(document: DocumentRecord, horse: Ho
         : new Set(sourceChips).size > 1 || (storedChip && sourceChips.some((chip) => chip !== storedChip))
           ? 'The source microchip conflicts with this horse. Review the original and correct the record.'
           : undefined;
-  return { sourceIdentity, conflictReason };
+  return { sourceIdentity, sourceChips, conflictReason };
 }
 
 /** A content/identity screen, never a legal opinion or automatic verification. */

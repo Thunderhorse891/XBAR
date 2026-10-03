@@ -418,3 +418,182 @@ test('one valid profile plus one internally conflicting source still exposes una
   assert.equal(useXbarStore.getState().documents.length, 2);
   assert.equal(result.heldForReviewCount, 1);
 });
+
+for (const [label, source, entities] of [
+  ['stale name', 'Registered Name: RED SUN\nRegistration Number: 1234567', {}],
+  ['stale registration', 'Registered Name: BLUE MOON\nRegistration Number: 7654321', {}],
+  [
+    'stale sire',
+    'Registered Name: BLUE MOON\nRegistration Number: 1234567\nSire: OTHER SIRE',
+    { sire: 'EXPECTED SIRE' },
+  ],
+  [
+    'conflicting microchips',
+    'Registered Name: BLUE MOON\nRegistration Number: 1234567\nMicrochip: 985000000000001\nMicrochip: 985000000000002',
+    {},
+  ],
+]) {
+  for (const existingMatch of [false, true]) {
+    test(`creation screens ${label} before ${existingMatch ? 'existing attachment' : 'new records'}, including retries`, async () => {
+      await intake([paper('BLUE MOON', '1234567')], false);
+      const document = {
+        ...useXbarStore.getState().documents[0],
+        extractedTextPreview: source,
+        entities: { horseName: 'BLUE MOON', registrationNumber: '1234567', ...entities },
+        identityReviewRequired: undefined,
+      };
+      const unrelated = horse('UNRELATED HORSE', '9990001');
+      const existing = horse('BLUE MOON', '1234567');
+      const { createOwnershipRecord } = await import('../../src/store/xbarStoreLogic.ts');
+      const horses = existingMatch ? [unrelated, existing] : [unrelated];
+      useXbarStore.setState({ documents: [document], horses, ownershipRecords: horses.map(createOwnershipRecord) });
+      const before = structuredClone({
+        horses: useXbarStore.getState().horses,
+        ownershipRecords: useXbarStore.getState().ownershipRecords,
+        documents: useXbarStore.getState().documents,
+      });
+      for (let attempt = 0; attempt < 2; attempt += 1) {
+        const result = useXbarStore.getState().createHorseFromDocument(document.id);
+        assert.equal(result.ok, false, 'Conflicting fresh source must not succeed');
+        assert.match(result.message, /source|identit|microchip/i);
+        assert.deepEqual(useXbarStore.getState().horses, before.horses);
+        assert.deepEqual(useXbarStore.getState().ownershipRecords, before.ownershipRecords);
+        assert.deepEqual(useXbarStore.getState().documents, before.documents);
+      }
+    });
+  }
+}
+
+test('bulk creation holds conflicting microchips without adding or changing horse and ownership records', async () => {
+  const existing = horse('UNRELATED HORSE', '9990001');
+  const { createOwnershipRecord } = await import('../../src/store/xbarStoreLogic.ts');
+  useXbarStore.setState({ horses: [existing], ownershipRecords: [createOwnershipRecord(existing)] });
+  const before = structuredClone({
+    horses: useXbarStore.getState().horses,
+    ownershipRecords: useXbarStore.getState().ownershipRecords,
+  });
+  const result = await intake([
+    sourceFile('conflicting-chips.txt', [
+      'Registered Name: BLUE MOON',
+      'Registration Number: 1234567',
+      'Microchip: 985000000000001',
+      'Microchip: 985000000000002',
+    ]),
+  ]);
+  assert.deepEqual(result.createdHorseIds, []);
+  assert.deepEqual(useXbarStore.getState().horses, before.horses);
+  assert.deepEqual(useXbarStore.getState().ownershipRecords, before.ownershipRecords);
+  assert.equal(result.heldForReviewCount, 1);
+  assert.equal(useXbarStore.getState().documents[0].horseId, undefined);
+  assert.equal(useXbarStore.getState().documents[0].state, 'Needs Review');
+});
+
+test('fresh compatible source still creates one horse and one ownership record; retry cannot duplicate them', async () => {
+  await intake([paper('BLUE MOON', '1234567')], false);
+  const id = useXbarStore.getState().documents[0].id;
+  const result = useXbarStore.getState().createHorseFromDocument(id);
+  assert.equal(result.ok, true);
+  assert.equal(useXbarStore.getState().horses.length, 1);
+  assert.equal(useXbarStore.getState().ownershipRecords.length, 1);
+  const before = structuredClone({
+    horses: useXbarStore.getState().horses,
+    ownershipRecords: useXbarStore.getState().ownershipRecords,
+  });
+  assert.equal(useXbarStore.getState().createHorseFromDocument(id).ok, false);
+  assert.deepEqual(useXbarStore.getState().horses, before.horses);
+  assert.deepEqual(useXbarStore.getState().ownershipRecords, before.ownershipRecords);
+});
+
+test('grouped sources with different single microchips cannot create horse or ownership records', async () => {
+  const result = await intake([
+    sourceFile('first-chip.txt', [
+      'Registered Name: BLUE MOON',
+      'Registration Number: 1234567',
+      'Microchip: 985000000000001',
+    ]),
+    sourceFile('second-chip.txt', [
+      'Registered Name: BLUE MOON',
+      'Registration Number: 1234567',
+      'Microchip: 985000000000002',
+    ]),
+  ]);
+  assert.deepEqual(result.createdHorseIds, []);
+  assert.deepEqual(useXbarStore.getState().horses, []);
+  assert.deepEqual(useXbarStore.getState().ownershipRecords, []);
+  assert.equal(result.heldForReviewCount, 2);
+  assert.ok(
+    useXbarStore.getState().documents.every((document) => !document.horseId && document.state === 'Needs Review'),
+  );
+});
+
+test('existing match is screened against its own microchip before attaching a source', async () => {
+  await intake(
+    [
+      sourceFile('one-chip.txt', [
+        'Registered Name: BLUE MOON',
+        'Registration Number: 1234567',
+        'Microchip: 985000000000001',
+      ]),
+    ],
+    false,
+  );
+  const existing = { ...horse('BLUE MOON', '1234567'), microchipId: '985000000000002' };
+  const { createOwnershipRecord } = await import('../../src/store/xbarStoreLogic.ts');
+  useXbarStore.setState({ horses: [existing], ownershipRecords: [createOwnershipRecord(existing)] });
+  const before = structuredClone({
+    horses: useXbarStore.getState().horses,
+    ownershipRecords: useXbarStore.getState().ownershipRecords,
+    documents: useXbarStore.getState().documents,
+  });
+  const result = useXbarStore.getState().createHorseFromDocument(before.documents[0].id);
+  assert.equal(result.ok, false);
+  assert.deepEqual(useXbarStore.getState().horses, before.horses);
+  assert.deepEqual(useXbarStore.getState().ownershipRecords, before.ownershipRecords);
+  assert.deepEqual(useXbarStore.getState().documents, before.documents);
+});
+
+for (const [label, patch] of [
+  ['archived', { state: 'Archived' }],
+  ['queued', { state: 'Queued' }],
+  ['identity review', { identityReviewRequired: true }],
+]) {
+  test(`creation preserves the ${label} gate without changing records`, async () => {
+    await intake([paper('BLUE MOON', '1234567')], false);
+    const document = { ...useXbarStore.getState().documents[0], ...patch };
+    useXbarStore.setState({ documents: [document] });
+    assert.equal(useXbarStore.getState().createHorseFromDocument(document.id).ok, false);
+    assert.deepEqual(useXbarStore.getState().horses, []);
+    assert.deepEqual(useXbarStore.getState().ownershipRecords, []);
+    assert.deepEqual(useXbarStore.getState().documents, [document]);
+  });
+}
+
+test('creation preserves role denial without changing records', async () => {
+  await intake([paper('BLUE MOON', '1234567')], false);
+  const document = structuredClone(useXbarStore.getState().documents[0]);
+  useXbarStore.setState({ currentRole: 'Viewer' });
+  assert.equal(useXbarStore.getState().createHorseFromDocument(document.id).ok, false);
+  assert.deepEqual(useXbarStore.getState().horses, []);
+  assert.deepEqual(useXbarStore.getState().ownershipRecords, []);
+  assert.deepEqual(useXbarStore.getState().documents, [document]);
+});
+
+test('grouped sources with equivalent microchip formatting still create one profile', async () => {
+  const result = await intake([
+    sourceFile('chip-one.txt', [
+      'Registered Name: BLUE MOON',
+      'Registration Number: 1234567',
+      'Microchip: 985000000000001',
+    ]),
+    sourceFile('chip-two.txt', [
+      'Registered Name: BLUE MOON',
+      'Registration Number: 1234567',
+      'Microchip: 985 000 000 000 001',
+    ]),
+  ]);
+  assert.equal(result.createdHorseIds.length, 1);
+  assert.equal(result.heldForReviewCount, 0);
+  assert.equal(useXbarStore.getState().horses.length, 1);
+  assert.equal(useXbarStore.getState().ownershipRecords.length, 1);
+  assert.ok(useXbarStore.getState().documents.every((document) => document.horseId === result.createdHorseIds[0]));
+});

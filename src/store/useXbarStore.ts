@@ -1096,6 +1096,19 @@ export const useXbarStore = create<XbarStore>()(
                       if (groupedDocuments.some(documentDuplicateNeedsReview)) return null;
                       const horseInput = buildHorseInputFromDocuments(groupedDocuments, state.workspaceProfile);
                       if (!horseInput) return null;
+                      const proposedHorse = createHorseRecord(horseInput, state.workspaceProfile);
+                      const sourceScreens = groupedDocuments.map((document) =>
+                        inspectDocumentHorseIdentity(document, proposedHorse),
+                      );
+                      const sourceConflict =
+                        sourceScreens.find((screen) => screen.conflictReason)?.conflictReason ||
+                        (new Set(sourceScreens.flatMap((screen) => screen.sourceChips)).size > 1
+                          ? 'These sources contain conflicting microchips. Compare the originals before creating a horse.'
+                          : undefined);
+                      if (sourceConflict) {
+                        groupedDocuments.forEach((document) => batchConflicts.set(document.id, sourceConflict));
+                        return null;
+                      }
                       const resolution = resolveDocumentHorseMatch(
                         currentHorses,
                         groupedDocuments.map((document) => document.extractedTextPreview).join('\n'),
@@ -1400,6 +1413,15 @@ export const useXbarStore = create<XbarStore>()(
         // Re-check current profiles with the same fail-closed identity rule as
         // upload. A paper left in review can outlive changes to the herd.
         const proposed = buildHorseInputFromDocuments([document], state.workspaceProfile);
+        // Legacy cached entities can disagree with the readable original. Screen
+        // the proposed identity before either attaching or creating any records.
+        if (proposed) {
+          const { conflictReason } = inspectDocumentHorseIdentity(
+            document,
+            createHorseRecord(proposed, state.workspaceProfile),
+          );
+          if (conflictReason) return { ok: false, message: conflictReason };
+        }
         const resolution = resolveDocumentHorseMatch(
           state.horses,
           `${document.title} ${document.extractedTextPreview}`,
@@ -1414,6 +1436,8 @@ export const useXbarStore = create<XbarStore>()(
         }
         const existingHorse = resolution.match?.horse;
         if (existingHorse) {
+          const { conflictReason } = inspectDocumentHorseIdentity(document, existingHorse);
+          if (conflictReason) return { ok: false, message: conflictReason };
           set((current) => {
             const nextDocuments = current.documents.map((item) =>
               item.id === documentId

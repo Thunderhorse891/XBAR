@@ -666,3 +666,28 @@ test('explicit adjacent fields end chip evidence for colon, hash and equals labe
     assert.equal(assessOwnershipDocument(source, registrationTarget, 'registration_certificate').ok, true, delimiter);
   }
 });
+
+test('delimiterless neighboring numeric fields do not become microchip evidence', () => {
+  const target = { ...horse, registrationNumber: '123456789', microchipId: '900123456789012' };
+  const base = paper.replace('7001111', '123456789');
+  for (const label of [
+    'Registration Number',
+    'Registration No.',
+    'Reg No',
+    'Registration',
+    'Phone',
+    'Batch',
+    'Invoice',
+  ]) {
+    for (const wrapping of [' ', '\n', '\r\n']) {
+      for (const chip of ['UNKNOWN', '900123456789012']) {
+        const text = `${base}\nMicrochip: ${chip}${wrapping}${label} 123456789`;
+        const source = document({
+          extractedTextPreview: text,
+          entities: { ...document().entities, registrationNumber: '123456789' },
+        });
+        assert.equal(assessOwnershipDocument(source, target, 'registration_certificate').ok, true, text);
+      }
+    }
+  }
+});
