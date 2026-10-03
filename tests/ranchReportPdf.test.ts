@@ -389,7 +389,7 @@ test('customer logo and contact details stay in ranch-first report styling', asy
   assert.ok(text.includes('Customer Ranch'));
   assert.ok(text.includes('records@example.test'));
   assert.ok(text.includes('555-0100'));
-  assert.ok(text.includes('https://example.test/'));
+  assert.ok(text.split(/\s+/).some((word) => word === 'https://example.test/'));
   assert.ok(text.includes('Prepared with XBAR'));
   assert.ok(!text.includes('Fallback Ranch'));
   const document = await PDFDocument.load(bytes);

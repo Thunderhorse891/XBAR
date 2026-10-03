@@ -456,7 +456,7 @@ for (const currentVerifier of [false, true]) {
   }, testInfo) => {
     const old = await readFile('tests/fixtures/packet-v5.generated.html', 'utf8');
     const html = currentVerifier
-      ? old.replace(/<script>[\s\S]*<\/script>/, `<script>${PACKET_VERIFIER_SCRIPT}</script>`)
+      ? old.replace(/<script>[\s\S]*<\/script>/i, `<script>${PACKET_VERIFIER_SCRIPT}</script>`)
       : old;
     await openPacket(page, html, testInfo.outputPath('historic-packet.html'));
     await expectVerdict(page, 'pass');

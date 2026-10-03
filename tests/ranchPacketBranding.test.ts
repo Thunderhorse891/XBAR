@@ -135,7 +135,7 @@ test('malicious contact strings remain inert and unsafe website schemes are refu
 
 test('vault compatibility admits only the exact reviewed v5 verifier, never arbitrary older scripts', async () => {
   const html = await readFile('tests/fixtures/packet-v5.generated.html', 'utf8');
-  const script = /<script>([\s\S]*)<\/script>/.exec(html)![1];
+  const script = /<script>([\s\S]*)<\/script>/i.exec(html)![1];
   assert.equal(createHash('sha256').update(script).digest('hex'), LEGACY_V5_VERIFIER_SHA256);
   assert.equal(isSupportedPacketVerifier(script, 5), true);
   assert.equal(isSupportedPacketVerifier(script + ' ', 5), false);

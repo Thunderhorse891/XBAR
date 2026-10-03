@@ -153,6 +153,10 @@ export default function Settings() {
 
   useEffect(() => {
     profileMounted.current = true;
+    // StrictMode replays setup → cleanup → setup without another render.
+    // Cleanup must invalidate old work, but the second setup must also render
+    // handlers bound to that new generation or every fresh control stays stale.
+    refreshProfileContext((revision) => revision + 1);
     let context = profileContextKey();
     const invalidate = () => {
       profileGeneration.current += 1;

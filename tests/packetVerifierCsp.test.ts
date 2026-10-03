@@ -320,7 +320,7 @@ test('the packet carries no inline event handlers for the verifier to trip on', 
 
 test('the deployed CSP retains the exact verifier used by previously saved v5 packets', async () => {
   const legacy = await readFile('tests/fixtures/packet-v5.generated.html', 'utf8');
-  const script = /<script>([\s\S]*)<\/script>/.exec(legacy)?.[1];
+  const script = /<script>([\s\S]*)<\/script>/i.exec(legacy)?.[1];
   assert.ok(script, 'historical packet must contain its original inline verifier');
   assert.ok((await scriptSrc()).includes(`'${cspHash(script)}'`), 'saved packets must still be able to verify');
 });

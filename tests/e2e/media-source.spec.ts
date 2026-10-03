@@ -225,7 +225,7 @@ for (const returnToOriginal of [false, true]) {
         window.history.pushState({}, '', url);
         window.dispatchEvent(new PopStateEvent('popstate'));
       }, originalUrl);
-      await expect(page.locator('.xs-objhead__name')).toHaveText('Media Horse');
+      await expect(page.locator('.xs-objhead__name')).toHaveText('MEDIA HORSE');
     }
     await page.evaluate(() => window.deliverLatePhoto());
     expect(await page.evaluate(() => window.mediaTestCalls)).toEqual([]);

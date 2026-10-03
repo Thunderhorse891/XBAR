@@ -384,3 +384,43 @@ test('workspace changes during async raster validation stop Save before any prof
   await expect(page.getByText('Profile saved on this device', { exact: true })).toHaveCount(0);
   expect(await savedProfile(page)).toEqual(before);
 });
+
+test('freshly mounted Settings controls work after StrictMode effect replay and route remount', async ({ page }) => {
+  await openSettings(page);
+  await page.getByLabel('Contact phone').fill('555-0141');
+  await expect(page.getByLabel('Contact phone')).toHaveValue('555-0141');
+  await page.getByRole('button', { name: 'Save profile', exact: true }).click();
+  await expect(page.getByText('Profile saved on this device', { exact: true })).toBeVisible();
+  expect((await savedProfile(page)).contactPhone).toBe('555-0141');
+
+  await page.getByRole('link', { name: 'Horses', exact: true }).click();
+  await page.getByRole('link', { name: 'Settings', exact: true }).click();
+  await page.getByLabel('Contact phone').fill('555-0142');
+  await expect(page.getByLabel('Contact phone')).toHaveValue('555-0142');
+  await page.getByRole('button', { name: 'Save profile', exact: true }).click();
+  await expect(page.getByText('Profile saved on this device', { exact: true })).toBeVisible();
+  expect((await savedProfile(page)).contactPhone).toBe('555-0142');
+});
+
+test('a retained Save handler cannot apply its draft after Settings unmounts', async ({ page }) => {
+  await openSettings(page);
+  const before = await savedProfile(page);
+  await page.getByLabel('Contact phone').fill('555-0177');
+  await expect(page.getByLabel('Contact phone')).toHaveValue('555-0177');
+  await page.getByRole('button', { name: 'Save profile', exact: true }).evaluate((button) => {
+    // Retain the real React handler, rather than dispatching on a detached DOM
+    // element (which would not reach React's delegated event listener at all).
+    const propsKey = Object.keys(button).find((key) => key.startsWith('__reactProps$'));
+    if (!propsKey) throw new Error('Could not find the mounted Save handler.');
+    const props = (button as unknown as Record<string, { onClick?: () => void }>)[propsKey];
+    if (typeof props.onClick !== 'function') throw new Error('The mounted Save handler is missing.');
+    (window as typeof window & { retainedProfileSave?: () => void }).retainedProfileSave = props.onClick;
+  });
+  await page.getByRole('link', { name: 'Horses', exact: true }).click();
+  await expect(page.getByRole('heading', { name: 'Settings', exact: true })).toHaveCount(0);
+  await page.evaluate(() => (window as typeof window & { retainedProfileSave?: () => void }).retainedProfileSave?.());
+  expect(await savedProfile(page)).toEqual(before);
+  await expect(page.getByText('Profile saved', { exact: true })).toHaveCount(0);
+  await page.getByRole('link', { name: 'Settings', exact: true }).click();
+  await expect(page.getByLabel('Contact phone')).toHaveValue(before.contactPhone ?? '');
+});
