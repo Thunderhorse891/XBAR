@@ -22,6 +22,25 @@ test('public and application typography share one shipped font and heading scale
   );
 });
 
+test('mobile auth grid and its breakpoint live in the same stylesheet', async () => {
+  const shared = withoutComments(await readFile('src/routes/cleanEntryExperience.css', 'utf8'));
+  const hero = withoutComments(await readFile('src/routes/loginHero.css', 'utf8'));
+  assert.match(
+    shared,
+    /@media \(max-width: 900px\)\s*\{\s*\.clean-login-layout\s*\{[^}]*grid-template-columns: minmax\(0, 1fr\)/,
+    'the mobile one-column rule must travel with the shared two-column grid',
+  );
+  assert.ok(!/\.clean-login-layout\s*\{/.test(hero), 'login art CSS must not compete for grid sizing');
+});
+
+test('working cards never paint a decorative film above their text', async () => {
+  const metal = withoutComments(await readFile('src/routes/metalBrandSystem.css', 'utf8'));
+  assert.ok(
+    !/\.(?:panel|metric-card|horse-card|table-shell)::after/.test(metal),
+    'full-card foreground sheen lowers contrast even with reduced motion',
+  );
+});
+
 test('operational route heroes use the shared page-title heading level', async () => {
   const component = await readFile('src/components/CommandBrief.tsx', 'utf8');
   assert.match(component, /<h1 className="command-brief__entity">\{entity\}<\/h1>/);

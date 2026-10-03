@@ -111,10 +111,6 @@
 }
 
 @media (max-width: 900px) {
-  .clean-login-layout {
-    grid-template-columns: minmax(0, 1fr);
-    max-width: 560px;
-  }
   .clean-login-visual {
     display: none;
   }

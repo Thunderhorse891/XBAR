@@ -85,6 +85,21 @@ for (const width of [1440, 390]) {
     await page.getByRole('button', { name: 'Hide entered value' }).click();
     await expect(page.getByLabel('Password', { exact: true })).toHaveAttribute('type', 'password');
     await assertFits(page);
+    const layout = await page.locator('.clean-login-layout').boundingBox();
+    const card = await page.locator('.clean-auth-card--login').boundingBox();
+    const form = await page.locator('.clean-form').boundingBox();
+    expect(layout).not.toBeNull();
+    expect(card).not.toBeNull();
+    expect(form).not.toBeNull();
+    if (width <= 900) {
+      await expect(page.locator('.clean-login-visual')).toBeHidden();
+      expect(card!.width, 'mobile auth card must fill the single grid track').toBeGreaterThanOrEqual(layout!.width - 2);
+      expect(form!.width, 'mobile inputs must use the available card width').toBeGreaterThanOrEqual(card!.width - 50);
+    } else {
+      await expect(page.locator('.clean-login-visual')).toBeVisible();
+      expect(card!.width / layout!.width).toBeGreaterThan(0.45);
+      expect(card!.width / layout!.width).toBeLessThan(0.55);
+    }
     await capture(page, `signup-${width}`);
 
     await page.goto('/app/reset-password');

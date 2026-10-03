@@ -74,6 +74,14 @@ for (const viewport of [
             '/app/billing?plan=Professional',
           );
         }
+        const foregroundFilms = await content.locator('.panel, .metric-card, .horse-card, .table-shell').evaluateAll(
+          (elements) =>
+            elements.filter((element) => {
+              const style = getComputedStyle(element, '::after');
+              return !['none', 'normal'].includes(style.content) && style.backgroundImage !== 'none';
+            }).length,
+        );
+        expect(foregroundFilms, `working text must not be covered by a sheen on ${route}`).toBe(0);
         const headings = await content.locator('h1, h2, h3').evaluateAll((elements) =>
           elements
             .filter((element) => element.getBoundingClientRect().height > 0)

@@ -908,6 +908,11 @@ export default function Documents() {
                                   {document.type} · {Math.round(document.confidence * 100)}% match confidence
                                 </span>
                               )}
+                              {document.batchReviewNote ? (
+                                <span role="note" className="field-error">
+                                  {document.batchReviewNote}
+                                </span>
+                              ) : null}
                               {/* Only ever present when the reader stopped
                                   short of the whole file. Silence here used to
                                   mean "read in full" and did not. */}

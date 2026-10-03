@@ -429,6 +429,15 @@
   margin-block: 18px;
 }
 
+/* Keep the responsive track definition with the base grid: route CSS chunks
+   can load in either order when switching between login and recovery. */
+@media (max-width: 900px) {
+  .clean-login-layout {
+    grid-template-columns: minmax(0, 1fr);
+    max-width: 560px;
+  }
+}
+
 @media (max-width: 860px) {
   .clean-setup-layout {
     max-width: 600px;

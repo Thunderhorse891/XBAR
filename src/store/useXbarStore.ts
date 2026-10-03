@@ -18,6 +18,7 @@ import { apiConfig, isRelationalCloudEnabled, isSupabaseConfigured } from '@/lib
 import { useCloudStore } from '@/store/useCloudStore';
 import { hasRoleCapability } from '@/lib/permissions';
 import { hasHorsePhoto, isHorsePhotoAsset } from '@/lib/animalPassport';
+import { groupDocumentBatchCandidates } from '@/lib/documentBatchIdentity';
 import { flagDocumentDuplicates, documentDuplicateNeedsReview, fingerprintDocument } from '@/lib/documentDuplicates';
 import {
   assessOwnershipDocument,
@@ -1081,34 +1082,20 @@ export const useXbarStore = create<XbarStore>()(
             documents = flagDocumentDuplicates(documents, duplicateIndex);
             const duplicateCount = documents.filter(documentDuplicateNeedsReview).length;
             const currentHorses = get().horses;
+            const batchConflicts = new Map<string, string>();
             let createdHorseBundles =
               !selectedHorse && createHorseFromBatch
-                ? Array.from(
-                    documents
-                      .filter((document) => !document.horseId)
-                      .reduce((groups, document) => {
-                        const key =
-                          document.entities.registrationNumber?.trim() ||
-                          document.entities.horseName?.trim() ||
-                          document.title.trim().toUpperCase();
-                        if (!key) {
-                          return groups;
-                        }
-                        const group = groups.get(key) ?? [];
-                        group.push(document);
-                        groups.set(key, group);
-                        return groups;
-                      }, new Map<string, DocumentRecord[]>()),
-                  )
-                    .map(([, groupedDocuments]) => {
+                ? groupDocumentBatchCandidates(documents.filter((document) => !document.horseId))
+                    .map(({ documents: groupedDocuments, reviewReason }) => {
+                      if (reviewReason) {
+                        groupedDocuments.forEach((document) => batchConflicts.set(document.id, reviewReason));
+                        return null;
+                      }
                       // A duplicate hint must never remove contradictory identity
                       // evidence from the batch. Hold the entire group for review.
                       if (groupedDocuments.some(documentDuplicateNeedsReview)) return null;
                       const horseInput = buildHorseInputFromDocuments(groupedDocuments, state.workspaceProfile);
-                      if (!horseInput) {
-                        return null;
-                      }
-
+                      if (!horseInput) return null;
                       const resolution = resolveDocumentHorseMatch(
                         currentHorses,
                         groupedDocuments.map((document) => document.extractedTextPreview).join('\n'),
@@ -1118,14 +1105,16 @@ export const useXbarStore = create<XbarStore>()(
                           registry: horseInput.registry,
                         },
                       );
-                      if (resolution.match || resolution.needsReview) {
-                        return null;
-                      }
-
+                      if (resolution.match || resolution.needsReview) return null;
                       return createHorseFromDocuments(groupedDocuments, state.workspaceProfile);
                     })
                     .filter((bundle): bundle is NonNullable<typeof bundle> => Boolean(bundle))
                 : [];
+            documents = documents.map((document) =>
+              batchConflicts.has(document.id)
+                ? { ...document, state: 'Needs Review' as const, batchReviewNote: batchConflicts.get(document.id) }
+                : document,
+            );
             const availableHorseSlots = Math.max(
               0,
               entitledUsage(state.subscription).horseLimit - currentHorses.length,
@@ -1280,7 +1269,7 @@ export const useXbarStore = create<XbarStore>()(
 
             return {
               ok: true,
-              message: `${documents.length} file${documents.length === 1 ? '' : 's'} entered the document queue.${duplicateCount ? ` ${duplicateCount} duplicate warning${duplicateCount === 1 ? '' : 's'} need review: compare files, keep a copy deliberately, or discard the extra. No files were removed.` : ''}${uncheckedLegacy ? ` Exact-file checks could not cover ${uncheckedLegacy} older file${uncheckedLegacy === 1 ? '' : 's'} whose original was unavailable.` : ''}${createdHorses.length ? ` ${createdHorses.length} new horse record${createdHorses.length === 1 ? ' was' : 's were'} created from the upload batch.` : ''}${omittedHorseCount ? ` ${omittedHorseCount} additional horse candidate${omittedHorseCount === 1 ? ' was' : 's were'} left for review because the horse limit was reached.` : ''}${localDocumentCount ? ` ${localDocumentCount} kept as metadata only — this browser could not store the file on this device either.` : ''}${capacityUnverified ? ' Cloud storage could not be reached, so these are on this device only — upload them again once it returns to put them in the cloud.' : ''}`,
+              message: `${documents.length} file${documents.length === 1 ? '' : 's'} entered the document queue.${batchConflicts.size ? ` ${batchConflicts.size} files need source review. No horse was created from those files.` : ''}${duplicateCount ? ` ${duplicateCount} duplicate warning${duplicateCount === 1 ? '' : 's'} need review: compare files, keep a copy deliberately, or discard the extra. No files were removed.` : ''}${uncheckedLegacy ? ` Exact-file checks could not cover ${uncheckedLegacy} older file${uncheckedLegacy === 1 ? '' : 's'} whose original was unavailable.` : ''}${createdHorses.length ? ` ${createdHorses.length} new horse record${createdHorses.length === 1 ? ' was' : 's were'} created from the upload batch.` : ''}${omittedHorseCount ? ` ${omittedHorseCount} additional horse candidate${omittedHorseCount === 1 ? ' was' : 's were'} left for review because the horse limit was reached.` : ''}${localDocumentCount ? ` ${localDocumentCount} kept as metadata only — this browser could not store the file on this device either.` : ''}${capacityUnverified ? ' Cloud storage could not be reached, so these are on this device only — upload them again once it returns to put them in the cloud.' : ''}`,
               id: batch.id,
               createdHorseIds: createdHorses.map((horse) => horse.id),
               duplicateCount,
@@ -1346,6 +1335,7 @@ export const useXbarStore = create<XbarStore>()(
             : document.duplicateReviewedAt,
           horseId: nextHorseId,
           state: 'Ready',
+          batchReviewNote: undefined,
           // Approval records a human action; it must not inflate OCR confidence.
           confidence: document.confidence,
           duplicateRisk: keepDuplicate ? 'Low' : document.duplicateRisk,
