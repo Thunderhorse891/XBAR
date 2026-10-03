@@ -101,24 +101,15 @@ jobs:
         if: failure() || cancelled()
         timeout-minutes: 2
         run: |
-          sysctl hw.memsize
-          vm_stat
-          ps -axo pid,%cpu,%mem,rss,comm | sort -nrk4 | sed -n '1,20p'
-          xcrun simctl list devices
-          xcrun xcresulttool get test-results summary --path ios/native-tests.xcresult || true
           python3 - <<'PY'
           import os, subprocess, tempfile
 
-          # Run 37071679679 failed before any test case: XCTest could not load
-          # AX. Capture the named services on both host and selected simulator,
-          # including the full seven-minute test window. Never change its verdict.
-          # Run 37076940093 exhausted the guest capture on pre-test SpringBoard
-          # startup messages. Focus its existing budget on the named test/AX
-          # services; keep the broader host query separate.
+          # Run 37081521423 spent half this step on preliminary commands, then
+          # captured widget subsystem chatter before reaching the test runner.
+          # Capture the named guest processes first, with every command bounded.
           predicate = ('process == "AppUITests-Runner" '
                        'OR process CONTAINS[c] "testmanager" OR process CONTAINS[c] "XCTest" '
-                       'OR process CONTAINS[c] "accessibility" OR process BEGINSWITH[c] "AX" '
-                       'OR subsystem CONTAINS[c] "XCTest" OR subsystem CONTAINS[c] "accessibility"')
+                       'OR process CONTAINS[c] "accessibility" OR process BEGINSWITH[c] "AX"')
           host_predicate = ('process == "Simulator" OR process == "com.apple.CoreSimulator.CoreSimulatorService" '
                             'OR process == "SpringBoard" OR ' + predicate)
 
@@ -141,17 +132,21 @@ jobs:
                   output.seek(max(0, size - 65536))
                   print(output.read().decode('utf-8', errors='replace'))
 
-          # Process names/state only: no command arguments or environment values.
-          capture('Host process state', ['ps', '-axo', 'pid,ppid,state,etime,comm'], timeout=10)
           log_args = ['show', '--last', '10m', '--style', 'compact', '--info', '--predicate']
-          capture('Host XCTest and AX logs', ['/usr/bin/log', *log_args, host_predicate])
           device = os.environ.get('IOS_SIMULATOR_ID')
           if device:
               capture('Selected simulator XCTest and AX logs', ['xcrun', 'simctl', 'spawn', device, 'log', *log_args, predicate])
           else:
               print('No selected simulator; guest diagnostics unavailable. Native check remains failed.')
+          capture('Host XCTest and AX logs', ['/usr/bin/log', *log_args, host_predicate])
+          # Process names/state only: no command arguments or environment values.
+          capture('Host process state', ['ps', '-axo', 'pid,ppid,state,etime,comm'], timeout=10)
+          capture('Host memory size', ['sysctl', 'hw.memsize'], timeout=5)
+          capture('Host memory state', ['vm_stat'], timeout=5)
+          capture('Simulator devices', ['xcrun', 'simctl', 'list', 'devices'], timeout=10)
+          reports = os.path.join(os.environ['HOME'], 'Library', 'Logs', 'DiagnosticReports')
+          capture('App crash report paths', ['find', reports, '-maxdepth', '1', '-name', '*App*', '-print'], timeout=5)
           PY
-          find "$HOME/Library/Logs/DiagnosticReports" -maxdepth 1 -name '*App*' -print || true
       - name: Capture the failed app's startup console
         if: failure() && env.IOS_SIMULATOR_ID != ''
         timeout-minutes: 2
@@ -184,6 +179,23 @@ jobs:
           # upload the full build directory, simulator filesystem or credentials.
           python3 - <<'PY'
           from pathlib import Path
+          import subprocess, tempfile
+          # Run 37081521423 exported the final sign-in attachment after the
+          # early reader found no Info.plist. Read the late summary here too;
+          # it is evidence only and cannot override the timed-out test step.
+          with tempfile.TemporaryFile() as output:
+              try:
+                  result = subprocess.run(['xcrun', 'xcresulttool', 'get', 'test-results', 'summary',
+                                           '--path', 'ios/native-tests.xcresult'], stdout=output,
+                                          stderr=subprocess.STDOUT, timeout=10, check=False)
+                  print(f'Late XCTest summary exit: {result.returncode}; native check remains failed.')
+              except (subprocess.TimeoutExpired, OSError) as error:
+                  print(f'Late XCTest summary unavailable: {error}; native check remains failed.')
+              size = output.seek(0, 2)
+              if size > 32768:
+                  print('Late XCTest summary truncated to its final 32 KiB.')
+              output.seek(max(0, size - 32768))
+              print(output.read().decode('utf-8', errors='replace'))
           root = Path('ios/native-diagnostics')
           for item in root.rglob('*'):
               if item.is_file() and item.suffix.lower() != '.png':
