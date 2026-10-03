@@ -173,7 +173,7 @@ test('a mixed batch preserves its duplicate warning even while creating two new 
   const route = await readFile('src/routes/Documents.tsx', 'utf8');
   assert.match(
     route,
-    /if \(result\.duplicateCount\) \{\s*goToStage\('Review'\);\s*\} else if \(createdHorseIds\.length === 1\)[\s\S]*?\} else if \(createdHorseIds\.length > 1\)/,
+    /if \(result\.duplicateCount \|\| result\.heldForReviewCount\) \{\s*goToStage\('Review'\);\s*\} else if \(createdHorseIds\.length === 1\)[\s\S]*?\} else if \(createdHorseIds\.length > 1\)/,
     'New profiles must not override the duplicate review destination',
   );
 });
@@ -192,6 +192,7 @@ test('complementary registration and name-only sale papers create one profile wi
     ),
   ]);
   assert.equal(result.createdHorseIds.length, 1);
+  assert.equal(result.heldForReviewCount, 0, 'Attached sources do not steal the valid profile destination');
   const state = useXbarStore.getState();
   assert.equal(state.horses.length, 1);
   assert.equal(state.horses[0].registrationNumber, '7654321');
@@ -364,4 +365,56 @@ test('out-of-order document reads keep one profile and stable source association
     ['delayed-registration', 'quick-sale'],
   );
   assert.ok(state.documents.every((document) => document.horseId === state.horses[0].id));
+});
+
+test('one valid profile plus contradictory source group exposes review work without losing any source', async () => {
+  const sources = [
+    ['good-source.txt', 'GOOD HORSE', '9990001'],
+    ['conflict-one.txt', 'CONFLICT HORSE', '9990002'],
+    ['conflict-two.txt', 'CONFLICT HORSE', '9990003'],
+  ].map(
+    ([name, horseName, registration]) =>
+      new File(
+        [`CERTIFICATE OF REGISTRATION\nRegistered Name: ${horseName}\nRegistration Number: ${registration}`],
+        name,
+        { type: 'text/plain' },
+      ),
+  );
+  const result = await intake(sources);
+  assert.equal(result.ok, true);
+  assert.equal(result.createdHorseIds.length, 1);
+  assert.equal(result.duplicateCount, 0);
+  assert.equal(useXbarStore.getState().documents.length, 3);
+  assert.equal(useXbarStore.getState().horses[0].name, 'GOOD HORSE');
+  assert.equal(useXbarStore.getState().documents.filter((document) => document.batchReviewNote).length, 2);
+  assert.equal(result.heldForReviewCount, 2, 'Callers need the held count before choosing the destination');
+  const { readFile } = await import('node:fs/promises');
+  const route = await readFile('src/routes/Documents.tsx', 'utf8');
+  const drawer = await readFile('src/components/saas/flows.tsx', 'utf8');
+  assert.match(route, /if \(result\.duplicateCount \|\| result\.heldForReviewCount\) \{\s*goToStage\('Review'\)/);
+  assert.match(
+    drawer,
+    /const destination =\s*result\.duplicateCount \|\| result\.heldForReviewCount\s*\? '\/documents\?stage=Review'/,
+  );
+});
+
+test('one valid profile plus one internally conflicting source still exposes unassigned review work', async () => {
+  const result = await intake([
+    new File(['Registered Name: GOOD HORSE\nRegistration Number: 9990001'], 'good.txt', { type: 'text/plain' }),
+    new File(
+      [
+        'Registered Name: BLUE MOON\nRegistration Number: 1234567\nRegistered Name: RED SUN\nRegistration Number: 7654321',
+      ],
+      'conflicting-subjects.txt',
+      { type: 'text/plain' },
+    ),
+  ]);
+  assert.equal(result.createdHorseIds.length, 1);
+  assert.equal(result.duplicateCount, 0);
+  const held = useXbarStore.getState().documents.find((document) => document.identityReviewRequired);
+  assert.ok(held);
+  assert.equal(held.horseId, undefined);
+  assert.equal(held.state, 'Needs Review');
+  assert.equal(useXbarStore.getState().documents.length, 2);
+  assert.equal(result.heldForReviewCount, 1);
 });

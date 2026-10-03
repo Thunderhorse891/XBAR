@@ -22,7 +22,7 @@ import { useCurrentRoleCapability, useXbarStore } from '@/store/useXbarStore';
 import { extractionProducedNothing, readableProcessingNote } from '@/lib/documentIntelligence';
 import { buildHorseEnrichmentFromEntities, normalizeOwnershipRecord } from '@/store/xbarStoreLogic';
 import type { DocumentRecord, DocumentSource, SalePacketBuild } from '@/types/xbar';
-import { documentSources } from '@/features/documents/constants';
+import { documentIntakeDisclosure, documentSources } from '@/features/documents/constants';
 import { useEffectiveSubscription } from '@/hooks/useOwnerPreview';
 import { isNavigableFileUrl } from '@/lib/navigableFileUrl';
 import { canPresentPurchaseFlow } from '@/lib/nativePlatform';
@@ -473,7 +473,7 @@ export default function Documents() {
       setBatchLabel('Live upload batch');
       setCreateHorseFromBatch(false);
       if (!requestedHorse) setSearchParams({});
-      if (result.duplicateCount) {
+      if (result.duplicateCount || result.heldForReviewCount) {
         goToStage('Review');
       } else if (createdHorseIds.length === 1) {
         navigate(`/horses/${createdHorseIds[0]}`);
@@ -622,7 +622,6 @@ export default function Documents() {
         <>
           <Panel
             title="Stage 1 · Upload"
-            description="When cloud storage is available, original files are uploaded to your workspace. Text is extracted on this device."
             action={
               <Pill tone={uploadOpen ? 'blue' : 'slate'}>
                 {uploadOpen
@@ -633,6 +632,7 @@ export default function Documents() {
             className="cursor-context-menu"
             onContextMenu={(event) => openSurfaceMenu('intake', event)}
           >
+            <p className="stack-item__copy">{documentIntakeDisclosure}</p>
             <div id="documents-intake" className="form-grid">
               <label className="field-stack">
                 <span className="field-label">Batch label</span>

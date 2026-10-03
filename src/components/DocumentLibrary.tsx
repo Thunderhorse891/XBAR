@@ -40,7 +40,7 @@ export function DocumentLibrary({
         </button>
       </div>
       {archived ? (
-        <p className="panel__description">
+        <p className="stack-item__copy">
           Archived originals stay here. Restore and move controls aren’t available yet.
         </p>
       ) : null}

@@ -1050,6 +1050,9 @@ test('archived library keeps the actual original readable after archive and relo
   await page.getByRole('button', { name: 'Create', exact: true }).click();
   await page.getByRole('menuitem', { name: 'Upload Document' }).click();
   const upload = page.getByRole('dialog', { name: 'Upload Document' });
+  const disclosure =
+    'When cloud storage is available, original files are uploaded to your workspace. Text is extracted on this device.';
+  await expect(upload.getByText(disclosure, { exact: true })).toBeVisible();
   const original = 'Care notes for manual review. Original scan retained.';
   await upload
     .locator('input[type="file"]')
@@ -1061,6 +1064,8 @@ test('archived library keeps the actual original readable after archive and relo
   await expect(review).toBeVisible();
   await review.getByRole('button', { name: 'Archive', exact: true }).click();
   await expect(review).not.toBeVisible();
+  await page.getByRole('tab', { name: /Upload/ }).click();
+  await expect(page.getByText(disclosure, { exact: true })).toBeVisible();
   await page.getByRole('tab', { name: /^Library/ }).click();
   await expect(page.getByRole('button', { name: /^Active \(0\)/ })).toBeVisible();
   await page.getByRole('button', { name: /^Archived \(1\)/ }).click();
@@ -1095,3 +1100,76 @@ test('archived library keeps the actual original readable after archive and relo
   await expect(reloaded).toHaveURL(new RegExp(`/horses/${libraryHorseId}$`));
   await reloaded.close();
 });
+
+for (const conflict of ['cross-file', 'single-file'] as const) {
+  for (const surface of ['drawer', 'documents'] as const) {
+    test(`mixed valid and ${conflict} identity conflicts prioritize review from the ${surface}`, async ({ page }) => {
+      await bootstrapWorkspace(page);
+      const sourceText = (name: string, registration: string) =>
+        `CERTIFICATE OF REGISTRATION\nRegistered Name: ${name}\nRegistration Number: ${registration}`;
+      const sources =
+        conflict === 'cross-file'
+          ? [
+              ['good-source.txt', sourceText('GOOD HORSE', '9990001')],
+              ['conflict-one.txt', sourceText('CONFLICT HORSE', '9990002')],
+              ['conflict-two.txt', sourceText('CONFLICT HORSE', '9990003')],
+            ]
+          : [
+              ['good-source.txt', sourceText('GOOD HORSE', '9990001')],
+              [
+                'conflicting-subjects.txt',
+                `${sourceText('BLUE MOON', '1234567')}\nRegistered Name: RED SUN\nRegistration Number: 7654321`,
+              ],
+            ];
+      const files = sources.map(([name, text]) => ({ name, mimeType: 'text/plain', buffer: Buffer.from(text) }));
+      if (surface === 'drawer') {
+        await page.getByRole('button', { name: 'Create', exact: true }).click();
+        await page.getByRole('menuitem', { name: 'Upload Document' }).click();
+        const upload = page.getByRole('dialog', { name: 'Upload Document' });
+        await upload.locator('input[type="file"]').setInputFiles(files);
+        await upload.getByRole('checkbox').check();
+        await upload.getByRole('button', { name: 'Upload for review' }).click();
+      } else {
+        await page.evaluate(() => {
+          window.history.pushState({}, '', '/app/documents?stage=Upload');
+          window.dispatchEvent(new PopStateEvent('popstate'));
+        });
+        await page.locator('#documents-intake input[type="file"]').setInputFiles(files);
+        await page.getByRole('button', { name: 'Review only', exact: true }).click();
+        await page.getByRole('button', { name: 'Add docs', exact: true }).click();
+      }
+      await expect(page).toHaveURL(/\/app\/documents(?:\?|$)/);
+      await expect(page.getByRole('tab', { name: /^3\. Review/ })).toHaveAttribute('aria-selected', 'true');
+      const heldNames = conflict === 'cross-file' ? ['conflict-one', 'conflict-two'] : ['conflicting-subjects'];
+      for (const name of heldNames) {
+        await expect(page.getByRole('group', { name: `${name} review actions` })).toBeVisible();
+      }
+      const saved = await page.evaluate(async () => {
+        const modulePath = '/src/store/useXbarStore.ts';
+        const { useXbarStore } = await import(/* @vite-ignore */ modulePath);
+        const state = useXbarStore.getState();
+        return {
+          horseNames: state.horses.map((horse: { name: string }) => horse.name),
+          documentCount: state.documents.length,
+          held: state.documents
+            .filter(
+              (document: { horseId?: string; state: string }) => !document.horseId && document.state === 'Needs Review',
+            )
+            .map((document: { horseId?: string; state: string }) => ({
+              horseId: document.horseId ?? '',
+              state: document.state,
+            })),
+          originalsRetained: state.documents.every((document: { localFileKey?: string }) =>
+            Boolean(document.localFileKey),
+          ),
+        };
+      });
+      expect(saved).toEqual({
+        horseNames: ['GOOD HORSE'],
+        documentCount: files.length,
+        held: heldNames.map(() => ({ horseId: '', state: 'Needs Review' })),
+        originalsRetained: true,
+      });
+    });
+  }
+}

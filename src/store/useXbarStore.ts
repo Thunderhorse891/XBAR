@@ -1273,6 +1273,8 @@ export const useXbarStore = create<XbarStore>()(
               id: batch.id,
               createdHorseIds: createdHorses.map((horse) => horse.id),
               duplicateCount,
+              heldForReviewCount: documents.filter((document) => !document.horseId && document.state === 'Needs Review')
+                .length,
             };
           } catch (error) {
             console.error('Document upload failed', error);

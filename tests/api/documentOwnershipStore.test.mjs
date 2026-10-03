@@ -188,7 +188,11 @@ test('the archived library remains read-only until server lifecycle enforcement 
   const route = await readFile('src/routes/Documents.tsx', 'utf8');
   assert.match(library, /Restore and move controls aren’t available yet/);
   assert.doesNotMatch(library, /restoreDocument|reassignDocument|discardDocument|onControl/);
-  assert.match(route, /original files are uploaded to your workspace/);
+  const constants = await readFile('src/features/documents/constants.ts', 'utf8');
+  const quickCreate = await readFile('src/components/saas/flows.tsx', 'utf8');
+  assert.match(constants, /original files are uploaded to your workspace/);
+  assert.match(route, /<p className="stack-item__copy">\{documentIntakeDisclosure\}<\/p>/);
+  assert.match(quickCreate, /<p className="stack-item__copy">\{documentIntakeDisclosure\}<\/p>/);
   assert.match(route, /inspectDocumentHorseIdentity\(document, horse\)/);
   assert.match(route, /const reviewHorseId = document\.horseId \|\| requestedHorse\?\.id/);
 });
