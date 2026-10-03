@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { useForm } from 'react-hook-form';
 import { useNavigate } from 'react-router-dom';
 import { Checkbox } from '@/components/ui/checkbox';
@@ -14,11 +14,20 @@ import { beginVaultWrite, endVaultWrite, storeLocalFile } from '@/lib/localFileV
 import { openStoredFileInTab } from '@/lib/openStoredFile';
 import { vaultOwnerId } from '@/lib/vaultOwner';
 import type { DocumentRecord, SaleCredentialSeal } from '@/types/xbar';
-import { billingPathForTier } from '@/lib/billingRoutes';
+import { packetExportGate } from '@/lib/subscriptionGates';
+import {
+  packetDocumentAction,
+  packetHoldAction,
+  packetFailureGuidance,
+  type PacketFailureGuidance,
+} from '@/lib/salePacketGuidance';
+import { clearPacketDraft, readPacketDraft, savePacketDraft } from '@/lib/salePacketDraft';
+import { buildSaleHold } from '@/lib/saleTrustEngine';
 import { openFacebookShareDialog } from '@/lib/facebookSharing';
 import { buildBadgeSnippet, buildShareText } from '@/lib/verificationBadge';
 import { realWorkspaceName } from '@/lib/workspaceIdentity';
-import { assessRevenueAtRisk, computeHorseEconomics } from '@/lib/businessIntelligence';
+import { computeHorseEconomics } from '@/lib/businessIntelligence';
+import { CURRENT_COGGINS_DAYS, hasCurrentReadyDocument } from '@/lib/documentCurrency';
 import { formatCompactCurrency } from '@/lib/format';
 import { useCloudStore } from '@/store/useCloudStore';
 import { useUiStore } from '@/store/useUiStore';
@@ -61,12 +70,16 @@ export function SalePacketWizard({
   const createSalesLead = useXbarStore((state) => state.createSalesLead);
   const workspaceProfile = useXbarStore((state) => state.workspaceProfile);
   const currentRole = useXbarStore((state) => state.currentRole);
+  const subscription = useXbarStore((state) => state.subscription);
   const session = useCloudStore((state) => state.session);
   const workspaceId = useCloudStore((state) => state.workspaceId);
   const pushToast = useUiStore((state) => state.pushToast);
   const navigate = useNavigate();
 
+  const draftScope = `${session?.user?.id ?? 'local'}:${vaultOwnerId()}`;
+  const previousDraftScope = useRef(draftScope);
   const [step, setStep] = useState(0);
+  const [generationFailure, setGenerationFailure] = useState<PacketFailureGuidance | null>(null);
   const [horseId, setHorseId] = useState<string>(initialHorseId ?? '');
   const [selectedDocIds, setSelectedDocIds] = useState<string[] | null>(null);
   const [cogginsDisclosed, setCogginsDisclosed] = useState(false);
@@ -87,14 +100,32 @@ export function SalePacketWizard({
   const buyerEmail = buyerForm.watch('buyerEmail');
   const watermark = buyerForm.watch('watermark');
 
+  useEffect(() => {
+    if (previousDraftScope.current !== draftScope) {
+      previousDraftScope.current = draftScope;
+      setHorseId('');
+      setStep(0);
+      setSelectedDocIds(null);
+      setCogginsDisclosed(false);
+      setGenerated(null);
+      setGenerationFailure(null);
+      buyerForm.reset({ buyerName: '', buyerEmail: '', watermark: '' });
+      return;
+    }
+    if (!open || !initialHorseId) return;
+    const draft = readPacketDraft(draftScope, initialHorseId);
+    if (!draft) return;
+    clearPacketDraft(draftScope, initialHorseId);
+    setHorseId(draft.horseId);
+    setStep(Math.min(draft.step, 1));
+    setSelectedDocIds(draft.selectedDocIds);
+    setCogginsDisclosed(false);
+    buyerForm.reset({ buyerName: draft.buyerName, buyerEmail: draft.buyerEmail, watermark: draft.watermark });
+  }, [open, initialHorseId, draftScope, buyerForm]);
+
   const effectiveHorseId = horseId || initialHorseId || '';
   const horse = horses.find((item) => item.id === effectiveHorseId);
 
-  const risk = useMemo(
-    () =>
-      assessRevenueAtRisk(horses, ownershipRecords, documents).items.find((item) => item.horseId === effectiveHorseId),
-    [horses, ownershipRecords, documents, effectiveHorseId],
-  );
   const economics = useMemo(
     () => (horse ? computeHorseEconomics(horse, expenseReceipts) : null),
     [horse, expenseReceipts],
@@ -102,10 +133,20 @@ export function SalePacketWizard({
 
   // Title/transfer problems hard-block release; a stale Coggins can be
   // disclosed and acknowledged, never silently ignored.
-  const ownershipBlockers = (risk?.blockers ?? []).filter(
-    (blocker) => !blocker.includes('Coggins') && !blocker.includes('medical review'),
+  const saleHold = horse
+    ? buildSaleHold(
+        horse,
+        documents,
+        ownershipRecords.find((record) => record.horseId === horse.id),
+      )
+    : null;
+  const ownershipBlockers = (saleHold?.reasons ?? []).filter((reason) =>
+    /ownership|transfer|registry|legal.owner/i.test(reason),
   );
-  const cogginsBlocked = (risk?.blockers ?? []).some((blocker) => blocker.includes('Coggins'));
+  const cogginsBlocked = !hasCurrentReadyDocument(
+    documents.filter((document) => document.horseId === effectiveHorseId && document.type === 'Coggins'),
+    CURRENT_COGGINS_DAYS,
+  );
   const careHold = horse?.status === 'Medical Review';
   /*
    * Buyer-safe types only, which is both what gets offered and what gets
@@ -120,13 +161,23 @@ export function SalePacketWizard({
     (document) =>
       document.horseId === effectiveHorseId && document.state === 'Ready' && isBuyerSafeDocumentType(document.type),
   );
-  const docSelection = selectedDocIds ?? readyDocs.map((document) => document.id);
+  const eligibleDocIds = new Set(readyDocs.map((document) => document.id));
+  const staleSelectedDocIds = (selectedDocIds ?? []).filter((id) => !eligibleDocIds.has(id));
+  const docSelection =
+    selectedDocIds?.filter((id) => eligibleDocIds.has(id)) ?? readyDocs.map((document) => document.id);
+  // Cloud entitlements are authoritative; a stale local snapshot must not
+  // prevent the server from checking an already-paid workspace.
+  const planBlock = hasBackendIdentity({ workspaceId, accessToken: session?.access_token ?? '' })
+    ? null
+    : packetExportGate(subscription);
   const defaultWatermark = `Copy for ${buyerName.trim() || 'buyer review'} – ${new Date().toISOString().slice(0, 10)}`;
   const effectiveWatermark = watermark.trim() || defaultWatermark;
 
   if (!open) return null;
 
   const reset = () => {
+    clearPacketDraft(draftScope, effectiveHorseId);
+    setGenerationFailure(null);
     setStep(0);
     setHorseId('');
     setSelectedDocIds(null);
@@ -137,6 +188,13 @@ export function SalePacketWizard({
   const close = () => {
     reset();
     onClose();
+  };
+
+  const goToRepair = (to: string) => {
+    savePacketDraft(draftScope, { horseId: effectiveHorseId, step, selectedDocIds, buyerName, buyerEmail, watermark });
+    onClose();
+    const returnTo = `/sale-packets?horse=${encodeURIComponent(effectiveHorseId)}&resume=1`;
+    navigate(`${to}${to.includes('?') ? '&' : '?'}returnTo=${encodeURIComponent(returnTo)}`);
   };
 
   const copyToClipboard = async (text: string, successMessage: string) => {
@@ -182,15 +240,32 @@ export function SalePacketWizard({
     step === 0 && !horse
       ? 'Select a horse to continue.'
       : step === 1 && ownershipBlockers.length
-        ? 'Title & transfer blockers must be cleared before a packet can be released.'
+        ? 'Complete each ownership requirement below before continuing.'
         : step === 1 && (cogginsBlocked || careHold) && !cogginsDisclosed
           ? 'Acknowledge the buyer disclosure to continue.'
-          : step === 2 && docSelection.length === 0
-            ? 'Include at least one approved document.'
-            : '';
+          : step === 2 && staleSelectedDocIds.length > 0
+            ? 'Some selected documents are no longer approved for this horse. Review the updated selection below.'
+            : step === 2 && docSelection.length === 0
+              ? 'Include at least one approved document.'
+              : '';
 
   const generate = async () => {
-    if (!horse) return;
+    if (!horse || isGenerating) return;
+    if (ownershipBlockers.length || ((cogginsBlocked || careHold) && !cogginsDisclosed)) {
+      setStep(1);
+      return;
+    }
+    if (!docSelection.length || staleSelectedDocIds.length) {
+      setStep(2);
+      return;
+    }
+    if (planBlock) {
+      setGenerationFailure(
+        packetFailureGuidance({ message: planBlock, code: 'sale_packet_limit_reached' }, canPresentPurchaseFlow),
+      );
+      return;
+    }
+    setGenerationFailure(null);
     setIsGenerating(true);
     /*
      * The generated packet's bytes go into the on-device vault, and the record
@@ -198,8 +273,8 @@ export function SalePacketWizard({
      * down. Between the two the blob is unreferenced, which is what the orphan
      * sweep deletes — the same window the intake and the backup import have.
      */
-    await beginVaultWrite();
     try {
+      await beginVaultWrite();
       const auth = { workspaceId, accessToken: session?.access_token ?? '' };
       let downloadUrl: string | undefined;
       let serverSeal: RemoteSalePacketSeal | undefined;
@@ -229,22 +304,7 @@ export function SalePacketWizard({
           documentIds: docSelection,
         });
         if (!remote.ok) {
-          setIsGenerating(false);
-          if (remote.tierBlock) {
-            pushToast({
-              title: `Sale packets need the ${remote.tierBlock.requiredPlan} plan`,
-              message: remote.message,
-              tone: 'warning',
-            });
-            close();
-            // The toast above already names the plan this needs. Dumping a
-            // store build onto the billing screen after refusing is a forced
-            // arrival at the paywall, which is not an improvement on a button
-            // that invites one.
-            if (canPresentPurchaseFlow()) navigate(billingPathForTier(remote.tierBlock.requiredPlan));
-            return;
-          }
-          pushToast({ title: 'Packet PDF failed', message: remote.message, tone: 'error' });
+          setGenerationFailure(packetFailureGuidance(remote, canPresentPurchaseFlow));
           return;
         }
         downloadUrl = remote.downloadUrl;
@@ -321,7 +381,7 @@ export function SalePacketWizard({
       setIsGenerating(false);
 
       if (!build.ok || !build.packet) {
-        pushToast({ title: 'Packet blocked', message: build.message, tone: 'error' });
+        setGenerationFailure(packetFailureGuidance({ message: build.message }, canPresentPurchaseFlow));
         return;
       }
 
@@ -374,6 +434,7 @@ export function SalePacketWizard({
           pushToast({ title: 'Packet could not be opened', message: opened.message, tone: 'warning' });
         }
       }
+      clearPacketDraft(draftScope, effectiveHorseId);
       setGenerated({
         packetId: build.packet.id,
         downloadUrl,
@@ -433,7 +494,15 @@ export function SalePacketWizard({
             ? 'success'
             : 'warning',
       });
+    } catch (error) {
+      setGenerationFailure(
+        packetFailureGuidance(
+          { message: error instanceof Error ? error.message : 'The packet could not be generated.' },
+          canPresentPurchaseFlow,
+        ),
+      );
     } finally {
+      setIsGenerating(false);
       endVaultWrite();
     }
   };
@@ -442,7 +511,7 @@ export function SalePacketWizard({
     <Dialog
       open={open}
       onOpenChange={(nextOpen) => {
-        if (!nextOpen) close();
+        if (!nextOpen && !isGenerating) close();
       }}
     >
       <DialogContent className="confirm-dialog" style={{ width: 'min(640px, 100%)' }}>
@@ -515,29 +584,44 @@ export function SalePacketWizard({
             <div>
               {ownershipBlockers.length > 0 ? (
                 <>
-                  <p className="confirm-dialog__hint" style={{ color: '#a8343e', marginTop: 0 }}>
-                    Release gate: this packet cannot be issued until title &amp; transfer is provable.
+                  <p className="confirm-dialog__hint" style={{ color: 'var(--xbar-danger)', marginTop: 0 }}>
+                    Ownership review needed before building this packet.
                   </p>
                   <ul className="confirm-dialog__consequences">
-                    {ownershipBlockers.map((blocker) => (
-                      <li key={blocker}>{blocker}</li>
+                    {[
+                      ...new Map(
+                        ownershipBlockers.map((blocker) => {
+                          const action = packetHoldAction(blocker, horse, documents);
+                          return [action.to, action] as const;
+                        }),
+                      ).values(),
+                    ].map((action) => (
+                      <li key={action.to}>
+                        <button
+                          className="button button--ghost button--compact"
+                          type="button"
+                          onClick={() => goToRepair(action.to)}
+                        >
+                          {action.label}
+                        </button>
+                      </li>
                     ))}
                   </ul>
-                  <button
-                    className="button button--primary button--compact"
-                    type="button"
-                    style={{ marginTop: 10 }}
-                    onClick={() => {
-                      close();
-                      navigate('/ownership');
-                    }}
-                  >
-                    Fix in Ownership registry
-                  </button>
+                  <details>
+                    <summary>See {ownershipBlockers.length} open requirements</summary>
+                    <ul className="confirm-dialog__consequences">
+                      {ownershipBlockers.map((blocker) => (
+                        <li key={blocker}>{blocker}</li>
+                      ))}
+                    </ul>
+                  </details>
+                  <p className="confirm-dialog__hint">
+                    Your packet details stay saved while you fix these. Return here when ready.
+                  </p>
                 </>
               ) : (
                 <p style={{ fontSize: 14, color: '#303842', marginTop: 0 }}>
-                  Title &amp; transfer is provable. This packet can be released.
+                  Ownership source review is complete. Review any buyer disclosures before continuing.
                 </p>
               )}
               {(cogginsBlocked || careHold) && ownershipBlockers.length === 0 && (
@@ -557,30 +641,28 @@ export function SalePacketWizard({
                       {cogginsBlocked && (
                         <>
                           {' '}
-                          (Or close and{' '}
+                          (Or{' '}
                           <button
                             type="button"
                             className="button button--ghost button--compact"
                             onClick={() => {
-                              close();
-                              navigate(`/documents?upload=1&horse=${horse.id}`);
+                              goToRepair(packetDocumentAction(horse.id, documents, ['Coggins'], 'Coggins').to);
                             }}
                           >
-                            upload the Coggins now
+                            {packetDocumentAction(horse.id, documents, ['Coggins'], 'Coggins').label}
                           </button>
                           .)
                         </>
                       )}
-                      {careHold && !cogginsBlocked && (
+                      {careHold && (
                         <>
                           {' '}
-                          (Or close and{' '}
+                          (Or{' '}
                           <button
                             type="button"
                             className="button button--ghost button--compact"
                             onClick={() => {
-                              close();
-                              navigate(`/medical?horse=${horse.id}`);
+                              goToRepair(`/medical?horse=${encodeURIComponent(horse.id)}`);
                             }}
                           >
                             review the care hold
@@ -613,6 +695,28 @@ export function SalePacketWizard({
 
           {step === 2 && (
             <div className="confirm-dialog__acks">
+              {staleSelectedDocIds.length > 0 && (
+                <div role="alert">
+                  <p>
+                    {staleSelectedDocIds.length} previously selected document(s) can no longer be included. They may
+                    have been archived, reassigned, or sent back for review.
+                  </p>
+                  <button
+                    type="button"
+                    className="button button--ghost button--compact"
+                    onClick={() => setSelectedDocIds(docSelection)}
+                  >
+                    Use current approved selection
+                  </button>
+                  <button
+                    type="button"
+                    className="button button--ghost button--compact"
+                    onClick={() => goToRepair(`/documents?horse=${encodeURIComponent(effectiveHorseId)}&stage=Review`)}
+                  >
+                    Review changed documents
+                  </button>
+                </div>
+              )}
               {readyDocs.length === 0 && (
                 <p style={{ fontSize: 14, color: '#303842' }}>
                   No approved documents for this horse yet.{' '}
@@ -620,11 +724,12 @@ export function SalePacketWizard({
                     type="button"
                     className="button button--ghost button--compact"
                     onClick={() => {
-                      close();
-                      navigate(`/documents?upload=1&horse=${effectiveHorseId}`);
+                      goToRepair(
+                        `/documents?horse=${encodeURIComponent(effectiveHorseId)}&stage=${documents.some((document) => document.horseId === effectiveHorseId && document.state !== 'Archived' && isBuyerSafeDocumentType(document.type)) ? 'Review' : 'Upload'}`,
+                      );
                     }}
                   >
-                    Upload Documents
+                    Open Documents to upload or review
                   </button>
                 </p>
               )}
@@ -717,6 +822,37 @@ export function SalePacketWizard({
 
           {step === 4 && !generated && horse && (
             <div>
+              {(ownershipBlockers.length > 0 || staleSelectedDocIds.length > 0) && (
+                <p role="alert">
+                  The records changed while you were preparing this packet. Generate will return you to the requirements
+                  that need review.
+                </p>
+              )}
+              {(generationFailure || planBlock) &&
+                (() => {
+                  const failure =
+                    generationFailure ??
+                    packetFailureGuidance(
+                      { message: planBlock!, code: 'sale_packet_limit_reached' },
+                      canPresentPurchaseFlow,
+                    );
+                  return (
+                    <div role="alert" className="confirm-dialog__proof">
+                      <strong>Packet needs attention</strong>
+                      <p>{failure.message}</p>
+                      <p>{failure.help}</p>
+                      {failure.action && (
+                        <button
+                          type="button"
+                          className="button button--ghost button--compact"
+                          onClick={() => goToRepair(failure.action!.to)}
+                        >
+                          {failure.action.label}
+                        </button>
+                      )}
+                    </div>
+                  );
+                })()}
               <ul className="confirm-dialog__consequences">
                 <li>
                   {docSelection.length} approved document{docSelection.length === 1 ? '' : 's'} bundled for {horse.name}
@@ -737,7 +873,7 @@ export function SalePacketWizard({
                 disabled={isGenerating}
                 onClick={() => void generate()}
               >
-                {isGenerating ? 'Assembling packet…' : 'Generate sale packet'}
+                {isGenerating ? 'Assembling packet…' : generationFailure ? 'Retry sale packet' : 'Generate sale packet'}
               </button>
             </div>
           )}
@@ -908,6 +1044,7 @@ export function SalePacketWizard({
           <button
             className="confirm-dialog__cancel"
             type="button"
+            disabled={isGenerating}
             onClick={step === 0 || generated ? close : () => setStep(step - 1)}
           >
             {step === 0 || generated ? 'Close' : 'Back'}

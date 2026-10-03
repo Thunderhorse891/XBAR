@@ -1,6 +1,8 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import type { MouseEvent } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
+import { ConfirmActionDialog } from '@/components/ConfirmActionDialog';
+import { documentDuplicateNeedsReview } from '@/lib/documentDuplicates';
 import { CommandBrief } from '@/components/CommandBrief';
 import { ContextMenu } from '@/components/ContextMenu';
 import { Panel, Pill } from '@/components/app-ui';
@@ -72,7 +74,13 @@ export default function Documents() {
 
   const [files, setFiles] = useState<File[]>([]);
   const [source, setSource] = useState<DocumentSource>('Bulk Intake');
-  const [horseId, setHorseId] = useState('');
+  const requestedHorseId = searchParams.get('horse') ?? '';
+  const requestedHorse = horses.find((horse) => horse.id === requestedHorseId);
+  const [horseId, setHorseId] = useState(requestedHorse?.id ?? '');
+  useEffect(() => {
+    setHorseId(requestedHorse?.id ?? '');
+  }, [requestedHorseId, requestedHorse?.id]);
+  const [duplicateReview, setDuplicateReview] = useState<{ documentId: string; horseId?: string } | null>(null);
   const [uploadedBy, setUploadedBy] = useState(currentUserName);
   const [batchLabel, setBatchLabel] = useState('Live upload batch');
   const [packetBuildingHorseId, setPacketBuildingHorseId] = useState('');
@@ -107,8 +115,15 @@ export default function Documents() {
 
   // Stage buckets — each document lives in exactly one workflow stage.
   const stageBuckets = useMemo(
-    () => computeStageBuckets(documents, horses, intakeBatches),
-    [documents, horses, intakeBatches],
+    () =>
+      computeStageBuckets(
+        requestedHorse
+          ? documents.filter((document) => document.horseId === requestedHorse.id || !document.horseId)
+          : documents,
+        horses,
+        intakeBatches,
+      ),
+    [documents, horses, intakeBatches, requestedHorse],
   );
   const {
     queuedDocuments,
@@ -236,6 +251,22 @@ export default function Documents() {
     }
   };
 
+  const approveDocument = (document: DocumentRecord, targetHorseId?: string, keepDuplicate = false) => {
+    if (documentDuplicateNeedsReview(document) && !keepDuplicate) {
+      setDuplicateReview({ documentId: document.id, horseId: targetHorseId });
+      return;
+    }
+    const result = reviewDocument(document.id, targetHorseId, keepDuplicate);
+    pushToast({
+      title: result.ok ? 'Document approved' : 'Approval blocked',
+      message: result.message,
+      tone: result.ok ? 'success' : 'error',
+    });
+    if (result.ok) setDuplicateReview(null);
+  };
+  const duplicateDocument = documents.find((document) => document.id === duplicateReview?.documentId);
+  const originalDocument = documents.find((document) => document.id === duplicateDocument?.duplicateOfId);
+
   const menuItems = menuDocument
     ? [
         ...(hasStoredFile(menuDocument)
@@ -255,12 +286,7 @@ export default function Documents() {
                 id: 'approve',
                 label: 'Approve document',
                 onSelect: () => {
-                  const result = reviewDocument(menuDocument.id, menuHorseId);
-                  pushToast({
-                    title: result.ok ? 'Document approved' : 'Approval blocked',
-                    message: result.message,
-                    tone: result.ok ? 'success' : 'error',
-                  });
+                  approveDocument(menuDocument, menuHorseId);
                 },
               },
               {
@@ -443,12 +469,13 @@ export default function Documents() {
       setFiles([]);
       setBatchLabel('Live upload batch');
       setCreateHorseFromBatch(false);
-      setSearchParams({});
-      if (createdHorseIds.length === 1) {
+      if (!requestedHorse) setSearchParams({});
+      if (result.duplicateCount) {
+        goToStage('Review');
+      } else if (createdHorseIds.length === 1) {
         navigate(`/horses/${createdHorseIds[0]}`);
         return;
-      }
-      if (createdHorseIds.length > 1) {
+      } else if (createdHorseIds.length > 1) {
         goToStage('Proof');
       }
     }
@@ -508,6 +535,17 @@ export default function Documents() {
 
   return (
     <>
+      {requestedHorse ? (
+        <div className="inline-actions">
+          <span>Documents for {requestedHorse.name} and unassigned uploads</span>
+          <button
+            className="button button--ghost"
+            onClick={() => navigate(`/sale-packets?horse=${encodeURIComponent(requestedHorse.id)}&resume=1`)}
+          >
+            Return to sale packet
+          </button>
+        </div>
+      ) : null}
       <CommandBrief
         eyebrow="Documents"
         entity="Your Documents"
@@ -908,7 +946,10 @@ export default function Documents() {
                                 {document.state}
                               </Pill>
                               <span>
-                                {document.duplicateRisk === 'Possible Duplicate' ? 'Duplicate check' : 'Manual match'}
+                                {document.duplicateReason ||
+                                  (document.duplicateRisk === 'Possible Duplicate'
+                                    ? 'Duplicate check'
+                                    : 'Manual match')}
                               </span>
                             </div>
                           </td>
@@ -977,19 +1018,11 @@ export default function Documents() {
                                 className="button button--ghost button--compact"
                                 type="button"
                                 onClick={() => {
-                                  const result = reviewDocument(
-                                    document.id,
-                                    reviewAssignments[document.id] ?? document.horseId,
-                                  );
-                                  pushToast({
-                                    title: result.ok ? 'Document approved' : 'Approval blocked',
-                                    message: result.message,
-                                    tone: result.ok ? 'success' : 'error',
-                                  });
+                                  approveDocument(document, reviewAssignments[document.id] ?? document.horseId);
                                 }}
                                 disabled={!canReviewDocuments}
                               >
-                                Approve
+                                {documentDuplicateNeedsReview(document) ? 'Review duplicate' : 'Approve'}
                               </button>
                               <button
                                 className="button button--ghost button--compact"
@@ -1078,7 +1111,7 @@ export default function Documents() {
               {proofDocuments.map((document) => {
                 const horse = horses.find((item) => item.id === document.horseId);
                 const record = ownershipRecords.find((item) => item.horseId === document.horseId);
-                const normalized = record ? normalizeOwnershipRecord(record) : undefined;
+                const normalized = record ? normalizeOwnershipRecord(record, documents, horse) : undefined;
                 const requirements = normalized?.proofRequirements ?? [];
                 const linkedLabels = proofLinksByDocumentId.get(document.id) ?? [];
                 return (
@@ -1373,6 +1406,35 @@ export default function Documents() {
         </>
       ) : null}
 
+      <ConfirmActionDialog
+        open={Boolean(duplicateReview && duplicateDocument)}
+        tone="legal"
+        title="Review possible duplicate"
+        consequences={[
+          duplicateDocument?.duplicateReason || 'A related document is already on file.',
+          'Keeping a copy preserves both files. You can cancel and discard the extra from the review queue.',
+        ]}
+        proofSummary={
+          <div className="inline-actions">
+            {duplicateDocument ? (
+              <button className="button button--ghost" onClick={() => void openDocument(duplicateDocument)}>
+                Open new file
+              </button>
+            ) : null}
+            {originalDocument ? (
+              <button className="button button--ghost" onClick={() => void openDocument(originalDocument)}>
+                Open existing file
+              </button>
+            ) : null}
+          </div>
+        }
+        acknowledgements={['I compared the files and want to keep this copy attached to the selected horse.']}
+        confirmLabel="Keep copy and approve"
+        onConfirm={() => {
+          if (duplicateDocument) approveDocument(duplicateDocument, duplicateReview?.horseId, true);
+        }}
+        onCancel={() => setDuplicateReview(null)}
+      />
       <SalePacketWizard
         open={Boolean(packetBuildingHorseId)}
         initialHorseId={packetBuildingHorseId || null}

@@ -98,15 +98,15 @@ export function assessRevenueAtRisk(
       actionLabel = `Start ownership documents for ${horse.name}`;
       actionRoute = '/ownership';
     } else {
-      const normalized = normalizeOwnershipRecord(record);
+      const normalized = normalizeOwnershipRecord(record, documents, horse);
       const unverified = (normalized.proofRequirements ?? []).filter((item) => item.status !== 'verified');
-      if (normalized.transferStatus !== 'Clear') {
+      if (normalized.transferStatus !== 'Clear' || unverified.length) {
         blockers.push(
           unverified.length
-            ? `Transfer ${normalized.transferStatus.toLowerCase()} — ${unverified.length} document${unverified.length === 1 ? '' : 's'} unverified`
+            ? `Transfer ${normalized.transferStatus.toLowerCase()} — ${unverified.length} document${unverified.length === 1 ? '' : 's'} need review`
             : `Transfer status ${normalized.transferStatus} — ready to mark Clear`,
         );
-        actionLabel = unverified.length ? `Verify documents for ${horse.name}` : `Mark ${horse.name} transfer Clear`;
+        actionLabel = unverified.length ? `Review documents for ${horse.name}` : `Mark ${horse.name} transfer Clear`;
         actionRoute = '/ownership';
       }
     }

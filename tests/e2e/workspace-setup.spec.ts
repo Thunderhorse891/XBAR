@@ -114,9 +114,7 @@ test('sale packets opens the real packet generator once a horse exists', async (
   await expect(page.getByRole('dialog', { name: 'Sale packet generator' })).toBeVisible();
   await expect(page.getByText('is selected for release-gate review')).toBeVisible();
   await page.getByRole('button', { name: 'Continue' }).click();
-  await expect(
-    page.getByText('Release gate: this packet cannot be issued until title & transfer is provable.'),
-  ).toBeVisible();
+  await expect(page.getByText('Ownership review needed before building this packet.')).toBeVisible();
 });
 
 test('buyer follow-up shows an empty state on a fresh workspace', async ({ page }) => {
@@ -695,4 +693,272 @@ test('OCR identity: conflicting review action refuses and a retry uses the corre
     };
   });
   expect(result).toEqual({ count: 2, linkedRegistration: '1234567', state: 'Needs Review' });
+});
+
+test('packet repair guidance targets the selected horse and retains buyer inputs through a repair', async ({
+  page,
+}) => {
+  await bootstrapWorkspace(page);
+  await seedHorse(page, 'Packet Repair Horse');
+  await page.getByRole('link', { name: 'Sale Packets', exact: true }).click();
+  const row = page.locator('.xs-mrow').filter({ hasText: 'Packet Repair Horse' });
+  await row.getByText(/What needs fixing/).click();
+  await expect(row.getByRole('list', { name: 'Packet requirements for Packet Repair Horse' })).toContainText(
+    'Ownership',
+  );
+  await page.screenshot({ path: 'test-results/packet-remediation-studio.png', fullPage: true });
+  await row.getByRole('button', { name: 'Build packet' }).click();
+  const wizard = page.getByRole('dialog', { name: 'Sale packet generator' });
+  await wizard.getByRole('button', { name: 'Continue' }).click();
+  await expect(wizard.getByRole('button', { name: 'Continue' })).toBeDisabled();
+  await page.screenshot({ path: 'test-results/packet-remediation-gate.png', fullPage: true });
+  await wizard.getByRole('button', { name: 'Review ownership requirements' }).first().click();
+  await expect(page).toHaveURL(/\/ownership\?horse=/);
+  await expect(page.getByRole('button', { name: 'Return to sale packet' })).toBeVisible();
+  // A local synthetic review fixture allows us to test recovery without using
+  // any production documents, permissions, or cloud writes.
+  await page.evaluate(async () => {
+    const modulePath = '/src/store/useXbarStore.ts';
+    const { useXbarStore } = await import(/* @vite-ignore */ modulePath);
+    const reviewPath = '/src/lib/ownershipDocumentReview.ts';
+    const { ownershipDocumentReviewKey } = await import(/* @vite-ignore */ reviewPath);
+    const state = useXbarStore.getState();
+    const horse = state.horses[0];
+    const now = new Date().toISOString();
+    const specs = [
+      ['bill_of_sale', 'Bill of sale', 'Bill of Sale', 'Bill of sale. Buyer signature.'],
+      ['registration_certificate', 'Registration certificate', 'Registration', 'Certificate of registration.'],
+      ['transfer_form', 'Signed transfer form', 'Transfer Packet', 'Transfer of ownership. Buyer signature.'],
+      ['signature_page', 'Signature page', 'Ownership Memo', 'Ownership memo. Seller signature.'],
+    ];
+    const documents = specs.map(([kind, label, type, text]) => ({
+      id: `packet-proof-${kind}`,
+      horseId: horse.id,
+      title: label,
+      type,
+      state: 'Ready',
+      source: 'Manual Upload',
+      uploadedAt: now,
+      uploadedBy: 'Synthetic reviewer',
+      confidence: 1,
+      duplicateRisk: 'Low',
+      entities: { horseName: horse.name },
+      extractedTextPreview: `${text}\nRegistered Name: ${horse.name}`,
+      tags: [],
+      localFileKey: `synthetic-${kind}`,
+    }));
+    useXbarStore.setState({
+      horses: [{ ...horse, sale: { ...horse.sale, askPrice: 12000 } }],
+      documents,
+      ownershipRecords: [
+        {
+          id: 'packet-ownership',
+          horseId: horse.id,
+          legalOwner: 'Synthetic Ranch',
+          transferStatus: 'Clear',
+          pendingDocuments: [],
+          confidence: 100,
+          complianceDeadline: '',
+          auditTrail: [],
+          proofRequirements: specs.map(([kind, label]) => ({
+            id: `proof-${kind}`,
+            kind,
+            label,
+            status: 'verified',
+            documentId: `packet-proof-${kind}`,
+            verifiedBy: 'Synthetic reviewer',
+            verifiedAt: now,
+            reviewAttestedAt: now,
+            reviewedSourceKey: ownershipDocumentReviewKey(
+              documents.find((document) => document.id === `packet-proof-${kind}`),
+            ),
+          })),
+        },
+      ],
+    });
+  });
+  await page.getByRole('button', { name: 'Return to sale packet' }).click();
+  await expect(wizard).toBeVisible();
+  await wizard.getByRole('checkbox', { name: /No current Coggins/ }).check();
+  await wizard.getByRole('button', { name: 'Continue' }).click();
+  await wizard.getByRole('checkbox', { name: 'Include Signature page' }).uncheck();
+  await wizard.getByRole('button', { name: 'Continue' }).click();
+  await wizard.getByRole('textbox', { name: 'Buyer name' }).fill('Synthetic Buyer');
+  await wizard.getByRole('textbox', { name: 'Buyer email' }).fill('buyer@example.test');
+  await wizard.getByRole('textbox', { name: 'Watermark' }).fill('Synthetic review copy');
+  await wizard.getByRole('button', { name: 'Back' }).click();
+  await wizard.getByRole('button', { name: 'Back' }).click();
+  await wizard.getByRole('button', { name: 'Upload Coggins' }).click();
+  await expect(page).toHaveURL(/\/documents\?horse=.*stage=Upload/);
+  await page.getByRole('button', { name: 'Return to sale packet' }).click();
+  await expect(wizard).toBeVisible();
+  await expect(wizard.getByRole('checkbox', { name: /No current Coggins/ })).not.toBeChecked();
+  await wizard.getByRole('checkbox', { name: /No current Coggins/ }).check();
+  await wizard.getByRole('button', { name: 'Continue' }).click();
+  await expect(wizard.getByRole('checkbox', { name: 'Include Signature page' })).not.toBeChecked();
+  await wizard.getByRole('button', { name: 'Continue' }).click();
+  await expect(wizard.getByRole('textbox', { name: 'Buyer name' })).toHaveValue('Synthetic Buyer');
+  await expect(wizard.getByRole('textbox', { name: 'Buyer email' })).toHaveValue('buyer@example.test');
+  await expect(wizard.getByRole('textbox', { name: 'Watermark' })).toHaveValue('Synthetic review copy');
+  await page.screenshot({ path: 'test-results/packet-remediation-restored-buyer.png', fullPage: true });
+  await wizard.getByRole('button', { name: 'Continue' }).click();
+  await expect(wizard.getByRole('alert')).toContainText('Professional');
+  await expect(wizard.getByRole('button', { name: 'Review plan and usage' })).toBeVisible();
+  await wizard.getByRole('button', { name: 'Generate sale packet' }).click();
+  await expect(wizard).toBeVisible();
+  const builds = await page.evaluate(async () => {
+    const modulePath = '/src/store/useXbarStore.ts';
+    const { useXbarStore } = await import(/* @vite-ignore */ modulePath);
+    return useXbarStore.getState().salePacketBuilds.length;
+  });
+  expect(builds).toBe(0);
+});
+
+test('ownership repair offers a replacement upload for an approved but ineligible original', async ({ page }) => {
+  await bootstrapWorkspace(page);
+  await seedHorse(page, 'Source Repair Horse');
+  const horseId = await page.evaluate(async () => {
+    const modulePath = '/src/store/useXbarStore.ts';
+    const { useXbarStore } = await import(/* @vite-ignore */ modulePath);
+    const horse = useXbarStore.getState().horses[0];
+    useXbarStore.setState({
+      documents: [
+        {
+          id: 'wrong-approved-original',
+          horseId: horse.id,
+          title: 'Wrong original',
+          type: 'Registration',
+          state: 'Ready',
+          source: 'Manual Upload',
+          uploadedAt: new Date().toISOString(),
+          uploadedBy: 'Synthetic reviewer',
+          confidence: 1,
+          duplicateRisk: 'Low',
+          entities: { horseName: horse.name },
+          extractedTextPreview: 'A grocery receipt renamed registration.pdf',
+          localFileKey: 'synthetic-wrong-original',
+          summary: 'Synthetic approved source that is not a registration certificate',
+        },
+      ],
+    });
+    return horse.id as string;
+  });
+  await page
+    .getByRole('navigation', { name: 'Primary' })
+    .getByRole('link', { name: /^Ownership(?:\s+\d+)?$/ })
+    .click();
+  await page
+    .getByRole('row')
+    .filter({ hasText: /source repair horse/i })
+    .getByRole('button', { name: 'Review sources', exact: true })
+    .click();
+  await expect(page).toHaveURL(new RegExp(`/ownership\\?horse=${encodeURIComponent(horseId)}`));
+  const requirement = page.locator('.ownership-proof-row').filter({
+    has: page.getByText('Registration certificate', { exact: true }),
+  });
+  await expect(
+    requirement.getByRole('combobox', { name: 'Link document for Registration certificate' }),
+  ).toBeDisabled();
+  await expect(requirement.locator('details')).not.toHaveAttribute('open');
+  await requirement.getByText('Why can’t I use these files?', { exact: true }).click();
+  await expect(requirement).toContainText('The document type or readable contents do not match this requirement.');
+  await requirement.getByRole('button', { name: 'Upload registration certificate', exact: true }).click();
+  await expect(page).toHaveURL(new RegExp(`/documents\\?horse=${encodeURIComponent(horseId)}&stage=Upload`));
+  await expect(page.getByRole('tab', { name: /Upload/ })).toHaveAttribute('aria-selected', 'true');
+});
+
+test('ownership packet repair starts the requested horse record without opening another horse', async ({ page }) => {
+  await bootstrapWorkspace(page);
+  await seedHorse(page, 'Existing Ownership Horse');
+  await seedHorse(page, 'Missing Ownership Horse');
+  const before = await page.evaluate(async () => {
+    const modulePath = '/src/store/useXbarStore.ts';
+    const { useXbarStore } = await import(/* @vite-ignore */ modulePath);
+    const state = useXbarStore.getState();
+    const target = state.horses.find((horse: { name: string }) => horse.name === 'MISSING OWNERSHIP HORSE');
+    const retained = state.ownershipRecords.filter((record: { horseId: string }) => record.horseId !== target.id);
+    useXbarStore.setState({ ownershipRecords: retained });
+    return { targetId: target.id as string, existing: JSON.stringify(retained[0]) };
+  });
+  await page.getByRole('link', { name: 'Sale Packets', exact: true }).click();
+  await page
+    .locator('.xs-mrow')
+    .filter({ hasText: 'Missing Ownership Horse' })
+    .getByRole('button', { name: 'Build packet' })
+    .click();
+  const wizard = page.getByRole('dialog', { name: 'Sale packet generator' });
+  await wizard.getByRole('button', { name: 'Continue' }).click();
+  await wizard.getByRole('button', { name: 'Review ownership requirements' }).first().click();
+  await expect(page).toHaveURL(new RegExp(`/ownership\\?horse=${encodeURIComponent(before.targetId)}`));
+  const workspace = page.locator('#ownership-record-workspace');
+  await expect(workspace.getByText(/^Missing Ownership Horse has no ownership record$/i)).toBeVisible();
+  await expect(workspace.getByRole('heading', { name: /^Existing Ownership Horse$/i })).toHaveCount(0);
+  await workspace.getByRole('button', { name: 'Start ownership record', exact: true }).click();
+  await expect(workspace.getByRole('heading', { name: /^Missing Ownership Horse$/i })).toBeVisible();
+  await expect(workspace.getByRole('combobox', { name: 'Link document for Registration certificate' })).toBeVisible();
+  const after = await page.evaluate(async (targetId) => {
+    const modulePath = '/src/store/useXbarStore.ts';
+    const { useXbarStore } = await import(/* @vite-ignore */ modulePath);
+    const records = useXbarStore.getState().ownershipRecords;
+    return {
+      targetCount: records.filter((record: { horseId: string }) => record.horseId === targetId).length,
+      existing: JSON.stringify(records.find((record: { horseId: string }) => record.horseId !== targetId)),
+    };
+  }, before.targetId);
+  expect(after).toEqual({ targetCount: 1, existing: before.existing });
+});
+
+test('renamed batch duplicates require comparison acknowledgment and keeping a copy preserves both files', async ({
+  page,
+}) => {
+  await bootstrapWorkspace(page);
+  await seedHorse(page, 'Duplicate Review Horse');
+  await page.getByRole('button', { name: 'Create', exact: true }).click();
+  await page.getByRole('menuitem', { name: 'Upload Document' }).click();
+  const drawer = page.getByRole('dialog', { name: 'Upload Document' });
+  const buffer = Buffer.from(
+    'CERTIFICATE OF REGISTRATION\nRegistered Name: Duplicate Review Horse\nOwner: Synthetic Ranch',
+  );
+  await drawer.locator('input[type="file"]').setInputFiles([
+    { name: 'original-paper.txt', mimeType: 'text/plain', buffer },
+    { name: 'renamed-copy.txt', mimeType: 'text/plain', buffer },
+  ]);
+  await drawer.locator('select').first().selectOption('');
+  await drawer.getByRole('checkbox').uncheck();
+  await drawer.getByRole('button', { name: 'Upload for review' }).click();
+  await expect(page).toHaveURL(/\/documents\?stage=Review/);
+  const copy = page.getByRole('group', { name: 'renamed-copy review actions' });
+  await expect(copy).toContainText('Identical file bytes');
+  await copy.getByRole('button', { name: 'Review duplicate', exact: true }).click();
+  const confirmation = page.getByRole('alertdialog', { name: 'Review possible duplicate' });
+  const keep = confirmation.getByRole('button', { name: 'Keep copy and approve', exact: true });
+  await expect(keep).toBeDisabled();
+  await expect(confirmation.getByRole('button', { name: 'Open new file' })).toBeVisible();
+  await expect(confirmation.getByRole('button', { name: 'Open existing file' })).toBeVisible();
+  await confirmation.getByRole('button', { name: 'Cancel', exact: true }).click();
+  await expect(copy).toBeVisible();
+  await copy.getByRole('button', { name: 'Review duplicate', exact: true }).click();
+  await expect(keep).toBeDisabled();
+  await confirmation
+    .getByRole('checkbox', { name: 'I compared the files and want to keep this copy attached to the selected horse.' })
+    .check();
+  await keep.click();
+  await expect(confirmation).not.toBeVisible();
+  const result = await page.evaluate(async () => {
+    const modulePath = '/src/store/useXbarStore.ts';
+    const { useXbarStore } = await import(/* @vite-ignore */ modulePath);
+    return useXbarStore
+      .getState()
+      .documents.map(
+        (document: { title: string; state: string; localFileKey?: string; duplicateReviewedAt?: string }) => ({
+          title: document.title,
+          state: document.state,
+          stored: Boolean(document.localFileKey),
+          reviewed: Boolean(document.duplicateReviewedAt),
+        }),
+      );
+  });
+  expect(result).toHaveLength(2);
+  expect(result).toContainEqual({ title: 'original-paper', state: 'Matched', stored: true, reviewed: false });
+  expect(result).toContainEqual({ title: 'renamed-copy', state: 'Ready', stored: true, reviewed: true });
 });

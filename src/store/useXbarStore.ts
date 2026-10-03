@@ -4,6 +4,7 @@ import { createJSONStorage, persist } from 'zustand/middleware';
 import {
   buildDocumentRecord,
   resolveDocumentHorseMatch,
+  horseIdentityConflicts,
   buildSubscriptionForTier,
   createId,
   createShareAccessToken,
@@ -17,6 +18,12 @@ import { apiConfig, isRelationalCloudEnabled, isSupabaseConfigured } from '@/lib
 import { useCloudStore } from '@/store/useCloudStore';
 import { hasRoleCapability } from '@/lib/permissions';
 import { hasHorsePhoto, isHorsePhotoAsset } from '@/lib/animalPassport';
+import { flagDocumentDuplicates, documentDuplicateNeedsReview, fingerprintDocument } from '@/lib/documentDuplicates';
+import {
+  assessOwnershipDocument,
+  ownershipReviewBlockers,
+  ownershipDocumentReviewKey,
+} from '@/lib/ownershipDocumentReview';
 import { buildSaleHold } from '@/lib/saleTrustEngine';
 import { buildPacketCredential } from '@/lib/localSalePacketGenerator';
 import { toPacketDisclosure } from '@/lib/salePacketDisclosure';
@@ -30,6 +37,7 @@ import { buildOfferDecision } from '@/lib/profitIntelligence';
 import { scheduleBuyerActivityFollowUp } from '@/lib/salesFollowUp';
 import {
   createWorkspaceInvitationInCloud,
+  getDocumentAccessUrl,
   loadWorkspaceStorageBytes,
   removeWorkspaceMemberFromCloud,
   revokeWorkspaceInvitationInCloud,
@@ -979,6 +987,40 @@ export const useXbarStore = create<XbarStore>()(
           try {
             const selectedHorse = state.horses.find((horse) => horse.id === horseId);
             const batchId = createId('batch');
+            // Fingerprint legacy originals once, using the same authorized file
+            // resolver as Open file. Only equal-size candidates can be exact
+            // duplicates; no arbitrary remote links are fetched here.
+            const incomingSizes = new Set(fileList.map((file) => file.size));
+            const legacyHashes = new Map<string, string>();
+            let uncheckedLegacy = 0;
+            for (const existing of get().documents) {
+              if (existing.state === 'Archived' || existing.contentSha256) continue;
+              if (existing.fileSizeBytes && !incomingSizes.has(existing.fileSizeBytes)) continue;
+              if (existing.fileUrl || (!existing.storagePath && !existing.localFileKey)) {
+                uncheckedLegacy += 1;
+                continue;
+              }
+              let release: (() => void) | undefined;
+              try {
+                const access = await getDocumentAccessUrl(existing);
+                if (!access.ok) {
+                  uncheckedLegacy += 1;
+                  continue;
+                }
+                release = access.release;
+                const response = await fetch(access.url);
+                if (!response.ok) throw new Error('Stored original could not be read.');
+                const blob = await response.blob();
+                legacyHashes.set(existing.id, await fingerprintDocument(blob));
+              } catch {
+                uncheckedLegacy += 1;
+              } finally {
+                release?.();
+              }
+            }
+            const duplicateIndex = get().documents.map((document) =>
+              legacyHashes.has(document.id) ? { ...document, contentSha256: legacyHashes.get(document.id) } : document,
+            );
             let documents: DocumentRecord[] = await Promise.all(
               fileList.map(async (file) => {
                 let uploadedAsset: Awaited<ReturnType<typeof uploadDocumentAssetToCloud>> = null;
@@ -1001,7 +1043,7 @@ export const useXbarStore = create<XbarStore>()(
                   source,
                   selectedHorse,
                   horses: get().horses,
-                  existingDocuments: get().documents,
+                  existingDocuments: duplicateIndex,
                 });
                 // Cloud storage did not take this file — it is either not
                 // configured for this build or the upload failed. Keeping the
@@ -1036,6 +1078,8 @@ export const useXbarStore = create<XbarStore>()(
                 };
               }),
             );
+            documents = flagDocumentDuplicates(documents, duplicateIndex);
+            const duplicateCount = documents.filter(documentDuplicateNeedsReview).length;
             const currentHorses = get().horses;
             let createdHorseBundles =
               !selectedHorse && createHorseFromBatch
@@ -1057,6 +1101,9 @@ export const useXbarStore = create<XbarStore>()(
                       }, new Map<string, DocumentRecord[]>()),
                   )
                     .map(([, groupedDocuments]) => {
+                      // A duplicate hint must never remove contradictory identity
+                      // evidence from the batch. Hold the entire group for review.
+                      if (groupedDocuments.some(documentDuplicateNeedsReview)) return null;
                       const horseInput = buildHorseInputFromDocuments(groupedDocuments, state.workspaceProfile);
                       if (!horseInput) {
                         return null;
@@ -1198,7 +1245,14 @@ export const useXbarStore = create<XbarStore>()(
             if (cloudStoredBytes > 0) useCloudStore.getState().noteStagedStorageBytes(cloudStoredBytes);
 
             set((current) => {
-              const allDocuments = [...documents, ...current.documents];
+              const allDocuments = [
+                ...documents,
+                ...current.documents.map((document) =>
+                  legacyHashes.has(document.id)
+                    ? { ...document, contentSha256: legacyHashes.get(document.id) }
+                    : document,
+                ),
+              ];
               const nextHorses = current.horses.map((horse) => {
                 const matchedDocuments = documents.filter(
                   (document) =>
@@ -1226,9 +1280,10 @@ export const useXbarStore = create<XbarStore>()(
 
             return {
               ok: true,
-              message: `${documents.length} file${documents.length === 1 ? '' : 's'} entered the document queue.${createdHorses.length ? ` ${createdHorses.length} new horse record${createdHorses.length === 1 ? ' was' : 's were'} created from the upload batch.` : ''}${omittedHorseCount ? ` ${omittedHorseCount} additional horse candidate${omittedHorseCount === 1 ? ' was' : 's were'} left for review because the horse limit was reached.` : ''}${localDocumentCount ? ` ${localDocumentCount} kept as metadata only — this browser could not store the file on this device either.` : ''}${capacityUnverified ? ' Cloud storage could not be reached, so these are on this device only — upload them again once it returns to put them in the cloud.' : ''}`,
+              message: `${documents.length} file${documents.length === 1 ? '' : 's'} entered the document queue.${duplicateCount ? ` ${duplicateCount} duplicate warning${duplicateCount === 1 ? '' : 's'} need review: compare files, keep a copy deliberately, or discard the extra. No files were removed.` : ''}${uncheckedLegacy ? ` Exact-file checks could not cover ${uncheckedLegacy} older file${uncheckedLegacy === 1 ? '' : 's'} whose original was unavailable.` : ''}${createdHorses.length ? ` ${createdHorses.length} new horse record${createdHorses.length === 1 ? ' was' : 's were'} created from the upload batch.` : ''}${omittedHorseCount ? ` ${omittedHorseCount} additional horse candidate${omittedHorseCount === 1 ? ' was' : 's were'} left for review because the horse limit was reached.` : ''}${localDocumentCount ? ` ${localDocumentCount} kept as metadata only — this browser could not store the file on this device either.` : ''}${capacityUnverified ? ' Cloud storage could not be reached, so these are on this device only — upload them again once it returns to put them in the cloud.' : ''}`,
               id: batch.id,
               createdHorseIds: createdHorses.map((horse) => horse.id),
+              duplicateCount,
             };
           } catch (error) {
             console.error('Document upload failed', error);
@@ -1241,7 +1296,7 @@ export const useXbarStore = create<XbarStore>()(
             set(() => ({ documentIntakeProgress: null }));
           }
         }),
-      reviewDocument: (documentId, horseId) => {
+      reviewDocument: (documentId, horseId, keepDuplicate = false) => {
         const deniedMessage = requireRoleCapability(get().currentRole, 'reviewDocuments');
         if (deniedMessage) {
           return { ok: false, message: deniedMessage };
@@ -1271,12 +1326,29 @@ export const useXbarStore = create<XbarStore>()(
           return { ok: false, message: 'Selected horse record was not found.' };
         }
 
+        if (horseIdentityConflicts(matchedHorse, document.entities)) {
+          return {
+            ok: false,
+            message:
+              'The source identity conflicts with the selected horse. Choose the correct horse or upload corrected papers.',
+          };
+        }
+        if (documentDuplicateNeedsReview(document) && !keepDuplicate) {
+          return {
+            ok: false,
+            message: 'Compare the duplicate files, then choose Keep copy and approve or discard the extra.',
+          };
+        }
         const nextDocument: DocumentRecord = {
           ...document,
+          duplicateReviewedAt: documentDuplicateNeedsReview(document)
+            ? new Date().toISOString()
+            : document.duplicateReviewedAt,
           horseId: nextHorseId,
           state: 'Ready',
-          confidence: Math.max(document.confidence, 0.92),
-          duplicateRisk: document.duplicateRisk === 'Possible Duplicate' ? 'Review' : document.duplicateRisk,
+          // Approval records a human action; it must not inflate OCR confidence.
+          confidence: document.confidence,
+          duplicateRisk: keepDuplicate ? 'Low' : document.duplicateRisk,
           summary: `${document.title} is approved and attached to ${matchedHorse.name}.`,
         };
 
@@ -2421,9 +2493,19 @@ export const useXbarStore = create<XbarStore>()(
         const document = get().documents.find((item) => item.id === documentId);
         if (!document) return { ok: false, message: 'Select an uploaded document to use as proof.' };
 
-        const normalized = normalizeOwnershipRecord(record);
+        const normalized = normalizeOwnershipRecord(
+          record,
+          get().documents,
+          get().horses.find((horse) => horse.id === record.horseId),
+        );
         const requirement = normalized.proofRequirements?.find((item) => item.id === requirementId);
         if (!requirement) return { ok: false, message: 'Proof requirement not found.' };
+        const assessment = assessOwnershipDocument(
+          document,
+          get().horses.find((horse) => horse.id === record.horseId),
+          requirement.kind,
+        );
+        if (!assessment.ok) return { ok: false, message: assessment.message };
 
         const nextRequirements = (normalized.proofRequirements ?? []).map((item) =>
           item.id === requirementId
@@ -2435,6 +2517,8 @@ export const useXbarStore = create<XbarStore>()(
                 linkedAt: new Date().toISOString(),
                 verifiedAt: undefined,
                 verifiedBy: undefined,
+                reviewAttestedAt: undefined,
+                reviewedSourceKey: undefined,
               }
             : item,
         );
@@ -2464,23 +2548,54 @@ export const useXbarStore = create<XbarStore>()(
 
         return { ok: true, message: `${requirement.label} linked to ${document.title}.`, id: recordId };
       },
-      verifyOwnershipProof: (recordId, requirementId, verifiedBy) => {
+      verifyOwnershipProof: (recordId, requirementId, verifiedBy, reviewConfirmed) => {
         const deniedMessage = requireRoleCapability(get().currentRole, 'manageOwnership');
         if (deniedMessage) return { ok: false, message: deniedMessage };
 
         const record = get().ownershipRecords.find((item) => item.id === recordId);
         if (!record) return { ok: false, message: 'Ownership record not found.' };
 
-        const normalized = normalizeOwnershipRecord(record);
+        const normalized = normalizeOwnershipRecord(
+          record,
+          get().documents,
+          get().horses.find((horse) => horse.id === record.horseId),
+        );
         const requirement = normalized.proofRequirements?.find((item) => item.id === requirementId);
         if (!requirement) return { ok: false, message: 'Proof requirement not found.' };
         if (requirement.status !== 'linked') {
           return { ok: false, message: 'Link a document before verifying.' };
         }
 
+        const document = get().documents.find((item) => item.id === requirement.documentId);
+        const assessment = assessOwnershipDocument(
+          document,
+          get().horses.find((horse) => horse.id === record.horseId),
+          requirement.kind,
+        );
+        if (!assessment.ok) return { ok: false, message: assessment.message };
+        if (
+          !document ||
+          !reviewConfirmed ||
+          reviewConfirmed.documentId !== document.id ||
+          reviewConfirmed.sourceKey !== ownershipDocumentReviewKey(document) ||
+          !verifiedBy.trim()
+        ) {
+          return {
+            ok: false,
+            message:
+              'Open the original and explicitly confirm the horse identity, document purpose, parties, dates and required signatures.',
+          };
+        }
         const nextRequirements = (normalized.proofRequirements ?? []).map((item) =>
           item.id === requirementId
-            ? { ...item, status: 'verified' as const, verifiedAt: new Date().toISOString(), verifiedBy }
+            ? {
+                ...item,
+                status: 'verified' as const,
+                verifiedAt: new Date().toISOString(),
+                reviewAttestedAt: new Date().toISOString(),
+                reviewedSourceKey: reviewConfirmed.sourceKey,
+                verifiedBy,
+              }
             : item,
         );
         const auditEvent = createAuditEvent({
@@ -2488,7 +2603,7 @@ export const useXbarStore = create<XbarStore>()(
           action: 'verified-proof',
           entityType: 'ownership',
           entityId: recordId,
-          summary: `${requirement.label} verified against "${requirement.documentTitle ?? 'linked document'}"`,
+          summary: `${requirement.label} reviewed by a person against "${requirement.documentTitle ?? 'linked document'}"`,
           context: { horseId: record.horseId },
         });
 
@@ -2507,7 +2622,11 @@ export const useXbarStore = create<XbarStore>()(
           auditEvents: [auditEvent, ...state.auditEvents].slice(0, 500),
         }));
 
-        return { ok: true, message: `${requirement.label} verified.`, id: recordId };
+        return {
+          ok: true,
+          message: `${requirement.label} marked reviewed by ${verifiedBy}. XBAR has not independently verified legal ownership.`,
+          id: recordId,
+        };
       },
       unlinkOwnershipProof: (recordId, requirementId) => {
         const deniedMessage = requireRoleCapability(get().currentRole, 'manageOwnership');
@@ -2516,7 +2635,11 @@ export const useXbarStore = create<XbarStore>()(
         const record = get().ownershipRecords.find((item) => item.id === recordId);
         if (!record) return { ok: false, message: 'Ownership record not found.' };
 
-        const normalized = normalizeOwnershipRecord(record);
+        const normalized = normalizeOwnershipRecord(
+          record,
+          get().documents,
+          get().horses.find((horse) => horse.id === record.horseId),
+        );
         const requirement = normalized.proofRequirements?.find((item) => item.id === requirementId);
         if (!requirement) return { ok: false, message: 'Proof requirement not found.' };
 
@@ -2530,6 +2653,8 @@ export const useXbarStore = create<XbarStore>()(
                 linkedAt: undefined,
                 verifiedAt: undefined,
                 verifiedBy: undefined,
+                reviewAttestedAt: undefined,
+                reviewedSourceKey: undefined,
               }
             : item,
         );
@@ -2566,9 +2691,21 @@ export const useXbarStore = create<XbarStore>()(
         const record = get().ownershipRecords.find((item) => item.id === recordId);
         if (!record) return { ok: false, message: 'Ownership record not found.' };
 
-        const normalized = normalizeOwnershipRecord(record);
+        const normalized = normalizeOwnershipRecord(
+          record,
+          get().documents,
+          get().horses.find((horse) => horse.id === record.horseId),
+        );
         if (status === 'Clear') {
-          const clearance = canMarkTransferClear(normalized);
+          const horse = get().horses.find((item) => item.id === record.horseId);
+          const sourceBlockers = horse
+            ? ownershipReviewBlockers(normalized, horse, get().documents)
+            : ['Horse record missing.'];
+          const proofClearance = canMarkTransferClear(normalized);
+          const clearance = {
+            ok: proofClearance.ok && sourceBlockers.length === 0,
+            blockers: [...proofClearance.blockers, ...sourceBlockers],
+          };
           if (!clearance.ok) {
             return {
               ok: false,

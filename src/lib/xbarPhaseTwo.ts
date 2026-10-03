@@ -29,7 +29,14 @@ type PacketDocumentInput = Pick<DocumentRecord, 'type' | 'state' | 'entities'>;
 
 type DocumentTrustInput = Pick<
   DocumentRecord,
-  'title' | 'extractedTextPreview' | 'entities' | 'state' | 'duplicateRisk' | 'confidence' | 'horseId'
+  | 'title'
+  | 'extractedTextPreview'
+  | 'entities'
+  | 'state'
+  | 'duplicateRisk'
+  | 'confidence'
+  | 'horseId'
+  | 'duplicateReason'
 >;
 
 type PacketOwnershipInput = Pick<OwnershipRecord, 'transferStatus'>;
@@ -159,7 +166,7 @@ function buildSalePacketSlot(params: {
 
 function describeDuplicateRisk(document: DocumentTrustInput) {
   if (document.duplicateRisk === 'Possible Duplicate') {
-    return 'Possible duplicate against an existing document record.';
+    return document.duplicateReason || 'Possible duplicate against an existing document record.';
   }
   if (document.duplicateRisk === 'Review') {
     return 'Related document already exists and needs side-by-side review.';

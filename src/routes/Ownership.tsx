@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
 import type { MouseEvent } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 import { CommandBrief } from '@/components/CommandBrief';
 import { ConfirmActionDialog } from '@/components/ConfirmActionDialog';
 import { ContextMenu } from '@/components/ContextMenu';
@@ -8,11 +8,20 @@ import { EmptyState } from '@/components/EmptyState';
 import { ActionMenuButton } from '@/components/InteractionSystem';
 import { Pill, ProgressBar } from '@/components/app-ui';
 import { DotsIcon } from '@/components/icons';
+import {
+  assessOwnershipDocument,
+  ownershipDocumentReviewKey,
+  ownershipProofDocumentTypes,
+  type OwnershipDocumentReview,
+} from '@/lib/ownershipDocumentReview';
+import { packetDocumentAction } from '@/lib/salePacketGuidance';
+import { openStoredFileInTab } from '@/lib/openStoredFile';
 import { formatDateLabel, formatDateTimeLabel } from '@/lib/format';
 import { useUiStore } from '@/store/useUiStore';
 import { useCurrentRoleCapability, useXbarStore } from '@/store/useXbarStore';
 import { normalizeOwnershipRecord } from '@/store/xbarStoreLogic';
 import type {
+  DocumentRecord,
   OwnershipProofRequirement,
   OwnershipRecord,
   OwnershipStake,
@@ -37,6 +46,29 @@ type MenuState =
 
 const RECORD_WORKSPACE_ID = 'ownership-record-workspace';
 
+function initialOwnershipRecordId(records: OwnershipRecord[], requestedHorseId: string): string {
+  return requestedHorseId
+    ? (records.find((record) => record.horseId === requestedHorseId)?.id ?? '')
+    : (records[0]?.id ?? '');
+}
+
+function ownershipRepairDocuments(
+  assessments: { document: DocumentRecord; review: OwnershipDocumentReview }[],
+): DocumentRecord[] {
+  // An approved source can still be the wrong or unreadable paper. Sending it
+  // to Proof cannot fix the original; only useful pending reviews belong here.
+  return assessments
+    .filter(
+      ({ document, review }) =>
+        review.ok ||
+        document.state === 'Queued' ||
+        (review.status === 'review_needed' &&
+          !document.processingNote?.trim() &&
+          (document.state === 'Needs Review' || document.state === 'Matched')),
+    )
+    .map(({ document }) => document);
+}
+
 // No green anywhere on this route: clear/verified is blue, in-progress is
 // amber, blocked/missing is rose.
 function statusPillTone(status: TransferStatus): 'blue' | 'amber' | 'rose' {
@@ -52,7 +84,7 @@ function proofChipTone(status: ProofStatus): 'blue' | 'amber' | 'rose' {
 }
 
 function proofChipLabel(status: ProofStatus): string {
-  if (status === 'verified') return 'Verified';
+  if (status === 'verified') return 'Reviewed by person';
   if (status === 'linked') return 'Linked';
   return 'Missing';
 }
@@ -95,9 +127,28 @@ export default function Ownership() {
 
   // Legacy persisted records may predate the proof model — normalize before
   // anything renders or computes from them.
-  const records = useMemo(() => ownershipRecords.map(normalizeOwnershipRecord), [ownershipRecords]);
+  const records = useMemo(
+    () =>
+      ownershipRecords.map((record) =>
+        normalizeOwnershipRecord(
+          record,
+          documents,
+          horses.find((horse) => horse.id === record.horseId),
+        ),
+      ),
+    [ownershipRecords, documents, horses],
+  );
 
-  const [selectedRecordId, setSelectedRecordId] = useState(records[0]?.id ?? '');
+  const [searchParams] = useSearchParams();
+  const requestedHorseId = searchParams.get('horse') ?? '';
+  const requestedHorse = horses.find((horse) => horse.id === requestedHorseId);
+  const [selectedRecordId, setSelectedRecordId] = useState(initialOwnershipRecordId(records, requestedHorseId));
+  const [reviewTarget, setReviewTarget] = useState<{
+    recordId: string;
+    requirementId: string;
+    documentId: string;
+    sourceKey: string;
+  } | null>(null);
   const [query, setQuery] = useState('');
   const [statusFilter, setStatusFilter] = useState<TransferStatus | 'All'>('All');
   const [sortMode, setSortMode] = useState<SortMode>('Deadline');
@@ -120,7 +171,7 @@ export default function Ownership() {
     [documents, horses, records],
   );
 
-  const selectedRecord = records.find((record) => record.id === selectedRecordId) ?? records[0];
+  const selectedRecord = records.find((record) => record.id === selectedRecordId);
   const selectedHorse = horses.find((horse) => horse.id === selectedRecord?.horseId);
   const selectedHorseName = selectedHorse?.name ?? selectedRecord?.legalOwner ?? 'record';
   const selectedHorseTotalShare = selectedHorse
@@ -128,15 +179,20 @@ export default function Ownership() {
     : 0;
   const remainingShare = Math.max(0, 100 - selectedHorseTotalShare);
 
+  const requestedRecordId = records.find((record) => record.horseId === requestedHorseId)?.id;
+  useEffect(() => {
+    if (requestedHorseId) setSelectedRecordId(requestedRecordId ?? '');
+  }, [requestedHorseId, requestedRecordId]);
+
   useEffect(() => {
     if (!records.length) {
       setSelectedRecordId('');
       return;
     }
     if (!selectedRecordId || !records.some((record) => record.id === selectedRecordId)) {
-      setSelectedRecordId(records[0].id);
+      setSelectedRecordId(initialOwnershipRecordId(records, requestedHorseId));
     }
-  }, [records, selectedRecordId]);
+  }, [records, selectedRecordId, requestedHorseId]);
 
   useEffect(() => {
     setStatusError('');
@@ -247,8 +303,8 @@ export default function Ownership() {
       title: horse.name,
       description:
         verified === requirements.length && requirements.length > 0
-          ? 'Every ownership requirement is verified.'
-          : `${verified} of ${requirements.length} ownership requirements verified.`,
+          ? 'Every ownership requirement has a recorded human review.'
+          : `${verified} of ${requirements.length} ownership requirements reviewed.`,
       facts: [
         { label: 'Legal owner', value: record.legalOwner },
         { label: 'Transfer', value: record.transferStatus },
@@ -288,7 +344,7 @@ export default function Ownership() {
 
   // ---- Ownership document actions -------------------------------------------
   const linkableDocuments = selectedRecord
-    ? documents.filter((document) => document.horseId === selectedRecord.horseId || !document.horseId)
+    ? documents.filter((document) => document.horseId === selectedRecord.horseId && document.state !== 'Archived')
     : [];
 
   const handleLinkProof = (requirementId: string, documentId: string) => {
@@ -303,9 +359,11 @@ export default function Ownership() {
 
   const handleVerifyProof = (requirementId: string) => {
     if (!selectedRecord) return;
-    const result = verifyOwnershipProof(selectedRecord.id, requirementId, currentRole);
+    if (!reviewTarget) return;
+    const result = verifyOwnershipProof(reviewTarget.recordId, requirementId, currentRole, reviewTarget);
+    if (result.ok) setReviewTarget(null);
     pushToast({
-      title: result.ok ? 'Document verified' : 'Verify blocked',
+      title: result.ok ? 'Source review recorded' : 'Review blocked',
       message: result.message,
       tone: result.ok ? 'success' : 'error',
     });
@@ -403,79 +461,136 @@ export default function Ownership() {
     (left, right) => Date.parse(right.at) - Date.parse(left.at),
   );
 
-  const renderProofRow = (requirement: OwnershipProofRequirement) => (
-    <div key={requirement.id} className={`ownership-proof-row ownership-proof-row--${requirement.status}`}>
-      <div className="ownership-proof-row__info">
-        <div className="ownership-proof-row__title">
-          <strong>{requirement.label}</strong>
-          <Pill tone={proofChipTone(requirement.status)}>{proofChipLabel(requirement.status)}</Pill>
+  const reviewRequirement = records
+    .find((record) => record.id === reviewTarget?.recordId)
+    ?.proofRequirements?.find((requirement) => requirement.id === reviewTarget?.requirementId);
+  const reviewSource = documents.find((document) => document.id === reviewTarget?.documentId);
+  const openReviewSource = async () => {
+    if (!reviewSource) return;
+    const result = await openStoredFileInTab(reviewSource);
+    if (!result.ok) pushToast({ title: 'Source unavailable', message: result.message, tone: 'error' });
+  };
+
+  const renderProofRow = (requirement: OwnershipProofRequirement) => {
+    const assessments = linkableDocuments.map((document) => ({
+      document,
+      review: assessOwnershipDocument(document, selectedHorse, requirement.kind),
+    }));
+    const eligible = assessments.filter(({ review }) => review.ok);
+    const repair = packetDocumentAction(
+      selectedRecord?.horseId ?? '',
+      ownershipRepairDocuments(assessments),
+      ownershipProofDocumentTypes[requirement.kind],
+      requirement.label.toLowerCase(),
+    );
+    return (
+      <div key={requirement.id} className={`ownership-proof-row ownership-proof-row--${requirement.status}`}>
+        <div className="ownership-proof-row__info">
+          <div className="ownership-proof-row__title">
+            <strong>{requirement.label}</strong>
+            <Pill tone={proofChipTone(requirement.status)}>{proofChipLabel(requirement.status)}</Pill>
+          </div>
+          {requirement.status === 'missing' ? (
+            <small>
+              {eligible.length ? 'Choose a source below.' : 'No eligible source yet.'}{' '}
+              <button className="button button--ghost button--compact" onClick={() => navigate(repair.to)}>
+                {repair.label}
+              </button>
+              {!eligible.length && assessments.length > 0 ? (
+                <details>
+                  <summary>Why can’t I use these files?</summary>
+                  <ul>
+                    {assessments.map(({ document, review }) => (
+                      <li key={document.id}>
+                        {document.title}: {review.message}
+                      </li>
+                    ))}
+                  </ul>
+                </details>
+              ) : null}
+            </small>
+          ) : (
+            <small>
+              {requirement.documentTitle ?? 'Linked document'}
+              {requirement.linkedAt ? ` · linked ${formatDateTimeLabel(requirement.linkedAt)}` : ''}
+              {requirement.status === 'verified' && requirement.verifiedBy
+                ? ` · reviewed by ${requirement.verifiedBy}${requirement.verifiedAt ? ` ${formatDateTimeLabel(requirement.verifiedAt)}` : ''}`
+                : ''}
+            </small>
+          )}
         </div>
-        {requirement.status === 'missing' ? (
-          <small>No document linked yet.</small>
-        ) : (
-          <small>
-            {requirement.documentTitle ?? 'Linked document'}
-            {requirement.linkedAt ? ` · linked ${formatDateTimeLabel(requirement.linkedAt)}` : ''}
-            {requirement.status === 'verified' && requirement.verifiedBy
-              ? ` · verified by ${requirement.verifiedBy}${requirement.verifiedAt ? ` ${formatDateTimeLabel(requirement.verifiedAt)}` : ''}`
-              : ''}
-          </small>
-        )}
-      </div>
-      <div className="ownership-proof-row__actions">
-        {requirement.status === 'missing' ? (
-          <select
-            className="field-input ownership-proof-select"
-            value=""
-            aria-label={`Link document for ${requirement.label}`}
-            disabled={!canManageOwnership || !linkableDocuments.length}
-            onChange={(event) => handleLinkProof(requirement.id, event.target.value)}
-          >
-            <option value="" disabled>
-              {linkableDocuments.length ? 'Link document…' : 'No documents for this horse'}
-            </option>
-            {linkableDocuments.map((document) => (
-              <option key={document.id} value={document.id}>
-                {document.title} ({document.state})
+        <div className="ownership-proof-row__actions">
+          {requirement.status === 'missing' ? (
+            <select
+              className="field-input ownership-proof-select"
+              value=""
+              aria-label={`Link document for ${requirement.label}`}
+              disabled={!canManageOwnership || !eligible.length}
+              onChange={(event) => handleLinkProof(requirement.id, event.target.value)}
+            >
+              <option value="" disabled>
+                {eligible.length ? 'Link document…' : 'No eligible source'}
               </option>
-            ))}
-          </select>
-        ) : null}
-        {requirement.status === 'linked' ? (
-          <button
-            className="button button--primary button--compact"
-            type="button"
-            onClick={() => handleVerifyProof(requirement.id)}
-            disabled={!canManageOwnership}
-          >
-            Verify document
-          </button>
-        ) : null}
-        {requirement.status !== 'missing' ? (
-          <button
-            className="button button--ghost button--compact"
-            type="button"
-            onClick={() => handleUnlinkProof(requirement.id)}
-            disabled={!canManageOwnership}
-          >
-            Unlink
-          </button>
-        ) : null}
+              {eligible.map(({ document }) => (
+                <option key={document.id} value={document.id}>
+                  {document.title} ({document.state})
+                </option>
+              ))}
+            </select>
+          ) : null}
+          {requirement.status === 'linked' ? (
+            <button
+              className="button button--primary button--compact"
+              type="button"
+              onClick={() => {
+                const source = documents.find((document) => document.id === requirement.documentId);
+                if (selectedRecord && source)
+                  setReviewTarget({
+                    recordId: selectedRecord.id,
+                    requirementId: requirement.id,
+                    documentId: source.id,
+                    sourceKey: ownershipDocumentReviewKey(source),
+                  });
+              }}
+              disabled={!canManageOwnership}
+            >
+              Review source
+            </button>
+          ) : null}
+          {requirement.status !== 'missing' ? (
+            <button
+              className="button button--ghost button--compact"
+              type="button"
+              onClick={() => handleUnlinkProof(requirement.id)}
+              disabled={!canManageOwnership}
+            >
+              Unlink
+            </button>
+          ) : null}
+        </div>
       </div>
-    </div>
-  );
+    );
+  };
 
   return (
     <div className="ownership-ops">
+      {requestedHorseId && horses.some((horse) => horse.id === requestedHorseId) ? (
+        <button
+          className="button button--ghost"
+          onClick={() => navigate(`/sale-packets?horse=${encodeURIComponent(requestedHorseId)}&resume=1`)}
+        >
+          Return to sale packet
+        </button>
+      ) : null}
       <CommandBrief
         eyebrow="Ownership"
         entity="Ownership & Transfers"
         variant="split"
         status={heroStatus}
-        summary="Every transfer is supported by linked, verified documents. Clear status requires completed records."
+        summary="Track the source documents and human review for each transfer. Clear status requires completed records."
         evidence={[
           { label: 'Records', value: `${records.length}` },
-          { label: 'Documents verified', value: `${proofTotals.verified} / ${proofTotals.total}` },
+          { label: 'Sources reviewed', value: `${proofTotals.verified} / ${proofTotals.total}` },
           { label: 'Transfers pending', value: `${pendingTransfers.length}` },
           { label: 'Next deadline', value: nextDeadline ? formatDateLabel(nextDeadline) : 'None pending' },
         ]}
@@ -553,7 +668,7 @@ export default function Ownership() {
                 <span>Documents</span>
               </div>
               {filteredRows.map((row) => {
-                const rowRecord = row.record ? normalizeOwnershipRecord(row.record) : undefined;
+                const rowRecord = row.record ? normalizeOwnershipRecord(row.record, documents, row.horse) : undefined;
                 const requirements = rowRecord?.proofRequirements ?? [];
                 const verifiedCount = requirements.filter((requirement) => requirement.status === 'verified').length;
                 return (
@@ -673,17 +788,17 @@ export default function Ownership() {
 
               <div
                 className="ownership-confidence"
-                aria-label={`Document-backed confidence ${selectedRecord.confidence}%`}
+                aria-label={`Human review completion ${selectedRecord.confidence}%`}
               >
                 <div className="ownership-confidence__caption">
-                  <span>Document-backed confidence</span>
+                  <span>Human review completion</span>
                   <strong>{selectedRecord.confidence}%</strong>
                 </div>
                 <ProgressBar
                   value={selectedRecord.confidence}
                   tone={selectedRecord.confidence >= 100 ? 'blue' : selectedRecord.confidence >= 50 ? 'amber' : 'rose'}
                 />
-                <small>Computed from linked and verified documents. Not editable.</small>
+                <small>Reviewed sources only. Uploading a file does not count.</small>
               </div>
 
               <div className="ownership-subsection">
@@ -702,7 +817,7 @@ export default function Ownership() {
                   ))}
                 </div>
                 <p className="ownership-status-hint">
-                  Clear requires every ownership document requirement to be verified and opens a signed confirmation.
+                  Review every requirement before marking Clear. XBAR does not verify legal ownership.
                 </p>
                 {statusError ? <div className="field-error">{statusError}</div> : null}
               </div>
@@ -796,6 +911,34 @@ export default function Ownership() {
                 ) : null}
               </div>
             </>
+          ) : requestedHorse ? (
+            <div className="ownership-empty-state">
+              <EmptyState
+                title={`${requestedHorse.name} has no ownership record`}
+                description={
+                  canManageOwnership
+                    ? 'Start its source checklist to review ownership and transfer documents.'
+                    : 'Ask a workspace administrator to start this horse’s ownership record.'
+                }
+              />
+              <button
+                className="button button--primary"
+                type="button"
+                disabled={!canManageOwnership}
+                onClick={() => {
+                  if (!canManageOwnership) return;
+                  const result = ensureOwnershipRecord(requestedHorse.id);
+                  if (result.ok && result.recordId) setSelectedRecordId(result.recordId);
+                  pushToast({
+                    title: result.ok ? 'Ownership record created' : 'Could not create record',
+                    message: result.message,
+                    tone: result.ok ? 'success' : 'error',
+                  });
+                }}
+              >
+                Start ownership record
+              </button>
+            </div>
           ) : (
             <EmptyState
               title="No ownership record loaded"
@@ -979,11 +1122,38 @@ export default function Ownership() {
       </div>
 
       <ConfirmActionDialog
+        key={reviewTarget?.sourceKey ?? 'no-review'}
+        open={Boolean(reviewRequirement)}
+        tone="legal"
+        title={`Review ${reviewRequirement?.label ?? 'ownership document'}`}
+        consequences={[
+          'OCR checks readable text and identity only. It cannot establish ownership, authenticity, signatures, liens or authority to sell.',
+          'This records your review of the source and may be shown in a sale packet. XBAR does not independently verify legal ownership.',
+        ]}
+        proofSummary={
+          <div>
+            <p>{reviewSource?.title ?? 'Source not found'}</p>
+            <button className="button button--ghost" onClick={() => void openReviewSource()}>
+              Open original document
+            </button>
+          </div>
+        }
+        acknowledgements={[
+          'I inspected the original and confirmed this is the correct horse and document purpose.',
+          'I checked the named parties, dates, required signatures and any ownership discrepancies against the original.',
+        ]}
+        confirmLabel="Record my review"
+        onConfirm={() => {
+          if (reviewTarget) handleVerifyProof(reviewTarget.requirementId);
+        }}
+        onCancel={() => setReviewTarget(null)}
+      />
+      <ConfirmActionDialog
         open={clearDialogOpen && Boolean(selectedRecord)}
         tone="legal"
         title={`Mark transfer Clear — ${selectedHorseName}`}
         consequences={[
-          'Clear states the legal transfer is complete and verified.',
+          'Clear records your confirmation that the transfer documentation is complete. XBAR does not independently establish legal ownership.',
           'This status is shown to buyers and on sale packets.',
           'The change is written to the permanent audit log.',
         ]}
@@ -994,20 +1164,20 @@ export default function Ownership() {
                 <strong>{requirement.label}</strong>
                 <span>{requirement.documentTitle ?? 'Linked document'}</span>
                 <small>
-                  Verified by {requirement.verifiedBy ?? 'unknown'}
+                  Reviewed by {requirement.verifiedBy ?? 'unknown'}
                   {requirement.verifiedAt ? ` · ${formatDateTimeLabel(requirement.verifiedAt)}` : ''}
                 </small>
               </li>
             ))}
             {unverifiedCount > 0 ? (
               <li className="ownership-clear-proof__warning">
-                {unverifiedCount} requirement{unverifiedCount === 1 ? '' : 's'} not verified yet — Clear will be
+                {unverifiedCount} requirement{unverifiedCount === 1 ? '' : 's'} not reviewed yet — Clear will be
                 refused.
               </li>
             ) : null}
           </ul>
         }
-        acknowledgements={['I confirm the verified documents above are accurate and complete.']}
+        acknowledgements={['I inspected the source documents above and confirm my review is accurate and complete.']}
         confirmLabel="Mark Clear"
         onConfirm={confirmMarkClear}
         onCancel={() => setClearDialogOpen(false)}

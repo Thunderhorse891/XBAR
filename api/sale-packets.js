@@ -11,7 +11,7 @@ import { loadHorseContext } from './_lib/horse-context.js';
 import { createSectionedPdf, assemblePacketPdf } from './_lib/pdf.js';
 import { sendEmail } from './_lib/email.js';
 import { recordAuditEvent } from './_lib/audit.js';
-import { buildServerSaleCredential } from './_lib/sale-credential.js';
+import { buildServerSaleCredential, ownershipReviewSummary } from './_lib/sale-credential.js';
 import { enforceRateLimit } from './_lib/rate-limit.js';
 import { applyCors } from './_lib/cors.js';
 import { packetOmissionSection, selectPacketDocuments } from './_lib/packet-selection.js';
@@ -223,6 +223,7 @@ export default async function handler(req, res) {
       horseId,
       context,
       ownershipRecord,
+      reviewDocuments: loaded.documents,
       documents: includedDocs,
       sealedAt: new Date().toISOString(),
       sellerIdentity: identity,
@@ -258,7 +259,9 @@ export default async function handler(req, res) {
             `Foaled: ${context.horse.birthdate || 'Not on file'}    Sex: ${context.horse.gender || 'Not on file'}`,
             `Microchip: ${context.horse.microchip || 'Not on file'}`,
             `Latest Coggins test: ${context.health.lastCogginsDate || 'Not on file'}`,
-            `Legal owner: ${context.owner.name || 'Not on file'}`,
+            `Recorded owner (seller supplied): ${context.owner.name || 'Not on file'}`,
+            ownershipReviewSummary(ownershipRecord, loaded.documents),
+            'The seal detects changes to recorded information. It does not establish authenticity, legal title, liens, or authority to sell.',
           ],
         },
         {
