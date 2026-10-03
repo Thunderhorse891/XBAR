@@ -1,3 +1,4 @@
+import { brandAssetPath } from '@/lib/brandAssets';
 import { useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { kindCopy } from '@/features/reminders/helpers';
@@ -94,7 +95,7 @@ export default function Reminders() {
         </div>
         <img
           className="reminders-header__art"
-          src="/brand/xbar-report-horse.png"
+          src={brandAssetPath('xbar-report-horse.png')}
           width="1672"
           height="941"
           alt=""

@@ -1,6 +1,8 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
+import { brandAssetPath } from '../src/lib/brandAssets.js';
+import { reportBrandAssetPaths } from '../src/lib/reportBranding.js';
 
 test('public and application typography share one shipped font and heading scale', async () => {
   const typography = withoutComments(await readFile('src/styles/typography.css', 'utf8'));
@@ -186,4 +188,47 @@ test('sign-in brand images reserve their real shape and keep the rim light', asy
   );
   assert.ok(watermark.length > 0, 'the watermark rule must be findable');
   assert.ok(!/grayscale\(/.test(watermark), 'the brand mark must not be desaturated on the sign-in panel');
+});
+
+// JSX and exported image constants are not rewritten by Vite's HTML asset pass.
+// Keep every entry/shell call site on the shared deployment-aware resolver.
+test('entry and shell artwork do not escape the GitHub Pages deployment base', async () => {
+  const consumers = [
+    'src/routes/Login.tsx',
+    'src/routes/ResetPassword.tsx',
+    'src/routes/SetupWorkspace.tsx',
+    'src/routes/layouts/MainLayout.tsx',
+    'src/components/BrandMark.tsx',
+    'src/pages/Dashboard.tsx',
+    'src/routes/Reminders.tsx',
+  ];
+  for (const file of consumers) {
+    const source = await readFile(file, 'utf8');
+    assert.doesNotMatch(source, /['"`]\/brand\//, `${file} must not request artwork at the host root`);
+    assert.match(source, /brandAssetPath\(/, `${file} must use the shared asset resolver`);
+  }
+});
+
+for (const base of ['/', '/XBAR/', '/XBAR']) {
+  test(`supplied artwork resolves with deployment base ${base}`, async () => {
+    const prefix = base === '/' ? '/' : '/XBAR/';
+    const names = ['xbar-wordmark.png', 'xbar-report-horse.png', 'apple-touch-icon.png', 'icon-512.png'];
+    for (const name of names) {
+      assert.equal(brandAssetPath(name, base), `${prefix}brand/${name}`);
+      const bytes = await readFile(`public/brand/${name}`);
+      assert.equal(bytes.subarray(0, 8).toString('hex'), '89504e470d0a1a0a', `${name} remains supplied PNG artwork`);
+    }
+    assert.deepEqual(
+      reportBrandAssetPaths(base),
+      ['xbar-report-horse.png', 'xbar-report-mark.png', 'xbar-report-watermark.png'].map(
+        (name) => `${prefix}brand/${name}`,
+      ),
+    );
+  });
+}
+
+test('artwork defaults to the root without a Vite environment', () => {
+  assert.equal(brandAssetPath('xbar-wordmark.png'), '/brand/xbar-wordmark.png');
+  assert.equal(brandAssetPath('xbar-wordmark.png', ''), '/brand/xbar-wordmark.png');
+  assert.equal(reportBrandAssetPaths()[0], '/brand/xbar-report-horse.png');
 });

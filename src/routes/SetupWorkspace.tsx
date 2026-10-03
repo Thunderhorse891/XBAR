@@ -1,3 +1,4 @@
+import { brandAssetPath } from '@/lib/brandAssets';
 import { type FormEvent, useMemo, useState } from 'react';
 import { Navigate, useLocation, useNavigate, useSearchParams } from 'react-router-dom';
 import { billingPathForTier } from '@/lib/billingRoutes';
@@ -201,7 +202,13 @@ export default function SetupWorkspace() {
       <div className="clean-setup-layout">
         <section className="clean-auth-card clean-auth-card--intro" aria-labelledby="setup-title">
           <div className="clean-brand">
-            <img className="clean-brand__wordmark" src="/brand/xbar-wordmark.png" width="550" height="170" alt="XBAR" />
+            <img
+              className="clean-brand__wordmark"
+              src={brandAssetPath('xbar-wordmark.png')}
+              width="550"
+              height="170"
+              alt="XBAR"
+            />
             <small>{accessLabel}</small>
           </div>
 
@@ -232,7 +239,7 @@ export default function SetupWorkspace() {
 
           <img
             className="clean-setup-art"
-            src="/brand/xbar-report-horse.png"
+            src={brandAssetPath('xbar-report-horse.png')}
             width="1672"
             height="941"
             alt="XBAR metallic horse artwork"

@@ -1,3 +1,4 @@
+import { brandAssetPath } from '@/lib/brandAssets';
 import { type FormEvent, useEffect, useId, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { isSupabaseConfigured } from '@/lib/platformConfig';
@@ -153,7 +154,13 @@ export default function ResetPassword() {
       <section className="clean-login-layout clean-login-layout--recovery" aria-label="Choose a new XBAR password">
         <section className="clean-auth-card clean-auth-card--login">
           <a className="clean-brand clean-brand--login" href="/" aria-label="XBAR home">
-            <img className="clean-brand__wordmark" src="/brand/xbar-wordmark.png" width="550" height="170" alt="XBAR" />
+            <img
+              className="clean-brand__wordmark"
+              src={brandAssetPath('xbar-wordmark.png')}
+              width="550"
+              height="170"
+              alt="XBAR"
+            />
           </a>
 
           <div className="clean-auth-card__header">
