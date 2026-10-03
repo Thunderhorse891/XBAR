@@ -1,3 +1,4 @@
+import { documentIntakeDisclosure } from '@/features/documents/constants';
 import type { ReactNode } from 'react';
 import { useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
@@ -352,13 +353,13 @@ export function GlobalCreateDrawer() {
     setBusy(false);
     // When exactly one horse was created, land on its new profile so the
     // extracted registration facts are immediately visible.
-    const createdHorseIds = (result as { createdHorseIds?: string[] }).createdHorseIds ?? [];
-    const duplicateCount = (result as { duplicateCount?: number }).duplicateCount ?? 0;
-    const destination = duplicateCount
-      ? '/documents?stage=Review'
-      : createdHorseIds.length === 1
-        ? `/horses/${createdHorseIds[0]}`
-        : '/documents';
+    const createdHorseIds = result.createdHorseIds ?? [];
+    const destination =
+      result.duplicateCount || result.heldForReviewCount
+        ? '/documents?stage=Review'
+        : createdHorseIds.length === 1
+          ? `/horses/${createdHorseIds[0]}`
+          : '/documents';
     finish(result, destination);
   };
 
@@ -510,6 +511,7 @@ export function GlobalCreateDrawer() {
     case 'Upload Document':
       body = (
         <div className="xs-form">
+          <p className="stack-item__copy">{documentIntakeDisclosure}</p>
           <button type="button" className="xs-drop" onClick={() => fileInputRef.current?.click()}>
             <FileUp size={20} style={{ display: 'block', margin: '0 auto 8px' }} />
             {files.length
