@@ -163,6 +163,15 @@ function latestByRecordType(
     .sort((a, b) => (a.date === b.date ? 0 : a.date < b.date ? 1 : -1))[0];
 }
 
+// A date-only boundary must also respect newest-first insertion order. Earlier
+// same-day evidence belongs to the previous cycle, for both covers and foalings.
+function eventsAfter(events: TimelineEvent[], boundary: TimelineEvent): TimelineEvent[] {
+  const boundaryOrder = events.indexOf(boundary);
+  return events.filter(
+    (event, order) => event.date > boundary.date || (event.date === boundary.date && order < boundaryOrder),
+  );
+}
+
 /*
  * What one pregnancy check says (audit F07).
  *
@@ -321,15 +330,7 @@ export function buildMareBreedingState(horse: HorseRecord, now: Date = new Date(
     // is in foal, not open. Her due date is unknown and is never invented from
     // the check, so she has no foaling window until the cover is logged. Checks
     // from before her latest foaling belong to an earlier pregnancy.
-    const lastFoaling = foaling;
-    // Dates have day precision. On the same day, timeline order determines
-    // whether the check was recorded before or after the latest foaling.
-    const foalingOrder = lastFoaling ? events.indexOf(lastFoaling) : -1;
-    const currentEvents = lastFoaling
-      ? events.filter(
-          (event, order) => event.date > lastFoaling.date || (event.date === lastFoaling.date && order < foalingOrder),
-        )
-      : events;
+    const currentEvents = foaling ? eventsAfter(events, foaling) : events;
     if (currentPregnancyOutcome(currentEvents, '') === 'positive') {
       return {
         ...base,
@@ -373,7 +374,8 @@ export function buildMareBreedingState(horse: HorseRecord, now: Date = new Date(
   }
 
   // Open again if the latest definite check came back negative.
-  const pregnancy = currentPregnancyOutcome(events, breeding.date);
+  const currentCycleEvents = eventsAfter(events, breeding);
+  const pregnancy = currentPregnancyOutcome(currentCycleEvents, breeding.date);
   if (pregnancy === 'negative') {
     return {
       ...base,
@@ -389,7 +391,7 @@ export function buildMareBreedingState(horse: HorseRecord, now: Date = new Date(
   // Gestational day of the latest logged pregnancy check (−1 if none). A check
   // satisfies every earlier diagnostic checkpoint — a day-20 scan covers the
   // day-15 ultrasound — so those should not be surfaced as overdue.
-  const latestCheckDay = events.reduce((latest, event) => {
+  const latestCheckDay = currentCycleEvents.reduce((latest, event) => {
     if (resolveRecordType(event) !== 'pregnancy-check') return latest;
     const day = Math.floor((new Date(event.date).getTime() - bredOn.getTime()) / DAY_MS);
     return day >= 0 ? Math.max(latest, day) : latest;

@@ -420,3 +420,42 @@ test('a post-foaling positive check starts a pregnancy without borrowing an old 
   assert.equal(newCycle.bredOn, foaling.date, 'a newer same-day cover belongs to the new cycle');
   assert.equal(newCycle.mateName, 'New Stallion');
 });
+
+test('same-day pre-cover checks cannot classify or satisfy checks for the new cover', () => {
+  const day = '2026-04-01';
+  const cover = {
+    id: 'cover',
+    date: day,
+    title: 'Bred',
+    summary: '',
+    owner: 'Vet',
+    category: 'Breeding',
+    details: { recordType: 'breeding' },
+  } as TimelineEvent;
+  const mare = (timeline: TimelineEvent[]) =>
+    ({
+      id: 'same-day-cover',
+      name: 'Newly covered',
+      sex: 'Mare',
+      breedingTimeline: timeline,
+      breedingEconomics: { foalProjectedValue: 9000 },
+    }) as unknown as HorseRecord;
+  const now = new Date('2026-04-02T12:00:00Z');
+  for (const result of ['open', 'in-foal', 'pending']) {
+    const oldCheck = check('Scan', '', result, day);
+    const state = buildMareBreedingState(mare([cover, oldCheck]), now);
+    assert.equal(state.status, 'bred-awaiting-check', `${result} before cover belongs to the prior cycle`);
+    const program = buildBreedingProgram([mare([cover, oldCheck])], now);
+    assert.equal(program.inFoal, 0);
+    assert.equal(program.projectedProgramValue, 0);
+  }
+  const positive = check('Scan', '', 'in-foal', day);
+  const negative = check('Scan', '', 'open', day);
+  assert.equal(buildMareBreedingState(mare([positive, cover, negative]), now).status, 'in-foal');
+  assert.equal(buildMareBreedingState(mare([negative, cover, positive]), now).status, 'open');
+  assert.equal(
+    buildMareBreedingState(mare([check('Scan', '', 'pending', day), cover, positive]), now).status,
+    'bred-awaiting-check',
+    'pending cannot recover a pre-cover positive',
+  );
+});
