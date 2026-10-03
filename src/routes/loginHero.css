@@ -279,3 +279,69 @@
   border: 0;
   padding-top: 0;
 }
+
+/* Keep the entry presentation independent of the shared entry stylesheet's
+   load order. The artwork and copy occupy separate rows, never layered text. */
+.clean-entry-shell--brand-auth .clean-login-visual {
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  gap: 28px;
+  padding: 44px;
+  min-height: 720px;
+  background: var(--xbar-graphite);
+  color: var(--xbar-white);
+}
+.clean-entry-shell--brand-auth .clean-login-visual::before,
+.clean-entry-shell--brand-auth .clean-login-visual::after {
+  display: none;
+}
+.clean-entry-shell--brand-auth .clean-login-visual__art {
+  position: relative;
+  inset: auto;
+  display: block;
+  width: 100%;
+  height: auto;
+  object-fit: contain;
+  filter: none;
+  mask-image: none;
+  border-radius: 8px;
+}
+.clean-entry-shell--brand-auth .clean-login-visual__copy {
+  flex: none;
+  align-self: auto;
+  margin: 0;
+  gap: 20px;
+}
+.clean-entry-shell--brand-auth .clean-login-visual__copy p,
+.clean-entry-shell--brand-auth .clean-login-capabilities {
+  color: var(--xbar-silver);
+}
+.clean-entry-shell--brand-auth .clean-login-capabilities {
+  margin-top: 0;
+  border-color: var(--workspace-dark-border);
+}
+.clean-entry-shell--brand-auth .clean-login-layout--confirmation .clean-login-visual {
+  display: none;
+}
+@media (max-width: 900px) {
+  .clean-entry-shell--brand-auth .clean-login-visual {
+    min-height: 0;
+    padding: 28px;
+    gap: 20px;
+  }
+  .clean-entry-shell--brand-auth .clean-login-visual__art {
+    max-height: none;
+  }
+}
+@media (max-width: 400px) {
+  .clean-entry-shell--brand-auth .clean-login-visual {
+    padding: 24px;
+  }
+}
+
+.clean-entry-shell--brand-auth .clean-login-visual__art-frame {
+  position: relative;
+  width: 100%;
+  flex: none;
+}

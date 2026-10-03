@@ -65,7 +65,7 @@ export function installSignatureMotion(svg: SVGSVGElement, isPaused: () => boole
   const hover = (event: PointerEvent) => {
     if (event.pointerType === 'mouse' && pointer.matches) play();
   };
-  const hoverTarget = svg.closest('a, button, .landing-art-plane') ?? svg;
+  const hoverTarget = svg.closest('a, button, .landing-art-plane, .clean-login-visual__art-frame') ?? svg;
   hoverTarget.addEventListener('pointerenter', hover as EventListener);
   doc.addEventListener('visibilitychange', sync);
   win.addEventListener('pagehide', cancel);

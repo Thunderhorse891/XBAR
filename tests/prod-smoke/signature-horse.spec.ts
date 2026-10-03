@@ -310,3 +310,28 @@ for (const pathname of ['/app/login', '/app/setup', '/app/reset-password']) {
     expect(await signature.evaluate((element) => element.getAnimations({ subtree: true }).length)).toBe(0);
   });
 }
+
+for (const width of [1180, 390]) {
+  test(`login artwork and copy keep separate readable rows at ${width}px`, async ({ page }, info) => {
+    await page.setViewportSize({ width, height: width === 1180 ? 757 : 844 });
+    await page.emulateMedia({ reducedMotion: 'reduce' });
+    await page.goto('/app/login');
+    const panel = page.locator('.clean-login-visual');
+    await expect(panel).toBeVisible();
+    await expect(panel).toHaveCSS('background-color', 'rgb(23, 27, 32)');
+    const artwork = await panel.locator('.clean-login-visual__art').boundingBox();
+    const copy = await panel.locator('.clean-login-visual__copy').boundingBox();
+    expect(artwork).not.toBeNull();
+    expect(copy).not.toBeNull();
+    expect(artwork!.y + artwork!.height).toBeLessThanOrEqual(copy!.y);
+    const colors = await panel.evaluate((element) => ({
+      background: getComputedStyle(element).backgroundColor,
+      copy: getComputedStyle(element.querySelector('p')!).color,
+      feature: getComputedStyle(element.querySelector('li')!).color,
+    }));
+    expect(contrastRatio(colors.copy, colors.background)).toBeGreaterThanOrEqual(4.5);
+    expect(contrastRatio(colors.feature, colors.background)).toBeGreaterThanOrEqual(4.5);
+    await expect(page.getByRole('heading', { name: 'Sign In', exact: true })).toBeVisible();
+    await page.screenshot({ path: info.outputPath(`workspace-signature-login-${width}.png`), fullPage: true });
+  });
+}
