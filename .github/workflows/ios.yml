@@ -92,6 +92,8 @@ jobs:
       - name: Exercise the real WKWebView in iOS Simulator
         timeout-minutes: 7
         run: |
+          # Bound any later guest-log query to this test attempt, excluding boot.
+          date -u '+%Y-%m-%d %H:%M:%S+0000' > "$RUNNER_TEMP/xbar-xctest-start.txt"
           xcodebuild -project ios/App/App.xcodeproj -scheme App -configuration Debug \
             -destination "platform=iOS Simulator,id=$IOS_SIMULATOR_ID" -derivedDataPath ios/DerivedData \
             -parallel-testing-enabled NO -resultBundlePath ios/native-tests.xcresult \
@@ -102,6 +104,8 @@ jobs:
         timeout-minutes: 2
         run: |
           python3 - <<'PY'
+          from datetime import datetime
+          from pathlib import Path
           import os, subprocess, tempfile
 
           # Run 37081521423 spent half this step on preliminary commands, then
@@ -113,7 +117,24 @@ jobs:
           host_predicate = ('process == "Simulator" OR process == "com.apple.CoreSimulator.CoreSimulatorService" '
                             'OR process == "SpringBoard" OR ' + predicate)
 
-          def capture(label, command, timeout=25):
+          def emit_tail(output, limit):
+              size = output.seek(0, os.SEEK_END)
+              if size > limit:
+                  print(f"Diagnostic output truncated to its final {limit // 1024} KiB.")
+              output.seek(max(0, size - limit))
+              print(output.read().decode('utf-8', errors='replace'), flush=True)
+
+          def native_process(line):
+              columns = line.decode('utf-8', errors='replace').split(None, 4)
+              if len(columns) < 5 or columns[0] == 'PID':
+                  return True  # Preserve the header and command error messages.
+              name = Path(columns[4].strip()).name.lower()
+              return (name in ('app', 'com.xbar.ranch', 'appuitests-runner')
+                      or name.startswith('ax')
+                      or any(part in name for part in ('simulator', 'xcodebuild', 'xctest',
+                                                        'testmanager', 'accessibility')))
+
+          def capture(label, command, timeout=25, line_filter=None, limit=65536):
               print(f"--- {label}; native check remains failed ---", flush=True)
               # Stream to a temporary file, then emit at most 64 KiB. A hung or
               # noisy service must not exhaust the diagnostic time/memory budget.
@@ -126,26 +147,41 @@ jobs:
                       print(f"Diagnostic command timed out after {timeout}s; partial output follows.")
                   except OSError as error:
                       print(f"Diagnostic command unavailable: {error}")
-                  size = output.seek(0, os.SEEK_END)
-                  if size > 65536:
-                      print("Diagnostic output truncated to its final 64 KiB.")
-                  output.seek(max(0, size - 65536))
-                  print(output.read().decode('utf-8', errors='replace'))
+                  if line_filter is None:
+                      emit_tail(output, limit)
+                  else:
+                      with tempfile.TemporaryFile() as selected:
+                          output.seek(0)
+                          for line in output:
+                              if line_filter(line):
+                                  selected.write(line)
+                          emit_tail(selected, limit)
 
           log_args = ['show', '--last', '10m', '--style', 'compact', '--info', '--predicate']
           device = os.environ.get('IOS_SIMULATOR_ID')
           if device:
-              capture('Selected simulator XCTest and AX logs', ['xcrun', 'simctl', 'spawn', device, 'log', *log_args, predicate])
+              try:
+                  start = (Path(os.environ['RUNNER_TEMP']) / 'xbar-xctest-start.txt').read_text().strip()
+                  datetime.strptime(start, '%Y-%m-%d %H:%M:%S%z')
+              except (OSError, KeyError, ValueError) as error:
+                  print(f'Test start timestamp unavailable; guest logs skipped: {error}. Native check remains failed.')
+              else:
+                  # Run 37090815633 exhausted its guest query on pre-test TTS
+                  # startup. Keep the same predicate/deadline, start at XCTest.
+                  guest_args = ['show', '--start', start, '--style', 'compact', '--info', '--predicate']
+                  capture('Selected simulator XCTest and AX logs', ['xcrun', 'simctl', 'spawn', device, 'log', *guest_args, predicate])
           else:
               print('No selected simulator; guest diagnostics unavailable. Native check remains failed.')
           capture('Host XCTest and AX logs', ['/usr/bin/log', *log_args, host_predicate])
-          # Process names/state only: no command arguments or environment values.
-          capture('Host process state', ['ps', '-axo', 'pid,ppid,state,etime,comm'], timeout=10)
+          # Preserve the small probes before potentially noisy process output.
           capture('Host memory size', ['sysctl', 'hw.memsize'], timeout=5)
           capture('Host memory state', ['vm_stat'], timeout=5)
           capture('Simulator devices', ['xcrun', 'simctl', 'list', 'devices'], timeout=10)
           reports = os.path.join(os.environ['HOME'], 'Library', 'Logs', 'DiagnosticReports')
           capture('App crash report paths', ['find', reports, '-maxdepth', '1', '-name', '*App*', '-print'], timeout=5)
+          # Process names/state only: no command arguments or environment values.
+          capture('Native host process state', ['ps', '-axo', 'pid,ppid,state,etime,comm'],
+                  timeout=10, line_filter=native_process, limit=16384)
           PY
       - name: Capture the failed app's startup console
         if: failure() && env.IOS_SIMULATOR_ID != ''
