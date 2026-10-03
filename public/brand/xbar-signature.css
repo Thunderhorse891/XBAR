@@ -1,0 +1,64 @@
+/* One static horse signature; the optional highlight is finite and additive. */
+.xbar-signature {
+  display: block;
+  flex: none;
+  overflow: visible;
+  color: var(--xbar-gunmetal);
+}
+.xbar-signature__base {
+  fill: currentColor;
+  stroke: none;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+.xbar-signature__trace {
+  fill: none;
+  stroke: var(--xbar-ice);
+  stroke-width: 24;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  stroke-dasharray: 0.18 1;
+  stroke-dashoffset: 0.18;
+  opacity: 0;
+  pointer-events: none;
+}
+.xbar-signature[data-tone='mono'] {
+  color: inherit;
+}
+.xs-sidebar .xbar-signature,
+.xs-mobile-menu .xbar-signature,
+.xs-navigation-sheet .xbar-signature {
+  color: var(--xbar-silver);
+}
+.xbar-signature--hero {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  color: var(--xbar-silver);
+}
+.xbar-signature--hero .xbar-signature__base {
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1;
+  opacity: 0.6;
+}
+.xbar-signature--hero .xbar-signature__trace {
+  stroke-width: 3.5;
+}
+@media (prefers-reduced-motion: reduce) {
+  .xbar-signature__trace {
+    display: none;
+  }
+}
+
+.brand .xbar-signature {
+  width: 38px;
+  height: 38px;
+}
+
+.clean-brand__mark .xbar-signature {
+  width: 32px;
+  height: 32px;
+  color: var(--xbar-silver);
+}

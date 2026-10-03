@@ -1,0 +1,27 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="330 100 1170 760" fill="none" role="img" aria-labelledby="signature-title signature-desc">
+  <title id="signature-title">XBAR horse signature</title>
+  <desc id="signature-desc">Static source-coordinate outline of the supplied XBAR report horse. Draft derivative pending owner visual approval.</desc>
+  <g stroke="#D6DDE5" stroke-width="5" stroke-linecap="round" stroke-linejoin="round">
+    <path id="signature-crest" d="M 929 208 C 1020 156 1129 141 1207 202 C 1193 222 1188 245 1201 264 M 929 208 C 1003 179 1092 175 1183 222" pathLength="1" />
+    <path id="signature-mane-upper" d="M 702 233 C 817 279 923 236 1006 212 C 1042 203 1088 201 1118 210 C 1046 213 969 267 886 277 C 811 288 740 268 702 233 Z" pathLength="1" />
+    <path id="signature-mane-middle" d="M 611 350 C 719 389 827 321 926 295 C 861 339 807 378 752 382 C 691 388 637 370 611 350 Z" pathLength="1" />
+    <path id="signature-mane-rear-upper" d="M 642 463 C 709 451 773 423 824 389 C 782 439 754 493 727 569" pathLength="1" />
+    <path id="signature-mane-rear-lower" d="M 727 569 C 693 686 510 772 350 817 C 563 781 695 718 731 626 C 759 543 780 445 824 389" pathLength="1" />
+    <path id="signature-mane-rear-tip" d="M 580 832 C 643 799 704 752 740 704 C 733 741 745 789 775 817" pathLength="1" />
+    <path id="signature-mane-long-outer" d="M 930 317 C 849 366 793 439 777 520 C 749 657 812 762 944 818" pathLength="1" />
+    <path id="signature-mane-long-inner" d="M 930 317 C 844.08 389.52 802.22 488.07 807.26 578.88 C 822.42 681.56 862.10 746.12 997 818" pathLength="1" />
+    <path id="signature-neck-outer" d="M 1183 222 C 1066.42 214.33 931.04 310.63 890.53 414.88 C 855.68 482.76 850.97 585.20 912.87 658.30 C 972.69 742.78 1071.68 786.75 1183 820" pathLength="1" />
+    <path id="signature-neck-inner" d="M 1183 356 C 1094.68 370.44 1005.14 445.32 978.91 531.26 C 950.88 670.52 1051.11 724.92 1183 820" pathLength="1" />
+    <path id="signature-neck-ribbon-outer" d="M 1088 436 C 1024.07 482.76 1008.59 571.76 1042.43 617.18 C 1076.33 690.30 1190.80 696.35 1251 817" pathLength="1" />
+    <path id="signature-neck-ribbon-inner" d="M 1088 436 C 1031.16 496.54 1061.94 570.55 1094.93 622.85 C 1157.61 685.58 1233.04 706.88 1251 817" pathLength="1" />
+    <path id="signature-neck-accent" d="M 1144 495 C 1115 531 1106 589 1151 633 C 1126 585 1128 538 1144 495 Z" pathLength="1" />
+    <path id="signature-ear-back" d="M 1328 125 C 1257 162 1213 202 1201 264" pathLength="1" />
+    <path id="signature-ear-inner" d="M 1328 125 C 1299 164 1270 220 1267 257 L 1294 253 C 1331 287 1372 339 1395 387 M 1322 146 C 1315 192 1315 229 1280 244" pathLength="1" />
+    <path id="signature-ear-front" d="M 1393 166 C 1388 200 1375 228 1362 248 L 1344 228 C 1361 211 1379 187 1393 166 Z M 1393 166 C 1377 185 1357 200 1336 212" pathLength="1" />
+    <path id="signature-face-outer" d="M 1328 235 C 1375 285 1406 344 1424 393 L 1414 426 C 1433 489 1461 561 1475 612 C 1478 621 1478 632 1475 638 L 1436 691 L 1410 691 C 1392 626 1357 564 1289 517" pathLength="1" />
+    <path id="signature-jaw" d="M 1289 517 C 1343 560 1380 618 1392 690 L 1348 670 C 1352 651 1351 635 1348 620 C 1326 587 1297 557 1270 533 L 1276 527 C 1226 528 1185 495 1171 452 C 1158 414 1166 379 1183 356" pathLength="1" />
+    <path id="signature-eye" d="M 1289 328 C 1310 362 1342 359 1355 387 C 1359 395 1361 402 1361 410 L 1414 538 L 1349 423 C 1305 414 1287 376 1289 328 Z" pathLength="1" />
+    <path id="signature-eye-aperture" d="M 1311 370 C 1330 378 1340 389 1345 404 C 1326 397 1315 388 1311 370 Z" pathLength="1" />
+    <path id="signature-nostril" d="M 1454 619 C 1453 604 1447 594 1438 594 C 1427 594 1421 605 1421 619 C 1421 633 1429 643 1439 643 C 1448 643 1454 633 1454 619 Z" pathLength="1" />
+  </g>
+</svg>

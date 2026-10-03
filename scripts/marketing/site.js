@@ -1,9 +1,9 @@
 // XBAR first-party site script (marketing pages only).
 //
 // Two jobs, both CSP-safe (script-src 'self') and zero-dependency:
-//   1. Progressive motion: scroll-reveal, header state, and card spotlight.
+//   1. Progressive motion: one-shot, preference-aware section entrances.
 //      Everything is additive — without JS (or with reduced motion) the page
-//      is fully visible and static. CSS gates on the html.js class set here.
+//      is fully visible and static.
 //   2. Anonymous analytics beacon: pageviews and the two CTA clicks that
 //      matter, reported to our own /api/metrics. No cookies, no identifiers,
 //      honors Do Not Track / Global Privacy Control.
@@ -42,75 +42,80 @@
     deferredImages.forEach(hydrateImage);
   }
 
-  var reduceMotion =
-    typeof window !== 'undefined' && window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
-
   /* ------------------------------------------------------------ motion */
   function setUpMotion() {
-    var header = doc.querySelector('.site-header');
-    if (header) {
-      var onScroll = function () {
-        header.classList.toggle('scrolled', window.scrollY > 8);
-      };
-      window.addEventListener('scroll', onScroll, { passive: true });
-      onScroll();
-    }
-
-    // Cursor spotlight on glass cards (hover-only; irrelevant on touch).
-    doc.addEventListener('pointermove', function (evt) {
-      var card = evt.target && evt.target.closest ? evt.target.closest('.card, .plan') : null;
-      if (!card) return;
-      var rect = card.getBoundingClientRect();
-      card.style.setProperty('--mx', ((evt.clientX - rect.left) / rect.width) * 100 + '%');
-      card.style.setProperty('--my', ((evt.clientY - rect.top) / rect.height) * 100 + '%');
-    });
-
-    if (reduceMotion) return;
-
-    // Scroll reveal: only elements below the initial viewport, so first paint
-    // never flashes. A deterministic position sweep (rAF-throttled on scroll,
-    // plus a short interval until done) is used instead of
-    // IntersectionObserver: the sweep cannot miss elements when rendering
-    // frames are throttled (battery saver, prerender, headless).
-    var pending = [];
+    // Native progressive enhancement: content is never hidden by a CSS class.
+    // Unsupported browsers retain the complete static page and every action.
+    if (!window.matchMedia || !('IntersectionObserver' in window) || !doc.body.animate) return;
+    var reduced = window.matchMedia('(prefers-reduced-motion: reduce)');
+    var connection = window.navigator && window.navigator.connection;
+    var controls = new Map();
+    var seen = new Set();
     var staggerByParent = new Map();
+    function motionOff() {
+      return reduced.matches || doc.hidden || (connection && connection.saveData);
+    }
+    function stopMotion() {
+      controls.forEach(function (animation) {
+        animation.cancel();
+      });
+      controls.clear();
+    }
+    var observer = new window.IntersectionObserver(
+      function (entries) {
+        entries.forEach(function (entry) {
+          if (!entry.isIntersecting || seen.has(entry.target)) return;
+          var el = entry.target;
+          seen.add(el);
+          observer.unobserve(el);
+          if (motionOff() || el.contains(doc.activeElement)) return;
+          var animation = el.animate(
+            [
+              { opacity: 0, transform: 'translateY(14px)' },
+              { opacity: 1, transform: 'translateY(0)' },
+            ],
+            {
+              duration: 650,
+              delay: Number(el.dataset.revealDelay || 0),
+              easing: 'cubic-bezier(0.22, 1, 0.36, 1)',
+              fill: 'backwards',
+            },
+          );
+          controls.set(el, animation);
+          animation.onfinish = function () {
+            controls.delete(el);
+          };
+        });
+      },
+      { threshold: 0.12 },
+    );
     doc
       .querySelectorAll(
-        '.section .card, .steps li, .plan, .faq details, .section h2, .section .intro, .section .shot, .cta .wrap',
+        '.hero > div, .section .card, .steps li, .plan, .faq details, .section h2, .section .intro, .section .shot, .cta .wrap',
       )
       .forEach(function (el) {
-        if (el.getBoundingClientRect().top < window.innerHeight * 0.92) return; // already visible
-        var n = (staggerByParent.get(el.parentElement) || 0) + 1;
-        staggerByParent.set(el.parentElement, n);
-        el.style.setProperty('--rd', Math.min((n - 1) * 70, 350) + 'ms');
-        el.classList.add('reveal');
-        pending.push(el);
+        var n = staggerByParent.get(el.parentElement) || 0;
+        staggerByParent.set(el.parentElement, n + 1);
+        el.dataset.revealDelay = String(Math.min(n * 60, 180));
+        observer.observe(el);
       });
-    if (!pending.length) return;
-
-    var ticking = false;
-    var sweep = function () {
-      ticking = false;
-      var line = window.innerHeight * 0.94;
-      pending = pending.filter(function (el) {
-        if (el.getBoundingClientRect().top > line) return true;
-        el.classList.add('in');
-        return false;
+    // No replay when preferences change, a tab returns, or the user revisits a section.
+    function syncMotion() {
+      if (motionOff()) stopMotion();
+    }
+    if (reduced.addEventListener) reduced.addEventListener('change', syncMotion);
+    else if (reduced.addListener) reduced.addListener(syncMotion);
+    if (connection && connection.addEventListener) connection.addEventListener('change', syncMotion);
+    doc.addEventListener('visibilitychange', syncMotion);
+    window.addEventListener('pagehide', stopMotion);
+    doc.addEventListener('focusin', function (event) {
+      controls.forEach(function (animation, el) {
+        if (el.contains(event.target)) {
+          animation.cancel();
+          controls.delete(el);
+        }
       });
-      if (!pending.length) {
-        window.removeEventListener('scroll', onScrollReveal);
-        window.clearInterval(sweepTimer);
-      }
-    };
-    var onScrollReveal = function () {
-      if (ticking) return;
-      ticking = true;
-      (window.requestAnimationFrame || window.setTimeout)(sweep);
-    };
-    window.addEventListener('scroll', onScrollReveal, { passive: true });
-    // Interval safety net: catches resizes, anchor jumps, and frame-starved
-    // environments where scroll events outpace rendering.
-    var sweepTimer = window.setInterval(sweep, 300);
+    });
   }
 
   // Progressive enhancement for the native <details> nav dropdowns: on
@@ -119,7 +124,7 @@
   // preserved — only real mouse clicks are intercepted to avoid closing a
   // hover-opened menu.
   function setUpNavDropdowns() {
-    var dropdowns = Array.prototype.slice.call(doc.querySelectorAll('.nav-dd'));
+    var dropdowns = Array.prototype.slice.call(doc.querySelectorAll('.nav-dd, .landing-mobile-nav'));
     if (!dropdowns.length) return;
     var hoverable = window.matchMedia && window.matchMedia('(hover: hover) and (pointer: fine)').matches;
 
@@ -133,7 +138,7 @@
       dd.addEventListener('toggle', function () {
         if (dd.open) closeAll(dd);
       });
-      if (hoverable) {
+      if (hoverable && dd.classList.contains('nav-dd')) {
         // pointerenter/leave ignore moves within the subtree, so the
         // absolutely-positioned menu (a DOM child) stays "inside" the dd.
         dd.addEventListener('pointerenter', function () {
@@ -153,10 +158,16 @@
     });
 
     doc.addEventListener('click', function (evt) {
-      if (!evt.target || !evt.target.closest || !evt.target.closest('.nav-dd')) closeAll(null);
+      if (!evt.target || !evt.target.closest || !evt.target.closest('.nav-dd, .landing-mobile-nav')) closeAll(null);
     });
     doc.addEventListener('keydown', function (evt) {
-      if (evt.key === 'Escape') closeAll(null);
+      if (evt.key === 'Escape') {
+        var open = dropdowns.find(function (dd) {
+          return dd.open && dd.contains(doc.activeElement);
+        });
+        closeAll(null);
+        if (open) open.querySelector('summary').focus();
+      }
     });
   }
 

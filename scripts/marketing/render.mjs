@@ -1,3 +1,5 @@
+import { signatureSvg } from './signature.mjs';
+
 // Shared HTML rendering for the static marketing site.
 // Every public page is complete server-generated HTML: view-source shows the
 // full content, each page carries unique metadata and a self-referencing
@@ -95,11 +97,9 @@ function header(currentPath) {
   return `<header class="site-header">
   <div class="wrap">
     <a class="brand" href="/" aria-label="XBAR home">
-      <img src="/brand/apple-touch-icon.png" alt="" width="30" height="30" />
+      ${signatureSvg()}
       <span>XBAR<small>Horse records &amp; sales</small></span>
-    </a>${
-      currentPath === '/'
-        ? `
+    </a>
     <details class="landing-mobile-nav">
       <summary>Menu <i class="nav-caret" aria-hidden="true"></i></summary>
       <nav aria-label="Mobile primary">
@@ -107,9 +107,7 @@ function header(currentPath) {
         <a href="${APP_LOGIN}" rel="nofollow">Sign in</a>
         <a href="${APP_SIGNUP}" rel="nofollow">Create your workspace</a>
       </nav>
-    </details>`
-        : ''
-    }
+    </details>
     <nav class="site-nav" aria-label="Primary">
       ${NAV_LINKS.map((item) => navLink(item, currentPath)).join('\n      ')}
       ${NAV_MENUS.map((menu) => navMenu(menu, currentPath)).join('\n      ')}
@@ -129,7 +127,7 @@ function footer() {
   return `<footer class="site-footer">
   <div class="wrap">
     <div>
-      <a class="brand" href="/"><img src="/brand/apple-touch-icon.png" alt="" width="30" height="30" /><span>XBAR</span></a>
+      <a class="brand" href="/">${signatureSvg()}<span>XBAR</span></a>
       <p>One trusted operational record for every horse — documents, ownership, care, and sale-ready buyer packets.</p>
       <p>Need help? <a href="mailto:${SUPPORT_EMAIL}">${SUPPORT_EMAIL}</a></p>
     </div>
@@ -179,7 +177,10 @@ function footer() {
  * @param {string} [page.ogType]    Open Graph type (default "website")
  * @param {boolean} [page.noindex]  Emit a robots noindex meta (404 page)
  */
-export function renderPage(page, { landingScript = '/landing/motion.js' } = {}) {
+export function renderPage(
+  page,
+  { landingScript = '/landing/motion.js', signatureScript = '/brand-motion/signature.js' } = {},
+) {
   const isLanding = page.path === '/';
   const canonical = `${SITE_ORIGIN}${page.path === '/' ? '/' : page.path}`;
   const verification = process.env.GOOGLE_SITE_VERIFICATION
@@ -192,7 +193,7 @@ export function renderPage(page, { landingScript = '/landing/motion.js' } = {}) 
       '@id': `${SITE_ORIGIN}/#organization`,
       name: 'XBAR',
       url: `${SITE_ORIGIN}/`,
-      logo: `${SITE_ORIGIN}/brand/icon-512.png`,
+      logo: `${SITE_ORIGIN}/brand/xbar-signature-horse-512.png`,
       description: 'Records, ownership, and sale-readiness software for performance horse and ranch operations.',
     },
     {
@@ -211,7 +212,7 @@ export function renderPage(page, { landingScript = '/landing/motion.js' } = {}) 
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <meta name="theme-color" content="#05070A" />
+    <meta name="theme-color" content="#171b20" />
     <title>${esc(page.title)}</title>
     <meta name="description" content="${esc(page.description)}" />
     ${page.noindex ? '<meta name="robots" content="noindex, nofollow" />' : '<meta name="robots" content="index, follow, max-image-preview:large, max-snippet:-1" />'}
@@ -237,17 +238,20 @@ export function renderPage(page, { landingScript = '/landing/motion.js' } = {}) 
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
     <link
-      href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,400;9..144,500;9..144,600;9..144,700&family=Outfit:wght@400;500;600;700;800;900&display=swap"
+      href="https://fonts.googleapis.com/css2?family=Outfit:wght@400;500;600;700;800;900&display=swap"
       rel="stylesheet"
     />
-    <link rel="stylesheet" href="/site.css" />${isLanding ? '\n    <link rel="stylesheet" href="/brand/xbar-brand-tokens.css" /><link rel="stylesheet" href="/landing.css" />' : ''}
-    <link rel="icon" type="image/png" href="/brand/xbar-favicon.png" />
-    <link rel="apple-touch-icon" href="/brand/apple-touch-icon.png" />
+    <link rel="stylesheet" href="/brand/xbar-brand-tokens.css" />
+    <link rel="stylesheet" href="/site.css" />
+    <link rel="stylesheet" href="/brand/xbar-signature.css" />${isLanding ? '\n    <link rel="stylesheet" href="/landing.css" />' : ''}
+    <link rel="icon" type="image/svg+xml" href="/brand/xbar-signature-icon.svg" />
+    <link rel="icon" type="image/png" href="/brand/xbar-signature-horse-32.png" />
+    <link rel="apple-touch-icon" href="/brand/xbar-signature-horse-180.png" />
     <script type="application/ld+json">${JSON.stringify(baseJsonLd)}</script>
-    <script defer src="/site.js"></script>${isLanding ? `\n    <script type="module" src="${esc(landingScript)}"></script>` : ''}
+    <script defer src="/site.js"></script>
+    <script type="module" src="${esc(signatureScript)}"></script>${isLanding ? `\n    <script type="module" src="${esc(landingScript)}"></script>` : ''}
   </head>
-  <body${isLanding ? ' class="landing-page"' : ''}>
-    <div class="bg-fx" aria-hidden="true"><i class="bg-fx__grid"></i><i class="bg-fx__aurora"></i><i class="bg-fx__aurora bg-fx__aurora--warm"></i></div>
+  <body class="marketing-page${isLanding ? ' landing-page' : ''}">
     <a class="skip-link" href="#main">Skip to content</a>
     ${header(page.path)}
     <main id="main">

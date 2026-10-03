@@ -56,3 +56,33 @@ When adding an asset, record its provenance, intended surfaces, canonical filena
 The preview now animates the unchanged `xbar-report-horse.png` master (1672x941) using browser-native opacity and scale keyframes. The supplied Meta-marked `horse.mp4` and its extracted `poster.jpg` have been removed from published assets; Erin's original desktop files remain unchanged. The sample card also uses the original PNG.
 
 The entrance plays once and offers pause/replay. Reduced-motion and data-saving visitors begin with static artwork. No video or external media service is loaded. Figures and horse names remain illustrative. This is a separate preview, not the production shell or a new vector logo master.
+
+## Signature refinement preview (October 3, 2026)
+
+The owner requested a recognizable horse-only signature, a finite 1.5-second
+silver/icy-blue outline highlight, graphite/charcoal navigation, and spacious
+white working surfaces. This preview is held for visual approval; it is not a
+recovered official vector master.
+
+- `xbar-signature-paths.json` is the single geometry source for the derivative.
+  Its source SHA pins the unchanged `xbar-report-horse.png`. Detailed `paths`
+  trace the intro; nine filled `compactPaths` close corresponding contour
+  ribbons for clean navigation and icons. The full viewBox
+  overlays that supplied master; the compact viewBox crops the same coordinates.
+- `xbar-signature-horse*.svg` and the corresponding PNGs are generated from
+  that geometry, with compact exports using the filled profile and minimal eye/mane gaps.
+- `xbar-signature-icon.svg`, icon PNGs, and the maskable PNG use an opaque
+  graphite ground so the silver horse remains visible in light and dark chrome.
+- React `XbarMark` and public header/footer/hero markup use those same real paths.
+  `src/lib/signatureMotion.ts` gives the entire highlight exactly 1,500 ms,
+  once on entry or pointer hover. The static base is always present; reduced
+  motion, data saving, a hidden tab, or the homepage pause control stop it.
+- Email and sample-packet headers use static PNG fallbacks. Existing report
+  masthead artwork remains; the small footer mark uses the signature print PNG.
+- Sealed buyer packets are deliberately unchanged: their format and verifier
+  reject extra image/SVG elements. A future signature insertion needs its own
+  reviewed format revision; branding must never weaken that verification.
+
+All pre-existing supplied assets are preserved byte-for-byte. The tracing
+proof and small-size/maskable checks document this derivative for approval;
+no generic horse, replacement wordmark, or perpetual flashing is introduced.

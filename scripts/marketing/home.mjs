@@ -1,3 +1,4 @@
+import { signatureSvg } from './signature.mjs';
 import { esc, APP_SIGNUP, SITE_ORIGIN } from './render.mjs';
 
 const stages = [
@@ -58,9 +59,7 @@ export function cinematicHome(plans) {
     <div class="landing-art" data-parallax>
       <div class="landing-art-plane">
         <picture><source srcset="/brand/xbar-report-horse-landing.webp" type="image/webp" /><img class="landing-horse" src="/brand/xbar-report-horse.png" width="1672" height="941" alt="XBAR's metallic horse and wordmark, edged in electric blue" fetchpriority="high" decoding="async" /></picture>
-        <i class="landing-horse-light landing-horse-light--mane" aria-hidden="true"></i>
-        <i class="landing-horse-light landing-horse-light--face" aria-hidden="true"></i>
-        <i class="landing-light-sweep" aria-hidden="true"></i>
+        ${signatureSvg({ hero: true })}
       </div>
       <div class="landing-art-caption"><span class="landing-rim" aria-hidden="true"></span><span>A record worth standing behind.</span></div>
     </div>
@@ -78,8 +77,8 @@ export function cinematicHome(plans) {
   </div>
   <figure class="landing-product" data-landing-reveal>
     <div class="landing-product-bar"><span><i aria-hidden="true"></i> Your horse’s record</span><a href="/demo">View the product tour</a></div>
-    ${deferredImage('<img src="/brand/screenshots/app-horse-record.jpg" width="1440" height="900" loading="lazy" alt="XBAR horse profile with identity, ownership, care details, and next steps" />', 1440, 900)}
-    <figcaption>Actual XBAR interface, shown with example data.</figcaption>
+    ${deferredImage('<img src="/brand/screenshots/app-horse-roster-signature.png" width="1440" height="1272" loading="lazy" alt="XBAR horse roster with search, filters, document gaps, and quick-review actions" />', 1440, 1272)}
+    <figcaption>Actual XBAR preview, shown with fictional example data.</figcaption>
   </figure>
   <div class="landing-capabilities">
     <article data-landing-reveal><svg viewBox="0 0 32 32" fill="none" aria-hidden="true"><path d="M9 4h10l6 6v18H9zM19 4v7h6M13 16h8M13 21h8" /></svg><h3>A home for every paper</h3><p>Registration, ownership, and care documents stay connected to the horse they describe.</p><a href="/features">Explore document tools</a></article>
@@ -96,7 +95,7 @@ export function cinematicHome(plans) {
 </section>
 
 <section class="landing-section wrap landing-sharing" aria-labelledby="sharing-title">
-  <div class="landing-x-art" data-landing-reveal>${deferredImage(`<picture><source srcset="/brand/xbar-report-mark-landing.webp" type="image/webp" /><img src="/brand/xbar-report-mark.png" width="1254" height="1254" loading="lazy" alt="XBAR's original metallic X mark" /></picture>`, 1254, 1254)}</div>
+  <div class="landing-x-art" data-landing-reveal>${deferredImage(`<img src="/brand/xbar-signature-horse-512.png" width="512" height="512" loading="lazy" alt="XBAR horse signature" />`, 512, 512)}</div>
   <div data-landing-reveal><p class="landing-eyebrow">Put your records to work</p><h2 id="sharing-title">Make the next<br />handoff count.</h2><p class="landing-lead">Give a buyer a clearer view of the horse. Bring identity, source documents, and ownership details together in a watermarked sale packet.</p><a class="btn" href="/samples/sample-sale-packet.html">Open a sample packet <span aria-hidden="true">↗</span></a><p class="landing-note">Sample packet uses fictional data.</p></div>
 </section>
 

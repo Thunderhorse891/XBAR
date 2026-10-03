@@ -17,7 +17,9 @@ import { canSubmitHorseCreate, horseCreateFieldErrors } from '@/lib/horseCreateG
 import { proposeHorseNameRepairs } from '@/lib/horseNameRepair';
 import { buildSaleReadinessScore } from '@/lib/saleReadinessScore';
 import { buildBuyerPacketReleaseGate } from '@/lib/buyerPacketReleaseGate';
+import { buildHorseDocumentActions, horseAgeLabel } from '@/lib/horseDocumentActions';
 import './horsesCommand.css';
+import './horseActionFlows.css';
 
 function createHorseFormDefaults(params: {
   defaultOwnerName: string;
@@ -82,9 +84,17 @@ export default function Horses() {
   const canEditHorse = useCurrentRoleCapability('editHorse');
   const applyHorseNameRepairs = useXbarStore((state) => state.applyHorseNameRepairs);
   const [searchParams, setSearchParams] = useSearchParams();
-  const [viewMode, setViewMode] = useState<ViewMode>('Cards');
-  const [segmentFilter, setSegmentFilter] = useState<SegmentFilter>('All');
-  const [search, setSearch] = useState(searchParams.get('search') ?? '');
+  const viewMode: ViewMode = searchParams.get('view') === 'Table' ? 'Table' : 'Cards';
+  const requestedSegment = searchParams.get('segment');
+  const segmentFilter: SegmentFilter = segments.find((segment) => segment === requestedSegment) ?? 'All';
+  const search = searchParams.get('search') ?? '';
+  const documentsOnly = searchParams.get('documents') === 'missing';
+  const setFilter = (key: string, value: string) => {
+    const next = new URLSearchParams(searchParams);
+    if (value) next.set(key, value);
+    else next.delete(key);
+    setSearchParams(next, { replace: true, preventScrollReset: true });
+  };
   const [formErrors, setFormErrors] = useState<
     Partial<Record<'name' | 'barnName' | 'owner' | 'ownerEntity' | 'barn' | 'pasture', string>>
   >({});
@@ -105,10 +115,6 @@ export default function Horses() {
   const activeSharedHorseIds = new Set(
     sharedListings.filter((listing) => listing.state !== 'Archived').map((listing) => listing.horseId),
   );
-
-  useEffect(() => {
-    setSearch(searchParams.get('search') ?? '');
-  }, [searchParams]);
 
   const setNewHorseParam = (open: boolean) => {
     const nextParams = new URLSearchParams(searchParams);
@@ -138,6 +144,22 @@ export default function Horses() {
       ),
     [horses, documents, expenseReceipts, ownershipRecords],
   );
+  const documentActionsById = useMemo(
+    () =>
+      new Map(
+        horses.map((horse) => [
+          horse.id,
+          buildHorseDocumentActions(
+            horse,
+            documents,
+            ownershipRecords.find((record) => record.horseId === horse.id),
+          ),
+        ]),
+      ),
+    [horses, documents, ownershipRecords],
+  );
+  const horsesWithDocumentGaps = horses.filter((horse) => documentActionsById.get(horse.id)?.length);
+
   const filtered = horses.filter((horse) => {
     const matchesSearch =
       !search.trim() ||
@@ -155,7 +177,7 @@ export default function Horses() {
         .toLowerCase()
         .includes(search.trim().toLowerCase());
     const matchesSegment = segmentFilter === 'All' || horse.segment === segmentFilter;
-    return matchesSearch && matchesSegment;
+    return matchesSearch && matchesSegment && (!documentsOnly || Boolean(documentActionsById.get(horse.id)?.length));
   });
 
   const commandPackets = horses.map((horse) => ({
@@ -174,10 +196,7 @@ export default function Horses() {
       (horse.segment === 'Sale Prospect' || horse.status === 'Sale Prep') &&
       (horse.status === 'Medical Review' || packet.saleSlots.some((slot) => slot.status !== 'ready')),
   ).length;
-  const missingDocumentCount = commandPackets.reduce(
-    (sum, item) => sum + item.packet.saleSlots.filter((slot) => slot.status !== 'ready').length,
-    0,
-  );
+  const missingDocumentCount = [...documentActionsById.values()].reduce((sum, actions) => sum + actions.length, 0);
   const buyerPacketsLiveCount = activeSharedHorseIds.size;
 
   const handleSavedHorseToggle = async (horseId: string) => {
@@ -232,19 +251,24 @@ export default function Horses() {
   const openHorseMenu = (horseId: string, x: number, y: number) => setMenuState({ horseId, x, y });
 
   const openHorseDetails = (horse: (typeof horses)[number]) => {
+    const actions = documentActionsById.get(horse.id) ?? [];
     openRightDrawer({
       id: `horse-${horse.id}`,
       eyebrow: 'Horse Record',
       title: horse.name,
       description: `${horse.segment} in ${horse.location.barn}. Open the horse record for identity, care, ownership, documents, buyer movement, and operating history.`,
       facts: [
+        { label: 'Sex / age', value: `${horse.sex} · ${horseAgeLabel(horse)}` },
         { label: 'Status', value: horse.status },
         { label: 'Legal owner', value: horse.owner },
         { label: 'Location', value: `${horse.location.barn} | ${horse.location.pasture}` },
         { label: 'Registration', value: horse.aqhaNumber || horse.registrationNumber || 'Pending' },
         { label: 'Sale readiness', value: formatPercent(saleReadinessById.get(horse.id) ?? 0) },
       ],
-      actions: [{ label: 'Open horse record', path: `/horses/${horse.id}` }],
+      actions: [
+        { label: 'Open horse record', path: `/horses/${horse.id}` },
+        ...actions.map((action) => ({ label: action.action, path: action.path })),
+      ],
     });
   };
 
@@ -300,7 +324,11 @@ export default function Horses() {
               ]
             : []),
           { id: 'open-sales', label: 'Open Sales', onSelect: () => navigate('/sales') },
-          { id: 'open-proof', label: 'Open Documents', onSelect: () => navigate('/documents') },
+          {
+            id: 'open-proof',
+            label: 'Open Documents',
+            onSelect: () => navigate(`/documents?horse=${encodeURIComponent(menuHorse.id)}&stage=Library&from=profile`),
+          },
         ]
       : [];
 
@@ -351,10 +379,14 @@ export default function Horses() {
               <span>Blocked from Sale</span>
               <strong>{blockedFromSaleCount}</strong>
             </div>
-            <div className={`hc-kpi${missingDocumentCount ? ' hc-kpi--gaps' : ' hc-kpi--quiet'}`}>
+            <button
+              type="button"
+              onClick={() => setFilter('documents', 'missing')}
+              className={`hc-kpi${missingDocumentCount ? ' hc-kpi--gaps' : ' hc-kpi--quiet'}`}
+            >
               <span>Missing Documents</span>
               <strong>{missingDocumentCount}</strong>
-            </div>
+            </button>
             <div className="hc-kpi">
               <span>Buyer Packets Live</span>
               <strong>{buyerPacketsLiveCount}</strong>
@@ -710,23 +742,68 @@ export default function Horses() {
               <SurfaceTabs
                 items={['Cards', 'Table']}
                 active={viewMode}
-                onChange={(mode) => setViewMode(mode as ViewMode)}
+                onChange={(mode) => setFilter('view', mode === 'Cards' ? '' : mode)}
               />
               <SurfaceTabs
                 items={segments}
                 active={segmentFilter}
-                onChange={(segment) => setSegmentFilter(segment as SegmentFilter)}
+                onChange={(segment) => setFilter('segment', segment === 'All' ? '' : segment)}
                 className="surface-tabs--wrap"
               />
             </div>
             <input
               value={search}
-              onChange={(event) => setSearch(event.target.value)}
+              onChange={(event) => setFilter('search', event.target.value)}
               className="field-input field-input--wide"
-              placeholder="Search horse record, owner, AQHA, barn, or documents"
+              placeholder="Search name, owner, registration, or barn"
               aria-label="Search horse records"
             />
           </section>
+
+          <div className="hc-filter-summary">
+            <span role="status">
+              {filtered.length} of {horses.length} horses
+            </span>
+            <button
+              type="button"
+              className="button button--ghost button--compact"
+              aria-pressed={documentsOnly}
+              onClick={() => setFilter('documents', documentsOnly ? '' : 'missing')}
+            >
+              Document gaps ({horsesWithDocumentGaps.length})
+            </button>
+          </div>
+          {documentsOnly ? (
+            <section className="hc-document-gaps" aria-labelledby="document-gaps-title">
+              <h2 id="document-gaps-title">Sale document gaps</h2>
+              <p>
+                Missing or awaiting review in the existing sale-packet checklist. Requirements depend on the horse and
+                sale.
+              </p>
+              {filtered.map((horse) => (
+                <div key={horse.id} className="hc-document-gaps__horse">
+                  <strong>{horse.name}</strong>
+                  <ul>
+                    {(documentActionsById.get(horse.id) ?? []).map((action) => (
+                      <li key={action.key}>
+                        <span>
+                          <strong>{action.label}</strong>
+                          <small>{action.detail}</small>
+                        </span>
+                        <Link
+                          className="button button--ghost button--compact"
+                          to={action.path}
+                          aria-label={`${action.action} for ${horse.name}`}
+                        >
+                          {action.action}
+                        </Link>
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              ))}
+            </section>
+          ) : null}
 
           {viewMode === 'Cards' ? (
             filtered.length ? (
@@ -744,7 +821,7 @@ export default function Horses() {
                   const valueLabel = horse.segment === 'Sale Prospect' && horse.sale.askPrice ? 'Ask' : 'Insured';
                   const accessLabel = saved ? 'Released' : 'Private';
                   const showSaleSignals = horse.segment === 'Sale Prospect' || horse.status === 'Sale Prep';
-                  const openProofSlots = packet.saleSlots.filter((slot) => slot.status !== 'ready').length;
+                  const openProofSlots = documentActionsById.get(horse.id)?.length ?? 0;
                   const readiness = saleReadinessById.get(horse.id) ?? 0;
                   const primaryMedia = primaryHorseMedia(horse);
                   return (
@@ -753,8 +830,13 @@ export default function Horses() {
                       className="horse-card horse-card--interactive"
                       role="group"
                       aria-label={`Open ${horse.name} horse record`}
-                      title="Select the card to open the horse record. Use Quick review or the actions menu for alternatives."
-                      onClick={() => navigate(`/horses/${horse.id}`)}
+                      title="Select to review this horse without leaving your list."
+                      onClick={(event) => {
+                        event.currentTarget
+                          .querySelector<HTMLButtonElement>('.horse-card__title button')
+                          ?.focus({ preventScroll: true });
+                        openHorseDetails(horse);
+                      }}
                       onContextMenu={(event) => {
                         event.preventDefault();
                         openHorseMenu(horse.id, event.clientX, event.clientY);
@@ -785,9 +867,20 @@ export default function Horses() {
                         </div>
                         <div className="horse-card__media-bottom">
                           <div className="horse-card__kicker">{horse.segment}</div>
-                          <div className="horse-card__title">{horse.name}</div>
+                          <div className="horse-card__title">
+                            <button
+                              type="button"
+                              aria-label={`Quick review ${horse.name}`}
+                              onClick={(event) => {
+                                event.stopPropagation();
+                                openHorseDetails(horse);
+                              }}
+                            >
+                              {horse.name}
+                            </button>
+                          </div>
                           <div className="horse-card__subtitle">
-                            {horse.registry} · {horse.sex} · {horse.location.barn}
+                            {horse.sex} · {horseAgeLabel(horse)} · {horse.location.barn}
                           </div>
                         </div>
                       </div>
@@ -795,7 +888,7 @@ export default function Horses() {
                       <div className="horse-card__body">
                         <div className="horse-card__metric-band">
                           <div className="horse-card__metric">
-                            <span>{showSaleSignals ? 'Documents' : 'Sale readiness'}</span>
+                            <span>{showSaleSignals ? 'Sale packet' : 'Sale readiness'}</span>
                             <strong>
                               {showSaleSignals
                                 ? `${packet.saleSlots.filter((slot) => slot.status === 'ready').length}/${packet.saleSlots.length}`
@@ -939,11 +1032,14 @@ export default function Horses() {
                       tabIndex={0}
                       aria-label={`Open ${horse.name} horse record`}
                       title="Press Enter to open. Press Shift+F10 for actions."
-                      onClick={() => navigate(`/horses/${horse.id}`)}
+                      onClick={(event) => {
+                        event.currentTarget.focus({ preventScroll: true });
+                        openHorseDetails(horse);
+                      }}
                       onKeyDown={(event) => {
                         if (event.key === 'Enter' || event.key === ' ') {
                           event.preventDefault();
-                          navigate(`/horses/${horse.id}`);
+                          openHorseDetails(horse);
                         }
                         if (event.key === 'ContextMenu' || (event.shiftKey && event.key === 'F10')) {
                           event.preventDefault();
