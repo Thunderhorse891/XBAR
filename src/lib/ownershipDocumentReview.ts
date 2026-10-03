@@ -212,7 +212,9 @@ function normalizeSourceHorseFields(text: string): string {
  * remain separate from extracted facts and ownership evidence.
  */
 export function inspectDocumentHorseIdentity(document: DocumentRecord, horse?: HorseRecord) {
-  const text = document.extractedTextPreview;
+  // Legacy restores may predate OCR previews. Missing text is uncertainty,
+  // never permission to promote the cached identity or mutate the original.
+  const text = document.extractedTextPreview ?? '';
   const labels = sourceChipLabels(text);
   // The canonical registration/fact reader already bounds Microchip fields.
   // Normalize only recognized aliases in this transient view, never the source.
@@ -318,14 +320,14 @@ export function assessOwnershipDocument(
       'identity_mismatch',
       'This document is not matched to this horse. Correct the assignment or upload the correct source.',
     );
-  if (!document.extractedTextPreview.trim() || extractionProducedNothing(document.processingNote))
+  const text = document.extractedTextPreview ?? '';
+  if (!text.trim() || extractionProducedNothing(document.processingNote))
     return fail('unreadable', 'No readable source text. Upload a clearer scan before using this as ownership support.');
   if (document.processingNote?.trim())
     return fail(
       'review_needed',
       `The source was not fully read: ${document.processingNote} Upload a complete readable copy.`,
     );
-  const text = document.extractedTextPreview;
   if (inferDocumentType('', text).ambiguous)
     return fail(
       'wrong_type',

@@ -1,8 +1,13 @@
 import assert from 'node:assert/strict';
 import { beforeEach, test } from 'node:test';
-import { createEmptyWorkspaceState, createHorseRecord } from '../../src/store/xbarStoreHelpers.ts';
+import {
+  canRestorePersistedState,
+  createEmptyWorkspaceState,
+  createHorseRecord,
+  restorePersistedState,
+} from '../../src/store/xbarStoreHelpers.ts';
 import { createOwnershipRecord, normalizeOwnershipRecord } from '../../src/store/xbarStoreLogic.ts';
-import { ownershipDocumentReviewKey } from '../../src/lib/ownershipDocumentReview.ts';
+import { documentWithFreshSource, ownershipDocumentReviewKey } from '../../src/lib/ownershipDocumentReview.ts';
 import { useXbarStore } from '../../src/store/useXbarStore.ts';
 await new Promise((resolve) => setImmediate(resolve));
 useXbarStore.persist.setOptions({ storage: { getItem: () => null, setItem: () => {}, removeItem: () => {} } });
@@ -280,6 +285,38 @@ test('identity-free manual attachment without cached facts does not promote fact
   assert.deepEqual(useXbarStore.getState().horses[0], { ...horse, documents: [...horse.documents, source.id] });
   assert.deepEqual(useXbarStore.getState().ownershipRecords, [record]);
   assert.equal(useXbarStore.getState().linkOwnershipProof(record.id, requirement.id, pending.id).ok, false);
+});
+
+test('missing legacy OCR text cannot promote cached facts and empty manual attachments remain safe', () => {
+  for (const extractedTextPreview of [undefined, null]) {
+    const legacy = {
+      ...source,
+      state: 'Needs Review',
+      source: 'Bulk Intake',
+      uploadedAt: '2026-10-01',
+      uploadedBy: 'Tester',
+      summary: 'Synthetic legacy source',
+      confidence: 0.91,
+      extractedTextPreview,
+    };
+    if (extractedTextPreview === undefined) delete legacy.extractedTextPreview;
+    const backup = { ...empty, horses: [horse], documents: [legacy] };
+    assert.equal(canRestorePersistedState(backup), true);
+    const pending = restorePersistedState(backup).documents[0];
+    assert.equal(documentWithFreshSource(pending).entities.horseName, undefined);
+    useXbarStore.setState({ horses: [horse], documents: [pending], ownershipRecords: [record] });
+    assert.equal(useXbarStore.getState().reviewDocument(pending.id, horse.id).ok, false);
+    assert.equal(useXbarStore.getState().createHorseFromDocument(pending.id).ok, false);
+    assert.deepEqual(useXbarStore.getState().horses, [horse]);
+    assert.deepEqual(useXbarStore.getState().documents, [pending]);
+    assert.deepEqual(useXbarStore.getState().ownershipRecords, [record]);
+
+    useXbarStore.setState({ documents: [{ ...pending, entities: {} }] });
+    assert.equal(useXbarStore.getState().reviewDocument(pending.id, horse.id).ok, true);
+    assert.deepEqual(useXbarStore.getState().horses, [{ ...horse, documents: [...horse.documents, source.id] }]);
+    assert.deepEqual(useXbarStore.getState().ownershipRecords, [record]);
+    assert.equal(useXbarStore.getState().linkOwnershipProof(record.id, requirement.id, pending.id).ok, false);
+  }
 });
 
 test('approval uses source-read facts and supports source-only registration or chip identity', () => {

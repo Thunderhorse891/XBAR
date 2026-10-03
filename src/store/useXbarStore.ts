@@ -119,7 +119,7 @@ function promoteSourceDocument(horse: HorseRecord, document: DocumentRecord): Ho
   const review = inspectDocumentHorseIdentity(document, horse);
   if (
     review.conflictReason ||
-    !document.extractedTextPreview.trim() ||
+    !document.extractedTextPreview?.trim() ||
     extractionProducedNothing(document.processingNote)
   ) {
     return { ...horse, documents: [...new Set([...horse.documents, document.id])] };

@@ -36,6 +36,7 @@ test('renaming the same bytes does not evade the existing-document duplicate ale
 import { flagDocumentDuplicates, fingerprintDocument } from '../src/lib/documentDuplicates.js';
 import {
   assessOwnershipDocument,
+  documentWithFreshSource,
   inspectDocumentHorseIdentity,
   ownershipReviewBlockers,
   ownershipDocumentReviewKey,
@@ -61,6 +62,25 @@ function document(overrides: Partial<DocumentRecord> = {}): DocumentRecord {
     ...overrides,
   };
 }
+test('legacy documents without OCR text stay unreadable instead of crashing source review', () => {
+  for (const preview of [undefined, null]) {
+    const legacy = document({ extractedTextPreview: preview as unknown as string });
+    if (preview === undefined) delete (legacy as Partial<DocumentRecord>).extractedTextPreview;
+    const restored = legacy;
+    const before = JSON.stringify(restored);
+    const identity = inspectDocumentHorseIdentity(restored, horse);
+    assert.match(identity.missingIdentityReason ?? '', /No horse identity/);
+    assert.equal(identity.conflictReason, undefined);
+    assert.deepEqual(identity.sourceChips, []);
+    assert.equal(identity.sourceEntities.horseName, undefined);
+    assert.equal(identity.sourceEntities.registrationNumber, undefined);
+    const fresh = documentWithFreshSource(restored);
+    assert.equal(fresh.entities.horseName, undefined, 'Cached horse identity is not source evidence');
+    assert.equal(assessOwnershipDocument(restored, horse, 'registration_certificate').status, 'unreadable');
+    assert.equal(assessOwnershipDocument(fresh, horse, 'registration_certificate').ok, false);
+    assert.equal(JSON.stringify(restored), before, 'Reading legacy source must not rewrite stored history');
+  }
+});
 test('batch duplicate detection flags renamed bytes within batch but retains every file', async () => {
   const contentSha256 = await fingerprintDocument(new Blob([paper]));
   const result = flagDocumentDuplicates(
