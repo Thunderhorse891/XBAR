@@ -92,6 +92,10 @@ function parentLabel(label: 'sire' | 'dam') {
   return `${label}(?:['’]s)?(?:\\s+name)?|name\\s+of\\s+${label}`;
 }
 
+// Match qualified ancestors as a whole so their inner Sire/Dam token cannot
+// become a top-level parent. They still delimit the subject and parent values.
+const PEDIGREE_LABEL = `(?:name\\s+of\\s+)?(?:sire|dam)\\s+of\\s+(?:the\\s+)?(?:sire|dam)|(?:sire|dam)(?:['’]s)\\s+(?:sire|dam)|(?:paternal|maternal)\\s+(?:grand\\s*)?(?:sire|dam)|grand\\s*(?:sire|dam)|${parentLabel('sire')}|${parentLabel('dam')}`;
+
 // Label tokens that mark the start of the *next* field. A captured value stops
 // when one of these appears, so "Sire: SHINING SPARK Dam: ..." splits cleanly.
 const STOP_LABELS = [
@@ -112,8 +116,7 @@ const STOP_LABELS = [
   'gender',
   'colou?r',
   'breed',
-  parentLabel('sire'),
-  parentLabel('dam'),
+  PEDIGREE_LABEL,
   'breeder',
   OWNER_LABELS,
   'microchip',
@@ -289,8 +292,7 @@ function findFoaledOn(text: string): string | undefined {
 // Boundaries that end a sire/dam entry. Deliberately excludes reg/registration
 // so a parent's own "Reg No 0011223" tail stays inside the captured chunk.
 const PARENT_STOP_GROUP = [
-  parentLabel('sire'),
-  parentLabel('dam'),
+  PEDIGREE_LABEL,
   'breeder',
   OWNER_LABELS,
   'foaled',
@@ -308,32 +310,51 @@ const PARENT_STOP_GROUP = [
   'breed',
 ].join('|');
 
-/** A sire/dam entry: the parent's name plus, when present, its registration number. */
-function findParent(text: string, label: 'sire' | 'dam'): { name?: string; registration?: string } {
-  const chunk = labeledValue(text, parentLabel(label), PARENT_STOP_GROUP);
-  if (!chunk || chunk.length < 2) return {};
-  // The registration number, if any, trails the name within the chunk.
-  const regMatch = chunk.match(
-    new RegExp(`\\b(?:${REGISTRIES.join('|')})?\\s*[:#-]?\\s*([A-Z]?\\d[\\d\\s-]{4,12}\\d)\\b`, 'i'),
-  );
-  const registration = regMatch ? regMatch[1].replace(/[\s-]/g, '').toUpperCase() : undefined;
-  let name = chunk;
-  if (regMatch) {
-    name = chunk.slice(0, regMatch.index).trim();
+/** Collect every top-level parent assertion; contradictions always need review. */
+function findParent(text: string, label: 'sire' | 'dam') {
+  const names = new Map<string, string>();
+  const registrations = new Set<string>();
+  const registries = new Set<string>();
+  const matches = [...text.matchAll(new RegExp(`\\b(?:${PEDIGREE_LABEL})\\b`, 'ig'))];
+  for (const [index, match] of matches.entries()) {
+    if (!new RegExp(`^(?:${parentLabel(label)})$`, 'i').test(match[0])) continue;
+    const chunk = labeledValue(
+      text.slice(match.index, matches[index + 1]?.index),
+      parentLabel(label),
+      PARENT_STOP_GROUP,
+    );
+    if (!chunk) continue;
+    const regPattern = new RegExp(
+      `\\b(?:(${REGISTRIES.join('|')})\\s*[:#-]?\\s*)?([A-Z]?\\d[\\d\\s-]{3,}\\d[A-Z]*)\\b`,
+      'ig',
+    );
+    const regMatches = [...chunk.matchAll(regPattern)];
+    for (const registration of regMatches) {
+      registrations.add(registration[2].replace(/[\s-]/g, '').toUpperCase());
+      if (registration[1]) registries.add(registration[1].toUpperCase());
+    }
+    const name = normalizePedigreeValue(
+      chunk
+        .slice(0, regMatches[0]?.index ?? chunk.length)
+        .replace(/\s*(?:registration|reg\.?)(?:\s*(?:number|no|#))?\.?\s*[:#-]?\s*$/i, '')
+        .replace(/[|;,:#.\-\s]+$/g, '')
+        .replace(/\s+/g, ' ')
+        .trim(),
+    );
+    if (name && name.length >= 2) {
+      const key = name
+        .toLowerCase()
+        .replace(/[^a-z0-9]+/g, ' ')
+        .trim();
+      if (!names.has(key)) names.set(key, name);
+    }
   }
-  name = name
-    .replace(new RegExp(`\\b(?:${REGISTRIES.join('|')})\\b`, 'ig'), '')
-    .replace(/\b(?:reg\.?\s*(?:no|number|#)?)\b/gi, '')
-    // A registration field printed right after the parent name -- the horse's
-    // own, on a certificate that puts it after the pedigree -- leaves the full
-    // word "Registration" (and "Number"/"No") clinging to the parent name once
-    // its digits are split off, e.g. "MOM Registration Number". Strip that tail
-    // so the parent name is just "MOM"; the digits stay in `registration`.
-    .replace(/\s*registration(?:\s+(?:number|no))?\.?\s*$/i, '')
-    .replace(/[|;,:#.\-\s]+$/g, '')
-    .replace(/\s+/g, ' ')
-    .trim();
-  return { name: name.length >= 2 ? normalizePedigreeValue(name) : undefined, registration };
+  const ambiguous = names.size > 1 || registrations.size > 1 || registries.size > 1;
+  return {
+    name: ambiguous ? undefined : names.values().next().value,
+    registration: ambiguous ? undefined : registrations.values().next().value,
+    ambiguous,
+  };
 }
 
 function findRegistry(text: string, fallback?: string): string | undefined {
@@ -449,7 +470,7 @@ export function extractRegistrationFields(rawText: string): RegistrationFields {
   const horseNames = findHorseNames(text, lineStarts);
   // A labeled name such as DAM GOOD contains data, not a parent-field label.
   const parentIndex =
-    [...text.matchAll(new RegExp(`\\b(?:${parentLabel('sire')}|${parentLabel('dam')})\\b`, 'ig'))].find(
+    [...text.matchAll(new RegExp(`\\b(?:${PEDIGREE_LABEL})\\b`, 'ig'))].find(
       (match) => !horseNames.some((name) => match.index >= name.start && match.index < name.end),
     )?.index ?? -1;
   const headText = parentIndex >= 0 ? text.slice(0, parentIndex) : text;
@@ -470,7 +491,12 @@ export function extractRegistrationFields(rawText: string): RegistrationFields {
   );
   const subjectRegistrations = new Set(subjectIds.map((entry) => entry.number).filter(Boolean));
   const subjectRegistries = new Set(subjectIds.map((entry) => entry.registry).filter(Boolean));
-  const identityReviewRequired = subjectNames.size > 1 || subjectRegistrations.size > 1 || subjectRegistries.size > 1;
+  const identityReviewRequired =
+    subjectNames.size > 1 ||
+    subjectRegistrations.size > 1 ||
+    subjectRegistries.size > 1 ||
+    sire.ambiguous ||
+    dam.ambiguous;
 
   const fields: RegistrationFields = {
     identityReviewRequired: identityReviewRequired || undefined,

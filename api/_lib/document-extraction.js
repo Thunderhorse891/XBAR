@@ -223,6 +223,10 @@ function parentLabel(label) {
   return `${label}(?:['’]s)?(?:\\s+name)?|name\\s+of\\s+${label}`;
 }
 
+// Match qualified ancestors as a whole so their inner Sire/Dam token cannot
+// become a top-level parent. They still delimit the subject and parent values.
+const PEDIGREE_LABEL = `(?:name\\s+of\\s+)?(?:sire|dam)\\s+of\\s+(?:the\\s+)?(?:sire|dam)|(?:sire|dam)(?:['’]s)\\s+(?:sire|dam)|(?:paternal|maternal)\\s+(?:grand\\s*)?(?:sire|dam)|grand\\s*(?:sire|dam)|${parentLabel('sire')}|${parentLabel('dam')}`;
+
 // Label tokens that mark the start of the *next* field. A captured value stops
 // when one of these appears, so "Sire: SHINING SPARK Dam: ..." splits cleanly.
 const STOP_LABELS = [
@@ -243,8 +247,7 @@ const STOP_LABELS = [
   'gender',
   'colou?r',
   'breed',
-  parentLabel('sire'),
-  parentLabel('dam'),
+  PEDIGREE_LABEL,
   'breeder',
   OWNER_LABELS,
   'microchip',
@@ -267,8 +270,7 @@ const COLOR_VALUE = `(?:${NAME_COLORS.map((color) => color.replace(/[-\s]/g, '[-
 // Boundaries that end a sire/dam entry. Deliberately excludes reg/registration
 // so a parent's own "Reg No 0011223" tail stays inside the captured chunk.
 const PARENT_STOP_GROUP = [
-  parentLabel('sire'),
-  parentLabel('dam'),
+  PEDIGREE_LABEL,
   'breeder',
   OWNER_LABELS,
   'foaled',
@@ -366,32 +368,51 @@ function normalizePedigreeValue(value) {
   return trimmed && !/^(?:unknown|n\/?a|not\s+recorded|pending)\.?$/i.test(trimmed) ? trimmed : undefined;
 }
 
-/** A sire/dam entry: the parent's name plus, when present, its registration number. */
+/** Collect every top-level parent assertion; contradictions always need review. */
 function findParent(text, label) {
-  const chunk = labeledValue(text, parentLabel(label), PARENT_STOP_GROUP);
-  if (!chunk || chunk.length < 2) return {};
-  // The registration number, if any, trails the name within the chunk.
-  const regMatch = chunk.match(
-    new RegExp(`\\b(?:${REGISTRIES.join('|')})?\\s*[:#-]?\\s*([A-Z]?\\d[\\d\\s-]{4,12}\\d)\\b`, 'i'),
-  );
-  const registration = regMatch ? regMatch[1].replace(/[\s-]/g, '').toUpperCase() : undefined;
-  let name = chunk;
-  if (regMatch) {
-    name = chunk.slice(0, regMatch.index).trim();
+  const names = new Map();
+  const registrations = new Set();
+  const registries = new Set();
+  const matches = [...text.matchAll(new RegExp(`\\b(?:${PEDIGREE_LABEL})\\b`, 'ig'))];
+  for (const [index, match] of matches.entries()) {
+    if (!new RegExp(`^(?:${parentLabel(label)})$`, 'i').test(match[0])) continue;
+    const chunk = labeledValue(
+      text.slice(match.index, matches[index + 1]?.index),
+      parentLabel(label),
+      PARENT_STOP_GROUP,
+    );
+    if (!chunk) continue;
+    const regPattern = new RegExp(
+      `\\b(?:(${REGISTRIES.join('|')})\\s*[:#-]?\\s*)?([A-Z]?\\d[\\d\\s-]{3,}\\d[A-Z]*)\\b`,
+      'ig',
+    );
+    const regMatches = [...chunk.matchAll(regPattern)];
+    for (const registration of regMatches) {
+      registrations.add(registration[2].replace(/[\s-]/g, '').toUpperCase());
+      if (registration[1]) registries.add(registration[1].toUpperCase());
+    }
+    const name = normalizePedigreeValue(
+      chunk
+        .slice(0, regMatches[0]?.index ?? chunk.length)
+        .replace(/\s*(?:registration|reg\.?)(?:\s*(?:number|no|#))?\.?\s*[:#-]?\s*$/i, '')
+        .replace(/[|;,:#.\-\s]+$/g, '')
+        .replace(/\s+/g, ' ')
+        .trim(),
+    );
+    if (name && name.length >= 2) {
+      const key = name
+        .toLowerCase()
+        .replace(/[^a-z0-9]+/g, ' ')
+        .trim();
+      if (!names.has(key)) names.set(key, name);
+    }
   }
-  name = name
-    .replace(new RegExp(`\\b(?:${REGISTRIES.join('|')})\\b`, 'ig'), '')
-    .replace(/\b(?:reg\.?\s*(?:no|number|#)?)\b/gi, '')
-    // A registration field printed right after the parent name -- the horse's
-    // own, on a certificate that puts it after the pedigree -- leaves the full
-    // word "Registration" (and "Number"/"No") clinging to the parent name once
-    // its digits are split off, e.g. "MOM Registration Number". Strip that tail
-    // so the parent name is just "MOM"; the digits stay in `registration`.
-    .replace(/\s*registration(?:\s+(?:number|no))?\.?\s*$/i, '')
-    .replace(/[|;,:#.\-\s]+$/g, '')
-    .replace(/\s+/g, ' ')
-    .trim();
-  return { name: name.length >= 2 ? normalizePedigreeValue(name) : undefined, registration };
+  const ambiguous = names.size > 1 || registrations.size > 1 || registries.size > 1;
+  return {
+    name: ambiguous ? undefined : names.values().next().value,
+    registration: ambiguous ? undefined : registrations.values().next().value,
+    ambiguous,
+  };
 }
 
 function findHorseNames(text, lineStarts) {
@@ -482,16 +503,23 @@ function extractNameFamily(rawText) {
   const horseNames = findHorseNames(text, lineStarts);
   // A labeled name such as DAM GOOD contains data, not a parent-field label.
   const parentIndex =
-    [...text.matchAll(new RegExp(`\\b(?:${parentLabel('sire')}|${parentLabel('dam')})\\b`, 'ig'))].find(
+    [...text.matchAll(new RegExp(`\\b(?:${PEDIGREE_LABEL})\\b`, 'ig'))].find(
       (match) => !horseNames.some((name) => match.index >= name.start && match.index < name.end),
     )?.index ?? -1;
   const headText = parentIndex >= 0 ? text.slice(0, parentIndex) : text;
   const parentText = parentIndex >= 0 ? text.slice(parentIndex) : '';
   const horseName = horseNames.find((name) => parentIndex < 0 || name.start < parentIndex)?.value;
 
-  const sire = findParent(parentText, 'sire').name;
-  const dam = findParent(parentText, 'dam').name;
-  return { headText, horseName, sire, dam };
+  const sire = findParent(parentText, 'sire');
+  const dam = findParent(parentText, 'dam');
+  return {
+    headText,
+    horseName,
+    sire: sire.name,
+    dam: dam.name,
+    parentAmbiguous: sire.ambiguous || dam.ambiguous,
+    subjectNames: horseNames.filter((name) => parentIndex < 0 || name.start < parentIndex).map((name) => name.value),
+  };
 }
 
 export function extractRegistrationFields(text) {
@@ -689,35 +717,22 @@ const EXTRACTORS = {
 // Count distinct horse-name captures so the pipeline can force a manual
 // "assign or create" decision instead of auto-creating a profile.
 export function detectMultipleHorses(text) {
-  // Flatten OCR line breaks the same way the field extractor does, so a name
-  // label and its value that OCR split across lines are read as one.
-  const source = String(text || '')
-    .split(/\r\n?|\n/)
-    .map(normalizeWhitespace)
-    .filter(Boolean)
-    .join(' ');
-  const names = new Set();
-  // Read each explicit horse-name label with the SAME separator-aware reader the
-  // field extractor now uses. The naive `Label: <value>` scan this replaced could
-  // not see "Registered Name | ALPHA" or a ruled blank, so a certificate carrying
-  // two such names -- a mare and her foal -- read as a single horse. With names
-  // now extractable but the detector still blind, a high-OCR document with only
-  // one recognizable registration number would clear the auto-create threshold
-  // and silently create only the first horse. The two must read names the same
-  // way. Pinned by the "two separator-formatted names" pipeline test.
-  const explicitPattern = "horse(?:['’]s)?\\s+name|registered\\s+name|animal\\s+name|name\\s+of\\s+horse";
-  for (const match of source.matchAll(new RegExp(`\\b(?:${explicitPattern})\\b`, 'gi'))) {
-    const rawName = labeledField(source.slice(match.index), explicitPattern)?.value;
-    const value = rawName
-      ?.toLowerCase()
-      .replace(/[^a-z0-9]+/g, ' ')
-      .replace(/\s+/g, ' ')
-      .trim();
-    if (value) names.add(value);
-  }
+  const family = extractNameFamily(text);
+  const source = family.headText;
+  const names = new Set(
+    (family.subjectNames ?? []).map((value) =>
+      value
+        .toLowerCase()
+        .replace(/[^a-z0-9]+/g, ' ')
+        .replace(/\s+/g, ' ')
+        .trim(),
+    ),
+  );
 
   const registrations = new Set();
-  const regMatches = source.matchAll(/registration\s*(?:no|number|#)\.?\s*[:#-]?\s*([A-Z]{0,4}[\s-]?\d{4,}[A-Z]*)/gi);
+  const regMatches = source.matchAll(
+    /(?:registration|reg\.?)\s*(?:no|number|#)?\.?\s*[:#-]?\s*([A-Z]{0,5}[\s-]?\d{4,}[A-Z]*)/gi,
+  );
   for (const match of regMatches) {
     registrations.add(cleanValue(match[1], { uppercase: true }).replace(/\s+/g, ''));
   }
@@ -733,7 +748,7 @@ export function detectMultipleHorses(text) {
     if (registry) registries.add(registry);
   }
   return {
-    multiple: names.size > 1 || numbers.size > 1 || registries.size > 1,
+    multiple: names.size > 1 || numbers.size > 1 || registries.size > 1 || Boolean(family.parentAmbiguous),
     horseNames: [...names],
     registrationNumbers: [...registrations],
   };

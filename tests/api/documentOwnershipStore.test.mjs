@@ -230,3 +230,18 @@ test('pedigree placeholders allow approval without replacing known parents or fi
     assert.deepEqual(buildHorseEnrichmentFromEntities(pending.entities, blank).patch, {}, value);
   }
 });
+
+test('approval rejects all conflicting chip list identities and preserves the pending source', () => {
+  const target = { ...horse, microchipId: '900123456789012' };
+  for (const separator of [', ', '/', ' and ', ' or ', '; ', ' & ']) {
+    const pending = {
+      ...source,
+      state: 'Needs Review',
+      extractedTextPreview: `${source.extractedTextPreview}\nMicrochip: 900123456789012${separator}900123456789099`,
+    };
+    useXbarStore.setState({ horses: [target], documents: [pending] });
+    assert.equal(useXbarStore.getState().reviewDocument(source.id, target.id).ok, false, separator);
+    assert.equal(useXbarStore.getState().documents[0].state, 'Needs Review', separator);
+    assert.equal(useXbarStore.getState().horses[0].microchipId, target.microchipId, separator);
+  }
+});

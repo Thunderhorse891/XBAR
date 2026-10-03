@@ -1225,3 +1225,40 @@ test('unknown microchip text allows facts and approval while preserving the reco
     sourceRetained: true,
   });
 });
+
+test('a second chip in a source list blocks facts and approval without altering the horse', async ({ page }) => {
+  await bootstrapWorkspace(page);
+  await seedHorse(page, 'Chip List Horse');
+  const horseId = await page.evaluate(async () => {
+    const modulePath = '/src/store/useXbarStore.ts';
+    const { useXbarStore } = await import(/* @vite-ignore */ modulePath);
+    const horse = useXbarStore.getState().horses[0];
+    useXbarStore.setState({ horses: [{ ...horse, color: '', microchipId: '900123456789012' }] });
+    return horse.id as string;
+  });
+  await page.getByRole('button', { name: 'Create', exact: true }).click();
+  await page.getByRole('menuitem', { name: 'Upload Document' }).click();
+  const drawer = page.getByRole('dialog', { name: 'Upload Document' });
+  await drawer.locator('input[type="file"]').setInputFiles({
+    name: 'chip-list-source.txt',
+    mimeType: 'text/plain',
+    buffer: Buffer.from(
+      'CERTIFICATE OF REGISTRATION\nRegistered Name: CHIP LIST HORSE\nColor: Bay\nMicrochip: 900123456789012, 900123456789099',
+    ),
+  });
+  await drawer.locator('select').first().selectOption(horseId);
+  await drawer.getByRole('button', { name: 'Upload for review' }).click();
+  const actions = page.getByRole('group', { name: 'chip-list-source review actions' });
+  await actions.getByRole('button', { name: 'Apply facts', exact: true }).click();
+  await expect(
+    page.getByText('Choose a horse that matches the original document before applying its facts.', { exact: true }),
+  ).toBeVisible();
+  await actions.getByRole('button', { name: 'Approve', exact: true }).click();
+  const saved = await page.evaluate(async () => {
+    const modulePath = '/src/store/useXbarStore.ts';
+    const { useXbarStore } = await import(/* @vite-ignore */ modulePath);
+    const state = useXbarStore.getState();
+    return { color: state.horses[0].color, chip: state.horses[0].microchipId, documentState: state.documents[0].state };
+  });
+  expect(saved).toEqual({ color: '', chip: '900123456789012', documentState: 'Needs Review' });
+});

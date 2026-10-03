@@ -64,32 +64,60 @@ function microchipKey(value: string): string | undefined {
   return /^(?:\d{9}|\d{15}|1\d{15}|[a-f0-9]{10})$/.test(key) ? key : undefined;
 }
 
-function sourceMicrochipKey(value: string): string | undefined {
+function sourceMicrochipKeys(value: string): string[] {
   const tokens = value.trim().split(/\s+/);
-  // A complete legacy numeric ID followed by prose/batch text is not a hex ID.
-  // Numeric continuation remains eligible for a grouped ISO identifier.
-  for (let end = 1; end < tokens.length; end += 1) {
-    const prefix = microchipKey(tokens.slice(0, end).join(' '));
-    if (prefix?.length === 9 && /^[a-z]/i.test(tokens[end])) return prefix;
+  // A bare year after a complete ISO identifier is metadata, not an extra
+  // scanner group that can repartition that identifier into shorter chips.
+  if (
+    /^(?:19|20)\d{2}$/.test(tokens[tokens.length - 1] ?? '') &&
+    microchipKey(tokens.slice(0, -1).join(' '))?.length === 15
+  )
+    tokens.pop();
+  type Parsed = { keys: string[]; complete: boolean };
+  const parsed: Parsed[] = Array.from({ length: tokens.length + 1 }, () => ({ keys: [], complete: true }));
+  // Retain every complete scanner-group partition. If more than one identity
+  // interpretation is possible, their union forces review instead of choosing
+  // the most convenient first/last value or maximizing consumed characters.
+  for (let start = tokens.length - 1; start >= 0; start -= 1) {
+    const candidates: Parsed[] = [];
+    let joined = '';
+    let previousKey: string | undefined;
+    for (let end = start; end < tokens.length; end += 1) {
+      const token = tokens[end];
+      if (!/^(?:AVID\*)?[a-f0-9.*-]+$/i.test(token)) break;
+      // A trailing prose "A" must not turn a complete legacy ID into hex.
+      if (previousKey?.length === 9 && /^[a-z]/i.test(token)) break;
+      joined += token;
+      const compact = joined.replace(/^AVID\*/i, '').replace(/[.*-]/g, '');
+      if (compact.length > 16) break;
+      const key = microchipKey(joined);
+      previousKey = key;
+      if (!key) continue;
+      const next = tokens[end + 1];
+      const malformedContinuation =
+        key.length === 9 && next && /^\d/.test(next) && /[a-z_]/i.test(next) && !microchipKey(next);
+      if (!malformedContinuation) {
+        const remaining = parsed[end + 1];
+        candidates.push({ keys: [key, ...remaining.keys], complete: remaining.complete });
+      }
+      if (key.length >= 15) break;
+    }
+    const complete = candidates.filter((candidate) => candidate.complete);
+    if (complete.length) {
+      parsed[start] = { keys: [...new Set(complete.flatMap((candidate) => candidate.keys))], complete: true };
+    } else if (candidates.length) {
+      // Preserve a complete leading identifier even when OCR appends an
+      // unrelated date/count that is not another complete identifier.
+      parsed[start] = candidates[candidates.length - 1];
+    } else {
+      const remaining = parsed[start + 1];
+      parsed[start] = {
+        keys: remaining.keys,
+        complete: !/^(?:AVID\*)?[a-f0-9.*-]+$/i.test(tokens[start]) && remaining.complete,
+      };
+    }
   }
-  const complete = microchipKey(value);
-  if (complete) return complete;
-  // OCR can place an unrelated date/count after a complete identifier. Preserve
-  // the longest complete identifier at a token boundary, never a substring of
-  // a malformed token (for example 900123456789012X).
-  for (let end = tokens.length - 1; end > 0; end -= 1) {
-    const prefix = microchipKey(tokens.slice(0, end).join(' '));
-    if (!prefix) continue;
-    // A nine-digit token can be the first group of a malformed ISO identifier.
-    // Keep longer complete IDs when OCR appends a separate date or batch token.
-    if (
-      prefix.length !== 9 ||
-      /^[a-z]/i.test(tokens[end]) ||
-      tokens.slice(end).every((token) => /^[a-f0-9.*-]+$/i.test(token))
-    )
-      return prefix;
-  }
-  return undefined;
+  return parsed[0].keys;
 }
 
 /** The same source identity screen for document movement, approval and ownership.
@@ -101,12 +129,18 @@ export function inspectDocumentHorseIdentity(document: DocumentRecord, horse: Ho
   const sourceIdentity = extractRegistrationFields(
     document.extractedTextPreview.replace(/(^|\n)\s*horse\s*[:#]\s*/gi, '$1Horse Name: '),
   );
-  const sourceChips = [
-    ...document.extractedTextPreview.matchAll(
-      /\bmicrochip\b(?:\s+(?:number|no\.?|id))?(?:\s*[:#-])*\s*([^\s,;:()]+(?:\s+(?:(?=[A-Z0-9.*_-]*\d)[A-Z0-9.*_-]+|[A-F.*-]+)(?=[\s,;:()]|$))*)/gi,
-    ),
-  ]
-    .map((match) => sourceMicrochipKey(match[1]))
+  // One labeled field may contain a list, not just one scalar identifier.
+  // Keep repeated labels available to the outer scan rather than consuming the
+  // next "Microchip" token as a list item.
+  const chipValue = String.raw`(?!microchip\b)[^\s,;:()/&|]+(?:\s+(?:(?=[A-Z0-9.*_-]*\d)[A-Z0-9.*_-]+|[A-F.*-]+)(?=[\s,;:()/&|]|$))*`;
+  const chipSeparator = String.raw`(?:\s*(?:[,;/&|]|\band\b|\bor\b)\s*)+`;
+  const chipField = new RegExp(
+    String.raw`\bmicrochip\b(?:\s+(?:number|no\.?|id))?(?:\s*[:#-])*\s*(${chipValue}(?:${chipSeparator}${chipValue})*)`,
+    'gi',
+  );
+  const sourceChips = [...document.extractedTextPreview.matchAll(chipField)]
+    .flatMap((match) => match[1].split(new RegExp(chipSeparator, 'i')))
+    .flatMap(sourceMicrochipKeys)
     .filter((chip): chip is string => Boolean(chip));
   const storedChip = horse.microchipId && (microchipKey(horse.microchipId.trim()) ?? normalize(horse.microchipId));
   const conflictReason =

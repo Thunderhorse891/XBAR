@@ -407,6 +407,8 @@ test('recognized chip formats keep matching and conflicts before unrelated prose
       ' A vaccine',
       ' X123 vaccine batch',
       '\n2026-01-01 vaccination',
+      '\n2026 vaccine record',
+      ' 2026 vaccine record',
     ]) {
       assert.equal(
         inspectDocumentHorseIdentity(
@@ -462,5 +464,64 @@ test('missing pedigree values are absent while genuine parent conflicts remain b
   for (const parent of ['sire', 'dam'] as const) {
     const source = document({ extractedTextPreview: `${paper}\n${parent}: UNKNOWN SOLDIER` });
     assert.equal(assessOwnershipDocument(source, target, 'registration_certificate').status, 'identity_mismatch');
+  }
+});
+
+test('every microchip identity in a labeled list participates in review', () => {
+  const target = { ...horse, microchipId: '900123456789012' };
+  for (const separator of [', ', '/', ' / ', '; ', ' and ', ' or ', ' & ', ' and/or ', ' ', '\n', ' | ']) {
+    for (const trailing of ['900123456789012', '900123456789099']) {
+      const source = document({ extractedTextPreview: `${paper}\nMicrochip: 900123456789012${separator}${trailing}` });
+      assert.equal(
+        assessOwnershipDocument(source, target, 'registration_certificate').ok,
+        trailing === target.microchipId,
+        separator,
+      );
+    }
+  }
+  for (const line of [
+    'Microchip: UNKNOWN, 900123456789099',
+    'Microchip: 900123456789012, Microchip ID #: 900123456789099',
+    'Microchip: 900-123-456-789-012 and 900-123-456-789-099',
+  ]) {
+    assert.equal(
+      assessOwnershipDocument(
+        document({ extractedTextPreview: `${paper}\n${line}` }),
+        target,
+        'registration_certificate',
+      ).ok,
+      false,
+      line,
+    );
+  }
+});
+
+test('chip lists retain every complete identity across formats and missing or malformed entries', () => {
+  for (const [stored, matching, conflicting] of [
+    ['123456789', '123456789', '987654321'],
+    ['123456789', '123 456 789', '987 654 321'],
+    ['123456789', 'AVID*123*456*789', 'AVID*987*654*321'],
+    ['900123456789012', '900123456789012', '900123456789099'],
+    ['900123456789012', '900 123 456 789 012', '900 123 456 789 099'],
+    ['0A01183726', '0A 0118 3726', '0A 0118 3727'],
+  ]) {
+    const target = { ...horse, microchipId: stored };
+    for (const separator of [', ', '/', '; ', ' and ', ' or ', ' & ', ' | ', '\n', ' ']) {
+      for (const [last, ok] of [
+        [matching, true],
+        [conflicting, false],
+      ] as const) {
+        const source = document({ extractedTextPreview: `${paper}\nMicrochip: ${matching}${separator}${last}` });
+        assert.equal(
+          assessOwnershipDocument(source, target, 'registration_certificate').ok,
+          ok,
+          `${matching}${separator}${last}`,
+        );
+      }
+    }
+    for (const middle of ['UNKNOWN', 'N/A', 'Pending', '900123456789012X', '900123456789012_EXTRA']) {
+      const source = document({ extractedTextPreview: `${paper}\nMicrochip: ${matching}, ${middle}, ${conflicting}` });
+      assert.equal(assessOwnershipDocument(source, target, 'registration_certificate').ok, false, middle);
+    }
   }
 });
