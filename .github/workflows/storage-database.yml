@@ -5,14 +5,14 @@ on:
     paths:
       - 'supabase/migrations/**'
       - 'supabase/checks/storage-fixture-schema.sql'
-      - 'supabase/checks/workspace-keyed-storage*.sql'
+      - 'supabase/checks/workspace-keyed-storage*'
       - '.github/workflows/storage-database.yml'
   push:
     branches: [main]
     paths:
       - 'supabase/migrations/**'
       - 'supabase/checks/storage-fixture-schema.sql'
-      - 'supabase/checks/workspace-keyed-storage*.sql'
+      - 'supabase/checks/workspace-keyed-storage*'
       - '.github/workflows/storage-database.yml'
   workflow_dispatch:
 
@@ -48,6 +48,8 @@ jobs:
       - uses: actions/checkout@v7
       - name: Production starting state
         run: psql -v ON_ERROR_STOP=1 -f supabase/checks/storage-fixture-schema.sql
+      - name: Contract refuses legacy and ambiguous namespaces without changing data
+        run: bash supabase/checks/workspace-keyed-storage-preflight.sh
       - name: The starting state leaks, so the checks can see a leak
         run: |
           # Must fail, and for the leak itself -- not a syntax error or a
@@ -69,6 +71,15 @@ jobs:
         run: |
           psql -v ON_ERROR_STOP=1 -f supabase/migrations/20261001090100_workspace_keyed_storage_contract.sql
           psql -v ON_ERROR_STOP=1 -f supabase/checks/workspace-keyed-storage.sql
+          psql -v ON_ERROR_STOP=1 <<'SQL'
+          do $$ begin
+            if (select count(*) from storage.objects where
+                (bucket_id = 'horse-documents' and name = 'cccccccc-cccc-4ccc-8ccc-cccccccccccc/documents/preflight/keep.pdf') or
+                (bucket_id = 'horse-media' and name = 'CCCCCCCC-CCCC-4CCC-8CCC-CCCCCCCCCCCC/horses/preflight/media-keep.jpg')) <> 2 then
+              raise exception 'The contract did not preserve valid existing workspace objects';
+            end if;
+          end $$;
+          SQL
       - name: The superseded migrations refuse to run after the contract
         run: |
           for file in supabase/migrations/20260924134000_horse_media_private_signed_urls.sql \

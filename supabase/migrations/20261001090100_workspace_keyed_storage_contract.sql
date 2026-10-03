@@ -24,6 +24,35 @@
 
 begin;
 
+-- Keep the inventory check and policy cutover atomic. Old app tabs can still
+-- INSERT uploader-keyed objects until these policies change. Block those
+-- writes first so a clean preflight cannot become stale before COMMIT.
+lock table storage.objects in share row exclusive mode;
+
+do $storage_preflight$
+begin
+  if exists (
+    select 1 from storage.objects o
+    where o.bucket_id in ('horse-media', 'horse-documents')
+      and (
+        not exists (
+          select 1 from public.workspaces w
+          where w.id::text = lower(split_part(o.name, '/', 1))
+        )
+        -- Workspaces can be created with a caller-selected UUID. A namespace
+        -- that is also a user id cannot establish whether these are legacy
+        -- uploader files, even if a workspace with that id now exists.
+        or exists (
+          select 1 from auth.users u
+          where u.id::text = lower(split_part(o.name, '/', 1))
+        )
+      )
+  ) then
+    raise exception 'Storage contract refused: legacy or ambiguous object namespaces remain; reconcile their ownership before retrying';
+  end if;
+end;
+$storage_preflight$;
+
 -- horse-media ------------------------------------------------------------
 
 drop policy if exists "horse media upload own" on storage.objects;
