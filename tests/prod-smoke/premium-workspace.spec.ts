@@ -48,13 +48,16 @@ test('desktop workspace preserves brand, horse creation and navigation', async (
   await page.setViewportSize({ width: 1440, height: 1000 });
   await page.emulateMedia({ reducedMotion: 'reduce' });
   await setupWorkspace(page);
-  const wordmark = page.locator('.xs-sidebar .xs-brand__wordmark');
-  await expect(wordmark).toHaveAttribute('src', '/brand/xbar-wordmark.png');
-  await expect.poll(() => wordmark.evaluate((img: HTMLImageElement) => img.naturalWidth)).toBeGreaterThan(0);
-  await expect(page.locator('.xs-hero__wm')).toHaveCSS('filter', 'none');
-  await expect(page.locator('.xs-hero__headline')).toHaveCSS('color', 'rgb(245, 242, 236)');
+  const signature = page.locator('.xs-sidebar .xs-brand__signature');
+  await expect(signature).toBeVisible();
+  await expect(signature.locator('.xbar-signature__base path')).not.toHaveCount(0);
+  await expect(signature.locator('image, text')).toHaveCount(0);
+  await expect(signature).toHaveAttribute('width', '44');
+  await expect(signature).toHaveAttribute('height', '44');
+  await expect(page.locator('.xs-hero__wm')).toHaveCount(0);
+  await expect(page.locator('.xs-hero__headline')).toHaveCSS('color', 'rgb(32, 36, 40)');
   await expect(page.locator('.xs-ranchcard__name')).toHaveCSS('color', 'rgb(245, 242, 236)');
-  await expect(page.locator('.xs-sidebar')).toHaveCSS('background-color', 'rgb(11, 13, 15)');
+  await expect(page.locator('.xs-sidebar')).toHaveCSS('background-color', 'rgb(23, 27, 32)');
   await noPageOverflow(page);
   await screenshot(page, info, 'dashboard-desktop');
   await addHorse(page);
@@ -125,7 +128,7 @@ test('desktop workspace preserves brand, horse creation and navigation', async (
     .getByRole('link', { name: 'Horses', exact: true })
     .click();
   await expect(page.locator('.horse-card__image')).toBeVisible();
-  await expect(page.locator('.horse-card__media-bottom')).toHaveCSS('background-color', 'rgba(11, 13, 15, 0.86)');
+  await expect(page.locator('.horse-card__media-bottom')).toHaveCSS('background-color', 'rgba(23, 27, 32, 0.86)');
   await screenshot(page, info, 'horses-bright-photo');
   await page.reload();
   await expect(page.locator('.horse-card__image')).toBeVisible();

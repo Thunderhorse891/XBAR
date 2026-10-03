@@ -2226,7 +2226,7 @@ test('a record that installs but crashes the route it lands on is refused', asyn
     ['src/routes/Sales.tsx', /<p className="horse-card__summary">\{horse\.summary\}<\/p>/],
     ['src/routes/AnimalProfile.tsx', /\{animal\.breed \|\| 'Horse'\} · \{animal\.sex\} · \{animal\.age\} yrs/],
     ['src/routes/Medical.tsx', /value: formatDateLabel\(horse\.lastVetVisit\)/],
-    ['src/routes/Horses.tsx', /\{horse\.registry\} · \{horse\.sex\} · \{horse\.location\.barn\}/],
+    ['src/routes/Horses.tsx', /\{horse\.sex\} · \{horseAgeLabel\(horse\)\} · \{horse\.location\.barn\}/],
     ['src/routes/RanchAssets.tsx', /a\.assignedTo\.toLowerCase\(\)/],
     ['src/routes/Sales.tsx', /h\.segment\.toLowerCase\(\)/],
     ['src/routes/AnimalProfile.tsx', /animal\.activity\.length/],

@@ -190,15 +190,23 @@ test('marketing, legal, and 404 pages share the same native mobile navigation an
       `${page.path}: mobile navigation must expose the same public and account destinations`,
     );
     assert.doesNotMatch(menu, /onclick=|href="(?:#|javascript:)/i, `${page.path}: menu must work without scripts`);
-    assert.match(html, /<header[\s\S]*?<img src="\/brand\/apple-touch-icon\.png"/);
-    assert.match(html, /<footer[\s\S]*?<img src="\/brand\/apple-touch-icon\.png"/);
+    assert.match(
+      html,
+      /<header[\s\S]*?<svg[^>]*data-xbar-signature/,
+      `${page.path}: header needs the recognizable horse signature`,
+    );
+    assert.match(
+      html,
+      /<footer[\s\S]*?<svg[^>]*data-xbar-signature/,
+      `${page.path}: footer needs the same horse signature`,
+    );
   }
 });
 
-test('shared public styles derive the warm-white, black, and steel identity from canonical brand tokens', async () => {
+test('shared public styles derive the white, black, and steel identity from canonical brand tokens', async () => {
   const css = (await readFile('scripts/marketing/site.css', 'utf8')).replace(/\/\*[\s\S]*?\*\//g, '');
   const aliases: Record<string, string> = {
-    '--bg': '--xbar-warm-white',
+    '--bg': '--xbar-white',
     '--ink': '--xbar-black',
     '--ink-soft': '--xbar-steel',
     '--ink-faint': '--xbar-steel',
@@ -231,7 +239,7 @@ test('the homepage retains approved artwork, accurate prices, and static signup 
   assert.match(html, /href="\/app\/login\?mode=signup"/);
   assert.match(html, /href="\/samples\/sample-sale-packet.html"/);
   assert.match(html, /\/brand\/xbar-report-horse.png/);
-  assert.match(html, /\/brand\/xbar-report-mark.png/);
+  assert.match(html, /\/brand\/xbar-signature-horse-512.png/);
   assert.match(html, /example data/);
   for (const plan of marketingPlans) {
     assert.ok(html.includes(`$${plan.monthlyRate}<span>/month</span>`), `${plan.tier} price must remain accurate`);
@@ -451,5 +459,33 @@ test('missing observer or animation support preserves static public content', as
     harness.intersect();
     assert.equal(harness.animations.length, 0);
     assert.deepEqual(harness.contentClasses, [], 'fallback content must never acquire a hidden class');
+  }
+});
+
+test('all public routes load one lightweight signature bundle with real path geometry', async () => {
+  const { renderPage } = await load('scripts/marketing/render.mjs');
+  for (const page of await allPublicPages()) {
+    const html = renderPage(page);
+    assert.equal(
+      [...html.matchAll(/<script[^>]*src="\/brand-motion\/signature[^"<>]*\.js"/g)].length,
+      1,
+      `${page.path}: missing or duplicated shared signature motion`,
+    );
+    assert.equal(html.split('href="/brand/xbar-signature.css"').length - 1, 1);
+    const signatures = [...html.matchAll(/<svg[^>]*data-xbar-signature[^>]*>[\s\S]*?<\/svg>/g)];
+    assert.ok(signatures.length >= 2, `${page.path}: header and footer signature required`);
+    for (const [svg] of signatures) {
+      assert.match(svg, /class="xbar-signature__base"/, 'recognition must remain visible when motion is disabled');
+      assert.match(
+        svg,
+        /class="xbar-signature__trace"[^>]*pathLength="1"/,
+        'the highlight must trace actual normalized paths',
+      );
+      assert.doesNotMatch(
+        svg,
+        /<image\b|<text\b|data:image/i,
+        'the signature must be real horse geometry independent of raster or typeset XBAR text',
+      );
+    }
   }
 });

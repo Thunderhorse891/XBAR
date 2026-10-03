@@ -1,0 +1,55 @@
+/* The signature belongs to the navigation; operational data stays on white. */
+.xs-shell {
+  --font-display: var(--font-ui);
+  --xbar-font-display: var(--font-ui);
+  --xbar-sidebar: var(--xbar-graphite);
+  --xbar-bg: var(--xbar-white);
+}
+.xs-shell .xs-sidebar,
+[role='dialog'].xs-navigation-sheet {
+  background: var(--xbar-graphite);
+}
+.xs-shell .xs-main {
+  background: var(--xbar-white);
+}
+.xs-sidebar .xs-nav__item--active,
+.xs-navigation-sheet .xs-nav__item--active {
+  background: var(--xbar-gunmetal);
+  box-shadow: inset 3px 0 0 var(--xbar-ice);
+}
+.xs-brand__signature {
+  flex: none;
+}
+.xs-home .xs-hero {
+  min-height: 0;
+  padding: 28px;
+  background: var(--xbar-white);
+  border-color: var(--border);
+  box-shadow: none;
+}
+.xs-home .xs-hero__body {
+  padding-right: 0;
+}
+.xs-home .xs-hero__headline,
+.xs-home .xs-hero__headline em,
+.xs-home .xs-hero__status {
+  color: var(--text);
+}
+.xs-home .xs-hero__eyebrow,
+.xs-home .xs-hero__sub {
+  color: var(--muted-strong);
+}
+.xs-home .xs-hero__actions .xs-btn {
+  color: var(--text);
+  border-color: var(--border-strong);
+}
+.xs-home .xs-hero__actions .xs-btn--primary {
+  background: var(--xbar-gunmetal);
+  color: var(--xbar-white);
+  border-color: var(--xbar-gunmetal);
+}
+@media (max-width: 600px) {
+  .xs-home .xs-hero {
+    padding: 22px 18px;
+  }
+}

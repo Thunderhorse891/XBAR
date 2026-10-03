@@ -1,3 +1,5 @@
+import { buildHorseDocumentActions } from '@/lib/horseDocumentActions';
+import './horseActionFlows.css';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import type { MouseEvent } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
@@ -75,6 +77,7 @@ export default function Documents() {
   const ownershipRecords = useXbarStore((state) => state.ownershipRecords);
   const salePacketBuilds = useXbarStore((state) => state.salePacketBuilds);
   const createDocumentIntake = useXbarStore((state) => state.createDocumentIntake);
+  const intakeProgress = useXbarStore((state) => state.documentIntakeProgress);
   const reviewDocument = useXbarStore((state) => state.reviewDocument);
   const createHorseFromDocument = useXbarStore((state) => state.createHorseFromDocument);
   const discardDocument = useXbarStore((state) => state.discardDocument);
@@ -113,6 +116,23 @@ export default function Documents() {
   const [packetBuildingHorseId, setPacketBuildingHorseId] = useState('');
   const [createHorseFromBatch, setCreateHorseFromBatch] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const submittingRef = useRef(false);
+  const intakeScreenRef = useRef({ active: true, query: searchParams.toString() });
+  useEffect(() => {
+    const screen = { active: true, query: searchParams.toString() };
+    intakeScreenRef.current = screen;
+    return () => {
+      screen.active = false;
+    };
+  }, [searchParams]);
+  const [intakeOutcome, setIntakeOutcome] = useState<{ ok: boolean; message: string } | null>(null);
+  const requestedDocumentAction = requestedHorse
+    ? buildHorseDocumentActions(
+        requestedHorse,
+        documents,
+        ownershipRecords.find((record) => record.horseId === requestedHorse.id),
+      ).find((action) => action.key === searchParams.get('requirement'))
+    : undefined;
   const [formErrors, setFormErrors] = useState<{ uploadedBy?: string; files?: string }>({});
   const [reviewAssignments, setReviewAssignments] = useState<Record<string, string>>({});
   const [proofSelections, setProofSelections] = useState<Record<string, string>>({});
@@ -466,6 +486,7 @@ export default function Documents() {
       : [];
 
   const handleIntake = async () => {
+    if (submittingRef.current) return;
     const nextErrors: { uploadedBy?: string; files?: string } = {};
     if (!uploadedBy.trim()) {
       nextErrors.uploadedBy = 'Uploaded by is required.';
@@ -479,37 +500,58 @@ export default function Documents() {
       return;
     }
 
+    const submissionScreen = intakeScreenRef.current;
+    submittingRef.current = true;
     setIsSubmitting(true);
-    const result = await createDocumentIntake({
-      files,
-      horseId: horseId || undefined,
-      source,
-      uploadedBy,
-      label: batchLabel,
-      createHorseFromBatch,
-    });
-
-    pushToast({
-      title: result.ok ? 'Document upload updated' : 'Document upload blocked',
-      message: result.message,
-      tone: result.ok ? 'success' : 'error',
-    });
-    if (result.ok) {
-      const createdHorseIds = result.createdHorseIds ?? [];
-      setFiles([]);
-      setBatchLabel('Live upload batch');
-      setCreateHorseFromBatch(false);
-      if (!requestedHorse) setSearchParams({});
-      if (result.duplicateCount || result.heldForReviewCount) {
-        goToStage('Review');
-      } else if (createdHorseIds.length === 1) {
-        navigate(`/horses/${createdHorseIds[0]}`);
+    setIntakeOutcome(null);
+    try {
+      const result = await createDocumentIntake({
+        files,
+        horseId: horseId || undefined,
+        source,
+        uploadedBy,
+        label: batchLabel,
+        createHorseFromBatch,
+      });
+      pushToast({
+        title: result.ok ? 'Document intake updated' : 'Document upload blocked',
+        message: result.message,
+        tone: result.ok ? 'success' : 'error',
+      });
+      // A completed intake must not navigate over a newer screen or horse selection.
+      if (!submissionScreen.active || intakeScreenRef.current !== submissionScreen) {
+        if (intakeScreenRef.current.active) {
+          setFiles([]);
+          if (fileInputRef.current) fileInputRef.current.value = '';
+        }
         return;
-      } else if (createdHorseIds.length > 1) {
-        goToStage('Proof');
       }
+      setIntakeOutcome({ ok: result.ok, message: result.message });
+      if (result.ok) {
+        const createdHorseIds = result.createdHorseIds ?? [];
+        setFiles([]);
+        if (fileInputRef.current) fileInputRef.current.value = '';
+        setBatchLabel('Live upload batch');
+        setCreateHorseFromBatch(false);
+        if (!requestedHorse) setSearchParams({});
+        if (result.duplicateCount || result.heldForReviewCount) {
+          goToStage('Review');
+        } else if (createdHorseIds.length === 1) {
+          navigate(`/horses/${createdHorseIds[0]}`);
+        } else if (createdHorseIds.length > 1) {
+          goToStage('Proof');
+        }
+      }
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'The document intake did not finish.';
+      if (submissionScreen.active && intakeScreenRef.current === submissionScreen) {
+        setIntakeOutcome({ ok: false, message });
+      }
+      pushToast({ title: 'Document intake interrupted', message, tone: 'error' });
+    } finally {
+      submittingRef.current = false;
+      if (intakeScreenRef.current.active) setIsSubmitting(false);
     }
-    setIsSubmitting(false);
   };
 
   const handleCreateOwnershipRecord = (targetHorseId: string) => {
@@ -580,6 +622,42 @@ export default function Documents() {
           >
             {fromHorseProfile ? 'Back to horse' : 'Return to sale packet'}
           </button>
+        </div>
+      ) : null}
+      {requestedDocumentAction ? (
+        <div className="hc-upload-context" role="status">
+          <strong>
+            {uploadOpen ? `Upload ${requestedDocumentAction.label}` : requestedDocumentAction.action} for{' '}
+            {requestedHorse?.name}
+          </strong>
+          <span>
+            {requestedDocumentAction.detail} This is sale-packet guidance; each original still goes through identity
+            review.
+          </span>
+          {!uploadOpen && requestedDocumentAction.intent === 'view' ? (
+            <button
+              type="button"
+              className="button button--ghost"
+              onClick={() => navigate(requestedDocumentAction.uploadPath)}
+            >
+              Upload replacement {requestedDocumentAction.label}
+            </button>
+          ) : null}
+        </div>
+      ) : null}
+      {intakeOutcome ? (
+        <div
+          className={`hc-upload-outcome${intakeOutcome.ok ? '' : ' hc-upload-outcome--error'}`}
+          role={intakeOutcome.ok ? 'status' : 'alert'}
+        >
+          <strong>{intakeOutcome.ok ? 'Intake finished' : 'Upload needs attention'}</strong>
+          <span>{intakeOutcome.message}</span>
+          {!intakeOutcome.ok ? (
+            <span>
+              Your file selection is still here. Check the message, then retry. If some files were added, review them
+              before retrying.
+            </span>
+          ) : null}
         </div>
       ) : null}
       <CommandBrief
@@ -660,7 +738,7 @@ export default function Documents() {
             onContextMenu={(event) => openSurfaceMenu('intake', event)}
           >
             <p className="stack-item__copy">{documentIntakeDisclosure}</p>
-            <div id="documents-intake" className="form-grid">
+            <fieldset id="documents-intake" className="form-grid hc-upload-fields" disabled={isSubmitting}>
               <label className="field-stack">
                 <span className="field-label">Batch label</span>
                 <input
@@ -741,12 +819,22 @@ export default function Documents() {
                   accept=".pdf,.txt,.csv,image/*"
                   onChange={(event) => {
                     setFiles(Array.from(event.target.files ?? []));
+                    setIntakeOutcome(null);
                     setFormErrors((current) => ({ ...current, files: undefined }));
                   }}
                   disabled={!canUploadDocuments}
                 />
                 {formErrors.files ? <span className="field-error">{formErrors.files}</span> : null}
               </label>
+            </fieldset>
+            <div className="hc-upload-progress" role="status" aria-live="polite">
+              {isSubmitting
+                ? intakeProgress
+                  ? `Reading ${intakeProgress.processed} of ${intakeProgress.total} files. Keep this screen open while XBAR reads and saves your intake.`
+                  : 'Adding files and saving your intake. Keep this screen open.'
+                : files.length
+                  ? `${files.length} file${files.length === 1 ? '' : 's'} selected. Ready to add.`
+                  : 'Choose files to begin.'}
             </div>
             <div className="inline-actions">
               <button
@@ -755,7 +843,7 @@ export default function Documents() {
                 onClick={handleIntake}
                 disabled={!canUploadDocuments || isSubmitting || !uploadedBy.trim() || !files.length}
               >
-                {isSubmitting ? 'Adding...' : 'Add docs'}
+                {isSubmitting ? 'Adding files…' : intakeOutcome && !intakeOutcome.ok ? 'Retry upload' : 'Add docs'}
               </button>
               <Pill tone={files.length ? 'blue' : 'slate'}>{files.length ? `${files.length} queued` : 'No files'}</Pill>
             </div>

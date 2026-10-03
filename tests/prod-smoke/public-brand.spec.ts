@@ -73,11 +73,11 @@ for (const pathname of publicPaths) {
         buttonInk: button.color,
       };
     });
-    expect(identity.background).toBe('rgb(245, 242, 236)');
+    expect(identity.background).toBe('rgb(255, 255, 255)');
     expect(identity.ink).toBe('rgb(11, 13, 15)');
     expect(identity.bodyFont).toContain('Outfit');
     expect(identity.headingFont).toBe(identity.bodyFont);
-    expect(identity.buttonBackground).toBe('rgb(32, 37, 42)');
+    expect(identity.buttonBackground).toBe('rgb(32, 45, 60)');
     expect(identity.buttonInk).toBe(identity.background);
     expect(requests).toContain('/brand/xbar-brand-tokens.css');
     expect(requests).toContain('/site.css');
