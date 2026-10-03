@@ -372,6 +372,8 @@ export interface DocumentRecord {
   processingNote?: string;
   /** Conflicting subject fields require separate/corrected source papers. */
   identityReviewRequired?: boolean;
+  /** Contradictory facts across related sources from one intake batch. */
+  batchReviewNote?: string;
   summary: string;
   entities: DocumentEntities;
   fileUrl?: string;

@@ -1119,6 +1119,7 @@ export function canRestorePersistedState(raw: unknown): boolean {
          * fix.
          */
         'processingNote',
+        'batchReviewNote',
         'contentSha256',
         'duplicateOfId',
         'duplicateReason',
