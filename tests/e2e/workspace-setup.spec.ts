@@ -41,6 +41,7 @@ async function bootstrapWorkspace(page: Page) {
   await page.getByPlaceholder('Primary Ranch').fill('Thunder Horse Ranch');
   await page.getByPlaceholder('Ranch manager').fill('Erin Wyrick');
   await page.getByPlaceholder('ops@yourranch.com').fill('ops@xbar.test');
+  await page.locator('.clean-setup-details > summary').click();
   await page.getByPlaceholder('Legal owner').fill('Thunder Horse Ranch');
   await page.getByPlaceholder('Owner entity').fill('Thunder Horse Ranch LLC');
   await page.getByPlaceholder('Barn A').fill('Barn A');
@@ -303,11 +304,8 @@ test('registration intake extracts sex, color, sire and dam into a new horse pro
     history.pushState({}, '', '/app/reports');
     dispatchEvent(new PopStateEvent('popstate'));
   });
-  await expect(page.getByRole('heading', { name: 'Know what the herd is worth' })).toBeVisible();
-  await expect(page.getByRole('heading', { name: 'Know what the herd is worth' })).toHaveCSS(
-    'color',
-    'rgb(255, 250, 242)',
-  );
+  await expect(page.getByRole('heading', { name: 'Reports', exact: true })).toBeVisible();
+  await expect(page.getByRole('heading', { name: 'Reports', exact: true })).toHaveCSS('color', 'rgb(245, 242, 236)');
   for (const width of [1440, 390]) {
     await page.setViewportSize({ width, height: 900 });
     const csvEvent = page.waitForEvent('download');

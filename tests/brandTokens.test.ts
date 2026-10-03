@@ -2,6 +2,26 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
 
+test('public and application typography share one shipped font and heading scale', async () => {
+  const typography = withoutComments(await readFile('src/styles/typography.css', 'utf8'));
+  const entry = await readFile('src/main.tsx', 'utf8');
+  const shell = await readFile('index.html', 'utf8');
+  const build = await readFile('scripts/build-marketing.mjs', 'utf8');
+  assert.match(typography, /--font-ui:\s*'Outfit'/);
+  assert.match(typography, /--font-display:\s*var\(--font-ui\)/);
+  for (const token of ['page-title', 'hero-title', 'section-title', 'subheading', 'body', 'small']) {
+    assert.ok(typography.includes(`--type-${token}:`), `${token} needs a shared scale token`);
+  }
+  assert.match(entry, /import '\.\/styles\/typography\.css';/);
+  assert.ok(build.includes("'typography.css'"), 'marketing must ship the same source stylesheet');
+  assert.ok(!shell.includes('family=Fraunces'), 'application must load the one interface family');
+  const commands = withoutComments(await readFile('src/routes/xbarCommandSystem.css', 'utf8'));
+  assert.ok(
+    !/h1:not\(\.xs-hero__headline\),\s*h2,\s*h3/.test(commands),
+    'workspace headings must not leak into auth pages',
+  );
+});
+
 /*
  * The brand layer, checked by measurement rather than by eye.
  *

@@ -11,6 +11,7 @@ import './styles/brandTokens.css';
 import './index.css';
 import './styles/motion.css';
 import './mobilePolish.css';
+import './styles/typography.css';
 
 // The application router lives under /app (see routeCanon.appBasePath). In
 // production the app shell is only ever served on /app/* (vercel.json), but

@@ -11,6 +11,7 @@ async function setupWorkspace(page: Page) {
   await page.getByPlaceholder('Primary Ranch').fill('Cedar Ridge Ranch');
   await page.getByPlaceholder('Ranch manager').fill('Example Manager');
   await page.getByPlaceholder('ops@yourranch.com').fill('preview@example.test');
+  await page.locator('.clean-setup-details > summary').click();
   await page.getByPlaceholder('Legal owner').fill('Cedar Ridge');
   await page.getByPlaceholder('Owner entity').fill('Cedar Ridge');
   await page.getByPlaceholder('Barn A').fill('Main Barn');
