@@ -1,6 +1,6 @@
 import { horseAgeLabel } from '@/lib/horseDocumentActions';
 import { useMemo, useRef, useState } from 'react';
-import type { ChangeEvent, CSSProperties } from 'react';
+import type { CSSProperties } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { ArrowLeft, Camera, Copy, FileText, HeartPulse, Move, Pencil, Plus, Upload } from 'lucide-react';
 import { HorsesIcon } from '@/components/icons';
@@ -8,7 +8,7 @@ import { ActionButton, Card, StatusChip } from '@/components/saas';
 import { useUiStore } from '@/store/useUiStore';
 import { useHorseRecord, useXbarStore } from '@/store/useXbarStore';
 import { formatCurrency, formatPercent } from '@/lib/format';
-import { billingPath } from '@/lib/billingRoutes';
+import { requestFeatureUpgrade } from '@/store/useUpgradeStore';
 import { buyerFollowUpPath } from '@/lib/buyerRoutes';
 import { hasRoleCapability } from '@/lib/permissions';
 import { hasActiveListing } from '@/lib/xbarPhaseTwo';
@@ -24,6 +24,9 @@ import { canPresentPurchaseFlow } from '@/lib/nativePlatform';
 import { buildSaleReadinessScore, readinessNextStep } from '@/lib/saleReadinessScore';
 import { buildBuyerPacketReleaseGate } from '@/lib/buyerPacketReleaseGate';
 import { SaleReadinessCard } from '@/components/SaleReadinessCard';
+import { HorsePhotoSourceDialog } from '@/components/HorsePhotoSourceDialog';
+import { useHorsePhotoSelection } from '@/hooks/useHorsePhotoSelection';
+import type { PhotoSelectionTicket } from '@/lib/photoSelection';
 
 // Stagger index for the motion system; the CSS var drives each child's delay.
 const motionIndex = (index: number): CSSProperties => ({ ['--motion-index' as string]: index }) as CSSProperties;
@@ -76,7 +79,9 @@ export default function AnimalProfile() {
   const profitGate = profitIntelligenceGate(subscription);
   const [tab, setTab] = useState<string>('Overview');
   const [uploadingPhoto, setUploadingPhoto] = useState(false);
-  const photoInputRef = useRef<HTMLInputElement>(null);
+  const photoSelection = useHorsePhotoSelection(id);
+  const photoOpenerRef = useRef<HTMLElement | null>(null);
+  const photoUploadPending = useRef(false);
   const animal = useHorseRecord(id);
 
   // This animal's honest money picture, straight from the shared engine (same
@@ -110,21 +115,27 @@ export default function AnimalProfile() {
   const passportId = animalPassportId(animal?.id);
   const canUploadMedia = hasRoleCapability(currentRole, 'uploadMedia');
 
-  async function onPhotoSelected(event: ChangeEvent<HTMLInputElement>) {
-    const input = event.target;
-    const files = input.files ? Array.from(input.files) : [];
-    input.value = ''; // allow re-selecting the same file after an error
-    if (!animal || !files.length) return;
+  function openPhotoSource() {
+    if (!canUploadMedia || photoUploadPending.current) return;
+    photoOpenerRef.current = document.activeElement instanceof HTMLElement ? document.activeElement : null;
+    photoSelection.open();
+  }
+
+  async function onPhotoSelected(files: File[], ticket: PhotoSelectionTicket) {
+    if (!files.length || photoUploadPending.current) return;
+    const targetHorseId = photoSelection.consume(ticket);
+    if (!targetHorseId) return;
+    photoUploadPending.current = true;
     setUploadingPhoto(true);
     try {
-      // This is a horse-photo capture control (camera / image picker), so tag the
+      // These are horse-photo sources (library / camera / files), so tag the
       // asset with a real horse-photo kind rather than guessing from the filename
       // — otherwise a file named e.g. "pedigree.jpg" would be classed as a
       // document, yet still get promoted to the primary image. Both entry points
       // set the primary: add the hero when none exists, replace it otherwise;
       // extra files join the gallery.
       const result = await uploadHorseMedia({
-        horseId: animal.id,
+        horseId: targetHorseId,
         files,
         kind: 'Conformation',
         makePrimary: true,
@@ -137,6 +148,7 @@ export default function AnimalProfile() {
     } catch {
       pushToast({ title: 'Upload failed', message: 'The photo could not be uploaded. Try again.', tone: 'error' });
     } finally {
+      photoUploadPending.current = false;
       setUploadingPhoto(false);
     }
   }
@@ -199,7 +211,7 @@ export default function AnimalProfile() {
   const identity = identityCompleteness(animal);
   const identityTone: Tone = identity.percent >= 90 ? 'success' : identity.percent >= 60 ? 'info' : 'warning';
   // Every identity gap except a Photo is filled from the Edit Horse drawer; a
-  // Photo is added through the camera-capture control on the avatar. So the
+  // Photo is added through the photo-source chooser on the avatar. So the
   // "Complete passport" (drawer) CTA only lists gaps the drawer can resolve —
   // the Photo gap is handled by its own Add Photo control instead of dead-ending.
   const drawerFixableMissing = identity.missing.filter((label) => label !== 'Photo');
@@ -222,7 +234,7 @@ export default function AnimalProfile() {
             <button
               type="button"
               className="xs-objhead__avatar xs-objhead__avatar--action"
-              onClick={() => photoInputRef.current?.click()}
+              onClick={openPhotoSource}
               disabled={uploadingPhoto}
               title={photoUrl ? 'Replace photo' : 'Add a photo'}
               aria-label={photoUrl ? 'Replace horse photo' : 'Add horse photo'}
@@ -245,15 +257,17 @@ export default function AnimalProfile() {
               )}
             </span>
           )}
-          <input
-            ref={photoInputRef}
-            type="file"
-            accept="image/*"
-            capture="environment"
-            multiple
-            hidden
-            onChange={onPhotoSelected}
-          />
+          {canUploadMedia && photoSelection.ticket ? (
+            <HorsePhotoSourceDialog
+              key={photoSelection.ticket.generation}
+              open
+              onOpenChange={(open) => {
+                if (!open) photoSelection.cancel();
+              }}
+              onFilesSelected={(files) => void onPhotoSelected(files, photoSelection.ticket!)}
+              onRestoreFocus={() => photoOpenerRef.current?.focus()}
+            />
+          ) : null}
           <div>
             <div className="xs-objhead__name">{animal.name}</div>
             <div className="xs-objhead__meta">
@@ -308,12 +322,7 @@ export default function AnimalProfile() {
             Upload Doc
           </ActionButton>
           {canUploadMedia && !photoUrl ? (
-            <ActionButton
-              size="sm"
-              icon={<Camera size={14} />}
-              onClick={() => photoInputRef.current?.click()}
-              disabled={uploadingPhoto}
-            >
+            <ActionButton size="sm" icon={<Camera size={14} />} onClick={openPhotoSource} disabled={uploadingPhoto}>
               {uploadingPhoto ? 'Uploading…' : 'Add Photo'}
             </ActionButton>
           ) : null}
@@ -347,7 +356,7 @@ export default function AnimalProfile() {
             <SaleReadinessCard
               horseId={animal.id}
               readiness={saleReadiness}
-              onAddPhoto={canUploadMedia ? () => photoInputRef.current?.click() : undefined}
+              onAddPhoto={canUploadMedia ? openPhotoSource : undefined}
             />
           ) : null}
           <div className="xs-grid-2">
@@ -452,7 +461,7 @@ export default function AnimalProfile() {
                 {profitGate}
               </p>
               {canPresentPurchaseFlow() ? (
-                <ActionButton size="sm" variant="primary" onClick={() => navigate(billingPath)}>
+                <ActionButton size="sm" variant="primary" onClick={() => requestFeatureUpgrade('profitIntelligence')}>
                   Upgrade to Ranch Ops
                 </ActionButton>
               ) : null}
@@ -710,7 +719,7 @@ export default function AnimalProfile() {
           <SaleReadinessCard
             horseId={animal.id}
             readiness={saleReadiness}
-            onAddPhoto={canUploadMedia ? () => photoInputRef.current?.click() : undefined}
+            onAddPhoto={canUploadMedia ? openPhotoSource : undefined}
             detailed
           />
         </>

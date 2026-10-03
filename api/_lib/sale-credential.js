@@ -68,7 +68,7 @@ export function ownershipReviewSummary(ownershipRecord, documents = []) {
   return `${reviewed} of ${requirements.length} ownership source reviews recorded by the seller's team. XBAR does not independently verify legal ownership.`;
 }
 
-export const SERVER_SALE_CREDENTIAL_VERSION = 2;
+export const SERVER_SALE_CREDENTIAL_VERSION = 3;
 
 /** Deterministic JSON: object keys sorted, arrays kept in caller order. */
 function canonicalStringify(value) {
@@ -104,6 +104,7 @@ export function buildServerCredentialPayload({
   documents,
   sealedAt,
   sellerIdentity,
+  packetBranding,
 }) {
   const horse = context?.horse ?? {};
   const health = context?.health ?? {};
@@ -117,7 +118,8 @@ export function buildServerCredentialPayload({
   // sealing, so the seal never authenticates a quick-start placeholder the
   // cover omits. Without an explicit identity the raw workspace names are
   // sealed, as before.
-  const identity = sellerIdentity ?? {};
+  const identity = packetBranding ?? sellerIdentity ?? {};
+  const branding = packetBranding ?? {};
 
   const payload = {
     version: SERVER_SALE_CREDENTIAL_VERSION,
@@ -151,6 +153,17 @@ export function buildServerCredentialPayload({
     workspace: {
       businessName: str(identity.business ?? workspace.businessName),
       ranchName: str(identity.ranch ?? workspace.ranchName),
+    },
+    // Immutable buyer-facing snapshot. The logo bytes are covered through
+    // their canonical inline data URL, not a mutable remote URL.
+    seller: {
+      name: str(branding.name),
+      displayName: str(branding.displayName),
+      email: str(branding.email),
+      phone: str(branding.phone),
+      website: str(branding.website),
+      logoDataUrl: str(branding.logoDataUrl),
+      logoDigest: branding.logoBytes ? createHash('sha256').update(branding.logoBytes).digest('hex') : '',
     },
     sealedAt: str(sealedAt),
   };

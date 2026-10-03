@@ -1,4 +1,7 @@
 import type { RanchReport } from './ranchReport.js';
+import type { SubscriptionTier } from '../types/xbar.js';
+import type { ReportPresentation } from './reportPresentation.js';
+import type { PacketBrandingProfile } from '../../api/_lib/packet-branding.js';
 import { saveBlobAsFile, saveTextAsFile, type FileSaveResult } from './fileDownload.js';
 import { realWorkspaceName } from './workspaceIdentity.js';
 import { csvRow } from './csv.js';
@@ -135,10 +138,14 @@ export function downloadRanchReportCsv(report: RanchReport, ranchName = ''): Pro
  * for every visitor — the Reports screen is not the first thing anyone opens,
  * and most sessions never export.
  */
-export async function downloadRanchReportPdf(report: RanchReport, ranchName: string): Promise<FileSaveResult> {
+export async function downloadRanchReportPdf(
+  report: RanchReport,
+  ranchName: string,
+  presentation?: { tier: SubscriptionTier; options?: Partial<ReportPresentation>; profile?: PacketBrandingProfile },
+): Promise<FileSaveResult> {
   const { renderReportPdf } = await import('./ranchReportPdf.js');
   // The PDF prints the name in its header and document title — filter the
   // quick-start placeholder the same way the CSV header does.
-  const bytes = await renderReportPdf(report, realWorkspaceName(ranchName));
+  const bytes = await renderReportPdf(report, realWorkspaceName(ranchName), undefined, presentation);
   return saveBlobAsFile(ranchReportFileName(report, 'pdf'), new Blob([bytes as BlobPart], { type: 'application/pdf' }));
 }

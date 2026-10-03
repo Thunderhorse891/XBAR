@@ -242,6 +242,13 @@ export function restoreWorkspaceProfile(raw: unknown): WorkspaceProfile {
     defaultOwnerEntity: value.defaultOwnerEntity?.trim() || '',
     ranchManagerName: value.ranchManagerName?.trim() || '',
     operationsEmail: value.operationsEmail?.trim() || '',
+    // Preserve explicit blanks (logo removal) and absent legacy fields. The UI
+    // validates before preview, and packet generation rejects corrupt branding.
+    ...(value.packetLogoDataUrl !== undefined ? { packetLogoDataUrl: value.packetLogoDataUrl } : {}),
+    ...(value.contactPhone !== undefined
+      ? { contactPhone: typeof value.contactPhone === 'string' ? value.contactPhone.trim() : '' }
+      : {}),
+    ...(value.website !== undefined ? { website: typeof value.website === 'string' ? value.website.trim() : '' } : {}),
     defaultBarn: value.defaultBarn?.trim() || '',
     defaultPasture: value.defaultPasture?.trim() || '',
     workspaceShortcuts,

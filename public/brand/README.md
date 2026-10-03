@@ -86,3 +86,26 @@ recovered official vector master.
 All pre-existing supplied assets are preserved byte-for-byte. The tracing
 proof and small-size/maskable checks document this derivative for approval;
 no generic horse, replacement wordmark, or perpetual flashing is introduced.
+
+## Customer ranch branding in seller packets (October 2026)
+
+Customers can save a ranch logo, public phone and website in Settings → Ranch
+profile. Existing ranch/business names, seller name and operations email appear
+alongside them. These fields travel in the workspace profile payload; no new
+storage bucket or schema migration is required. Uploads accept PNG/JPEG, at most
+256 KiB and 2048 × 2048 pixels, and are decoded then re-encoded as PNG. Only
+embedded validated raster bytes are used; no remote logo URL is fetched.
+
+Local HTML packets use credential format v6: customer header/logo/contact are
+sealed, including the logo's content digest, and the verifier pins the logo's
+attributes, position, count and dimensions. The packet stylesheet is unchanged.
+Previously saved v5 packets and their exact CSP script hash remain supported.
+Cloud PDFs use server credential v3 with the same normalized ranch identity and
+contact. The public verification page shows the sealed snapshot, including logo
+and contact, rather than the customer's subsequently edited profile. Historical
+v1/v2 server payloads are verified by their original canonical bytes.
+
+Customer branding is distinct from XBAR's verification seal and link, which
+remain visible. This feature does not change plans, limits, pricing or offer
+white-label removal of the verification identity. Supplied XBAR assets remain
+unchanged.

@@ -1,3 +1,6 @@
+import { createHash } from 'node:crypto';
+import { serverSealCode } from './sale-credential.js';
+import { validatePacketLogo } from './packet-branding.js';
 import { sendJson, getQuery, readJsonBody } from './http.js';
 import { getSupabaseAdmin } from './supabase-admin.js';
 import { enforceRateLimit } from './rate-limit.js';
@@ -63,7 +66,32 @@ export function summarizeSealedPacket(row) {
     return { found: true, anchored: false };
   }
 
-  const sealed = asObject(seal.payload) || {};
+  // Hash the exact stored canonical string, never rebuild historical packets
+  // with today's credential schema. v1/v2 seals remain independently valid.
+  if (typeof seal.payload !== 'string') return { found: true, anchored: false };
+  const digest = createHash('sha256').update(seal.payload, 'utf8').digest('hex');
+  const sealed = asObject(seal.payload);
+  if (
+    !sealed ||
+    digest !== seal.digest ||
+    (sealed.version !== undefined && sealed.version !== (seal.version ?? 1)) ||
+    (sealed.sealedAt !== undefined && sealed.sealedAt !== seal.sealedAt) ||
+    serverSealCode(digest) !== seal.sealCode ||
+    (row.packet_id && sealed.packetId !== row.packet_id)
+  ) {
+    return { found: true, anchored: false };
+  }
+  const seller = asObject(sealed.seller) || {};
+  let logo;
+  try {
+    logo = validatePacketLogo(seller.logoDataUrl);
+  } catch {
+    return { found: true, anchored: false };
+  }
+  const logoDigest = logo ? createHash('sha256').update(logo.bytes).digest('hex') : '';
+  if (Number(sealed.version) >= 3 && str(seller.logoDigest) !== logoDigest) {
+    return { found: true, anchored: false };
+  }
   const horse = asObject(sealed.horse) || {};
   const owner = asObject(sealed.owner) || {};
   const transfer = asObject(sealed.transfer) || {};
@@ -96,6 +124,13 @@ export function summarizeSealedPacket(row) {
       // verifies as unaltered, but the mismatch is now visible.
       sellerBusinessName: str(workspace.businessName),
       sellerRanchName: str(workspace.ranchName),
+      sellerDisplayName: str(seller.displayName),
+      sellerName: str(seller.name),
+      sellerEmail: str(seller.email),
+      sellerPhone: str(seller.phone),
+      sellerWebsite: str(seller.website),
+      sellerLogoDataUrl: logo?.dataUrl || '',
+      sellerLogoDigest: logoDigest,
       documents: documents.map((doc) => ({ type: str(doc.type), title: str(doc.title) })),
       sealedAt: str(seal.sealedAt),
     },

@@ -595,6 +595,10 @@ export interface WorkspaceProfile {
   defaultOwnerEntity: string;
   ranchManagerName: string;
   operationsEmail: string;
+  /** Buyer-facing ranch branding, stored with the existing workspace profile. */
+  packetLogoDataUrl?: string;
+  contactPhone?: string;
+  website?: string;
   defaultBarn: string;
   defaultPasture: string;
   workspaceShortcuts: string[];

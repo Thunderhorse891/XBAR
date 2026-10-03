@@ -1,13 +1,13 @@
 import { useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Lock } from 'lucide-react';
+import { ArrowUpRight, FileText, Lock, Palette } from 'lucide-react';
 import { EmptyState } from '@/components/EmptyState';
 import { useDayKey } from '@/hooks/useDayKey';
 import { MetricCard, Panel, Pill } from '@/components/app-ui';
 import { ReadinessChart } from '@/components/saas';
 import { HorsesIcon } from '@/components/icons';
 import { useEffectiveSubscription } from '@/hooks/useOwnerPreview';
-import { billingPath } from '@/lib/billingRoutes';
+import { requestFeatureUpgrade } from '@/store/useUpgradeStore';
 import { formatCompactCurrency, formatCurrency } from '@/lib/format';
 import { buildRanchReport } from '@/lib/ranchReport';
 import { downloadRanchReportCsv, downloadRanchReportPdf } from '@/lib/ranchReportExport';
@@ -17,6 +17,14 @@ import { useXbarStore } from '@/store/useXbarStore';
 import './operationsExperience.css';
 import './reportsExperience.css';
 import { canPresentPurchaseFlow } from '@/lib/nativePlatform';
+import {
+  DEFAULT_REPORT_PRESENTATION,
+  REPORT_ACCENT_PRESETS,
+  resolveReportPresentation,
+  validReportAccent,
+  type ReportPresentation,
+} from '@/lib/reportPresentation';
+import { useCloudStore } from '@/store/useCloudStore';
 
 /*
  * What the operation is worth, what it costs, and what is holding money up.
@@ -53,6 +61,146 @@ export default function Reports() {
   const subscription = useEffectiveSubscription();
   const locked = profitIntelligenceGate(subscription);
   const [exporting, setExporting] = useState<'pdf' | null>(null);
+  const workspaceId = useCloudStore((state) => state.workspaceId);
+  const presentationScope = workspaceId || workspaceProfile.ranchName;
+  const [presentationState, setPresentationState] = useState({
+    scope: presentationScope,
+    options: DEFAULT_REPORT_PRESENTATION,
+  });
+  const requestedPresentation =
+    presentationState.scope === presentationScope ? presentationState.options : DEFAULT_REPORT_PRESENTATION;
+  const presentation = resolveReportPresentation(subscription.tier, requestedPresentation);
+  const updatePresentation = (patch: Partial<ReportPresentation>) =>
+    setPresentationState({ scope: presentationScope, options: { ...requestedPresentation, ...patch } });
+  const customAccentValid = validReportAccent(requestedPresentation.accent);
+
+  const presentationStudio = (
+    <section className="report-studio" aria-labelledby="report-studio-title">
+      <div className="report-studio__heading">
+        <div>
+          <span className="report-studio__eyebrow">Your records, beautifully prepared</span>
+          <h2 id="report-studio-title">Report presentation</h2>
+          <p>
+            Make a report that belongs to your ranch. Every version keeps the same figures, source notes and complete
+            registers.
+          </p>
+        </div>
+        <Palette size={24} aria-hidden="true" />
+      </div>
+      <div className="report-studio__grid">
+        <div className="report-studio__preview" style={{ borderTopColor: presentation.accent }}>
+          <span className="report-studio__preview-label">Style preview · illustrative</span>
+          <FileText size={28} aria-hidden="true" />
+          <strong>{workspaceProfile.ranchName || 'Your ranch'}</strong>
+          <span>
+            {presentation.layout === 'cover'
+              ? 'Executive cover + complete report'
+              : 'Executive dashboard + complete registers'}
+          </span>
+          <div className="report-studio__preview-bars" aria-hidden="true">
+            <i style={{ backgroundColor: presentation.accent }} />
+            <i style={{ backgroundColor: presentation.accent }} />
+            <i style={{ backgroundColor: presentation.accent }} />
+          </div>
+          <small>
+            {presentation.whiteLabel
+              ? 'Ranch-first artwork · XBAR source attribution retained'
+              : 'Ranch identity · XBAR artwork and source attribution'}
+          </small>
+        </div>
+        <div className="report-studio__controls">
+          <div className="report-studio__tier">
+            <span>Ranch Ops</span>
+            <strong>Executive styling</strong>
+          </div>
+          {locked ? (
+            <>
+              <p>Choose your report color and add a polished executive cover.</p>
+              {canPresentPurchaseFlow() && (
+                <button
+                  className="button button--ghost"
+                  type="button"
+                  onClick={() => requestFeatureUpgrade('reportPresentation')}
+                >
+                  Customize your reports
+                  <ArrowUpRight size={15} aria-hidden="true" />
+                </button>
+              )}
+            </>
+          ) : (
+            <>
+              <fieldset className="report-studio__accents">
+                <legend>Report accent</legend>
+                {Object.entries(REPORT_ACCENT_PRESETS).map(([label, color]) => (
+                  <button
+                    key={label}
+                    type="button"
+                    aria-pressed={presentation.accent === color}
+                    onClick={() => updatePresentation({ accent: color })}
+                  >
+                    <i style={{ backgroundColor: color }} aria-hidden="true" />
+                    {label}
+                  </button>
+                ))}
+              </fieldset>
+              <label className="report-studio__color">
+                Your ranch color
+                <input
+                  type="color"
+                  value={requestedPresentation.accent}
+                  onChange={(event) => updatePresentation({ accent: event.target.value })}
+                />
+              </label>
+              {!customAccentValid && (
+                <p className="report-studio__note" role="status">
+                  Choose a darker color for readable text. The preview and PDF keep the standard accent until it passes
+                  contrast checks.
+                </p>
+              )}
+              <label className="report-studio__check">
+                <input
+                  type="checkbox"
+                  checked={presentation.layout === 'cover'}
+                  onChange={(event) => updatePresentation({ layout: event.target.checked ? 'cover' : 'standard' })}
+                />
+                Add an executive cover
+              </label>
+            </>
+          )}
+          <div className="report-studio__tier">
+            <span>Enterprise</span>
+            <strong>Ranch-first presentation</strong>
+          </div>
+          {subscription.tier === 'Enterprise' ? (
+            <label className="report-studio__check">
+              <input
+                type="checkbox"
+                checked={presentation.whiteLabel}
+                onChange={(event) => updatePresentation({ whiteLabel: event.target.checked })}
+              />
+              Hide decorative XBAR artwork
+            </label>
+          ) : (
+            <>
+              {canPresentPurchaseFlow() && (
+                <button
+                  className="button button--ghost"
+                  type="button"
+                  onClick={() => requestFeatureUpgrade('reportWhiteLabel')}
+                >
+                  Explore ranch-first styling
+                  <ArrowUpRight size={15} aria-hidden="true" />
+                </button>
+              )}
+            </>
+          )}
+          <small className="report-studio__note">
+            Source attribution and verification identity always stay visible. CSV files keep the original data format.
+          </small>
+        </div>
+      </div>
+    </section>
+  );
 
   const reportInput = useMemo(
     () => ({ horses, documents, expenseReceipts, salesLeads, ownershipRecords }),
@@ -98,7 +246,11 @@ export default function Reports() {
       // date printed on it; the screen refreshes at midnight, but an export
       // fired in the seconds before that must not carry yesterday's date and
       // last month's totals into a document that outlives the tab.
-      const saved = await downloadRanchReportPdf(buildRanchReport(reportInput), workspaceProfile.ranchName);
+      const saved = await downloadRanchReportPdf(buildRanchReport(reportInput), workspaceProfile.ranchName, {
+        tier: subscription.tier,
+        options: presentation,
+        profile: workspaceProfile,
+      });
       // A save that did not happen must not be reported as one. On iOS the
       // anchor-download trick silently does nothing, and a cancelled share
       // sheet leaves the file nowhere the customer chose.
@@ -152,6 +304,7 @@ export default function Reports() {
             </p>
           </div>
         </section>
+        {presentationStudio}
         <Panel title="Nothing to report yet" description="Add horses and log receipts to see the numbers here.">
           <EmptyState
             title="No horses on record"
@@ -183,7 +336,11 @@ export default function Reports() {
               // charge. The locked explanation above stays; only the button
               // that invites a purchase goes.
               canPresentPurchaseFlow() ? (
-                <button className="button button--primary" type="button" onClick={() => navigate(billingPath)}>
+                <button
+                  className="button button--primary"
+                  type="button"
+                  onClick={() => requestFeatureUpgrade('profitIntelligence')}
+                >
                   Unlock with Ranch Ops
                 </button>
               ) : null
@@ -237,6 +394,7 @@ export default function Reports() {
           </div>
         )}
       </section>
+      {presentationStudio}
 
       {locked ? (
         <Panel
@@ -252,7 +410,11 @@ export default function Reports() {
             // different answers to one question on a single screen.
             action={
               canPresentPurchaseFlow() ? (
-                <button className="button button--primary" type="button" onClick={() => navigate(billingPath)}>
+                <button
+                  className="button button--primary"
+                  type="button"
+                  onClick={() => requestFeatureUpgrade('profitIntelligence')}
+                >
                   See Ranch Ops
                 </button>
               ) : null

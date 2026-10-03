@@ -1274,3 +1274,129 @@ test('a second chip in a source list blocks facts and approval without altering 
   });
   expect(saved).toEqual({ color: '', chip: '900123456789012', documentState: initialState });
 });
+
+async function readyLocalPacketWizard(page: Page, logo = '') {
+  await bootstrapWorkspace(page);
+  await seedHorse(page, 'Branded Packet Horse');
+  await page.evaluate(async (logo) => {
+    const modulePath = '/src/store/useXbarStore.ts';
+    const { useXbarStore } = await import(/* @vite-ignore */ modulePath);
+    const reviewPath = '/src/lib/ownershipDocumentReview.ts';
+    const { ownershipDocumentReviewKey } = await import(/* @vite-ignore */ reviewPath);
+    const state = useXbarStore.getState();
+    const horse = state.horses[0];
+    const now = new Date().toISOString();
+    const specs = [
+      ['bill_of_sale', 'Bill of sale', 'Bill of Sale', 'Bill of sale. Buyer signature.'],
+      ['registration_certificate', 'Registration certificate', 'Registration', 'Certificate of registration.'],
+      ['transfer_form', 'Signed transfer form', 'Transfer Packet', 'Transfer of ownership. Buyer signature.'],
+      ['signature_page', 'Signature page', 'Ownership Memo', 'Ownership memo. Seller signature.'],
+    ];
+    const documents = specs.map(([kind, label, type, text]) => ({
+      id: `packet-proof-${kind}`,
+      horseId: horse.id,
+      title: label,
+      type,
+      state: 'Ready',
+      source: 'Manual Upload',
+      uploadedAt: now,
+      uploadedBy: 'Synthetic reviewer',
+      confidence: 1,
+      duplicateRisk: 'Low',
+      entities: { horseName: horse.name },
+      extractedTextPreview: `${text}\nRegistered Name: ${horse.name}`,
+      tags: [],
+      localFileKey: `synthetic-${kind}`,
+    }));
+    useXbarStore.setState({
+      workspaceProfile: { ...state.workspaceProfile, packetLogoDataUrl: logo },
+      horses: [{ ...horse, sale: { ...horse.sale, askPrice: 12000 } }],
+      documents,
+      ownershipRecords: [
+        {
+          id: 'packet-ownership',
+          horseId: horse.id,
+          legalOwner: 'Synthetic Ranch',
+          transferStatus: 'Clear',
+          pendingDocuments: [],
+          confidence: 100,
+          complianceDeadline: '',
+          auditTrail: [],
+          proofRequirements: specs.map(([kind, label]) => ({
+            id: `proof-${kind}`,
+            kind,
+            label,
+            status: 'verified',
+            documentId: `packet-proof-${kind}`,
+            verifiedBy: 'Synthetic reviewer',
+            verifiedAt: now,
+            reviewAttestedAt: now,
+            reviewedSourceKey: ownershipDocumentReviewKey(
+              documents.find((document) => document.id === `packet-proof-${kind}`),
+            ),
+          })),
+        },
+      ],
+    });
+    useXbarStore.getState().applySubscriptionTier('Professional');
+  }, logo);
+  await page.getByRole('link', { name: 'Sale Packets', exact: true }).click();
+  await page
+    .locator('.xs-mrow')
+    .filter({ hasText: 'Branded Packet Horse' })
+    .getByRole('button', { name: 'Build packet' })
+    .click();
+  const wizard = page.getByRole('dialog', { name: 'Sale packet generator' });
+  await wizard.getByRole('button', { name: 'Continue' }).click();
+  await wizard.getByRole('checkbox', { name: /No current Coggins/ }).check();
+  await wizard.getByRole('button', { name: 'Continue' }).click();
+  await wizard.getByRole('button', { name: 'Continue' }).click();
+  await wizard.getByRole('button', { name: 'Continue' }).click();
+  return wizard;
+}
+async function packetPersistenceCounts(page: Page) {
+  return page.evaluate(async () => {
+    const storePath = '/src/store/useXbarStore.ts';
+    const vaultPath = '/src/lib/localFileVault.ts';
+    const { useXbarStore } = await import(/* @vite-ignore */ storePath);
+    const { listLocalFiles } = await import(/* @vite-ignore */ vaultPath);
+    return { builds: useXbarStore.getState().salePacketBuilds.length, files: (await listLocalFiles()).length };
+  });
+}
+
+test('invalid restored ranch raster fails before any local packet record or file is saved', async ({ page }) => {
+  const logo =
+    'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAACgAAAAUCAIAAABwJOjsAAAACElEQVR4nAMAAAAAAUgGidIAAAAASUVORK5CYII=';
+  const wizard = await readyLocalPacketWizard(page, logo);
+  const before = await packetPersistenceCounts(page);
+  await wizard.getByRole('button', { name: 'Generate sale packet' }).click();
+  await expect(wizard.getByRole('alert')).toContainText('logo could not be decoded');
+  expect(await packetPersistenceCounts(page)).toEqual(before);
+});
+
+test('a workspace round trip during raster validation cannot persist an old packet', async ({ page }) => {
+  await page.route('**/api/_lib/packet-branding-raster.js*', (route) =>
+    route.fulfill({
+      contentType: 'application/javascript',
+      body: 'export async function validatePacketLogoRaster() { await new Promise(resolve => { window.releasePacketLogo = resolve; }); return null; }',
+    }),
+  );
+  const wizard = await readyLocalPacketWizard(page);
+  const before = await packetPersistenceCounts(page);
+  await wizard.getByRole('button', { name: 'Generate sale packet' }).click();
+  await expect
+    .poll(() =>
+      page.evaluate(() => typeof (window as typeof window & { releasePacketLogo?: () => void }).releasePacketLogo),
+    )
+    .toBe('function');
+  await page.evaluate(async () => {
+    const cloudPath = '/src/store/useCloudStore.ts';
+    const { useCloudStore } = await import(/* @vite-ignore */ cloudPath);
+    useCloudStore.setState({ workspaceId: 'other-ranch' });
+    useCloudStore.setState({ workspaceId: null });
+    (window as typeof window & { releasePacketLogo?: () => void }).releasePacketLogo?.();
+  });
+  await expect(wizard.getByRole('alert')).toContainText('changed');
+  await expect(wizard.getByRole('button', { name: 'Retry sale packet' })).toBeEnabled();
+  expect(await packetPersistenceCounts(page)).toEqual(before);
+});

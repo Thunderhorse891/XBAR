@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
 import { inflateSync } from 'node:zlib';
 import test from 'node:test';
-import { PDFDocument, StandardFonts } from 'pdf-lib';
+import { PDFDocument, PDFName, PDFDict, StandardFonts } from 'pdf-lib';
 import { buildRanchReport, type RanchReportInput } from '../src/lib/ranchReport.js';
 import { reportDecisions, reportException } from '../src/lib/ranchReportDecisions.js';
 import { ownershipDocumentReviewKey } from '../src/lib/ownershipDocumentReview.js';
@@ -323,5 +323,95 @@ test('report artwork honors the deployment base and survives offline after cachi
   assert.deepEqual(
     new Uint8Array(await cacheValues.get(paths[0])!.clone().arrayBuffer()),
     new Uint8Array(originals.logo),
+  );
+});
+
+test('premium report cover retains every original register and source attribution', async () => {
+  const report = buildRanchReport(fixture(18), now);
+  const ordinary = await renderReportPdf(report, 'Cedar Ridge Ranch', await branding());
+  const premium = await renderReportPdf(report, 'Cedar Ridge Ranch', await branding(), {
+    tier: 'Ranch Ops',
+    options: { accent: '#171b20', layout: 'cover' },
+  });
+  assert.equal((await PDFDocument.load(premium)).getPageCount(), (await PDFDocument.load(ordinary)).getPageCount() + 1);
+  const originalText = drawn(ordinary)
+    .filter((item) => item.y > 48)
+    .map((item) => item.text);
+  const upgradedText = drawn(premium).map((item) => item.text);
+  for (const text of originalText) assert.ok(upgradedText.includes(text), `Lost report content: ${text}`);
+  assert.ok(upgradedText.includes('Ranch management report'));
+  assert.ok(upgradedText.some((text) => text.includes('Prepared with XBAR')));
+  await assertFits(premium);
+});
+
+test('Enterprise removes decorative images, never source notes or report records', async () => {
+  const report = buildRanchReport(fixture(18), now);
+  const bytes = await renderReportPdf(report, 'Cedar Ridge Ranch', await branding(), {
+    tier: 'Enterprise',
+    options: { whiteLabel: true, layout: 'cover' },
+  });
+  const text = drawn(bytes)
+    .map((item) => item.text)
+    .join(' ');
+  assert.ok(text.includes('Prepared with XBAR'));
+  assert.ok(text.includes('Unaudited management estimates'));
+  assert.ok(text.includes('Synthetic Ranch Horse 18 - Blocked'));
+  const doc = await PDFDocument.load(bytes);
+  for (const page of doc.getPages())
+    assert.equal(page.node.Resources()?.lookupMaybe(PDFName.of('XObject'), PDFDict)?.keys().length ?? 0, 0);
+  await assertFits(bytes);
+});
+
+test('report cover contains an exceptionally long ranch name without pushing data into the footer', async () => {
+  const bytes = await renderReportPdf(buildRanchReport(fixture(2), now), 'Cedar Ridge '.repeat(40), await branding(), {
+    tier: 'Ranch Ops',
+    options: { layout: 'cover' },
+  });
+  await assertFits(bytes);
+});
+
+test('customer logo and contact details stay in ranch-first report styling', async () => {
+  const logoBytes = await readFile('public/brand/xbar-signature-horse-32.png');
+  const bytes = await renderReportPdf(buildRanchReport(fixture(2), now), 'Fallback Ranch', await branding(), {
+    tier: 'Enterprise',
+    options: { whiteLabel: true },
+    profile: {
+      ranchName: 'Customer Ranch',
+      operationsEmail: 'records@example.test',
+      contactPhone: '555-0100',
+      website: 'https://example.test',
+      packetLogoDataUrl: `data:image/png;base64,${logoBytes.toString('base64')}`,
+    },
+  });
+  const text = drawn(bytes)
+    .map((item) => item.text)
+    .join(' ');
+  assert.ok(text.includes('Customer Ranch'));
+  assert.ok(text.includes('records@example.test'));
+  assert.ok(text.includes('555-0100'));
+  assert.ok(text.includes('https://example.test/'));
+  assert.ok(text.includes('Prepared with XBAR'));
+  assert.ok(!text.includes('Fallback Ranch'));
+  const document = await PDFDocument.load(bytes);
+  for (const page of document.getPages())
+    assert.equal(
+      page.node.Resources()?.lookupMaybe(PDFName.of('XObject'), PDFDict)?.keys().length,
+      1,
+      'Customer artwork remains; decorative platform art is absent',
+    );
+  await assertFits(bytes);
+});
+
+test('report generation refuses a corrupt restored logo instead of exporting a blank image', async () => {
+  const report = buildRanchReport(fixture(2), now);
+  const packetLogoDataUrl =
+    'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAACgAAAAUCAIAAABwJOjsAAAACElEQVR4nAMAAAAAAUgGidIAAAAASUVORK5CYII=';
+  const assets = await branding();
+  await assert.rejects(
+    renderReportPdf(report, 'Customer Ranch', assets, {
+      tier: 'Ranch Ops',
+      profile: { ranchName: 'Customer Ranch', packetLogoDataUrl },
+    }),
+    /logo could not be decoded/,
   );
 });

@@ -1,9 +1,13 @@
-import { PDFDocument, StandardFonts, rgb, type PDFPage, type RGB } from 'pdf-lib';
+import { PDFDocument, StandardFonts, rgb, type PDFPage, type PDFImage, type RGB } from 'pdf-lib';
 import { toDrawableText } from '../../api/_lib/pdf.js';
 import type { RanchReport } from './ranchReport.js';
 import { reportCount, reportDecisions, reportDollars as dollars, reportException } from './ranchReportDecisions.js';
 
 import { loadReportBranding, type ReportBranding } from './reportBranding.js';
+import { reportAccentRgb, resolveReportPresentation, type ReportPresentation } from './reportPresentation.js';
+import type { SubscriptionTier } from '../types/xbar.js';
+import { normalizePacketBranding, type PacketBrandingProfile } from '../../api/_lib/packet-branding.js';
+import { validatePacketLogoRaster } from '../../api/_lib/packet-branding-raster.js';
 
 /** "2026-09-24" (local calendar date) as "September 24, 2026". Built from the parts, never parsed as an instant. */
 function longDate(isoDate: string): string {
@@ -18,7 +22,10 @@ export async function renderReportPdf(
   report: RanchReport,
   ranchName: string,
   branding?: ReportBranding,
+  presentation?: { tier: SubscriptionTier; options?: Partial<ReportPresentation>; profile?: PacketBrandingProfile },
 ): Promise<Uint8Array> {
+  const style = resolveReportPresentation(presentation?.tier ?? 'Ranch Ops', presentation?.options);
+  const customer = presentation?.profile ? normalizePacketBranding(presentation.profile) : null;
   const pdf = await PDFDocument.create();
   const regular = await pdf.embedFont(StandardFonts.Helvetica);
   const bold = await pdf.embedFont(StandardFonts.HelveticaBold);
@@ -26,9 +33,21 @@ export async function renderReportPdf(
   const logo = await pdf.embedPng(assets.logo);
   const mark = await pdf.embedPng(assets.mark);
   const watermark = await pdf.embedPng(assets.watermark);
+  const validatedLogo = await validatePacketLogoRaster(customer?.logoDataUrl);
+  let customerLogo: PDFImage | null = null;
+  if (validatedLogo) {
+    try {
+      customerLogo =
+        validatedLogo.mimeType === 'image/png'
+          ? await pdf.embedPng(validatedLogo.bytes)
+          : await pdf.embedJpg(validatedLogo.bytes);
+    } catch {
+      throw new Error('The ranch logo could not be decoded. Replace it with a valid PNG or JPEG in Settings.');
+    }
+  }
   const ink = rgb(0.08, 0.15, 0.23),
     muted = rgb(0.32, 0.39, 0.46),
-    blue = rgb(0.12, 0.37, 0.58);
+    blue = presentation ? rgb(...reportAccentRgb(style.accent)!) : rgb(0.12, 0.37, 0.58);
   const red = rgb(0.64, 0.18, 0.16),
     green = rgb(0.1, 0.4, 0.32),
     amber = rgb(0.55, 0.34, 0.08);
@@ -41,7 +60,7 @@ export async function renderReportPdf(
   // Setup requires a ranch name, so an empty one only arrives from a workspace
   // created before that requirement — and then the document must say the name
   // is missing, not print someone else's business name.
-  const displayName = ranchName.trim() || 'Your ranch name';
+  const displayName = customer?.displayName || ranchName.trim() || 'Your ranch name';
   let page: PDFPage;
   const clean = (s: string) => toDrawableText(s).replace(/[–—]/g, '-');
   const measure = (s: string, size: number, strong = false) =>
@@ -81,15 +100,22 @@ export async function renderReportPdf(
     page = pdf.addPage([612, 792]);
     rect(0, 0, 612, 5, blue);
     // Branding is confined to the masthead, never behind operational data.
-    page.drawImage(watermark, { x: 445, y: 713, width: 130, height: 73, opacity: 0.018 });
-    page.drawImage(logo, { x: 36, y: 724, width: 72, height: 40.5 });
+    if (!style.whiteLabel) {
+      page.drawImage(watermark, { x: 445, y: 713, width: 130, height: 73, opacity: 0.018 });
+      if (!customerLogo) page.drawImage(logo, { x: 36, y: 724, width: 72, height: 40.5 });
+    }
+    if (customerLogo) {
+      const size = customerLogo.scale(Math.min(72 / customerLogo.width, 40.5 / customerLogo.height));
+      page.drawImage(customerLogo, { x: 36 + (72 - size.width) / 2, y: 724 + (40.5 - size.height) / 2, ...size });
+    }
+    const titleX = style.whiteLabel && !customerLogo ? 36 : 120;
     // The rancher's operation is the masthead on the rancher's document — never
     // the platform's name, and never a name invented for an unset profile.
     let masthead = displayName;
     while (masthead.length > 1 && measure(masthead, 8, true) > 440) masthead = masthead.slice(0, -1);
     if (masthead !== displayName) masthead = `${masthead.slice(0, -3)}...`;
-    text(masthead, 120, 29, 8, blue, true);
-    text(title, 120, 43, 21, ink, true);
+    text(masthead, titleX, 29, 8, blue, true);
+    text(title, titleX, 43, 21, ink, true);
     const name = clean(displayName);
     const nameSize = Math.max(7, Math.min(9, (9 * 540) / Math.max(540, measure(name, 9))));
     // The full entity name is retained in PDF metadata; masthead is at most two lines.
@@ -127,6 +153,52 @@ export async function renderReportPdf(
     text(valueLabel, x + width - measure(valueLabel, 8, true), top, 8, color, true);
     rect(x, top + 15, width, 7, pale);
     if (value > 0 && max > 0) rect(x, top + 15, width * Math.min(1, value / max), 7, color);
+  }
+
+  if (style.layout === 'cover') {
+    newPage('Ranch management report', 'Executive edition');
+    text('THE OPERATION AT A GLANCE', 36, 154, 9, blue, true);
+    const coverNameLines = wrap(displayName, 500, 30, true);
+    coverNameLines
+      .slice(0, 3)
+      .forEach((line, index) =>
+        text(
+          index === 2 && coverNameLines.length > 3 ? `${line.slice(0, -3)}...` : line,
+          36,
+          188 + index * 33,
+          30,
+          ink,
+          true,
+        ),
+      );
+    const nameHeight = Math.min(3, coverNameLines.length) * 33;
+    const overviewY = Math.max(280, 200 + nameHeight);
+    paragraph('A clear record of your investment, sale readiness and next decisions.', 36, overviewY, 480, 16, muted);
+    card('Horses on record', String(report.horseCount), 'Workspace roster', 36, overviewY + 95, 170, blue);
+    card(
+      'Investment recorded',
+      dollars(money.investedToDate),
+      'Purchase prices + receipts',
+      221,
+      overviewY + 95,
+      355,
+      ink,
+    );
+    heading('Inside this report', 36, overviewY + 208);
+    paragraph(
+      'Executive dashboard / Sale readiness and blockers / Horse-level economics / Action and spending detail when applicable',
+      36,
+      overviewY + 232,
+      480,
+      11,
+    );
+    paragraph(
+      'Prepared from your workspace records. Amounts are management estimates, not an appraisal, audit or financial certification. Full supporting registers follow.',
+      36,
+      663,
+      510,
+      9,
+    );
   }
 
   newPage(
@@ -512,13 +584,32 @@ export async function renderReportPdf(
   }
   pdf.getPages().forEach((p, index) => {
     page = p;
+    const contact = customer ? [customer.email, customer.phone, customer.website].filter(Boolean).join(' · ') : '';
+    if (contact) {
+      const contactLines = wrap(contact, 540, 7);
+      contactLines
+        .slice(0, 2)
+        .forEach((value, index) =>
+          text(
+            index === 1 && contactLines.length > 2 ? `${value.slice(0, -3)}...` : value,
+            36,
+            726 + index * 9,
+            7,
+            muted,
+          ),
+        );
+    }
     rect(36, 746, 540, 0.5, line);
-    page.drawImage(mark, { x: 36, y: 29, width: 12, height: 12 });
+    if (!style.whiteLabel) page.drawImage(mark, { x: 36, y: 29, width: 12, height: 12 });
     // The rancher's name is the masthead; the platform gets small footer type.
     text('Unaudited management estimates from ranch records · Prepared with XBAR', 55, 754, 7, muted);
     text(`${index + 1} / ${pdf.getPageCount()}`, 550, 754, 7, muted);
   });
-  pdf.setTitle(ranchName.trim() ? `${ranchName.trim()} - Ranch management report` : 'Ranch management report');
+  pdf.setTitle(
+    customer?.displayName || ranchName.trim()
+      ? `${customer?.displayName || ranchName.trim()} - Ranch management report`
+      : 'Ranch management report',
+  );
   pdf.setProducer('XBAR');
   return pdf.save();
 }
