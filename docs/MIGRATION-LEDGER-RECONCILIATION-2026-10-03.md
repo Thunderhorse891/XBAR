@@ -27,7 +27,11 @@ The ledger map pins the full source SHA-256 and the raw stored SQL SHA-256, name
 
 ## Baseline regeneration and validation
 
-The map is part of the source digest. Its change intentionally makes the old baseline stale until a real isolated PostgreSQL 17 run generates a candidate. The CI database check remains red; the failure-only diagnostic exports a separate SHA-labelled candidate from synthetic `127.0.0.1/xbar_ci`, only if its complete catalog and required migration list equal the committed baseline. It refuses schema/grant differences and cannot overwrite the baseline. Review the artifact, then commit the generated result and rerun all gates. Do not manually replace the source digest.
+The map is part of the source digest. Its initial change intentionally left the old baseline stale. [CI run 37097544617](https://github.com/Thunderhorse891/XBAR/actions/runs/37097544617), database job `111130453797`, applied the schema and migrations to fresh PostgreSQL 17.11, passed the preceding policy/storage tests, then failed specifically at baseline freshness. The original check stayed red while the failure-only diagnostic exported a separate candidate from synthetic `127.0.0.1/xbar_ci`.
+
+Artifact `11264154878` has ZIP SHA-256 `ce52ddfbf1d7cc1d41eb3bebe804a1b799a9cf1b7a8ac2f13313005d2bbf1cad`; its generated JSON has SHA-256 `96b3da89c13b3c06fa70d56f4273cf526d424e45bf75a47bbde624c1dfd794bf`. This PR-triggered run checked merge SHA `c805d8031d18181fc69723e0eff79db42675bf5f` (head `6ca2c9718dae0f21c119fa100f9be1d0c239b545` into unchanged base `cc155fa5309b00e8a0947e8cb73302eb9bad139e`). Independent parent review confirmed catalog and requiredVersions are exactly unchanged; only sourceDigest differs, matching the reviewed source tree. The genuine generated candidate is now imported with repository Prettier formatting only (parsed JSON equality verified). No digest was manually invented or replaced.
+
+All 14 focused readiness tests pass after import. Full exact-head CI, including database checks after the former freshness failure and encrypted restore, must still finish successfully; the initial run did not reach those later checks. The diagnostic refuses catalog/grant differences and cannot overwrite an existing file. It remains diagnostic evidence, never a production-readiness waiver.
 
 ## Controlled rollout order
 
