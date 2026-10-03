@@ -337,3 +337,86 @@ test('same-day foaling cuts off earlier checks without a recorded cover', () => 
     'the latest same-day foaling is the boundary',
   );
 });
+
+test('a post-foaling positive check starts a pregnancy without borrowing an old cover or mate', () => {
+  const now = new Date('2026-10-01T12:00:00Z');
+  const oldCover = {
+    id: 'old-cover',
+    date: '2025-04-01',
+    title: 'Bred',
+    summary: '',
+    owner: 'Vet',
+    category: 'Breeding',
+    details: { recordType: 'breeding', mateName: 'Historical Stallion', method: 'live-cover' },
+  } as TimelineEvent;
+  const foaling = {
+    id: 'foaling',
+    date: '2026-03-01',
+    title: 'Foaled',
+    summary: 'Live colt',
+    owner: 'Vet',
+    category: 'Breeding',
+    details: { recordType: 'foaling' },
+  } as TimelineEvent;
+  const mare = (timeline: TimelineEvent[]) =>
+    ({
+      id: 'new-cycle',
+      name: 'New cycle',
+      sex: 'Mare',
+      breedingTimeline: timeline,
+      breedingEconomics: { foalProjectedValue: 9000 },
+    }) as unknown as HorseRecord;
+  for (const date of ['2026-09-01', foaling.date]) {
+    const positive = check('Ultrasound', '', 'in-foal', date);
+    const timeline = [positive, foaling, oldCover];
+    const state = buildMareBreedingState(mare(timeline), now);
+    assert.equal(state.status, 'in-foal', date);
+    assert.equal(state.bredOn, undefined, 'the old cover does not date the new pregnancy');
+    assert.equal(state.expectedFoalingDate, undefined);
+    assert.equal(state.foalingWindowStart, undefined);
+    assert.equal(state.mateName, undefined, 'the old stallion is not the recorded new sire');
+    assert.equal(state.method, undefined);
+    assert.equal(state.guarantee, 'none');
+    const program = buildBreedingProgram([mare(timeline)], now);
+    assert.equal(program.inFoal, 1);
+    assert.equal(program.projectedProgramValue, 9000);
+    assert.equal(
+      buildMareBreedingState(mare([check('Scan', '', 'pending', '2026-09-02'), ...timeline]), now).status,
+      'in-foal',
+    );
+  }
+  assert.equal(
+    buildMareBreedingState(mare([foaling, oldCover]), now).status,
+    'foaled-live',
+    'completed cycle remains recorded',
+  );
+  assert.equal(
+    buildBreedingProgram([mare([foaling, check('Scan', '', 'in-foal', foaling.date), oldCover])], now).inFoal,
+    0,
+    'same-day check before foaling stays in prior cycle',
+  );
+  for (const result of ['open', 'pending']) {
+    const program = buildBreedingProgram([mare([check('Scan', '', result, '2026-09-01'), foaling, oldCover])], now);
+    assert.equal(program.inFoal, 0, `${result} does not invent a new pregnancy`);
+    assert.equal(program.projectedProgramValue, 0);
+  }
+  const priorPositive = check('Scan', '', 'in-foal', '2026-09-01');
+  const ambiguous = check('Pregnancy check', 'In foal?', undefined, '2026-09-02');
+  assert.equal(buildBreedingProgram([mare([ambiguous, priorPositive, foaling, oldCover])], now).inFoal, 0);
+  const loss = { ...foaling, summary: 'Stillborn foal' };
+  assert.equal(buildMareBreedingState(mare([loss, oldCover]), now).status, 'foaled-loss');
+  assert.equal(buildMareBreedingState(mare([priorPositive, loss, oldCover]), now).status, 'in-foal');
+  const newCover = {
+    ...oldCover,
+    id: 'new-cover',
+    date: foaling.date,
+    details: { recordType: 'breeding', mateName: 'New Stallion' },
+  } as TimelineEvent;
+  const newCycle = buildMareBreedingState(
+    mare([check('Scan', '', 'in-foal', '2026-03-20'), newCover, foaling, oldCover]),
+    now,
+  );
+  assert.equal(newCycle.status, 'in-foal');
+  assert.equal(newCycle.bredOn, foaling.date, 'a newer same-day cover belongs to the new cycle');
+  assert.equal(newCycle.mateName, 'New Stallion');
+});

@@ -308,12 +308,20 @@ export function buildMareBreedingState(horse: HorseRecord, now: Date = new Date(
     };
   }
 
-  if (!breeding || !bredOn) {
+  const foaling = latestByRecordType(events, 'foaling');
+  // Day-only dates need the timeline's newest-first order to separate cycles.
+  const completedCycle =
+    foaling &&
+    (!breeding ||
+      foaling.date > breeding.date ||
+      (foaling.date === breeding.date && events.indexOf(foaling) < events.indexOf(breeding)));
+
+  if (!breeding || !bredOn || completedCycle) {
     // A mare can arrive already in foal: a positive check with no cover on file
     // is in foal, not open. Her due date is unknown and is never invented from
     // the check, so she has no foaling window until the cover is logged. Checks
     // from before her latest foaling belong to an earlier pregnancy.
-    const lastFoaling = latestByRecordType(events, 'foaling');
+    const lastFoaling = foaling;
     // Dates have day precision. On the same day, timeline order determines
     // whether the check was recorded before or after the latest foaling.
     const foalingOrder = lastFoaling ? events.indexOf(lastFoaling) : -1;
@@ -327,23 +335,28 @@ export function buildMareBreedingState(horse: HorseRecord, now: Date = new Date(
         ...base,
         status: 'in-foal',
         statusLabel: STATUS_LABELS['in-foal'],
+        // A completed cover cannot provide dates or a sire for this pregnancy.
+        bredOn: undefined,
+        mateName: undefined,
+        method: undefined,
         guarantee: 'none',
         actionLabel: `Log the cover date for ${horse.name} to track her foaling window`,
         actionRoute: '/breeding',
       };
     }
-    return {
-      ...base,
-      status: 'open',
-      statusLabel: STATUS_LABELS.open,
-      guarantee: 'none',
-      actionLabel: `Log a breeding for ${horse.name}`,
-      actionRoute: '/breeding',
-    };
+    if (!breeding || !bredOn) {
+      return {
+        ...base,
+        status: 'open',
+        statusLabel: STATUS_LABELS.open,
+        guarantee: 'none',
+        actionLabel: `Log a breeding for ${horse.name}`,
+        actionRoute: '/breeding',
+      };
+    }
   }
 
-  const foaling = latestByRecordType(events, 'foaling');
-  if (foaling && foaling.date >= breeding.date) {
+  if (foaling && completedCycle) {
     const result = outcomeText(foaling);
     // Loss-specific terms only — a bare "still" (e.g. "mare and foal still
     // doing well") must not flip a live foaling to a loss.
