@@ -277,7 +277,7 @@ const pricing = {
 <section class="section">
   <div class="wrap">
     <h2>Plan limits, side by side</h2>
-    <div class="table-scroll">
+    <div class="table-scroll" role="region" aria-label="Plan capacity comparison" tabindex="0">
       <table class="limits">
         <caption>These limits are enforced by the application — the same numbers appear in your workspace usage meter.</caption>
         <thead><tr><th scope="col">Capacity</th>${marketingPlans.map((plan) => `<th scope="col">${esc(plan.tier)}</th>`).join('')}</tr></thead>

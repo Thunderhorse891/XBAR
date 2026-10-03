@@ -4,7 +4,7 @@ import { readFileSync } from 'node:fs';
 const headline = 'Every horse. One clear picture.';
 
 test('short-screen menu can reach signup without dynamic viewport units', async ({ page }) => {
-  await page.route('**/landing.css', async (route) => {
+  await page.route(/\/(?:site|landing)\.css$/, async (route) => {
     const response = await route.fetch();
     await route.fulfill({ response, body: (await response.text()).replace(/max-height:[^;]*dvh[^;]*;/g, '') });
   });
@@ -81,7 +81,7 @@ test('artwork stays available without IntersectionObserver', async ({ page }) =>
 test('light navigation remains readable when CSS color mixing is unsupported', async ({ page }) => {
   // Emulate discarded unsupported declarations in the served stylesheet,
   // preserving earlier fallback declarations as an older CSS parser would.
-  await page.route('**/landing.css', async (route) => {
+  await page.route(/\/(?:site|landing)\.css$/, async (route) => {
     const response = await route.fetch();
     const css = (await response.text()).replace(/[\w-]+\s*:\s*[^;{}]*color-mix\([^;{}]*;/g, '');
     await route.fulfill({ response, body: css });

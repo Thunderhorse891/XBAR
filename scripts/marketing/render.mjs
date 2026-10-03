@@ -97,9 +97,7 @@ function header(currentPath) {
     <a class="brand" href="/" aria-label="XBAR home">
       <img src="/brand/apple-touch-icon.png" alt="" width="30" height="30" />
       <span>XBAR<small>Horse records &amp; sales</small></span>
-    </a>${
-      currentPath === '/'
-        ? `
+    </a>
     <details class="landing-mobile-nav">
       <summary>Menu <i class="nav-caret" aria-hidden="true"></i></summary>
       <nav aria-label="Mobile primary">
@@ -107,9 +105,7 @@ function header(currentPath) {
         <a href="${APP_LOGIN}" rel="nofollow">Sign in</a>
         <a href="${APP_SIGNUP}" rel="nofollow">Create your workspace</a>
       </nav>
-    </details>`
-        : ''
-    }
+    </details>
     <nav class="site-nav" aria-label="Primary">
       ${NAV_LINKS.map((item) => navLink(item, currentPath)).join('\n      ')}
       ${NAV_MENUS.map((menu) => navMenu(menu, currentPath)).join('\n      ')}
@@ -211,7 +207,7 @@ export function renderPage(page, { landingScript = '/landing/motion.js' } = {}) 
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <meta name="theme-color" content="#05070A" />
+    <meta name="theme-color" content="#f5f2ec" />
     <title>${esc(page.title)}</title>
     <meta name="description" content="${esc(page.description)}" />
     ${page.noindex ? '<meta name="robots" content="noindex, nofollow" />' : '<meta name="robots" content="index, follow, max-image-preview:large, max-snippet:-1" />'}
@@ -237,17 +233,17 @@ export function renderPage(page, { landingScript = '/landing/motion.js' } = {}) 
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
     <link
-      href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,400;9..144,500;9..144,600;9..144,700&family=Outfit:wght@400;500;600;700;800;900&display=swap"
+      href="https://fonts.googleapis.com/css2?family=Outfit:wght@400;500;600;700;800;900&display=swap"
       rel="stylesheet"
     />
-    <link rel="stylesheet" href="/site.css" />${isLanding ? '\n    <link rel="stylesheet" href="/brand/xbar-brand-tokens.css" /><link rel="stylesheet" href="/landing.css" />' : ''}
+    <link rel="stylesheet" href="/brand/xbar-brand-tokens.css" />
+    <link rel="stylesheet" href="/site.css" />${isLanding ? '\n    <link rel="stylesheet" href="/landing.css" />' : ''}
     <link rel="icon" type="image/png" href="/brand/xbar-favicon.png" />
     <link rel="apple-touch-icon" href="/brand/apple-touch-icon.png" />
     <script type="application/ld+json">${JSON.stringify(baseJsonLd)}</script>
     <script defer src="/site.js"></script>${isLanding ? `\n    <script type="module" src="${esc(landingScript)}"></script>` : ''}
   </head>
-  <body${isLanding ? ' class="landing-page"' : ''}>
-    <div class="bg-fx" aria-hidden="true"><i class="bg-fx__grid"></i><i class="bg-fx__aurora"></i><i class="bg-fx__aurora bg-fx__aurora--warm"></i></div>
+  <body class="marketing-page${isLanding ? ' landing-page' : ''}">
     <a class="skip-link" href="#main">Skip to content</a>
     ${header(page.path)}
     <main id="main">
