@@ -2,7 +2,7 @@
 -- Integrating staff horse writes must preserve the sale-media review boundary:
 -- editHorse/uploadMedia do not grant manageSales. A Ranch Manager or member
 -- Owner can save horse details and pending uploads, but cannot mark a photo
--- Approved or attach a previous photo's approval to a replacement source.
+-- Approved or attach a previous photo's approval to another source or horse.
 -- No existing data or staff write policy is changed. Storage object ownership
 -- and buyer signing remain separate checks. The server review endpoint still
 -- requires a compare-and-set acknowledgment for its selected image.
@@ -23,7 +23,13 @@ begin
      or public.xbar_has_workspace_capability(new.workspace_id, 'manageSales') then
     return new;
   end if;
-  if TG_OP = 'UPDATE' and jsonb_typeof(old.payload -> 'gallery') = 'array' then
+  -- Staff UPDATE policies may authorize both the old and new workspace. An
+  -- approval earned where this caller manages sales cannot travel back into
+  -- a workspace (or onto another horse) where the caller lacks that authority.
+  if TG_OP = 'UPDATE'
+     and new.workspace_id is not distinct from old.workspace_id
+     and new.horse_id is not distinct from old.horse_id
+     and jsonb_typeof(old.payload -> 'gallery') = 'array' then
     previous_gallery := old.payload -> 'gallery';
   end if;
   if jsonb_typeof(new.payload -> 'gallery') is distinct from 'array' then return new; end if;

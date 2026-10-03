@@ -1,5 +1,5 @@
 {
-  "sourceDigest": "6c664efbd26f8f7a502977d7c952927056b1b2350ebc1d81cf7de9630c7f9a41",
+  "sourceDigest": "71d2b35458d97362a60a685c409c28d2f28395a17e0727dc9d5c92f872e08a02",
   "requiredVersions": [
     "20260924120000",
     "20260924130000",
@@ -692,7 +692,7 @@
       },
       "xbar_guard_sale_media_approval()": {
         "anon": false,
-        "definition": "2e607f975dadaf3af0ac5fb09cccc876",
+        "definition": "6a5a4422900163d3ff4b7dd94590f6d0",
         "service_role": false,
         "authenticated": false
       },

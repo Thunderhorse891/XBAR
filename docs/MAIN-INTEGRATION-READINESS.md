@@ -18,7 +18,11 @@ create them. Those capabilities must not grant sale-media approval to other
 roles. The additive, held `20261003021000_guard_sale_media_approval.sql` migration
 preserves pending uploads and horse edits while refusing new approved images or
 replacement images carrying an old approval unless the caller may manage sales.
-It preserves service writes and already approved, unchanged image identities.
+It preserves service writes and already approved image identities only when the
+workspace and horse keys also remain unchanged for callers without sales authority.
+Actual staff-policy regressions cover a Ranch Manager approving in a second
+workspace they own and trying to carry that approval back, plus a horse-key change.
+Pending transfers and ordinary edits remain permitted by the existing policies.
 Storage ownership, private buckets, buyer signing, and the review API's selected
 image compare-and-set remain separate requirements. Do not release this combined
 application/database change without reviewed migration ordering and recovery.
