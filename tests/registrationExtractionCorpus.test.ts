@@ -27,9 +27,209 @@ type ExtractionCase = {
   reg?: string;
   sire?: string;
   dam?: string;
+  sireReg?: string;
+  damReg?: string;
 };
 
+// BEGIN PARENT FIELD BOUNDARY CORPUS
+// Explicit neighboring fields end the parent identity on a flattened or wrapped
+// line. Include absent, bare and labeled parent IDs so unrelated numbers never
+// become a first ID or a conflicting second ID. Delimiterless numeric fields
+// require an existing parent ID; PHONE 1111111 alone can be a real parent.
+// The server pins this matrix to the browser copy below; only the browser API
+// exposes the parent IDs directly.
+const PARENT_BOUNDARY_FIELDS = [
+  ['Phone', '5551234567'],
+  ['Telephone Number', '5551234567'],
+  ['Tel.', '5551234567'],
+  ['Mobile Phone', '5551234567'],
+  ['Cell Phone', '5551234567'],
+  ['Fax Number', '5551234567'],
+  ['UELN', '840123456789012'],
+  ['Universal Equine Life Number', '840123456789012'],
+  ['Passport No.', '987654321'],
+  ['Date of Birth', '20200302'],
+  ['Birth Date', '20200302'],
+  ['DOB', '20200302'],
+  ['Date Foaled', '20200302'],
+  ['Year Foaled', '2020'],
+  ['Date', '20200302'],
+  ['Born', '20200302'],
+  ['Weight', '1050'],
+  ['Invoice No.', '3333333'],
+  ['Lot Number', '3333333'],
+  ['Batch Number', '3333333'],
+  ['Account Number', '3333333'],
+  ['Member ID', '3333333'],
+  ['Reference Number', '3333333'],
+  ['Document Number', '3333333'],
+  ['Certificate Number', '3333333'],
+  ['Registry Number', '3333333'],
+  ['Association Number', '3333333'],
+  ['Contact Number', '5551234567'],
+  ['Postal Code', '90210'],
+  ['ZIP Code', '90210'],
+];
+const PARENT_BOUNDARY_CORPUS = PARENT_BOUNDARY_FIELDS.flatMap(([field, value]) =>
+  [' ', '\n'].flatMap((gap) =>
+    [':', '#', '=', ''].flatMap((separator) =>
+      ['sire', 'dam'].flatMap((parent) =>
+        ['', ' 1111111AA', ' Reg No: 1111111AA']
+          .filter((registration) => Boolean(separator || registration))
+          .map((registration) => ({
+            id: `parent-boundary-${field}-${JSON.stringify(gap)}-${separator}-${parent}-${registration}`,
+            text: `Registered Name: BLUE MOON\n${parent}: DAD${registration}${gap}${field}${separator} ${value}${gap}${parent === 'sire' ? 'Dam' : 'Sire'}: MOM 2222222`,
+            name: 'BLUE MOON',
+            sire: parent === 'sire' ? 'DAD' : 'MOM',
+            dam: parent === 'dam' ? 'DAD' : 'MOM',
+            sireReg: parent === 'sire' ? (registration ? '1111111AA' : undefined) : '2222222',
+            damReg: parent === 'dam' ? (registration ? '1111111AA' : undefined) : '2222222',
+            review: false,
+          })),
+      ),
+    ),
+  ),
+);
+// END PARENT FIELD BOUNDARY CORPUS
+
 const CORPUS: ExtractionCase[] = [
+  {
+    id: 'numeric-metadata-word-at-parent-value-start-is-a-name',
+    text: 'Sire: PHONE 1111111 Dam: UELN 2222222',
+    sire: 'PHONE',
+    dam: 'UELN',
+    review: false,
+  },
+  {
+    id: 'numeric-metadata-boundary-retains-prior-registration-conflict',
+    text: 'Sire: SAME PARENT Reg No: 1111111AA Registration Number: 1111111AB Phone 5551234567',
+    sire: undefined,
+    review: true,
+  },
+  {
+    id: 'curly-quoted-parent-value-starting-with-parent-word',
+    text: 'Sire: “SIRE POWER” 1111111 Dam: ‘DAM GOOD’ 2222222',
+    sire: '“SIRE POWER”',
+    dam: '‘DAM GOOD’',
+    review: false,
+  },
+  {
+    id: 'attached-dash-parent-value-starting-with-parent-word',
+    text: 'Sire: –DAM GOOD 1111111 Phone: 5551234567 Dam: —SIRE POWER 2222222',
+    sire: '–DAM GOOD',
+    dam: '—SIRE POWER',
+    review: false,
+  },
+  {
+    id: 'parent-value-starting-with-parent-word',
+    text: 'Registered Name: BLUE MOON\nSire: SIRE POWER 1111111\nDam: DAM GOOD 2222222',
+    name: 'BLUE MOON',
+    sire: 'SIRE POWER',
+    dam: 'DAM GOOD',
+    review: false,
+  },
+  {
+    id: 'parent-value-starting-with-opposite-parent-word',
+    text: 'Sire: DAM GOOD 1111111 Dam: SIRE POWER 2222222',
+    sire: 'DAM GOOD',
+    dam: 'SIRE POWER',
+    review: false,
+  },
+  {
+    id: 'bare-parent-value-starting-with-parent-word',
+    text: 'Sire SIRE POWER 1111111 Dam DAM GOOD 2222222',
+    sire: 'SIRE POWER',
+    dam: 'DAM GOOD',
+    review: false,
+  },
+  {
+    id: 'wrapped-parent-value-starting-with-parent-word',
+    text: 'Sire:\nSIRE POWER\nDam:\nDAM GOOD',
+    sire: 'SIRE POWER',
+    dam: 'DAM GOOD',
+    review: false,
+  },
+  {
+    id: 'punctuated-parent-value-starting-with-parent-word',
+    text: 'Name of Sire: "SIRE POWER" 1111111 Name of Dam: *DAM GOOD 2222222',
+    sire: '"SIRE POWER"',
+    dam: '*DAM GOOD',
+    review: false,
+  },
+  {
+    id: 'ancestor-value-starting-with-parent-word-is-not-parent',
+    text: 'Sire: DAD 1111111 Dam: MOM 2222222 Sire of Sire: SIRE POWER 3333333',
+    sire: 'DAD',
+    dam: 'MOM',
+    review: false,
+  },
+  {
+    id: 'parent-value-word-guard-does-not-hide-name-conflict',
+    text: 'Sire: SIRE POWER 1111111 Phone: 5551234567 Sire: SIRE OTHER 1111111',
+    sire: undefined,
+    review: true,
+  },
+  {
+    id: 'empty-parent-before-repeated-explicit-parent-label',
+    text: 'Sire: Sire: DAD 1111111 Dam: Dam: MOM 2222222',
+    sire: 'DAD',
+    dam: 'MOM',
+    review: false,
+  },
+  {
+    id: 'phone-boundary-preserves-parent-name',
+    text: 'Registered Name: CALL MY PHONE\nSire: CALL MY PHONE 1111111 Phone: 5551234567\nDam: THE LAST PASSPORT 2222222 UELN: 840123456789012',
+    name: 'CALL MY PHONE',
+    sire: 'CALL MY PHONE',
+    dam: 'THE LAST PASSPORT',
+    review: false,
+  },
+  {
+    id: 'metadata-words-in-parent-name-are-not-labels',
+    text: 'Sire: PHONE NUMBER SEVEN 1111111\nDam: UNIVERSAL EQUINE LIFE NUMBER DREAM 2222222',
+    sire: 'PHONE NUMBER SEVEN',
+    dam: 'UNIVERSAL EQUINE LIFE NUMBER DREAM',
+    review: false,
+  },
+  {
+    id: 'empty-parent-before-explicit-number',
+    text: 'Sire: Phone: 5551234567\nDam: Tel.: 5559876543',
+    sire: undefined,
+    dam: undefined,
+    review: false,
+  },
+  {
+    id: 'empty-parent-before-explicit-id',
+    text: 'Sire: UELN: 840123456789012\nDam: Passport No.: 987654321',
+    sire: undefined,
+    dam: undefined,
+    review: false,
+  },
+  {
+    id: 'metadata-boundary-does-not-hide-repeated-parent-name-conflict',
+    text: 'Sire: FIRST PARENT 1111111 Phone: 5551234567 Sire: SECOND PARENT 1111111 UELN: 840123456789012',
+    sire: undefined,
+    review: true,
+  },
+  {
+    id: 'metadata-boundary-does-not-hide-repeated-parent-id-conflict',
+    text: 'Dam: SAME PARENT 1111111AA UELN: 840123456789012\nDam: SAME PARENT 1111111AB Phone: 5551234567',
+    dam: undefined,
+    review: true,
+  },
+  {
+    id: 'metadata-boundary-does-not-hide-same-entry-registration-conflict',
+    text: 'Sire: SAME PARENT Reg No: 1111111AA Registration Number: 1111111AB Phone: 5551234567',
+    sire: undefined,
+    review: true,
+  },
+  {
+    id: 'metadata-boundary-preserves-repeat-and-qualified-ancestor',
+    text: 'Sire: SAME PARENT Reg No: AQHA1111111AA Phone: 5551234567\nSire: SAME PARENT Reg No: 1111111AA\nSire of Sire: GRAND PARENT 3333333 UELN: 840123456789012\nDam: OTHER PARENT 2222222',
+    sire: 'SAME PARENT',
+    dam: 'OTHER PARENT',
+    review: false,
+  },
   {
     id: 'ancestor-sire-of-sire-name',
     text: 'Registered Name: BLUE MOON\nSire: SAME PARENT Reg No: 1111111\nDam: OTHER PARENT Reg No: 2222222\nSire of Sire: GRAND PARENT Reg No: 3333333',
@@ -501,7 +701,8 @@ const CORPUS: ExtractionCase[] = [
 test('the extraction corpus holds, every row', () => {
   const failures: string[] = [];
 
-  for (const row of CORPUS) {
+  const cases: ExtractionCase[] = [...CORPUS, ...PARENT_BOUNDARY_CORPUS];
+  for (const row of cases) {
     const fields = extractRegistrationFields(row.text);
     const actual = {
       review: fields.identityReviewRequired ?? false,
@@ -509,9 +710,11 @@ test('the extraction corpus holds, every row', () => {
       reg: fields.registrationNumber,
       sire: fields.sire,
       dam: fields.dam,
+      sireReg: fields.sireRegistration,
+      damReg: fields.damRegistration,
     };
 
-    for (const key of ['name', 'reg', 'sire', 'dam', 'review'] as const) {
+    for (const key of ['name', 'reg', 'sire', 'dam', 'sireReg', 'damReg', 'review'] as const) {
       if (!(key in row)) continue;
       if (actual[key] !== row[key]) {
         failures.push(`${row.id} -> ${key}: got ${JSON.stringify(actual[key])}, want ${JSON.stringify(row[key])}`);

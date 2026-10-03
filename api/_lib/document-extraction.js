@@ -368,26 +368,56 @@ function normalizePedigreeValue(value) {
   return trimmed && !/^(?:unknown|n\/?a|not\s+recorded|pending)\.?$/i.test(trimmed) ? trimmed : undefined;
 }
 
+// Numeric metadata belongs to its own field, never to the parent's registration.
+// Before a parent ID, require field punctuation so CALL MY PHONE remains a
+// name. After an ID, a labeled numeric field is clear without punctuation.
+// Keep these boundaries parent-local: bare STOP_LABELS additions would change
+// the horse-name and microchip readers. Reg/registration stay inside the entry
+// because they can introduce the parent's own identifier.
+const PARENT_METADATA_LABEL =
+  `(?:phone|telephone|tel|(?:mobile|cell)(?:\\s+phone)?|fax|contact|` +
+  `ueln|universal\\s+equine\\s+life\\s+number|passport|` +
+  `date\\s+of\\s+birth|birth\\s*date|dob|date\\s+foaled|year\\s+foaled|date|born|weight|` +
+  `invoice|lot|batch|account|member|reference|document|certificate|registry|association|postal|zip` +
+  `)(?:\\s+(?:number|no|id|code))?\\.?`;
+const PARENT_METADATA_FIELD = new RegExp(`(?:^|[\\s|;,:])${PARENT_METADATA_LABEL}\\s*[:#=]`, 'i');
+const PARENT_NUMERIC_METADATA_FIELD = new RegExp(`(?:^|[\\s|;,:])${PARENT_METADATA_LABEL}\\s+(?=[+(]?\\d)`, 'i');
+
 /** Collect every top-level parent assertion; contradictions always need review. */
 function findParent(text, label) {
   const names = new Map();
   const registrations = new Set();
   const registries = new Set();
-  const matches = [...text.matchAll(new RegExp(`\\b(?:${PEDIGREE_LABEL})\\b`, 'ig'))];
+  const matches = [...text.matchAll(new RegExp(`\\b(?:${PEDIGREE_LABEL})\\b`, 'ig'))].filter((match, index, all) => {
+    const previous = all[index - 1];
+    if (!previous) return true;
+    const between = text.slice(previous.index + previous[0].length, match.index);
+    const valuePrefix = cleanFieldValue(between)?.replace(/^["'‘’“”*–—]+$/, '');
+    const ruledBlank = /^\s*[:#]?\s*(?:[|;=•·]+|[_.\-–—~]{2,})/.test(between);
+    const explicitLabel = /^\s*[:#=|]/.test(text.slice(match.index + match[0].length));
+    // Sire: SIRE POWER starts a value, not another assertion. An explicit
+    // next label or ruled empty field still marks a real pedigree boundary.
+    return Boolean(valuePrefix) || ruledBlank || explicitLabel;
+  });
   for (const [index, match] of matches.entries()) {
     if (!new RegExp(`^(?:${parentLabel(label)})$`, 'i').test(match[0])) continue;
-    const chunk = labeledValue(
-      text.slice(match.index, matches[index + 1]?.index),
-      parentLabel(label),
-      PARENT_STOP_GROUP,
-    );
+    const entry = text.slice(match.index, matches[index + 1]?.index);
+    const nextField = entry.match(PARENT_METADATA_FIELD);
+    const chunk = labeledValue(entry.slice(0, nextField?.index), parentLabel(label), PARENT_STOP_GROUP);
     if (!chunk) continue;
     const regPattern = new RegExp(
       `\\b(?:(${REGISTRIES.join('|')})\\s*[:#-]?\\s*)?([A-Z]?\\d[\\d\\s-]{3,}\\d[A-Z]*)\\b`,
       'ig',
     );
     const regMatches = [...chunk.matchAll(regPattern)];
+    const firstRegistration = regMatches[0];
+    const firstEnd = firstRegistration ? firstRegistration.index + firstRegistration[0].length : chunk.length;
+    // Once an ID is established, Phone 5551234567 is a neighboring numeric
+    // field even without punctuation. Before that ID, PHONE can be the name.
+    const numericField = chunk.slice(firstEnd).match(PARENT_NUMERIC_METADATA_FIELD);
+    const identityEnd = numericField?.index === undefined ? chunk.length : firstEnd + numericField.index;
     for (const registration of regMatches) {
+      if (registration.index >= identityEnd) break;
       registrations.add(registration[2].replace(/[\s-]/g, '').toUpperCase());
       if (registration[1]) registries.add(registration[1].toUpperCase());
     }
