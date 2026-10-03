@@ -437,6 +437,7 @@ export function InteractionShell() {
           <SheetContent
             className="right-drawer"
             side="right"
+            aria-labelledby="right-drawer-title"
             onOpenAutoFocus={() => {
               drawerReturnFocus.current = document.activeElement instanceof HTMLElement ? document.activeElement : null;
             }}

@@ -182,9 +182,13 @@ test('mobile all-sections navigation closes, restores focus, and preserves recor
     await filter.click();
     await expect(filter).toHaveAttribute('aria-selected', 'true');
   }
-  const filtersBox = await segments.boundingBox();
+  // On phones, search is intentionally first. Both tab groups must stay below
+  // its full height; wrapped segment rows must never overlap the search field.
+  const controlsBox = await page.locator('.portfolio-toolbar__controls').boundingBox();
   const searchBox = await page.getByRole('textbox', { name: 'Search horse records' }).boundingBox();
-  expect(searchBox!.y).toBeGreaterThanOrEqual(filtersBox!.y + filtersBox!.height);
+  expect(controlsBox).not.toBeNull();
+  expect(searchBox).not.toBeNull();
+  expect(controlsBox!.y).toBeGreaterThanOrEqual(searchBox!.y + searchBox!.height);
   await screenshot(page, info, 'horses-mobile');
   await page.getByRole('button', { name: 'Account menu' }).click();
   await expect(page.getByRole('menuitem', { name: 'Notifications' })).toBeVisible();

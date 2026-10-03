@@ -115,6 +115,22 @@ export default function Documents() {
   const [batchLabel, setBatchLabel] = useState('Live upload batch');
   const [packetBuildingHorseId, setPacketBuildingHorseId] = useState('');
   const [createHorseFromBatch, setCreateHorseFromBatch] = useState(false);
+  const selectUploadHorse = (nextHorseId: string) => {
+    setHorseId(nextHorseId);
+    if (nextHorseId) setCreateHorseFromBatch(false);
+    // Contextual intake has one target: its banner, document scope, and saved
+    // assignment must all follow an explicit change in the horse selector.
+    if (searchParams.has('horse')) {
+      const next = new URLSearchParams(searchParams);
+      if (nextHorseId) next.set('horse', nextHorseId);
+      else {
+        next.delete('horse');
+        next.delete('requirement');
+        next.delete('from');
+      }
+      setSearchParams(next, { replace: true, preventScrollReset: true });
+    }
+  };
   const [isSubmitting, setIsSubmitting] = useState(false);
   const submittingRef = useRef(false);
   const intakeScreenRef = useRef({ active: true, query: searchParams.toString() });
@@ -151,6 +167,13 @@ export default function Documents() {
   const [activeStage, setActiveStage] = useState<PipelineStage>(
     uploadOpen ? 'Upload' : (requestedStage ?? (documents.length === 0 && canUploadDocuments ? 'Upload' : 'Review')),
   );
+  const intakeStageRevision = useRef(0);
+  const selectStage = (stage: PipelineStage) => {
+    // Increment synchronously so an intake resolving in the next microtask
+    // cannot override a newer choice, including leaving and returning to Upload.
+    intakeStageRevision.current += 1;
+    setActiveStage(stage);
+  };
 
   useEffect(() => {
     if (uploadOpen) {
@@ -265,7 +288,7 @@ export default function Documents() {
   const menuHorseId = menuDocument ? (reviewAssignments[menuDocument.id] ?? menuDocument.horseId) : undefined;
 
   const goToStage = (stage: PipelineStage) => {
-    setActiveStage(stage);
+    selectStage(stage);
     if (typeof window !== 'undefined') {
       window.scrollTo({ top: 0, behavior: 'smooth' });
     }
@@ -501,6 +524,7 @@ export default function Documents() {
     }
 
     const submissionScreen = intakeScreenRef.current;
+    const submissionStageRevision = intakeStageRevision.current;
     submittingRef.current = true;
     setIsSubmitting(true);
     setIntakeOutcome(null);
@@ -533,6 +557,9 @@ export default function Documents() {
         if (fileInputRef.current) fileInputRef.current.value = '';
         setBatchLabel('Live upload batch');
         setCreateHorseFromBatch(false);
+        // Report completion and clear only successfully accepted files, but
+        // let the user's newer stage selection win over automatic routing.
+        if (intakeStageRevision.current !== submissionStageRevision) return;
         if (!requestedHorse) setSearchParams({});
         if (result.duplicateCount || result.heldForReviewCount) {
           goToStage('Review');
@@ -696,7 +723,7 @@ export default function Documents() {
               role="tab"
               aria-selected={activeStage === stage.id}
               className={`surface-tab${activeStage === stage.id ? ' surface-tab--active' : ''}`}
-              onClick={() => setActiveStage(stage.id)}
+              onClick={() => selectStage(stage.id)}
             >
               {stage.id === 'Library' ? '' : `${index + 1}. `}
               {stage.label} ({stageCounts[stage.id]})
@@ -781,13 +808,7 @@ export default function Documents() {
                 <select
                   className="field-input"
                   value={horseId}
-                  onChange={(event) => {
-                    const nextHorseId = event.target.value;
-                    setHorseId(nextHorseId);
-                    if (nextHorseId) {
-                      setCreateHorseFromBatch(false);
-                    }
-                  }}
+                  onChange={(event) => selectUploadHorse(event.target.value)}
                   disabled={!canUploadDocuments}
                 >
                   <option value="">Try local file-name match</option>
