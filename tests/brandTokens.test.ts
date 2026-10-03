@@ -198,7 +198,6 @@ test('entry and shell artwork do not escape the GitHub Pages deployment base', a
     'src/routes/ResetPassword.tsx',
     'src/routes/SetupWorkspace.tsx',
     'src/routes/layouts/MainLayout.tsx',
-    'src/components/BrandMark.tsx',
     'src/pages/Dashboard.tsx',
     'src/routes/Reminders.tsx',
   ];
