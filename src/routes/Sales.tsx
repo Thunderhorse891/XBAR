@@ -836,6 +836,7 @@ export default function Sales() {
                           amount: leadAmountReceived,
                           receivedOn: leadAmountReceivedOn,
                           saleValue: agreedSaleValue,
+                          paidDepositAmount: leadDepositStatus === 'Paid' ? Number(leadDepositAmount) : 0,
                           today: localIsoDate(),
                         })
                       : null;

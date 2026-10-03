@@ -26,6 +26,17 @@ export function isCalendarDay(value: unknown): value is string {
   return date.getFullYear() === year && date.getMonth() === month - 1 && date.getDate() === day;
 }
 
+/** The total includes the deposit; correct the deposit record before reducing it. */
+export function receivedTotalBelowPaidDeposit(amount: number | undefined, paidDepositAmount: number): boolean {
+  return (
+    typeof amount === 'number' &&
+    Number.isFinite(amount) &&
+    amount >= 0 &&
+    Number.isFinite(paidDepositAmount) &&
+    amount < paidDepositAmount
+  );
+}
+
 export function validateSalePayment(input: {
   /** Raw text from the amount field; blank means nothing recorded. */
   amount: string;
@@ -33,6 +44,8 @@ export function validateSalePayment(input: {
   receivedOn: string;
   /** The agreed sale price: the counteroffer when there is one, else the offer. */
   saleValue: number;
+  /** Only deposits separately marked Paid, not due/requested deposits. */
+  paidDepositAmount?: number;
   /** The viewer's local day, YYYY-MM-DD. */
   today: string;
 }): SalePaymentResult {
@@ -47,6 +60,13 @@ export function validateSalePayment(input: {
   const amount = Number(rawAmount);
   if (!Number.isFinite(amount) || amount < 0) {
     return { ok: false, message: 'Amount received must be $0 or more.' };
+  }
+  if (receivedTotalBelowPaidDeposit(amount, input.paidDepositAmount ?? 0)) {
+    return {
+      ok: false,
+      message:
+        'Amount received includes the paid deposit. Enter at least the paid deposit amount, or correct the deposit record first.',
+    };
   }
   if (amount > 0 && !(input.saleValue > 0)) {
     return { ok: false, message: 'Record the agreed sale amount before the money received against it.' };

@@ -230,3 +230,54 @@ for (const amount of ['lots', '25000', true, {}, NaN, Infinity]) {
     assert.notEqual(buildBankedHeadline(financials(lead)).state, 'complete');
   });
 }
+
+for (const amount of ['0', '4000']) {
+  test(`the close-out refuses total ${amount} below a paid deposit`, () => {
+    const result = validateSalePayment({
+      amount,
+      receivedOn: amount === '0' ? '' : '2026-05-01',
+      saleValue: 25000,
+      today: TODAY,
+      paidDepositAmount: 5000,
+    } as Parameters<typeof validateSalePayment>[0]);
+    assert.equal(result.ok, false);
+    if (!result.ok) assert.match(result.message, /paid deposit/i);
+  });
+}
+
+test('a missing-cost insight does not claim an unpaid sale is collected', () => {
+  const fin = buildRanchFinancials([horse('h1', 0)], [], [auditLead()]);
+  assert.equal(fin.collectedFromSales, 0);
+  assert.equal(fin.outstandingFromSales, 25000);
+  const detail = fin.insights.find((insight) => insight.id === 'blindspot-sold-cost')?.detail;
+  assert.ok(detail);
+  assert.doesNotMatch(detail, /sale amount counts as collected/);
+  assert.match(detail, /agreed/i);
+  assert.match(detail, /received/i);
+});
+
+for (const amount of [0, 4000]) {
+  test(`restored valid total ${amount} cannot erase a separately paid deposit`, () => {
+    const fin = financials(
+      auditLead({ amountReceived: amount, amountReceivedOn: amount ? '2026-05-01' : undefined, depositStatus: 'Paid' }),
+    );
+    assert.equal(fin.collectedFromSales, 5000);
+    assert.equal(fin.outstandingFromSales, 20000);
+    assert.notEqual(buildBankedHeadline(fin).state, 'complete');
+  });
+}
+
+for (const receivedOn of ['not-a-date', '9999-12-31', 123, {}]) {
+  test(`zero total with supplied invalid date ${String(receivedOn)} fails closed`, () => {
+    const fin = financials(
+      auditLead({
+        amountReceived: 0,
+        amountReceivedOn: receivedOn as string,
+        depositStatus: 'Paid',
+        depositAmount: 25000,
+      }),
+    );
+    assert.equal(fin.collectedFromSales, 0);
+    assert.notEqual(buildBankedHeadline(fin).state, 'complete');
+  });
+}

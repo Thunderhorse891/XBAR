@@ -318,14 +318,23 @@ export function saleAmountReceived(lead: SalesLead, saleValue: number, today = l
   if (
     lead.amountReceived !== undefined &&
     lead.amountReceived !== null &&
-    (!Number.isFinite(lead.amountReceived) || !isCalendarDay(lead.amountReceivedOn) || lead.amountReceivedOn > today)
+    (!Number.isFinite(lead.amountReceived) ||
+      lead.amountReceived < 0 ||
+      ((lead.amountReceived > 0 ||
+        (lead.amountReceivedOn !== undefined && lead.amountReceivedOn !== null && lead.amountReceivedOn !== '')) &&
+        (!isCalendarDay(lead.amountReceivedOn) || lead.amountReceivedOn > today)))
   ) {
     return 0;
   }
   const recorded =
     lead.amountReceived === undefined || lead.amountReceived === null ? NaN : Number(lead.amountReceived);
   const deposit = lead.depositStatus === 'Paid' ? Number(lead.depositAmount) : 0;
-  const received = Number.isFinite(recorded) ? recorded : Number.isFinite(deposit) ? deposit : 0;
+  // A valid total includes the separately recorded paid deposit. Legacy restored
+  // totals below that deposit are contradictory: the paid deposit is the known
+  // minimum. Zero claims no new receipt and needs no date; invalid positive
+  // receipts still fail closed above. The editor/store require correction.
+  const paidDeposit = Number.isFinite(deposit) ? Math.max(0, deposit) : 0;
+  const received = Number.isFinite(recorded) ? Math.max(recorded, paidDeposit) : paidDeposit;
   return Math.min(Math.max(0, received), Math.max(0, saleValue));
 }
 
@@ -626,7 +635,7 @@ function buildFinancialInsights(
       id: 'blindspot-sold-cost',
       tone: 'info',
       title: `${n} sold ${n === 1 ? 'horse has' : 'horses have'} a price but no recorded cost`,
-      detail: `The sale amount counts as collected, but without a cost basis the profit is unknown — add ${n === 1 ? 'its' : 'their'} cost so the sale lands in banked profit.`,
+      detail: `The agreed sale value is recorded; only recorded payments count as received, and any unpaid balance remains owed. Add ${n === 1 ? 'its' : 'their'} cost to calculate profit; the sale is banked only when paid in full.`,
     });
   }
 
