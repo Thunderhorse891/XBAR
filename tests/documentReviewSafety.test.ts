@@ -691,3 +691,41 @@ test('delimiterless neighboring numeric fields do not become microchip evidence'
     }
   }
 });
+
+test('all supported adjacent identity and metadata fields remain outside chip evidence', () => {
+  const target = { ...horse, registrationNumber: '', aqhaNumber: '', microchipId: '900123456789012' };
+  for (const label of [
+    'Tattoo',
+    'DNA',
+    'DNA Panel',
+    'Markings',
+    'Height',
+    'Weight',
+    'Sex',
+    'Color',
+    'Breed',
+    'Owner',
+    'Breeder',
+    'Signature',
+    'Foaled',
+    'Sire',
+    'Dam',
+    'Phone',
+    'Batch',
+    'Invoice',
+  ]) {
+    for (const delimiter of [':', '#', '=', '']) {
+      for (const wrapping of [' ', '\n']) {
+        const text = `CERTIFICATE OF REGISTRATION\nRegistered Name: DESERT DAISY\nMicrochip: UNKNOWN${wrapping}${label}${delimiter} 123456789`;
+        assert.equal(
+          inspectDocumentHorseIdentity(
+            document({ extractedTextPreview: text, entities: { horseName: horse.name } }),
+            target,
+          ).conflictReason,
+          undefined,
+          text,
+        );
+      }
+    }
+  }
+});

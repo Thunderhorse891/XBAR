@@ -7,7 +7,11 @@ import type {
   OwnershipRecord,
 } from '../types/xbar.js';
 import { sha256 } from './sha256.js';
-import { extractRegistrationFields, normalizePedigreeValue } from './registrationExtraction.js';
+import {
+  extractRegistrationFields,
+  normalizePedigreeValue,
+  registrationFieldLabelPattern,
+} from './registrationExtraction.js';
 import { horseIdentityConflicts, registrationKey, hasDocumentSourceHeading, inferDocumentType } from './xbarRuntime.js';
 import { extractionProducedNothing } from './documentIntelligence.js';
 import { hasStoredFile } from './storedFiles.js';
@@ -134,6 +138,7 @@ export function inspectDocumentHorseIdentity(document: DocumentRecord, horse: Ho
   // Only a paragraph break, another chip label, or an explicit neighboring
   // field ends it; unfamiliar/malformed continuation is evidence, not absence.
   const chipSpans: string[] = [];
+  const neighboringField = `${registrationFieldLabelPattern}|date|dob|born|weight|batch|lot|invoice|phone|reg\\.?`;
   const text = document.extractedTextPreview;
   const labels = [...text.matchAll(/\bmicrochip\b/gi)];
   for (const [index, label] of labels.entries()) {
@@ -141,13 +146,11 @@ export function inspectDocumentHorseIdentity(document: DocumentRecord, horse: Ho
     const limit = labels[index + 1]?.index ?? text.length;
     let span = text.slice(start, limit).split(/\r?\n[ \t]*\r?\n/)[0];
     // Flattened OCR can place another explicitly labeled field on this line.
-    span = span.split(
-      /\b(?:date|dob|born|foaled|owner|sire|dam|registration|reg|colou?r|breed|sex|height|weight|batch|lot|invoice|phone)\b[^:#=\r\n]{0,30}[:#=]/i,
-    )[0];
+    span = span.split(new RegExp(String.raw`\b(?:${neighboringField})\b[^:#=\r\n]{0,30}[:#=]`, 'i'))[0];
     // OCR may omit field punctuation. A named numeric field followed by its
     // value is still a boundary, including on a flattened single line.
     span = span.split(
-      /\b(?:registration|reg\.?|phone|batch|lot|invoice)(?:\s+(?:number|no\.?))?\s+(?=[+]?(?:[a-z]{0,5})\d)/i,
+      new RegExp(String.raw`\b(?:${neighboringField})(?:\s+(?:number|no\.?))?\s+(?=[+]?(?:[a-z]{0,5})\d)`, 'i'),
     )[0];
     chipSpans.push(span);
   }

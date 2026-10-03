@@ -133,6 +133,8 @@ const STOP_LABELS = [
 ];
 
 const STOP_GROUP = STOP_LABELS.join('|');
+/** Canonical neighboring field labels for source identity readers. */
+export const registrationFieldLabelPattern = STOP_GROUP;
 const SEX_VALUE = '(?:gelding|stallion|stud|colt|filly|mare)';
 const COLOR_VALUE = `(?:${COLORS.map((color) => color.replace(/[-\s]/g, '[-\\s]')).join('|')})`;
 
