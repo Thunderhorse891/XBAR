@@ -131,6 +131,45 @@ function sourceMicrochipKeys(value: string): string[] {
   return parsed[0].keys;
 }
 
+const chipFieldAliasPattern = String.raw`(?:micro[ \t-]*chip|chip|transponder)`;
+
+/** Keep candidate detection and accepted fields on the same source boundaries. */
+function sourceChipSpan(text: string, start: number, limit: number): string {
+  const neighboringField = `${registrationFieldLabelPattern}|buyer|seller|date|dob|born|weight|batch|lot|invoice|phone|reg\\.?`;
+  const metadataField = String.raw`(?:ueln(?:\s+(?:number|no\.?|id))?|universal\s+equine\s+life\s+number|passport(?:\s+(?:number|no\.?|id))?)`;
+  let span = text.slice(start, limit).split(/\r?\n[ \t]*\r?\n/)[0];
+  span = span.split(new RegExp(String.raw`\b(?:${neighboringField})\b[^:#=\r\n]{0,30}[:#=]`, 'i'))[0];
+  span = span.split(
+    new RegExp(String.raw`\b(?:${neighboringField})(?:\s+(?:number|no\.?))?\s+(?=[+]?(?:[a-z]{0,5})\d)`, 'i'),
+  )[0];
+  span = span.split(new RegExp(String.raw`\b${metadataField}\s*[:#=]`, 'i'))[0];
+  return span.split(new RegExp(String.raw`\b${metadataField}\s+(?=[+]?(?:[a-z]{0,5})\d)`, 'i'))[0];
+}
+
+function sourceChipLabels(text: string) {
+  // Bare mentions and subject names such as CHIP SHOT or BLUE CHIP 123 are
+  // not fields. Unfamiliar wording at a line/list start needs plausible chip
+  // evidence before another field, not merely a later party/registration colon.
+  const candidates = [...text.matchAll(new RegExp(String.raw`\b${chipFieldAliasPattern}\b`, 'gi'))];
+  return candidates.filter((label, index) => {
+    const prefix =
+      text
+        .slice(0, label.index)
+        .split(/\r\n?|\n/)
+        .at(-1)
+        ?.trim() ?? '';
+    const suffix = sourceChipSpan(text, label.index + label[0].length, candidates[index + 1]?.index ?? text.length);
+    return (
+      /^\s*(?:(?:id|number|no)\b\.?\s*)?[:#=]/i.test(suffix) ||
+      /^\s+(?:(?:id|number|no)\b\.?\s+)?(?:was\s+)?(?:scanned|read|detected|verified)\b/i.test(suffix) ||
+      /^\s+(?:(?:id|number|no)\b\.?\s+)?(?:AVID\*|(?=(?:\d[.*\s-]*){9})\d|(?:[a-f0-9][.*\s-]*){10}|unknown\b|pending\b|n\/a\b|none\b|not recorded\b|unavailable\b)/i.test(
+        suffix,
+      ) ||
+      ((!prefix || /[,;|]$/.test(prefix)) && /(?:\d[.*\s-]*){9}|(?:[a-f0-9][.*\s-]*){10}/i.test(suffix))
+    );
+  });
+}
+
 /** Recognize the plain Horse alias only at explicit form boundaries. Keep this
  * ownership-review normalization local; prose and qualified labels are not subjects.
  */
@@ -173,7 +212,15 @@ function normalizeSourceHorseFields(text: string): string {
  * remain separate from extracted facts and ownership evidence.
  */
 export function inspectDocumentHorseIdentity(document: DocumentRecord, horse?: HorseRecord) {
-  const normalizedSource = normalizeSourceHorseFields(document.extractedTextPreview);
+  const text = document.extractedTextPreview;
+  const labels = sourceChipLabels(text);
+  // The canonical registration/fact reader already bounds Microchip fields.
+  // Normalize only recognized aliases in this transient view, never the source.
+  const chipNormalized = labels.reduceRight(
+    (value, label) => `${value.slice(0, label.index)}Microchip${value.slice(label.index + label[0].length)}`,
+    text,
+  );
+  const normalizedSource = normalizeSourceHorseFields(chipNormalized);
   const { identityReviewRequired: sourceIdentityReviewRequired, ...sourceIdentity } =
     extractRegistrationFields(normalizedSource);
   // Reuse intake's canonical fact reader, but a filename is not source evidence.
@@ -186,31 +233,11 @@ export function inspectDocumentHorseIdentity(document: DocumentRecord, horse?: H
   // Read the whole labeled field independent of status wording or wrapping.
   // Only a paragraph break, another chip label, or an explicit neighboring
   // field ends it; unfamiliar/malformed continuation is evidence, not absence.
-  const chipSpans: string[] = [];
-  const neighboringField = `${registrationFieldLabelPattern}|date|dob|born|weight|batch|lot|invoice|phone|reg\\.?`;
-  // These are neighboring identifier fields, never chip evidence. Require the
-  // exact field label and punctuation or a numeric value, not an arbitrary
-  // continuation containing a metadata word.
-  const chipMetadataField = String.raw`(?:ueln(?:\s+(?:number|no\.?|id))?|universal\s+equine\s+life\s+number|passport(?:\s+(?:number|no\.?|id))?)`;
-  const text = document.extractedTextPreview;
-  const labels = [...text.matchAll(/\bmicrochip\b/gi)];
-  for (const [index, label] of labels.entries()) {
-    const start = label.index + label[0].length;
-    const limit = labels[index + 1]?.index ?? text.length;
-    let span = text.slice(start, limit).split(/\r?\n[ \t]*\r?\n/)[0];
-    // Flattened OCR can place another explicitly labeled field on this line.
-    span = span.split(new RegExp(String.raw`\b(?:${neighboringField})\b[^:#=\r\n]{0,30}[:#=]`, 'i'))[0];
-    // OCR may omit field punctuation. A named numeric field followed by its
-    // value is still a boundary, including on a flattened single line.
-    span = span.split(
-      new RegExp(String.raw`\b(?:${neighboringField})(?:\s+(?:number|no\.?))?\s+(?=[+]?(?:[a-z]{0,5})\d)`, 'i'),
-    )[0];
-    span = span.split(new RegExp(String.raw`\b${chipMetadataField}\s*[:#=]`, 'i'))[0];
-    span = span.split(new RegExp(String.raw`\b${chipMetadataField}\s+(?=[+]?(?:[a-z]{0,5})\d)`, 'i'))[0];
-    chipSpans.push(span);
-  }
+  const chipSpans = labels.map((label, index) =>
+    sourceChipSpan(text, label.index + label[0].length, labels[index + 1]?.index ?? text.length),
+  );
   const sourceChips = chipSpans
-    .flatMap((span) => span.split(/\s*(?:[,;:/|&()]|\band\b|\bor\b)\s*/i))
+    .flatMap((span) => span.split(/\s*(?:[,;:#=/|&()]|\band\b|\bor\b)\s*/i))
     .flatMap(sourceMicrochipKeys);
   // Unusual punctuation can prevent token attribution. Never turn a complete
   // identifier-shaped value in the chip field into silent absence.

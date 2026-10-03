@@ -968,3 +968,233 @@ test('flattened Horse ownership forms share fresh identity and facts, including 
     assert.equal(review.sourceIdentityReviewRequired, true, text);
   }
 });
+
+const chipFieldAliases = ['Microchip', 'Micro Chip', 'Micro-chip', 'Chip', 'Transponder'];
+
+test('all chip field aliases compare complete, missing and malformed identifiers across common field layouts', () => {
+  const target = { ...horse, microchipId: '900123456789012' };
+  for (const alias of chipFieldAliases) {
+    for (const suffix of ['', ' ID', ' No', ' No.', ' Number']) {
+      for (const delimiter of [':', '#', '=', ' #:', '']) {
+        for (const wrapping of [' ', '\n', '\r\n']) {
+          for (const [value, expected] of [
+            ['900123456789012', true],
+            ['900123456789099', false],
+            ['900123456789012X', false],
+            ['UNKNOWN', true],
+          ] as const) {
+            const field = `${alias}${suffix}${delimiter}${wrapping}${value}`;
+            const source = document({ extractedTextPreview: `${paper}\n${field}` });
+            const review = inspectDocumentHorseIdentity(source, target);
+            assert.equal(Boolean(review.conflictReason), !expected, field);
+            assert.equal(assessOwnershipDocument(source, target, 'registration_certificate').ok, expected, field);
+            if (value === target.microchipId) assert.deepEqual(review.sourceChips, [target.microchipId], field);
+          }
+        }
+      }
+    }
+  }
+});
+
+test('chip alias scanner statuses preserve matching, conflicting and missing evidence on the same or next line', () => {
+  const target = { ...horse, microchipId: '900123456789012' };
+  for (const alias of chipFieldAliases) {
+    for (const status of [
+      'scanned',
+      'read as',
+      'was scanned as',
+      'was read as',
+      'detected',
+      'verified',
+      'ID scanned',
+    ]) {
+      for (const wrapping of [' ', '\n', '\r\n']) {
+        for (const [value, expected] of [
+          ['', true],
+          ['UNKNOWN', true],
+          ['900123456789012', true],
+          ['900123456789099', false],
+          ['900123456789012_EXTRA', false],
+        ] as const) {
+          const field = `${alias} ${status}${wrapping}${value}`;
+          const review = inspectDocumentHorseIdentity(document({ extractedTextPreview: `${paper}\n${field}` }), target);
+          assert.equal(Boolean(review.conflictReason), !expected, field);
+          if (value === target.microchipId) assert.deepEqual(review.sourceChips, [target.microchipId], field);
+        }
+      }
+    }
+  }
+});
+
+test('mixed chip aliases bound one another and retain every value in repeated fields and lists', () => {
+  const target = { ...horse, microchipId: '900123456789012' };
+  for (const first of chipFieldAliases) {
+    for (const second of chipFieldAliases) {
+      for (const boundary of [' ', '\n', '\r\n', ', ', '; ', ' | ', ' and ']) {
+        for (const [last, expected] of [
+          ['900123456789012', true],
+          ['900123456789099', false],
+          ['900123456789012X', false],
+          ['UNKNOWN', true],
+        ] as const) {
+          // Nearby metadata ends the first span. The second alias must restart
+          // chip evidence rather than being swallowed by that earlier boundary.
+          const text = `${paper}\n${first}: ${target.microchipId} Passport Number: 276098106123456${boundary}${second} No: ${last}`;
+          const review = inspectDocumentHorseIdentity(document({ extractedTextPreview: text }), target);
+          assert.equal(Boolean(review.conflictReason), !expected, text);
+        }
+      }
+    }
+    for (const separator of [', ', '/', '; ', ' and ', ' or ', ' & ', ' | ', '\n']) {
+      const field = `${first}: UNKNOWN${separator}${target.microchipId}${separator}900123456789099`;
+      const review = inspectDocumentHorseIdentity(document({ extractedTextPreview: `${paper}\n${field}` }), target);
+      assert.ok(review.conflictReason, field);
+      assert.ok(review.sourceChips.includes('900123456789099'), field);
+    }
+  }
+});
+
+test('chip aliases retain metadata boundaries without turning unrelated prose or longer words into fields', () => {
+  const target = { ...horse, microchipId: '900123456789012' };
+  for (const alias of chipFieldAliases) {
+    for (const boundary of [' ', '\n', '\r\n']) {
+      for (const label of ['Phone', 'Registration Number', 'UELN', 'Universal Equine Life Number', 'Passport Number']) {
+        for (const delimiter of [':', '#', '=', '']) {
+          const text = `${paper}\n${alias}: UNKNOWN${boundary}${label}${delimiter} 276098106123456`;
+          const review = inspectDocumentHorseIdentity(document({ extractedTextPreview: text }), target);
+          assert.deepEqual(review.sourceChips, [], text);
+          // Registration metadata deliberately differs here; only the chip screen is under test.
+          if (label !== 'Registration Number') assert.equal(review.conflictReason, undefined, text);
+        }
+      }
+    }
+    for (const text of [
+      `Instructions discuss ${alias.toLowerCase()} readers under reference 900123456789099`,
+      `A replacement ${alias.toLowerCase()} may be ordered using item 900123456789099`,
+      `${alias}set: 900123456789099`,
+      `Super${alias.replace(/[ -]/g, '')}: 900123456789099`,
+    ]) {
+      const review = inspectDocumentHorseIdentity(document({ extractedTextPreview: `${paper}\n${text}` }), target);
+      assert.deepEqual(review.sourceChips, [], text);
+      assert.equal(review.conflictReason, undefined, text);
+    }
+  }
+});
+
+test('flattened chip aliases stay separate from fresh subject names and reopen delimiterless fields after metadata', () => {
+  const target = { ...horse, microchipId: '900123456789012' };
+  for (const alias of chipFieldAliases) {
+    for (const suffix of ['', ' ID', ' No.', ' Number']) {
+      for (const delimiter of [':', '#', '=', ' ']) {
+        for (const [value, expected] of [
+          ['900123456789012', true],
+          ['900123456789099', false],
+          ['900123456789012X', false],
+          ['UNKNOWN', true],
+        ] as const) {
+          const text = `CERTIFICATE OF REGISTRATION Registered Name: DESERT DAISY ${alias}${suffix}${delimiter}${value}`;
+          const source = document({ extractedTextPreview: text });
+          const review = inspectDocumentHorseIdentity(source, target);
+          assert.equal(review.sourceIdentity.horseName, horse.name, text);
+          assert.equal(review.sourceEntities.horseName, horse.name, text);
+          assert.equal(Boolean(review.conflictReason), !expected, text);
+          assert.equal(assessOwnershipDocument(source, target, 'registration_certificate').ok, expected, text);
+          const restarted = `${paper}\nMicrochip: ${target.microchipId} Passport Number: 276098106123456 ${alias}${suffix}${delimiter}${value}`;
+          assert.equal(
+            Boolean(inspectDocumentHorseIdentity(document({ extractedTextPreview: restarted }), target).conflictReason),
+            !expected,
+            restarted,
+          );
+        }
+      }
+    }
+  }
+});
+
+test('chip aliases preserve the canonical ISO and legacy scanner formats rather than introducing a second parser', () => {
+  for (const alias of chipFieldAliases) {
+    for (const [stored, matching, different] of [
+      ['900123456789012', '0900123456789012', '0900123456789099'],
+      ['900123456789012', '900 123 456 789 012', '900 123 456 789 099'],
+      ['900123456789012', '900.123456789012', '900.123456789099'],
+      ['123456789', 'AVID*123*456*789', 'AVID*987*654*321'],
+      ['123456789', '123 456 789', '987 654 321'],
+      ['0A01183726', '0A 0118 3726', '0A 0118 3727'],
+      ['ABCDEFABCD', 'ABCDEFABCD', 'ABCDEFABCE'],
+    ]) {
+      const target = { ...horse, microchipId: stored };
+      for (const delimiter of [':', '#', '=']) {
+        for (const [value, expected] of [
+          [matching, true],
+          [different, false],
+        ] as const) {
+          const field = `${alias} ID scanned${delimiter}${value}`;
+          const review = inspectDocumentHorseIdentity(document({ extractedTextPreview: `${paper}\n${field}` }), target);
+          assert.equal(Boolean(review.conflictReason), !expected, field);
+          assert.ok(review.sourceChips.length > 0, field);
+        }
+      }
+    }
+  }
+});
+
+test('chip alias words inside inline or wrapped registered names remain literal subject identity', () => {
+  for (const name of ['CHIP SHOT', 'CHIP 42', 'BLUE CHIP 123', 'TRANSPONDER 23', 'MICRO CHIP 55', 'MICRO-CHIP 55']) {
+    const target = { ...horse, name, registrationNumber: '1234567', microchipId: '900123456789012' };
+    for (const wrapping of [' ', '\n', '\r\n']) {
+      for (const fieldBoundary of [' ', '\n']) {
+        const text = `CERTIFICATE OF REGISTRATION\nRegistered Name:${wrapping}${name}${fieldBoundary}Registration Number: 1234567`;
+        const source = document({ extractedTextPreview: text });
+        const review = inspectDocumentHorseIdentity(source, target);
+        assert.equal(review.sourceIdentity.horseName, name, text);
+        assert.equal(review.sourceEntities.horseName, name, text);
+        assert.deepEqual(review.sourceChips, [], text);
+        assert.equal(review.conflictReason, undefined, text);
+        assert.equal(assessOwnershipDocument(source, target, 'registration_certificate').ok, true, text);
+      }
+    }
+  }
+});
+
+test('wrapped chip-named horses keep sale-party fields out of alias normalization', () => {
+  for (const name of ['CHIP SHOT', 'CHIP 42', 'BLUE CHIP 123', 'TRANSPONDER 23', 'MICRO CHIP 55', 'MICRO-CHIP 55']) {
+    const target = { ...horse, name, registrationNumber: '', microchipId: '900123456789012' };
+    for (const label of ['Horse', 'Registered Name']) {
+      for (const wrapping of label === 'Horse' ? [' ', '\n', '\r\n'] : [' ']) {
+        for (const party of ['Buyer', 'Seller', 'Buyer’s Name', "Seller's Name"]) {
+          const text = `BILL OF SALE\n${label}:${wrapping}${name} ${party}: Ranch\nSignature: Signed`;
+          const source = document({ type: 'Bill of Sale', extractedTextPreview: text });
+          const review = inspectDocumentHorseIdentity(source, target);
+          assert.equal(review.sourceIdentity.horseName, name, text);
+          assert.equal(review.sourceEntities.horseName, name, text);
+          assert.deepEqual(review.sourceChips, [], text);
+          assert.equal(review.conflictReason, undefined, text);
+          assert.equal(assessOwnershipDocument(source, target, 'bill_of_sale').ok, true, text);
+        }
+      }
+    }
+  }
+});
+
+test('unfamiliar scanner wording still holds conflicting alias evidence before party or metadata boundaries', () => {
+  const target = { ...horse, microchipId: '900123456789012' };
+  for (const alias of chipFieldAliases) {
+    for (const wording of ['arbitrary scanner output', 'result returned by reader', 'unfamiliar device output']) {
+      for (const delimiter of ['', ':', '#', '=']) {
+        for (const wrapping of [' ', '\n', '\r\n']) {
+          for (const [value, expected] of [
+            ['900123456789012', true],
+            ['900123456789099', false],
+            ['900123456789012_EXTRA', false],
+            ['UNKNOWN', true],
+          ] as const) {
+            const text = `${paper}\n${alias} ${wording}${delimiter}${wrapping}${value}\nBuyer: Synthetic`;
+            const review = inspectDocumentHorseIdentity(document({ extractedTextPreview: text }), target);
+            assert.equal(Boolean(review.conflictReason), !expected, text);
+            if (value === target.microchipId) assert.deepEqual(review.sourceChips, [target.microchipId], text);
+          }
+        }
+      }
+    }
+  }
+});
