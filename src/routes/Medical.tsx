@@ -67,7 +67,9 @@ export default function Medical() {
   const [eventTitle, setEventTitle] = useState('Vet follow-up');
   const [eventBody, setEventBody] = useState('');
   const [eventDate, setEventDate] = useState(new Date().toISOString().slice(0, 10));
-  const [eventType, setEventType] = useState<MedicalEventType>('Vet visit');
+  const [eventType, setEventType] = useState<MedicalEventType>(
+    () => medicalEventTypes.find((type) => type === searchParams.get('type')) ?? 'Vet visit',
+  );
   const [eventError, setEventError] = useState('');
   const [timelineQuery, setTimelineQuery] = useState('');
   const [editingEventId, setEditingEventId] = useState<string | null>(null);

@@ -615,6 +615,25 @@ test('packet care repair opens horse health records rather than a purchase form'
   const due = complete({ horse: cared([]) }).actions.find((action) => action.target === 'care')!;
   assert.deepEqual(packetReadinessAction(due, 'horse/with space'), {
     label: 'Log health record',
-    to: '/medical?horse=horse%2Fwith%20space',
+    to: '/medical?horse=horse%2Fwith%20space&type=Deworming',
   });
+});
+
+test('each packet care repair preserves its record type through the medical form', async () => {
+  const { packetReadinessAction } = await import('../src/lib/salePacketGuidance.js');
+  for (const [timeline, expected] of [
+    [[], 'Deworming'],
+    [[careEvent('Deworming', '2026-06-01')], 'Dental'],
+  ] as const) {
+    const due = complete({ horse: cared([...timeline]) }).actions.find((action) => action.target === 'care')!;
+    const route = new URL(packetReadinessAction(due, 'horse/with space').to, 'https://xbar.test');
+    assert.equal(route.searchParams.get('horse'), 'horse/with space');
+    assert.equal(route.searchParams.get('type'), expected);
+  }
+  const medical = await readFile('src/routes/Medical.tsx', 'utf8');
+  assert.match(
+    medical,
+    /useState<MedicalEventType>\(\s*\(\) =>[\s\S]*?medicalEventTypes\.find\(\(type\) => type === searchParams\.get\('type'\)\) \?\? 'Vet visit'/,
+  );
+  assert.match(medical, /type: eventType/);
 });

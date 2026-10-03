@@ -168,7 +168,7 @@ export function packetReadinessAction(action: ReadinessAction, horseId: string):
     case 'care':
       return {
         label: 'Log health record',
-        to: `/medical?horse=${id}`,
+        to: `/medical?horse=${id}&type=${encodeURIComponent(action.careType ?? 'Deworming')}`,
       };
     case 'add-photo':
       return { label: 'Add horse photos', to: `/horses/${id}` };
