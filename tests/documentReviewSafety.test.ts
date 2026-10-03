@@ -427,3 +427,20 @@ test('recognized chip formats keep matching and conflicts before unrelated prose
     }
   }
 });
+
+test('combined microchip label delimiters preserve identity comparisons', () => {
+  const target = { ...horse, microchipId: '900123456789012' };
+  for (const label of ['Microchip #:', 'Microchip ID #:', 'Microchip No. #:', 'Microchip Number # :', 'Microchip: #']) {
+    for (const [chip, expected] of [
+      ['900123456789012', true],
+      ['900123456789099', false],
+    ] as const) {
+      const source = document({ extractedTextPreview: `${paper}\n${label} ${chip}` });
+      assert.equal(
+        assessOwnershipDocument(source, target, 'registration_certificate').ok,
+        expected,
+        `${label} ${chip}`,
+      );
+    }
+  }
+});

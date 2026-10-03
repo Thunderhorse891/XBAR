@@ -103,7 +103,7 @@ export function inspectDocumentHorseIdentity(document: DocumentRecord, horse: Ho
   );
   const sourceChips = [
     ...document.extractedTextPreview.matchAll(
-      /\bmicrochip\b(?:\s+(?:number|no\.?|id))?\s*[:#-]?\s*([^\s,;:()]+(?:\s+(?:(?=[A-Z0-9.*_-]*\d)[A-Z0-9.*_-]+|[A-F.*-]+)(?=[\s,;:()]|$))*)/gi,
+      /\bmicrochip\b(?:\s+(?:number|no\.?|id))?(?:\s*[:#-])*\s*([^\s,;:()]+(?:\s+(?:(?=[A-Z0-9.*_-]*\d)[A-Z0-9.*_-]+|[A-F.*-]+)(?=[\s,;:()]|$))*)/gi,
     ),
   ]
     .map((match) => sourceMicrochipKey(match[1]))
