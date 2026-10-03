@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { Plus, ShieldCheck, Upload } from 'lucide-react';
 import { ActionButton, Card, PageHead, StatusChip } from '@/components/saas';
 import { useXbarStore } from '@/store/useXbarStore';
+import { normalizeOwnershipRecord } from '@/store/xbarStoreLogic';
 import type { TransferStatus } from '@/types/xbar';
 
 type Tone = 'success' | 'warning' | 'danger' | 'info' | 'neutral';
@@ -17,22 +18,39 @@ export default function OwnershipChain() {
   const navigate = useNavigate();
   const ownershipRecords = useXbarStore((s) => s.ownershipRecords);
   const horses = useXbarStore((s) => s.horses);
+  const documents = useXbarStore((s) => s.documents);
+  const records = useMemo(
+    () =>
+      ownershipRecords.map((record) =>
+        normalizeOwnershipRecord(
+          record,
+          documents,
+          horses.find((horse) => horse.id === record.horseId),
+        ),
+      ),
+    [ownershipRecords, documents, horses],
+  );
+  const reviewed = (record: (typeof records)[number]) =>
+    (record.proofRequirements ?? []).filter((proof) => proof.status === 'verified').length;
+  const reviewComplete = (record: (typeof records)[number]) =>
+    Boolean(record.proofRequirements?.length && reviewed(record) === record.proofRequirements.length);
+  const reviewPath = (horseId: string) => `/ownership?horse=${encodeURIComponent(horseId)}`;
 
   const horseName = useMemo(() => {
     const map = new Map(horses.map((h) => [h.id, h.name]));
     return (id: string) => map.get(id) ?? 'Unlinked horse';
   }, [horses]);
 
-  const counts = useMemo(
-    () => ({
-      clear: ownershipRecords.filter((o) => o.transferStatus === 'Clear').length,
-      review: ownershipRecords.filter(
-        (o) => o.transferStatus === 'Pending Signatures' || o.transferStatus === 'AQHA Review',
-      ).length,
-      gaps: ownershipRecords.filter((o) => o.transferStatus === 'Attention Required').length,
-    }),
-    [ownershipRecords],
-  );
+  const counts = {
+    clear: records.filter((o) => o.transferStatus === 'Clear' && reviewComplete(o)).length,
+    review: records.filter(
+      (o) =>
+        o.transferStatus === 'Pending Signatures' ||
+        o.transferStatus === 'AQHA Review' ||
+        (o.transferStatus === 'Clear' && !reviewComplete(o)),
+    ).length,
+    gaps: records.filter((o) => o.transferStatus === 'Attention Required').length,
+  };
 
   if (ownershipRecords.length === 0) {
     return (
@@ -77,8 +95,8 @@ export default function OwnershipChain() {
             <ActionButton icon={<Upload size={15} />} onClick={() => navigate('/documents?upload=1')}>
               Upload Proof
             </ActionButton>
-            <ActionButton variant="primary" icon={<Plus size={15} />} onClick={() => navigate('/horses?new=1')}>
-              Add Transfer
+            <ActionButton variant="primary" icon={<Plus size={15} />} onClick={() => navigate('/ownership')}>
+              Review ownership
             </ActionButton>
           </>
         }
@@ -119,28 +137,26 @@ export default function OwnershipChain() {
             </tr>
           </thead>
           <tbody>
-            {ownershipRecords.map((o) => (
-              <tr key={o.id} onClick={() => navigate(`/horses/${o.horseId}`)}>
+            {records.map((o) => (
+              <tr key={o.id} onClick={() => navigate(reviewPath(o.horseId))}>
                 <td style={{ fontWeight: 600 }}>{horseName(o.horseId)}</td>
                 <td>{o.legalOwner}</td>
                 <td className="xs-muted">
-                  {o.pendingDocuments.length
-                    ? `${o.pendingDocuments.length} pending`
-                    : `${Math.round(o.confidence * 100)}% verified`}
+                  {reviewed(o)} / {o.proofRequirements?.length ?? 0} sources reviewed
                 </td>
                 <td>
-                  <StatusChip tone={STATUS_TONE[o.transferStatus]}>{o.transferStatus}</StatusChip>
+                  <StatusChip
+                    tone={
+                      o.transferStatus === 'Clear' && !reviewComplete(o) ? 'warning' : STATUS_TONE[o.transferStatus]
+                    }
+                  >
+                    {o.transferStatus === 'Clear' && !reviewComplete(o) ? 'Review needed' : o.transferStatus}
+                  </StatusChip>
                 </td>
                 <td onClick={(e) => e.stopPropagation()}>
-                  {o.transferStatus === 'Clear' ? (
-                    <span className="xs-chip xs-chip--success">
-                      <ShieldCheck size={12} /> Verified
-                    </span>
-                  ) : (
-                    <ActionButton size="sm" onClick={() => navigate(`/horses/${o.horseId}`)}>
-                      Resolve
-                    </ActionButton>
-                  )}
+                  <ActionButton size="sm" onClick={() => navigate(reviewPath(o.horseId))}>
+                    Review sources
+                  </ActionButton>
                 </td>
               </tr>
             ))}

@@ -59,8 +59,20 @@ for (const viewport of [
         await expect(content).toBeVisible();
         await expect(content.getByRole('heading').first()).toBeVisible();
         await expect(content).not.toContainText('Something went wrong');
-        if (['documents', 'expenses', 'sales', 'ownership', 'medical', 'breeding', 'assets'].includes(route)) {
+        if (
+          ['documents', 'expenses', 'sales', 'ownership', 'medical', 'breeding', 'assets', 'shared-access'].includes(
+            route,
+          )
+        ) {
           await expect(content.getByRole('heading', { level: 1 })).toHaveCount(1);
+        }
+        if (route === 'shared-access') {
+          await expect(content.getByRole('heading', { name: 'Sale listings', level: 1 })).toBeVisible();
+          await expect(content.getByText('Unlock sale listings', { exact: true })).toBeVisible();
+          await expect(content.getByRole('link', { name: 'Compare billing' })).toHaveAttribute(
+            'href',
+            '/app/billing?plan=Professional',
+          );
         }
         const headings = await content.locator('h1, h2, h3').evaluateAll((elements) =>
           elements

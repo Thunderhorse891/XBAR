@@ -96,7 +96,8 @@ test('creating and approving a profile never backfills source facts from workspa
   const { documents, horses } = useXbarStore.getState();
   const sourceFacts = { horseName: 'BLUE MOON', registrationNumber: '1234567' };
   assert.deepEqual(JSON.parse(JSON.stringify(documents[0].entities)), sourceFacts);
-  assert.equal(horses[0].owner, 'Synthetic Ranch');
+  assert.equal(horses[0].owner, '', 'Workspace default is not evidence of this horse owner');
+  assert.deepEqual(horses[0].ownership, [], 'OCR cannot invent ownership shares or legal authority');
   const result = useXbarStore.getState().reviewDocument(documents[0].id, horses[0].id);
   assert.equal(result.ok, true);
   assert.deepEqual(JSON.parse(JSON.stringify(useXbarStore.getState().documents[0].entities)), sourceFacts);
@@ -134,4 +135,45 @@ test('one paper with conflicting subject labels cannot auto-link, create or appr
   assert.equal(useXbarStore.getState().createHorseFromDocument(document.id).ok, false);
   assert.equal(useXbarStore.getState().reviewDocument(document.id, existing.id).ok, false);
   assert.equal(useXbarStore.getState().horses.length, 1);
+});
+
+test('identical renamed files in one batch remain visible and route to duplicate review without creating a horse', async () => {
+  const bytes = 'CERTIFICATE OF REGISTRATION\nRegistered Name: BLUE MOON\nRegistration Number: 7654321';
+  const result = await intake([
+    new File([bytes], 'first.txt', { type: 'text/plain' }),
+    new File([bytes], 'copy.txt', { type: 'text/plain' }),
+  ]);
+  assert.equal(result.ok, true);
+  assert.equal(result.duplicateCount, 1);
+  assert.equal(useXbarStore.getState().documents.length, 2);
+  assert.equal(useXbarStore.getState().documents[1].duplicateRisk, 'Possible Duplicate');
+  assert.equal(useXbarStore.getState().horses.length, 0);
+  assert.match(result.message, /No files were removed/);
+});
+
+test('a mixed batch preserves its duplicate warning even while creating two new horses', async () => {
+  const original = new File(
+    ['CERTIFICATE OF REGISTRATION\nRegistered Name: Existing Horse\nRegistration Number: 1234567'],
+    'original.txt',
+    { type: 'text/plain' },
+  );
+  await intake([original]);
+  const result = await intake([
+    new File([await original.text()], 'renamed.txt', { type: 'text/plain' }),
+    new File(['CERTIFICATE OF REGISTRATION\nRegistered Name: New Alpha\nRegistration Number: 7654321'], 'alpha.txt', {
+      type: 'text/plain',
+    }),
+    new File(['CERTIFICATE OF REGISTRATION\nRegistered Name: New Beta\nRegistration Number: 7654322'], 'beta.txt', {
+      type: 'text/plain',
+    }),
+  ]);
+  assert.equal(result.duplicateCount, 1);
+  assert.equal(result.createdHorseIds.length, 2);
+  const { readFile } = await import('node:fs/promises');
+  const route = await readFile('src/routes/Documents.tsx', 'utf8');
+  assert.match(
+    route,
+    /if \(result\.duplicateCount\) \{\s*goToStage\('Review'\);\s*\} else if \(createdHorseIds\.length === 1\)[\s\S]*?\} else if \(createdHorseIds\.length > 1\)/,
+    'New profiles must not override the duplicate review destination',
+  );
 });

@@ -1,5 +1,6 @@
 import type { ReactNode } from 'react';
 import { Link } from 'react-router-dom';
+import { PageHeader } from '@/components/app-ui';
 import { EmptyState } from '@/components/EmptyState';
 import { billingPathForTier } from '@/lib/billingRoutes';
 import { sharedListingGate } from '@/lib/subscriptionGates';
@@ -13,16 +14,19 @@ export function RequireSharedListings({ children }: { children: ReactNode }) {
   if (!blocked) return <>{children}</>;
 
   return (
-    <EmptyState
-      title="Unlock sale listings"
-      description={blocked}
-      action={
-        canPresentPurchaseFlow() ? (
-          <Link className="button button--primary" to={billingPathForTier('Professional')}>
-            Compare billing
-          </Link>
-        ) : null
-      }
-    />
+    <>
+      <PageHeader eyebrow="Sale Packets" title="Sale listings" />
+      <EmptyState
+        title="Unlock sale listings"
+        description={blocked}
+        action={
+          canPresentPurchaseFlow() ? (
+            <Link className="button button--primary" to={billingPathForTier('Professional')}>
+              Compare billing
+            </Link>
+          ) : null
+        }
+      />
+    </>
   );
 }

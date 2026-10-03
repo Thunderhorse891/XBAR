@@ -8,6 +8,7 @@ import {
   readinessHeadline,
   readinessNextStep,
 } from '../src/lib/saleReadinessScore.js';
+import { ownershipDocumentReviewKey } from '../src/lib/ownershipDocumentReview.js';
 import { hasRoleCapability } from '../src/lib/permissions.js';
 import { hasActiveListing } from '../src/lib/xbarPhaseTwo.js';
 import {
@@ -72,12 +73,33 @@ function doc(type: DocumentRecord['type'], fields: Partial<DocumentRecord> = {})
 const receipt = (category: ExpenseReceipt['category'], receiptDate: string, horseId = 'h1') =>
   ({ id: `r-${category}-${receiptDate}`, horseId, category, receiptDate, amount: 50 }) as ExpenseReceipt;
 
+// Score arithmetic uses four reviewed supporting memos, so the transfer-file
+// component can be exercised independently without inventing unattached proofs.
+const ownershipSources = () =>
+  [0, 1, 2, 3].map((index) =>
+    doc('Ownership Memo', {
+      id: `own-source-${index}`,
+      localFileKey: `own-file-${index}`,
+      duplicateRisk: 'Low',
+      extractedTextPreview: 'OWNERSHIP MEMO\nRegistered Name: Copper Canyon\nRegistration Number: 5876123',
+    }),
+  );
+
 const proofs = (verified: number): OwnershipProofRequirement[] =>
   ['bill_of_sale', 'registration_certificate', 'transfer_form', 'signature_page'].map((kind, index) => ({
     id: `proof-${kind}`,
-    kind: kind as OwnershipProofRequirement['kind'],
+    kind: 'supporting',
     label: kind,
     status: index < verified ? 'verified' : 'missing',
+    ...(index < verified
+      ? {
+          verifiedBy: 'Tester',
+          verifiedAt: '2026-06-30',
+          reviewAttestedAt: '2026-06-30',
+          documentId: `own-source-${index}`,
+          reviewedSourceKey: ownershipDocumentReviewKey(ownershipSources()[index]),
+        }
+      : {}),
   }));
 
 const ownership = (verified: number, transferStatus: OwnershipRecord['transferStatus']): OwnershipRecord => ({
@@ -101,12 +123,12 @@ const gateClear = { allowed: true, nextAction: 'Release buyer packet.' };
 function complete(overrides: Partial<Parameters<typeof buildSaleReadinessScore>[0]> = {}) {
   return buildSaleReadinessScore({
     horse: makeHorse(),
-    documents: [currentCoggins(), transferFile()],
     receipts: careReceipts(),
     ownershipRecord: ownership(4, 'Clear'),
     releaseGate: gateClear,
     now: NOW,
     ...overrides,
+    documents: [...(overrides.documents ?? [currentCoggins(), transferFile()]), ...ownershipSources()],
   });
 }
 
@@ -199,12 +221,12 @@ test('the ownership chain earns full credit only when every proof is verified an
   assert.equal(earned(undefined), 0);
   assert.equal(
     complete({ ownershipRecord: undefined }).actions[0]?.label,
-    'Record ownership, verify its proofs and clear the transfer',
+    'Record ownership, review its sources and clear the transfer',
   );
   assert.equal(earned(ownership(2, 'Pending Signatures')), 7.5);
   assert.equal(
     complete({ ownershipRecord: ownership(2, 'Pending Signatures') }).actions[0]?.label,
-    'Verify 2 ownership proofs',
+    'Review 2 ownership proofs',
   );
   assert.equal(earned(ownership(4, 'AQHA Review')), 12);
   assert.equal(complete({ ownershipRecord: ownership(4, 'AQHA Review') }).actions[0]?.label, 'Mark the transfer Clear');
@@ -306,7 +328,7 @@ test('each ownership action claims only what its own step earns', () => {
 
   // Verifying proofs on a transfer that is not Clear stops at the uncleared cap.
   const pending = ownershipAction(ownership(2, 'Pending Signatures'));
-  assert.equal(pending.action?.label, 'Verify 2 ownership proofs');
+  assert.equal(pending.action?.label, 'Review 2 ownership proofs');
   assert.equal(pending.action?.gain, 4.5, '7.5 → the 12 cap, not → 15');
   assert.equal(
     ownershipAction(ownership(4, 'Pending Signatures')).earned,
@@ -321,7 +343,7 @@ test('each ownership action claims only what its own step earns', () => {
   // With no record, the action names the whole path to the full 15.
   const missing = ownershipAction(undefined).action;
   assert.equal(missing?.gain, 15);
-  assert.match(missing?.label ?? '', /verify its proofs and clear the transfer/);
+  assert.match(missing?.label ?? '', /review its sources and clear the transfer/);
 
   // When verifying alone would earn nothing more, the action includes clearing.
   const five = ownership(4, 'Pending Signatures');
@@ -331,7 +353,7 @@ test('each ownership action claims only what its own step earns', () => {
   ] as OwnershipProofRequirement[];
   const capped = ownershipAction(five);
   assert.equal(capped.earned, 12);
-  assert.equal(capped.action?.label, 'Verify 1 ownership proof and mark the transfer Clear');
+  assert.equal(capped.action?.label, 'Review 1 ownership proof and mark the transfer Clear');
   assert.equal(capped.action?.gain, 3);
 });
 
@@ -531,4 +553,23 @@ test('a step waiting on a file still being read opens Documents where that file 
   assert.match(card, /case 'processing-documents':\s*navigate\(documentsStageUrl\('Processing'\)\);/);
   const documents = await readFile('src/routes/Documents.tsx', 'utf8');
   assert.match(documents, /stageFromParam\(searchParams\.get\('stage'\)\)/);
+});
+
+test('archiving a reviewed source removes ownership credit and restores the repair action', () => {
+  const sources = ownershipSources();
+  const params = {
+    horse: makeHorse(),
+    documents: sources,
+    receipts: careReceipts(),
+    ownershipRecord: ownership(4, 'Clear'),
+    releaseGate: gateClear,
+    now: NOW,
+  };
+  assert.equal(buildSaleReadinessScore(params).components.find((item) => item.key === 'ownership')?.earned, 15);
+  const result = buildSaleReadinessScore({
+    ...params,
+    documents: sources.map((source) => ({ ...source, state: 'Archived' as const })),
+  });
+  assert.equal(result.components.find((item) => item.key === 'ownership')?.earned, 0);
+  assert.ok(result.actions.some((action) => action.key === 'ownership'));
 });
