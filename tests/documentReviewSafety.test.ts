@@ -321,12 +321,6 @@ test('microchip prose and empty-value placeholders are not conflicting identifie
     'Microchip ID: N/A',
     'Microchip: none',
     'Microchip scan completed',
-    'Microchip: 900123456789012_EXTRA',
-    'Microchip: 9001234567890123',
-    'Microchip: 900123456789012X',
-    'Microchip: 900123456 789012X',
-    'Microchip: 900123456 789012_EXTRA',
-    'Microchip: 9001234567890123456789012345678901',
   ]) {
     const source = document({ extractedTextPreview: `${paper}\n${note}` });
     assert.equal(inspectDocumentHorseIdentity(source, target).conflictReason, undefined, note);
@@ -523,5 +517,152 @@ test('chip lists retain every complete identity across formats and missing or ma
       const source = document({ extractedTextPreview: `${paper}\nMicrochip: ${matching}, ${middle}, ${conflicting}` });
       assert.equal(assessOwnershipDocument(source, target, 'registration_certificate').ok, false, middle);
     }
+  }
+});
+
+test('scan-status microchip labels retain identifiers without treating status-only prose as identity', () => {
+  const target = { ...horse, microchipId: '900123456789012' };
+  for (const label of [
+    'Microchip scanned',
+    'Microchip read as',
+    'Microchip was scanned as',
+    'Microchip was read as',
+    'Microchip detected',
+    'Microchip verified',
+    'Microchip ID scanned',
+    'Microchip number read as',
+    'Microchip arbitrary scanner wording',
+    'Microchip result returned by reader',
+  ]) {
+    for (const [suffix, ok] of [
+      ['', true],
+      [': UNKNOWN', true],
+      [': 900123456789012', true],
+      [': 900123456789099', false],
+    ] as const) {
+      const source = document({ extractedTextPreview: `${paper}\n${label}${suffix}` });
+      assert.equal(assessOwnershipDocument(source, target, 'registration_certificate').ok, ok, `${label}${suffix}`);
+    }
+  }
+});
+
+test('plausible malformed chip evidence requires review rather than becoming absent', () => {
+  const target = { ...horse, microchipId: '900123456789012' };
+  for (const note of [
+    'Microchip: 900123456789012_EXTRA',
+    'Microchip: 9001234567890123',
+    'Microchip: 900123456789012X',
+    'Microchip: 900123456 789012X',
+    'Microchip: 900123456 789012_EXTRA',
+    'Microchip: 9001234567890123456789012345678901',
+  ]) {
+    const source = document({ extractedTextPreview: `${paper}\n${note}` });
+    assert.equal(assessOwnershipDocument(source, target, 'registration_certificate').ok, false, note);
+  }
+});
+
+test('chip field boundaries exclude separately labelled dates and other identifiers', () => {
+  const target = { ...horse, microchipId: '900123456789012' };
+  for (const text of [
+    'Microchip scanned\nPhone: 1234567890',
+    'Microchip: UNKNOWN Phone: 1234567890',
+    'Microchip read as: 900123456789012 Date: 2026-10-03',
+    'Microchip: 900123456789012\nBatch: 1234567890',
+  ]) {
+    assert.equal(
+      assessOwnershipDocument(
+        document({ extractedTextPreview: `${paper}\n${text}` }),
+        target,
+        'registration_certificate',
+      ).ok,
+      true,
+      text,
+    );
+  }
+  assert.equal(
+    assessOwnershipDocument(
+      document({ extractedTextPreview: `${paper}\nMicrochip strange=>900123456789099` }),
+      target,
+      'registration_certificate',
+    ).ok,
+    false,
+  );
+});
+
+test('wrapped chip fields retain missing and malformed values for review', () => {
+  const target = { ...horse, microchipId: '900123456789012' };
+  for (const value of [
+    '900123456789012X',
+    '900123456789012_EXTRA',
+    '900123456 789012X',
+    'UNKNOWN, 900123456789099',
+    'N/A, 900123456789099',
+    'Pending, 900123456789099',
+  ]) {
+    for (const label of ['Microchip:', 'Microchip scanned']) {
+      const source = document({ extractedTextPreview: `${paper}\n${label}\n${value}` });
+      assert.equal(assessOwnershipDocument(source, target, 'registration_certificate').ok, false, `${label}\n${value}`);
+    }
+  }
+});
+
+test('microchip identity survives status wording, wrapping and list separator changes', () => {
+  const target = { ...horse, microchipId: '900123456789012' };
+  for (const label of [
+    'Microchip:',
+    'Microchip ID #:',
+    'Microchip scanned:',
+    'Microchip read as:',
+    'Microchip arbitrary scanner output:',
+  ]) {
+    for (const wrapping of [' ', '\n', '\r\n']) {
+      for (const separator of [', ', '/', '; ', ' and ', ' or ', ' | ', '\n']) {
+        for (const [last, expected] of [
+          ['900123456789012', true],
+          ['900123456789099', false],
+          ['900123456789012X', false],
+          ['UNKNOWN', true],
+        ] as const) {
+          const field = `${label}${wrapping}900123456789012${separator}${last}`;
+          assert.equal(
+            assessOwnershipDocument(
+              document({ extractedTextPreview: `${paper}\n${field}` }),
+              target,
+              'registration_certificate',
+            ).ok,
+            expected,
+            field,
+          );
+        }
+      }
+    }
+  }
+});
+
+test('explicit adjacent fields end chip evidence for colon, hash and equals labels', () => {
+  const target = { ...horse, microchipId: '900123456789012' };
+  for (const nextField of ['Phone', 'Batch', 'Invoice']) {
+    for (const delimiter of [':', '#', '=']) {
+      for (const wrapping of [' ', '\n']) {
+        const text = `Microchip: UNKNOWN${wrapping}${nextField} ${delimiter} 1234567890`;
+        assert.equal(
+          assessOwnershipDocument(
+            document({ extractedTextPreview: `${paper}\n${text}` }),
+            target,
+            'registration_certificate',
+          ).ok,
+          true,
+          text,
+        );
+      }
+    }
+  }
+  const registrationTarget = { ...target, registrationNumber: '1234567890' };
+  for (const delimiter of [':', '#', '=']) {
+    const source = document({
+      extractedTextPreview: `${paper.replace('7001111', '1234567890')}\nMicrochip: 900123456789012\nRegistration ${delimiter} 1234567890`,
+      entities: { ...document().entities, registrationNumber: '1234567890' },
+    });
+    assert.equal(assessOwnershipDocument(source, registrationTarget, 'registration_certificate').ok, true, delimiter);
   }
 });

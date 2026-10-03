@@ -1243,22 +1243,31 @@ test('a second chip in a source list blocks facts and approval without altering 
     name: 'chip-list-source.txt',
     mimeType: 'text/plain',
     buffer: Buffer.from(
-      'CERTIFICATE OF REGISTRATION\nRegistered Name: CHIP LIST HORSE\nColor: Bay\nMicrochip: 900123456789012, 900123456789099',
+      'CERTIFICATE OF REGISTRATION\nRegistered Name: CHIP LIST HORSE\nColor: Bay\nMicrochip scanned: 900123456789012, 900123456789099',
     ),
   });
   await drawer.locator('select').first().selectOption(horseId);
   await drawer.getByRole('button', { name: 'Upload for review' }).click();
   const actions = page.getByRole('group', { name: 'chip-list-source review actions' });
+  const initialState = await page.evaluate(async () => {
+    const modulePath = '/src/store/useXbarStore.ts';
+    const { useXbarStore } = await import(/* @vite-ignore */ modulePath);
+    return useXbarStore.getState().documents[0].state;
+  });
+  // Matched is a tentative horse assignment in the Review queue, not approval.
+  expect(initialState).toBe('Matched');
   await actions.getByRole('button', { name: 'Apply facts', exact: true }).click();
   await expect(
     page.getByText('Choose a horse that matches the original document before applying its facts.', { exact: true }),
   ).toBeVisible();
   await actions.getByRole('button', { name: 'Approve', exact: true }).click();
+  await expect(page.getByText('Approval blocked', { exact: true })).toBeVisible();
+  await expect(actions).toBeVisible();
   const saved = await page.evaluate(async () => {
     const modulePath = '/src/store/useXbarStore.ts';
     const { useXbarStore } = await import(/* @vite-ignore */ modulePath);
     const state = useXbarStore.getState();
     return { color: state.horses[0].color, chip: state.horses[0].microchipId, documentState: state.documents[0].state };
   });
-  expect(saved).toEqual({ color: '', chip: '900123456789012', documentState: 'Needs Review' });
+  expect(saved).toEqual({ color: '', chip: '900123456789012', documentState: initialState });
 });

@@ -66,6 +66,7 @@ function microchipKey(value: string): string | undefined {
 
 function sourceMicrochipKeys(value: string): string[] {
   const tokens = value.trim().split(/\s+/);
+  while (tokens.length && !/^(?:AVID\*)?[a-f0-9.*-]+$/i.test(tokens[tokens.length - 1])) tokens.pop();
   // A bare year after a complete ISO identifier is metadata, not an extra
   // scanner group that can repartition that identifier into shorter chips.
   if (
@@ -129,22 +130,45 @@ export function inspectDocumentHorseIdentity(document: DocumentRecord, horse: Ho
   const sourceIdentity = extractRegistrationFields(
     document.extractedTextPreview.replace(/(^|\n)\s*horse\s*[:#]\s*/gi, '$1Horse Name: '),
   );
-  // One labeled field may contain a list, not just one scalar identifier.
-  // Keep repeated labels available to the outer scan rather than consuming the
-  // next "Microchip" token as a list item.
-  const chipValue = String.raw`(?!microchip\b)[^\s,;:()/&|]+(?:\s+(?:(?=[A-Z0-9.*_-]*\d)[A-Z0-9.*_-]+|[A-F.*-]+)(?=[\s,;:()/&|]|$))*`;
-  const chipSeparator = String.raw`(?:\s*(?:[,;/&|]|\band\b|\bor\b)\s*)+`;
-  const chipField = new RegExp(
-    String.raw`\bmicrochip\b(?:\s+(?:number|no\.?|id))?(?:\s*[:#-])*\s*(${chipValue}(?:${chipSeparator}${chipValue})*)`,
-    'gi',
-  );
-  const sourceChips = [...document.extractedTextPreview.matchAll(chipField)]
-    .flatMap((match) => match[1].split(new RegExp(chipSeparator, 'i')))
-    .flatMap(sourceMicrochipKeys)
-    .filter((chip): chip is string => Boolean(chip));
+  // Read the whole labeled field independent of status wording or wrapping.
+  // Only a paragraph break, another chip label, or an explicit neighboring
+  // field ends it; unfamiliar/malformed continuation is evidence, not absence.
+  const chipSpans: string[] = [];
+  const text = document.extractedTextPreview;
+  const labels = [...text.matchAll(/\bmicrochip\b/gi)];
+  for (const [index, label] of labels.entries()) {
+    const start = label.index + label[0].length;
+    const limit = labels[index + 1]?.index ?? text.length;
+    let span = text.slice(start, limit).split(/\r?\n[ \t]*\r?\n/)[0];
+    // Flattened OCR can place another explicitly labeled field on this line.
+    span = span.split(
+      /\b(?:date|dob|born|foaled|owner|sire|dam|registration|reg|colou?r|breed|sex|height|weight|batch|lot|invoice|phone)\b[^:#=\r\n]{0,30}[:#=]/i,
+    )[0];
+    chipSpans.push(span);
+  }
+  const sourceChips = chipSpans
+    .flatMap((span) => span.split(/\s*(?:[,;:/|&()]|\band\b|\bor\b)\s*/i))
+    .flatMap(sourceMicrochipKeys);
+  // Unusual punctuation can prevent token attribution. Never turn a complete
+  // identifier-shaped value in the chip field into silent absence.
+  const unparsedChipEvidence = chipSpans.some((span) => {
+    if (/\b\d{9}\s+\d+[a-z_][a-z0-9_]*/i.test(span)) return true;
+    if (
+      [...span.matchAll(/[a-z0-9_*.-]+/gi)].some(
+        ([token]) => (token.match(/\d/g)?.length ?? 0) >= 9 && !microchipKey(token),
+      )
+    )
+      return true;
+    return [...span.matchAll(/\b(?:\d{15,16}|\d{9}|[a-f0-9]{10})\b/gi)].some((match) => {
+      const key = microchipKey(match[0]);
+      const continuation = span.slice(match.index + match[0].length).match(/^\s+(\d{6})\b/)?.[1];
+      const grouped = key?.length === 9 && continuation ? microchipKey(`${key}${continuation}`) : undefined;
+      return key && !sourceChips.includes(key) && !(grouped && sourceChips.includes(grouped));
+    });
+  });
   const storedChip = horse.microchipId && (microchipKey(horse.microchipId.trim()) ?? normalize(horse.microchipId));
   const conflictReason =
-    document.identityReviewRequired || sourceIdentity.identityReviewRequired
+    document.identityReviewRequired || sourceIdentity.identityReviewRequired || unparsedChipEvidence
       ? 'The source contains ambiguous horse identities. Upload separate or corrected papers.'
       : ownershipIdentityConflicts(horse, document.entities) || ownershipIdentityConflicts(horse, sourceIdentity)
         ? 'The readable source or extracted identity conflicts with the selected horse. Choose the correct horse or upload corrected papers.'
