@@ -304,6 +304,21 @@ export function buildMareBreedingState(horse: HorseRecord, now: Date = new Date(
   }
 
   if (!breeding || !bredOn) {
+    // A mare can arrive already in foal: a positive check with no cover on file
+    // is in foal, not open. Her due date is unknown and is never invented from
+    // the check, so she has no foaling window until the cover is logged. Checks
+    // from before her latest foaling belong to an earlier pregnancy.
+    const lastFoaling = latestByRecordType(events, 'foaling');
+    if (currentPregnancyOutcome(events, lastFoaling?.date ?? '') === 'positive') {
+      return {
+        ...base,
+        status: 'in-foal',
+        statusLabel: STATUS_LABELS['in-foal'],
+        guarantee: 'none',
+        actionLabel: `Log the cover date for ${horse.name} to track her foaling window`,
+        actionRoute: '/breeding',
+      };
+    }
     return {
       ...base,
       status: 'open',

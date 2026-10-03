@@ -172,6 +172,47 @@ test('time since a cover is not a pregnancy: near term needs a confirmed check',
   assert.equal(program.projectedProgramValue, 18000);
 });
 
+test('a mare confirmed in foal with no cover on file is in foal, with no invented due date', () => {
+  const now = new Date('2026-06-01T12:00:00Z');
+  const economics = { studFee: 0, bookedMares: 1, breedingCosts: 0, mareProductionValue: 0, foalProjectedValue: 9000 };
+  const mare = (timeline: TimelineEvent[]) =>
+    ({
+      id: 'm2',
+      name: 'Bought Bred',
+      sex: 'Mare',
+      breedingTimeline: timeline,
+      breedingEconomics: economics,
+    }) as unknown as HorseRecord;
+
+  const confirmed = buildMareBreedingState(mare([check('Ultrasound', '', 'in-foal', '2026-05-20')]), now);
+  assert.equal(confirmed.status, 'in-foal');
+  assert.equal(confirmed.expectedFoalingDate, undefined, 'no due date without a cover');
+  assert.equal(confirmed.foalingWindowStart, undefined);
+  assert.match(confirmed.actionLabel, /Log the cover date for Bought Bred/);
+  const program = buildBreedingProgram([mare([check('Ultrasound', '', 'in-foal', '2026-05-20')])], now);
+  assert.equal(program.inFoal, 1);
+  assert.equal(program.projectedProgramValue, 9000);
+
+  // Open, pending or unreadable stays open -- nothing is inferred.
+  for (const result of ['open', 'pending']) {
+    assert.equal(buildMareBreedingState(mare([check('Ultrasound', '', result, '2026-05-20')]), now).status, 'open');
+  }
+  // A positive check from before her last foaling was an earlier pregnancy.
+  const foaled = {
+    id: 'foal',
+    date: '2026-04-01',
+    title: 'Foaled',
+    summary: 'Live colt',
+    owner: 'Vet',
+    category: 'Breeding',
+    details: { recordType: 'foaling' },
+  } as TimelineEvent;
+  assert.equal(
+    buildMareBreedingState(mare([foaled, check('Ultrasound', '', 'in-foal', '2025-06-01')]), now).status,
+    'open',
+  );
+});
+
 test('an entry says what it is, and a check says its result, or it is refused', () => {
   assert.deepEqual(breedingEntryDetails({ kind: 'pregnancy-check', result: 'in-foal' }), {
     ok: true,
