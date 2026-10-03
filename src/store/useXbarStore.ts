@@ -2483,6 +2483,76 @@ export const useXbarStore = create<XbarStore>()(
               : `Renamed ${repairs.length} horses from their documents.`,
         };
       },
+      archiveHorse: (horseId) => {
+        const state = get();
+        const deniedMessage = requireRoleCapability(state.currentRole, 'editHorse');
+        if (deniedMessage) return { ok: false, message: deniedMessage };
+        const matches = state.horses.filter((horse) => horse.id === horseId);
+        if (matches.length !== 1) return { ok: false, message: 'A unique horse record could not be found.' };
+        const horse = matches[0];
+        if (horse.archive) return { ok: false, message: 'This horse is already archived.' };
+        const archive = { id: createId('horse-archive'), archivedAt: nowStamp() };
+        // Archive is a roster filter, never a deletion or a snapshot of the
+        // horse. All history and subsequent edits remain on the same record.
+        set({
+          horses: state.horses.map((item) => (item.id === horseId ? { ...item, archive } : item)),
+          auditEvents: [
+            createAuditEvent({
+              actor: state.currentRole,
+              action: 'updated',
+              entityType: 'horse',
+              entityId: horseId,
+              summary: `Horse record "${horse.name}" archived from the active roster`,
+            }),
+            ...state.auditEvents,
+          ].slice(0, 500),
+        });
+        return {
+          ok: true,
+          message: 'Horse archived from the active roster. Records and reminders are retained.',
+          id: horseId,
+          archiveId: archive.id,
+        };
+      },
+      restoreHorse: (horseId, archiveId, expectedOwnerId) => {
+        const state = get();
+        if (expectedOwnerId !== undefined && expectedOwnerId !== vaultOwnerId()) {
+          return {
+            ok: false,
+            message: 'The workspace has changed. Open Archived horses in the current workspace to restore.',
+          };
+        }
+        const deniedMessage = requireRoleCapability(state.currentRole, 'editHorse');
+        if (deniedMessage) return { ok: false, message: deniedMessage };
+        const matches = state.horses.filter((horse) => horse.id === horseId);
+        if (matches.length !== 1) return { ok: false, message: 'A unique horse record could not be found.' };
+        const horse = matches[0];
+        if (!horse.archive) return { ok: false, message: 'This horse is already in the active roster.' };
+        // A toast can outlive a restore/rearchive, a permission change, or a
+        // workspace change. Only the exact archive it refers to may be undone.
+        if (!archiveId || horse.archive.id !== archiveId) {
+          return {
+            ok: false,
+            message: 'This archive has changed. Open Archived horses and restore the current record.',
+          };
+        }
+        const restored = { ...horse };
+        delete restored.archive;
+        set({
+          horses: state.horses.map((item) => (item.id === horseId ? restored : item)),
+          auditEvents: [
+            createAuditEvent({
+              actor: state.currentRole,
+              action: 'updated',
+              entityType: 'horse',
+              entityId: horseId,
+              summary: `Horse record "${horse.name}" restored to the active roster`,
+            }),
+            ...state.auditEvents,
+          ].slice(0, 500),
+        });
+        return { ok: true, message: 'Horse restored to the active roster.', id: horseId };
+      },
       deleteHorse: (horseId) => {
         // Deleting a horse takes its leads and receipts with it, so it needs the
         // capability that creates horses (Admin, Ranch Manager) -- the same rule

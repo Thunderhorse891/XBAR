@@ -287,6 +287,8 @@ export interface HorseAlert {
 
 export interface HorseRecord {
   id: string;
+  /** Roster visibility only; related records, care, listings and usage are retained. */
+  archive?: { id: string; archivedAt: string };
   name: string;
   barnName: string;
   summary: string;

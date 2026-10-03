@@ -182,6 +182,8 @@ export type XbarStore = {
    * push an arbitrary name through this path.
    */
   applyHorseNameRepairs: (horseIds: readonly string[]) => ActionResult;
+  archiveHorse: (horseId: string) => ActionResult & { archiveId?: string };
+  restoreHorse: (horseId: string, archiveId: string, expectedOwnerId?: string) => ActionResult;
   deleteHorse: (horseId: string) => ActionResult;
   updateMedicalEvent: (
     horseId: string,
