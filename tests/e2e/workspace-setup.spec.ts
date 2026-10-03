@@ -114,9 +114,7 @@ test('sale packets opens the real packet generator once a horse exists', async (
   await expect(page.getByRole('dialog', { name: 'Sale packet generator' })).toBeVisible();
   await expect(page.getByText('is selected for release-gate review')).toBeVisible();
   await page.getByRole('button', { name: 'Continue' }).click();
-  await expect(
-    page.getByText('Release gate: complete the ownership source review before building this packet.'),
-  ).toBeVisible();
+  await expect(page.getByText('Ownership review needed before building this packet.')).toBeVisible();
 });
 
 test('buyer follow-up shows an empty state on a fresh workspace', async ({ page }) => {
@@ -849,6 +847,12 @@ test('ownership repair offers a replacement upload for an approved but ineligibl
     .getByRole('navigation', { name: 'Primary' })
     .getByRole('link', { name: /^Ownership(?:\s+\d+)?$/ })
     .click();
+  await page
+    .getByRole('row')
+    .filter({ hasText: /source repair horse/i })
+    .getByRole('button', { name: 'Review sources', exact: true })
+    .click();
+  await expect(page).toHaveURL(new RegExp(`/ownership\\?horse=${encodeURIComponent(horseId)}`));
   const requirement = page.locator('.ownership-proof-row').filter({
     has: page.getByText('Registration certificate', { exact: true }),
   });
@@ -871,7 +875,7 @@ test('ownership packet repair starts the requested horse record without opening 
     const modulePath = '/src/store/useXbarStore.ts';
     const { useXbarStore } = await import(/* @vite-ignore */ modulePath);
     const state = useXbarStore.getState();
-    const target = state.horses.find((horse: { name: string }) => horse.name === 'Missing Ownership Horse');
+    const target = state.horses.find((horse: { name: string }) => horse.name === 'MISSING OWNERSHIP HORSE');
     const retained = state.ownershipRecords.filter((record: { horseId: string }) => record.horseId !== target.id);
     useXbarStore.setState({ ownershipRecords: retained });
     return { targetId: target.id as string, existing: JSON.stringify(retained[0]) };
@@ -887,10 +891,10 @@ test('ownership packet repair starts the requested horse record without opening 
   await wizard.getByRole('button', { name: 'Review ownership requirements' }).first().click();
   await expect(page).toHaveURL(new RegExp(`/ownership\\?horse=${encodeURIComponent(before.targetId)}`));
   const workspace = page.locator('#ownership-record-workspace');
-  await expect(workspace.getByText('Missing Ownership Horse has no ownership record', { exact: true })).toBeVisible();
-  await expect(workspace.getByRole('heading', { name: 'Existing Ownership Horse', exact: true })).toHaveCount(0);
+  await expect(workspace.getByText(/^Missing Ownership Horse has no ownership record$/i)).toBeVisible();
+  await expect(workspace.getByRole('heading', { name: /^Existing Ownership Horse$/i })).toHaveCount(0);
   await workspace.getByRole('button', { name: 'Start ownership record', exact: true }).click();
-  await expect(workspace.getByRole('heading', { name: 'Missing Ownership Horse', exact: true })).toBeVisible();
+  await expect(workspace.getByRole('heading', { name: /^Missing Ownership Horse$/i })).toBeVisible();
   await expect(workspace.getByRole('combobox', { name: 'Link document for Registration certificate' })).toBeVisible();
   const after = await page.evaluate(async (targetId) => {
     const modulePath = '/src/store/useXbarStore.ts';

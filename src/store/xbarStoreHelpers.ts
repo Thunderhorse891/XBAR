@@ -1171,14 +1171,13 @@ export function canRestorePersistedState(raw: unknown): boolean {
     /*
      * `record.legalOwner` → `rawName.trim()` — commandPalette.ts:134.
      * `selectedRecord.auditTrail.length` — Ownership.tsx:787.
-     * `o.pendingDocuments.length` — OwnershipChain.tsx:127.
+     * `params.ownershipRecord?.pendingDocuments.join` — localSalePacketGenerator.ts.
      * `ownershipRecord.transferStatus.toLowerCase()` — xbarPhaseTwo.ts:290.
      *
      * The last two were excluded here once, on the grounds that their reads are
      * guarded — `record?.pendingDocuments ?? []` in the ownership selectors, and
      * `normalizeOwnershipRecord` mapped over the records in Ownership.tsx. Both
-     * are true and neither generalises. OwnershipChain maps the RAW store
-     * records, and Horses.tsx hands a raw record to
+     * are true and neither generalises. The packet generator consumes the raw pending-document list, and Horses.tsx hands a raw record to
      * `buildHorsePacketCompleteness`, whose guard tests the record for
      * truthiness and then reads the field.
      *

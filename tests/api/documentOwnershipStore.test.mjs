@@ -133,3 +133,12 @@ test('server summary uses current reviewed source fingerprints and is sealed eve
   assert.match(JSON.parse(seal.payload).transfer.reviewSummary, /^1 of 1/);
   assert.match(JSON.parse(seal.payload).transfer.reviewSummary, /does not independently verify/);
 });
+
+test('the customer ownership summary opens source review and never labels stale sources verified', async () => {
+  const { readFile } = await import('node:fs/promises');
+  const route = await readFile('src/routes/OwnershipChain.tsx', 'utf8');
+  assert.match(route, /normalizeOwnershipRecord\([\s\S]*?record,[\s\S]*?documents,[\s\S]*?horses\.find/);
+  assert.match(route, /`\/ownership\?horse=\$\{encodeURIComponent\(horseId\)\}`/);
+  assert.match(route, /sources reviewed/);
+  assert.doesNotMatch(route, /% verified|> Verified/);
+});
