@@ -52,6 +52,46 @@ function ownershipIdentityConflicts(horse: HorseRecord, entities?: DocumentEntit
   });
 }
 
+function microchipKey(value: string): string | undefined {
+  // Recognize complete ISO and legacy identifiers, including scanner separators.
+  // Words such as UNKNOWN or scanned are missing information, not conflicting IDs.
+  const key = value
+    .replace(/^AVID\*/i, '')
+    .replace(/[.*\s-]/g, '')
+    .toLowerCase();
+  // Some readers prefix the 15-digit ISO display with its application bit.
+  if (/^0\d{15}$/.test(key)) return key.slice(1);
+  return /^(?:\d{9}|\d{15}|1\d{15}|[a-f0-9]{10})$/.test(key) ? key : undefined;
+}
+
+function sourceMicrochipKey(value: string): string | undefined {
+  const tokens = value.trim().split(/\s+/);
+  // A complete legacy numeric ID followed by prose/batch text is not a hex ID.
+  // Numeric continuation remains eligible for a grouped ISO identifier.
+  for (let end = 1; end < tokens.length; end += 1) {
+    const prefix = microchipKey(tokens.slice(0, end).join(' '));
+    if (prefix?.length === 9 && /^[a-z]/i.test(tokens[end])) return prefix;
+  }
+  const complete = microchipKey(value);
+  if (complete) return complete;
+  // OCR can place an unrelated date/count after a complete identifier. Preserve
+  // the longest complete identifier at a token boundary, never a substring of
+  // a malformed token (for example 900123456789012X).
+  for (let end = tokens.length - 1; end > 0; end -= 1) {
+    const prefix = microchipKey(tokens.slice(0, end).join(' '));
+    if (!prefix) continue;
+    // A nine-digit token can be the first group of a malformed ISO identifier.
+    // Keep longer complete IDs when OCR appends a separate date or batch token.
+    if (
+      prefix.length !== 9 ||
+      /^[a-z]/i.test(tokens[end]) ||
+      tokens.slice(end).every((token) => /^[a-f0-9.*-]+$/i.test(token))
+    )
+      return prefix;
+  }
+  return undefined;
+}
+
 /** The same source identity screen for document movement, approval and ownership.
  * Cached entities in older backups may have been filled from the selected horse;
  * they cannot override contradictory identity still present in the original text.
@@ -62,15 +102,19 @@ export function inspectDocumentHorseIdentity(document: DocumentRecord, horse: Ho
     document.extractedTextPreview.replace(/(^|\n)\s*horse\s*[:#]\s*/gi, '$1Horse Name: '),
   );
   const sourceChips = [
-    ...document.extractedTextPreview.matchAll(/\bmicrochip(?:\s+(?:number|no\.?|id))?\s*[:#-]?\s*([A-Z0-9-]{5,30})/gi),
-  ].map((match) => normalize(match[1]));
+    ...document.extractedTextPreview.matchAll(
+      /\bmicrochip\b(?:\s+(?:number|no\.?|id))?\s*[:#-]?\s*([^\s,;:()]+(?:\s+(?:(?=[A-Z0-9.*_-]*\d)[A-Z0-9.*_-]+|[A-F.*-]+)(?=[\s,;:()]|$))*)/gi,
+    ),
+  ]
+    .map((match) => sourceMicrochipKey(match[1]))
+    .filter((chip): chip is string => Boolean(chip));
+  const storedChip = horse.microchipId && (microchipKey(horse.microchipId.trim()) ?? normalize(horse.microchipId));
   const conflictReason =
     document.identityReviewRequired || sourceIdentity.identityReviewRequired
       ? 'The source contains ambiguous horse identities. Upload separate or corrected papers.'
       : ownershipIdentityConflicts(horse, document.entities) || ownershipIdentityConflicts(horse, sourceIdentity)
         ? 'The readable source or extracted identity conflicts with the selected horse. Choose the correct horse or upload corrected papers.'
-        : new Set(sourceChips).size > 1 ||
-            (horse.microchipId && sourceChips.some((chip) => chip !== normalize(horse.microchipId)))
+        : new Set(sourceChips).size > 1 || (storedChip && sourceChips.some((chip) => chip !== storedChip))
           ? 'The source microchip conflicts with this horse. Review the original and correct the record.'
           : undefined;
   return { sourceIdentity, conflictReason };

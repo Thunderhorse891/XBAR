@@ -36,6 +36,7 @@ test('renaming the same bytes does not evade the existing-document duplicate ale
 import { flagDocumentDuplicates, fingerprintDocument } from '../src/lib/documentDuplicates.js';
 import {
   assessOwnershipDocument,
+  inspectDocumentHorseIdentity,
   ownershipReviewBlockers,
   ownershipDocumentReviewKey,
 } from '../src/lib/ownershipDocumentReview.js';
@@ -307,4 +308,122 @@ test('legacy filename-derived types cannot override contradictory source purpose
   const result = assessOwnershipDocument(legacy, horse, 'registration_certificate');
   assert.equal(result.ok, false);
   assert.equal(result.status, 'wrong_type');
+});
+
+test('microchip prose and empty-value placeholders are not conflicting identifiers', () => {
+  const target = { ...horse, microchipId: '900123456789012' };
+  for (const note of [
+    'Microchip: UNKNOWN',
+    'Microchip scanned',
+    'Microchip: pending',
+    'Microchip: not recorded',
+    'Microchip number: unavailable',
+    'Microchip ID: N/A',
+    'Microchip: none',
+    'Microchip scan completed',
+    'Microchip: 900123456789012_EXTRA',
+    'Microchip: 9001234567890123',
+    'Microchip: 900123456789012X',
+    'Microchip: 900123456 789012X',
+    'Microchip: 900123456 789012_EXTRA',
+    'Microchip: 9001234567890123456789012345678901',
+  ]) {
+    const source = document({ extractedTextPreview: `${paper}\n${note}` });
+    assert.equal(inspectDocumentHorseIdentity(source, target).conflictReason, undefined, note);
+    assert.equal(assessOwnershipDocument(source, target, 'registration_certificate').ok, true, note);
+  }
+});
+
+test('complete numeric and legacy hexadecimal microchips retain matching and conflict checks', () => {
+  for (const [stored, matching, different] of [
+    ['900123456789012', 'Microchip: 900123456789012', 'Microchip: 900123456789099'],
+    ['900123456789012', 'Microchip Number: 900-123-456-789-012', 'Microchip No. 900-123-456-789-099'],
+    ['123456789', 'Microchip ID # 123456789', 'Microchip ID # 987654321'],
+    ['123456789', 'Microchip: AVID*123*456*789', 'Microchip: AVID*987*654*321'],
+    ['123456789', 'Microchip: 123*456*789', 'Microchip: 987*654*321'],
+    ['900123456789012', 'Microchip: 900.123456789012', 'Microchip: 900.123456789099'],
+    ['900123456789012', 'Microchip: 900123456 789012', 'Microchip: 900123456 789099'],
+    ['900123456789012', 'Microchip: 900123456\n789012', 'Microchip: 900123456\n789099'],
+    ['900123456789012', 'Microchip: 900 123 456 789 012', 'Microchip: 900 123 456 789 099'],
+    ['0A01183726', 'Microchip: 0A 0118 3726', 'Microchip: 0A 0118 3727'],
+    ['A123456789', 'Microchip: A123456789', 'Microchip: A987654321'],
+    ['0A01183726', 'Microchip: 0a01183726', 'Microchip: 0A01183727'],
+    ['ABCDEFABCD', 'Microchip: abcdefabcd', 'Microchip: ABCDEFABCE'],
+    ['0900123456789012', 'Microchip: 0900123456789012', 'Microchip: 0900123456789099'],
+    ['900123456789012', 'Microchip: 0900123456789012', 'Microchip: 0900123456789099'],
+  ]) {
+    const target = { ...horse, microchipId: stored };
+    assert.equal(
+      inspectDocumentHorseIdentity(document({ extractedTextPreview: `${paper}\n${matching}` }), target).conflictReason,
+      undefined,
+      matching,
+    );
+    assert.match(
+      inspectDocumentHorseIdentity(document({ extractedTextPreview: `${paper}\n${different}` }), target)
+        .conflictReason ?? '',
+      /microchip conflicts/,
+      different,
+    );
+  }
+  const repeated = document({
+    extractedTextPreview: `${paper}\nMicrochip: UNKNOWN\nMicrochip: 900123456789012\nMicrochip: 900123456789099`,
+  });
+  assert.match(inspectDocumentHorseIdentity(repeated, horse).conflictReason ?? '', /microchip conflicts/);
+});
+
+test('complete conflicting microchips remain visible before unrelated numeric text', () => {
+  const target = { ...horse, microchipId: '900123456789012' };
+  for (const note of [
+    'Microchip: 900123456789099\n2026 vaccine record',
+    'Microchip: 900123456789099\n2026-01-01 vaccination',
+    'Microchip: 900123456789099\nA vaccine',
+    'Microchip: 900123456789099\nX123 vaccine batch',
+    'Microchip: 900123456789099 2026 vaccine record',
+    'Microchip: 900 123 456 789 099\n2026 vaccine record',
+  ]) {
+    assert.match(
+      inspectDocumentHorseIdentity(document({ extractedTextPreview: `${paper}\n${note}` }), target).conflictReason ??
+        '',
+      /microchip conflicts/,
+      note,
+    );
+  }
+});
+
+test('recognized chip formats keep matching and conflicts before unrelated prose', () => {
+  for (const [stored, matching, different] of [
+    ['123456789', '123456789', '987654321'],
+    ['123456789', '123 456 789', '987 654 321'],
+    ['123456789', 'AVID*123*456*789', 'AVID*987*654*321'],
+    ['900123456789012', '900123456789012', '900123456789099'],
+    ['900123456789012', '900 123 456 789 012', '900 123 456 789 099'],
+    ['0A01183726', '0A 0118 3726', '0A 0118 3727'],
+    ['ABCDEFABCD', 'ABCDEFABCD', 'ABCDEFABCE'],
+  ]) {
+    const target = { ...horse, microchipId: stored };
+    for (const suffix of [
+      '\nA vaccine',
+      '\nX123 vaccine batch',
+      ' A vaccine',
+      ' X123 vaccine batch',
+      '\n2026-01-01 vaccination',
+    ]) {
+      assert.equal(
+        inspectDocumentHorseIdentity(
+          document({ extractedTextPreview: `${paper}\nMicrochip: ${matching}${suffix}` }),
+          target,
+        ).conflictReason,
+        undefined,
+        `${matching}${suffix}`,
+      );
+      assert.match(
+        inspectDocumentHorseIdentity(
+          document({ extractedTextPreview: `${paper}\nMicrochip: ${different}${suffix}` }),
+          target,
+        ).conflictReason ?? '',
+        /microchip conflicts/,
+        `${different}${suffix}`,
+      );
+    }
+  }
 });

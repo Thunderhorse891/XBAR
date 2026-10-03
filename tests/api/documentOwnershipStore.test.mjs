@@ -196,3 +196,19 @@ test('the archived library remains read-only until server lifecycle enforcement 
   assert.match(route, /inspectDocumentHorseIdentity\(document, horse\)/);
   assert.match(route, /const reviewHorseId = document\.horseId \|\| requestedHorse\?\.id/);
 });
+
+test('microchip prose does not block document approval for a horse with a recorded chip', () => {
+  const target = { ...horse, microchipId: '982000123456789' };
+  useXbarStore.setState({ horses: [target] });
+  for (const note of ['Microchip: UNKNOWN', 'Microchip scanned', 'Microchip: pending']) {
+    const pending = {
+      ...source,
+      state: 'Needs Review',
+      extractedTextPreview: `${source.extractedTextPreview}\n${note}`,
+    };
+    useXbarStore.setState({ documents: [pending] });
+    assert.equal(useXbarStore.getState().reviewDocument(source.id, horse.id).ok, true, note);
+    assert.equal(useXbarStore.getState().documents[0].state, 'Ready', note);
+    assert.equal(useXbarStore.getState().horses[0].microchipId, target.microchipId, note);
+  }
+});

@@ -1174,3 +1174,45 @@ for (const conflict of ['cross-file', 'single-file'] as const) {
     });
   }
 }
+
+test('unknown microchip text allows facts and approval while preserving the recorded identifier', async ({ page }) => {
+  await bootstrapWorkspace(page);
+  await seedHorse(page, 'Chip Review Horse');
+  const horseId = await page.evaluate(async () => {
+    const modulePath = '/src/store/useXbarStore.ts';
+    const { useXbarStore } = await import(/* @vite-ignore */ modulePath);
+    const horse = useXbarStore.getState().horses[0];
+    useXbarStore.setState({ horses: [{ ...horse, color: '', microchipId: '982000123456789' }] });
+    return horse.id as string;
+  });
+  await page.getByRole('button', { name: 'Create', exact: true }).click();
+  await page.getByRole('menuitem', { name: 'Upload Document' }).click();
+  const drawer = page.getByRole('dialog', { name: 'Upload Document' });
+  await drawer.locator('input[type="file"]').setInputFiles({
+    name: 'unknown-chip-source.txt',
+    mimeType: 'text/plain',
+    buffer: Buffer.from(
+      'CERTIFICATE OF REGISTRATION\nRegistered Name: CHIP REVIEW HORSE\nColor: Bay\nMicrochip: UNKNOWN',
+    ),
+  });
+  await drawer.locator('select').first().selectOption(horseId);
+  await drawer.getByRole('button', { name: 'Upload for review' }).click();
+  await expect(page).toHaveURL(/\/app\/documents(?:\?|$)/);
+  await expect(page.getByRole('tab', { name: /^3\. Review/ })).toHaveAttribute('aria-selected', 'true');
+  const actions = page.getByRole('group', { name: 'unknown-chip-source review actions' });
+  await actions.getByRole('button', { name: 'Apply facts', exact: true }).click();
+  await expect(page.getByText('Facts applied to record', { exact: true })).toBeVisible();
+  await actions.getByRole('button', { name: 'Approve', exact: true }).click();
+  const saved = await page.evaluate(async () => {
+    const modulePath = '/src/store/useXbarStore.ts';
+    const { useXbarStore } = await import(/* @vite-ignore */ modulePath);
+    const state = useXbarStore.getState();
+    return {
+      color: state.horses[0].color,
+      chip: state.horses[0].microchipId,
+      documentState: state.documents[0].state,
+      sourceRetained: Boolean(state.documents[0].localFileKey),
+    };
+  });
+  expect(saved).toEqual({ color: 'Bay', chip: '982000123456789', documentState: 'Ready', sourceRetained: true });
+});
