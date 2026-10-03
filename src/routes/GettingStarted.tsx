@@ -125,7 +125,7 @@ export default function GettingStarted() {
           <ProgressRing value={progress} size={56} />
           <div style={{ flex: 1 }}>
             <div style={{ fontFamily: 'var(--xbar-font-display)', fontSize: 24, fontWeight: 600 }}>
-              {progress}% set up
+              Workflow checklist
             </div>
             <div className="xs-card__sub">
               {doneCount} of {steps.length} steps are complete.

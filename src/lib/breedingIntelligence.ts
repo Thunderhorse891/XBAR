@@ -160,7 +160,7 @@ function latestByRecordType(
 ): TimelineEvent | undefined {
   return events
     .filter((event) => resolveRecordType(event) === recordType)
-    .sort((a, b) => (a.date < b.date ? 1 : -1))[0];
+    .sort((a, b) => (a.date === b.date ? 0 : a.date < b.date ? 1 : -1))[0];
 }
 
 /*
@@ -190,6 +190,9 @@ const NEGATIVE_WORDING =
 const POSITIVE_WORDING =
   /in.?foal|\bpositive\b|\bconfirmed\b|\bpregnant\b|heartbeat|\bsingle(?:ton)?\s+(?:pregnancy|embryo|vesicle)/g;
 const CLAUSE_NEGATION = /\b(?:no|not|without|never|isn'?t|wasn'?t|yet to be)\b/;
+// Free-text questions and uncertainty cannot establish a pregnancy outcome.
+const UNCERTAIN_WORDING =
+  /\?|\b(?:possibly|possible|maybe|uncertain|unclear|unconfirmed|inconclusive|equivocal|suspected|suspect|cannot|can't|could not|unable to|indeterminate)\b/;
 const CLAUSE_BREAK = /[.;,:!?\n\u2013\u2014]|\s-\s/;
 
 export function pregnancyCheckOutcome(event: TimelineEvent): PregnancyCheckOutcome {
@@ -202,16 +205,17 @@ export function pregnancyCheckOutcome(event: TimelineEvent): PregnancyCheckOutco
 
   // An OCR or imported result is still the most specific text there is.
   const text = (structured || `${event.status ?? ''} ${event.title} ${event.summary}`).toLowerCase();
+  if (UNCERTAIN_WORDING.test(text)) return 'unknown';
   const negative = NEGATIVE_WORDING.test(text);
   let positive = false;
   for (const match of text.matchAll(POSITIVE_WORDING)) {
     const before = text.slice(0, match.index).split(CLAUSE_BREAK).pop() ?? '';
-    if (CLAUSE_NEGATION.test(before)) continue;
+    const after = text.slice((match.index ?? 0) + match[0].length).split(CLAUSE_BREAK)[0] ?? '';
+    if (CLAUSE_NEGATION.test(before) || CLAUSE_NEGATION.test(after)) continue;
     // "Confirmed" is not a result on its own; it confirms what follows it. Only
     // with nothing negating or negative after it in its clause is it in foal.
     if (match[0] === 'confirmed') {
-      const after = text.slice((match.index ?? 0) + match[0].length).split(CLAUSE_BREAK)[0] ?? '';
-      if (CLAUSE_NEGATION.test(after) || NEGATIVE_WORDING.test(after)) continue;
+      if (NEGATIVE_WORDING.test(after)) continue;
     }
     positive = true;
   }
@@ -222,10 +226,10 @@ export function pregnancyCheckOutcome(event: TimelineEvent): PregnancyCheckOutco
 }
 
 /*
- * Where the mare stands after a cover: the latest check that said something
- * definite. A later re-check overrides an earlier one -- open at 14 days and in
+ * Where the mare stands after a cover: the latest non-pending check. A later re-check overrides an earlier one -- open at 14 days and in
  * foal at 16 is in foal; in foal at 16 and open at 45 is a loss -- and a check
- * still awaiting its result does not erase what the last real result said.
+ * explicitly marked pending does not erase the prior result. An ambiguous or
+ * unreadable check stops classification; it is not evidence of a prior result.
  * Same-day checks resolve to the one entered last (the timeline is newest-first).
  */
 export function currentPregnancyOutcome(events: TimelineEvent[], afterISO: string): PregnancyCheckOutcome {
@@ -234,8 +238,9 @@ export function currentPregnancyOutcome(events: TimelineEvent[], afterISO: strin
     .filter(({ event }) => resolveRecordType(event) === 'pregnancy-check' && event.date >= afterISO)
     .sort((a, b) => (a.event.date === b.event.date ? a.order - b.order : a.event.date < b.event.date ? 1 : -1));
   for (const { event } of checks) {
-    const outcome = pregnancyCheckOutcome(event);
-    if (outcome !== 'unknown') return outcome;
+    const result: unknown = breedingDetails(event)?.result;
+    if (typeof result === 'string' && result.trim().toLowerCase() === 'pending') continue;
+    return pregnancyCheckOutcome(event);
   }
   return 'unknown';
 }
@@ -309,7 +314,15 @@ export function buildMareBreedingState(horse: HorseRecord, now: Date = new Date(
     // the check, so she has no foaling window until the cover is logged. Checks
     // from before her latest foaling belong to an earlier pregnancy.
     const lastFoaling = latestByRecordType(events, 'foaling');
-    if (currentPregnancyOutcome(events, lastFoaling?.date ?? '') === 'positive') {
+    // Dates have day precision. On the same day, timeline order determines
+    // whether the check was recorded before or after the latest foaling.
+    const foalingOrder = lastFoaling ? events.indexOf(lastFoaling) : -1;
+    const currentEvents = lastFoaling
+      ? events.filter(
+          (event, order) => event.date > lastFoaling.date || (event.date === lastFoaling.date && order < foalingOrder),
+        )
+      : events;
+    if (currentPregnancyOutcome(currentEvents, '') === 'positive') {
       return {
         ...base,
         status: 'in-foal',

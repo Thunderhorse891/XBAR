@@ -2,6 +2,7 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 import { assessRevenueAtRisk, detectSpendAnomalies } from '../src/lib/businessIntelligence.js';
 import { CURRENT_COGGINS_DAYS, hasCurrentReadyDocument } from '../src/lib/documentCurrency.js';
+import { ownershipDocumentReviewKey } from '../src/lib/ownershipDocumentReview.js';
 import { createOwnershipRecord } from '../src/store/xbarStoreLogic.js';
 import type { DocumentRecord, ExpenseReceipt, HorseRecord, OwnershipRecord } from '../src/types/xbar.js';
 
@@ -64,12 +65,37 @@ function dateOnlyCogginsDoc(horseId: string, examDaysAgo: number): DocumentRecor
   } as DocumentRecord;
 }
 
+function ownershipSource(horseId = 'h1'): DocumentRecord {
+  return {
+    id: `ownership-${horseId}`,
+    horseId,
+    title: 'Ownership source',
+    type: 'Ownership Memo',
+    state: 'Ready',
+    localFileKey: 'review-fixture',
+    extractedTextPreview: 'OWNERSHIP MEMO\nRegistered Name: Spirit',
+    entities: { horseName: 'Spirit' },
+    duplicateRisk: 'Low',
+  } as DocumentRecord;
+}
 function clearRecord(horseId: string): OwnershipRecord {
-  const record = createOwnershipRecord({ id: horseId, name: 'X', owner: 'Erin' } as HorseRecord);
+  const record = createOwnershipRecord({ id: horseId, name: 'Spirit', owner: 'Erin' } as HorseRecord);
   return {
     ...record,
     transferStatus: 'Clear',
-    proofRequirements: record.proofRequirements?.map((item) => ({ ...item, status: 'verified' as const })),
+    proofRequirements: [
+      {
+        id: 'supporting',
+        kind: 'supporting',
+        label: 'Reviewed source',
+        status: 'verified',
+        documentId: ownershipSource(horseId).id,
+        verifiedBy: 'Tester',
+        verifiedAt: now.toISOString(),
+        reviewAttestedAt: now.toISOString(),
+        reviewedSourceKey: ownershipDocumentReviewKey(ownershipSource(horseId)),
+      },
+    ],
   };
 }
 
@@ -84,7 +110,12 @@ function receipt(category: ExpenseReceipt['category'], amount: number, monthsAgo
 }
 
 test('listed horse with verified proof and current Coggins is sale-ready', () => {
-  const result = assessRevenueAtRisk([horse('h1', 'Spirit', 18500)], [clearRecord('h1')], [cogginsDoc('h1', 90)], now);
+  const result = assessRevenueAtRisk(
+    [horse('h1', 'Spirit', 18500)],
+    [clearRecord('h1')],
+    [ownershipSource(), cogginsDoc('h1', 90)],
+    now,
+  );
   assert.equal(result.totalListedValue, 18500);
   assert.equal(result.valueAtRisk, 0);
   assert.equal(result.items.length, 0);
@@ -95,15 +126,20 @@ test('unverified ownership documents price the listing as blocked with a fix act
   const result = assessRevenueAtRisk([horse('h1', 'Spirit', 18500)], [record], [cogginsDoc('h1', 90)], now);
   assert.equal(result.valueAtRisk, 18500);
   assert.equal(result.items.length, 1);
-  assert.match(result.items[0]!.blockers[0] ?? '', /documents unverified/);
-  assert.match(result.items[0]!.actionLabel, /Verify documents for Spirit/);
+  assert.match(result.items[0]!.blockers[0] ?? '', /documents need review/);
+  assert.match(result.items[0]!.actionLabel, /Review documents for Spirit/);
   assert.equal(result.items[0]!.actionRoute, '/ownership');
 });
 
 test('a Coggins whose EXAM is stale blocks the sale, however recent the upload', () => {
   // Uploaded today, drawn 400 days ago. Measured from the upload this was
   // "current" and the horse's full ask counted as ready to close.
-  const result = assessRevenueAtRisk([horse('h1', 'Spirit', 12000)], [clearRecord('h1')], [cogginsDoc('h1', 400)], now);
+  const result = assessRevenueAtRisk(
+    [horse('h1', 'Spirit', 12000)],
+    [clearRecord('h1')],
+    [ownershipSource(), cogginsDoc('h1', 400)],
+    now,
+  );
   assert.equal(result.valueAtRisk, 12000);
   assert.match(result.items[0]!.blockers[0] ?? '', /no current exam date/);
   assert.equal(result.items[0]!.actionRoute, '/documents?horse=h1');
@@ -114,7 +150,7 @@ test('a Coggins nobody has reviewed is not proof of anything', () => {
     const result = assessRevenueAtRisk(
       [horse('h1', 'Spirit', 12000)],
       [clearRecord('h1')],
-      [cogginsDoc('h1', 30, state)],
+      [ownershipSource(), cogginsDoc('h1', 30, state)],
       now,
     );
     assert.equal(result.valueAtRisk, 12000, `${state} must not count as a current Coggins`);
@@ -126,7 +162,7 @@ test('a reviewed Coggins with no exam date at all is not current', () => {
   const result = assessRevenueAtRisk(
     [horse('h1', 'Spirit', 12000)],
     [clearRecord('h1')],
-    [cogginsDoc('h1', null)],
+    [ownershipSource(), cogginsDoc('h1', null)],
     now,
   );
   assert.equal(result.valueAtRisk, 12000);
@@ -136,7 +172,7 @@ test('a reviewed Coggins with no exam date at all is not current', () => {
 test('a horse with no Coggins is told to upload one, not to review one', () => {
   // Telling someone to review a document they never uploaded is how a report
   // stops being read.
-  const result = assessRevenueAtRisk([horse('h1', 'Spirit', 12000)], [clearRecord('h1')], [], now);
+  const result = assessRevenueAtRisk([horse('h1', 'Spirit', 12000)], [clearRecord('h1')], [ownershipSource()], now);
   assert.match(result.items[0]!.blockers[0] ?? '', /No Coggins on file/);
   assert.equal(result.items[0]!.actionRoute, '/documents?upload=1&horse=h1');
 });
@@ -156,7 +192,12 @@ test('the risk report and the sale-packet gate agree about the same horse', () =
   ] as const) {
     const documents = [cogginsDoc('h1', examDaysAgo, state)];
     const gate = hasCurrentReadyDocument(documents, CURRENT_COGGINS_DAYS, now);
-    const report = assessRevenueAtRisk([horse('h1', 'Spirit', 12000)], [clearRecord('h1')], documents, now);
+    const report = assessRevenueAtRisk(
+      [horse('h1', 'Spirit', 12000)],
+      [clearRecord('h1')],
+      [ownershipSource(), ...documents],
+      now,
+    );
     assert.equal(
       gate,
       report.items.length === 0,
@@ -288,7 +329,7 @@ test('an active medical review prices the listing as blocked with disclosure req
     owner: 'Erin',
     sale: { askPrice: 9000, listingState: 'Market Ready' },
   } as unknown as HorseRecord;
-  const result = assessRevenueAtRisk([held], [clearRecord('h1')], [cogginsDoc('h1', 30)], now);
+  const result = assessRevenueAtRisk([held], [clearRecord('h1')], [ownershipSource(), cogginsDoc('h1', 30)], now);
   assert.equal(result.valueAtRisk, 9000);
   assert.match(result.items[0]!.blockers[0] ?? '', /medical review/);
   assert.equal(result.items[0]!.actionRoute, '/medical?horse=h1');
@@ -427,4 +468,15 @@ test('the expiry boundary does not move with the clock or the time zone', () => 
       `still current at ${hour}:00 — the boundary must not move with the clock`,
     );
   }
+});
+
+test('a formerly clear transfer with archived proof remains revenue at risk', () => {
+  const result = assessRevenueAtRisk(
+    [horse('h1', 'Spirit', 18500)],
+    [clearRecord('h1')],
+    [{ ...ownershipSource(), state: 'Archived' }, cogginsDoc('h1', 90)],
+    now,
+  );
+  assert.equal(result.valueAtRisk, 18500);
+  assert.match(result.items[0]?.actionLabel ?? '', /Review documents/);
 });

@@ -66,6 +66,10 @@ const corpus: Array<[string, TimelineEvent, PregnancyCheckOutcome]> = [
   ['awaiting lab results', check('Pregnancy check', 'Awaiting results from the lab'), 'unknown'],
   // Both directions at once is for a person to settle, not a guess.
   ['conflicting wording', check('Ultrasound', 'Heartbeat seen but fluid noted, possibly open'), 'unknown'],
+  ['negation after heartbeat', check('Pregnancy check', 'Heartbeat not detected'), 'unknown'],
+  ['possible pregnancy', check('Pregnancy check', 'Possibly pregnant; repeat scan'), 'unknown'],
+  ['cannot confirm', check('Pregnancy check', 'Pregnancy cannot be confirmed'), 'unknown'],
+  ['questioned pregnancy', check('Pregnancy check', 'In foal?'), 'unknown'],
   // A restored backup can carry anything in the result field.
   ['non-string result falls back to the text', check('Pregnancy check', 'In foal', 45), 'positive'],
 ];
@@ -245,4 +249,91 @@ test('both entry points ask, and the foaling page reads the same classifier', as
   const foaling = await readFile('src/routes/BreedingFoaling.tsx', 'utf8');
   assert.match(foaling, /const state = buildMareBreedingState\(m\);/);
   assert.doesNotMatch(foaling, /in foal\|confirmed\|pregnan/, 'no private word match');
+});
+
+test('a latest ambiguous or unreadable check stops classification instead of reviving older evidence', () => {
+  const now = new Date('2027-02-15T12:00:00Z');
+  const prior = check('Ultrasound', '', 'in-foal', '2026-04-20');
+  const cover = {
+    id: 'cover',
+    date: BRED,
+    title: 'Bred',
+    summary: '',
+    owner: 'Vet',
+    category: 'Breeding',
+    details: { recordType: 'breeding' },
+  } as TimelineEvent;
+  for (const summary of [
+    'Heartbeat seen but fluid noted, possibly open',
+    'Unable to interpret scan',
+    'Awaiting lab results',
+    'Heartbeat not detected',
+    'Possibly pregnant; repeat scan',
+    'Pregnancy cannot be confirmed',
+    'In foal?',
+  ]) {
+    const latest = check('Pregnancy check', summary, undefined, '2026-05-20');
+    for (const result of ['in-foal', 'open']) {
+      assert.equal(currentPregnancyOutcome([latest, check('Scan', '', result, prior.date)], BRED), 'unknown', summary);
+    }
+    for (const covers of [[], [cover]]) {
+      const mare = {
+        id: 'ambiguous',
+        name: 'Review needed',
+        sex: 'Mare',
+        breedingTimeline: [latest, prior, ...covers],
+        breedingEconomics: { foalProjectedValue: 9000 },
+      } as unknown as HorseRecord;
+      const program = buildBreedingProgram([mare], now);
+      assert.equal(program.inFoal, 0, summary);
+      assert.equal(program.nearTerm, 0, summary);
+      assert.equal(program.projectedProgramValue, 0, summary);
+      if (covers.length) assert.equal(buildMareBreedingState(mare, now).status, 'bred-awaiting-check');
+    }
+    // An explicit pending result skips only itself, not the ambiguous evidence below it.
+    assert.equal(currentPregnancyOutcome([check('Scan', '', 'pending', '2026-06-01'), latest, prior], BRED), 'unknown');
+  }
+  assert.equal(
+    currentPregnancyOutcome([check('Scan', 'Unclear note', 'pending', '2026-05-20'), prior], BRED),
+    'positive',
+  );
+});
+
+test('same-day foaling cuts off earlier checks without a recorded cover', () => {
+  const now = new Date('2026-06-01T12:00:00Z');
+  const day = '2026-05-20';
+  const foaling = {
+    id: 'foaling',
+    date: day,
+    title: 'Foaled',
+    summary: 'Live colt',
+    owner: 'Vet',
+    category: 'Breeding',
+    details: { recordType: 'foaling' },
+  } as TimelineEvent;
+  const positive = check('Ultrasound', '', 'in-foal', day);
+  const mare = (timeline: TimelineEvent[]) =>
+    ({
+      id: 'same-day',
+      name: 'Already foaled',
+      sex: 'Mare',
+      breedingTimeline: timeline,
+      breedingEconomics: { foalProjectedValue: 9000 },
+    }) as unknown as HorseRecord;
+  for (const timeline of [
+    [foaling, positive],
+    [foaling, check('Scan', '', 'pending', day), positive],
+  ]) {
+    const program = buildBreedingProgram([mare(timeline)], now);
+    assert.equal(program.inFoal, 0, 'a completed pregnancy is not counted as carrying');
+    assert.equal(program.projectedProgramValue, 0, 'no projected foal value from a completed pregnancy');
+  }
+  // Recorded evidence after the boundary is still considered; dates alone cannot decide the order.
+  assert.equal(buildMareBreedingState(mare([positive, foaling]), now).status, 'in-foal');
+  const earlierFoaling = { ...foaling, id: 'earlier-foaling' };
+  assert.equal(
+    buildBreedingProgram([mare([foaling, positive, earlierFoaling])], now).inFoal,
+    0,
+    'the latest same-day foaling is the boundary',
+  );
 });

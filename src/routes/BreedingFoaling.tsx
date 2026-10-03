@@ -22,7 +22,7 @@ export default function BreedingFoaling() {
         // Newest event first (addBreedingEvent prepends) reflects current status.
         const latest = m.breedingTimeline[0];
         // In foal is decided where the Breeding screen decides it: the recorded
-        // result of the latest definite check (audit F07). This page used to
+        // result of the latest non-pending check (audit F07). This page used to
         // keep its own word match over the latest title, so "Pregnancy check"
         // read as in foal whatever the result said.
         const state = buildMareBreedingState(m);

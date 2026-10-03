@@ -5,6 +5,7 @@ import test from 'node:test';
 import { PDFDocument, StandardFonts } from 'pdf-lib';
 import { buildRanchReport, type RanchReportInput } from '../src/lib/ranchReport.js';
 import { reportDecisions, reportException } from '../src/lib/ranchReportDecisions.js';
+import { ownershipDocumentReviewKey } from '../src/lib/ownershipDocumentReview.js';
 import { renderReportPdf } from '../src/lib/ranchReportPdf.js';
 
 const now = new Date('2026-09-11T12:00:00Z');
@@ -215,12 +216,41 @@ test('ready horses, losses and unpriced inventory produce honest labels and rank
   input.horses[0].sale.askPrice = 1000;
   input.horses[1].sale.askPrice = 0;
   input.horses[1].status = 'Sale Prep';
+  input.horses[2].registrationNumber = '7003333';
+  const reviewedSource = {
+    id: 'source-h2',
+    horseId: 'h2',
+    type: 'Ownership Memo',
+    state: 'Ready',
+    localFileKey: 'synthetic-reviewed-source',
+    extractedTextPreview: 'OWNERSHIP MEMO\nRegistration Number: 7003333',
+    entities: { registrationNumber: '7003333' },
+    duplicateRisk: 'Low',
+  } as RanchReportInput['documents'][number];
   input.ownershipRecords = [
-    { id: 'o2', horseId: 'h2', transferStatus: 'Clear', proofRequirements: [] },
-  ] as unknown as RanchReportInput['ownershipRecords'];
+    {
+      id: 'o2',
+      horseId: 'h2',
+      transferStatus: 'Clear',
+      proofRequirements: [
+        {
+          id: 'reviewed',
+          kind: 'supporting',
+          label: 'Reviewed source',
+          status: 'verified',
+          documentId: reviewedSource.id,
+          verifiedBy: 'Synthetic reviewer',
+          verifiedAt: now.toISOString(),
+          reviewAttestedAt: now.toISOString(),
+          reviewedSourceKey: ownershipDocumentReviewKey(reviewedSource),
+        },
+      ],
+    },
+  ] as RanchReportInput['ownershipRecords'];
   input.documents = [
+    reviewedSource,
     { id: 'c2', horseId: 'h2', type: 'Coggins', state: 'Ready', entities: { examDate: '2026-09-01' } },
-  ] as unknown as RanchReportInput['documents'];
+  ] as RanchReportInput['documents'];
   const report = buildRanchReport(input, now),
     decisions = reportDecisions(report);
   assert.equal(report.money.readyValue, 14000);

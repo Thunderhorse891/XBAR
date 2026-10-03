@@ -358,9 +358,9 @@ function careLine(care: CredentialCare): string {
  * the manifest says what the buyer should do instead of reading as a negative. */
 function verifiedProofsLine(verifiedProofs: string[]): string {
   if (verifiedProofs.length) {
-    return `Verified proofs: ${[...verifiedProofs].sort().join(', ')}`;
+    return `Human-reviewed ownership sources: ${[...verifiedProofs].sort().join(', ')} (seller-recorded; not independently verified by XBAR)`;
   }
-  return 'Ownership proofs: none verified at seal time — confirm the underlying documents with the seller';
+  return 'Ownership sources: no human review recorded at seal time — confirm the originals and title with the seller';
 }
 
 /**
