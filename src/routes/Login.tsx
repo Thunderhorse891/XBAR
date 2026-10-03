@@ -1,6 +1,5 @@
 import { type FormEvent, useEffect, useId, useMemo, useRef, useState } from 'react';
 import { useLocation, useNavigate, useSearchParams } from 'react-router-dom';
-import { XbarMark } from '@/components/BrandMark';
 import { billingPath, billingPathForTier } from '@/lib/billingRoutes';
 import { isSupabaseConfigured } from '@/lib/platformConfig';
 import { productEvent, productEventNames } from '@/lib/productEvents';
@@ -381,13 +380,14 @@ export default function Login() {
     </p>
   );
 
-  const label = authMode === 'signin' ? 'System access' : selectedPlan ? `${selectedPlan} tier` : 'New workspace';
+  const label = authMode === 'signin' ? 'Welcome back' : selectedPlan ? `${selectedPlan} tier` : 'New workspace';
   const title = authMode === 'signin' ? 'Sign In' : 'Create Account';
-  const description = selectedPlan
-    ? `Create credentials, set up your workspace, then continue to the ${selectedPlan} plan.`
-    : authMode === 'signin'
+  const description =
+    authMode === 'signin'
       ? 'Sign in to your workspace.'
-      : 'Create a sign-in for your XBAR workspace.';
+      : selectedPlan
+        ? `Set up your workspace, then review the ${selectedPlan} plan.`
+        : 'Your horse records start here.';
 
   return (
     <main className="clean-entry-shell clean-entry-shell--brand-auth">
@@ -413,22 +413,11 @@ export default function Login() {
             </h2>
             <p>Bring your horses, records, and next decisions together.</p>
           </div>
-          <ul className="clean-login-capabilities" aria-label="Workspace tools">
-            <li>Horse records</li>
-            <li>Documents</li>
-            <li>Sale reports</li>
-          </ul>
         </aside>
 
         <section className="clean-auth-card clean-auth-card--login">
           <a className="clean-brand clean-brand--login" href="/" aria-label="XBAR home">
-            <span className="clean-brand__mark" aria-hidden="true">
-              <XbarMark tone="mono" />
-            </span>
-            <span>
-              <strong>XBAR</strong>
-              <small>Horse records</small>
-            </span>
+            <img className="clean-brand__wordmark" src="/brand/xbar-wordmark.png" width="550" height="170" alt="XBAR" />
           </a>
 
           <div className="clean-auth-card__header">
@@ -582,6 +571,7 @@ export default function Login() {
                     <>
                       <input
                         className="field-input"
+                        aria-label="Sign-in code"
                         inputMode="numeric"
                         autoComplete="one-time-code"
                         placeholder="6-digit code"

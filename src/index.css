@@ -1,5 +1,5 @@
-/* Fonts are loaded once from index.html (Outfit for UI, Fraunces for display).
-   Do not add per-file @import font loads — one UI family, one display family. */
+/* The single Outfit family is loaded from index.html. Shared font and
+   heading tokens are defined in styles/typography.css. */
 
 @tailwind base;
 
@@ -65,9 +65,6 @@
   --input: 210 8% 80%;
   --ring: 211 62% 41%;
   --radius: 0.625rem;
-  /* Typography system: exactly one UI family and one display family. */
-  --font-ui: 'Outfit', 'Avenir Next', 'Futura PT', 'Segoe UI Variable Text', sans-serif;
-  --font-display: 'Fraunces', 'Times New Roman', Georgia, serif;
 }
 
 * {

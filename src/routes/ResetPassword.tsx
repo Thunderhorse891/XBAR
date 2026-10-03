@@ -1,6 +1,5 @@
 import { type FormEvent, useEffect, useId, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { XbarMark } from '@/components/BrandMark';
 import { isSupabaseConfigured } from '@/lib/platformConfig';
 import { hasValidatedPasswordRecovery, useCloudStore } from '@/store/useCloudStore';
 import { recoveryGrantAdopted, resetScreenState } from '@/lib/passwordRecovery';
@@ -151,16 +150,10 @@ export default function ResetPassword() {
 
   return (
     <main className="clean-entry-shell clean-entry-shell--brand-auth">
-      <section className="clean-login-layout" aria-label="Choose a new XBAR password">
+      <section className="clean-login-layout clean-login-layout--recovery" aria-label="Choose a new XBAR password">
         <section className="clean-auth-card clean-auth-card--login">
           <a className="clean-brand clean-brand--login" href="/" aria-label="XBAR home">
-            <span className="clean-brand__mark" aria-hidden="true">
-              <XbarMark tone="mono" />
-            </span>
-            <span>
-              <strong>XBAR</strong>
-              <small>Horse records</small>
-            </span>
+            <img className="clean-brand__wordmark" src="/brand/xbar-wordmark.png" width="550" height="170" alt="XBAR" />
           </a>
 
           <div className="clean-auth-card__header">

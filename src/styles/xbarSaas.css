@@ -4,8 +4,8 @@
    All classes are prefixed `xs-` so they never collide with legacy styles.
    ========================================================================= */
 
-/* Typography comes from the global tokens in index.css (Outfit UI /
-   Fraunces display) — one system, no per-file font imports. */
+/* Typography comes from styles/typography.css: one Outfit interface family,
+   shared heading roles, and no per-file font imports. */
 
 :root {
   color-scheme: light;

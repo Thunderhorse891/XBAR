@@ -102,18 +102,11 @@ main.flex.flex-col {
 
 /* ── Topbar: light translucent steel ─────────── */
 
-.page-title,
-.panel__title,
-h1:not(.xs-hero__headline),
-h2,
-h3 {
-  color: #0d1420 !important;
-  letter-spacing: -0.03em;
-}
-
-.page-title {
-  font-size: clamp(1rem, 1.8vw, 1.55rem) !important;
-  line-height: 1.06 !important;
+/* Typography is shared across app, auth and public pages. Heading colors
+   belong to their surface, so dark heroes and dialogs inherit correctly. */
+.xs-shell .page-title {
+  font-size: var(--type-page-title);
+  line-height: var(--type-heading-leading);
 }
 
 .page-header {
