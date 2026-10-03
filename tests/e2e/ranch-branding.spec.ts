@@ -145,9 +145,17 @@ test('cancel, newer picks, and navigation invalidate older logo reads', async ({
   );
   await pauseLogoReads(page);
   await upload.setInputFiles(first);
+  await expect(page.getByRole('button', { name: 'Cancel logo upload', exact: true })).toBeVisible();
   await page.getByRole('link', { name: 'Horses', exact: true }).click();
+  // Horses is lazy-loaded. A click/URL change can leave Settings mounted under
+  // Suspense; prove the destination committed before completing the old read.
+  await expect(page).toHaveURL(/\/app\/horses$/);
+  await expect(page.getByRole('heading', { name: 'Build your first sale-ready horse record.' })).toBeVisible();
+  await expect(page.getByRole('heading', { name: 'Settings', exact: true })).toHaveCount(0);
   await releaseLogoReads(page);
   await page.getByRole('link', { name: 'Settings', exact: true }).click();
+  await expect(page).toHaveURL(/\/app\/settings$/);
+  await expect(page.getByRole('heading', { name: 'Settings', exact: true })).toBeVisible();
   await expect(page.getByRole('img', { name: 'Ranch logo preview' })).toHaveCount(0);
   expect((await savedProfile(page)).packetLogoDataUrl).toBeFalsy();
 });
@@ -394,7 +402,10 @@ test('freshly mounted Settings controls work after StrictMode effect replay and 
   expect((await savedProfile(page)).contactPhone).toBe('555-0141');
 
   await page.getByRole('link', { name: 'Horses', exact: true }).click();
+  await expect(page.getByRole('heading', { name: 'Build your first sale-ready horse record.' })).toBeVisible();
+  await expect(page.getByRole('heading', { name: 'Settings', exact: true })).toHaveCount(0);
   await page.getByRole('link', { name: 'Settings', exact: true }).click();
+  await expect(page.getByRole('heading', { name: 'Settings', exact: true })).toBeVisible();
   await page.getByLabel('Contact phone').fill('555-0142');
   await expect(page.getByLabel('Contact phone')).toHaveValue('555-0142');
   await page.getByRole('button', { name: 'Save profile', exact: true }).click();
