@@ -64,6 +64,26 @@ async function openBillingScreen(page: Page) {
   await expect(page.getByRole('heading', { name: 'Review Billing' })).toBeVisible({ timeout: 30_000 });
 }
 
+test('the native workflow checklist excludes the paid-plan step and keeps its own progress total', async ({ page }) => {
+  await page.setViewportSize({ width: 390, height: 844 });
+  await createWorkspace(page);
+  await goToRoute(page, '#/getting-started');
+  await expect(page.getByRole('heading', { name: 'Getting started', exact: true })).toBeVisible();
+
+  const checklist = page.locator('.xs-card').filter({ hasText: 'Workflow checklist' });
+  await expect(checklist).toContainText('1 of 6 steps are complete.');
+  await expect(page.locator('.xs-checkitem')).toHaveCount(6);
+  await expect(page.getByText('Review billing', { exact: true })).toHaveCount(0);
+  await expect(page.getByRole('button', { name: 'Open billing', exact: true })).toHaveCount(0);
+  await expect(page.getByText(/\d+% set up/)).toHaveCount(0);
+
+  await goToRoute(page, '#/billing');
+  await expect(page.getByRole('heading', { name: 'Review Billing', exact: true })).toBeVisible();
+  await page.goBack();
+  await expect(checklist).toContainText('1 of 6 steps are complete.');
+  expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(390);
+});
+
 test('the store build offers no purchase path on the billing screen', async ({ page }) => {
   await openBillingScreen(page);
 

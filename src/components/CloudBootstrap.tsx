@@ -207,7 +207,7 @@ export function CloudBootstrap() {
       setSyncState('syncing', 'Reconciling this ranch with cloud records...');
       const remote = await loadWorkspaceBackupFromCloud();
       if (!owns()) return;
-      if (remote.ok) {
+      if ('authoritativeSubscription' in remote && remote.authoritativeSubscription) {
         // Entitlements are server-owned, independent of any ranch-data conflict.
         // Updating only this field preserves local horses/documents and prevents
         // a stale Starter snapshot from trapping an already-granted owner.

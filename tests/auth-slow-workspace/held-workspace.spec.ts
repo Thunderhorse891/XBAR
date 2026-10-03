@@ -142,6 +142,21 @@ async function holdSnapshotApi(page: Page) {
 
 const heldGrant = (page: Page) => page.evaluate((key) => window.sessionStorage.getItem(key) ?? '', RECOVERY_KEY);
 
+/*
+ * These snapshot-hold cases need a readable canonical subscription. Leaving
+ * this endpoint unmocked returns the static server's 404, so fail-closed
+ * entitlement loading correctly stops before the snapshot under test.
+ */
+async function stubReadableSubscription(page: Page) {
+  await page.route(/\/rest\/v1\/workspace_subscription_profiles/, (route) =>
+    route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify({ tier: 'Starter', billing_state: 'Manual Billing', monthly_rate: 0, payload: {} }),
+    }),
+  );
+}
+
 test('a validated recovery reaches the form while the workspace API hangs', async ({ page }) => {
   const workspace = await holdWorkspaceApi(page);
   await stubGoTrueUser(page);
@@ -183,6 +198,7 @@ test('reloading while the workspace API hangs still reaches the form', async ({ 
 });
 
 test('releasing the workspace API hydrates once, for the workspace it resolved', async ({ page }) => {
+  await stubReadableSubscription(page);
   const workspace = await holdWorkspaceApi(page);
   const snapshotReads: string[] = [];
   await page.route(SNAPSHOT_REST, async (route) => {
@@ -399,6 +415,7 @@ test('switching accounts in a hydrated tab locks its records until the new profi
 });
 
 test('a token refresh during hydration does not restart or abandon it', async ({ page }) => {
+  await stubReadableSubscription(page);
   const workspace = await holdWorkspaceApi(page, { holding: false });
   const snapshot = await holdSnapshotApi(page);
   await stubGoTrueUser(page);
