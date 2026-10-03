@@ -962,3 +962,80 @@ test('renamed batch duplicates require comparison acknowledgment and keeping a c
   expect(result).toContainEqual({ title: 'original-paper', state: 'Matched', stored: true, reviewed: false });
   expect(result).toContainEqual({ title: 'renamed-copy', state: 'Ready', stored: true, reviewed: true });
 });
+
+test('complementary source papers create one durable horse record without copying facts between originals', async ({
+  page,
+  context,
+}) => {
+  await bootstrapWorkspace(page);
+  await page.getByRole('button', { name: 'Create', exact: true }).click();
+  await page.getByRole('menuitem', { name: 'Upload Document' }).click();
+  const drawer = page.getByRole('dialog', { name: 'Upload Document' });
+  await drawer.locator('input[type="file"]').setInputFiles([
+    {
+      name: 'registered-source.txt',
+      mimeType: 'text/plain',
+      buffer: Buffer.from(
+        'CERTIFICATE OF REGISTRATION\nRegistered Name: BLUE MOON\nRegistration Number: 7654321\nSire: SHINING SPARK',
+      ),
+    },
+    {
+      name: 'sale-source.txt',
+      mimeType: 'text/plain',
+      buffer: Buffer.from('BILL OF SALE\nRegistered Name: BLUE MOON\nSex: Mare\nColor: Bay\nOwner: Synthetic Ranch'),
+    },
+  ]);
+  await drawer.getByRole('checkbox').check();
+  await drawer.getByRole('button', { name: 'Upload for review' }).click();
+  await expect(page).toHaveURL(/\/horses\//);
+  const read = (target: Page) =>
+    target.evaluate(async () => {
+      const modulePath = '/src/store/useXbarStore.ts';
+      const { useXbarStore } = await import(/* @vite-ignore */ modulePath);
+      const state = useXbarStore.getState();
+      return {
+        count: state.horses.length,
+        horse: {
+          id: state.horses[0].id,
+          name: state.horses[0].name,
+          registration: state.horses[0].registrationNumber,
+          sire: state.horses[0].bloodline.sire,
+          color: state.horses[0].color,
+          owner: state.horses[0].owner,
+          sourceCount: state.horses[0].documents.length,
+        },
+        documents: state.documents.map(
+          (document: {
+            title: string;
+            horseId?: string;
+            localFileKey?: string;
+            entities: { registrationNumber?: string; color?: string };
+          }) => ({
+            title: document.title,
+            horseId: document.horseId,
+            stored: Boolean(document.localFileKey),
+            registration: document.entities.registrationNumber ?? '',
+            color: document.entities.color ?? '',
+          }),
+        ),
+      };
+    });
+  const saved = await read(page);
+  expect(saved.count).toBe(1);
+  expect(saved.horse).toMatchObject({
+    name: 'BLUE MOON',
+    registration: '7654321',
+    sire: 'SHINING SPARK',
+    color: 'Bay',
+    owner: 'Synthetic Ranch',
+    sourceCount: 2,
+  });
+  expect(saved.documents).toEqual([
+    { title: 'registered-source', horseId: saved.horse.id, stored: true, registration: '7654321', color: '' },
+    { title: 'sale-source', horseId: saved.horse.id, stored: true, registration: '', color: 'Bay' },
+  ]);
+  const restored = await context.newPage();
+  await restored.goto(`/app/horses/${saved.horse.id}`);
+  await expect.poll(() => read(restored)).toEqual(saved);
+  await restored.close();
+});
