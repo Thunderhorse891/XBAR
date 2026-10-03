@@ -106,10 +106,9 @@ test('a buyer disclosure still answers what a buyer came for', () => {
   assert.equal(disclosure.care.status, 'Pasture');
 });
 
-test('the owner entity falls back to the workspace, as the packet prints it', () => {
-  // The rendered page shows this fallback, so a credential sealed without the
-  // workspace profile would cover a different owner entity than the page shows.
-  assert.equal(toPacketDisclosure(privateHorse(), ownership(), workspace).ownership.ownerEntity, 'XBAR LLC');
+test('workspace defaults do not become ownership claims for this horse', () => {
+  // A ranch default is not evidence that entity owns this particular horse.
+  assert.equal(toPacketDisclosure(privateHorse(), ownership(), workspace).ownership.ownerEntity, '');
 });
 
 test('a field added to the record tomorrow is not disclosed by default', () => {

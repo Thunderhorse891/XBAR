@@ -9,6 +9,7 @@ import { openStoredFileInTab } from '@/lib/openStoredFile';
 import type { SalePacketBuild } from '@/types/xbar';
 import { isNavigableFileUrl } from '@/lib/navigableFileUrl';
 import { buildSaleReadinessScore } from '@/lib/saleReadinessScore';
+import { packetReadinessAction } from '@/lib/salePacketGuidance';
 import { buildBuyerPacketReleaseGate } from '@/lib/buyerPacketReleaseGate';
 
 function formatDate(value: string) {
@@ -55,20 +56,25 @@ export default function SalePacketStudio() {
         // checklist here disagreed with the gate (it wanted a bill of sale the
         // gate doesn't, and the wizard can draft), so there is none.
         const ownershipRecord = ownershipRecords.find((record) => record.horseId === horse.id);
+        const releaseGate = buildBuyerPacketReleaseGate({
+          horse,
+          documents: documents.filter((document) => document.horseId === horse.id),
+          ownershipRecord,
+        });
         const score = buildSaleReadinessScore({
           horse,
           documents,
           receipts: expenseReceipts,
           ownershipRecord,
-          releaseGate: buildBuyerPacketReleaseGate({
-            horse,
-            documents: documents.filter((document) => document.horseId === horse.id),
-            ownershipRecord,
-          }),
+          releaseGate,
         });
         const blockers = score.proofPacketBlocker ? [score.proofPacketBlocker] : [];
         const state: 'Ready' | 'Blocked' = score.proofPacketReady ? 'Ready' : 'Blocked';
-        return { horse, readyDocs, blockers, state };
+        const repairs = [
+          ...score.actions.map((action) => ({ reason: action.label, ...packetReadinessAction(action, horse.id) })),
+          ...releaseGate.remediations,
+        ];
+        return { horse, readyDocs, blockers, state, repairs };
       }),
     [horses, documents, expenseReceipts, ownershipRecords],
   );
@@ -122,7 +128,7 @@ export default function SalePacketStudio() {
 
       <Card title="Horse readiness">
         <div className="xs-mlist">
-          {readiness.map(({ horse, blockers, state, readyDocs }) => (
+          {readiness.map(({ horse, blockers, state, readyDocs, repairs }) => (
             <div key={horse.id} className="xs-mrow">
               <span className="xs-mrow__main" style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
                 <span className="xs-mrow__title">{horse.name}</span>
@@ -133,9 +139,19 @@ export default function SalePacketStudio() {
               </span>
               <StatusChip tone={state === 'Ready' ? 'success' : 'danger'}>{state}</StatusChip>
               {state === 'Blocked' ? (
-                <ActionButton size="sm" onClick={() => navigate(`/horses/${horse.id}`)}>
-                  Fix on record
-                </ActionButton>
+                <details style={{ maxWidth: 360 }}>
+                  <summary className="xs-btn xs-btn--sm">What needs fixing ({repairs.length})</summary>
+                  <ul style={{ margin: '8px 0', paddingLeft: 18 }} aria-label={`Packet requirements for ${horse.name}`}>
+                    {repairs.map((repair, index) => (
+                      <li key={`${repair.reason}-${index}`} style={{ marginBottom: 10 }}>
+                        <div>{repair.reason}</div>
+                        <ActionButton size="sm" onClick={() => navigate(repair.to)}>
+                          {repair.label}
+                        </ActionButton>
+                      </li>
+                    ))}
+                  </ul>
+                </details>
               ) : null}
               <ActionButton size="sm" variant="primary" onClick={() => openWizard(horse.id)}>
                 Build packet

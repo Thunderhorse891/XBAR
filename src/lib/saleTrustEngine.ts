@@ -1,3 +1,4 @@
+import { ownershipReviewBlockers } from './ownershipDocumentReview.js';
 import type { DocumentRecord, HorseRecord, OwnershipRecord } from '../types/xbar.js';
 
 export type SaleHold = {
@@ -6,6 +7,7 @@ export type SaleHold = {
   ownershipConfidence: number;
   transferStatus: string;
   missingTitleProof: string[];
+  ownershipReviewBlockers: string[];
 };
 
 function hasCurrentCoggins(documents: DocumentRecord[], horseId: string, now = new Date()) {
@@ -24,6 +26,8 @@ export function buildSaleHold(
   now = new Date(),
 ): SaleHold {
   const reasons: string[] = [];
+  const proofBlockers = ownershipReviewBlockers(ownershipRecord, horse, documents);
+  reasons.push(...proofBlockers.map((blocker) => `Ownership review: ${blocker}`));
   const missingTitleProof = [...(ownershipRecord?.pendingDocuments ?? [])];
   const hasOwnershipProof = documents.some(
     (document) =>
@@ -46,6 +50,7 @@ export function buildSaleHold(
     .forEach((alert) => reasons.push(`${alert.title}: ${alert.summary}`));
 
   return {
+    ownershipReviewBlockers: proofBlockers,
     held: reasons.length > 0,
     reasons: [...new Set(reasons)],
     ownershipConfidence: ownershipRecord?.confidence ?? 0,

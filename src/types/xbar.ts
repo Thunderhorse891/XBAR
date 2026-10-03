@@ -106,6 +106,9 @@ export interface OwnershipProofRequirement {
   linkedAt?: string;
   verifiedAt?: string;
   verifiedBy?: string;
+  /** Explicit human source-review acknowledgment, not independent verification. */
+  reviewAttestedAt?: string;
+  reviewedSourceKey?: string;
   note?: string;
 }
 
@@ -355,6 +358,11 @@ export interface DocumentRecord {
   state: ProcessingState;
   confidence: number;
   duplicateRisk: 'Low' | 'Review' | 'Possible Duplicate';
+  /** SHA-256 of the complete original file bytes, never of OCR text. */
+  contentSha256?: string;
+  duplicateOfId?: string;
+  duplicateReason?: string;
+  duplicateReviewedAt?: string;
   extractedTextPreview: string;
   /**
    * What the reader could NOT examine, when it could not examine all of it.
@@ -364,6 +372,8 @@ export interface DocumentRecord {
   processingNote?: string;
   /** Conflicting subject fields require separate/corrected source papers. */
   identityReviewRequired?: boolean;
+  /** Contradictory facts across related sources from one intake batch. */
+  batchReviewNote?: string;
   summary: string;
   entities: DocumentEntities;
   fileUrl?: string;
