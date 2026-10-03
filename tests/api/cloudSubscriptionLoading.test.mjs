@@ -48,13 +48,17 @@ function fixture({
   row = ownerGrant,
   subscriptionError = false,
   relational = false,
+  snapshotFallback = true,
+  snapshotError = false,
   ownerId = 'ws-owner',
   accessError = false,
   data = snapshot(),
 } = {}) {
   calls = [];
+  supabaseConfig.url = 'http://127.0.0.1:4179';
+  supabaseConfig.anonKey = 'owner-entitlement-test-key';
   supabaseConfig.relationalSyncEnabled = relational;
-  supabaseConfig.snapshotFallbackEnabled = true;
+  supabaseConfig.snapshotFallbackEnabled = snapshotFallback;
   const client = {
     auth: {
       getSession: async () => ({
@@ -75,7 +79,10 @@ function fixture({
         if (table === 'workspace_subscription_profiles')
           return { data: row, error: subscriptionError ? { message: 'subscription unavailable' } : null };
         if (table === supabaseConfig.workspaceTable)
-          return { data: { payload: data, updated_at: '2026-10-02T21:36:00Z' }, error: null };
+          return {
+            data: { payload: data, updated_at: '2026-10-02T21:36:00Z' },
+            error: snapshotError ? { message: 'snapshot unavailable' } : null,
+          };
         // Force a relational read failure while preserving the snapshot fallback.
         return { data: null, error: relational ? { message: 'relational records unavailable' } : null };
       };
@@ -215,4 +222,33 @@ test('canonical limits replace snapshot caps without zeroing current usage count
   assert.equal(usage.salePacketsGenerated, 9);
   assert.equal(usage.storageUsedGb, 17);
   assert.equal(usage.sharedAccessSeatsUsed, 2);
+});
+
+for (const config of [
+  { relational: true, data: null },
+  { relational: true, snapshotFallback: false },
+  { snapshotError: true },
+]) {
+  test(`canonical entitlements survive independently unavailable ranch records: ${JSON.stringify(config)}`, async () => {
+    fixture(config);
+    const loaded = await loadWorkspaceBackupFromCloud();
+    assert.equal(loaded.ok, false, 'record loading must still honestly fail');
+    assert.equal(loaded.backup, undefined, 'never substitute invented ranch records');
+    assert.equal(loaded.authoritativeSubscription?.tier, 'Enterprise');
+    assert.equal(loaded.authoritativeSubscription?.monthlyRate, 0);
+    assert.equal(profitIntelligenceGate(loaded.authoritativeSubscription), null);
+    assert.equal(
+      decideCloudReconciliation({ local: snapshot(), remoteError: loaded.message }),
+      'error-lock',
+      'unavailable records must not be treated as an empty ranch and automatically overwritten',
+    );
+  });
+}
+
+test('cancellation is authoritative even when no fallback snapshot exists', async () => {
+  fixture({ relational: true, data: null, row: { tier: 'Enterprise', billing_state: 'Inactive', monthly_rate: 199 } });
+  const loaded = await loadWorkspaceBackupFromCloud();
+  assert.equal(loaded.ok, false);
+  assert.equal(loaded.authoritativeSubscription?.tier, 'Starter');
+  assert.ok(profitIntelligenceGate(loaded.authoritativeSubscription));
 });

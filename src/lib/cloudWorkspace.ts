@@ -1212,30 +1212,14 @@ export async function loadWorkspaceBackupFromCloud() {
     return { ok: false, message: 'Sign in before pulling cloud data.' } as const;
   }
 
+  let relationalError: { ok: false; message: string } | undefined;
   if (isRelationalCloudEnabled()) {
     const relational = await loadWorkspaceBackupFromRelationalCloud(session);
     if (relational.ok) {
       return relational;
     }
 
-    if (!isSnapshotFallbackEnabled()) {
-      return relational;
-    }
-  }
-
-  const { data, error } = await client
-    .from(supabaseConfig.workspaceTable)
-    .select('payload, updated_at')
-    .eq('user_id', session.user.id)
-    .eq('workspace_key', 'primary')
-    .maybeSingle();
-
-  if (error) {
-    return { ok: false, message: error.message } as const;
-  }
-
-  if (!data?.payload) {
-    return { ok: false, message: 'No cloud workspace has been saved for this account yet.' } as const;
+    relationalError = relational;
   }
 
   // A snapshot preserves ranch records, not the authority to grant a plan.
@@ -1255,6 +1239,33 @@ export async function loadWorkspaceBackupFromCloud() {
     : { ok: true as const, profile: null };
   if (!subscription.ok) return subscription;
   const authoritativeSubscription = subscription.profile ?? baselineCloudSubscription();
+
+  // Entitlement reads are independent of record availability. A missing or
+  // unreadable snapshot must not leave a stale grant or cancellation in place.
+  if (relationalError && !isSnapshotFallbackEnabled()) {
+    return { ...relationalError, authoritativeSubscription } as const;
+  }
+
+  const { data, error } = await client
+    .from(supabaseConfig.workspaceTable)
+    .select('payload, updated_at')
+    .eq('user_id', session.user.id)
+    .eq('workspace_key', 'primary')
+    .maybeSingle();
+
+  if (error) {
+    return { ok: false, message: error.message, authoritativeSubscription } as const;
+  }
+
+  if (!data?.payload) {
+    return {
+      ok: false,
+      // A failed relational read is not proof that the ranch is empty. Keep
+      // reconciliation locked rather than inviting an automatic local push.
+      message: relationalError?.message ?? 'No cloud workspace has been saved for this account yet.',
+      authoritativeSubscription,
+    } as const;
+  }
 
   return {
     ok: true,
