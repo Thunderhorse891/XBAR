@@ -52,6 +52,30 @@ function ownershipIdentityConflicts(horse: HorseRecord, entities?: DocumentEntit
   });
 }
 
+/** The same source identity screen for document movement, approval and ownership.
+ * Cached entities in older backups may have been filled from the selected horse;
+ * they cannot override contradictory identity still present in the original text.
+ * No readable identity is an explicit manual assignment, not proof of ownership.
+ */
+export function inspectDocumentHorseIdentity(document: DocumentRecord, horse: HorseRecord) {
+  const sourceIdentity = extractRegistrationFields(
+    document.extractedTextPreview.replace(/(^|\n)\s*horse\s*[:#]\s*/gi, '$1Horse Name: '),
+  );
+  const sourceChips = [
+    ...document.extractedTextPreview.matchAll(/\bmicrochip(?:\s+(?:number|no\.?|id))?\s*[:#-]?\s*([A-Z0-9-]{5,30})/gi),
+  ].map((match) => normalize(match[1]));
+  const conflictReason =
+    document.identityReviewRequired || sourceIdentity.identityReviewRequired
+      ? 'The source contains ambiguous horse identities. Upload separate or corrected papers.'
+      : ownershipIdentityConflicts(horse, document.entities) || ownershipIdentityConflicts(horse, sourceIdentity)
+        ? 'The readable source or extracted identity conflicts with the selected horse. Choose the correct horse or upload corrected papers.'
+        : new Set(sourceChips).size > 1 ||
+            (horse.microchipId && sourceChips.some((chip) => chip !== normalize(horse.microchipId)))
+          ? 'The source microchip conflicts with this horse. Review the original and correct the record.'
+          : undefined;
+  return { sourceIdentity, conflictReason };
+}
+
 /** A content/identity screen, never a legal opinion or automatic verification. */
 export function assessOwnershipDocument(
   document: DocumentRecord | undefined,
@@ -102,27 +126,8 @@ export function assessOwnershipDocument(
       'wrong_type',
       'The document type or readable contents do not match this requirement. A filename alone is not evidence.',
     );
-  // Legacy payload entities may have been filled from the selected horse.
-  // Re-read the source preview, rather than laundering those copied facts.
-  const sourceIdentity = extractRegistrationFields(
-    document.extractedTextPreview.replace(/(^|\n)\s*horse\s*[:#]\s*/gi, '$1Horse Name: '),
-  );
-  if (sourceIdentity.identityReviewRequired || ownershipIdentityConflicts(horse, sourceIdentity))
-    return fail(
-      'identity_mismatch',
-      'The readable source identifies a different or ambiguous horse. Upload the correct source.',
-    );
-  const sourceChips = [
-    ...document.extractedTextPreview.matchAll(/\bmicrochip(?:\s+(?:number|no\.?|id))?\s*[:#-]?\s*([A-Z0-9-]{5,30})/gi),
-  ].map((match) => normalize(match[1]));
-  if (
-    new Set(sourceChips).size > 1 ||
-    (horse.microchipId && sourceChips.some((chip) => chip !== normalize(horse.microchipId)))
-  )
-    return fail(
-      'identity_mismatch',
-      'The source microchip conflicts with this horse. Review the original and correct the record.',
-    );
+  const { sourceIdentity, conflictReason } = inspectDocumentHorseIdentity(document, horse);
+  if (conflictReason) return fail('identity_mismatch', conflictReason);
   const nameMatches = Boolean(
     sourceIdentity.horseName &&
     [horse.name, horse.barnName].some((name) => normalize(name) === normalize(sourceIdentity.horseName)),

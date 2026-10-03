@@ -186,6 +186,12 @@ export default function AnimalProfile() {
     );
   }
 
+  const activeDocumentFacts = animal.documentFacts.filter((fact) =>
+    documents.some(
+      (document) =>
+        document.id === fact.sourceDocumentId && document.horseId === animal.id && document.state !== 'Archived',
+    ),
+  );
   const packetReady = saleReadiness?.proofPacketReady ?? false;
   const identity = identityCompleteness(animal);
   const identityTone: Tone = identity.percent >= 90 ? 'success' : identity.percent >= 60 ? 'info' : 'warning';
@@ -564,10 +570,14 @@ export default function AnimalProfile() {
       ) : null}
 
       {tab === 'Documents' ? (
-        <Card title="Documents" link="Open documents" onLink={() => navigate('/documents')}>
-          {animal.documentFacts.length ? (
+        <Card
+          title="Documents"
+          link="Open documents"
+          onLink={() => navigate(`/documents?stage=Library&horse=${encodeURIComponent(animal.id)}&from=profile`)}
+        >
+          {activeDocumentFacts.length ? (
             <div className="xs-mlist">
-              {animal.documentFacts.slice(0, 10).map((f) => (
+              {activeDocumentFacts.slice(0, 10).map((f) => (
                 <div key={f.id} className="xs-mrow">
                   <span className="xs-mrow__main">
                     <span className="xs-mrow__title">{f.label}</span>

@@ -142,3 +142,53 @@ test('the customer ownership summary opens source review and never labels stale 
   assert.match(route, /sources reviewed/);
   assert.doesNotMatch(route, /% verified|> Verified/);
 });
+
+test('approval re-reads sparse or stale legacy source identity instead of trusting copied entities', () => {
+  const other = { ...horse, id: 'other-horse', name: 'OTHER HORSE', barnName: '' };
+  useXbarStore.setState({ horses: [horse, other] });
+  for (const entities of [{}, { horseName: other.name, registrationNumber: horse.registrationNumber }]) {
+    const legacy = { ...source, horseId: undefined, entities };
+    useXbarStore.setState({ documents: [legacy] });
+    assert.equal(useXbarStore.getState().reviewDocument(source.id, other.id).ok, false);
+    assert.deepEqual(useXbarStore.getState().documents[0], legacy);
+  }
+});
+
+test('approval rejects contradictory readable pedigree and microchip even when cached entities are blank', () => {
+  const target = {
+    ...horse,
+    microchipId: '982000123456789',
+    bloodline: { ...horse.bloodline, sire: 'REAL SIRE (1234567)' },
+  };
+  useXbarStore.setState({ horses: [target] });
+  for (const text of [
+    'Horse: DESERT DAISY\nMicrochip: 982000987654321',
+    'Horse: DESERT DAISY\nSire: OTHER SIRE',
+    'Horse: DESERT DAISY\nSire: REAL SIRE\nSire Registration Number: 7654321',
+  ]) {
+    const legacy = { ...source, entities: {}, extractedTextPreview: text };
+    useXbarStore.setState({ documents: [legacy] });
+    assert.equal(useXbarStore.getState().reviewDocument(source.id, horse.id).ok, false, text);
+  }
+});
+
+test('archived or queued originals cannot bypass review through direct approval or new-horse actions', () => {
+  for (const state of ['Archived', 'Queued']) {
+    const held = { ...source, state, horseId: undefined };
+    useXbarStore.setState({ documents: [held] });
+    assert.equal(useXbarStore.getState().reviewDocument(source.id, horse.id).ok, false);
+    assert.equal(useXbarStore.getState().createHorseFromDocument(source.id).ok, false);
+    assert.deepEqual(useXbarStore.getState().documents, [held]);
+  }
+});
+
+test('the archived library remains read-only until server lifecycle enforcement is available', async () => {
+  const { readFile } = await import('node:fs/promises');
+  const library = await readFile('src/components/DocumentLibrary.tsx', 'utf8');
+  const route = await readFile('src/routes/Documents.tsx', 'utf8');
+  assert.match(library, /Restore and move controls aren’t available yet/);
+  assert.doesNotMatch(library, /restoreDocument|reassignDocument|discardDocument|onControl/);
+  assert.match(route, /original files are uploaded to your workspace/);
+  assert.match(route, /inspectDocumentHorseIdentity\(document, horse\)/);
+  assert.match(route, /const reviewHorseId = document\.horseId \|\| requestedHorse\?\.id/);
+});

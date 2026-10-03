@@ -4,7 +4,6 @@ import { createJSONStorage, persist } from 'zustand/middleware';
 import {
   buildDocumentRecord,
   resolveDocumentHorseMatch,
-  horseIdentityConflicts,
   buildSubscriptionForTier,
   createId,
   createShareAccessToken,
@@ -22,6 +21,7 @@ import { groupDocumentBatchCandidates } from '@/lib/documentBatchIdentity';
 import { flagDocumentDuplicates, documentDuplicateNeedsReview, fingerprintDocument } from '@/lib/documentDuplicates';
 import {
   assessOwnershipDocument,
+  inspectDocumentHorseIdentity,
   ownershipReviewBlockers,
   ownershipDocumentReviewKey,
 } from '@/lib/ownershipDocumentReview';
@@ -1297,6 +1297,13 @@ export const useXbarStore = create<XbarStore>()(
           return { ok: false, message: 'Document not found.' };
         }
 
+        if (document.state === 'Archived' || document.state === 'Queued') {
+          return {
+            ok: false,
+            message: 'Archived documents cannot be approved. Queued documents must finish processing first.',
+          };
+        }
+
         if (document.identityReviewRequired) {
           return {
             ok: false,
@@ -1315,7 +1322,7 @@ export const useXbarStore = create<XbarStore>()(
           return { ok: false, message: 'Selected horse record was not found.' };
         }
 
-        if (horseIdentityConflicts(matchedHorse, document.entities)) {
+        if (inspectDocumentHorseIdentity(document, matchedHorse).conflictReason) {
           return {
             ok: false,
             message:
@@ -1369,6 +1376,13 @@ export const useXbarStore = create<XbarStore>()(
         if (!document) {
           return { ok: false, message: 'Document not found.' };
         }
+        if (document.state === 'Archived' || document.state === 'Queued') {
+          return {
+            ok: false,
+            message: 'Archived documents cannot be approved. Queued documents must finish processing first.',
+          };
+        }
+
         if (document.identityReviewRequired) {
           return {
             ok: false,

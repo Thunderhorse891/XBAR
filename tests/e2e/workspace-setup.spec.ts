@@ -1039,3 +1039,59 @@ test('complementary source papers create one durable horse record without copyin
   await expect.poll(() => read(restored)).toEqual(saved);
   await restored.close();
 });
+
+test('archived library keeps the actual original readable after archive and reload without exposing unsafe recovery controls', async ({
+  page,
+  context,
+}) => {
+  await bootstrapWorkspace(page);
+  await seedHorse(page, 'Library Horse');
+  const libraryHorseId = new URL(page.url()).pathname.split('/').at(-1)!;
+  await page.getByRole('button', { name: 'Create', exact: true }).click();
+  await page.getByRole('menuitem', { name: 'Upload Document' }).click();
+  const upload = page.getByRole('dialog', { name: 'Upload Document' });
+  const original = 'Care notes for manual review. Original scan retained.';
+  await upload
+    .locator('input[type="file"]')
+    .setInputFiles({ name: 'library-original.txt', mimeType: 'text/plain', buffer: Buffer.from(original) });
+  await upload.getByRole('checkbox').uncheck();
+  await upload.getByRole('button', { name: 'Upload for review' }).click();
+  await expect(page).toHaveURL(/\/documents/);
+  const review = page.getByRole('group', { name: 'library-original review actions' });
+  await expect(review).toBeVisible();
+  await review.getByRole('button', { name: 'Archive', exact: true }).click();
+  await expect(review).not.toBeVisible();
+  await page.getByRole('tab', { name: /^Library/ }).click();
+  await expect(page.getByRole('button', { name: /^Active \(0\)/ })).toBeVisible();
+  await page.getByRole('button', { name: /^Archived \(1\)/ }).click();
+  const row = page.getByRole('row', { name: 'library-original library actions' });
+  await expect(row).toContainText('Archived');
+  await expect(row.getByRole('button', { name: 'Restore', exact: true })).toHaveCount(0);
+  await expect(row.getByRole('button', { name: 'Move', exact: true })).toHaveCount(0);
+  await expect(
+    page.getByText('Archived originals stay here. Restore and move controls aren’t available yet.'),
+  ).toBeVisible();
+  const opened = context.waitForEvent('page');
+  await row.getByRole('button', { name: 'Open file', exact: true }).click();
+  const originalTab = await opened;
+  await expect(originalTab).toHaveURL(/^blob:/);
+  await expect(originalTab.locator('body')).toHaveText(original);
+  await originalTab.close();
+
+  const reloaded = await context.newPage();
+  await reloaded.goto(`/app/documents?stage=Library&horse=${libraryHorseId}&from=profile`);
+  await expect(reloaded.getByRole('tab', { name: 'Library (1)', exact: true })).toBeVisible();
+  await expect(reloaded.getByRole('button', { name: 'Back to horse', exact: true })).toBeVisible();
+  await reloaded.getByRole('button', { name: /^Archived \(1\)/ }).click();
+  const retained = reloaded.getByRole('row', { name: 'library-original library actions' });
+  await expect(retained).toContainText('On this device');
+  const reopened = context.waitForEvent('page');
+  await retained.getByRole('button', { name: 'Open file', exact: true }).click();
+  const retainedTab = await reopened;
+  await expect(retainedTab).toHaveURL(/^blob:/);
+  await expect(retainedTab.locator('body')).toHaveText(original);
+  await retainedTab.close();
+  await reloaded.getByRole('button', { name: 'Back to horse', exact: true }).click();
+  await expect(reloaded).toHaveURL(new RegExp(`/horses/${libraryHorseId}$`));
+  await reloaded.close();
+});
