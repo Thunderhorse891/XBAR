@@ -834,3 +834,137 @@ test('ownership blockers retain a cache-only review hold without contradicting f
     /approve the document again.*legacy identity cache/,
   );
 });
+
+test('explicit Horse fields after source headings retain the same identity when flattened', () => {
+  const target = { ...horse, name: 'BLUE MOON', registrationNumber: '', aqhaNumber: '', registry: '' };
+  for (const [heading, type, kind] of [
+    ['BILL OF SALE', 'Bill of Sale', 'bill_of_sale'],
+    ['CERTIFICATE OF REGISTRATION', 'Registration', 'registration_certificate'],
+    ['TRANSFER OF OWNERSHIP', 'Transfer Packet', 'transfer_form'],
+  ] as const) {
+    for (const boundary of [' ', '\n', '\r\n', ' | ', '; ']) {
+      for (const delimiter of [':', '#', '=']) {
+        const text = `${heading}${boundary}Horse${delimiter} BLUE MOON`;
+        const source = document({ type, extractedTextPreview: text, entities: {} });
+        const review = inspectDocumentHorseIdentity(source, target);
+        assert.equal(review.sourceIdentity.horseName, target.name, text);
+        assert.equal(review.sourceEntities.horseName, target.name, text);
+        assert.equal(review.missingIdentityReason, undefined, text);
+        assert.equal(review.conflictReason, undefined, text);
+        assert.equal(assessOwnershipDocument(source, target, kind).ok, true, text);
+      }
+    }
+  }
+});
+
+test('plain Horse labels in prose and qualified parent or party fields do not supply subject identity', () => {
+  for (const text of [
+    'BILL OF SALE Seller described the horse: BLUE MOON',
+    'BILL OF SALE notes about Horse: BLUE MOON',
+    'This bill of sale describes the Horse: BLUE MOON',
+    'BILL OF SALE Sire Horse: BLUE MOON',
+    "BILL OF SALE Sire's Horse: BLUE MOON",
+    'BILL OF SALE Dam Horse: BLUE MOON',
+    "BILL OF SALE Owner's Horse: BLUE MOON",
+    "BILL OF SALE\nOwner's\nHorse: BLUE MOON",
+    'BILL OF SALE Horsepower: BLUE MOON',
+    'BILL OF SALE Horse ID: BLUE MOON',
+  ]) {
+    const review = inspectDocumentHorseIdentity(
+      document({ type: 'Bill of Sale', extractedTextPreview: text, entities: {} }),
+    );
+    assert.equal(review.sourceIdentity.horseName, undefined, text);
+    assert.equal(review.sourceEntities.horseName, undefined, text);
+    assert.match(review.missingIdentityReason ?? '', /no horse identity/i, text);
+  }
+  const subjectWithParent = document({
+    type: 'Bill of Sale',
+    extractedTextPreview: "BILL OF SALE Horse: DESERT DAISY Sire's Horse: BLUE MOON",
+    entities: {},
+  });
+  const review = inspectDocumentHorseIdentity(subjectWithParent, horse);
+  assert.equal(review.sourceIdentity.horseName, horse.name);
+  assert.equal(review.sourceIdentityReviewRequired, false);
+});
+
+test('UELN and passport fields are bounded metadata rather than additional microchips', () => {
+  const target = { ...horse, microchipId: '900123456789012' };
+  for (const label of ['UELN', 'Universal Equine Life Number', 'Passport Number', 'Passport No.', 'Passport ID']) {
+    for (const boundary of [' ', '\n', '\r\n']) {
+      for (const delimiter of [':', '#', '=', '']) {
+        for (const chip of ['UNKNOWN', target.microchipId]) {
+          const text = `${paper}\nMicrochip: ${chip}${boundary}${label}${delimiter} 276098106123456`;
+          const source = document({ extractedTextPreview: text });
+          const review = inspectDocumentHorseIdentity(source, target);
+          assert.deepEqual(review.sourceChips, chip === 'UNKNOWN' ? [] : [target.microchipId], text);
+          assert.equal(review.conflictReason, undefined, text);
+          assert.equal(assessOwnershipDocument(source, target, 'registration_certificate').ok, true, text);
+        }
+      }
+    }
+  }
+});
+
+test('invalid metadata boundaries cannot hide actual chip evidence', () => {
+  const target = { ...horse, microchipId: '900123456789012' };
+  for (const metadata of [
+    'UELNish: 276098106123456',
+    'UELN appears in note 276098106123456',
+    'Universal Equine Life Story: 276098106123456',
+    'Passport Stamp: 276098106123456',
+    'PassportNumber: 276098106123456',
+  ]) {
+    const review = inspectDocumentHorseIdentity(
+      document({ extractedTextPreview: `${paper}\nMicrochip: UNKNOWN ${metadata}` }),
+      target,
+    );
+    assert.ok(review.conflictReason, metadata);
+  }
+  for (const label of ['UELN', 'Universal Equine Life Number', 'Passport Number']) {
+    for (const boundary of [' ', '\n']) {
+      const conflictingFirst = `${paper}\nMicrochip: 900123456789099${boundary}${label}: 276098106123456`;
+      assert.match(
+        inspectDocumentHorseIdentity(document({ extractedTextPreview: conflictingFirst }), target).conflictReason ?? '',
+        /microchip conflicts/,
+        conflictingFirst,
+      );
+      const conflictingLater = `${paper}\nMicrochip: ${target.microchipId}${boundary}${label}: 276098106123456\nMicrochip: 900123456789099`;
+      assert.match(
+        inspectDocumentHorseIdentity(document({ extractedTextPreview: conflictingLater }), target).conflictReason ?? '',
+        /microchip conflicts/,
+        conflictingLater,
+      );
+    }
+  }
+});
+
+test('flattened Horse ownership forms share fresh identity and facts, including party fields and real mismatches', () => {
+  const target = { ...horse, name: 'BLUE MOON', registrationNumber: '1234567', aqhaNumber: '', registry: '' };
+  for (const boundary of [' ', '\n', '\r\n']) {
+    for (const registration of ['', `Registration Number: 1234567${boundary}`]) {
+      const text = `BILL OF SALE${boundary}Horse: BLUE MOON${boundary}${registration}Buyer: Fresh Ranch${boundary}Seller: Sample Seller${boundary}Signature: Signed`;
+      const source = document({ type: 'Bill of Sale', extractedTextPreview: text, entities: {} });
+      const review = inspectDocumentHorseIdentity(source, target);
+      assert.equal(review.sourceIdentity.horseName, 'BLUE MOON', text);
+      assert.equal(review.sourceEntities.horseName, 'BLUE MOON', text);
+      assert.equal(review.conflictReason, undefined, text);
+      assert.equal(assessOwnershipDocument(source, target, 'bill_of_sale').ok, true, text);
+      const wrongSource = { ...source, extractedTextPreview: text.replace('Horse: BLUE MOON', 'Horse: RED SUN') };
+      assert.match(
+        inspectDocumentHorseIdentity(wrongSource, target).conflictReason ?? '',
+        /conflicts with the selected horse/,
+        text,
+      );
+      assert.equal(assessOwnershipDocument(wrongSource, target, 'bill_of_sale').status, 'identity_mismatch', text);
+    }
+  }
+  for (const separator of [' ', '; ', ' | ']) {
+    const text = `BILL OF SALE Horse: BLUE MOON${separator}Horse: RED SUN`;
+    const review = inspectDocumentHorseIdentity(
+      document({ type: 'Bill of Sale', extractedTextPreview: text, entities: {} }),
+      target,
+    );
+    assert.ok(review.conflictReason, text);
+    assert.equal(review.sourceIdentityReviewRequired, true, text);
+  }
+});

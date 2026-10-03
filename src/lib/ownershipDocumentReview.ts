@@ -131,6 +131,41 @@ function sourceMicrochipKeys(value: string): string[] {
   return parsed[0].keys;
 }
 
+/** Recognize the plain Horse alias only at explicit form boundaries. Keep this
+ * ownership-review normalization local; prose and qualified labels are not subjects.
+ */
+function normalizeSourceHorseFields(text: string): string {
+  const joined = text.replace(
+    /(^|[\r\n])[ \t]*((?:sire|dam|owner|breeder|seller|buyer)(?:['’]s)?)[ \t]*\r?\n[ \t]*(?=horse\s*[:#=])/gi,
+    '$1$2 ',
+  );
+  const normalized = joined.replace(/\bhorse\s*[:#=]\s*/gi, (label, offset: number) => {
+    const prefix =
+      joined
+        .slice(0, offset)
+        .split(/\r\n?|\n/)
+        .at(-1)
+        ?.trim() ?? '';
+    const followsHeading = [
+      sourceCues.bill_of_sale,
+      sourceCues.registration_certificate,
+      sourceCues.transfer_form,
+    ].some((cue) => {
+      const heading = prefix.match(cue);
+      return Boolean(
+        heading &&
+        hasDocumentSourceHeading(prefix, cue) &&
+        /^[\s|;:.-]*$/.test(prefix.slice(heading.index! + heading[0].length)),
+      );
+    });
+    return !prefix || /[|;]$/.test(prefix) || followsHeading ? 'Horse Name: ' : label;
+  });
+  // Buyer and seller fields commonly follow the subject in a flattened sale
+  // form. A real field delimiter bounds the name without making party names
+  // into subject identity or changing the global registration label taxonomy.
+  return normalized.replace(/\s+(?=(?:buyer|seller)(?:['’]s)?(?:\s+name)?\s*[:#=])/gi, '\n');
+}
+
 /** The same source identity screen for document movement, approval and ownership.
  * Cached entities in older backups may have been filled from the selected horse;
  * they cannot replace missing identity or override contradictory source identity.
@@ -138,13 +173,13 @@ function sourceMicrochipKeys(value: string): string[] {
  * remain separate from extracted facts and ownership evidence.
  */
 export function inspectDocumentHorseIdentity(document: DocumentRecord, horse?: HorseRecord) {
-  const { identityReviewRequired: sourceIdentityReviewRequired, ...sourceIdentity } = extractRegistrationFields(
-    document.extractedTextPreview.replace(/(^|\n)\s*horse\s*[:#]\s*/gi, '$1Horse Name: '),
-  );
+  const normalizedSource = normalizeSourceHorseFields(document.extractedTextPreview);
+  const { identityReviewRequired: sourceIdentityReviewRequired, ...sourceIdentity } =
+    extractRegistrationFields(normalizedSource);
   // Reuse intake's canonical fact reader, but a filename is not source evidence.
   const sourceEntities = extractDocumentEntities({
     fileName: '',
-    previewText: document.extractedTextPreview,
+    previewText: normalizedSource,
     inferredType: document.type,
   });
   delete sourceEntities.identityReviewRequired;
@@ -153,6 +188,10 @@ export function inspectDocumentHorseIdentity(document: DocumentRecord, horse?: H
   // field ends it; unfamiliar/malformed continuation is evidence, not absence.
   const chipSpans: string[] = [];
   const neighboringField = `${registrationFieldLabelPattern}|date|dob|born|weight|batch|lot|invoice|phone|reg\\.?`;
+  // These are neighboring identifier fields, never chip evidence. Require the
+  // exact field label and punctuation or a numeric value, not an arbitrary
+  // continuation containing a metadata word.
+  const chipMetadataField = String.raw`(?:ueln(?:\s+(?:number|no\.?|id))?|universal\s+equine\s+life\s+number|passport(?:\s+(?:number|no\.?|id))?)`;
   const text = document.extractedTextPreview;
   const labels = [...text.matchAll(/\bmicrochip\b/gi)];
   for (const [index, label] of labels.entries()) {
@@ -166,6 +205,8 @@ export function inspectDocumentHorseIdentity(document: DocumentRecord, horse?: H
     span = span.split(
       new RegExp(String.raw`\b(?:${neighboringField})(?:\s+(?:number|no\.?))?\s+(?=[+]?(?:[a-z]{0,5})\d)`, 'i'),
     )[0];
+    span = span.split(new RegExp(String.raw`\b${chipMetadataField}\s*[:#=]`, 'i'))[0];
+    span = span.split(new RegExp(String.raw`\b${chipMetadataField}\s+(?=[+]?(?:[a-z]{0,5})\d)`, 'i'))[0];
     chipSpans.push(span);
   }
   const sourceChips = chipSpans
@@ -189,8 +230,9 @@ export function inspectDocumentHorseIdentity(document: DocumentRecord, horse?: H
     });
   });
   const storedChip = horse?.microchipId && (microchipKey(horse.microchipId.trim()) ?? normalize(horse.microchipId));
+  const unresolvedSubjectField = /\bhorse\s*[:#=]/i.test(sourceIdentity.horseName ?? '');
   const conflictReason =
-    sourceIdentityReviewRequired || unparsedChipEvidence
+    sourceIdentityReviewRequired || unresolvedSubjectField || unparsedChipEvidence
       ? 'The source contains ambiguous horse identities. Upload separate or corrected papers.'
       : horse && ownershipIdentityConflicts(horse, sourceIdentity)
         ? 'The readable source identity conflicts with the selected horse. Choose the correct horse or upload corrected papers.'
@@ -206,7 +248,7 @@ export function inspectDocumentHorseIdentity(document: DocumentRecord, horse?: H
     sourceEntities,
     sourceChips,
     sourceIdentityReviewRequired: Boolean(
-      sourceIdentityReviewRequired || unparsedChipEvidence || new Set(sourceChips).size > 1,
+      sourceIdentityReviewRequired || unresolvedSubjectField || unparsedChipEvidence || new Set(sourceChips).size > 1,
     ),
     conflictReason,
     missingIdentityReason,
