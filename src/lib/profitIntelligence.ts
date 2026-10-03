@@ -395,7 +395,11 @@ export function buildRanchFinancials(
   // gain, so those rows are proceeds we can show but profit we won't invent.
   const hasKnownProfit = (row: AnimalFinancialRow) => row.value > 0 && !row.costBlindSpot;
   const soldWithPrice = sold.filter((row) => !row.saleValueUnknown); // the agreed amount is known
-  const soldBanked = soldWithPrice.filter((row) => !row.costBlindSpot); // profit is knowable
+  const soldCosted = soldWithPrice.filter((row) => !row.costBlindSpot); // profit is knowable
+  // Banked is narrower still: a sale's profit is banked only once it is paid in
+  // full (audit F08). An unpaid or part-paid sale's margin is agreed, not banked,
+  // so it adds nothing to the banked figure until the money is in.
+  const soldBanked = soldCosted.filter((row) => row.outstanding === 0);
   const pipeline = rows.filter((row) => row.status === 'pipeline');
   const held = rows.filter((row) => row.status === 'held');
   const unrealized = [...pipeline, ...held];
@@ -468,7 +472,9 @@ export function buildRanchFinancials(
     soldMissingPriceCount,
     perAnimal: sortAnimalRows(rows),
     topCostCategories,
-    insights: buildFinancialInsights(soldBanked, held, topCostCategories, {
+    // Best and worst sale read the agreed margin -- a fact of the deal whether or
+    // not it has been paid; what is still owed is its own insight.
+    insights: buildFinancialInsights(soldCosted, held, topCostCategories, {
       unsettled,
       costBlindSpotCount,
       unpricedHeldCount,

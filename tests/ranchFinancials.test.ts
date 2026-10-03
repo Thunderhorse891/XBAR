@@ -260,7 +260,7 @@ test('overhead can flip a positive gross into a net loss, and it is surfaced', (
   const solo = buildRanchFinancials(
     [horse('h', 5000, 20000, 'Halo')],
     [receipt('rent', undefined, 'Other', 20000)],
-    [wonLead('lh', 'h', 15000)], // 15,000 − 5,000 = 10,000 gross
+    [paidInFull(wonLead('lh', 'h', 15000))], // 15,000 − 5,000 = 10,000 gross, paid
   );
   assert.equal(solo.grossProfitOnSales, 10000);
   assert.equal(solo.overheadSpend, 20000);

@@ -3,7 +3,7 @@ import { readFile } from 'node:fs/promises';
 import test from 'node:test';
 import { buildBankedHeadline, buildRanchFinancials, saleAmountReceived } from '../src/lib/profitIntelligence.js';
 import { validateSalePayment } from '../src/lib/salePayment.js';
-import type { HorseRecord, SalesLead } from '../src/types/xbar.js';
+import type { ExpenseReceipt, HorseRecord, SalesLead } from '../src/types/xbar.js';
 
 /*
  * Audit F08: "Profit banked" counted money that had not been received. Any lead
@@ -40,9 +40,13 @@ test("the audit's unpaid sale is agreed, not collected, and the headline says so
   assert.equal(fin.collectedFromSales, 0);
   assert.equal(fin.outstandingFromSales, 25000);
   assert.equal(fin.soldUnsettledCount, 1);
+  // Nothing has been received, so nothing is banked: no $15,000 figure at all.
+  assert.equal(fin.netProfit, 0);
+  assert.equal(fin.grossProfitOnSales, 0);
   const headline = buildBankedHeadline(fin);
   assert.notEqual(headline.state, 'complete');
-  assert.equal(headline.state, 'partial');
+  assert.equal(headline.state, 'unknown');
+  assert.equal(headline.netProfit, 0);
   assert.equal(headline.fixPhrase, 'record payments received');
   const owed = fin.insights.find((insight) => insight.id === 'sale-payment-outstanding');
   assert.equal(owed?.tone, 'risk');
@@ -54,14 +58,36 @@ test('a paid deposit counts as received, and only the deposit', () => {
   const fin = financials(auditLead({ depositStatus: 'Paid' }));
   assert.equal(fin.collectedFromSales, 5000);
   assert.equal(fin.outstandingFromSales, 20000);
-  assert.equal(buildBankedHeadline(fin).state, 'partial');
+  assert.notEqual(buildBankedHeadline(fin).state, 'complete');
+  assert.equal(fin.netProfit, 0, 'a deposit is money in, but the sale is not banked until paid');
+});
+
+test('an unpaid sale adds nothing to banked profit, so overhead shows as the true floor', () => {
+  const fin = buildRanchFinancials(
+    [horse('h1', 10000, 'Dun It Again')],
+    [{ id: 'rent', category: 'Other', amount: 300 } as unknown as ExpenseReceipt],
+    [auditLead()],
+  );
+  assert.equal(fin.netProfit, -300, 'not +$14,700 from money nobody has paid');
+  const headline = buildBankedHeadline(fin);
+  assert.equal(headline.state, 'partial');
+  assert.equal(headline.netProfit, -300);
+  // Paid in full, the same sale is banked.
+  const paid = buildRanchFinancials(
+    [horse('h1', 10000, 'Dun It Again')],
+    [{ id: 'rent', category: 'Other', amount: 300 } as unknown as ExpenseReceipt],
+    [auditLead({ amountReceived: 25000, amountReceivedOn: '2026-05-20' })],
+  );
+  assert.equal(paid.netProfit, 14700);
+  assert.equal(buildBankedHeadline(paid).state, 'complete');
 });
 
 test('a partly paid sale is partial; paid in full is complete', () => {
   const part = financials(auditLead({ amountReceived: 20000, amountReceivedOn: '2026-05-10' }));
   assert.equal(part.collectedFromSales, 20000);
   assert.equal(part.outstandingFromSales, 5000);
-  assert.equal(buildBankedHeadline(part).state, 'partial');
+  assert.notEqual(buildBankedHeadline(part).state, 'complete');
+  assert.equal(part.netProfit, 0, 'part-paid is not banked');
 
   const paid = financials(auditLead({ amountReceived: 25000, amountReceivedOn: '2026-05-20' }));
   assert.equal(paid.collectedFromSales, 25000);
@@ -145,6 +171,9 @@ test('the screens show money received as collected, and the form records it', as
   assert.match(money, /still owed/);
   const sales = await readFile('src/routes/Sales.tsx', 'utf8');
   assert.match(sales, /validateSalePayment\(\{/);
+  // "Still owed" in the form is the engine's own figure, deposit fallback included.
+  assert.match(sales, /const receivedPreview = saleAmountReceived\(/);
+  assert.match(sales, /formatCompactCurrency\(agreedSaleValue - receivedPreview\)\} still owed/);
   assert.match(sales, /amountReceived: payment\.amountReceived, amountReceivedOn: payment\.amountReceivedOn/);
   assert.doesNotMatch(sales, /toISOString\(\)\.slice\(0, 10\)/, 'dates default to the local day');
   const store = await readFile('src/store/useXbarStore.ts', 'utf8');

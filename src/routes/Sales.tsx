@@ -14,8 +14,9 @@ import { MetricCard, Panel, Pill } from '@/components/app-ui';
 import { DotsIcon } from '@/components/icons';
 import { buildPublicShareUrl } from '@/lib/facebookSharing';
 import { formatCompactCurrency, formatDateLabel, localIsoDate } from '@/lib/format';
-import { buildOfferDecision } from '@/lib/profitIntelligence';
+import { buildOfferDecision, saleAmountReceived } from '@/lib/profitIntelligence';
 import { validateSalePayment } from '@/lib/salePayment';
+import type { SalesLead } from '@/types/xbar';
 import { buildSaleHold } from '@/lib/saleTrustEngine';
 import { useUiStore } from '@/store/useUiStore';
 import { buildHorsePacketCompleteness } from '@/lib/xbarPhaseTwo';
@@ -82,7 +83,9 @@ export default function Sales() {
   const [leadAmountReceived, setLeadAmountReceived] = useState(
     selectedLead?.amountReceived !== undefined ? String(selectedLead.amountReceived) : '',
   );
-  const [leadAmountReceivedOn, setLeadAmountReceivedOn] = useState(selectedLead?.amountReceivedOn ?? '');
+  const [leadAmountReceivedOn, setLeadAmountReceivedOn] = useState(
+    typeof selectedLead?.amountReceivedOn === 'string' ? selectedLead.amountReceivedOn : '',
+  );
   const [acceptMarginOverride, setAcceptMarginOverride] = useState(false);
   const [leadError, setLeadError] = useState('');
   const [menuState, setMenuState] = useState<{ type: 'lead' | 'horse'; id: string; x: number; y: number } | null>(null);
@@ -102,7 +105,7 @@ export default function Sales() {
     setLeadNotes(selectedLead.notes ?? '');
     setLeadOutcome(selectedLead.outcome ?? 'Won');
     setLeadAmountReceived(selectedLead.amountReceived !== undefined ? String(selectedLead.amountReceived) : '');
-    setLeadAmountReceivedOn(selectedLead.amountReceivedOn ?? '');
+    setLeadAmountReceivedOn(typeof selectedLead.amountReceivedOn === 'string' ? selectedLead.amountReceivedOn : '');
     setAcceptMarginOverride(false);
     setLeadError('');
   }, [selectedLead]);
@@ -122,6 +125,16 @@ export default function Sales() {
   // buildRanchFinancials reads it.
   const agreedSaleValue = Number(leadCounterOfferAmount) || Number(leadOfferAmount) || 0;
   const closedWon = leadStage === 'Closed' && leadOutcome === 'Won';
+  // What the money engine will count as received for this close-out -- with the
+  // same paid-deposit fallback -- so "still owed" here matches the dashboard.
+  const receivedPreview = saleAmountReceived(
+    {
+      amountReceived: leadAmountReceived.trim() ? Number(leadAmountReceived) : undefined,
+      depositAmount: Number(leadDepositAmount) || undefined,
+      depositStatus: leadDepositStatus,
+    } as SalesLead,
+    agreedSaleValue,
+  );
   const menuLead = menuState?.type === 'lead' ? salesLeads.find((lead) => lead.id === menuState.id) : undefined;
   const menuHorse = menuState?.type === 'horse' ? saleHorses.find((horse) => horse.id === menuState.id) : undefined;
   const menuListing = menuHorse
@@ -737,7 +750,7 @@ export default function Sales() {
                     <div className="field-stack">
                       <span className="field-label">
                         {agreedSaleValue > 0
-                          ? `${formatCompactCurrency(Math.max(0, agreedSaleValue - (Number(leadAmountReceived) || 0)))} still owed`
+                          ? `${formatCompactCurrency(agreedSaleValue - receivedPreview)} still owed`
                           : 'Record the sale amount first'}
                       </span>
                       <button
