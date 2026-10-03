@@ -83,9 +83,113 @@ const PARENT_BOUNDARY_CORPUS = PARENT_BOUNDARY_FIELDS.flatMap(([field, value]) =
     ),
   ),
 );
+// A bare pedigree word inside a value is data. Exercise both parents, field
+// dividers, numeric/labeled/absent IDs, and same-line/next-line actual fields.
+const PARENT_ASSERTION_CORPUS = [
+  'MY SIRE IS GREAT',
+  'MY DAM IS GREAT',
+  'MY SIRE AND DAM ARE GREAT',
+  '*MY SIRE IS GREAT',
+  '“MY DAM IS GREAT”',
+].flatMap((name) =>
+  ['sire', 'dam'].flatMap((parent) =>
+    [':', '|', '___', ''].flatMap((divider) =>
+      ['', ' 1111111AA', ' Reg No: 1111111AA'].flatMap((registration) =>
+        [' ', '\n'].map((gap) => ({
+          id: `parent-value-word-${name}-${parent}-${divider}-${registration}-${JSON.stringify(gap)}`,
+          text: `Registered Name: BLUE MOON\n${parent} ${divider} ${name}${registration}${gap}${parent === 'sire' ? 'Dam' : 'Sire'}: OTHER PARENT 2222222`,
+          name: 'BLUE MOON',
+          sire: parent === 'sire' ? name : 'OTHER PARENT',
+          dam: parent === 'dam' ? name : 'OTHER PARENT',
+          sireReg: parent === 'sire' ? (registration ? '1111111AA' : undefined) : '2222222',
+          damReg: parent === 'dam' ? (registration ? '1111111AA' : undefined) : '2222222',
+          review: false,
+        })),
+      ),
+    ),
+  ),
+);
 // END PARENT FIELD BOUNDARY CORPUS
 
 const CORPUS = [
+  {
+    id: 'bare-parent-label-after-registration-is-an-assertion',
+    text: 'Sire MY SIRE IS GREAT 1111111 Dam MY DAM IS GREAT 2222222',
+    sire: 'MY SIRE IS GREAT',
+    dam: 'MY DAM IS GREAT',
+    review: false,
+  },
+  {
+    id: 'bare-parent-repetition-after-registration-retains-name-conflict',
+    text: 'Sire FIRST PARENT 1111111 Sire SECOND PARENT 1111111',
+    sire: undefined,
+    review: true,
+  },
+  {
+    id: 'bare-parent-repetition-after-registration-retains-id-conflict',
+    text: 'Dam MY DAM IS GREAT AQHA1111111AA Dam MY DAM IS GREAT AQHA1111111AB',
+    dam: undefined,
+    review: true,
+  },
+  {
+    id: 'bare-parent-repetition-after-registration-agrees',
+    text: 'Sire MY SIRE IS GREAT AQHA1111111AA Sire MY SIRE IS GREAT 1111111AA',
+    sire: 'MY SIRE IS GREAT',
+    review: false,
+  },
+  {
+    id: 'bare-parent-lines-without-ids-remain-fields',
+    text: 'Sire MY SIRE IS GREAT\nDam MY DAM IS GREAT',
+    sire: 'MY SIRE IS GREAT',
+    dam: 'MY DAM IS GREAT',
+    review: false,
+  },
+  {
+    id: 'bare-parent-repetition-on-next-line-retains-name-conflict',
+    text: 'Sire FIRST PARENT\nSire SECOND PARENT',
+    sire: undefined,
+    review: true,
+  },
+  {
+    id: 'bare-parent-columns-without-ids-remain-fields',
+    text: 'Sire MY SIRE IS GREAT | Dam MY DAM IS GREAT',
+    sire: 'MY SIRE IS GREAT',
+    dam: 'MY DAM IS GREAT',
+    review: false,
+  },
+  {
+    id: 'bare-parent-repetition-after-semicolon-retains-name-conflict',
+    text: 'Sire FIRST PARENT; Sire SECOND PARENT',
+    sire: undefined,
+    review: true,
+  },
+  {
+    id: 'explicit-parent-repetition-after-interior-word-retains-name-conflict',
+    text: 'Sire: MY SIRE IS GREAT Sire: SECOND PARENT',
+    sire: undefined,
+    review: true,
+  },
+  {
+    id: 'qualified-parent-fields-survive-interior-pedigree-words',
+    text: 'Sire Name MY SIRE IS GREAT Dam Name MY DAM IS GREAT',
+    sire: 'MY SIRE IS GREAT',
+    dam: 'MY DAM IS GREAT',
+    review: false,
+  },
+  {
+    id: 'qualified-ancestor-value-interior-word-is-not-parent',
+    text: 'Sire DAD 1111111 Dam MOM 2222222 Sire of Sire MY SIRE IS GREAT 3333333',
+    sire: 'DAD',
+    dam: 'MOM',
+    review: false,
+  },
+  {
+    id: 'bare-parent-after-missing-sentinel-remains-field',
+    text: 'Sire UNKNOWN Sire MY SIRE IS GREAT 1111111 Dam N/A',
+    sire: 'MY SIRE IS GREAT',
+    dam: undefined,
+    review: false,
+  },
   {
     id: 'numeric-metadata-word-at-parent-value-start-is-a-name',
     text: 'Sire: PHONE 1111111 Dam: UELN 2222222',
@@ -695,7 +799,7 @@ const CORPUS = [
 test('the server extraction corpus holds, every row', () => {
   const failures = [];
 
-  for (const row of [...CORPUS, ...PARENT_BOUNDARY_CORPUS]) {
+  for (const row of [...CORPUS, ...PARENT_BOUNDARY_CORPUS, ...PARENT_ASSERTION_CORPUS]) {
     const fields = extractRegistrationFields(row.text);
     const actual = {
       review: detectMultipleHorses(row.text).multiple,
@@ -796,5 +900,6 @@ test('the server parent-field boundary matrix stays in step with the browser', (
       source.indexOf('// END PARENT FIELD BOUNDARY CORPUS'),
     );
   assert.equal(PARENT_BOUNDARY_CORPUS.length, PARENT_BOUNDARY_FIELDS.length * 2 * 2 * (3 * 3 + 2));
+  assert.equal(PARENT_ASSERTION_CORPUS.length, 5 * 2 * 4 * 3 * 2);
   assert.equal(matrix(serverSource), matrix(clientSource));
 });

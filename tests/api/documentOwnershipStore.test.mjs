@@ -1007,4 +1007,158 @@ test('the shared approval and intake promotion helper preserves facts on failed 
   assert.equal(promoted.documentFacts.find((fact) => fact.id === priorFact.id).value, 'Black');
   assert.equal(promoted.documentFacts.find((fact) => fact.id === priorFact.id).confidence, matched.confidence);
   assert.equal(promoted.color, target.color);
+
+  for (const type of ['Transfer Packet', 'Media Kit', 'Vet Record', 'Registration']) {
+    const initial = {
+      ...horse,
+      status: 'Medical Review',
+      readiness: { ...horse.readiness, score: 25, packetStatus: 'Needs Photos' },
+    };
+    const incoming = { ...matched, type };
+    const first = promote(initial, incoming);
+    const bonus = { 'Transfer Packet': 4, 'Media Kit': 6, 'Vet Record': 3 }[type] ?? 0;
+    assert.equal(first.readiness.score, 25 + bonus);
+    assert.equal(first.activity.length, initial.activity.length + 1);
+    assert.deepEqual(promote(first, incoming), first, 'Repeated matched intake only refreshes source facts');
+  }
+  const chipOnly = { ...matched, type: 'Media Kit', entities: {}, extractedTextPreview: 'Microchip: 982000123456789' };
+  const chipHorse = { ...horse, microchipId: '982000123456789' };
+  const firstChipMatch = promote(chipHorse, chipOnly);
+  assert.equal(firstChipMatch.readiness.score, horse.readiness.score + 6);
+  assert.equal(firstChipMatch.documentFacts.length, 0);
+  assert.deepEqual(promote(firstChipMatch, chipOnly), firstChipMatch, 'Matched lifecycle also holds zero-fact awards');
+});
+
+for (const type of [
+  'Registration',
+  'Bill of Sale',
+  'Vet Record',
+  'Coggins',
+  'Breeding Contract',
+  'Insurance',
+  'Transfer Packet',
+  'Media Kit',
+  'Ownership Memo',
+]) {
+  test(`${type} awards its first promotion once and reapproval refreshes facts without replaying horse side effects`, () => {
+    for (const preattached of [false, true]) {
+      const target = {
+        ...horse,
+        status: 'Medical Review',
+        documents: preattached ? [source.id] : [],
+        readiness: { ...horse.readiness, score: 25, packetStatus: 'Needs Photos' },
+      };
+      const pending = {
+        ...source,
+        type,
+        state: 'Needs Review',
+        extractedTextPreview: `${source.extractedTextPreview}\nColor: Black`,
+        confidence: 0.94,
+      };
+      useXbarStore.setState({ horses: [target], documents: [pending] });
+      assert.equal(useXbarStore.getState().reviewDocument(source.id, horse.id).ok, true);
+      const first = structuredClone(useXbarStore.getState().horses[0]);
+      const bonus = { 'Transfer Packet': 4, 'Media Kit': 6, 'Vet Record': 3 }[type] ?? 0;
+      assert.equal(
+        first.readiness.score,
+        25 + (preattached ? 0 : bonus),
+        'Only an unlinked first promotion earns readiness',
+      );
+      assert.equal(first.activity.length, target.activity.length + (preattached ? 0 : 1));
+      assert.equal(first.sale.socialReady, !preattached && type === 'Media Kit');
+      assert.equal(
+        first.readiness.packetStatus,
+        !preattached && ['Media Kit', 'Transfer Packet'].includes(type) ? 'Ready' : 'Needs Photos',
+      );
+      assert.deepEqual(first.documents, [source.id]);
+      for (let repeat = 0; repeat < 3; repeat += 1) {
+        assert.equal(useXbarStore.getState().reviewDocument(source.id, horse.id).ok, true);
+        assert.deepEqual(
+          useXbarStore.getState().horses[0],
+          first,
+          'Reapproval cannot award points or add attachment activity',
+        );
+      }
+
+      // A later source refresh must preserve current human-maintained readiness
+      // and sale settings, even if the document was sent back to review.
+      const maintained = {
+        ...first,
+        readiness: { ...first.readiness, score: 31, packetStatus: 'Needs Photos' },
+        sale: { ...first.sale, socialReady: false },
+      };
+      useXbarStore.setState({
+        horses: [maintained],
+        documents: [{ ...pending, extractedTextPreview: `${source.extractedTextPreview}\nColor: Gray` }],
+      });
+      assert.equal(useXbarStore.getState().reviewDocument(source.id, horse.id).ok, true);
+      const refreshed = useXbarStore.getState().horses[0];
+      assert.equal(refreshed.documentFacts.find((fact) => fact.label === 'color').value, 'Gray');
+      assert.deepEqual(
+        { ...refreshed, documentFacts: [] },
+        { ...maintained, documentFacts: [] },
+        'Changed source facts do not overwrite canonical fields, readiness, sale flags or activity',
+      );
+    }
+  });
+}
+
+test('already-promoted zero-fact sources do not need derived facts to prevent repeated readiness awards', () => {
+  const target = {
+    ...horse,
+    microchipId: '982000123456789',
+    documents: [],
+    readiness: { ...horse.readiness, score: 25, packetStatus: 'Needs Photos' },
+  };
+  const pending = {
+    ...source,
+    type: 'Media Kit',
+    state: 'Needs Review',
+    entities: {},
+    extractedTextPreview: 'Microchip: 982000123456789',
+  };
+  useXbarStore.setState({ horses: [target], documents: [pending] });
+  assert.equal(useXbarStore.getState().reviewDocument(source.id, horse.id).ok, true);
+  const first = structuredClone(useXbarStore.getState().horses[0]);
+  assert.equal(first.readiness.score, 31);
+  assert.deepEqual(first.documentFacts, [], 'Chip-only identity produces no ordinary derived fields');
+  for (let repeat = 0; repeat < 3; repeat += 1) {
+    assert.equal(useXbarStore.getState().reviewDocument(source.id, horse.id).ok, true);
+    assert.deepEqual(useXbarStore.getState().horses[0], first);
+  }
+  // Legacy re-review may have lost every derived claim. The existing link is
+  // enough to withhold another speculative first-promotion award.
+  useXbarStore.setState({ documents: [{ ...useXbarStore.getState().documents[0], state: 'Needs Review' }] });
+  assert.equal(useXbarStore.getState().reviewDocument(source.id, horse.id).ok, true);
+  assert.deepEqual(useXbarStore.getState().horses[0], first);
+});
+
+test('linked legacy sources without facts refresh conservatively even after returning to review', () => {
+  for (const type of ['Transfer Packet', 'Media Kit', 'Vet Record']) {
+    const target = {
+      ...horse,
+      status: 'Medical Review',
+      documents: [source.id],
+      readiness: { ...horse.readiness, score: 42, packetStatus: 'Needs Photos' },
+    };
+    for (const state of ['Ready', 'Matched', 'Needs Review']) {
+      useXbarStore.setState({ horses: [target], documents: [{ ...source, type, state }] });
+      assert.equal(useXbarStore.getState().reviewDocument(source.id, horse.id).ok, true);
+      const refreshed = useXbarStore.getState().horses[0];
+      assert.ok(refreshed.documentFacts.length > 0);
+      assert.deepEqual({ ...refreshed, documentFacts: [] }, target, state);
+    }
+  }
+});
+
+test('new-horse creation keeps default first-promotion behavior for ready documents', async () => {
+  const { createHorseFromDocuments } = await import('../../src/store/xbarStoreHelpers.ts');
+  for (const type of ['Transfer Packet', 'Media Kit', 'Vet Record', 'Registration']) {
+    const created = createHorseFromDocuments([{ ...source, type }], empty.workspaceProfile);
+    assert.ok(created);
+    assert.equal(created.horse.readiness.score, { 'Transfer Packet': 4, 'Media Kit': 6 }[type] ?? 0);
+    assert.equal(created.horse.sale.socialReady, type === 'Media Kit');
+    assert.equal(created.horse.activity.length, 2);
+    assert.ok(created.horse.documentFacts.some((fact) => fact.sourceDocumentId === source.id));
+  }
 });

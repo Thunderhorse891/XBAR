@@ -135,7 +135,11 @@ function promoteSourceDocument(horse: HorseRecord, document: DocumentRecord): Ho
   if (review.missingIdentityReason) {
     return { ...refreshedHorse, documents: [...new Set([...horse.documents, document.id])] };
   }
-  const promoted = promoteDocument(refreshedHorse, { ...document, entities: review.sourceEntities });
+  // A link or source fact may represent an earlier promotion, including a
+  // zero-fact source sent back to review. Without a contribution ledger, do not
+  // award speculative readiness points or replay attachment side effects.
+  const factsOnly = sourceFacts.length > 0 || horse.documents.includes(document.id);
+  const promoted = promoteDocument(refreshedHorse, { ...document, entities: review.sourceEntities }, { factsOnly });
   return {
     ...promoted,
     documentFacts: promoted.documentFacts.map((fact) => {

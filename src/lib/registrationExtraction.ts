@@ -293,8 +293,8 @@ function findFoaledOn(text: string): string | undefined {
 
 // Boundaries that end a sire/dam entry. Deliberately excludes reg/registration
 // so a parent's own "Reg No 0011223" tail stays inside the captured chunk.
+// Pedigree labels are bounded by the assertion scan, not bare words in a name.
 const PARENT_STOP_GROUP = [
-  PEDIGREE_LABEL,
   'breeder',
   OWNER_LABELS,
   'foaled',
@@ -327,32 +327,43 @@ const PARENT_METADATA_LABEL =
 const PARENT_METADATA_FIELD = new RegExp(`(?:^|[\\s|;,:])${PARENT_METADATA_LABEL}\\s*[:#=]`, 'i');
 const PARENT_NUMERIC_METADATA_FIELD = new RegExp(`(?:^|[\\s|;,:])${PARENT_METADATA_LABEL}\\s+(?=[+(]?\\d)`, 'i');
 
+const PARENT_REGISTRATION_PATTERN = `\\b(?:(${REGISTRIES.join('|')})\\s*[:#-]?\\s*)?([A-Z]?\\d[\\d\\s-]{3,}\\d[A-Z]*)\\b`;
+const PARENT_REGISTRATION_END = new RegExp(`${PARENT_REGISTRATION_PATTERN}\\s*$`, 'i');
+
 /** Collect every top-level parent assertion; contradictions always need review. */
 function findParent(text: string, label: 'sire' | 'dam') {
   const names = new Map<string, string>();
   const registrations = new Set<string>();
   const registries = new Set<string>();
-  const matches = [...text.matchAll(new RegExp(`\\b(?:${PEDIGREE_LABEL})\\b`, 'ig'))].filter((match, index, all) => {
-    const previous = all[index - 1];
-    if (!previous) return true;
+  const matches: RegExpExecArray[] = [];
+  for (const match of text.matchAll(new RegExp(`\\b(?:${PEDIGREE_LABEL})\\b`, 'ig'))) {
+    const previous = matches[matches.length - 1];
+    if (!previous) {
+      matches.push(match);
+      continue;
+    }
     const between = text.slice(previous.index + previous[0].length, match.index);
     const valuePrefix = cleanFieldValue(between)?.replace(/^["'‘’“”*–—]+$/, '');
-    const ruledBlank = /^\s*[:#]?\s*(?:[|;=•·]+|[_.\-–—~]{2,})/.test(between);
+    const ruledBlank = !valuePrefix && /^\s*[:#]?\s*(?:[|;=•·]+|[_.\-–—~]{2,})/.test(between);
     const explicitLabel = /^\s*[:#=|]/.test(text.slice(match.index + match[0].length));
-    // Sire: SIRE POWER starts a value, not another assertion. An explicit
-    // next label or ruled empty field still marks a real pedigree boundary.
-    return Boolean(valuePrefix) || ruledBlank || explicitLabel;
-  });
+    const assertionBoundary =
+      valuePrefix &&
+      (!/^(?:sire|dam)(?:['’]s)?$/i.test(match[0]) ||
+        /[\n|;]\s*$/.test(between) ||
+        PARENT_REGISTRATION_END.test(valuePrefix) ||
+        !normalizePedigreeValue(valuePrefix));
+    // A bare Sire/Dam inside MY SIRE IS GREAT is name data. A later assertion
+    // needs label syntax, a row/column boundary, or a completed ID/sentinel.
+    // Compare against the last accepted label, never an ignored name token.
+    if (explicitLabel || ruledBlank || assertionBoundary) matches.push(match);
+  }
   for (const [index, match] of matches.entries()) {
     if (!new RegExp(`^(?:${parentLabel(label)})$`, 'i').test(match[0])) continue;
-    const entry = text.slice(match.index, matches[index + 1]?.index);
+    const entry = normalizeWhitespace(text.slice(match.index, matches[index + 1]?.index));
     const nextField = entry.match(PARENT_METADATA_FIELD);
     const chunk = labeledValue(entry.slice(0, nextField?.index), parentLabel(label), PARENT_STOP_GROUP);
     if (!chunk) continue;
-    const regPattern = new RegExp(
-      `\\b(?:(${REGISTRIES.join('|')})\\s*[:#-]?\\s*)?([A-Z]?\\d[\\d\\s-]{3,}\\d[A-Z]*)\\b`,
-      'ig',
-    );
+    const regPattern = new RegExp(PARENT_REGISTRATION_PATTERN, 'ig');
     const regMatches = [...chunk.matchAll(regPattern)];
     const firstRegistration = regMatches[0];
     const firstEnd = firstRegistration ? firstRegistration.index + firstRegistration[0].length : chunk.length;
@@ -506,7 +517,9 @@ export function extractRegistrationFields(rawText: string): RegistrationFields {
       (match) => !horseNames.some((name) => match.index >= name.start && match.index < name.end),
     )?.index ?? -1;
   const headText = parentIndex >= 0 ? text.slice(0, parentIndex) : text;
-  const parentText = parentIndex >= 0 ? text.slice(parentIndex) : '';
+  // Newlines and spaces have equal width, so preserve parent row boundaries
+  // without changing the offsets identified in the flattened subject text.
+  const parentText = parentIndex >= 0 ? lines.join('\n').slice(parentIndex) : '';
   const horseName = horseNames.find((name) => parentIndex < 0 || name.start < parentIndex);
 
   const own = findRegistrationNumber(headText);
