@@ -319,6 +319,26 @@ test('missing legacy OCR text cannot promote cached facts and empty manual attac
   }
 });
 
+test('successful unreadable manual attachment removes only its old derived claims', () => {
+  for (const extractedTextPreview of [undefined, null, '']) {
+    for (const processingNote of [undefined, 'No readable text was extracted.']) {
+      const obsolete = { id: `${source.id}-color`, sourceDocumentId: source.id, label: 'color', value: 'Bay' };
+      const unrelated = { ...obsolete, id: 'other-color', sourceDocumentId: 'other', value: 'Black' };
+      const target = { ...horse, color: 'Chestnut', documents: [source.id], documentFacts: [obsolete, unrelated] };
+      const pending = { ...source, state: 'Needs Review', extractedTextPreview, processingNote, entities: {} };
+      useXbarStore.setState({ horses: [target], documents: [pending], ownershipRecords: [record] });
+      assert.equal(useXbarStore.getState().reviewDocument(source.id, target.id).ok, true);
+      assert.deepEqual(useXbarStore.getState().horses, [{ ...target, documentFacts: [unrelated] }]);
+      assert.match(useXbarStore.getState().documents[0].summary, /No extracted facts or ownership evidence/);
+      assert.deepEqual(useXbarStore.getState().ownershipRecords, [record]);
+      assert.equal(useXbarStore.getState().linkOwnershipProof(record.id, requirement.id, source.id).ok, false);
+      const after = structuredClone(useXbarStore.getState().horses);
+      assert.equal(useXbarStore.getState().reviewDocument(source.id, target.id).ok, true);
+      assert.deepEqual(useXbarStore.getState().horses, after, 'Repeated manual review is idempotent');
+    }
+  }
+});
+
 test('approval uses source-read facts and supports source-only registration or chip identity', () => {
   const target = { ...horse, microchipId: '982000123456789' };
   for (const text of [

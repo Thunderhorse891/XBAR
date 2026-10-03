@@ -1448,9 +1448,20 @@ export const useXbarStore = create<XbarStore>()(
 
         set((current) => {
           const nextDocuments = current.documents.map((item) => (item.id === documentId ? nextDocument : item));
-          const nextHorses = current.horses.map((horse) =>
-            horse.id === matchedHorse.id ? promoteSourceDocument(horse, nextDocument) : horse,
-          );
+          const nextHorses = current.horses.map((horse) => {
+            if (horse.id !== matchedHorse.id) return horse;
+            // This successful manual action explicitly approves no extracted
+            // claims. Clear only this source's old derived facts, even when
+            // OCR is absent/failed; automatic failed reads still preserve them.
+            if (identityReview.missingIdentityReason) {
+              return {
+                ...horse,
+                documents: [...new Set([...horse.documents, documentId])],
+                documentFacts: horse.documentFacts.filter((fact) => fact.sourceDocumentId !== documentId),
+              };
+            }
+            return promoteSourceDocument(horse, nextDocument);
+          });
           const nextBatches = current.intakeBatches.map((batch) => summarizeBatch(batch, nextDocuments));
 
           return {
