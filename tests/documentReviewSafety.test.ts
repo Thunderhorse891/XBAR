@@ -113,8 +113,16 @@ test('ownership support checks contents, not the upload filename or selected hor
       'identity_mismatch',
     ],
     [{ horseId: 'horse-b' }, 'identity_mismatch'],
-    [{ entities: { horseName: horse.name, registrationNumber: '9999999' } }, 'identity_mismatch'],
-    [{ identityReviewRequired: true }, 'identity_mismatch'],
+    [
+      {
+        extractedTextPreview: `CERTIFICATE OF REGISTRATION\nRegistered Name: ${horse.name}\nRegistration Number: 9999999`,
+      },
+      'identity_mismatch',
+    ],
+    [
+      { identityReviewRequired: false, extractedTextPreview: `${paper}\nRegistered Name: OTHER HORSE` },
+      'identity_mismatch',
+    ],
     [{ state: 'Matched' }, 'review_needed'],
     [{ processingNote: 'Only 3 of 10 pages were read.' }, 'review_needed'],
     [{ duplicateRisk: 'Possible Duplicate' }, 'review_needed'],
@@ -746,4 +754,83 @@ test('missing readable source identity is distinct from a source contradiction',
     assert.equal(screen.conflictReason, undefined, text);
     assert.equal(screen.missingIdentityReason, undefined, text);
   }
+});
+
+test('fresh identity is authoritative over stale cached identities and ambiguity flags', () => {
+  for (const identityReviewRequired of [false, true]) {
+    const source = document({
+      identityReviewRequired,
+      entities: { horseName: 'OLD WRONG CACHE', registrationNumber: '9999999', sire: 'STALE SIRE' },
+    });
+    const review = inspectDocumentHorseIdentity(source, horse);
+    assert.equal(review.conflictReason, undefined);
+    assert.equal(review.missingIdentityReason, undefined);
+    assert.equal(assessOwnershipDocument(source, horse, 'registration_certificate').ok, true);
+    const missing = inspectDocumentHorseIdentity(
+      { ...source, extractedTextPreview: 'CERTIFICATE OF REGISTRATION' },
+      horse,
+    );
+    assert.equal(missing.conflictReason, undefined);
+    assert.match(missing.missingIdentityReason ?? '', /no horse identity/i);
+    const contradictory = document({
+      ...source,
+      extractedTextPreview: `${paper}\nRegistered Name: OTHER HORSE`,
+      identityReviewRequired: false,
+    });
+    assert.match(inspectDocumentHorseIdentity(contradictory, horse).conflictReason ?? '', /ambiguous/);
+    assert.equal(assessOwnershipDocument(contradictory, horse, 'registration_certificate').ok, false);
+  }
+});
+
+test('bulk grouping uses fresh identities instead of unrelated historical cache values', async () => {
+  const { documentWithFreshSource } = await import('../src/lib/ownershipDocumentReview.js');
+  const { groupDocumentBatchCandidates } = await import('../src/lib/documentBatchIdentity.js');
+  const sources = [
+    document({
+      id: 'first',
+      horseId: undefined,
+      identityReviewRequired: true,
+      entities: { horseName: 'OLD CACHE ONE', registrationNumber: '9999999' },
+    }),
+    document({
+      id: 'second',
+      horseId: undefined,
+      identityReviewRequired: false,
+      entities: { horseName: 'OLD CACHE TWO', registrationNumber: '8888888' },
+    }),
+  ];
+  const groups = groupDocumentBatchCandidates(sources.map(documentWithFreshSource));
+  assert.equal(groups.length, 1);
+  assert.equal(groups[0].reviewReason, undefined);
+  assert.ok(
+    groups[0].documents.every(
+      (source) => source.entities.horseName === horse.name && source.identityReviewRequired === false,
+    ),
+  );
+  assert.equal(sources[0].identityReviewRequired, true);
+});
+
+test('ownership blockers retain a cache-only review hold without contradicting fresh source identity', () => {
+  const legacy = document({
+    identityReviewRequired: false,
+    entities: { horseName: 'OLD WRONG CACHE', registrationNumber: '9999999' },
+  });
+  const requirement: OwnershipProofRequirement = {
+    id: 'proof',
+    kind: 'registration_certificate',
+    label: 'Registration',
+    status: 'verified',
+    documentId: legacy.id,
+    verifiedAt: '2026-10-01',
+    verifiedBy: 'Prior reviewer',
+    reviewAttestedAt: '2026-10-01',
+    reviewedSourceKey: ownershipDocumentReviewKey(legacy),
+  };
+  const record = { proofRequirements: [requirement] } as OwnershipRecord;
+  assert.equal(inspectDocumentHorseIdentity(legacy, horse).conflictReason, undefined);
+  assert.equal(assessOwnershipDocument(legacy, horse, 'registration_certificate').ok, true);
+  assert.match(
+    ownershipReviewBlockers(record, horse, [legacy])[0],
+    /approve the document again.*legacy identity cache/,
+  );
 });

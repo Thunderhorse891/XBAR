@@ -424,7 +424,7 @@ for (const [label, source, entities] of [
   ['stale registration', 'Registered Name: BLUE MOON\nRegistration Number: 7654321', {}],
   [
     'stale sire',
-    'Registered Name: BLUE MOON\nRegistration Number: 1234567\nSire: OTHER SIRE',
+    'Registered Name: BLUE MOON\nRegistration Number: 1234567\nSire: SHINING SPARK',
     { sire: 'EXPECTED SIRE' },
   ],
   [
@@ -434,7 +434,7 @@ for (const [label, source, entities] of [
   ],
 ]) {
   for (const existingMatch of [false, true]) {
-    test(`creation screens ${label} before ${existingMatch ? 'existing attachment' : 'new records'}, including retries`, async () => {
+    test(`fresh ${label} controls ${existingMatch ? 'existing attachment' : 'new records'}, including retries`, async () => {
       await intake([paper('BLUE MOON', '1234567')], false);
       const document = {
         ...useXbarStore.getState().documents[0],
@@ -443,7 +443,10 @@ for (const [label, source, entities] of [
         identityReviewRequired: undefined,
       };
       const unrelated = horse('UNRELATED HORSE', '9990001');
-      const existing = horse('BLUE MOON', '1234567');
+      const existing = {
+        ...horse('BLUE MOON', '1234567'),
+        ...(label === 'stale sire' ? { bloodline: { sire: 'EXPECTED SIRE', dam: '' } } : {}),
+      };
       const { createOwnershipRecord } = await import('../../src/store/xbarStoreLogic.ts');
       const horses = existingMatch ? [unrelated, existing] : [unrelated];
       useXbarStore.setState({ documents: [document], horses, ownershipRecords: horses.map(createOwnershipRecord) });
@@ -452,13 +455,31 @@ for (const [label, source, entities] of [
         ownershipRecords: useXbarStore.getState().ownershipRecords,
         documents: useXbarStore.getState().documents,
       });
-      for (let attempt = 0; attempt < 2; attempt += 1) {
+      if (existingMatch || label === 'conflicting microchips') {
+        for (let attempt = 0; attempt < 2; attempt += 1) {
+          const result = useXbarStore.getState().createHorseFromDocument(document.id);
+          assert.equal(result.ok, false, 'The fresh source conflicts with the actual existing target or itself');
+          assert.match(result.message, /source|identit|microchip/i);
+          assert.deepEqual(useXbarStore.getState().horses, before.horses);
+          assert.deepEqual(useXbarStore.getState().ownershipRecords, before.ownershipRecords);
+          assert.deepEqual(useXbarStore.getState().documents, before.documents);
+        }
+      } else {
+        // The old fixture treated a stale cache as a contradiction even with no
+        // existing target. A clear original must now create its real identity.
         const result = useXbarStore.getState().createHorseFromDocument(document.id);
-        assert.equal(result.ok, false, 'Conflicting fresh source must not succeed');
-        assert.match(result.message, /source|identit|microchip/i);
-        assert.deepEqual(useXbarStore.getState().horses, before.horses);
-        assert.deepEqual(useXbarStore.getState().ownershipRecords, before.ownershipRecords);
-        assert.deepEqual(useXbarStore.getState().documents, before.documents);
+        assert.equal(result.ok, true);
+        const created = useXbarStore.getState().horses.find((item) => item.id === result.id);
+        assert.equal(created.name, label === 'stale name' ? 'RED SUN' : 'BLUE MOON');
+        assert.equal(created.registrationNumber, label === 'stale registration' ? '7654321' : '1234567');
+        assert.equal(created.bloodline.sire, label === 'stale sire' ? 'SHINING SPARK' : '');
+        const after = structuredClone({
+          horses: useXbarStore.getState().horses,
+          ownershipRecords: useXbarStore.getState().ownershipRecords,
+        });
+        assert.equal(useXbarStore.getState().createHorseFromDocument(document.id).ok, false);
+        assert.deepEqual(useXbarStore.getState().horses, after.horses);
+        assert.deepEqual(useXbarStore.getState().ownershipRecords, after.ownershipRecords);
       }
     });
   }
@@ -555,7 +576,13 @@ test('existing match is screened against its own microchip before attaching a so
 for (const [label, patch] of [
   ['archived', { state: 'Archived' }],
   ['queued', { state: 'Queued' }],
-  ['identity review', { identityReviewRequired: true }],
+  [
+    'fresh identity review',
+    {
+      identityReviewRequired: false,
+      extractedTextPreview: 'Registered Name: BLUE MOON\nRegistered Name: RED SUN\nRegistration Number: 1234567',
+    },
+  ],
 ]) {
   test(`creation preserves the ${label} gate without changing records`, async () => {
     await intake([paper('BLUE MOON', '1234567')], false);
@@ -671,3 +698,33 @@ test('creation takes fresh source facts and never promotes an unsupported cached
   assert.equal(created.bloodline.sire, '');
   assert.equal(useXbarStore.getState().ownershipRecords[0].legalOwner, '');
 });
+
+for (const existingMatch of [false, true]) {
+  test(`clear source can ${existingMatch ? 'attach to its real existing match' : 'create the real horse'} despite stale cached identity and review flag`, async () => {
+    await intake([paper('BLUE MOON', '1234567')], false);
+    const document = {
+      ...useXbarStore.getState().documents[0],
+      entities: { horseName: 'OLD WRONG CACHE', registrationNumber: '9999999', ownerName: 'Unsupported Owner' },
+      identityReviewRequired: true,
+    };
+    const existing = horse('BLUE MOON', '1234567');
+    useXbarStore.setState({ documents: [document], horses: existingMatch ? [existing] : [] });
+    const result = useXbarStore.getState().createHorseFromDocument(document.id);
+    assert.equal(result.ok, true);
+    const created = useXbarStore.getState().horses[0];
+    assert.equal(created.name, 'BLUE MOON');
+    assert.equal(created.registrationNumber, '1234567');
+    assert.equal(useXbarStore.getState().horses.length, 1);
+    assert.equal(useXbarStore.getState().ownershipRecords.length, existingMatch ? 0 : 1);
+    assert.equal(useXbarStore.getState().documents[0].identityReviewRequired, false);
+    assert.deepEqual(
+      useXbarStore.getState().documents[0].entities,
+      document.entities,
+      'Keep the historical cache without promoting it',
+    );
+    if (existingMatch) assert.equal(result.id, existing.id);
+    else assert.equal(created.owner, '');
+    assert.equal(useXbarStore.getState().createHorseFromDocument(document.id).ok, false);
+    assert.equal(useXbarStore.getState().horses.length, 1);
+  });
+}

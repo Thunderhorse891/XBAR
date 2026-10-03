@@ -1,4 +1,8 @@
-import { isOwnershipProofReviewed, assessOwnershipDocument } from '../lib/ownershipDocumentReview.js';
+import {
+  isOwnershipProofReviewed,
+  assessOwnershipDocument,
+  documentIdentityCacheNeedsReview,
+} from '../lib/ownershipDocumentReview.js';
 import { createId, todayStamp } from '../lib/xbarRuntime.js';
 import { normalizePedigreeValue } from '../lib/registrationExtraction.js';
 import type {
@@ -143,6 +147,7 @@ export function normalizeOwnershipRecord(
                 document.state !== 'Ready' ||
                 document.horseId !== record.horseId ||
                 document.identityReviewRequired ||
+                documentIdentityCacheNeedsReview(document, horse) ||
                 (document.duplicateRisk === 'Possible Duplicate' && !document.duplicateReviewedAt))) ||
             (horse && !assessOwnershipDocument(document, horse, item.kind).ok))
           ? { ...item, status: 'linked' as const }

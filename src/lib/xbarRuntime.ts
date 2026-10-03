@@ -365,6 +365,9 @@ function extractTransferStatus(haystack: string, type: DocumentType) {
   return 'Pending Signatures';
 }
 
+export const documentIdentityReviewNote =
+  'Conflicting horse identities were read from this file. Upload separate papers for each horse before approving.';
+
 export function extractDocumentEntities(params: { fileName: string; previewText: string; inferredType: DocumentType }) {
   const { fileName, previewText, inferredType } = params;
   const haystack = `${fileName} ${previewText}`;
@@ -598,9 +601,7 @@ export async function buildDocumentRecord(params: {
     processingNote: [
       describeDocumentCoverage(coverage),
       typeReview.ambiguous ? 'Multiple document types were read. Upload separate sources for each requirement.' : '',
-      identityReviewRequired
-        ? 'Conflicting horse identities were read from this file. Upload separate papers for each horse before approving.'
-        : '',
+      identityReviewRequired ? documentIdentityReviewNote : '',
     ]
       .filter(Boolean)
       .join(' '),

@@ -190,11 +190,10 @@ export function inspectDocumentHorseIdentity(document: DocumentRecord, horse?: H
   });
   const storedChip = horse?.microchipId && (microchipKey(horse.microchipId.trim()) ?? normalize(horse.microchipId));
   const conflictReason =
-    document.identityReviewRequired || sourceIdentityReviewRequired || unparsedChipEvidence
+    sourceIdentityReviewRequired || unparsedChipEvidence
       ? 'The source contains ambiguous horse identities. Upload separate or corrected papers.'
-      : horse &&
-          (ownershipIdentityConflicts(horse, document.entities) || ownershipIdentityConflicts(horse, sourceIdentity))
-        ? 'The readable source or extracted identity conflicts with the selected horse. Choose the correct horse or upload corrected papers.'
+      : horse && ownershipIdentityConflicts(horse, sourceIdentity)
+        ? 'The readable source identity conflicts with the selected horse. Choose the correct horse or upload corrected papers.'
         : new Set(sourceChips).size > 1 || (storedChip && sourceChips.some((chip) => chip !== storedChip))
           ? 'The source microchip conflicts with this horse. Review the original and correct the record.'
           : undefined;
@@ -202,7 +201,34 @@ export function inspectDocumentHorseIdentity(document: DocumentRecord, horse?: H
     !sourceIdentity.horseName && !registrationKey(sourceIdentity.registrationNumber) && !sourceChips.length
       ? 'No horse identity was read from the source. Upload readable identifying text before creating a horse or approving extracted facts.'
       : undefined;
-  return { sourceIdentity, sourceEntities, sourceChips, conflictReason, missingIdentityReason };
+  return {
+    sourceIdentity,
+    sourceEntities,
+    sourceChips,
+    sourceIdentityReviewRequired: Boolean(
+      sourceIdentityReviewRequired || unparsedChipEvidence || new Set(sourceChips).size > 1,
+    ),
+    conflictReason,
+    missingIdentityReason,
+  };
+}
+
+/** Legacy proof trust stays on hold until explicit review repairs a cache that
+ * used to conflict with this horse. This is not a verdict on fresh source identity
+ * and must never veto document approval, creation, or applying source-read facts.
+ */
+export function documentIdentityCacheNeedsReview(document: DocumentRecord, horse?: HorseRecord): boolean {
+  return Boolean(horse && ownershipIdentityConflicts(horse, document.entities));
+}
+
+/** A current source view for review displays and intake decisions, without changing stored history. */
+export function documentWithFreshSource(document: DocumentRecord): DocumentRecord {
+  const review = inspectDocumentHorseIdentity(document);
+  return {
+    ...document,
+    entities: review.sourceEntities,
+    identityReviewRequired: review.sourceIdentityReviewRequired,
+  };
 }
 
 /** A content/identity screen, never a legal opinion or automatic verification. */
@@ -218,15 +244,10 @@ export function assessOwnershipDocument(
   });
   if (!document || document.state === 'Archived' || !hasStoredFile(document))
     return fail('missing', 'Source file is missing or archived. Upload the original document.');
-  if (
-    !horse ||
-    document.horseId !== horse.id ||
-    document.identityReviewRequired ||
-    ownershipIdentityConflicts(horse, document.entities)
-  )
+  if (!horse || document.horseId !== horse.id)
     return fail(
       'identity_mismatch',
-      'This document is not matched to this horse, or its extracted identity conflicts. Correct the assignment or upload the correct source.',
+      'This document is not matched to this horse. Correct the assignment or upload the correct source.',
     );
   if (!document.extractedTextPreview.trim() || extractionProducedNothing(document.processingNote))
     return fail('unreadable', 'No readable source text. Upload a clearer scan before using this as ownership support.');
@@ -292,6 +313,10 @@ export function ownershipReviewBlockers(
     const document = documents.find((item) => item.id === requirement.documentId);
     const assessment = assessOwnershipDocument(document, horse, requirement.kind);
     if (!assessment.ok) return [`${requirement.label}: ${assessment.message}`];
+    if (document && documentIdentityCacheNeedsReview(document, horse))
+      return [
+        `${requirement.label}: Review and approve the document again to repair its legacy identity cache before ownership review.`,
+      ];
     if (!isOwnershipProofReviewed(requirement, document))
       return [`${requirement.label}: Human source review is still required.`];
     return [];

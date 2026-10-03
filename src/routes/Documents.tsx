@@ -2,7 +2,11 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import type { MouseEvent } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { DocumentLibrary } from '@/components/DocumentLibrary';
-import { inspectDocumentHorseIdentity } from '@/lib/ownershipDocumentReview';
+import {
+  documentWithFreshSource,
+  documentIdentityCacheNeedsReview,
+  inspectDocumentHorseIdentity,
+} from '@/lib/ownershipDocumentReview';
 import { ConfirmActionDialog } from '@/components/ConfirmActionDialog';
 import { documentDuplicateNeedsReview } from '@/lib/documentDuplicates';
 import { CommandBrief } from '@/components/CommandBrief';
@@ -44,8 +48,28 @@ type SurfaceId = 'review' | 'buyer' | 'intake' | 'batches' | 'duplicates' | 'pro
 export default function Documents() {
   const navigate = useNavigate();
   const [searchParams, setSearchParams] = useSearchParams();
-  const documents = useXbarStore((state) => state.documents);
+  const storedDocuments = useXbarStore((state) => state.documents);
   const horses = useXbarStore((state) => state.horses);
+  // Display the same source-read identities and facts used by review actions.
+  // Keep obsolete cache values in storage, outside the current review view.
+  const documents = useMemo(
+    () =>
+      storedDocuments.map((document) => {
+        const source = documentWithFreshSource(document);
+        // An old operational warning still needs explicit approval before proof
+        // attestation; a fresh ambiguity also belongs in review.
+        return document.state === 'Ready' &&
+          (document.identityReviewRequired ||
+            source.identityReviewRequired ||
+            documentIdentityCacheNeedsReview(
+              document,
+              horses.find((horse) => horse.id === document.horseId),
+            ))
+          ? { ...source, state: 'Needs Review' as const }
+          : source;
+      }),
+    [storedDocuments, horses],
+  );
   const intakeBatches = useXbarStore((state) => state.intakeBatches);
   const subscription = useEffectiveSubscription();
   const ownershipRecords = useXbarStore((state) => state.ownershipRecords);
@@ -1144,7 +1168,7 @@ export default function Documents() {
               {proofDocuments.map((document) => {
                 const horse = horses.find((item) => item.id === document.horseId);
                 const record = ownershipRecords.find((item) => item.horseId === document.horseId);
-                const normalized = record ? normalizeOwnershipRecord(record, documents, horse) : undefined;
+                const normalized = record ? normalizeOwnershipRecord(record, storedDocuments, horse) : undefined;
                 const requirements = normalized?.proofRequirements ?? [];
                 const linkedLabels = proofLinksByDocumentId.get(document.id) ?? [];
                 return (
