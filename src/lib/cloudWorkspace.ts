@@ -349,6 +349,7 @@ export async function loadWorkspaceAccessProfile(
  */
 export async function refreshWorkspaceSubscriptionProfile(
   workspaceId: string,
+  signal?: AbortSignal,
 ): Promise<{ ok: true; profile: SubscriptionProfile | null } | { ok: false; message: string }> {
   const client = getSupabaseClient();
   if (!client) {
@@ -358,11 +359,12 @@ export async function refreshWorkspaceSubscriptionProfile(
     return { ok: false, message: 'No cloud workspace is connected for this session.' };
   }
 
-  const { data, error } = await client
+  const query = client
     .from('workspace_subscription_profiles')
     .select('tier, billing_state, monthly_rate, billing_period, payload, updated_at')
-    .eq('workspace_id', workspaceId)
-    .maybeSingle();
+    .eq('workspace_id', workspaceId);
+  if (signal) query.abortSignal(signal);
+  const { data, error } = await query.maybeSingle();
 
   if (error) {
     return { ok: false, message: error.message };
