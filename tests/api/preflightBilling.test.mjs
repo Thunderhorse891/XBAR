@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { execFileSync } from 'node:child_process';
+import { spawnSync } from 'node:child_process';
 import path from 'node:path';
 
 const repoRoot = process.cwd();
@@ -35,11 +35,13 @@ const ANNUAL_VARS = {
 const ANNUAL_NAMES = Object.keys(ANNUAL_VARS);
 
 function runPreflight(env) {
-  return execFileSync('node', [path.join('scripts', 'preflight.mjs')], {
+  const result = spawnSync('node', [path.join('scripts', 'preflight.mjs')], {
     encoding: 'utf8',
     cwd: repoRoot,
     env: { PATH: process.env.PATH, ...env },
   });
+  assert.equal(result.status, 1, 'missing backup evidence must block production preflight');
+  return result.stdout;
 }
 
 test('billing is NOT reported configured when the annual price ids are missing', () => {

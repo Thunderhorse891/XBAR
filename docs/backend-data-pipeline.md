@@ -1,3 +1,5 @@
+> Readiness update: the unused `/api/horses/*` and `/api/documents/*` dispatchers below were removed from deployment after verifying no frontend callers. Their tested helpers remain internal only. The historical route descriptions below are not available HTTP endpoints.
+
 # XBAR Backend & Data Pipeline (OCR → Horse Profile → Sale Packet)
 
 This document covers the production data infrastructure added in the

@@ -7,9 +7,8 @@ import { sendJson } from './http.js';
  *  - If Upstash Redis REST credentials are configured
  *    (UPSTASH_REDIS_REST_URL + UPSTASH_REDIS_REST_TOKEN), use a fixed-window
  *    counter that is shared across every serverless instance and region.
- *  - Otherwise fall back to a per-instance in-memory window. This is best
- *    effort (each cold serverless instance keeps its own counter) but still
- *    blunts naive floods and keeps local/dev working with zero configuration.
+ *  - Missing or failed shared storage refuses with 503. Local memory mode is
+ *    explicit, restricted to development/tests, and never allowed on Vercel.
  */
 
 const memoryBuckets = new Map();
@@ -56,40 +55,34 @@ export function getClientIp(req) {
 async function checkUpstash(key, limit, windowSeconds) {
   const url = process.env.UPSTASH_REDIS_REST_URL;
   const token = process.env.UPSTASH_REDIS_REST_TOKEN;
-  if (!url && !token) {
-    return null;
+  if (!url || !token) {
+    throw new Error('Shared rate limiter unavailable');
   }
-  if (!url || !token) throw new Error('Shared rate limiter configuration is incomplete.');
 
-  const response = await fetch(`${url.replace(/\/$/, '')}/pipeline`, {
+  const response = await fetch(url.replace(/\/$/, ''), {
     method: 'POST',
     headers: {
       Authorization: `Bearer ${token}`,
       'Content-Type': 'application/json',
     },
+    // Counter and expiry are one atomic operation, including first creation.
     body: JSON.stringify([
-      ['INCR', key],
-      ['EXPIRE', key, windowSeconds, 'NX'],
+      'EVAL',
+      "local n=redis.call('INCR',KEYS[1]); if n==1 then redis.call('EXPIRE',KEYS[1],ARGV[1]) end; return n",
+      1,
+      key,
+      windowSeconds,
     ]),
-    signal: AbortSignal.timeout(3000),
+    signal: AbortSignal.timeout(1500),
   });
 
   if (!response.ok) {
-    throw new Error('Shared rate limiter is unavailable.');
+    throw new Error('Shared rate limiter unavailable');
   }
 
   const results = await response.json();
-  const count = results?.[0]?.result;
-  if (
-    !Array.isArray(results) ||
-    results.length !== 2 ||
-    results.some((result) => result.error) ||
-    !Number.isSafeInteger(count) ||
-    count < 1 ||
-    ![0, 1].includes(results[1]?.result)
-  ) {
-    throw new Error('Shared rate limiter returned an invalid result.');
-  }
+  const count = results?.result;
+  if (results?.error || !Number.isSafeInteger(count) || count < 1) throw new Error('Invalid rate limiter response');
   const ok = count <= limit;
   return {
     ok,
@@ -130,11 +123,16 @@ export async function enforceRateLimit(req, res, { bucket, limit, windowSeconds 
 
   let result;
   try {
-    result = (await checkUpstash(key, limit, windowSeconds)) || checkMemory(key, limit, windowSeconds);
+    const localMemory =
+      process.env.RATE_LIMIT_MODE === 'memory' &&
+      ['test', 'development'].includes(process.env.NODE_ENV) &&
+      !process.env.VERCEL;
+    result = localMemory ? checkMemory(key, limit, windowSeconds) : await checkUpstash(key, limit, windowSeconds);
   } catch {
     res.setHeader('Retry-After', '30');
     sendJson(res, 503, {
       ok: false,
+      code: 'rate_limit_unavailable',
       message: 'Request protection is temporarily unavailable. Please try again shortly.',
     });
     return false;

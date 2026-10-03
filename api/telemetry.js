@@ -1,3 +1,4 @@
+import { withErrorTracking } from './_lib/error-tracking.js';
 import { readJsonBody, sendJson } from './_lib/http.js';
 import { getSupabaseAdmin, requireWorkspaceAccess } from './_lib/supabase-admin.js';
 import { enforceRateLimit } from './_lib/rate-limit.js';
@@ -28,7 +29,7 @@ function capPayload(value) {
   }
 }
 
-export default async function handler(req, res) {
+async function handler(req, res) {
   if (!applyCors(req, res)) {
     return;
   }
@@ -91,3 +92,5 @@ export default async function handler(req, res) {
 
   return sendJson(res, 200, { ok: true });
 }
+
+export default withErrorTracking(handler, 'telemetry.js');

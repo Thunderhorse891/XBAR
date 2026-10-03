@@ -1,3 +1,4 @@
+import { captureUiError } from '@/lib/errorTracking';
 import { trackRuntimeEvent } from '@/lib/runtimeEvents';
 import { useCloudStore } from '@/store/useCloudStore';
 
@@ -17,6 +18,7 @@ function report(eventName: string, payload: Record<string, unknown>) {
     return;
   }
   reportsSent += 1;
+  captureUiError(new Error(eventName));
   void trackRuntimeEvent({
     workspaceId: useCloudStore.getState().workspaceId,
     eventName,

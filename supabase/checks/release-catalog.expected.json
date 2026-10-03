@@ -1,0 +1,2721 @@
+{
+  "sourceDigest": "71d2b35458d97362a60a685c409c28d2f28395a17e0727dc9d5c92f872e08a02",
+  "requiredVersions": [
+    "20260924120000",
+    "20260924130000",
+    "20260924134000",
+    "20260924223000",
+    "20260925180000",
+    "20260926000000",
+    "20260926003000",
+    "20260928120000",
+    "20260928150000",
+    "20260928163000",
+    "20260928170000",
+    "20261001090000",
+    "20261001090100",
+    "20261002090000",
+    "20261002100000",
+    "20261002120000",
+    "20261002182226",
+    "20261003021000"
+  ],
+  "catalog": {
+    "rls": {
+      "public.horses": true,
+      "storage.objects": true,
+      "public.documents": true,
+      "public.reminders": true,
+      "public.audit_logs": true,
+      "public.workspaces": true,
+      "public.sales_leads": true,
+      "public.ranch_assets": true,
+      "public.sale_packets": true,
+      "public.notifications": true,
+      "public.intake_batches": true,
+      "public.runtime_events": true,
+      "public.shared_listings": true,
+      "public.expense_receipts": true,
+      "public.horse_vet_access": true,
+      "public.ownership_records": true,
+      "public.document_templates": true,
+      "public.workspace_profiles": true,
+      "public.public_share_events": true,
+      "public.workspace_snapshots": true,
+      "public.workspace_invitations": true,
+      "public.workspace_memberships": true,
+      "public.account_deletion_holds": true,
+      "public.account_deletion_events": true,
+      "public.document_processing_jobs": true,
+      "public.account_deletion_receipts": true,
+      "public.account_deletion_requests": true,
+      "public.reminder_email_deliveries": true,
+      "public.workspace_billing_customers": true,
+      "public.workspace_subscription_events": true,
+      "public.workspace_subscription_profiles": true
+    },
+    "buckets": {
+      "horse-media": false,
+      "sale-packets": false,
+      "horse-documents": false
+    },
+    "policies": {
+      "public.horses.horses staff delete": {
+        "check": null,
+        "roles": ["authenticated"],
+        "using": "public.xbar_has_workspace_capability(workspace_id, 'createHorse'::text)",
+        "command": "DELETE",
+        "permissive": "PERMISSIVE"
+      },
+      "public.horses.horses staff insert": {
+        "check": "(public.xbar_has_workspace_capability(workspace_id, 'createHorse'::text) OR (public.xbar_record_exists('horses'::text, workspace_id, horse_id) AND (public.xbar_has_workspace_capability(workspace_id, 'editHorse'::text) OR public.xbar_has_workspace_capability(workspace_id, 'manageMedical'::text) OR public.xbar_has_workspace_capability(workspace_id, 'uploadDocuments'::text) OR public.xbar_has_workspace_capability(workspace_id, 'reviewDocuments'::text) OR public.xbar_has_workspace_capability(workspace_id, 'uploadMedia'::text))))",
+        "roles": ["authenticated"],
+        "using": null,
+        "command": "INSERT",
+        "permissive": "PERMISSIVE"
+      },
+      "public.horses.horses staff update": {
+        "check": "(public.xbar_has_workspace_capability(workspace_id, 'editHorse'::text) OR public.xbar_has_workspace_capability(workspace_id, 'manageMedical'::text) OR public.xbar_has_workspace_capability(workspace_id, 'uploadDocuments'::text) OR public.xbar_has_workspace_capability(workspace_id, 'reviewDocuments'::text) OR public.xbar_has_workspace_capability(workspace_id, 'uploadMedia'::text) OR public.xbar_has_workspace_capability(workspace_id, 'createHorse'::text))",
+        "roles": ["authenticated"],
+        "using": "(public.xbar_has_workspace_capability(workspace_id, 'editHorse'::text) OR public.xbar_has_workspace_capability(workspace_id, 'manageMedical'::text) OR public.xbar_has_workspace_capability(workspace_id, 'uploadDocuments'::text) OR public.xbar_has_workspace_capability(workspace_id, 'reviewDocuments'::text) OR public.xbar_has_workspace_capability(workspace_id, 'uploadMedia'::text) OR public.xbar_has_workspace_capability(workspace_id, 'createHorse'::text))",
+        "command": "UPDATE",
+        "permissive": "PERMISSIVE"
+      },
+      "public.horses.horses vet grant read": {
+        "check": null,
+        "roles": ["authenticated"],
+        "using": "(EXISTS ( SELECT 1\n   FROM public.horse_vet_access v\n  WHERE ((v.workspace_id = horses.workspace_id) AND (v.horse_id = horses.horse_id) AND (v.vet_user_id = auth.uid()) AND (v.status = 'active'::text))))",
+        "command": "SELECT",
+        "permissive": "PERMISSIVE"
+      },
+      "public.horses.horses workspace read": {
+        "check": null,
+        "roles": ["authenticated"],
+        "using": "public.xbar_has_workspace_access(workspace_id)",
+        "command": "SELECT",
+        "permissive": "PERMISSIVE"
+      },
+      "public.horses.horses workspace manage": {
+        "check": "public.xbar_can_manage_workspace(workspace_id)",
+        "roles": ["authenticated"],
+        "using": "public.xbar_can_manage_workspace(workspace_id)",
+        "command": "ALL",
+        "permissive": "PERMISSIVE"
+      },
+      "public.documents.documents staff insert": {
+        "check": "(public.xbar_has_workspace_capability(workspace_id, 'uploadDocuments'::text) OR public.xbar_has_workspace_capability(workspace_id, 'reviewDocuments'::text) OR public.xbar_has_workspace_capability(workspace_id, 'createHorse'::text))",
+        "roles": ["authenticated"],
+        "using": null,
+        "command": "INSERT",
+        "permissive": "PERMISSIVE"
+      },
+      "public.documents.documents staff update": {
+        "check": "(public.xbar_has_workspace_capability(workspace_id, 'uploadDocuments'::text) OR public.xbar_has_workspace_capability(workspace_id, 'reviewDocuments'::text) OR public.xbar_has_workspace_capability(workspace_id, 'createHorse'::text))",
+        "roles": ["authenticated"],
+        "using": "(public.xbar_has_workspace_capability(workspace_id, 'uploadDocuments'::text) OR public.xbar_has_workspace_capability(workspace_id, 'reviewDocuments'::text) OR public.xbar_has_workspace_capability(workspace_id, 'createHorse'::text))",
+        "command": "UPDATE",
+        "permissive": "PERMISSIVE"
+      },
+      "public.workspaces.workspaces insert own": {
+        "check": "(auth.uid() = owner_user_id)",
+        "roles": ["authenticated"],
+        "using": null,
+        "command": "INSERT",
+        "permissive": "PERMISSIVE"
+      },
+      "public.workspaces.workspaces select own": {
+        "check": null,
+        "roles": ["authenticated"],
+        "using": "(auth.uid() = owner_user_id)",
+        "command": "SELECT",
+        "permissive": "PERMISSIVE"
+      },
+      "public.workspaces.workspaces update own": {
+        "check": "(auth.uid() = owner_user_id)",
+        "roles": ["authenticated"],
+        "using": "(auth.uid() = owner_user_id)",
+        "command": "UPDATE",
+        "permissive": "PERMISSIVE"
+      },
+      "public.documents.documents vet grant read": {
+        "check": null,
+        "roles": ["authenticated"],
+        "using": "(EXISTS ( SELECT 1\n   FROM public.horse_vet_access v\n  WHERE ((v.workspace_id = documents.workspace_id) AND (v.horse_id = documents.horse_id) AND (v.vet_user_id = auth.uid()) AND (v.status = 'active'::text))))",
+        "command": "SELECT",
+        "permissive": "PERMISSIVE"
+      },
+      "public.documents.documents workspace read": {
+        "check": null,
+        "roles": ["authenticated"],
+        "using": "public.xbar_has_workspace_access(workspace_id)",
+        "command": "SELECT",
+        "permissive": "PERMISSIVE"
+      },
+      "public.reminders.reminders workspace read": {
+        "check": null,
+        "roles": ["authenticated"],
+        "using": "public.xbar_has_workspace_access(workspace_id)",
+        "command": "SELECT",
+        "permissive": "PERMISSIVE"
+      },
+      "public.audit_logs.audit logs workspace read": {
+        "check": null,
+        "roles": ["authenticated"],
+        "using": "public.xbar_can_manage_workspace(workspace_id)",
+        "command": "SELECT",
+        "permissive": "PERMISSIVE"
+      },
+      "public.documents.documents workspace manage": {
+        "check": "public.xbar_can_manage_workspace(workspace_id)",
+        "roles": ["authenticated"],
+        "using": "public.xbar_can_manage_workspace(workspace_id)",
+        "command": "ALL",
+        "permissive": "PERMISSIVE"
+      },
+      "public.reminders.reminders workspace manage": {
+        "check": "public.xbar_can_manage_workspace(workspace_id)",
+        "roles": ["authenticated"],
+        "using": "public.xbar_can_manage_workspace(workspace_id)",
+        "command": "ALL",
+        "permissive": "PERMISSIVE"
+      },
+      "public.sales_leads.sales leads staff delete": {
+        "check": null,
+        "roles": ["authenticated"],
+        "using": "public.xbar_has_workspace_capability(workspace_id, 'createHorse'::text)",
+        "command": "DELETE",
+        "permissive": "PERMISSIVE"
+      },
+      "public.sales_leads.sales leads staff insert": {
+        "check": "public.xbar_has_workspace_capability(workspace_id, 'manageSales'::text)",
+        "roles": ["authenticated"],
+        "using": null,
+        "command": "INSERT",
+        "permissive": "PERMISSIVE"
+      },
+      "public.sales_leads.sales leads staff update": {
+        "check": "public.xbar_has_workspace_capability(workspace_id, 'manageSales'::text)",
+        "roles": ["authenticated"],
+        "using": "public.xbar_has_workspace_capability(workspace_id, 'manageSales'::text)",
+        "command": "UPDATE",
+        "permissive": "PERMISSIVE"
+      },
+      "public.notifications.notifications mark read": {
+        "check": "((user_id = auth.uid()) OR public.xbar_can_manage_workspace(workspace_id))",
+        "roles": ["authenticated"],
+        "using": "((user_id = auth.uid()) OR public.xbar_can_manage_workspace(workspace_id))",
+        "command": "UPDATE",
+        "permissive": "PERMISSIVE"
+      },
+      "storage.objects.horse media insert workspace": {
+        "check": "((bucket_id = 'horse-media'::text) AND\nCASE\n    WHEN (split_part(name, '/'::text, 1) ~ '^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$'::text) THEN public.xbar_has_workspace_capability((split_part(name, '/'::text, 1))::uuid, 'uploadMedia'::text)\n    ELSE false\nEND)",
+        "roles": ["authenticated"],
+        "using": null,
+        "command": "INSERT",
+        "permissive": "PERMISSIVE"
+      },
+      "storage.objects.horse media select workspace": {
+        "check": null,
+        "roles": ["authenticated"],
+        "using": "((bucket_id = 'horse-media'::text) AND\nCASE\n    WHEN (split_part(name, '/'::text, 1) ~ '^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$'::text) THEN public.xbar_has_workspace_access((split_part(name, '/'::text, 1))::uuid)\n    ELSE false\nEND)",
+        "command": "SELECT",
+        "permissive": "PERMISSIVE"
+      },
+      "public.audit_logs.audit logs workspace insert": {
+        "check": "(public.xbar_has_workspace_access(workspace_id) AND (actor_user_id = auth.uid()))",
+        "roles": ["authenticated"],
+        "using": null,
+        "command": "INSERT",
+        "permissive": "PERMISSIVE"
+      },
+      "public.horse_vet_access.horse vet access read": {
+        "check": null,
+        "roles": ["authenticated"],
+        "using": "((vet_user_id = auth.uid()) OR public.xbar_has_workspace_access(workspace_id))",
+        "command": "SELECT",
+        "permissive": "PERMISSIVE"
+      },
+      "public.ranch_assets.ranch assets staff delete": {
+        "check": null,
+        "roles": ["authenticated"],
+        "using": "public.xbar_has_workspace_capability(workspace_id, 'manageAssets'::text)",
+        "command": "DELETE",
+        "permissive": "PERMISSIVE"
+      },
+      "public.ranch_assets.ranch assets staff insert": {
+        "check": "public.xbar_has_workspace_capability(workspace_id, 'manageAssets'::text)",
+        "roles": ["authenticated"],
+        "using": null,
+        "command": "INSERT",
+        "permissive": "PERMISSIVE"
+      },
+      "public.ranch_assets.ranch assets staff update": {
+        "check": "public.xbar_has_workspace_capability(workspace_id, 'manageAssets'::text)",
+        "roles": ["authenticated"],
+        "using": "public.xbar_has_workspace_capability(workspace_id, 'manageAssets'::text)",
+        "command": "UPDATE",
+        "permissive": "PERMISSIVE"
+      },
+      "public.sales_leads.sales leads workspace read": {
+        "check": null,
+        "roles": ["authenticated"],
+        "using": "public.xbar_has_workspace_access(workspace_id)",
+        "command": "SELECT",
+        "permissive": "PERMISSIVE"
+      },
+      "public.horse_vet_access.horse vet access manage": {
+        "check": "public.xbar_can_manage_workspace(workspace_id)",
+        "roles": ["authenticated"],
+        "using": "public.xbar_can_manage_workspace(workspace_id)",
+        "command": "ALL",
+        "permissive": "PERMISSIVE"
+      },
+      "public.ranch_assets.ranch assets workspace read": {
+        "check": null,
+        "roles": ["authenticated"],
+        "using": "public.xbar_has_workspace_access(workspace_id)",
+        "command": "SELECT",
+        "permissive": "PERMISSIVE"
+      },
+      "public.sale_packets.sale packets workspace read": {
+        "check": null,
+        "roles": ["authenticated"],
+        "using": "public.xbar_has_workspace_access(workspace_id)",
+        "command": "SELECT",
+        "permissive": "PERMISSIVE"
+      },
+      "public.sales_leads.sales leads workspace manage": {
+        "check": "public.xbar_can_manage_workspace(workspace_id)",
+        "roles": ["authenticated"],
+        "using": "public.xbar_can_manage_workspace(workspace_id)",
+        "command": "ALL",
+        "permissive": "PERMISSIVE"
+      },
+      "storage.objects.horse documents insert workspace": {
+        "check": "((bucket_id = 'horse-documents'::text) AND\nCASE\n    WHEN (split_part(name, '/'::text, 1) ~ '^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$'::text) THEN public.xbar_can_manage_workspace((split_part(name, '/'::text, 1))::uuid)\n    ELSE false\nEND)",
+        "roles": ["authenticated"],
+        "using": null,
+        "command": "INSERT",
+        "permissive": "PERMISSIVE"
+      },
+      "storage.objects.horse documents select workspace": {
+        "check": null,
+        "roles": ["authenticated"],
+        "using": "((bucket_id = 'horse-documents'::text) AND\nCASE\n    WHEN (split_part(name, '/'::text, 1) ~ '^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$'::text) THEN public.xbar_has_workspace_access((split_part(name, '/'::text, 1))::uuid)\n    ELSE false\nEND)",
+        "command": "SELECT",
+        "permissive": "PERMISSIVE"
+      },
+      "storage.objects.horse documents update workspace": {
+        "check": "((bucket_id = 'horse-documents'::text) AND\nCASE\n    WHEN (split_part(name, '/'::text, 1) ~ '^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$'::text) THEN public.xbar_can_manage_workspace((split_part(name, '/'::text, 1))::uuid)\n    ELSE false\nEND)",
+        "roles": ["authenticated"],
+        "using": "((bucket_id = 'horse-documents'::text) AND\nCASE\n    WHEN (split_part(name, '/'::text, 1) ~ '^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$'::text) THEN public.xbar_can_manage_workspace((split_part(name, '/'::text, 1))::uuid)\n    ELSE false\nEND)",
+        "command": "UPDATE",
+        "permissive": "PERMISSIVE"
+      },
+      "public.document_templates.document templates read": {
+        "check": null,
+        "roles": ["authenticated"],
+        "using": "true",
+        "command": "SELECT",
+        "permissive": "PERMISSIVE"
+      },
+      "public.intake_batches.intake batches staff insert": {
+        "check": "(public.xbar_has_workspace_capability(workspace_id, 'uploadDocuments'::text) OR public.xbar_has_workspace_capability(workspace_id, 'reviewDocuments'::text) OR public.xbar_has_workspace_capability(workspace_id, 'createHorse'::text))",
+        "roles": ["authenticated"],
+        "using": null,
+        "command": "INSERT",
+        "permissive": "PERMISSIVE"
+      },
+      "public.intake_batches.intake batches staff update": {
+        "check": "(public.xbar_has_workspace_capability(workspace_id, 'uploadDocuments'::text) OR public.xbar_has_workspace_capability(workspace_id, 'reviewDocuments'::text) OR public.xbar_has_workspace_capability(workspace_id, 'createHorse'::text))",
+        "roles": ["authenticated"],
+        "using": "(public.xbar_has_workspace_capability(workspace_id, 'uploadDocuments'::text) OR public.xbar_has_workspace_capability(workspace_id, 'reviewDocuments'::text) OR public.xbar_has_workspace_capability(workspace_id, 'createHorse'::text))",
+        "command": "UPDATE",
+        "permissive": "PERMISSIVE"
+      },
+      "public.ranch_assets.ranch assets workspace manage": {
+        "check": "public.xbar_can_manage_workspace(workspace_id)",
+        "roles": ["authenticated"],
+        "using": "public.xbar_can_manage_workspace(workspace_id)",
+        "command": "ALL",
+        "permissive": "PERMISSIVE"
+      },
+      "public.sale_packets.sale packets workspace manage": {
+        "check": "public.xbar_can_manage_workspace(workspace_id)",
+        "roles": ["authenticated"],
+        "using": "public.xbar_can_manage_workspace(workspace_id)",
+        "command": "ALL",
+        "permissive": "PERMISSIVE"
+      },
+      "public.intake_batches.intake batches workspace read": {
+        "check": null,
+        "roles": ["authenticated"],
+        "using": "public.xbar_has_workspace_access(workspace_id)",
+        "command": "SELECT",
+        "permissive": "PERMISSIVE"
+      },
+      "public.runtime_events.runtime events workspace read": {
+        "check": null,
+        "roles": ["authenticated"],
+        "using": "public.xbar_has_workspace_access(workspace_id)",
+        "command": "SELECT",
+        "permissive": "PERMISSIVE"
+      },
+      "public.shared_listings.shared listings staff insert": {
+        "check": "public.xbar_has_workspace_capability(workspace_id, 'manageSharedAccess'::text)",
+        "roles": ["authenticated"],
+        "using": null,
+        "command": "INSERT",
+        "permissive": "PERMISSIVE"
+      },
+      "public.shared_listings.shared listings staff update": {
+        "check": "public.xbar_has_workspace_capability(workspace_id, 'manageSharedAccess'::text)",
+        "roles": ["authenticated"],
+        "using": "public.xbar_has_workspace_capability(workspace_id, 'manageSharedAccess'::text)",
+        "command": "UPDATE",
+        "permissive": "PERMISSIVE"
+      },
+      "public.expense_receipts.expense receipts staff delete": {
+        "check": null,
+        "roles": ["authenticated"],
+        "using": "public.xbar_has_workspace_capability(workspace_id, 'createHorse'::text)",
+        "command": "DELETE",
+        "permissive": "PERMISSIVE"
+      },
+      "public.expense_receipts.expense receipts staff insert": {
+        "check": "public.xbar_has_workspace_capability(workspace_id, 'manageAssets'::text)",
+        "roles": ["authenticated"],
+        "using": null,
+        "command": "INSERT",
+        "permissive": "PERMISSIVE"
+      },
+      "public.expense_receipts.expense receipts staff update": {
+        "check": "public.xbar_has_workspace_capability(workspace_id, 'manageAssets'::text)",
+        "roles": ["authenticated"],
+        "using": "public.xbar_has_workspace_capability(workspace_id, 'manageAssets'::text)",
+        "command": "UPDATE",
+        "permissive": "PERMISSIVE"
+      },
+      "public.intake_batches.intake batches workspace manage": {
+        "check": "public.xbar_can_manage_workspace(workspace_id)",
+        "roles": ["authenticated"],
+        "using": "public.xbar_can_manage_workspace(workspace_id)",
+        "command": "ALL",
+        "permissive": "PERMISSIVE"
+      },
+      "public.runtime_events.runtime events workspace insert": {
+        "check": "(public.xbar_has_workspace_access(workspace_id) AND ((user_id IS NULL) OR (user_id = auth.uid())))",
+        "roles": ["authenticated"],
+        "using": null,
+        "command": "INSERT",
+        "permissive": "PERMISSIVE"
+      },
+      "public.shared_listings.shared listings workspace read": {
+        "check": null,
+        "roles": ["authenticated"],
+        "using": "public.xbar_has_workspace_access(workspace_id)",
+        "command": "SELECT",
+        "permissive": "PERMISSIVE"
+      },
+      "public.workspace_profiles.workspace profiles managers": {
+        "check": "public.xbar_can_manage_workspace(workspace_id)",
+        "roles": ["authenticated"],
+        "using": "public.xbar_can_manage_workspace(workspace_id)",
+        "command": "ALL",
+        "permissive": "PERMISSIVE"
+      },
+      "public.workspaces.workspaces select active memberships": {
+        "check": null,
+        "roles": ["authenticated"],
+        "using": "public.xbar_has_workspace_access(id)",
+        "command": "SELECT",
+        "permissive": "PERMISSIVE"
+      },
+      "public.expense_receipts.expense receipts workspace read": {
+        "check": null,
+        "roles": ["authenticated"],
+        "using": "public.xbar_has_workspace_access(workspace_id)",
+        "command": "SELECT",
+        "permissive": "PERMISSIVE"
+      },
+      "public.ownership_records.ownership records staff insert": {
+        "check": "(public.xbar_has_workspace_capability(workspace_id, 'createHorse'::text) OR public.xbar_has_workspace_capability(workspace_id, 'manageOwnership'::text))",
+        "roles": ["authenticated"],
+        "using": null,
+        "command": "INSERT",
+        "permissive": "PERMISSIVE"
+      },
+      "public.ownership_records.ownership records staff update": {
+        "check": "public.xbar_has_workspace_capability(workspace_id, 'manageOwnership'::text)",
+        "roles": ["authenticated"],
+        "using": "public.xbar_has_workspace_capability(workspace_id, 'manageOwnership'::text)",
+        "command": "UPDATE",
+        "permissive": "PERMISSIVE"
+      },
+      "public.shared_listings.shared listings workspace manage": {
+        "check": "public.xbar_can_manage_workspace(workspace_id)",
+        "roles": ["authenticated"],
+        "using": "public.xbar_can_manage_workspace(workspace_id)",
+        "command": "ALL",
+        "permissive": "PERMISSIVE"
+      },
+      "public.notifications.notifications read own or workspace": {
+        "check": null,
+        "roles": ["authenticated"],
+        "using": "((user_id = auth.uid()) OR public.xbar_has_workspace_access(workspace_id))",
+        "command": "SELECT",
+        "permissive": "PERMISSIVE"
+      },
+      "public.expense_receipts.expense receipts workspace manage": {
+        "check": "public.xbar_can_manage_workspace(workspace_id)",
+        "roles": ["authenticated"],
+        "using": "public.xbar_can_manage_workspace(workspace_id)",
+        "command": "ALL",
+        "permissive": "PERMISSIVE"
+      },
+      "public.ownership_records.ownership records workspace read": {
+        "check": null,
+        "roles": ["authenticated"],
+        "using": "public.xbar_has_workspace_access(workspace_id)",
+        "command": "SELECT",
+        "permissive": "PERMISSIVE"
+      },
+      "public.workspace_snapshots.workspace snapshots insert own": {
+        "check": "(auth.uid() = user_id)",
+        "roles": ["authenticated"],
+        "using": null,
+        "command": "INSERT",
+        "permissive": "PERMISSIVE"
+      },
+      "public.workspace_snapshots.workspace snapshots select own": {
+        "check": null,
+        "roles": ["authenticated"],
+        "using": "(auth.uid() = user_id)",
+        "command": "SELECT",
+        "permissive": "PERMISSIVE"
+      },
+      "public.workspace_snapshots.workspace snapshots update own": {
+        "check": "(auth.uid() = user_id)",
+        "roles": ["authenticated"],
+        "using": "(auth.uid() = user_id)",
+        "command": "UPDATE",
+        "permissive": "PERMISSIVE"
+      },
+      "public.workspace_profiles.workspace profiles own workspace": {
+        "check": "(EXISTS ( SELECT 1\n   FROM public.workspaces w\n  WHERE ((w.id = workspace_profiles.workspace_id) AND (w.owner_user_id = auth.uid()))))",
+        "roles": ["authenticated"],
+        "using": "(EXISTS ( SELECT 1\n   FROM public.workspaces w\n  WHERE ((w.id = workspace_profiles.workspace_id) AND (w.owner_user_id = auth.uid()))))",
+        "command": "ALL",
+        "permissive": "PERMISSIVE"
+      },
+      "public.ownership_records.ownership records workspace manage": {
+        "check": "public.xbar_can_manage_workspace(workspace_id)",
+        "roles": ["authenticated"],
+        "using": "public.xbar_can_manage_workspace(workspace_id)",
+        "command": "ALL",
+        "permissive": "PERMISSIVE"
+      },
+      "public.public_share_events.public share events workspace read": {
+        "check": null,
+        "roles": ["authenticated"],
+        "using": "((EXISTS ( SELECT 1\n   FROM public.workspace_memberships m\n  WHERE ((m.workspace_id = public_share_events.workspace_id) AND (m.user_id = auth.uid()) AND (m.status = 'active'::text)))) OR (EXISTS ( SELECT 1\n   FROM public.workspaces w\n  WHERE ((w.id = public_share_events.workspace_id) AND (w.owner_user_id = auth.uid())))))",
+        "command": "SELECT",
+        "permissive": "PERMISSIVE"
+      },
+      "public.workspace_memberships.workspace memberships insert own or owner": {
+        "check": "public.xbar_can_manage_workspace(workspace_id)",
+        "roles": ["authenticated"],
+        "using": null,
+        "command": "INSERT",
+        "permissive": "PERMISSIVE"
+      },
+      "public.workspace_memberships.workspace memberships select own or owner": {
+        "check": null,
+        "roles": ["authenticated"],
+        "using": "((user_id = auth.uid()) OR public.xbar_has_workspace_access(workspace_id))",
+        "command": "SELECT",
+        "permissive": "PERMISSIVE"
+      },
+      "public.workspace_memberships.workspace memberships update own or owner": {
+        "check": "public.xbar_can_manage_workspace(workspace_id)",
+        "roles": ["authenticated"],
+        "using": "public.xbar_can_manage_workspace(workspace_id)",
+        "command": "UPDATE",
+        "permissive": "PERMISSIVE"
+      },
+      "public.workspace_profiles.workspace profiles select active memberships": {
+        "check": null,
+        "roles": ["authenticated"],
+        "using": "(EXISTS ( SELECT 1\n   FROM public.workspace_memberships m\n  WHERE ((m.workspace_id = workspace_profiles.workspace_id) AND (m.user_id = auth.uid()) AND (m.status = 'active'::text))))",
+        "command": "SELECT",
+        "permissive": "PERMISSIVE"
+      },
+      "public.document_processing_jobs.document processing jobs workspace read": {
+        "check": null,
+        "roles": ["authenticated"],
+        "using": "public.xbar_has_workspace_access(workspace_id)",
+        "command": "SELECT",
+        "permissive": "PERMISSIVE"
+      },
+      "public.workspace_invitations.workspace invitations delete owner or admin": {
+        "check": null,
+        "roles": ["authenticated"],
+        "using": "public.xbar_can_manage_workspace(workspace_id)",
+        "command": "DELETE",
+        "permissive": "PERMISSIVE"
+      },
+      "public.workspace_invitations.workspace invitations insert owner or admin": {
+        "check": "public.xbar_can_manage_workspace(workspace_id)",
+        "roles": ["authenticated"],
+        "using": null,
+        "command": "INSERT",
+        "permissive": "PERMISSIVE"
+      },
+      "public.workspace_memberships.workspace memberships delete owner or admin": {
+        "check": null,
+        "roles": ["authenticated"],
+        "using": "public.xbar_can_manage_workspace(workspace_id)",
+        "command": "DELETE",
+        "permissive": "PERMISSIVE"
+      },
+      "public.document_processing_jobs.document processing jobs workspace manage": {
+        "check": "public.xbar_can_manage_workspace(workspace_id)",
+        "roles": ["authenticated"],
+        "using": "public.xbar_can_manage_workspace(workspace_id)",
+        "command": "ALL",
+        "permissive": "PERMISSIVE"
+      },
+      "public.workspace_billing_customers.workspace billing customers own workspace": {
+        "check": "(EXISTS ( SELECT 1\n   FROM public.workspaces w\n  WHERE ((w.id = workspace_billing_customers.workspace_id) AND (w.owner_user_id = auth.uid()))))",
+        "roles": ["authenticated"],
+        "using": "(EXISTS ( SELECT 1\n   FROM public.workspaces w\n  WHERE ((w.id = workspace_billing_customers.workspace_id) AND (w.owner_user_id = auth.uid()))))",
+        "command": "ALL",
+        "permissive": "PERMISSIVE"
+      },
+      "public.workspace_invitations.workspace invitations update owner admin or invitee": {
+        "check": "public.xbar_can_manage_workspace(workspace_id)",
+        "roles": ["authenticated"],
+        "using": "public.xbar_can_manage_workspace(workspace_id)",
+        "command": "UPDATE",
+        "permissive": "PERMISSIVE"
+      },
+      "public.workspace_subscription_events.workspace subscription events own workspace": {
+        "check": null,
+        "roles": ["authenticated"],
+        "using": "(EXISTS ( SELECT 1\n   FROM public.workspaces w\n  WHERE ((w.id = workspace_subscription_events.workspace_id) AND (w.owner_user_id = auth.uid()))))",
+        "command": "SELECT",
+        "permissive": "PERMISSIVE"
+      },
+      "public.workspace_invitations.workspace invitations select own or workspace access": {
+        "check": null,
+        "roles": ["authenticated"],
+        "using": "((NULLIF(lower(btrim(email)), ''::text) = NULLIF(lower(btrim((auth.jwt() ->> 'email'::text))), ''::text)) OR public.xbar_has_workspace_access(workspace_id))",
+        "command": "SELECT",
+        "permissive": "PERMISSIVE"
+      },
+      "public.workspace_subscription_profiles.subscription profiles select active memberships": {
+        "check": null,
+        "roles": ["authenticated"],
+        "using": "((EXISTS ( SELECT 1\n   FROM public.workspace_memberships m\n  WHERE ((m.workspace_id = workspace_subscription_profiles.workspace_id) AND (m.user_id = auth.uid()) AND (m.status = 'active'::text)))) OR (EXISTS ( SELECT 1\n   FROM public.workspaces w\n  WHERE ((w.id = workspace_subscription_profiles.workspace_id) AND (w.owner_user_id = auth.uid())))))",
+        "command": "SELECT",
+        "permissive": "PERMISSIVE"
+      }
+    },
+    "triggers": {
+      "public.documents.trg_documents_enforce_storage": {
+        "enabled": "O",
+        "definition": "CREATE TRIGGER trg_documents_enforce_storage BEFORE INSERT OR UPDATE ON public.documents FOR EACH ROW EXECUTE FUNCTION public.xbar_enforce_storage_limit()"
+      },
+      "public.horses.trg_horses_guard_specialist_update": {
+        "enabled": "O",
+        "definition": "CREATE TRIGGER trg_horses_guard_specialist_update BEFORE UPDATE ON public.horses FOR EACH ROW EXECUTE FUNCTION public.xbar_guard_specialist_horse_update()"
+      },
+      "public.shared_listings.trg_shared_listings_audit": {
+        "enabled": "O",
+        "definition": "CREATE TRIGGER trg_shared_listings_audit AFTER INSERT OR UPDATE ON public.shared_listings FOR EACH ROW EXECUTE FUNCTION public.xbar_audit_shared_listing_change()"
+      },
+      "public.horses.trg_horses_enforce_commercial_limits": {
+        "enabled": "O",
+        "definition": "CREATE TRIGGER trg_horses_enforce_commercial_limits BEFORE INSERT OR UPDATE ON public.horses FOR EACH ROW EXECUTE FUNCTION public.xbar_enforce_commercial_resource_limits()"
+      },
+      "public.horses.trg_horses_guard_sale_media_approval": {
+        "enabled": "O",
+        "definition": "CREATE TRIGGER trg_horses_guard_sale_media_approval BEFORE INSERT OR UPDATE ON public.horses FOR EACH ROW EXECUTE FUNCTION public.xbar_guard_sale_media_approval()"
+      },
+      "public.sale_packets.trg_sale_packets_enforce_storage": {
+        "enabled": "O",
+        "definition": "CREATE TRIGGER trg_sale_packets_enforce_storage BEFORE INSERT OR UPDATE ON public.sale_packets FOR EACH ROW EXECUTE FUNCTION public.xbar_enforce_storage_limit()"
+      },
+      "public.documents.trg_documents_enforce_commercial_limits": {
+        "enabled": "O",
+        "definition": "CREATE TRIGGER trg_documents_enforce_commercial_limits BEFORE INSERT OR UPDATE ON public.documents FOR EACH ROW EXECUTE FUNCTION public.xbar_enforce_commercial_resource_limits()"
+      },
+      "public.sales_leads.trg_sales_leads_enforce_commercial_limits": {
+        "enabled": "O",
+        "definition": "CREATE TRIGGER trg_sales_leads_enforce_commercial_limits BEFORE INSERT OR UPDATE ON public.sales_leads FOR EACH ROW EXECUTE FUNCTION public.xbar_enforce_commercial_resource_limits()"
+      },
+      "public.sale_packets.trg_sale_packets_enforce_commercial_limits": {
+        "enabled": "O",
+        "definition": "CREATE TRIGGER trg_sale_packets_enforce_commercial_limits BEFORE INSERT OR UPDATE ON public.sale_packets FOR EACH ROW EXECUTE FUNCTION public.xbar_enforce_commercial_resource_limits()"
+      },
+      "public.workspaces.trg_workspaces_refuse_ownership_during_deletion": {
+        "enabled": "O",
+        "definition": "CREATE TRIGGER trg_workspaces_refuse_ownership_during_deletion BEFORE INSERT OR UPDATE OF owner_user_id ON public.workspaces FOR EACH ROW EXECUTE FUNCTION public.xbar_refuse_workspace_ownership_during_deletion()"
+      },
+      "public.shared_listings.trg_shared_listings_enforce_commercial_limits": {
+        "enabled": "O",
+        "definition": "CREATE TRIGGER trg_shared_listings_enforce_commercial_limits BEFORE INSERT OR UPDATE ON public.shared_listings FOR EACH ROW EXECUTE FUNCTION public.xbar_enforce_commercial_resource_limits()"
+      },
+      "public.workspace_invitations.trg_workspace_invitations_enforce_limits": {
+        "enabled": "O",
+        "definition": "CREATE TRIGGER trg_workspace_invitations_enforce_limits BEFORE INSERT OR UPDATE ON public.workspace_invitations FOR EACH ROW EXECUTE FUNCTION public.xbar_enforce_workspace_seat_limits()"
+      },
+      "public.workspace_memberships.trg_workspace_memberships_enforce_limits": {
+        "enabled": "O",
+        "definition": "CREATE TRIGGER trg_workspace_memberships_enforce_limits BEFORE INSERT OR UPDATE ON public.workspace_memberships FOR EACH ROW EXECUTE FUNCTION public.xbar_enforce_workspace_seat_limits()"
+      },
+      "public.workspace_invitations.trg_workspace_invitations_refuse_during_deletion": {
+        "enabled": "O",
+        "definition": "CREATE TRIGGER trg_workspace_invitations_refuse_during_deletion BEFORE INSERT OR UPDATE ON public.workspace_invitations FOR EACH ROW EXECUTE FUNCTION public.xbar_refuse_access_during_account_deletion()"
+      },
+      "public.workspace_memberships.trg_workspace_memberships_refuse_during_deletion": {
+        "enabled": "O",
+        "definition": "CREATE TRIGGER trg_workspace_memberships_refuse_during_deletion BEFORE INSERT OR UPDATE ON public.workspace_memberships FOR EACH ROW EXECUTE FUNCTION public.xbar_refuse_access_during_account_deletion()"
+      }
+    },
+    "functions": {
+      "xbar_enforce_storage_limit()": {
+        "anon": false,
+        "definition": "3a019db8c477a2491725388e22bbdd84",
+        "service_role": false,
+        "authenticated": false
+      },
+      "xbar_guard_sale_media_approval()": {
+        "anon": false,
+        "definition": "6a5a4422900163d3ff4b7dd94590f6d0",
+        "service_role": false,
+        "authenticated": false
+      },
+      "xbar_audit_shared_listing_change()": {
+        "anon": false,
+        "definition": "0f8c0fcb5230643caf045e3992bae46b",
+        "service_role": false,
+        "authenticated": false
+      },
+      "xbar_trial_active(p_payload jsonb)": {
+        "anon": false,
+        "definition": "064373d177c9ae87b7ea54e8c490a994",
+        "service_role": true,
+        "authenticated": false
+      },
+      "xbar_enforce_workspace_seat_limits()": {
+        "anon": false,
+        "definition": "5229f9637757d3df4597ea5eac0230ed",
+        "service_role": false,
+        "authenticated": false
+      },
+      "xbar_guard_specialist_horse_update()": {
+        "anon": false,
+        "definition": "585d4d22abd21fb0dc989eadd3e35a0d",
+        "service_role": false,
+        "authenticated": false
+      },
+      "xbar_enforce_commercial_resource_limits()": {
+        "anon": false,
+        "definition": "b47cb2dd91edc81a1a7283ff6c435dc1",
+        "service_role": false,
+        "authenticated": false
+      },
+      "xbar_commercial_limits(p_workspace_id uuid)": {
+        "anon": false,
+        "definition": "e0ae86d38896a73f730c70d9e26a4561",
+        "service_role": false,
+        "authenticated": true
+      },
+      "xbar_refuse_access_during_account_deletion()": {
+        "anon": false,
+        "definition": "0b643c28c455170a5650ffd1a44736ca",
+        "service_role": false,
+        "authenticated": false
+      },
+      "xbar_subscription_limits(p_workspace_id uuid)": {
+        "anon": false,
+        "definition": "1bb45a8e38dd4aeea5e0d6aa63f3e7b8",
+        "service_role": false,
+        "authenticated": true
+      },
+      "xbar_can_manage_workspace(p_workspace_id uuid)": {
+        "anon": false,
+        "definition": "af95b8127b3ea45f93f00492ab0fa4ed",
+        "service_role": false,
+        "authenticated": true
+      },
+      "xbar_has_workspace_access(p_workspace_id uuid)": {
+        "anon": false,
+        "definition": "a3cc86ead0b628fea8dc17b2d5c1211f",
+        "service_role": false,
+        "authenticated": true
+      },
+      "xbar_refuse_workspace_ownership_during_deletion()": {
+        "anon": false,
+        "definition": "915740776ed94eab3e77d373f6c68730",
+        "service_role": false,
+        "authenticated": false
+      },
+      "xbar_workspace_storage_bytes(p_workspace_id uuid)": {
+        "anon": false,
+        "definition": "fdbb980d37ebe88ce14c979ec81c746a",
+        "service_role": true,
+        "authenticated": true
+      },
+      "xbar_release_account_deletion_holds(p_user_id uuid)": {
+        "anon": false,
+        "definition": "6f47aa08a12f2fb9dbe2b4f62ab4a56e",
+        "service_role": true,
+        "authenticated": false
+      },
+      "xbar_hold_owned_workspaces_for_deletion(p_user_id uuid)": {
+        "anon": false,
+        "definition": "1a82ff8ecdef408a9d5ac7b5eac71086",
+        "service_role": true,
+        "authenticated": false
+      },
+      "xbar_resolve_public_listing(p_share_path text, p_share_token text)": {
+        "anon": true,
+        "definition": "47aa1850c91338efa195be10072cb582",
+        "service_role": true,
+        "authenticated": true
+      },
+      "xbar_track_public_share_view(p_share_path text, p_share_token text)": {
+        "anon": true,
+        "definition": "3f44374eebed808717fbfba4723ad339",
+        "service_role": true,
+        "authenticated": true
+      },
+      "xbar_has_workspace_capability(p_workspace_id uuid, p_capability text)": {
+        "anon": false,
+        "definition": "bf7c33f6f5891b535805a9739b7764fe",
+        "service_role": false,
+        "authenticated": true
+      },
+      "xbar_record_exists(p_table text, p_workspace_id uuid, p_record_id text)": {
+        "anon": false,
+        "definition": "943bc58f042bb9f21cb601b3e2f5ef01",
+        "service_role": false,
+        "authenticated": true
+      },
+      "xbar_hold_account_deletion_request(p_user_id uuid, p_request_token uuid)": {
+        "anon": false,
+        "definition": "10fec832b93d9151bea53bb86b619696",
+        "service_role": true,
+        "authenticated": false
+      },
+      "xbar_resolve_public_listing_legacy(p_share_path text, p_share_token text)": {
+        "anon": false,
+        "definition": "844aa9e6036b4fbf02a9266b1d4e0e8f",
+        "service_role": false,
+        "authenticated": true
+      },
+      "xbar_accept_workspace_invitation(p_workspace_id uuid, p_invitation_id text)": {
+        "anon": false,
+        "definition": "fee35a70113e568328f1772e5a4a9ba5",
+        "service_role": false,
+        "authenticated": true
+      },
+      "xbar_release_account_deletion_request(p_user_id uuid, p_request_token uuid)": {
+        "anon": false,
+        "definition": "bdd130318f0693e4b81a800a6a4322db",
+        "service_role": true,
+        "authenticated": false
+      },
+      "xbar_confirm_account_deletion_request(p_user_id uuid, p_request_token uuid, p_workspace_ids uuid[])": {
+        "anon": false,
+        "definition": "127b57d08e42b6a6736312c7ff5119eb",
+        "service_role": true,
+        "authenticated": false
+      },
+      "xbar_claim_checkout_lock(p_workspace_id uuid, p_stale_before timestamp with time zone, p_token text)": {
+        "anon": false,
+        "definition": "0823edef1db15121d77f06f7ac546d79",
+        "service_role": true,
+        "authenticated": false
+      },
+      "xbar_apply_subscription_event(p_workspace_id uuid, p_event_id text, p_event_type text, p_event_created_at timestamp with time zone, p_payload jsonb, p_tier text, p_billing_state text, p_monthly_rate double precision, p_profile jsonb, p_customer_id text, p_subscription_id text, p_price_id text, p_seat_count integer, p_from_sibling boolean, p_billing_period text)": {
+        "anon": false,
+        "definition": "ef3f3903350ad487ceb5bf923e8beab2",
+        "service_role": true,
+        "authenticated": false
+      }
+    },
+    "tableGrants": {
+      "horses": {
+        "table": {
+          "anon": {
+            "DELETE": false,
+            "INSERT": false,
+            "SELECT": false,
+            "UPDATE": false,
+            "TRIGGER": false,
+            "MAINTAIN": false,
+            "TRUNCATE": false,
+            "REFERENCES": false
+          },
+          "service_role": {
+            "DELETE": true,
+            "INSERT": true,
+            "SELECT": true,
+            "UPDATE": true,
+            "TRIGGER": true,
+            "MAINTAIN": true,
+            "TRUNCATE": true,
+            "REFERENCES": true
+          },
+          "authenticated": {
+            "DELETE": true,
+            "INSERT": true,
+            "SELECT": true,
+            "UPDATE": true,
+            "TRIGGER": true,
+            "MAINTAIN": true,
+            "TRUNCATE": true,
+            "REFERENCES": true
+          }
+        },
+        "column": {
+          "anon": {
+            "INSERT": false,
+            "SELECT": false,
+            "UPDATE": false,
+            "REFERENCES": false
+          },
+          "service_role": {
+            "INSERT": true,
+            "SELECT": true,
+            "UPDATE": true,
+            "REFERENCES": true
+          },
+          "authenticated": {
+            "INSERT": true,
+            "SELECT": true,
+            "UPDATE": true,
+            "REFERENCES": true
+          }
+        }
+      },
+      "documents": {
+        "table": {
+          "anon": {
+            "DELETE": false,
+            "INSERT": false,
+            "SELECT": false,
+            "UPDATE": false,
+            "TRIGGER": false,
+            "MAINTAIN": false,
+            "TRUNCATE": false,
+            "REFERENCES": false
+          },
+          "service_role": {
+            "DELETE": true,
+            "INSERT": true,
+            "SELECT": true,
+            "UPDATE": true,
+            "TRIGGER": true,
+            "MAINTAIN": true,
+            "TRUNCATE": true,
+            "REFERENCES": true
+          },
+          "authenticated": {
+            "DELETE": true,
+            "INSERT": true,
+            "SELECT": true,
+            "UPDATE": true,
+            "TRIGGER": true,
+            "MAINTAIN": true,
+            "TRUNCATE": true,
+            "REFERENCES": true
+          }
+        },
+        "column": {
+          "anon": {
+            "INSERT": false,
+            "SELECT": false,
+            "UPDATE": false,
+            "REFERENCES": false
+          },
+          "service_role": {
+            "INSERT": true,
+            "SELECT": true,
+            "UPDATE": true,
+            "REFERENCES": true
+          },
+          "authenticated": {
+            "INSERT": true,
+            "SELECT": true,
+            "UPDATE": true,
+            "REFERENCES": true
+          }
+        }
+      },
+      "reminders": {
+        "table": {
+          "anon": {
+            "DELETE": false,
+            "INSERT": false,
+            "SELECT": false,
+            "UPDATE": false,
+            "TRIGGER": false,
+            "MAINTAIN": false,
+            "TRUNCATE": false,
+            "REFERENCES": false
+          },
+          "service_role": {
+            "DELETE": true,
+            "INSERT": true,
+            "SELECT": true,
+            "UPDATE": true,
+            "TRIGGER": true,
+            "MAINTAIN": true,
+            "TRUNCATE": true,
+            "REFERENCES": true
+          },
+          "authenticated": {
+            "DELETE": true,
+            "INSERT": true,
+            "SELECT": true,
+            "UPDATE": true,
+            "TRIGGER": true,
+            "MAINTAIN": true,
+            "TRUNCATE": true,
+            "REFERENCES": true
+          }
+        },
+        "column": {
+          "anon": {
+            "INSERT": false,
+            "SELECT": false,
+            "UPDATE": false,
+            "REFERENCES": false
+          },
+          "service_role": {
+            "INSERT": true,
+            "SELECT": true,
+            "UPDATE": true,
+            "REFERENCES": true
+          },
+          "authenticated": {
+            "INSERT": true,
+            "SELECT": true,
+            "UPDATE": true,
+            "REFERENCES": true
+          }
+        }
+      },
+      "audit_logs": {
+        "table": {
+          "anon": {
+            "DELETE": false,
+            "INSERT": false,
+            "SELECT": false,
+            "UPDATE": false,
+            "TRIGGER": false,
+            "MAINTAIN": false,
+            "TRUNCATE": false,
+            "REFERENCES": false
+          },
+          "service_role": {
+            "DELETE": true,
+            "INSERT": true,
+            "SELECT": true,
+            "UPDATE": true,
+            "TRIGGER": true,
+            "MAINTAIN": true,
+            "TRUNCATE": true,
+            "REFERENCES": true
+          },
+          "authenticated": {
+            "DELETE": true,
+            "INSERT": true,
+            "SELECT": true,
+            "UPDATE": true,
+            "TRIGGER": true,
+            "MAINTAIN": true,
+            "TRUNCATE": true,
+            "REFERENCES": true
+          }
+        },
+        "column": {
+          "anon": {
+            "INSERT": false,
+            "SELECT": false,
+            "UPDATE": false,
+            "REFERENCES": false
+          },
+          "service_role": {
+            "INSERT": true,
+            "SELECT": true,
+            "UPDATE": true,
+            "REFERENCES": true
+          },
+          "authenticated": {
+            "INSERT": true,
+            "SELECT": true,
+            "UPDATE": true,
+            "REFERENCES": true
+          }
+        }
+      },
+      "workspaces": {
+        "table": {
+          "anon": {
+            "DELETE": false,
+            "INSERT": false,
+            "SELECT": false,
+            "UPDATE": false,
+            "TRIGGER": false,
+            "MAINTAIN": false,
+            "TRUNCATE": false,
+            "REFERENCES": false
+          },
+          "service_role": {
+            "DELETE": true,
+            "INSERT": true,
+            "SELECT": true,
+            "UPDATE": true,
+            "TRIGGER": true,
+            "MAINTAIN": true,
+            "TRUNCATE": true,
+            "REFERENCES": true
+          },
+          "authenticated": {
+            "DELETE": true,
+            "INSERT": true,
+            "SELECT": true,
+            "UPDATE": true,
+            "TRIGGER": true,
+            "MAINTAIN": true,
+            "TRUNCATE": true,
+            "REFERENCES": true
+          }
+        },
+        "column": {
+          "anon": {
+            "INSERT": false,
+            "SELECT": false,
+            "UPDATE": false,
+            "REFERENCES": false
+          },
+          "service_role": {
+            "INSERT": true,
+            "SELECT": true,
+            "UPDATE": true,
+            "REFERENCES": true
+          },
+          "authenticated": {
+            "INSERT": true,
+            "SELECT": true,
+            "UPDATE": true,
+            "REFERENCES": true
+          }
+        }
+      },
+      "sales_leads": {
+        "table": {
+          "anon": {
+            "DELETE": false,
+            "INSERT": false,
+            "SELECT": false,
+            "UPDATE": false,
+            "TRIGGER": false,
+            "MAINTAIN": false,
+            "TRUNCATE": false,
+            "REFERENCES": false
+          },
+          "service_role": {
+            "DELETE": true,
+            "INSERT": true,
+            "SELECT": true,
+            "UPDATE": true,
+            "TRIGGER": true,
+            "MAINTAIN": true,
+            "TRUNCATE": true,
+            "REFERENCES": true
+          },
+          "authenticated": {
+            "DELETE": true,
+            "INSERT": true,
+            "SELECT": true,
+            "UPDATE": true,
+            "TRIGGER": true,
+            "MAINTAIN": true,
+            "TRUNCATE": true,
+            "REFERENCES": true
+          }
+        },
+        "column": {
+          "anon": {
+            "INSERT": false,
+            "SELECT": false,
+            "UPDATE": false,
+            "REFERENCES": false
+          },
+          "service_role": {
+            "INSERT": true,
+            "SELECT": true,
+            "UPDATE": true,
+            "REFERENCES": true
+          },
+          "authenticated": {
+            "INSERT": true,
+            "SELECT": true,
+            "UPDATE": true,
+            "REFERENCES": true
+          }
+        }
+      },
+      "ranch_assets": {
+        "table": {
+          "anon": {
+            "DELETE": false,
+            "INSERT": false,
+            "SELECT": false,
+            "UPDATE": false,
+            "TRIGGER": false,
+            "MAINTAIN": false,
+            "TRUNCATE": false,
+            "REFERENCES": false
+          },
+          "service_role": {
+            "DELETE": true,
+            "INSERT": true,
+            "SELECT": true,
+            "UPDATE": true,
+            "TRIGGER": true,
+            "MAINTAIN": true,
+            "TRUNCATE": true,
+            "REFERENCES": true
+          },
+          "authenticated": {
+            "DELETE": true,
+            "INSERT": true,
+            "SELECT": true,
+            "UPDATE": true,
+            "TRIGGER": true,
+            "MAINTAIN": true,
+            "TRUNCATE": true,
+            "REFERENCES": true
+          }
+        },
+        "column": {
+          "anon": {
+            "INSERT": false,
+            "SELECT": false,
+            "UPDATE": false,
+            "REFERENCES": false
+          },
+          "service_role": {
+            "INSERT": true,
+            "SELECT": true,
+            "UPDATE": true,
+            "REFERENCES": true
+          },
+          "authenticated": {
+            "INSERT": true,
+            "SELECT": true,
+            "UPDATE": true,
+            "REFERENCES": true
+          }
+        }
+      },
+      "sale_packets": {
+        "table": {
+          "anon": {
+            "DELETE": false,
+            "INSERT": false,
+            "SELECT": false,
+            "UPDATE": false,
+            "TRIGGER": false,
+            "MAINTAIN": false,
+            "TRUNCATE": false,
+            "REFERENCES": false
+          },
+          "service_role": {
+            "DELETE": true,
+            "INSERT": true,
+            "SELECT": true,
+            "UPDATE": true,
+            "TRIGGER": true,
+            "MAINTAIN": true,
+            "TRUNCATE": true,
+            "REFERENCES": true
+          },
+          "authenticated": {
+            "DELETE": true,
+            "INSERT": true,
+            "SELECT": true,
+            "UPDATE": true,
+            "TRIGGER": true,
+            "MAINTAIN": true,
+            "TRUNCATE": true,
+            "REFERENCES": true
+          }
+        },
+        "column": {
+          "anon": {
+            "INSERT": false,
+            "SELECT": false,
+            "UPDATE": false,
+            "REFERENCES": false
+          },
+          "service_role": {
+            "INSERT": true,
+            "SELECT": true,
+            "UPDATE": true,
+            "REFERENCES": true
+          },
+          "authenticated": {
+            "INSERT": true,
+            "SELECT": true,
+            "UPDATE": true,
+            "REFERENCES": true
+          }
+        }
+      },
+      "notifications": {
+        "table": {
+          "anon": {
+            "DELETE": false,
+            "INSERT": false,
+            "SELECT": false,
+            "UPDATE": false,
+            "TRIGGER": false,
+            "MAINTAIN": false,
+            "TRUNCATE": false,
+            "REFERENCES": false
+          },
+          "service_role": {
+            "DELETE": true,
+            "INSERT": true,
+            "SELECT": true,
+            "UPDATE": true,
+            "TRIGGER": true,
+            "MAINTAIN": true,
+            "TRUNCATE": true,
+            "REFERENCES": true
+          },
+          "authenticated": {
+            "DELETE": true,
+            "INSERT": true,
+            "SELECT": true,
+            "UPDATE": true,
+            "TRIGGER": true,
+            "MAINTAIN": true,
+            "TRUNCATE": true,
+            "REFERENCES": true
+          }
+        },
+        "column": {
+          "anon": {
+            "INSERT": false,
+            "SELECT": false,
+            "UPDATE": false,
+            "REFERENCES": false
+          },
+          "service_role": {
+            "INSERT": true,
+            "SELECT": true,
+            "UPDATE": true,
+            "REFERENCES": true
+          },
+          "authenticated": {
+            "INSERT": true,
+            "SELECT": true,
+            "UPDATE": true,
+            "REFERENCES": true
+          }
+        }
+      },
+      "intake_batches": {
+        "table": {
+          "anon": {
+            "DELETE": false,
+            "INSERT": false,
+            "SELECT": false,
+            "UPDATE": false,
+            "TRIGGER": false,
+            "MAINTAIN": false,
+            "TRUNCATE": false,
+            "REFERENCES": false
+          },
+          "service_role": {
+            "DELETE": true,
+            "INSERT": true,
+            "SELECT": true,
+            "UPDATE": true,
+            "TRIGGER": true,
+            "MAINTAIN": true,
+            "TRUNCATE": true,
+            "REFERENCES": true
+          },
+          "authenticated": {
+            "DELETE": true,
+            "INSERT": true,
+            "SELECT": true,
+            "UPDATE": true,
+            "TRIGGER": true,
+            "MAINTAIN": true,
+            "TRUNCATE": true,
+            "REFERENCES": true
+          }
+        },
+        "column": {
+          "anon": {
+            "INSERT": false,
+            "SELECT": false,
+            "UPDATE": false,
+            "REFERENCES": false
+          },
+          "service_role": {
+            "INSERT": true,
+            "SELECT": true,
+            "UPDATE": true,
+            "REFERENCES": true
+          },
+          "authenticated": {
+            "INSERT": true,
+            "SELECT": true,
+            "UPDATE": true,
+            "REFERENCES": true
+          }
+        }
+      },
+      "runtime_events": {
+        "table": {
+          "anon": {
+            "DELETE": false,
+            "INSERT": false,
+            "SELECT": false,
+            "UPDATE": false,
+            "TRIGGER": false,
+            "MAINTAIN": false,
+            "TRUNCATE": false,
+            "REFERENCES": false
+          },
+          "service_role": {
+            "DELETE": true,
+            "INSERT": true,
+            "SELECT": true,
+            "UPDATE": true,
+            "TRIGGER": true,
+            "MAINTAIN": true,
+            "TRUNCATE": true,
+            "REFERENCES": true
+          },
+          "authenticated": {
+            "DELETE": true,
+            "INSERT": true,
+            "SELECT": true,
+            "UPDATE": true,
+            "TRIGGER": true,
+            "MAINTAIN": true,
+            "TRUNCATE": true,
+            "REFERENCES": true
+          }
+        },
+        "column": {
+          "anon": {
+            "INSERT": false,
+            "SELECT": false,
+            "UPDATE": false,
+            "REFERENCES": false
+          },
+          "service_role": {
+            "INSERT": true,
+            "SELECT": true,
+            "UPDATE": true,
+            "REFERENCES": true
+          },
+          "authenticated": {
+            "INSERT": true,
+            "SELECT": true,
+            "UPDATE": true,
+            "REFERENCES": true
+          }
+        }
+      },
+      "shared_listings": {
+        "table": {
+          "anon": {
+            "DELETE": false,
+            "INSERT": false,
+            "SELECT": false,
+            "UPDATE": false,
+            "TRIGGER": false,
+            "MAINTAIN": false,
+            "TRUNCATE": false,
+            "REFERENCES": false
+          },
+          "service_role": {
+            "DELETE": true,
+            "INSERT": true,
+            "SELECT": true,
+            "UPDATE": true,
+            "TRIGGER": true,
+            "MAINTAIN": true,
+            "TRUNCATE": true,
+            "REFERENCES": true
+          },
+          "authenticated": {
+            "DELETE": true,
+            "INSERT": true,
+            "SELECT": true,
+            "UPDATE": true,
+            "TRIGGER": true,
+            "MAINTAIN": true,
+            "TRUNCATE": true,
+            "REFERENCES": true
+          }
+        },
+        "column": {
+          "anon": {
+            "INSERT": false,
+            "SELECT": false,
+            "UPDATE": false,
+            "REFERENCES": false
+          },
+          "service_role": {
+            "INSERT": true,
+            "SELECT": true,
+            "UPDATE": true,
+            "REFERENCES": true
+          },
+          "authenticated": {
+            "INSERT": true,
+            "SELECT": true,
+            "UPDATE": true,
+            "REFERENCES": true
+          }
+        }
+      },
+      "expense_receipts": {
+        "table": {
+          "anon": {
+            "DELETE": false,
+            "INSERT": false,
+            "SELECT": false,
+            "UPDATE": false,
+            "TRIGGER": false,
+            "MAINTAIN": false,
+            "TRUNCATE": false,
+            "REFERENCES": false
+          },
+          "service_role": {
+            "DELETE": true,
+            "INSERT": true,
+            "SELECT": true,
+            "UPDATE": true,
+            "TRIGGER": true,
+            "MAINTAIN": true,
+            "TRUNCATE": true,
+            "REFERENCES": true
+          },
+          "authenticated": {
+            "DELETE": true,
+            "INSERT": true,
+            "SELECT": true,
+            "UPDATE": true,
+            "TRIGGER": true,
+            "MAINTAIN": true,
+            "TRUNCATE": true,
+            "REFERENCES": true
+          }
+        },
+        "column": {
+          "anon": {
+            "INSERT": false,
+            "SELECT": false,
+            "UPDATE": false,
+            "REFERENCES": false
+          },
+          "service_role": {
+            "INSERT": true,
+            "SELECT": true,
+            "UPDATE": true,
+            "REFERENCES": true
+          },
+          "authenticated": {
+            "INSERT": true,
+            "SELECT": true,
+            "UPDATE": true,
+            "REFERENCES": true
+          }
+        }
+      },
+      "horse_vet_access": {
+        "table": {
+          "anon": {
+            "DELETE": false,
+            "INSERT": false,
+            "SELECT": false,
+            "UPDATE": false,
+            "TRIGGER": false,
+            "MAINTAIN": false,
+            "TRUNCATE": false,
+            "REFERENCES": false
+          },
+          "service_role": {
+            "DELETE": true,
+            "INSERT": true,
+            "SELECT": true,
+            "UPDATE": true,
+            "TRIGGER": true,
+            "MAINTAIN": true,
+            "TRUNCATE": true,
+            "REFERENCES": true
+          },
+          "authenticated": {
+            "DELETE": true,
+            "INSERT": true,
+            "SELECT": true,
+            "UPDATE": true,
+            "TRIGGER": true,
+            "MAINTAIN": true,
+            "TRUNCATE": true,
+            "REFERENCES": true
+          }
+        },
+        "column": {
+          "anon": {
+            "INSERT": false,
+            "SELECT": false,
+            "UPDATE": false,
+            "REFERENCES": false
+          },
+          "service_role": {
+            "INSERT": true,
+            "SELECT": true,
+            "UPDATE": true,
+            "REFERENCES": true
+          },
+          "authenticated": {
+            "INSERT": true,
+            "SELECT": true,
+            "UPDATE": true,
+            "REFERENCES": true
+          }
+        }
+      },
+      "ownership_records": {
+        "table": {
+          "anon": {
+            "DELETE": false,
+            "INSERT": false,
+            "SELECT": false,
+            "UPDATE": false,
+            "TRIGGER": false,
+            "MAINTAIN": false,
+            "TRUNCATE": false,
+            "REFERENCES": false
+          },
+          "service_role": {
+            "DELETE": true,
+            "INSERT": true,
+            "SELECT": true,
+            "UPDATE": true,
+            "TRIGGER": true,
+            "MAINTAIN": true,
+            "TRUNCATE": true,
+            "REFERENCES": true
+          },
+          "authenticated": {
+            "DELETE": true,
+            "INSERT": true,
+            "SELECT": true,
+            "UPDATE": true,
+            "TRIGGER": true,
+            "MAINTAIN": true,
+            "TRUNCATE": true,
+            "REFERENCES": true
+          }
+        },
+        "column": {
+          "anon": {
+            "INSERT": false,
+            "SELECT": false,
+            "UPDATE": false,
+            "REFERENCES": false
+          },
+          "service_role": {
+            "INSERT": true,
+            "SELECT": true,
+            "UPDATE": true,
+            "REFERENCES": true
+          },
+          "authenticated": {
+            "INSERT": true,
+            "SELECT": true,
+            "UPDATE": true,
+            "REFERENCES": true
+          }
+        }
+      },
+      "document_templates": {
+        "table": {
+          "anon": {
+            "DELETE": false,
+            "INSERT": false,
+            "SELECT": false,
+            "UPDATE": false,
+            "TRIGGER": false,
+            "MAINTAIN": false,
+            "TRUNCATE": false,
+            "REFERENCES": false
+          },
+          "service_role": {
+            "DELETE": true,
+            "INSERT": true,
+            "SELECT": true,
+            "UPDATE": true,
+            "TRIGGER": true,
+            "MAINTAIN": true,
+            "TRUNCATE": true,
+            "REFERENCES": true
+          },
+          "authenticated": {
+            "DELETE": true,
+            "INSERT": true,
+            "SELECT": true,
+            "UPDATE": true,
+            "TRIGGER": true,
+            "MAINTAIN": true,
+            "TRUNCATE": true,
+            "REFERENCES": true
+          }
+        },
+        "column": {
+          "anon": {
+            "INSERT": false,
+            "SELECT": false,
+            "UPDATE": false,
+            "REFERENCES": false
+          },
+          "service_role": {
+            "INSERT": true,
+            "SELECT": true,
+            "UPDATE": true,
+            "REFERENCES": true
+          },
+          "authenticated": {
+            "INSERT": true,
+            "SELECT": true,
+            "UPDATE": true,
+            "REFERENCES": true
+          }
+        }
+      },
+      "workspace_profiles": {
+        "table": {
+          "anon": {
+            "DELETE": false,
+            "INSERT": false,
+            "SELECT": false,
+            "UPDATE": false,
+            "TRIGGER": false,
+            "MAINTAIN": false,
+            "TRUNCATE": false,
+            "REFERENCES": false
+          },
+          "service_role": {
+            "DELETE": true,
+            "INSERT": true,
+            "SELECT": true,
+            "UPDATE": true,
+            "TRIGGER": true,
+            "MAINTAIN": true,
+            "TRUNCATE": true,
+            "REFERENCES": true
+          },
+          "authenticated": {
+            "DELETE": true,
+            "INSERT": true,
+            "SELECT": true,
+            "UPDATE": true,
+            "TRIGGER": true,
+            "MAINTAIN": true,
+            "TRUNCATE": true,
+            "REFERENCES": true
+          }
+        },
+        "column": {
+          "anon": {
+            "INSERT": false,
+            "SELECT": false,
+            "UPDATE": false,
+            "REFERENCES": false
+          },
+          "service_role": {
+            "INSERT": true,
+            "SELECT": true,
+            "UPDATE": true,
+            "REFERENCES": true
+          },
+          "authenticated": {
+            "INSERT": true,
+            "SELECT": true,
+            "UPDATE": true,
+            "REFERENCES": true
+          }
+        }
+      },
+      "public_share_events": {
+        "table": {
+          "anon": {
+            "DELETE": false,
+            "INSERT": false,
+            "SELECT": false,
+            "UPDATE": false,
+            "TRIGGER": false,
+            "MAINTAIN": false,
+            "TRUNCATE": false,
+            "REFERENCES": false
+          },
+          "service_role": {
+            "DELETE": true,
+            "INSERT": true,
+            "SELECT": true,
+            "UPDATE": true,
+            "TRIGGER": true,
+            "MAINTAIN": true,
+            "TRUNCATE": true,
+            "REFERENCES": true
+          },
+          "authenticated": {
+            "DELETE": true,
+            "INSERT": true,
+            "SELECT": true,
+            "UPDATE": true,
+            "TRIGGER": true,
+            "MAINTAIN": true,
+            "TRUNCATE": true,
+            "REFERENCES": true
+          }
+        },
+        "column": {
+          "anon": {
+            "INSERT": false,
+            "SELECT": false,
+            "UPDATE": false,
+            "REFERENCES": false
+          },
+          "service_role": {
+            "INSERT": true,
+            "SELECT": true,
+            "UPDATE": true,
+            "REFERENCES": true
+          },
+          "authenticated": {
+            "INSERT": true,
+            "SELECT": true,
+            "UPDATE": true,
+            "REFERENCES": true
+          }
+        }
+      },
+      "workspace_snapshots": {
+        "table": {
+          "anon": {
+            "DELETE": false,
+            "INSERT": false,
+            "SELECT": false,
+            "UPDATE": false,
+            "TRIGGER": false,
+            "MAINTAIN": false,
+            "TRUNCATE": false,
+            "REFERENCES": false
+          },
+          "service_role": {
+            "DELETE": true,
+            "INSERT": true,
+            "SELECT": true,
+            "UPDATE": true,
+            "TRIGGER": true,
+            "MAINTAIN": true,
+            "TRUNCATE": true,
+            "REFERENCES": true
+          },
+          "authenticated": {
+            "DELETE": true,
+            "INSERT": true,
+            "SELECT": true,
+            "UPDATE": true,
+            "TRIGGER": true,
+            "MAINTAIN": true,
+            "TRUNCATE": true,
+            "REFERENCES": true
+          }
+        },
+        "column": {
+          "anon": {
+            "INSERT": false,
+            "SELECT": false,
+            "UPDATE": false,
+            "REFERENCES": false
+          },
+          "service_role": {
+            "INSERT": true,
+            "SELECT": true,
+            "UPDATE": true,
+            "REFERENCES": true
+          },
+          "authenticated": {
+            "INSERT": true,
+            "SELECT": true,
+            "UPDATE": true,
+            "REFERENCES": true
+          }
+        }
+      },
+      "workspace_invitations": {
+        "table": {
+          "anon": {
+            "DELETE": false,
+            "INSERT": false,
+            "SELECT": false,
+            "UPDATE": false,
+            "TRIGGER": false,
+            "MAINTAIN": false,
+            "TRUNCATE": false,
+            "REFERENCES": false
+          },
+          "service_role": {
+            "DELETE": true,
+            "INSERT": true,
+            "SELECT": true,
+            "UPDATE": true,
+            "TRIGGER": true,
+            "MAINTAIN": true,
+            "TRUNCATE": true,
+            "REFERENCES": true
+          },
+          "authenticated": {
+            "DELETE": true,
+            "INSERT": true,
+            "SELECT": true,
+            "UPDATE": true,
+            "TRIGGER": true,
+            "MAINTAIN": true,
+            "TRUNCATE": true,
+            "REFERENCES": true
+          }
+        },
+        "column": {
+          "anon": {
+            "INSERT": false,
+            "SELECT": false,
+            "UPDATE": false,
+            "REFERENCES": false
+          },
+          "service_role": {
+            "INSERT": true,
+            "SELECT": true,
+            "UPDATE": true,
+            "REFERENCES": true
+          },
+          "authenticated": {
+            "INSERT": true,
+            "SELECT": true,
+            "UPDATE": true,
+            "REFERENCES": true
+          }
+        }
+      },
+      "workspace_memberships": {
+        "table": {
+          "anon": {
+            "DELETE": false,
+            "INSERT": false,
+            "SELECT": false,
+            "UPDATE": false,
+            "TRIGGER": false,
+            "MAINTAIN": false,
+            "TRUNCATE": false,
+            "REFERENCES": false
+          },
+          "service_role": {
+            "DELETE": true,
+            "INSERT": true,
+            "SELECT": true,
+            "UPDATE": true,
+            "TRIGGER": true,
+            "MAINTAIN": true,
+            "TRUNCATE": true,
+            "REFERENCES": true
+          },
+          "authenticated": {
+            "DELETE": true,
+            "INSERT": true,
+            "SELECT": true,
+            "UPDATE": true,
+            "TRIGGER": true,
+            "MAINTAIN": true,
+            "TRUNCATE": true,
+            "REFERENCES": true
+          }
+        },
+        "column": {
+          "anon": {
+            "INSERT": false,
+            "SELECT": false,
+            "UPDATE": false,
+            "REFERENCES": false
+          },
+          "service_role": {
+            "INSERT": true,
+            "SELECT": true,
+            "UPDATE": true,
+            "REFERENCES": true
+          },
+          "authenticated": {
+            "INSERT": true,
+            "SELECT": true,
+            "UPDATE": true,
+            "REFERENCES": true
+          }
+        }
+      },
+      "account_deletion_holds": {
+        "table": {
+          "anon": {
+            "DELETE": false,
+            "INSERT": false,
+            "SELECT": false,
+            "UPDATE": false,
+            "TRIGGER": false,
+            "MAINTAIN": false,
+            "TRUNCATE": false,
+            "REFERENCES": false
+          },
+          "service_role": {
+            "DELETE": true,
+            "INSERT": true,
+            "SELECT": true,
+            "UPDATE": true,
+            "TRIGGER": true,
+            "MAINTAIN": true,
+            "TRUNCATE": true,
+            "REFERENCES": true
+          },
+          "authenticated": {
+            "DELETE": false,
+            "INSERT": false,
+            "SELECT": false,
+            "UPDATE": false,
+            "TRIGGER": false,
+            "MAINTAIN": false,
+            "TRUNCATE": false,
+            "REFERENCES": false
+          }
+        },
+        "column": {
+          "anon": {
+            "INSERT": false,
+            "SELECT": false,
+            "UPDATE": false,
+            "REFERENCES": false
+          },
+          "service_role": {
+            "INSERT": true,
+            "SELECT": true,
+            "UPDATE": true,
+            "REFERENCES": true
+          },
+          "authenticated": {
+            "INSERT": false,
+            "SELECT": false,
+            "UPDATE": false,
+            "REFERENCES": false
+          }
+        }
+      },
+      "account_deletion_events": {
+        "table": {
+          "anon": {
+            "DELETE": false,
+            "INSERT": false,
+            "SELECT": false,
+            "UPDATE": false,
+            "TRIGGER": false,
+            "MAINTAIN": false,
+            "TRUNCATE": false,
+            "REFERENCES": false
+          },
+          "service_role": {
+            "DELETE": false,
+            "INSERT": true,
+            "SELECT": true,
+            "UPDATE": false,
+            "TRIGGER": false,
+            "MAINTAIN": false,
+            "TRUNCATE": false,
+            "REFERENCES": false
+          },
+          "authenticated": {
+            "DELETE": false,
+            "INSERT": false,
+            "SELECT": false,
+            "UPDATE": false,
+            "TRIGGER": false,
+            "MAINTAIN": false,
+            "TRUNCATE": false,
+            "REFERENCES": false
+          }
+        },
+        "column": {
+          "anon": {
+            "INSERT": false,
+            "SELECT": false,
+            "UPDATE": false,
+            "REFERENCES": false
+          },
+          "service_role": {
+            "INSERT": true,
+            "SELECT": true,
+            "UPDATE": false,
+            "REFERENCES": false
+          },
+          "authenticated": {
+            "INSERT": false,
+            "SELECT": false,
+            "UPDATE": false,
+            "REFERENCES": false
+          }
+        }
+      },
+      "document_processing_jobs": {
+        "table": {
+          "anon": {
+            "DELETE": false,
+            "INSERT": false,
+            "SELECT": false,
+            "UPDATE": false,
+            "TRIGGER": false,
+            "MAINTAIN": false,
+            "TRUNCATE": false,
+            "REFERENCES": false
+          },
+          "service_role": {
+            "DELETE": true,
+            "INSERT": true,
+            "SELECT": true,
+            "UPDATE": true,
+            "TRIGGER": true,
+            "MAINTAIN": true,
+            "TRUNCATE": true,
+            "REFERENCES": true
+          },
+          "authenticated": {
+            "DELETE": true,
+            "INSERT": true,
+            "SELECT": true,
+            "UPDATE": true,
+            "TRIGGER": true,
+            "MAINTAIN": true,
+            "TRUNCATE": true,
+            "REFERENCES": true
+          }
+        },
+        "column": {
+          "anon": {
+            "INSERT": false,
+            "SELECT": false,
+            "UPDATE": false,
+            "REFERENCES": false
+          },
+          "service_role": {
+            "INSERT": true,
+            "SELECT": true,
+            "UPDATE": true,
+            "REFERENCES": true
+          },
+          "authenticated": {
+            "INSERT": true,
+            "SELECT": true,
+            "UPDATE": true,
+            "REFERENCES": true
+          }
+        }
+      },
+      "account_deletion_receipts": {
+        "table": {
+          "anon": {
+            "DELETE": false,
+            "INSERT": false,
+            "SELECT": false,
+            "UPDATE": false,
+            "TRIGGER": false,
+            "MAINTAIN": false,
+            "TRUNCATE": false,
+            "REFERENCES": false
+          },
+          "service_role": {
+            "DELETE": true,
+            "INSERT": true,
+            "SELECT": true,
+            "UPDATE": true,
+            "TRIGGER": true,
+            "MAINTAIN": true,
+            "TRUNCATE": true,
+            "REFERENCES": true
+          },
+          "authenticated": {
+            "DELETE": false,
+            "INSERT": false,
+            "SELECT": false,
+            "UPDATE": false,
+            "TRIGGER": false,
+            "MAINTAIN": false,
+            "TRUNCATE": false,
+            "REFERENCES": false
+          }
+        },
+        "column": {
+          "anon": {
+            "INSERT": false,
+            "SELECT": false,
+            "UPDATE": false,
+            "REFERENCES": false
+          },
+          "service_role": {
+            "INSERT": true,
+            "SELECT": true,
+            "UPDATE": true,
+            "REFERENCES": true
+          },
+          "authenticated": {
+            "INSERT": false,
+            "SELECT": false,
+            "UPDATE": false,
+            "REFERENCES": false
+          }
+        }
+      },
+      "account_deletion_requests": {
+        "table": {
+          "anon": {
+            "DELETE": false,
+            "INSERT": false,
+            "SELECT": false,
+            "UPDATE": false,
+            "TRIGGER": false,
+            "MAINTAIN": false,
+            "TRUNCATE": false,
+            "REFERENCES": false
+          },
+          "service_role": {
+            "DELETE": true,
+            "INSERT": true,
+            "SELECT": true,
+            "UPDATE": true,
+            "TRIGGER": true,
+            "MAINTAIN": true,
+            "TRUNCATE": true,
+            "REFERENCES": true
+          },
+          "authenticated": {
+            "DELETE": false,
+            "INSERT": false,
+            "SELECT": false,
+            "UPDATE": false,
+            "TRIGGER": false,
+            "MAINTAIN": false,
+            "TRUNCATE": false,
+            "REFERENCES": false
+          }
+        },
+        "column": {
+          "anon": {
+            "INSERT": false,
+            "SELECT": false,
+            "UPDATE": false,
+            "REFERENCES": false
+          },
+          "service_role": {
+            "INSERT": true,
+            "SELECT": true,
+            "UPDATE": true,
+            "REFERENCES": true
+          },
+          "authenticated": {
+            "INSERT": false,
+            "SELECT": false,
+            "UPDATE": false,
+            "REFERENCES": false
+          }
+        }
+      },
+      "reminder_email_deliveries": {
+        "table": {
+          "anon": {
+            "DELETE": false,
+            "INSERT": false,
+            "SELECT": false,
+            "UPDATE": false,
+            "TRIGGER": false,
+            "MAINTAIN": false,
+            "TRUNCATE": false,
+            "REFERENCES": false
+          },
+          "service_role": {
+            "DELETE": true,
+            "INSERT": true,
+            "SELECT": true,
+            "UPDATE": true,
+            "TRIGGER": true,
+            "MAINTAIN": true,
+            "TRUNCATE": true,
+            "REFERENCES": true
+          },
+          "authenticated": {
+            "DELETE": false,
+            "INSERT": false,
+            "SELECT": false,
+            "UPDATE": false,
+            "TRIGGER": false,
+            "MAINTAIN": false,
+            "TRUNCATE": false,
+            "REFERENCES": false
+          }
+        },
+        "column": {
+          "anon": {
+            "INSERT": false,
+            "SELECT": false,
+            "UPDATE": false,
+            "REFERENCES": false
+          },
+          "service_role": {
+            "INSERT": true,
+            "SELECT": true,
+            "UPDATE": true,
+            "REFERENCES": true
+          },
+          "authenticated": {
+            "INSERT": false,
+            "SELECT": false,
+            "UPDATE": false,
+            "REFERENCES": false
+          }
+        }
+      },
+      "workspace_billing_customers": {
+        "table": {
+          "anon": {
+            "DELETE": false,
+            "INSERT": false,
+            "SELECT": false,
+            "UPDATE": false,
+            "TRIGGER": false,
+            "MAINTAIN": false,
+            "TRUNCATE": false,
+            "REFERENCES": false
+          },
+          "service_role": {
+            "DELETE": true,
+            "INSERT": true,
+            "SELECT": true,
+            "UPDATE": true,
+            "TRIGGER": true,
+            "MAINTAIN": true,
+            "TRUNCATE": true,
+            "REFERENCES": true
+          },
+          "authenticated": {
+            "DELETE": true,
+            "INSERT": true,
+            "SELECT": true,
+            "UPDATE": true,
+            "TRIGGER": true,
+            "MAINTAIN": true,
+            "TRUNCATE": true,
+            "REFERENCES": true
+          }
+        },
+        "column": {
+          "anon": {
+            "INSERT": false,
+            "SELECT": false,
+            "UPDATE": false,
+            "REFERENCES": false
+          },
+          "service_role": {
+            "INSERT": true,
+            "SELECT": true,
+            "UPDATE": true,
+            "REFERENCES": true
+          },
+          "authenticated": {
+            "INSERT": true,
+            "SELECT": true,
+            "UPDATE": true,
+            "REFERENCES": true
+          }
+        }
+      },
+      "workspace_subscription_events": {
+        "table": {
+          "anon": {
+            "DELETE": false,
+            "INSERT": false,
+            "SELECT": false,
+            "UPDATE": false,
+            "TRIGGER": false,
+            "MAINTAIN": false,
+            "TRUNCATE": false,
+            "REFERENCES": false
+          },
+          "service_role": {
+            "DELETE": true,
+            "INSERT": true,
+            "SELECT": true,
+            "UPDATE": true,
+            "TRIGGER": true,
+            "MAINTAIN": true,
+            "TRUNCATE": true,
+            "REFERENCES": true
+          },
+          "authenticated": {
+            "DELETE": true,
+            "INSERT": true,
+            "SELECT": true,
+            "UPDATE": true,
+            "TRIGGER": true,
+            "MAINTAIN": true,
+            "TRUNCATE": true,
+            "REFERENCES": true
+          }
+        },
+        "column": {
+          "anon": {
+            "INSERT": false,
+            "SELECT": false,
+            "UPDATE": false,
+            "REFERENCES": false
+          },
+          "service_role": {
+            "INSERT": true,
+            "SELECT": true,
+            "UPDATE": true,
+            "REFERENCES": true
+          },
+          "authenticated": {
+            "INSERT": true,
+            "SELECT": true,
+            "UPDATE": true,
+            "REFERENCES": true
+          }
+        }
+      },
+      "workspace_subscription_profiles": {
+        "table": {
+          "anon": {
+            "DELETE": false,
+            "INSERT": false,
+            "SELECT": false,
+            "UPDATE": false,
+            "TRIGGER": false,
+            "MAINTAIN": false,
+            "TRUNCATE": false,
+            "REFERENCES": false
+          },
+          "service_role": {
+            "DELETE": true,
+            "INSERT": true,
+            "SELECT": true,
+            "UPDATE": true,
+            "TRIGGER": true,
+            "MAINTAIN": true,
+            "TRUNCATE": true,
+            "REFERENCES": true
+          },
+          "authenticated": {
+            "DELETE": true,
+            "INSERT": true,
+            "SELECT": true,
+            "UPDATE": true,
+            "TRIGGER": true,
+            "MAINTAIN": true,
+            "TRUNCATE": true,
+            "REFERENCES": true
+          }
+        },
+        "column": {
+          "anon": {
+            "INSERT": false,
+            "SELECT": false,
+            "UPDATE": false,
+            "REFERENCES": false
+          },
+          "service_role": {
+            "INSERT": true,
+            "SELECT": true,
+            "UPDATE": true,
+            "REFERENCES": true
+          },
+          "authenticated": {
+            "INSERT": true,
+            "SELECT": true,
+            "UPDATE": true,
+            "REFERENCES": true
+          }
+        }
+      }
+    },
+    "billingPeriod": {
+      "type": "text",
+      "nullable": "YES"
+    },
+    "reminderDelivery": {
+      "columns": {
+        "id": {
+          "type": "uuid",
+          "default": null,
+          "notNull": true
+        },
+        "status": {
+          "type": "text",
+          "default": null,
+          "notNull": true
+        },
+        "request": {
+          "type": "jsonb",
+          "default": null,
+          "notNull": false
+        },
+        "due_date": {
+          "type": "date",
+          "default": null,
+          "notNull": true
+        },
+        "created_at": {
+          "type": "timestamp with time zone",
+          "default": "now()",
+          "notNull": true
+        },
+        "accepted_at": {
+          "type": "timestamp with time zone",
+          "default": null,
+          "notNull": false
+        },
+        "reminder_id": {
+          "type": "text",
+          "default": null,
+          "notNull": true
+        },
+        "workspace_id": {
+          "type": "uuid",
+          "default": null,
+          "notNull": true
+        },
+        "next_attempt_at": {
+          "type": "timestamp with time zone",
+          "default": null,
+          "notNull": false
+        }
+      },
+      "indexes": {
+        "reminder_email_retry_due": {
+          "ready": true,
+          "valid": true,
+          "definition": "CREATE INDEX reminder_email_retry_due ON public.reminder_email_deliveries USING btree (next_attempt_at) WHERE ((status = 'pending'::text) AND (next_attempt_at IS NOT NULL))"
+        },
+        "reminder_email_deliveries_pkey": {
+          "ready": true,
+          "valid": true,
+          "definition": "CREATE UNIQUE INDEX reminder_email_deliveries_pkey ON public.reminder_email_deliveries USING btree (id)"
+        },
+        "reminder_email_deliveries_workspace_id_reminder_id_due_date_key": {
+          "ready": true,
+          "valid": true,
+          "definition": "CREATE UNIQUE INDEX reminder_email_deliveries_workspace_id_reminder_id_due_date_key ON public.reminder_email_deliveries USING btree (workspace_id, reminder_id, due_date)"
+        }
+      },
+      "constraints": {
+        "reminder_email_deliveries_pkey": "PRIMARY KEY (id)",
+        "reminder_email_deliveries_status_check": "CHECK ((status = ANY (ARRAY['pending'::text, 'accepted'::text])))",
+        "reminder_email_deliveries_workspace_id_fkey": "FOREIGN KEY (workspace_id) REFERENCES public.workspaces(id) ON DELETE CASCADE",
+        "reminder_email_deliveries_workspace_id_reminder_id_due_date_key": "UNIQUE (workspace_id, reminder_id, due_date)"
+      }
+    },
+    "deletionLifecycle": {
+      "account_deletion_holds": {
+        "columns": {
+          "user_id": {
+            "type": "uuid",
+            "default": null,
+            "notNull": true
+          },
+          "created_at": {
+            "type": "timestamp with time zone",
+            "default": "now()",
+            "notNull": true
+          },
+          "workspace_id": {
+            "type": "uuid",
+            "default": null,
+            "notNull": true
+          }
+        },
+        "indexes": {
+          "account_deletion_holds_pkey": {
+            "ready": true,
+            "valid": true,
+            "definition": "CREATE UNIQUE INDEX account_deletion_holds_pkey ON public.account_deletion_holds USING btree (workspace_id)"
+          }
+        },
+        "constraints": {
+          "account_deletion_holds_pkey": "PRIMARY KEY (workspace_id)",
+          "account_deletion_holds_workspace_id_fkey": "FOREIGN KEY (workspace_id) REFERENCES public.workspaces(id) ON DELETE CASCADE"
+        }
+      },
+      "account_deletion_events": {
+        "columns": {
+          "id": {
+            "type": "uuid",
+            "default": "gen_random_uuid()",
+            "notNull": true
+          },
+          "phase": {
+            "type": "text",
+            "default": null,
+            "notNull": true
+          },
+          "created_at": {
+            "type": "timestamp with time zone",
+            "default": "now()",
+            "notNull": true
+          },
+          "operation_id": {
+            "type": "uuid",
+            "default": null,
+            "notNull": true
+          },
+          "actor_user_id": {
+            "type": "uuid",
+            "default": null,
+            "notNull": true
+          },
+          "workspace_ids": {
+            "type": "uuid[]",
+            "default": "'{}'::uuid[]",
+            "notNull": true
+          }
+        },
+        "indexes": {
+          "account_deletion_events_pkey": {
+            "ready": true,
+            "valid": true,
+            "definition": "CREATE UNIQUE INDEX account_deletion_events_pkey ON public.account_deletion_events USING btree (id)"
+          },
+          "account_deletion_events_operation": {
+            "ready": true,
+            "valid": true,
+            "definition": "CREATE INDEX account_deletion_events_operation ON public.account_deletion_events USING btree (operation_id, created_at)"
+          }
+        },
+        "constraints": {
+          "account_deletion_events_pkey": "PRIMARY KEY (id)",
+          "account_deletion_events_phase_check": "CHECK ((phase = ANY (ARRAY['started'::text, 'completed'::text, 'failed'::text])))"
+        }
+      },
+      "account_deletion_receipts": {
+        "columns": {
+          "id": {
+            "type": "uuid",
+            "default": "gen_random_uuid()",
+            "notNull": true
+          },
+          "status": {
+            "type": "text",
+            "default": "'pending'::text",
+            "notNull": true
+          },
+          "failure": {
+            "type": "text",
+            "default": "''::text",
+            "notNull": true
+          },
+          "user_id": {
+            "type": "uuid",
+            "default": null,
+            "notNull": true
+          },
+          "finished_at": {
+            "type": "timestamp with time zone",
+            "default": null,
+            "notNull": false
+          },
+          "requested_at": {
+            "type": "timestamp with time zone",
+            "default": "now()",
+            "notNull": true
+          },
+          "held_workspaces": {
+            "type": "uuid[]",
+            "default": "'{}'::uuid[]",
+            "notNull": true
+          },
+          "storage_leftovers": {
+            "type": "jsonb",
+            "default": "'[]'::jsonb",
+            "notNull": true
+          }
+        },
+        "indexes": {
+          "account_deletion_receipts_pkey": {
+            "ready": true,
+            "valid": true,
+            "definition": "CREATE UNIQUE INDEX account_deletion_receipts_pkey ON public.account_deletion_receipts USING btree (id)"
+          },
+          "account_deletion_receipts_user_idx": {
+            "ready": true,
+            "valid": true,
+            "definition": "CREATE INDEX account_deletion_receipts_user_idx ON public.account_deletion_receipts USING btree (user_id, requested_at DESC)"
+          }
+        },
+        "constraints": {
+          "account_deletion_receipts_pkey": "PRIMARY KEY (id)",
+          "account_deletion_receipts_status_check": "CHECK ((status = ANY (ARRAY['pending'::text, 'refused'::text, 'failed'::text, 'complete'::text, 'storage_incomplete'::text])))"
+        }
+      },
+      "account_deletion_requests": {
+        "columns": {
+          "user_id": {
+            "type": "uuid",
+            "default": null,
+            "notNull": true
+          },
+          "created_at": {
+            "type": "timestamp with time zone",
+            "default": "now()",
+            "notNull": true
+          },
+          "request_token": {
+            "type": "uuid",
+            "default": null,
+            "notNull": true
+          }
+        },
+        "indexes": {
+          "account_deletion_requests_pkey": {
+            "ready": true,
+            "valid": true,
+            "definition": "CREATE UNIQUE INDEX account_deletion_requests_pkey ON public.account_deletion_requests USING btree (user_id)"
+          }
+        },
+        "constraints": {
+          "account_deletion_requests_pkey": "PRIMARY KEY (user_id)",
+          "account_deletion_requests_user_id_fkey": "FOREIGN KEY (user_id) REFERENCES auth.users(id) ON DELETE CASCADE"
+        }
+      }
+    }
+  }
+}

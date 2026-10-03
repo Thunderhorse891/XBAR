@@ -15,6 +15,7 @@ import {
 } from './account-deletion.js';
 import { enforceRateLimit } from './rate-limit.js';
 import { applyCors } from './cors.js';
+import { recordDeletionAudit } from './deletion-audit.js';
 
 // In-app account deletion. Irreversible. Deletes the
 // caller's own auth account and the workspaces they PRIVATELY own. Accounts
@@ -23,10 +24,10 @@ import { applyCors } from './cors.js';
 // Requires the user to type their exact email to confirm.
 //
 // Order: plan (read) -> database hold on every owned workspace (refuses if any
-// is shared, and blocks new members until the delete) -> durable receipt ->
-// auth delete (memberships cascade with it) -> storage sweep -> receipt
-// outcome. Any failure before the auth delete releases the holds and changes
-// nothing.
+// is shared, and blocks new members until the delete) -> acknowledged receipt
+// and append-only started event -> auth delete (memberships cascade with it)
+// -> cleanup -> acknowledged outcome. Refusals preserve account access and
+// release this request's holds; audit records deliberately survive the account.
 
 const stripeSecretKey = process.env.STRIPE_SECRET_KEY?.trim() || '';
 const stripe = stripeSecretKey ? new Stripe(stripeSecretKey, { apiVersion: '2026-02-25.clover' }) : null;
@@ -83,6 +84,23 @@ export default async function handler(req, res) {
   const deletionToken = randomUUID();
   let releaseHolds = null;
   let accountDeleted = false;
+  let auditEvent;
+  let auditStarted = false;
+  let auditFailureRecorded = false;
+  let auditOutcomeFailed = false;
+  let finishReceipt;
+  let receiptFinalized = false;
+  let receiptOutcomeFailed = false;
+  const recordFailure = async () => {
+    if (auditStarted && !auditFailureRecorded) {
+      await recordDeletionAudit(supabase, { ...auditEvent, phase: 'failed' });
+      auditFailureRecorded = true;
+    }
+  };
+  const refuseReceipt = async (fields) => {
+    await finishReceipt(fields);
+    await recordFailure();
+  };
   try {
     // Build the plan: for every owned workspace, look up its OTHER active members
     // so a shared workspace cannot be mistaken for private data to purge.
@@ -183,23 +201,43 @@ export default async function handler(req, res) {
      */
     const { data: receipt, error: receiptError } = await supabase
       .from('account_deletion_receipts')
-      .insert({ user_id: user.id, held_workspaces: purgeable })
+      .insert({ id: deletionToken, user_id: user.id, held_workspaces: purgeable })
       .select('id')
       .single();
-    if (receiptError || !receipt?.id) {
+    if (receiptError || receipt?.id !== deletionToken) {
       return sendJson(res, 502, { ok: false, message: 'Unable to start account deletion. Nothing was changed.' });
     }
-    const finishReceipt = (fields) =>
-      supabase
-        .from('account_deletion_receipts')
-        .update({ ...fields, finished_at: new Date().toISOString() })
-        .eq('id', receipt.id)
-        .then(
-          ({ error }) => {
-            if (error) console.error('account deletion: receipt not updated', { receiptId: receipt.id, fields });
-          },
-          () => console.error('account deletion: receipt not updated', { receiptId: receipt.id, fields }),
-        );
+    // The mutable operational receipt keeps cleanup details; the append-only
+    // phase trail has separate durability/privilege guarantees. One request ID
+    // correlates both without replacing either role or changing historical SQL.
+    finishReceipt = async (fields) => {
+      try {
+        const { data, error } = await supabase
+          .from('account_deletion_receipts')
+          .update({ ...fields, finished_at: new Date().toISOString() })
+          .eq('id', receipt.id)
+          .select('id')
+          .single();
+        if (error || data?.id !== receipt.id) throw new Error('receipt_outcome_unconfirmed');
+        receiptFinalized = true;
+      } catch {
+        receiptOutcomeFailed = true;
+        throw new Error('receipt_outcome_unconfirmed');
+      }
+    };
+    auditEvent = { operation_id: deletionToken, actor_user_id: user.id, workspace_ids: purgeable };
+    try {
+      await recordDeletionAudit(supabase, { ...auditEvent, phase: 'started' });
+      auditStarted = true;
+    } catch {
+      await finishReceipt({ status: 'failed', failure: 'start audit unavailable' });
+      return sendJson(res, 503, {
+        ok: false,
+        code: 'deletion_audit_unavailable',
+        operationId: deletionToken,
+        message: 'Deletion could not be recorded. Nothing was deleted. Please try again later.',
+      });
+    }
 
     /*
      * Files under the account's own legacy prefix that another workspace still
@@ -213,7 +251,7 @@ export default async function handler(req, res) {
       .select('workspace_id, storage_path')
       .like('storage_path', `${user.id}/%`);
     if (sharedRefsError || !Array.isArray(sharedRefs)) {
-      await finishReceipt({ status: 'refused', failure: 'shared file references unreadable' });
+      await refuseReceipt({ status: 'refused', failure: 'shared file references unreadable' });
       return sendJson(res, 502, {
         ok: false,
         message: 'Unable to confirm which stored files are still shared. Nothing was changed.',
@@ -231,7 +269,7 @@ export default async function handler(req, res) {
     // the account instead of deleting it beside a newly admitted purchase.
     for (const { workspaceId, token } of billingClaims) {
       if (!(await renewCheckoutLock(supabase, workspaceId, token))) {
-        await finishReceipt({ status: 'refused', failure: 'billing lease lost' });
+        await refuseReceipt({ status: 'refused', failure: 'billing lease lost' });
         return sendJson(res, BILLING_UNVERIFIED.status, BILLING_UNVERIFIED);
       }
     }
@@ -241,13 +279,13 @@ export default async function handler(req, res) {
       p_workspace_ids: purgeable,
     });
     if (confirmError || confirmed !== true) {
-      await finishReceipt({ status: 'refused', failure: 'deletion request fence lost' });
+      await refuseReceipt({ status: 'refused', failure: 'deletion request fence lost' });
       return sendJson(res, BILLING_UNVERIFIED.status, BILLING_UNVERIFIED);
     }
     const { error: deleteUserError } = await supabase.auth.admin.deleteUser(user.id);
     if (deleteUserError) {
       console.error('account deletion: auth delete failed', { userId: user.id, message: deleteUserError.message });
-      await finishReceipt({ status: 'failed', failure: 'auth delete failed' });
+      await refuseReceipt({ status: 'failed', failure: 'auth delete failed' });
       return sendJson(res, 502, {
         ok: false,
         message: 'Your account could not be deleted. Nothing was removed; try again.',
@@ -264,12 +302,14 @@ export default async function handler(req, res) {
      * harmless when the rows are already gone. Storage is NOT cascaded by
      * anything, which is the part that genuinely still has to run here.
      */
+    let workspaceCleanupComplete = true;
     if (purgeable.length) {
-      await supabase
-        .from('workspaces')
-        .delete()
-        .in('id', purgeable)
-        .then(undefined, () => {});
+      try {
+        const { error } = await supabase.from('workspaces').delete().in('id', purgeable);
+        workspaceCleanupComplete = !error;
+      } catch {
+        workspaceCleanupComplete = false;
+      }
     }
     /*
      * Each sweep reports what it could not finish rather than swallowing it.
@@ -292,18 +332,48 @@ export default async function handler(req, res) {
       console.error('account deletion: stored files could not all be removed', { userId: user.id, leftovers });
     }
     await finishReceipt({
-      status: leftovers.length ? 'storage_incomplete' : 'complete',
+      status: leftovers.length ? 'storage_incomplete' : workspaceCleanupComplete ? 'complete' : 'failed',
       storage_leftovers: leftovers,
+      ...(!workspaceCleanupComplete ? { failure: 'workspace cleanup incomplete' } : {}),
     });
+    if (leftovers.length || !workspaceCleanupComplete) throw new Error('cleanup_incomplete');
+    try {
+      await recordDeletionAudit(supabase, { ...auditEvent, phase: 'completed' });
+    } catch {
+      auditOutcomeFailed = true;
+      throw new Error('completion_audit_unavailable');
+    }
 
     return sendJson(res, 200, {
       ok: true,
+      operationId: deletionToken,
       purgedWorkspaces: purgeable.length,
       transferredWorkspaces: plan.workspacesToTransfer.length,
       storageCleanupComplete: leftovers.length === 0,
     });
-  } catch (error) {
-    return sendJson(res, 500, { ok: false, message: `Account deletion failed: ${error.message}` });
+  } catch {
+    if (finishReceipt && !receiptFinalized) {
+      try {
+        await finishReceipt({ status: 'failed', failure: 'deletion outcome unconfirmed' });
+      } catch {
+        console.error('Account deletion receipt outcome unavailable', deletionToken);
+      }
+    }
+    try {
+      await recordFailure();
+    } catch {
+      auditOutcomeFailed = true;
+      console.error('Account deletion audit outcome unavailable', deletionToken);
+    }
+    return sendJson(res, auditOutcomeFailed || receiptOutcomeFailed ? 503 : 502, {
+      ok: false,
+      code: auditOutcomeFailed ? 'deletion_audit_incomplete' : 'deletion_incomplete',
+      operationId: deletionToken,
+      accountDeleted,
+      message: accountDeleted
+        ? 'Your account was deleted, but cleanup or its confirmation is incomplete. Contact support with this operation ID.'
+        : 'Account deletion could not be confirmed. Contact support with this operation ID before retrying.',
+    });
   } finally {
     if (!accountDeleted && releaseHolds) await releaseHolds();
     for (const { workspaceId, token } of billingClaims) {

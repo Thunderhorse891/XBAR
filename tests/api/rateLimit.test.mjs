@@ -76,6 +76,10 @@ for (const failure of ['http', 'network', 'malformed', 'redis-error', 'expiry-er
   test(`configured shared limiter fails closed on ${failure}`, async () => {
     const saved = { ...process.env };
     const originalFetch = globalThis.fetch;
+    // The suite opts into local memory elsewhere; these cases exercise the
+    // production shared-store boundary even when that global test mode is set.
+    process.env.NODE_ENV = 'production';
+    process.env.VERCEL = '1';
     process.env.UPSTASH_REDIS_REST_URL = 'https://redis.example.invalid';
     process.env.UPSTASH_REDIS_REST_TOKEN = 'fixture';
     globalThis.fetch = async () => {
@@ -106,6 +110,9 @@ for (const failure of ['http', 'network', 'malformed', 'redis-error', 'expiry-er
 }
 
 test('rotating the spoofed leftmost entry does not escape the limit on the real IP', async () => {
+  process.env.NODE_ENV = 'test';
+  process.env.RATE_LIMIT_MODE = 'memory';
+  delete process.env.VERCEL;
   delete process.env.UPSTASH_REDIS_REST_URL;
   delete process.env.UPSTASH_REDIS_REST_TOKEN;
   const bucket = `rate-limit-spoof-${Date.now()}`;

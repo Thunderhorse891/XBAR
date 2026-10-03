@@ -145,7 +145,15 @@ test('verified private and shared workspaces produce distinct deletion plans', a
 const FIXTURE_USER = '11111111-1111-4111-8111-111111111111';
 
 function deletionFixture(t) {
-  const envKeys = ['SUPABASE_URL', 'SUPABASE_SERVICE_ROLE_KEY', 'UPSTASH_REDIS_REST_URL', 'UPSTASH_REDIS_REST_TOKEN'];
+  const envKeys = [
+    'SUPABASE_URL',
+    'SUPABASE_SERVICE_ROLE_KEY',
+    'UPSTASH_REDIS_REST_URL',
+    'UPSTASH_REDIS_REST_TOKEN',
+    'NODE_ENV',
+    'RATE_LIMIT_MODE',
+    'VERCEL',
+  ];
   const savedEnv = Object.fromEntries(envKeys.map((key) => [key, process.env[key]]));
   t.after(() => {
     for (const key of envKeys) {
@@ -157,8 +165,11 @@ function deletionFixture(t) {
   process.env.SUPABASE_SERVICE_ROLE_KEY = 'fixture-service-key';
   delete process.env.UPSTASH_REDIS_REST_URL;
   delete process.env.UPSTASH_REDIS_REST_TOKEN;
+  process.env.NODE_ENV = 'test';
+  process.env.RATE_LIMIT_MODE = 'memory';
+  delete process.env.VERCEL;
 
-  const state = { scenario: '', calls: [], receiptUpdates: [] };
+  const state = { scenario: '', calls: [], receiptUpdates: [], auditEvents: [] };
   t.mock.method(globalThis, 'fetch', async (input, init = {}) => {
     const url = new URL(typeof input === 'string' || input instanceof URL ? input : input.url);
     assert.equal(url.hostname, 'deletion-fixture.invalid', 'test must not contact a real service');
@@ -198,11 +209,28 @@ function deletionFixture(t) {
       return reply(scenario !== 'fence-lost');
     }
     if (url.pathname === '/rest/v1/workspace_subscription_profiles') return reply(null);
-    if (url.pathname === '/rest/v1/account_deletion_receipts' && method === 'POST')
-      return scenario === 'receipt' ? failure() : reply({ id: 'receipt-1' }, 201);
+    if (url.pathname === '/rest/v1/account_deletion_events' && method === 'POST') {
+      const event = JSON.parse(init.body);
+      state.auditEvents.push(event);
+      if (scenario === `audit-${event.phase}-error`) return failure();
+      if (scenario === `audit-${event.phase}-empty`) return reply(null);
+      return reply({ id: `event-${event.phase}` }, 201);
+    }
+    if (url.pathname === '/rest/v1/account_deletion_receipts' && method === 'POST') {
+      state.receiptInsert = JSON.parse(init.body);
+      state.receiptId = state.receiptInsert.id ?? 'receipt-1';
+      if (scenario === 'receipt') return failure();
+      if (scenario === 'receipt-empty') return reply(null);
+      if (scenario === 'receipt-wrong-id') return reply({ id: 'another-operation' }, 201);
+      return reply({ id: state.receiptId }, 201);
+    }
     if (url.pathname === '/rest/v1/account_deletion_receipts' && method === 'PATCH') {
+      assert.equal(url.searchParams.get('id'), `eq.${state.receiptId}`);
       state.receiptUpdates.push(JSON.parse(init.body));
-      return reply(null, 204);
+      if (scenario === 'outcome-error') return failure();
+      if (scenario === 'outcome-empty') return reply(null);
+      if (scenario === 'outcome-wrong-id') return reply({ id: 'another-operation' });
+      return reply({ id: state.receiptId });
     }
     if (url.pathname === '/rest/v1/rpc/xbar_claim_checkout_lock') {
       state.claimToken = JSON.parse(init.body).p_token;
@@ -240,9 +268,11 @@ function deletionFixture(t) {
           ]);
     if (url.pathname === `/auth/v1/admin/users/${FIXTURE_USER}` && method === 'DELETE')
       return scenario === 'auth' ? reply({ message: 'Fixture auth failure' }, 500) : reply({});
-    if (url.pathname === '/rest/v1/workspaces' && method === 'DELETE') return reply(null, 204);
+    if (url.pathname === '/rest/v1/workspaces' && method === 'DELETE')
+      return scenario === 'cleanup-error' ? failure() : reply(null, 204);
     if (url.pathname.startsWith('/storage/v1/object/list/')) {
       const { prefix } = JSON.parse(init.body);
+      if (scenario === 'packet-list-error' && url.pathname.endsWith('/sale-packets')) return failure();
       // Only the documents bucket holds the legacy files in this scenario.
       if (url.pathname !== '/storage/v1/object/list/horse-documents') return reply([]);
       if (prefix === `${FIXTURE_USER}/documents`)
@@ -254,6 +284,7 @@ function deletionFixture(t) {
       return reply([]);
     }
     if (url.pathname.startsWith('/storage/v1/object/') && method === 'DELETE') {
+      if (scenario === 'storage-remove-error') return failure();
       state.removed = [...(state.removed ?? []), ...JSON.parse(init.body).prefixes];
       return reply([]);
     }
@@ -372,7 +403,68 @@ test('a completed deletion keeps files another ranch still uses and records the 
   const renewAt = state.calls.indexOf('billing-lease-renew');
   assert.ok(claimAt > -1 && holdAt > claimAt && billingAt > holdAt && renewAt > billingAt && deleteAt > renewAt);
   assert.ok(state.calls.indexOf('billing-lease-release') > deleteAt);
+  assert.deepEqual(
+    state.auditEvents.map((event) => event.phase),
+    ['started', 'completed'],
+  );
+  assert.equal(state.receiptId, state.deletionToken);
+  assert.ok(state.auditEvents.every((event) => event.operation_id === state.receiptId));
+  assert.ok(state.calls.indexOf('POST /rest/v1/account_deletion_events') < deleteAt);
+  assert.ok(state.calls.indexOf('PATCH /rest/v1/account_deletion_receipts') > deleteAt);
 });
+
+for (const scenario of ['receipt-empty', 'receipt-wrong-id', 'audit-started-error', 'audit-started-empty']) {
+  test(`deletion requires acknowledged receipt and append-only start (${scenario})`, async (t) => {
+    const state = deletionFixture(t);
+    state.scenario = scenario;
+    const { default: handler } = await import('../../api/_lib/account-delete.js');
+    const response = await deleteAccount(handler, `fixture-${scenario}`);
+    assert.ok(response.status >= 500);
+    assert.equal(response.body.ok, false);
+    assert.ok(!state.calls.some((call) => call.includes('/auth/v1/admin/') || call.includes('/storage/')));
+    assert.ok(!state.calls.some((call) => call.startsWith('DELETE ')));
+    assert.ok(state.calls.includes('POST /rest/v1/rpc/xbar_release_account_deletion_request'));
+  });
+}
+
+for (const scenario of [
+  'outcome-error',
+  'outcome-empty',
+  'outcome-wrong-id',
+  'audit-completed-error',
+  'audit-completed-empty',
+  'cleanup-error',
+  'packet-list-error',
+  'storage-remove-error',
+]) {
+  test(`post-delete incompleteness stays visible and correlated (${scenario})`, async (t) => {
+    const state = deletionFixture(t);
+    state.scenario = scenario;
+    const { default: handler } = await import('../../api/_lib/account-delete.js');
+    const response = await deleteAccount(handler, `fixture-${scenario}`);
+    assert.ok(response.status >= 500, `${scenario} must never report successful deletion`);
+    assert.equal(response.body.ok, false);
+    assert.equal(response.body.operationId, state.deletionToken);
+    assert.equal(response.body.accountDeleted, true);
+    assert.doesNotMatch(JSON.stringify(response.body), /Fixture|XX000|stack|workspace_cleanup_failed/);
+    assert.equal(state.auditEvents[0]?.phase, 'started');
+    assert.equal(state.auditEvents.at(-1)?.phase, 'failed');
+    assert.ok(state.calls.includes(`DELETE /auth/v1/admin/users/${FIXTURE_USER}`));
+    assert.ok(!state.calls.includes('POST /rest/v1/rpc/xbar_release_account_deletion_request'));
+    if (scenario === 'cleanup-error') {
+      assert.ok(
+        state.calls.some((call) => call.includes('/storage/v1/object/list/sale-packets')),
+        'safe storage cleanup still runs after a workspace cleanup error',
+      );
+      assert.equal(state.receiptUpdates.at(-1)?.failure, 'workspace cleanup incomplete');
+    }
+    if (scenario === 'packet-list-error' || scenario === 'storage-remove-error') {
+      assert.equal(state.receiptUpdates.at(-1)?.status, 'storage_incomplete');
+      assert.ok(state.receiptUpdates.at(-1)?.storage_leftovers.length);
+      assert.ok(!state.auditEvents.some((event) => event.phase === 'completed'));
+    }
+  });
+}
 
 test('a purged private workspace has its documents erased, not orphaned', () => {
   // Documents are keyed to the workspace now, so sweeping only the departing

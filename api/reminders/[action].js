@@ -1,3 +1,5 @@
+import { withCronHeartbeat } from '../_lib/cron-heartbeat.js';
+import { withErrorTracking } from '../_lib/error-tracking.js';
 import { sendJson } from '../_lib/http.js';
 import runHandler from '../_lib/reminders-run.js';
 import trialRemindersHandler from '../_lib/reminders-trial.js';
@@ -23,13 +25,15 @@ function resolveAction(req) {
   return pathname.split('/').filter(Boolean).pop() || '';
 }
 
-export default async function handler(req, res) {
+async function handler(req, res) {
   const action = resolveAction(req);
   if (action === 'run') {
-    return runHandler(req, res);
+    return withCronHeartbeat('run', runHandler)(req, res);
   }
   if (action === 'trial-reminders') {
-    return trialRemindersHandler(req, res);
+    return withCronHeartbeat('trial-reminders', trialRemindersHandler)(req, res);
   }
   return sendJson(res, 404, { ok: false, message: 'Unknown reminders action.' });
 }
+
+export default withErrorTracking(handler, 'reminders/[action].js');

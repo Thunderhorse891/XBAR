@@ -1,8 +1,9 @@
--- Rolled-back claim identity and privilege contract; sends no email.
+-- Isolated CI fixture and rolled-back claim identity/privilege contract; sends no email.
 begin;
 do $$
 declare
-  workspace uuid := (select id from public.workspaces limit 1);
+  fixture_owner uuid := gen_random_uuid();
+  workspace uuid := gen_random_uuid();
   delivery uuid := gen_random_uuid();
   reminder text := 'delivery-contract-' || gen_random_uuid()::text;
   retry_at timestamptz := now() - interval '1 hour';
@@ -12,7 +13,8 @@ begin
     or has_table_privilege('authenticated', 'public.reminder_email_deliveries', 'UPDATE') then
     raise exception 'Delivery claims exposed outside service role';
   end if;
-  if workspace is null then raise exception 'A disposable or existing workspace is needed'; end if;
+  insert into auth.users(id,email) values(fixture_owner,'reminder-contract@example.invalid');
+  insert into public.workspaces(id,owner_user_id) values(workspace,fixture_owner);
   insert into public.reminder_email_deliveries(id,workspace_id,reminder_id,due_date,status)
     values(delivery,workspace,reminder,current_date,'pending');
   begin

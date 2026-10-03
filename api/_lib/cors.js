@@ -8,16 +8,24 @@
 
 function getAllowedOrigins() {
   const vercelOrigin = process.env.VERCEL_URL ? `https://${process.env.VERCEL_URL}` : '';
-  return [process.env.PUBLIC_APP_URL, process.env.VITE_PUBLIC_APP_URL, vercelOrigin]
+  const webOrigins = [process.env.PUBLIC_APP_URL, process.env.VITE_PUBLIC_APP_URL, vercelOrigin]
     .filter(Boolean)
     .map((value) => {
       try {
-        return new URL(value).origin;
+        const url = new URL(value);
+        // Opaque URLs (including capacitor:, file: and data:) serialize their
+        // origin as "null". They must not authorize sandboxed browser callers.
+        // Native shell origins are admitted explicitly below instead.
+        return url.protocol === 'https:' || url.protocol === 'http:' ? url.origin : '';
       } catch {
         return '';
       }
     })
     .filter(Boolean);
+  // Capacitor's bundled iOS and Android origins. This grants browser transport
+  // only: handlers still require their bearer token, workspace and capability.
+  // Never reflect arbitrary custom schemes, localhost subdomains or Origin:null.
+  return [...webOrigins, 'capacitor://localhost', 'https://localhost'];
 }
 
 /**

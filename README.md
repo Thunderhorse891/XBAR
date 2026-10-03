@@ -485,6 +485,17 @@ psql -1 -v ON_ERROR_STOP=1 "$DATABASE_URL" -f supabase/migrations/20261002182226
 #    Run this proof only on an approved disposable database. It supersedes the
 #    legacy account-deletion-hold.sql check after the protocol upgrade.
 psql -v ON_ERROR_STOP=1 "$DISPOSABLE_DATABASE_URL" -f supabase/checks/account-deletion-request-fence.sql
+
+# 16. HELD INTEGRATION GATE: staff horse writes must not grant sale-media
+#    approval to a non-reviewer or let a replacement image inherit approval.
+#    Requires reviewed rollout/recovery approval before release. Retains staff
+#    edits and pending uploads; changes no existing rows or storage policies.
+#    Documented command only; not evidence of production application.
+psql -1 -v ON_ERROR_STOP=1 "$DATABASE_URL" -f supabase/migrations/20261003021000_guard_sale_media_approval.sql
+psql -v ON_ERROR_STOP=1 "$DISPOSABLE_DATABASE_URL" -f supabase/checks/media-approval-writes.sql
+#    Read docs/MAIN-INTEGRATION-READINESS.md. Historical storage replay guards
+#    require separately reviewed ledger reconciliation, never a replay or
+#    invented migration row. The full current catalog must also match.
 ```
 
 **(4) and (5) are prerequisites for billing, not optimizations to schedule
@@ -541,10 +552,10 @@ the counts are documented at the bottom of file 3.
 ### Operations
 
 - **Health probe**: `GET /api/health` returns liveness plus subsystem-configured booleans (no secrets, no database touch). Point uptime monitors here.
-- **Rate limiting**: every request-driven API endpoint is per-IP rate limited. Set `UPSTASH_REDIS_REST_URL` and `UPSTASH_REDIS_REST_TOKEN` so limits are shared across all serverless instances; without them the limiter degrades to per-instance in-memory counting.
+- **Rate limiting**: set `UPSTASH_REDIS_REST_URL` and `UPSTASH_REDIS_REST_TOKEN` for shared request protection. Protected production requests fail closed with 503 if Redis is missing or fails; in-memory mode is limited to explicit local/test operation.
 - **Crash telemetry**: uncaught browser errors and unhandled promise rejections are reported to `runtime_events` through `/api/telemetry` (rate limited, workspace-verified, capped at 20 reports per session).
 - **Marketing analytics**: every public page loads the first-party beacon `/site.js`, which reports pageviews and CTA clicks to `/api/metrics` — anonymous (no cookies, no identifiers, honors Do Not Track), CSP-safe, logged in the Vercel function stream, and stored in `runtime_events` as `marketing.*` when Supabase is configured.
-- **Go-live preflight**: `npm run preflight` reports which subsystems are configured and what each missing env var keeps switched off; add `-- --url <deployment>` to probe the live `/api/health` and compare.
+- **Go-live preflight**: `npm run preflight` requires configuration, verified backup/restore evidence and a fresh matching database catalog/critical migration ledger. Add `-- --url <deployment>` to compare the live health response too. See [database reconciliation](docs/PRODUCTION-DATABASE-ROLLOUT.md); health success alone cannot clear this gate.
 - **Webhook replays**: Stripe webhook deliveries are idempotent on `stripe_event_id` — retried events are acknowledged without re-running the subscription sync.
 - **CI**: every push runs lint, format check, production-dependency audit, typecheck, unit tests, build, and a browser smoke test of the built bundle; CodeQL scans weekly and on PRs; Dependabot files grouped weekly updates.
 
@@ -556,7 +567,7 @@ Do not paste `supabase/production-schema.sql` directly into production. Generate
 npm run supabase:prepare
 ```
 
-Then apply `supabase/production-schema.generated.sql` in the Supabase SQL editor. It converts unsupported policy syntax and appends the idempotent workspace RLS hardening migration.
+The generated schema is for an empty, isolated bootstrap/test database. It converts unsupported policy syntax and appends migrations. **Do not replay it over the existing production project.** Reconcile live definitions and legacy client compatibility, verify recovery and obtain Erin's explicit approval for a reviewed migration sequence; see [the rollout plan](docs/PRODUCTION-DATABASE-ROLLOUT.md).
 
 ### Stripe Go-Live
 
@@ -581,3 +592,21 @@ Managed checkout is restricted to workspace admins and only returns customers to
 - Proof Vault for document intake, review, matching, approval, and buyer-safe release
 - Operating Ledger for receipt intake, cost allocation, and ranch-level expense visibility
 - Buyer Desk, buyer follow-ups, shared buyer packets, ranch assets, action queue, and field conditions
+
+### Held readiness rollout
+
+See [production readiness rollout](docs/production-readiness-rollout.md) and
+[database recovery](docs/database-recovery.md). The deletion audit requires
+`20260925180000_account_deletion_audit.sql` before its endpoint can run.
+The following is a reviewed-staging command, not authorization to apply production:
+
+```sh
+psql "$STAGING_DATABASE_URL" -v ON_ERROR_STOP=1 -f supabase/migrations/20260925180000_account_deletion_audit.sql
+psql "$STAGING_DATABASE_URL" -v ON_ERROR_STOP=1 -f supabase/migrations/20260928150000_restrict_anon_table_discovery.sql
+```
+
+Production application remains held pending Erin's explicit approval and backup/restore verification.
+The anonymous-table migration preserves the intended public buyer RPCs and
+aborts if removing inherited table/column grants would remove authenticated or
+service-role reads. Review its actual catalog diff and the full
+[database rollout dependencies](docs/PRODUCTION-DATABASE-ROLLOUT.md) first.

@@ -1,0 +1,53 @@
+{
+  "version": 1,
+  "sourceRef": "uxvwfepyothlakhqazwv",
+  "historicalExclusions": {
+    "20260924134000_horse_media_private_signed_urls.sql": {
+      "historicalSourceSha256": "95de51705cc1b3ff03ae1b9cc08007ac91a8444f098ad37d79a597aca0cc25ce",
+      "historicalBatchVersion": "20260928153909",
+      "reason": "Upstream added a replay-refusal guard after the hosted batch was recorded. The historical batch must not satisfy this changed source version. Require its own ledger evidence and the full current catalog; never replay the superseded SQL to manufacture that evidence."
+    }
+  },
+  "batches": [
+    {
+      "version": "20260928153909",
+      "name": "xbar_launch_billing_trial_private_media_reconciliation",
+      "statementCount": 1,
+      "statementsSha256": "5b42006f942a95740e68f78c52fbdf287d365be63778b0822250057d2e246a7a",
+      "sourceFiles": {
+        "20260924120000_billing_period.sql": "34b0cc30ebf298abe6bd66b44eade60a1296b6a8ee94ae6227013cf02cf092df",
+        "20260924130000_trial_entitlement.sql": "aa045d72408b42bf07f4f562ab2d349c72099092a58ba43895e569e9e510a23d",
+        "20260924223000_preserve_trial_in_event_rpc.sql": "2e636667cdb4dc004f7dd835b2b2d402dc4b7d329d69c3ea82dff9b8f20682c3",
+        "20260926000000_trial_dates_fail_closed.sql": "ca91d852b6f0662144660e214ad1a5131cbf6eddc4e1eb36f14196bc1654aabf",
+        "20260926003000_atomic_trial_event_merge.sql": "56ebf6b4cac268da882b266431a9dcf3b8762b507daac3529b007ecfb6e90600"
+      }
+    },
+    {
+      "version": "20260928154229",
+      "name": "trial_helper_private",
+      "statementCount": 1,
+      "statementsSha256": "28c1e25119419528183f05202ef3fe6b76871a43682c2fb803a61fc6bd8efc23",
+      "sourceFiles": {
+        "20260928120000_trial_helper_private.sql": "4e6e51696f55f2a74e012f865bf8cc07f7915e804d9356e9f693a237efd5584d"
+      }
+    },
+    {
+      "version": "20260928161212",
+      "name": "reminder_email_delivery_claims",
+      "statementCount": 1,
+      "statementsSha256": "5b7bf9be22630dfd54fb6cd0cd580536dd76e747c2a77bd5993986fb7ab42fad",
+      "sourceFiles": {
+        "20260928163000_reminder_email_delivery_claims.sql": "70f9dd8b94e9b4165ed1011fdd8be2bff7aff695d0b2765b05d54eda4fafb5db"
+      }
+    },
+    {
+      "version": "20260928163507",
+      "name": "reminder_declined_retry",
+      "statementCount": 1,
+      "statementsSha256": "398ac596a3b0b6b90877b8f7bdbf3be6b60a34e6d004b800227c61be4fee8213",
+      "sourceFiles": {
+        "20260928170000_reminder_declined_retry.sql": "c871b67d18953125b178986d6c3a8d526f1f491f5da19c35a123760336ad6031"
+      }
+    }
+  ]
+}

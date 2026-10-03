@@ -83,8 +83,11 @@ export async function assertDeletionRace(t, handler) {
       return reply([{ workspace_id: 'ws1' }]);
     }
     if (url.pathname === '/rest/v1/account_deletion_receipts' && method === 'POST')
-      return reply({ id: 'receipt-1' }, 201);
-    if (url.pathname === '/rest/v1/account_deletion_receipts' && method === 'PATCH') return reply(null, 204);
+      return reply({ id: JSON.parse(init.body).id }, 201);
+    if (url.pathname === '/rest/v1/account_deletion_receipts' && method === 'PATCH')
+      return reply({ id: url.searchParams.get('id').slice(3) });
+    if (url.pathname === '/rest/v1/account_deletion_events' && method === 'POST')
+      return reply({ id: 'acknowledged-event' }, 201);
     if (url.pathname === '/rest/v1/workspace_subscription_profiles') return reply(null);
     if (url.pathname === '/rest/v1/rpc/xbar_confirm_account_deletion_request')
       return reply(

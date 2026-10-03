@@ -1,3 +1,4 @@
+import { withErrorTracking } from '../_lib/error-tracking.js';
 import Stripe from 'stripe';
 import { readRawBody, sendJson } from '../_lib/http.js';
 import { buildSubscriptionProfile, findTierByPriceId } from '../_lib/subscription-plans.js';
@@ -256,7 +257,7 @@ async function syncWorkspaceSubscription({
   return { applied: applied === true };
 }
 
-export default async function handler(req, res) {
+async function handler(req, res) {
   if (req.method !== 'POST') {
     return sendJson(res, 405, { ok: false, message: 'Method not allowed.' });
   }
@@ -474,3 +475,5 @@ export default async function handler(req, res) {
     });
   }
 }
+
+export default withErrorTracking(handler, 'stripe/webhook.js');

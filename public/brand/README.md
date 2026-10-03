@@ -17,6 +17,11 @@ Other files are retained as supplied or historical aliases. Do not infer a suppo
 
 ## Known aliases
 
+The checked-in iOS project copies `xbar-app-icon.png` (1024 × 1024) unchanged
+into its AppIcon asset and `xbar-report-horse.png` unchanged into its launch
+asset. Neither is redrawn or recolored. The launch image uses aspect-fit.
+App Store icon validation and final visual acceptance remain release checks.
+
 The following groups are byte-identical, despite names that imply different crops or treatments:
 
 - `xbar-brand-hero.png`, `xbar-horse-logo-lockup-main.png`, and `xbar-horse-main-logo-26.png`

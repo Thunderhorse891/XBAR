@@ -1,3 +1,4 @@
+import { withErrorTracking } from './_lib/error-tracking.js';
 import { sendJson, readJsonBody } from './_lib/http.js';
 import { getSupabaseAdmin } from './_lib/supabase-admin.js';
 import { enforceRateLimit } from './_lib/rate-limit.js';
@@ -24,7 +25,7 @@ function capString(value) {
   return trimmed.slice(0, MAX_FIELD_LENGTH);
 }
 
-export default async function handler(req, res) {
+async function handler(req, res) {
   if (!applyCors(req, res)) {
     return;
   }
@@ -84,3 +85,5 @@ export default async function handler(req, res) {
   res.statusCode = 204;
   res.end();
 }
+
+export default withErrorTracking(handler, 'metrics.js');

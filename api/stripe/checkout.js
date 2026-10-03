@@ -1,3 +1,4 @@
+import { withErrorTracking } from '../_lib/error-tracking.js';
 import { serverManagedBillingEnabled } from '../_lib/managed-billing.js';
 import Stripe from 'stripe';
 import { readJsonBody, sendJson } from '../_lib/http.js';
@@ -53,7 +54,7 @@ function getTrustedReturnUrl(requestedReturnUrl) {
   return fallbackOrigin;
 }
 
-export default async function handler(req, res) {
+async function handler(req, res) {
   if (!applyCors(req, res, { methods: 'GET, POST, OPTIONS' })) {
     return;
   }
@@ -574,3 +575,5 @@ export default async function handler(req, res) {
     await releaseCheckoutLock(supabase, workspaceId, claimToken);
   }
 }
+
+export default withErrorTracking(handler, 'stripe/checkout.js');

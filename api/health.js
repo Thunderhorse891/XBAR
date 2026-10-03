@@ -1,3 +1,4 @@
+import { withErrorTracking } from './_lib/error-tracking.js';
 import { isEmailConfigured } from './_lib/email.js';
 import { gmailSmtpStatus } from './_lib/gmail-smtp.js';
 import { sendJson } from './_lib/http.js';
@@ -32,7 +33,7 @@ function envValue(name) {
   return process.env[name]?.trim() || '';
 }
 
-export default function handler(req, res) {
+function handler(req, res) {
   if (req.method !== 'GET' && req.method !== 'HEAD') {
     return sendJson(res, 405, { ok: false, message: 'Method not allowed.' });
   }
@@ -233,3 +234,5 @@ export default function handler(req, res) {
     ...(warnings.length ? { warnings } : {}),
   });
 }
+
+export default withErrorTracking(handler, 'health.js');
