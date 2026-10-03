@@ -1,3 +1,4 @@
+import { horseAgeLabel } from '@/lib/horseDocumentActions';
 import { useMemo, useRef, useState } from 'react';
 import type { ChangeEvent, CSSProperties } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
@@ -256,7 +257,7 @@ export default function AnimalProfile() {
           <div>
             <div className="xs-objhead__name">{animal.name}</div>
             <div className="xs-objhead__meta">
-              {animal.breed || 'Horse'} · {animal.sex} · {animal.age} yrs · {location}
+              {animal.breed || 'Horse'} · {animal.sex} · {horseAgeLabel(animal)} · {location}
             </div>
             <button
               type="button"

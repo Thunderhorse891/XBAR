@@ -4,6 +4,7 @@ import {
   isValidElement,
   useEffect,
   useMemo,
+  useRef,
   useState,
   type KeyboardEvent,
   type ReactElement,
@@ -301,6 +302,7 @@ export function InteractionShell() {
   const exitFocus = useUiStore((state) => state.exitFocusMode);
   const focusedSurfaceId = useUiStore((state) => state.focusedSurfaceId);
   const [query, setQuery] = useState('');
+  const drawerReturnFocus = useRef<HTMLElement | null>(null);
 
   // InteractionShell is mounted globally — including on /login, outside
   // RequireCloudAuth — and the persisted workspace survives sign-out, so the
@@ -432,7 +434,19 @@ export function InteractionShell() {
         }}
       >
         {drawer ? (
-          <SheetContent className="right-drawer" side="right">
+          <SheetContent
+            className="right-drawer"
+            side="right"
+            onOpenAutoFocus={() => {
+              drawerReturnFocus.current = document.activeElement instanceof HTMLElement ? document.activeElement : null;
+            }}
+            onCloseAutoFocus={(event) => {
+              if (drawerReturnFocus.current?.isConnected) {
+                event.preventDefault();
+                drawerReturnFocus.current.focus({ preventScroll: true });
+              }
+            }}
+          >
             <SheetHeader className="right-drawer__header">
               {drawer.eyebrow ? <small>{drawer.eyebrow}</small> : null}
               <SheetTitle id="right-drawer-title">{drawer.title}</SheetTitle>

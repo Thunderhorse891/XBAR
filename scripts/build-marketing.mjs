@@ -86,10 +86,32 @@ const output = (Array.isArray(landingBuild) ? landingBuild[0] : landingBuild).ou
 const motionEntry = output.find((chunk) => chunk.type === 'chunk' && chunk.isEntry);
 if (!motionEntry) throw new Error('Landing motion entry missing from build output');
 
+// Tiny shared signature controller; the heavier cinematic bundle stays homepage-only.
+const signatureBuild = await build({
+  configFile: false,
+  publicDir: false,
+  build: {
+    outDir: path.join(dist, 'brand-motion'),
+    emptyOutDir: false,
+    target: ['es2021', 'chrome100', 'safari13'],
+    lib: { entry: path.join(repoRoot, 'src/marketing/signatureMotion.ts'), formats: ['es'], fileName: 'signature' },
+    rollupOptions: { output: { entryFileNames: 'signature-[hash].js' } },
+  },
+});
+const signatureOutput = (Array.isArray(signatureBuild) ? signatureBuild[0] : signatureBuild).output;
+const signatureEntry = signatureOutput.find((chunk) => chunk.type === 'chunk' && chunk.isEntry);
+if (!signatureEntry) throw new Error('Signature motion entry missing from build output');
+
 for (const page of [...pages, notFoundPage]) {
   const file = outputFileFor(page.path);
   mkdirSync(path.dirname(file), { recursive: true });
-  writeFileSync(file, renderPage(page, { landingScript: `/landing/${motionEntry.fileName}` }));
+  writeFileSync(
+    file,
+    renderPage(page, {
+      landingScript: `/landing/${motionEntry.fileName}`,
+      signatureScript: `/brand-motion/${signatureEntry.fileName}`,
+    }),
+  );
 }
 copyFileSync(path.join(here, 'marketing', 'site.css'), path.join(dist, 'site.css'));
 copyFileSync(path.join(here, 'marketing', 'site.js'), path.join(dist, 'site.js'));

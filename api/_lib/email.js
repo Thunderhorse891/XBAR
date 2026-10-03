@@ -46,10 +46,10 @@ function buildFrom(defaultFrom, fromName, fromEmail) {
 
 /**
  * Wrap outbound HTML in the XBAR brand shell: a dark header with the
- * letterspaced wordmark, the caller's content on white, and a muted footer.
+ * static horse signature, the caller's content on white, and a muted footer.
  * Token hexes are inlined (email clients cannot rely on the app's CSS
- * variables): --xbar-black #0b0d0f, --xbar-warm-white #f5f2ec,
- * --accent-edge #0078d7. No images — remote art is blocked by most inboxes.
+ * variables). The image has no recipient data or tracking parameters.
+ * Text identity remains readable when a mail client blocks external images.
  */
 const EMAIL_FONT_STACK = "'Outfit', -apple-system, 'Segoe UI', Arial, sans-serif";
 
@@ -59,8 +59,9 @@ export function brandEmailHtml(html, text) {
   return (
     `<div style="font-family:${EMAIL_FONT_STACK};background:#f5f6f7;padding:24px 16px;">` +
     `<div style="max-width:560px;margin:0 auto;background:#ffffff;border:1px solid #e0e3e6;border-radius:10px;overflow:hidden;">` +
-    `<div style="background:#0b0d0f;padding:18px 24px;border-bottom:2px solid #0078d7;">` +
-    `<span style="color:#f5f2ec;font-size:15px;font-weight:800;letter-spacing:0.28em;">XBAR</span>` +
+    `<div style="background:#171b20;padding:18px 24px;border-bottom:2px solid #94d8f2;">` +
+    `<img src="https://xbar-horse-management-app.vercel.app/brand/xbar-signature-email-192.png" width="48" height="48" alt="XBAR horse signature" style="display:block;width:48px;height:48px;margin:0 0 10px;border:0;" />` +
+    `<span style="color:#d6dde5;font-size:15px;font-weight:800;letter-spacing:0.28em;">XBAR</span>` +
     `</div>` +
     `<div style="padding:24px;color:#202428;font-size:14px;line-height:1.6;">${inner}</div>` +
     `<div style="padding:14px 24px;border-top:1px solid #e0e3e6;color:#6b737c;font-size:12px;">Sent from XBAR — the private ranch operating system.</div>` +

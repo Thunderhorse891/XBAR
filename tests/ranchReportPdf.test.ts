@@ -34,7 +34,7 @@ function fixture(count = 18): RanchReportInput {
 }
 const branding = async () => ({
   logo: await readFile('public/brand/xbar-report-horse.png'),
-  mark: await readFile('public/brand/xbar-report-mark.png'),
+  mark: await readFile('public/brand/xbar-signature-print-512.png'),
   watermark: await readFile('public/brand/xbar-report-watermark.png'),
 });
 
@@ -292,7 +292,7 @@ test('report artwork honors the deployment base and survives offline after cachi
   const { reportBrandAssetPaths, loadReportBranding } = await import('../src/lib/reportBranding.js');
   assert.deepEqual(reportBrandAssetPaths('/XBAR/'), [
     '/XBAR/brand/xbar-report-horse.png',
-    '/XBAR/brand/xbar-report-mark.png',
+    '/XBAR/brand/xbar-signature-print-512.png',
     '/XBAR/brand/xbar-report-watermark.png',
   ]);
   const originals = await branding();

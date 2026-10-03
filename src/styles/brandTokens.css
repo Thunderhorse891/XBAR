@@ -12,10 +12,9 @@
  * surface. Measured against the real working ground (#f5f6f7):
  *
  *   #0078d7  4.16:1  — fails AA for text; fine for edges and fills (>= 3)
- *   #2868a9  5.33:1  — passes AA for text
  *
  * So the supplied blue is the EDGE colour, faithful to artwork where blue
- * appears only as a rim light and never as a fill, and a darker relative of it
+ * appears as a rim light. The owner-approved charcoal/graphite family now
  * carries text and button grounds. Collapsing the two is how the primary
  * button came to sit at 3.62:1 with white on it.
  *
@@ -23,21 +22,23 @@
  * what produced nine unrelated blues across four families.
  *
  * NOTE: public/brand/xbar-brand-tokens.css holds the same constants but lives
- * under public/, which is copied verbatim and is not part of the build graph —
- * nothing has ever loaded it. This file is the one that governs.
+ * under public/ for marketing pages. Shared constants are checked for parity.
+ * The app role values remain here so pale decorative ice never becomes text.
  */
 
 :root {
-  /* Brand constants — as supplied. Do not tune these to fix a contrast
-     problem; add or adjust a ROLE below instead. */
+  /* Owner-approved signature palette, October 3. Pale ice is decorative;
+     the accessible edge blue remains available on white working surfaces. */
   --xbar-black: #0b0d0f;
-  --xbar-graphite: #121518;
-  --xbar-gunmetal: #20252a;
+  --xbar-graphite: #171b20;
+  --xbar-gunmetal: #202d3c;
   --xbar-steel: #596168;
-  --xbar-silver: #b7bcc2;
+  --xbar-silver: #d6dde5;
   --xbar-warm-white: #f5f2ec;
   --xbar-muted-sand: #c7bdaa;
   --xbar-blue: #0078d7;
+  --xbar-ice: #94d8f2;
+  --xbar-white: #ffffff;
 
   /*
    * Roles.
@@ -49,12 +50,12 @@
    *                 on top of it.
    */
   /* Shared low-contrast divider on graphite navigation and hero surfaces. */
-  --workspace-photo-scrim: rgba(11, 13, 15, 0.86);
-  --workspace-dark-border: rgba(183, 188, 194, 0.18);
+  --workspace-photo-scrim: rgba(23, 27, 32, 0.86);
+  --workspace-dark-border: rgba(214, 221, 229, 0.18);
 
   --accent-edge: var(--xbar-blue);
-  --accent-ink: #2868a9;
-  --accent-ink-lift: #2f76bd;
-  --accent-ink-hover: #3179ba;
-  --accent-ink-press: #1a4f84;
+  --accent-ink: #202d3c;
+  --accent-ink-lift: #2a3a4c;
+  --accent-ink-hover: #31465c;
+  --accent-ink-press: #171b20;
 }
