@@ -693,7 +693,7 @@ export default function Documents() {
                   ))}
                 </select>
               </label>
-              <label className="field-stack">
+              <div className="field-stack">
                 <span className="field-label">Horse</span>
                 <button
                   type="button"
@@ -703,7 +703,7 @@ export default function Documents() {
                 >
                   {createHorseFromBatch ? 'Create horse profiles' : 'Review only'}
                 </button>
-              </label>
+              </div>
               <label className="field-stack field-stack--wide">
                 <span className="field-label">Files</span>
                 <input

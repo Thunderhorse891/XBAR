@@ -1136,6 +1136,7 @@ for (const conflict of ['cross-file', 'single-file'] as const) {
         });
         await page.locator('#documents-intake input[type="file"]').setInputFiles(files);
         await page.getByRole('button', { name: 'Review only', exact: true }).click();
+        await expect(page.getByRole('button', { name: 'Create horse profiles', exact: true })).toBeVisible();
         await page.getByRole('button', { name: 'Add docs', exact: true }).click();
       }
       await expect(page).toHaveURL(/\/app\/documents(?:\?|$)/);
