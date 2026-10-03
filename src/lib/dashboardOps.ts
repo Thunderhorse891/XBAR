@@ -90,10 +90,26 @@ function latestCompletedCare(horse: HorseRecord, kind: 'wormer' | 'dental', now:
     .filter((event) => {
       const details = event.details as MedicalRecordDetails | undefined;
       const isKind = event.status === match.status || details?.recordType === match.recordType;
-      // A date still ahead is a plan, not care given.
-      return isKind && /^\d{4}-\d{2}-\d{2}/.test(event.date ?? '') && event.date.slice(0, 10) <= today;
+      // A date still ahead is a plan, not care given; one that is not a real
+      // calendar day is no date at all.
+      const day = careDay(event.date);
+      return isKind && day !== null && day <= today;
     })
     .sort((left, right) => (left.date < right.date ? 1 : left.date > right.date ? -1 : 0))[0];
+}
+
+/*
+ * The calendar day a care entry was given, or null when it is not a real day.
+ * Restored or synced timelines can carry a well-formed impossible date such as
+ * 2026-09-31, which Date would quietly turn into 1 October and score as care.
+ * Same refusal documentExamTime makes for a Coggins exam date.
+ */
+function careDay(value: string | undefined): string | null {
+  const match = /^(\d{4})-(\d{2})-(\d{2})/.exec(value ?? '');
+  if (!match) return null;
+  const [year, month, day] = [Number(match[1]), Number(match[2]), Number(match[3])];
+  const date = new Date(year, month - 1, day);
+  return date.getFullYear() === year && date.getMonth() === month - 1 && date.getDate() === day ? match[0] : null;
 }
 
 function localDayKey(now: Date): string {

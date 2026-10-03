@@ -110,6 +110,17 @@ test('a care date still ahead is a plan, not care given', () => {
   assert.equal(planned.detail, 'No wormer on record yet');
 });
 
+test('a care date that is not a real day is no care at all', () => {
+  // 2026-09-31 would be read by Date as 1 October -- yesterday -- and score as current.
+  const impossible = signal([horse([care('Deworming', '2026-09-31')])], 'wormer');
+  assert.equal(impossible.status, 'due');
+  assert.equal(impossible.detail, 'No wormer on record yet');
+  // Nor can it outrank a real, older entry.
+  const withReal = signal([horse([care('Dental', '2026-02-30'), care('Dental', day(-400))])], 'dental');
+  assert.equal(withReal.status, 'due');
+  assert.equal(withReal.detail, 'Dental float overdue');
+});
+
 test('structured records count by type, and the latest one decides', () => {
   const structured = horse([
     { ...care('Historical note', day(-200)), details: { recordType: 'deworming' } } as TimelineEvent,
