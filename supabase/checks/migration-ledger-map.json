@@ -48,6 +48,42 @@
       "sourceFiles": {
         "20260928170000_reminder_declined_retry.sql": "c871b67d18953125b178986d6c3a8d526f1f491f5da19c35a123760336ad6031"
       }
+    },
+    {
+      "version": "20261002042804",
+      "name": "seat_reservation_consumed_on_accept",
+      "statementCount": 1,
+      "statementsSha256": "dc3e4039b8b5991c353f8d510b5f650a36c4f0043cca49d25bf1d79656193266",
+      "sourceFiles": {
+        "20261002090000_seat_reservation_consumed_on_accept.sql": "0b287da4cae04581cd1d9c551e68b5efc71c617f5f3445c5541a9d674386ca3b"
+      }
+    },
+    {
+      "version": "20261002134542",
+      "name": "account_deletion_hold",
+      "statementCount": 1,
+      "statementsSha256": "8f9eca670b92d23ba39c759adcdfcca314201f283b83ceb002675c5985c3fe72",
+      "sourceFiles": {
+        "20261002100000_account_deletion_hold.sql": "65358ee44639393396c654d2fe12a01bc736fb091bdcd4a51608376deb1d03da"
+      }
+    },
+    {
+      "version": "20261002144027",
+      "name": "staff_write_policies",
+      "statementCount": 1,
+      "statementsSha256": "e02babfa82ae35d99cd7e7f36ee8f37f932e8c961a069909d04510cd4be8ae64",
+      "sourceFiles": {
+        "20261002120000_staff_write_policies.sql": "de9cfb93ae363b3d539dfe53d95d46051d44d80c736a3b0ec0683d15cc4bb2ad"
+      }
+    },
+    {
+      "version": "20261002192519",
+      "name": "account_deletion_request_fence",
+      "statementCount": 1,
+      "statementsSha256": "4075a114424a8a51a4c4a23b3634cbc8850e6f1bd03d18a74cb0cd146c04b9a5",
+      "sourceFiles": {
+        "20261002182226_account_deletion_request_fence.sql": "4075a114424a8a51a4c4a23b3634cbc8850e6f1bd03d18a74cb0cd146c04b9a5"
+      }
     }
   ]
 }
