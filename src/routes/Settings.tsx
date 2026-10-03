@@ -34,6 +34,8 @@ import { promoteLocalVaultFiles } from '@/lib/workspacePromotion';
 import type { UserRole } from '@/types/xbar';
 import { useEffectiveSubscription } from '@/hooks/useOwnerPreview';
 import { saveBlobAsFile } from '@/lib/fileDownload';
+import { hasRoleCapability } from '@/lib/permissions';
+import type { RoleCapability } from '@/types/xbar';
 
 function roleLabel(role: UserRole) {
   return role === 'Owner' ? 'Horse Owner / Client' : role;
@@ -91,6 +93,37 @@ export default function Settings() {
   const [deleteConfirm, setDeleteConfirm] = useState('');
   const [deleting, setDeleting] = useState(false);
   const [exportingBackup, setExportingBackup] = useState(false);
+  const [importingBackup, setImportingBackup] = useState(false);
+  const importInFlight = useRef(false);
+  const transferGeneration = useRef(0);
+  useEffect(() => {
+    const unsubscribe = useCloudStore.subscribe((next, previous) => {
+      if (next.workspaceId !== previous.workspaceId || next.session?.user.id !== previous.session?.user.id) {
+        transferGeneration.current += 1;
+      }
+    });
+    return () => {
+      transferGeneration.current += 1;
+      unsubscribe();
+    };
+  }, []);
+  const captureTransfer = () => ({
+    generation: transferGeneration.current,
+    ownerId: vaultOwnerId(),
+    accountId: useCloudStore.getState().session?.user.id,
+  });
+  const transferIsCurrent = (target: ReturnType<typeof captureTransfer>, capability: RoleCapability) =>
+    target.generation === transferGeneration.current &&
+    target.ownerId === vaultOwnerId() &&
+    target.accountId === useCloudStore.getState().session?.user.id &&
+    hasRoleCapability(useXbarStore.getState().currentRole, capability);
+  const reportTransferStopped = () =>
+    pushToast({
+      title: 'Restore stopped',
+      message:
+        'Your account, workspace, or permission changed. Reopen the original workspace to retry. Any files already restored remain in that workspace.',
+      tone: 'warning',
+    });
   const facebookConnected = cloudSession?.user?.app_metadata?.provider === 'facebook';
   const activeMembers = workspaceMembers.filter((member) => member.status === 'Active');
   const pendingInvites = workspaceInvitations.filter((invite) => invite.status === 'Pending');
@@ -260,6 +293,15 @@ export default function Settings() {
 
   const handleImport = async (file?: File) => {
     if (!file) return;
+    if (importInFlight.current || cloudBusy) return;
+    const target = captureTransfer();
+    if (!transferIsCurrent(target, 'manageSettings')) {
+      reportTransferStopped();
+      if (importRef.current) importRef.current.value = '';
+      return;
+    }
+    importInFlight.current = true;
+    setImportingBackup(true);
     /*
      * `importLocalFiles` writes every blob before `importWorkspaceBackup`
      * installs the records that reference them. Until it does, those bytes are
@@ -267,9 +309,13 @@ export default function Settings() {
      * deletes — so a cloud reconciliation settling mid-import destroyed files
      * this had just restored, and left the restored records dangling.
      */
-    await beginVaultWrite();
     try {
+      await beginVaultWrite();
       const text = await file.text();
+      if (!transferIsCurrent(target, 'manageSettings')) {
+        reportTransferStopped();
+        return;
+      }
       const payload = JSON.parse(text) as { files?: PortableLocalFile[]; omittedFiles?: UnbackedUpFile[] };
 
       /*
@@ -333,8 +379,12 @@ export default function Settings() {
        * verifier runs there with no CSP to satisfy.
        */
       const { restored, failed, remapped } = Array.isArray(payload.files)
-        ? await importLocalFiles(payload.files, { workspaceId: vaultOwnerId() })
+        ? await importLocalFiles(payload.files, { workspaceId: target.ownerId })
         : { restored: 0, failed: [] as UnbackedUpFile[], remapped: {} as Record<string, string> };
+      if (!transferIsCurrent(target, 'manageSettings')) {
+        reportTransferStopped();
+        return;
+      }
 
       /*
        * Follow any keys the vault had to re-mint.
@@ -462,6 +512,8 @@ export default function Settings() {
     } finally {
       // Released on every path, including the catch above.
       endVaultWrite();
+      importInFlight.current = false;
+      setImportingBackup(false);
       if (importRef.current) importRef.current.value = '';
     }
   };
@@ -549,27 +601,43 @@ export default function Settings() {
   };
 
   const handlePullCloud = async () => {
+    if (importInFlight.current || cloudBusy) return;
+    const target = captureTransfer();
+    if (!transferIsCurrent(target, 'syncCloud')) return;
     setCloudBusy(true);
-    const remote = await loadWorkspaceBackupFromCloud();
-    if (!remote.ok) {
-      pushToast({ title: 'Cloud pull failed', message: remote.message, tone: 'error' });
+    try {
+      const remote = await loadWorkspaceBackupFromCloud();
+      if (!transferIsCurrent(target, 'syncCloud')) {
+        reportTransferStopped();
+        return;
+      }
+      if (!remote.ok) {
+        pushToast({ title: 'Cloud pull failed', message: remote.message, tone: 'error' });
+        setCloudBusy(false);
+        return;
+      }
+      const result = importWorkspaceBackup(remote.backup);
+      pushToast({
+        title: result.ok ? 'Cloud workspace loaded' : 'Cloud import blocked',
+        message: result.message,
+        tone: result.ok ? 'success' : 'error',
+      });
+      if (result.ok && remote.updatedAt) setLastCloudSyncAt(remote.updatedAt);
+      // The other half of the same choice: taking the cloud copy settles the
+      // conflict exactly as pushing the local one does.
+      if (result.ok) {
+        unlockAutosaveAfterManualSync();
+        setCloudSyncState('idle', 'Cloud workspace ready.');
+      }
+    } catch {
+      pushToast({
+        title: 'Cloud pull failed',
+        message: 'Cloud pull could not finish. Review the current workspace before retrying.',
+        tone: 'error',
+      });
+    } finally {
       setCloudBusy(false);
-      return;
     }
-    const result = importWorkspaceBackup(remote.backup);
-    pushToast({
-      title: result.ok ? 'Cloud workspace loaded' : 'Cloud import blocked',
-      message: result.message,
-      tone: result.ok ? 'success' : 'error',
-    });
-    if (result.ok && remote.updatedAt) setLastCloudSyncAt(remote.updatedAt);
-    // The other half of the same choice: taking the cloud copy settles the
-    // conflict exactly as pushing the local one does.
-    if (result.ok) {
-      unlockAutosaveAfterManualSync();
-      setCloudSyncState('idle', 'Cloud workspace ready.');
-    }
-    setCloudBusy(false);
   };
 
   const handleSignOutCloud = async () => {
@@ -1184,9 +1252,9 @@ export default function Settings() {
             className="button button--ghost button--compact"
             type="button"
             onClick={() => importRef.current?.click()}
-            disabled={!canManageSettings}
+            disabled={!canManageSettings || importingBackup || cloudBusy}
           >
-            Import backup
+            {importingBackup ? 'Restoring backup…' : 'Import backup'}
           </button>
         </div>
       </Panel>
