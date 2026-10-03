@@ -444,3 +444,23 @@ test('combined microchip label delimiters preserve identity comparisons', () => 
     }
   }
 });
+
+test('missing pedigree values are absent while genuine parent conflicts remain blocked', () => {
+  const target = {
+    ...horse,
+    bloodline: { sire: 'SHINING SPARK (1234567)', dam: 'BLUE GIRL (7654321)' },
+  } as HorseRecord;
+  for (const value of ['UNKNOWN', 'N/A', 'Not recorded', 'Pending']) {
+    for (const parent of ['sire', 'dam'] as const) {
+      const source = document({
+        extractedTextPreview: `${paper}\n${parent}: ${value}`,
+        entities: { ...document().entities, [parent]: value },
+      });
+      assert.equal(assessOwnershipDocument(source, target, 'registration_certificate').ok, true, `${parent}: ${value}`);
+    }
+  }
+  for (const parent of ['sire', 'dam'] as const) {
+    const source = document({ extractedTextPreview: `${paper}\n${parent}: UNKNOWN SOLDIER` });
+    assert.equal(assessOwnershipDocument(source, target, 'registration_certificate').status, 'identity_mismatch');
+  }
+});

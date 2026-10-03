@@ -82,6 +82,12 @@ const OWNER_LABELS = 'current\\s+owner|recorded\\s+owner|owner\\s+of\\s+record|o
 const QUALIFIER_ONLY_LINE =
   /^(?:association|farm|ranch|stable|stables|barn|registry|company|corporation|club|owner|breeder|sire|dam)$/i;
 
+/** Missing pedigree sentinels are absence, never a parent identity. */
+export function normalizePedigreeValue(value?: string): string | undefined {
+  const trimmed = value?.trim();
+  return trimmed && !/^(?:unknown|n\/?a|not\s+recorded|pending)\.?$/i.test(trimmed) ? trimmed : undefined;
+}
+
 function parentLabel(label: 'sire' | 'dam') {
   return `${label}(?:['’]s)?(?:\\s+name)?|name\\s+of\\s+${label}`;
 }
@@ -327,7 +333,7 @@ function findParent(text: string, label: 'sire' | 'dam'): { name?: string; regis
     .replace(/[|;,:#.\-\s]+$/g, '')
     .replace(/\s+/g, ' ')
     .trim();
-  return { name: name.length >= 2 ? name : undefined, registration };
+  return { name: name.length >= 2 ? normalizePedigreeValue(name) : undefined, registration };
 }
 
 function findRegistry(text: string, fallback?: string): string | undefined {

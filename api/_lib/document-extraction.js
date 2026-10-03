@@ -360,6 +360,12 @@ function labeledValue(text, labelPattern, stopGroup = STOP_GROUP) {
   return labeledField(text, labelPattern, stopGroup)?.value;
 }
 
+// Mirrored by the browser pedigree normalizer; both extraction corpora pin it.
+function normalizePedigreeValue(value) {
+  const trimmed = value?.trim();
+  return trimmed && !/^(?:unknown|n\/?a|not\s+recorded|pending)\.?$/i.test(trimmed) ? trimmed : undefined;
+}
+
 /** A sire/dam entry: the parent's name plus, when present, its registration number. */
 function findParent(text, label) {
   const chunk = labeledValue(text, parentLabel(label), PARENT_STOP_GROUP);
@@ -385,7 +391,7 @@ function findParent(text, label) {
     .replace(/[|;,:#.\-\s]+$/g, '')
     .replace(/\s+/g, ' ')
     .trim();
-  return { name: name.length >= 2 ? name : undefined, registration };
+  return { name: name.length >= 2 ? normalizePedigreeValue(name) : undefined, registration };
 }
 
 function findHorseNames(text, lineStarts) {

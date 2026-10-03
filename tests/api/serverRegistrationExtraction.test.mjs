@@ -26,6 +26,42 @@ import { extractRegistrationFields, detectMultipleHorses } from '../../api/_lib/
 
 const CORPUS = [
   {
+    id: 'absent-pedigree-0',
+    text: 'Registered Name: BLUE MOON\nSire: UNKNOWN\nDam: UNKNOWN',
+    name: 'BLUE MOON',
+    sire: undefined,
+    dam: undefined,
+  },
+  {
+    id: 'absent-pedigree-1',
+    text: 'Registered Name: BLUE MOON\nSire: N/A\nDam: N/A',
+    name: 'BLUE MOON',
+    sire: undefined,
+    dam: undefined,
+  },
+  {
+    id: 'absent-pedigree-2',
+    text: 'Registered Name: BLUE MOON\nSire: Not recorded\nDam: Not recorded',
+    name: 'BLUE MOON',
+    sire: undefined,
+    dam: undefined,
+  },
+  {
+    id: 'absent-pedigree-3',
+    text: 'Registered Name: BLUE MOON\nSire: Pending\nDam: Pending',
+    name: 'BLUE MOON',
+    sire: undefined,
+    dam: undefined,
+  },
+  {
+    id: 'real-parent-name-including-placeholder-word',
+    text: 'Registered Name: BLUE MOON\nSire: UNKNOWN SOLDIER\nDam: PENDING SUNRISE',
+    name: 'BLUE MOON',
+    sire: 'UNKNOWN SOLDIER',
+    dam: 'PENDING SUNRISE',
+  },
+
+  {
     id: 'registration-long-id',
     text: 'Registered Name: BLUE MOON\nRegistration Number: 12345678901234567',
     name: 'BLUE MOON',

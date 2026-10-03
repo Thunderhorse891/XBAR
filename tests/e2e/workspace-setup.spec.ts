@@ -1192,7 +1192,7 @@ test('unknown microchip text allows facts and approval while preserving the reco
     name: 'unknown-chip-source.txt',
     mimeType: 'text/plain',
     buffer: Buffer.from(
-      'CERTIFICATE OF REGISTRATION\nRegistered Name: CHIP REVIEW HORSE\nColor: Bay\nMicrochip: UNKNOWN',
+      'CERTIFICATE OF REGISTRATION\nRegistered Name: CHIP REVIEW HORSE\nColor: Bay\nMicrochip: UNKNOWN\nSire: UNKNOWN\nDam: Pending',
     ),
   });
   await drawer.locator('select').first().selectOption(horseId);
@@ -1210,9 +1210,18 @@ test('unknown microchip text allows facts and approval while preserving the reco
     return {
       color: state.horses[0].color,
       chip: state.horses[0].microchipId,
+      sire: state.horses[0].bloodline.sire,
+      dam: state.horses[0].bloodline.dam,
       documentState: state.documents[0].state,
       sourceRetained: Boolean(state.documents[0].localFileKey),
     };
   });
-  expect(saved).toEqual({ color: 'Bay', chip: '982000123456789', documentState: 'Ready', sourceRetained: true });
+  expect(saved).toEqual({
+    color: 'Bay',
+    chip: '982000123456789',
+    sire: '',
+    dam: '',
+    documentState: 'Ready',
+    sourceRetained: true,
+  });
 });

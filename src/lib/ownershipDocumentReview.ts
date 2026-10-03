@@ -7,7 +7,7 @@ import type {
   OwnershipRecord,
 } from '../types/xbar.js';
 import { sha256 } from './sha256.js';
-import { extractRegistrationFields } from './registrationExtraction.js';
+import { extractRegistrationFields, normalizePedigreeValue } from './registrationExtraction.js';
 import { horseIdentityConflicts, registrationKey, hasDocumentSourceHeading, inferDocumentType } from './xbarRuntime.js';
 import { extractionProducedNothing } from './documentIntelligence.js';
 import { hasStoredFile } from './storedFiles.js';
@@ -43,8 +43,8 @@ function ownershipIdentityConflicts(horse: HorseRecord, entities?: DocumentEntit
     // Imported parent IDs are displayed as "NAME (1234567)" in the profile.
     const storedId = stored.match(/\s+\(([^()]+)\)\s*$/)?.[1];
     const storedName = storedId ? stored.replace(/\s+\([^()]+\)\s*$/, '') : stored;
-    const sourceName = entities?.[parent];
-    const sourceId = entities?.[parent === 'sire' ? 'sireRegistration' : 'damRegistration'];
+    const sourceName = normalizePedigreeValue(entities?.[parent]);
+    const sourceId = normalizePedigreeValue(entities?.[parent === 'sire' ? 'sireRegistration' : 'damRegistration']);
     return Boolean(
       (sourceName && normalize(sourceName) !== normalize(storedName)) ||
       (sourceId && storedId && registrationKey(sourceId) !== registrationKey(storedId)),

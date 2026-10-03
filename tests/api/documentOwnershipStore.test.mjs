@@ -212,3 +212,21 @@ test('microchip prose does not block document approval for a horse with a record
     assert.equal(useXbarStore.getState().horses[0].microchipId, target.microchipId, note);
   }
 });
+
+test('pedigree placeholders allow approval without replacing known parents or filling blank parents', async () => {
+  const { buildHorseEnrichmentFromEntities } = await import('../../src/store/xbarStoreLogic.ts');
+  for (const value of ['UNKNOWN', 'N/A', 'Not recorded', 'Pending']) {
+    const target = { ...horse, bloodline: { ...horse.bloodline, sire: 'SHINING SPARK', dam: 'BLUE GIRL' } };
+    const pending = {
+      ...source,
+      state: 'Needs Review',
+      extractedTextPreview: `${source.extractedTextPreview}\nSire: ${value}\nDam: ${value}`,
+      entities: { ...source.entities, sire: value, dam: value },
+    };
+    useXbarStore.setState({ horses: [target], documents: [pending] });
+    assert.equal(useXbarStore.getState().reviewDocument(source.id, target.id).ok, true, value);
+    assert.deepEqual(useXbarStore.getState().horses[0].bloodline, target.bloodline);
+    const blank = { ...target, bloodline: { ...target.bloodline, sire: '', dam: '' } };
+    assert.deepEqual(buildHorseEnrichmentFromEntities(pending.entities, blank).patch, {}, value);
+  }
+});
