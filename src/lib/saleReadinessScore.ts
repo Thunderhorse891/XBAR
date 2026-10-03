@@ -69,8 +69,7 @@ export type ReadinessAction = {
   /** What to do, in the rancher's words: "Add a current Coggins". */
   label: string;
   target: ReadinessActionTarget;
-  /** For a care action: the receipt category that clears it on the care board. */
-  // The health record type the care step opens pre-selected.
+  /** The health record type the care step opens pre-selected. */
   careType?: 'Deworming' | 'Dental';
   /** Points this action recovers. */
   gain: number;
@@ -316,7 +315,9 @@ export function buildSaleReadinessScore(params: {
   }
 
   // Ownership — every proof verified and the transfer marked Clear.
-  const ownership = params.ownershipRecord ? normalizeOwnershipRecord(params.ownershipRecord) : undefined;
+  const ownership = params.ownershipRecord
+    ? normalizeOwnershipRecord(params.ownershipRecord, params.documents, horse)
+    : undefined;
   const proofs = ownership?.proofRequirements ?? [];
   const verified = proofs.filter((proof) => proof.status === 'verified').length;
   const transferClear = ownership?.transferStatus === 'Clear';
@@ -334,8 +335,8 @@ export function buildSaleReadinessScore(params: {
     detail: !ownership
       ? 'No ownership record yet.'
       : transferClear && allVerified
-        ? 'Every ownership proof is verified and the transfer is Clear.'
-        : `${verified} of ${proofs.length} ownership proofs verified · transfer ${ownership.transferStatus}.`,
+        ? 'Every ownership source has a recorded review and the transfer is Clear.'
+        : `${verified} of ${proofs.length} ownership sources reviewed · transfer ${ownership.transferStatus}.`,
   });
   if (ownershipEarned < WEIGHTS.ownership) {
     /*
@@ -348,13 +349,13 @@ export function buildSaleReadinessScore(params: {
     const proofsLabel = `${unverified} ownership proof${unverified === 1 ? '' : 's'}`;
     const verifyGain = (transferClear ? WEIGHTS.ownership : OWNERSHIP_UNCLEARED_CAP) - ownershipEarned;
     const step = !ownership
-      ? { label: 'Record ownership, verify its proofs and clear the transfer', gain: WEIGHTS.ownership }
+      ? { label: 'Record ownership, review its sources and clear the transfer', gain: WEIGHTS.ownership }
       : allVerified
         ? { label: 'Mark the transfer Clear', gain: WEIGHTS.ownership - ownershipEarned }
         : verifyGain > 0
-          ? { label: `Verify ${proofsLabel}`, gain: verifyGain }
+          ? { label: `Review ${proofsLabel}`, gain: verifyGain }
           : {
-              label: `Verify ${proofsLabel} and mark the transfer Clear`,
+              label: `Review ${proofsLabel} and mark the transfer Clear`,
               gain: WEIGHTS.ownership - ownershipEarned,
             };
     actions.push({ key: 'ownership', target: 'ownership', ...step });

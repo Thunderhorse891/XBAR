@@ -172,7 +172,8 @@ export default function MainLayout() {
     documents.length > 0,
     Boolean(workspaceProfile.defaultOwnerName),
   ];
-  const setupProgress = Math.round((setupSteps.filter(Boolean).length / setupSteps.length) * 100);
+  const setupDoneCount = setupSteps.filter(Boolean).length;
+  const setupProgress = Math.round((setupDoneCount / setupSteps.length) * 100);
 
   async function handleSignOut() {
     const result = await signOutCloud();
@@ -236,9 +237,9 @@ export default function MainLayout() {
         <button type="button" className="xs-setupbar" onClick={() => navigate('/getting-started')}>
           <ProgressRing value={setupProgress} size={32} />
           <span className="xs-setupbar__body">
-            <span className="xs-setupbar__top">{setupProgress}% set up</span>
+            <span className="xs-setupbar__top">Workspace basics</span>
             <span className="xs-setupbar__sub">
-              {setupProgress === 100 ? 'Workspace guide' : 'Finish getting started'}
+              {setupDoneCount} of {setupSteps.length} complete
             </span>
           </span>
         </button>

@@ -131,3 +131,9 @@ test('structured records count by type, and the latest one decides', () => {
   const note = horse([{ ...care('Historical note', day(0)), title: 'Talked about worming' } as TimelineEvent]);
   assert.equal(signal([note], 'wormer').status, 'due');
 });
+
+test('malformed timestamp cannot hide an older valid care record', () => {
+  const h = horse([care('Deworming', `${day(-1)}Tgarbage`), care('Deworming', day(-10))]);
+  assert.equal(signal([h], 'wormer').status, 'clear');
+  assert.equal(signal([horse([care('Dental', `${day(-1)}Tgarbage`)])], 'dental').status, 'due');
+});

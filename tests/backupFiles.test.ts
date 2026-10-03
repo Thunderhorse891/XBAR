@@ -1606,7 +1606,7 @@ test('a record that installs but crashes the route it lands on is refused', asyn
    */
   assert.match(
     ownershipEntry,
-    /optionalStrings: \['documentTitle', 'linkedAt', 'verifiedAt', 'verifiedBy'\]/,
+    /optionalStrings: \[\s*'documentTitle',\s*'linkedAt',\s*'verifiedAt',\s*'verifiedBy',\s*'reviewAttestedAt',\s*'reviewedSourceKey',?\s*\]/,
     "requirement.documentTitle ?? 'Linked document' is a bare React child",
   );
   assert.match(
@@ -2286,9 +2286,9 @@ test('a record that installs but crashes the route it lands on is refused', asyn
    * as dead weight if a route ever starts guarding.
    */
   assert.match(
-    await readFile('src/routes/OwnershipChain.tsx', 'utf8'),
-    /o\.pendingDocuments\.length/,
-    'OwnershipChain maps the RAW store records',
+    await readFile('src/lib/localSalePacketGenerator.ts', 'utf8'),
+    /ownershipRecord\?\.pendingDocuments\.join/,
+    'the packet generator still consumes the required pending-document list',
   );
   assert.match(
     await readFile('src/lib/xbarPhaseTwo.ts', 'utf8'),
