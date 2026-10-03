@@ -193,8 +193,9 @@
     padding: 28px 22px;
   }
 }
-/* Confirmation is a focused second step, not the signup hero repeated. */
-.clean-login-layout--confirmation {
+/* Confirmation is a focused second step. Keep its single-column geometry
+   independent of whether shared entry CSS loads before or after this chunk. */
+.clean-entry-shell--brand-auth .clean-login-layout--confirmation {
   max-width: 580px;
   min-height: 0;
   grid-template-columns: minmax(0, 1fr);
@@ -202,7 +203,8 @@
 .clean-login-layout--confirmation .clean-login-visual {
   display: none;
 }
-.clean-login-layout--confirmation .clean-auth-card--login {
+.clean-entry-shell--brand-auth .clean-login-layout--confirmation .clean-auth-card--login {
+  width: 100%;
   padding: clamp(24px, 5vw, 44px);
   gap: 24px;
 }
