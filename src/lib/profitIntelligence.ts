@@ -537,7 +537,7 @@ function buildFinancialInsights(
       id: 'sale-payment-outstanding',
       tone: 'risk',
       title: `${money(owed)} from closed sales is still owed`,
-      detail: `${count === 1 ? '1 sale is' : `${count} sales are`} not recorded as paid in full — ${largestOwed.horseName} has the most outstanding (${money(largestOwed.outstanding)}). Record each payment when it lands; profit counts as banked only once it is received.`,
+      detail: `${count === 1 ? '1 sale is' : `${count} sales are`} not recorded as paid in full — ${largestOwed.horseName} has the most outstanding (${money(largestOwed.outstanding)}). Record each payment when it lands; profit counts as banked only when the full sale price has been received.`,
       horseId: largestOwed.horseId,
       amount: owed,
     });
@@ -548,8 +548,8 @@ function buildFinancialInsights(
     insights.push({
       id: `win-${bestSale.horseId}`,
       tone: 'win',
-      title: `${bestSale.horseName} was your best sale`,
-      detail: `Sold for ${money(bestSale.value)} — ${money(bestSale.profit)} profit at ${bestSale.marginPercent.toFixed(0)}% margin.`,
+      title: `${bestSale.horseName} had your highest agreed sale margin`,
+      detail: `Agreed sale value ${money(bestSale.value)} gives a ${money(bestSale.profit)} margin (${bestSale.marginPercent.toFixed(0)}%). ${money(bestSale.received)} received; ${money(bestSale.outstanding)} still owed.`,
       horseId: bestSale.horseId,
       amount: bestSale.profit,
     });
@@ -561,7 +561,7 @@ function buildFinancialInsights(
       id: `loss-${worstSale.horseId}`,
       tone: 'risk',
       title: `${worstSale.horseName} sold below break-even`,
-      detail: `Proceeds of ${money(worstSale.value)} came in ${money(-worstSale.profit)} under the ${money(worstSale.invested)} it cost to get there.`,
+      detail: `Agreed sale value ${money(worstSale.value)} is ${money(-worstSale.profit)} below the ${money(worstSale.invested)} invested. ${money(worstSale.received)} received; ${money(worstSale.outstanding)} still owed.`,
       horseId: worstSale.horseId,
       amount: worstSale.profit,
     });
@@ -613,8 +613,8 @@ function buildFinancialInsights(
     insights.push({
       id: 'overhead-drag',
       tone: 'risk',
-      title: 'Overhead is outrunning your sales profit',
-      detail: `${money(grossFromSales)} gross on sold horses, but ${money(integrity.overheadSpend)} of operating overhead puts the operation ${money(integrity.overheadSpend - grossFromSales)} in the red. Sell more margin or cut overhead.`,
+      title: 'Overhead exceeds your agreed sale margins',
+      detail: `Agreed gross margin on sold horses is ${money(grossFromSales)} before payment status; operating overhead of ${money(integrity.overheadSpend)} exceeds those margins by ${money(integrity.overheadSpend - grossFromSales)}. Banked profit separately counts only fully paid sales with recorded costs.`,
       amount: grossFromSales - integrity.overheadSpend,
     });
   }
@@ -625,7 +625,7 @@ function buildFinancialInsights(
       id: 'blindspot-sale-price',
       tone: 'info',
       title: `${n} sold ${n === 1 ? 'horse has' : 'horses have'} no recorded sale price`,
-      detail: `Record what ${n === 1 ? 'it' : 'they'} sold for so your banked profit is accurate — until then ${n === 1 ? "it's" : "they're"} left out of the total.`,
+      detail: `Record the agreed sale price and payments received. Until the price is known, ${n === 1 ? 'this sale is' : 'these sales are'} excluded from the totals; banked profit also requires recorded costs and full payment.`,
     });
   }
 

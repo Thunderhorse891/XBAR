@@ -281,3 +281,60 @@ for (const receivedOn of ['not-a-date', '9999-12-31', 123, {}]) {
     assert.notEqual(buildBankedHeadline(fin).state, 'complete');
   });
 }
+
+for (const saleValue of [5000, 25000]) {
+  for (const [label, extra, received] of [
+    ['unpaid', {}, 0],
+    ['partial', { amountReceived: 1000, amountReceivedOn: '2026-05-01' }, 1000],
+    ['paid', { amountReceived: saleValue, amountReceivedOn: '2026-05-01' }, saleValue],
+    ['deposit', { depositAmount: 1000, depositStatus: 'Paid' }, 1000],
+  ] as const) {
+    test(`${label} ${saleValue < 10000 ? 'loss' : 'gain'} insight separates agreed value from receipts`, () => {
+      const fin = financials(won('h1', saleValue, extra));
+      const insight = fin.insights.find((item) => item.id === `${saleValue < 10000 ? 'loss' : 'win'}-h1`);
+      assert.ok(insight);
+      assert.match(insight.detail, /agreed/i);
+      assert.doesNotMatch(insight.detail, /proceeds.*came in/i);
+      assert.ok(insight.detail.includes(`$${received.toLocaleString()} received`));
+      assert.ok(insight.detail.includes(`$${(saleValue - received).toLocaleString()} still owed`));
+    });
+  }
+}
+
+test('overhead insight describes agreed margins without inventing banked cash', () => {
+  const fin = buildRanchFinancials(
+    [horse('h1', 10000)],
+    [{ amount: 20000, category: 'Other' } as unknown as ExpenseReceipt],
+    [auditLead()],
+  );
+  assert.equal(fin.netProfit, -20000);
+  const detail = fin.insights.find((item) => item.id === 'overhead-drag')?.detail;
+  assert.ok(detail);
+  assert.match(detail, /agreed/i);
+  assert.match(detail, /payment/i);
+  assert.doesNotMatch(detail, /operation.*in the red/i);
+});
+
+test('missing sale price insight also asks for receipts before calling profit banked', () => {
+  const fin = financials(won('h1', 0));
+  const detail = fin.insights.find((item) => item.id === 'blindspot-sale-price')?.detail;
+  assert.ok(detail);
+  assert.match(detail, /agreed/i);
+  assert.match(detail, /payment/i);
+});
+
+for (const extra of [
+  {},
+  { amountReceived: 1000, amountReceivedOn: '2026-05-01' },
+  { amountReceived: 25000, amountReceivedOn: '2026-05-01' },
+  { depositAmount: 1000, depositStatus: 'Paid' },
+] as const) {
+  test(`missing-cost settlement wording stays honest for ${JSON.stringify(extra)}`, () => {
+    const fin = buildRanchFinancials([horse('h1', 0)], [], [auditLead(extra)]);
+    const detail = fin.insights.find((item) => item.id === 'blindspot-sold-cost')?.detail;
+    assert.ok(detail);
+    assert.match(detail, /agreed.*received.*owed/i);
+    assert.match(detail, /paid in full/i);
+    assert.equal(fin.netProfit, 0);
+  });
+}
