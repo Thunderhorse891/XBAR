@@ -237,5 +237,10 @@ test('sale hold blocks missing Coggins and ownership proof', () => {
     confidence: 96,
     pendingDocuments: [],
   } as unknown as OwnershipRecord;
-  assert.equal(buildSaleHold(horse, documents, ownership).held, false);
+  assert.equal(
+    buildSaleHold(horse, documents, ownership).held,
+    true,
+    'Clear and a ready upload cannot replace a reviewed proof checklist',
+  );
+  assert.match(buildSaleHold(horse, documents, ownership).ownershipReviewBlockers[0], /not been reviewed/);
 });

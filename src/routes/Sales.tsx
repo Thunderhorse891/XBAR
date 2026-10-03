@@ -130,6 +130,7 @@ export default function Sales() {
   const receivedPreview = saleAmountReceived(
     {
       amountReceived: leadAmountReceived.trim() ? Number(leadAmountReceived) : undefined,
+      amountReceivedOn: leadAmountReceivedOn,
       depositAmount: Number(leadDepositAmount) || undefined,
       depositStatus: leadDepositStatus,
     } as SalesLead,

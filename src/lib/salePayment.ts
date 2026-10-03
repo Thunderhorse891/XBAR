@@ -17,7 +17,8 @@ export type SalePaymentResult =
 
 const ISO_DAY = /^(\d{4})-(\d{2})-(\d{2})$/;
 
-function isCalendarDay(value: string): boolean {
+export function isCalendarDay(value: unknown): value is string {
+  if (typeof value !== 'string') return false;
   const match = ISO_DAY.exec(value);
   if (!match) return false;
   const [year, month, day] = [Number(match[1]), Number(match[2]), Number(match[3])];

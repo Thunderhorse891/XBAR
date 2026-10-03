@@ -1,5 +1,6 @@
 import type { ExpenseCategory, ExpenseReceipt, HorseRecord, SalesLead } from '../types/xbar.js';
-import { compareTimestampDesc } from './format.js';
+import { compareTimestampDesc, localIsoDate } from './format.js';
+import { isCalendarDay } from './salePayment.js';
 
 export type OfferDecisionStatus = 'no-offer' | 'missing-costs' | 'loss' | 'thin-margin' | 'protected-margin';
 
@@ -310,7 +311,17 @@ export const NON_LIVE_OFFER_STATUSES = new Set(['Draft', 'Rejected']);
  * when none has been recorded, a deposit marked Paid. Never negative, never
  * more than the sale value, and an unreadable figure is nothing received.
  */
-export function saleAmountReceived(lead: SalesLead, saleValue: number): number {
+export function saleAmountReceived(lead: SalesLead, saleValue: number, today = localIsoDate()): number {
+  // Persisted/restored records can bypass the close-out form. An explicit
+  // receipt must carry the same real, non-future local day before it counts.
+  // Do not fall back to a deposit when an explicit receipt is invalid.
+  if (
+    lead.amountReceived !== undefined &&
+    lead.amountReceived !== null &&
+    (!Number.isFinite(lead.amountReceived) || !isCalendarDay(lead.amountReceivedOn) || lead.amountReceivedOn > today)
+  ) {
+    return 0;
+  }
   const recorded =
     lead.amountReceived === undefined || lead.amountReceived === null ? NaN : Number(lead.amountReceived);
   const deposit = lead.depositStatus === 'Paid' ? Number(lead.depositAmount) : 0;

@@ -104,11 +104,23 @@ test('a partly paid sale is partial; paid in full is complete', () => {
 
 test('a recorded amount replaces the deposit, and is never negative or more than the sale', () => {
   // The recorded total includes the deposit; it is not added on top of it.
-  assert.equal(saleAmountReceived(auditLead({ depositStatus: 'Paid', amountReceived: 8000 }), 25000), 8000);
-  assert.equal(saleAmountReceived(auditLead({ amountReceived: 30000 }), 25000), 25000);
-  assert.equal(saleAmountReceived(auditLead({ amountReceived: -500 }), 25000), 0);
+  assert.equal(
+    saleAmountReceived(
+      auditLead({ depositStatus: 'Paid', amountReceived: 8000, amountReceivedOn: '2026-05-01' }),
+      25000,
+    ),
+    8000,
+  );
+  assert.equal(saleAmountReceived(auditLead({ amountReceived: 30000, amountReceivedOn: '2026-05-01' }), 25000), 25000);
+  assert.equal(saleAmountReceived(auditLead({ amountReceived: -500, amountReceivedOn: '2026-05-01' }), 25000), 0);
   // An unreadable figure (a restored backup can carry anything) is nothing received.
-  assert.equal(saleAmountReceived(auditLead({ amountReceived: 'lots' as unknown as number }), 25000), 0);
+  assert.equal(
+    saleAmountReceived(
+      auditLead({ amountReceived: 'lots' as unknown as number, amountReceivedOn: '2026-05-01' }),
+      25000,
+    ),
+    0,
+  );
   assert.equal(saleAmountReceived(auditLead({ depositStatus: 'Paid', depositAmount: undefined }), 25000), 0);
 });
 
@@ -173,9 +185,48 @@ test('the screens show money received as collected, and the form records it', as
   assert.match(sales, /validateSalePayment\(\{/);
   // "Still owed" in the form is the engine's own figure, deposit fallback included.
   assert.match(sales, /const receivedPreview = saleAmountReceived\(/);
+  assert.match(sales, /amountReceivedOn: leadAmountReceivedOn/);
   assert.match(sales, /formatCompactCurrency\(agreedSaleValue - receivedPreview\)\} still owed/);
   assert.match(sales, /amountReceived: payment\.amountReceived, amountReceivedOn: payment\.amountReceivedOn/);
   assert.doesNotMatch(sales, /toISOString\(\)\.slice\(0, 10\)/, 'dates default to the local day');
   const store = await readFile('src/store/useXbarStore.ts', 'utf8');
   assert.match(store, /patch\.amountReceived !== undefined &&/);
 });
+
+for (const receivedOn of [undefined, '', 'not-a-date', '2026-02-30', '9999-12-31', 123, {}]) {
+  test(`restored explicit payment with invalid date ${JSON.stringify(receivedOn)} cannot bank profit`, () => {
+    const fin = financials(
+      auditLead({
+        amountReceived: 25000,
+        amountReceivedOn: receivedOn as string,
+        depositStatus: 'Paid',
+      }),
+    );
+    assert.equal(fin.collectedFromSales, 0);
+    assert.equal(fin.outstandingFromSales, 25000);
+    assert.equal(fin.netProfit, 0);
+    assert.notEqual(buildBankedHeadline(fin).state, 'complete');
+  });
+}
+
+test('receipt dates use the local day boundary and valid leap days', () => {
+  const received = (date: string, today: string) =>
+    saleAmountReceived(auditLead({ amountReceived: 25000, amountReceivedOn: date }), 25000, today);
+  assert.equal(received('2026-10-03', '2026-10-02'), 0);
+  assert.equal(received('2026-10-03', '2026-10-03'), 25000);
+  assert.equal(received('2024-02-29', '2026-10-03'), 25000);
+  assert.equal(received('2025-02-29', '2026-10-03'), 0);
+});
+
+for (const amount of ['lots', '25000', true, {}, NaN, Infinity]) {
+  test(`invalid explicit receipt amount ${String(amount)} does not revive a paid deposit`, () => {
+    const lead = auditLead({
+      amountReceived: amount as number,
+      amountReceivedOn: '2026-05-01',
+      depositStatus: 'Paid',
+      depositAmount: 25000,
+    });
+    assert.equal(saleAmountReceived(lead, 25000), 0);
+    assert.notEqual(buildBankedHeadline(financials(lead)).state, 'complete');
+  });
+}
