@@ -403,6 +403,7 @@ test('approval preserves freshly read clinical and transfer facts but ignores ca
     );
     for (const key of ['examDate', 'veterinarian', 'transferStatus', 'color', 'ownerName']) {
       assert.equal(facts[key], expected[key], `${type}: ${key}`);
+      assert.equal(useXbarStore.getState().documents[0].entities[key], expected[key], `${type}: persisted ${key}`);
     }
   }
 });
@@ -728,3 +729,120 @@ for (const priorStatus of ['verified', 'linked']) {
     );
   });
 }
+
+test('source-clear approval removes unsupported matching-identity cache from buyer view and trust scoring', async () => {
+  const { sanitizeDocumentForBuyerView } = await import('../../src/lib/publicShare.ts');
+  const { buildDocumentTrustProfile } = await import('../../src/lib/xbarPhaseTwo.ts');
+  const pending = {
+    ...source,
+    state: 'Needs Review',
+    confidence: 0.91,
+    entities: {
+      ...source.entities,
+      ownerName: 'Unsupported Owner',
+      color: 'Bay',
+      sire: 'CACHED STALLION',
+      dam: 'CACHED MARE',
+    },
+  };
+  const oldProof = {
+    ...requirement,
+    status: 'verified',
+    documentId: source.id,
+    verifiedAt: '2026-10-01',
+    verifiedBy: 'Prior reviewer',
+    reviewAttestedAt: '2026-10-01',
+    reviewedSourceKey: ownershipDocumentReviewKey(pending),
+  };
+  const reviewed = {
+    ...record,
+    legalOwner: 'Declared Owner',
+    proofRequirements: record.proofRequirements.map((item) => (item.id === requirement.id ? oldProof : item)),
+  };
+  const originalHistory = {
+    id: 'prior-audit',
+    actor: 'Tester',
+    action: 'created',
+    entityType: 'document',
+    entityId: source.id,
+    at: '2026-10-01',
+    summary: 'Existing history',
+  };
+  useXbarStore.setState({ documents: [pending], ownershipRecords: [reviewed], auditEvents: [originalHistory] });
+  const inflatedTrust = buildDocumentTrustProfile({ ...pending, state: 'Ready' }, [horse]);
+  assert.equal(useXbarStore.getState().reviewDocument(source.id, horse.id).ok, true);
+  const approved = useXbarStore.getState().documents[0];
+  const buyerDocument = sanitizeDocumentForBuyerView(approved);
+  for (const key of ['ownerName', 'color', 'sire', 'dam']) {
+    assert.equal(buyerDocument.entities[key], undefined, `${key} must not reach buyers`);
+    assert.equal(approved.entities[key], undefined, `${key} must not remain in approved operational cache`);
+  }
+  assert.equal(buyerDocument.entities.horseName, horse.name);
+  assert.equal(buyerDocument.entities.registrationNumber, horse.registrationNumber);
+  const trust = buildDocumentTrustProfile(approved, [horse]);
+  const sourceOnlyTrust = buildDocumentTrustProfile({ ...approved, entities: source.entities }, [horse]);
+  assert.equal(trust.entityCount, 2);
+  assert.equal(trust.trustScore, sourceOnlyTrust.trustScore);
+  assert.ok(trust.trustScore < inflatedTrust.trustScore, 'Cached factual padding must not increase approved trust');
+  const audits = useXbarStore.getState().auditEvents;
+  assert.equal(audits.length, 2);
+  assert.deepEqual(audits[1], originalHistory);
+  assert.deepEqual(JSON.parse(audits[0].context.previousEntities), pending.entities);
+  assert.deepEqual(JSON.parse(audits[0].context.sourceEntities), source.entities);
+  const repaired = useXbarStore.getState().ownershipRecords[0];
+  assert.equal(repaired.legalOwner, reviewed.legalOwner);
+  assert.equal(repaired.proofRequirements.find((item) => item.id === requirement.id).status, 'linked');
+  assert.equal(repaired.proofRequirements.find((item) => item.id === requirement.id).reviewedSourceKey, undefined);
+  assert.equal(useXbarStore.getState().verifyOwnershipProof(record.id, requirement.id, 'Tester').ok, false);
+  assert.equal(
+    useXbarStore.getState().verifyOwnershipProof(record.id, requirement.id, 'Tester', confirmation(approved)).ok,
+    true,
+  );
+  const after = structuredClone({
+    auditEvents: useXbarStore.getState().auditEvents,
+    ownershipRecords: useXbarStore.getState().ownershipRecords,
+  });
+  assert.equal(useXbarStore.getState().reviewDocument(source.id, horse.id).ok, true);
+  assert.deepEqual(useXbarStore.getState().auditEvents, after.auditEvents, 'No repeated cache-change audit');
+  assert.deepEqual(
+    useXbarStore.getState().ownershipRecords,
+    after.ownershipRecords,
+    'Ordinary repeat does not invalidate the renewed attestation',
+  );
+});
+
+test('source-clear approval refreshes newly supported facts, ignores entity key order and preserves manual empty attachments', () => {
+  const pending = {
+    ...source,
+    state: 'Needs Review',
+    extractedTextPreview: `${source.extractedTextPreview}\nOwner: Fresh Ranch\nColor: Black`,
+    entities: {
+      registrationNumber: horse.registrationNumber,
+      horseName: horse.name,
+      ownerName: 'Stale Ranch',
+      color: 'Bay',
+    },
+  };
+  useXbarStore.setState({ documents: [pending] });
+  assert.equal(useXbarStore.getState().reviewDocument(source.id, horse.id).ok, true);
+  const approved = useXbarStore.getState().documents[0];
+  assert.equal(approved.entities.ownerName, 'Fresh Ranch');
+  assert.equal(approved.entities.color, 'Black');
+  const auditCount = useXbarStore.getState().auditEvents.length;
+  const reordered = { ...approved, entities: Object.fromEntries(Object.entries(approved.entities).reverse()) };
+  useXbarStore.setState({ documents: [reordered] });
+  assert.equal(useXbarStore.getState().reviewDocument(source.id, horse.id).ok, true);
+  assert.equal(useXbarStore.getState().auditEvents.length, auditCount);
+  const manual = {
+    ...source,
+    id: 'manual-empty',
+    horseId: undefined,
+    state: 'Needs Review',
+    extractedTextPreview: 'Care notes without identity.',
+    entities: {},
+  };
+  useXbarStore.setState({ documents: [manual] });
+  assert.equal(useXbarStore.getState().reviewDocument(manual.id, horse.id).ok, true);
+  assert.deepEqual(useXbarStore.getState().documents[0].entities, {});
+  assert.equal(useXbarStore.getState().auditEvents.length, auditCount);
+});

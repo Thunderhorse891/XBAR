@@ -1362,21 +1362,27 @@ export const useXbarStore = create<XbarStore>()(
             message: 'Compare the duplicate files, then choose Keep copy and approve or discard the extra.',
           };
         }
-        const repairingCachedIdentity = documentIdentityCacheNeedsReview(document, matchedHorse);
-        const repairingIdentityReview =
+        // Every approved source-clear cache must describe the current original,
+        // including non-identity facts used by buyer views and trust scoring.
+        // Sort keys and omit undefined values so equivalent caches are idempotent.
+        const sourceEntitiesChanged =
+          !identityReview.missingIdentityReason &&
+          JSON.stringify(document.entities, Object.keys(document.entities).sort()) !==
+            JSON.stringify(identityReview.sourceEntities, Object.keys(identityReview.sourceEntities).sort());
+        const requiresOwnershipRereview =
           !identityReview.missingIdentityReason &&
           Boolean(
-            repairingCachedIdentity ||
+            sourceEntitiesChanged ||
             document.identityReviewRequired ||
             document.processingNote?.includes(documentIdentityReviewNote),
           );
-        const cacheRepairAudit = repairingCachedIdentity
+        const sourceRefreshAudit = sourceEntitiesChanged
           ? createAuditEvent({
               actor: state.currentRole,
               action: 'updated',
               entityType: 'document',
               entityId: documentId,
-              summary: 'Legacy document identity cache replaced with source-read facts during explicit approval.',
+              summary: 'Document extraction cache refreshed from source-read facts during explicit approval.',
               context: {
                 horseId: matchedHorse.id,
                 previousEntities: JSON.stringify(document.entities),
@@ -1386,7 +1392,7 @@ export const useXbarStore = create<XbarStore>()(
           : undefined;
         const nextDocument: DocumentRecord = {
           ...document,
-          entities: repairingCachedIdentity ? identityReview.sourceEntities : document.entities,
+          entities: identityReview.missingIdentityReason ? document.entities : identityReview.sourceEntities,
           // Clear only the canonical generated identity warning after explicit
           // source-clear approval. Coverage and document-purpose notes survive.
           processingNote:
@@ -1419,10 +1425,10 @@ export const useXbarStore = create<XbarStore>()(
             documents: nextDocuments,
             horses: nextHorses,
             intakeBatches: nextBatches,
-            auditEvents: cacheRepairAudit ? [cacheRepairAudit, ...current.auditEvents] : current.auditEvents,
-            // Repairing identity metadata must not resurrect an old attestation.
+            auditEvents: sourceRefreshAudit ? [sourceRefreshAudit, ...current.auditEvents] : current.auditEvents,
+            // Refreshing facts or identity metadata must not preserve an old attestation.
             // Keep its source link and require a new human ownership review.
-            ownershipRecords: repairingIdentityReview
+            ownershipRecords: requiresOwnershipRereview
               ? current.ownershipRecords.map((record) => {
                   const requirements = record.proofRequirements;
                   if (
