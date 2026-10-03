@@ -17,6 +17,7 @@ import { normalizeWorkspaceEmail, validateWorkspaceInvitation } from '@/lib/work
 import { apiConfig, isRelationalCloudEnabled, isSupabaseConfigured } from '@/lib/platformConfig';
 import { useCloudStore } from '@/store/useCloudStore';
 import { hasRoleCapability } from '@/lib/permissions';
+import { breedingEntryDetails } from '@/lib/breedingEntry';
 import { hasHorsePhoto, isHorsePhotoAsset } from '@/lib/animalPassport';
 import { groupDocumentBatchCandidates } from '@/lib/documentBatchIdentity';
 import { flagDocumentDuplicates, documentDuplicateNeedsReview, fingerprintDocument } from '@/lib/documentDuplicates';
@@ -2100,12 +2101,18 @@ export const useXbarStore = create<XbarStore>()(
           return { ok: false, message: 'Horse record not found for this breeding event.' };
         }
 
+        // What the entry is, and a check's result, are chosen -- never read
+        // out of the note (audit F07).
+        const entry = breedingEntryDetails({ kind: event.kind, result: event.result });
+        if (!entry.ok) return { ok: false, message: entry.message };
+
         const nextEvent = createTimelineEvent({
           title: event.title,
           summary: event.body,
           owner: event.author,
           date: event.date,
           category: 'Breeding',
+          details: entry.details,
         });
 
         set((state) => ({

@@ -224,7 +224,9 @@ export interface MedicalRecordDetails {
 }
 
 export interface BreedingRecordDetails {
-  recordType: 'breeding' | 'pregnancy-check' | 'foaling' | 'weaning' | 'contract';
+  // 'note' is a breeding note the person said is not a cover, check or
+  // foaling, so its wording is never read as one.
+  recordType: 'breeding' | 'pregnancy-check' | 'foaling' | 'weaning' | 'contract' | 'note';
   mateName?: string;
   method?: 'live-cover' | 'ai-fresh' | 'ai-frozen' | 'embryo-transfer';
   result?: string;
