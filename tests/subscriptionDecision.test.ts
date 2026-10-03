@@ -442,6 +442,19 @@ test('no screen decides billing is configured from entitlement alone', async () 
   );
 });
 
+test('workspace basics and the workflow checklist identify their different progress scopes', async () => {
+  const sidebar = await readFile(path.join(process.cwd(), 'src/routes/layouts/MainLayout.tsx'), 'utf8');
+  const checklist = await readFile(path.join(process.cwd(), 'src/routes/GettingStarted.tsx'), 'utf8');
+
+  // A fresh ranch is 2/4 basics but 1/7 workflow steps. Calling both "set up"
+  // made two correct calculations look like contradictory answers.
+  assert.match(sidebar, />Workspace basics</);
+  assert.match(sidebar, /\{setupDoneCount\} of \{setupSteps.length\} complete/);
+  assert.match(checklist, />\s*Workflow checklist\s*</);
+  assert.match(checklist, /\{doneCount\} of \{steps.length\} steps are complete/);
+  for (const source of [sidebar, checklist]) assert.doesNotMatch(source, /% set up/);
+});
+
 /*
  * A past-due workspace must not be sold a second subscription.
  *
