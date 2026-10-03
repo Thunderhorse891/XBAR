@@ -31,16 +31,31 @@ select jsonb_build_object(
       jsonb_build_object('command', cmd, 'roles', roles, 'permissive', permissive,
         'using', qual, 'check', with_check))
     from pg_policies where (schemaname = 'storage' and tablename = 'objects')
-      or (schemaname = 'public' and tablename in
-        ('workspace_subscription_profiles', 'workspace_billing_customers', 'account_deletion_events', 'reminder_email_deliveries'))
+      or schemaname = 'public'
   ), '{}'::jsonb),
   'rls', coalesce((
     select jsonb_object_agg(n.nspname || '.' || c.relname, c.relrowsecurity)
     from pg_class c join pg_namespace n on n.oid = c.relnamespace
-    where c.relkind = 'r' and ((n.nspname = 'public' and c.relname in
-      ('horses', 'documents', 'workspace_memberships', 'workspace_subscription_profiles',
-       'workspace_billing_customers', 'account_deletion_events', 'reminder_email_deliveries'))
+    where c.relkind in ('r', 'p') and (n.nspname = 'public'
       or (n.nspname = 'storage' and c.relname = 'objects'))
+  ), '{}'::jsonb),
+  'deletionLifecycle', coalesce((
+    select jsonb_object_agg(c.relname, jsonb_build_object(
+      'columns', coalesce((select jsonb_object_agg(a.attname,jsonb_build_object(
+        'type',format_type(a.atttypid,a.atttypmod),'notNull',a.attnotnull,
+        'default',pg_get_expr(d.adbin,d.adrelid)))
+        from pg_attribute a left join pg_attrdef d on d.adrelid=a.attrelid and d.adnum=a.attnum
+        where a.attrelid=c.oid and a.attnum>0 and not a.attisdropped), '{}'::jsonb),
+      'constraints', coalesce((select jsonb_object_agg(conname,pg_get_constraintdef(oid))
+        from pg_constraint where conrelid=c.oid), '{}'::jsonb),
+      'indexes', coalesce((select jsonb_object_agg(idx.relname,jsonb_build_object(
+        'definition',pg_get_indexdef(i.indexrelid),'valid',i.indisvalid,'ready',i.indisready))
+        from pg_index i join pg_class idx on idx.oid=i.indexrelid
+        where i.indrelid=c.oid), '{}'::jsonb)))
+    from pg_class c join pg_namespace n on n.oid=c.relnamespace
+    where n.nspname='public' and c.relname in
+      ('account_deletion_events','account_deletion_holds','account_deletion_receipts','account_deletion_requests')
+      and c.relkind in ('r','p')
   ), '{}'::jsonb),
   'triggers', coalesce((
     select jsonb_object_agg(n.nspname || '.' || c.relname || '.' || t.tgname,

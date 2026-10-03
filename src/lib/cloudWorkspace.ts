@@ -1,6 +1,11 @@
 import { apiConfig, isRelationalCloudEnabled, isSnapshotFallbackEnabled, supabaseConfig } from '@/lib/platformConfig';
 import { publicShareEventToBuyerRoomEvent, type PublicShareEventRow } from '@/lib/buyerDealRoom';
-import { buildDocumentStoragePath, explainUnopenableCloudDocument } from '@/lib/documentStoragePath';
+import {
+  buildDocumentStoragePath,
+  buildMediaStoragePath,
+  explainUnopenableCloudDocument,
+  isWorkspaceStorageKey,
+} from '@/lib/documentStoragePath';
 import { createId, todayStamp } from '@/lib/xbarRuntime';
 import { WORKSPACE_SCHEMA_VERSION } from '@/store/xbarStoreHelpers';
 import { intakeIdentityChanged, type IntakeIdentity } from '@/store/xbarStoreLogic';
@@ -8,7 +13,9 @@ import { getSupabaseClient } from '@/lib/supabaseClient';
 import { isNavigableFileUrl } from '@/lib/navigableFileUrl';
 import { openLocalFile } from '@/lib/localFileVault';
 import { vaultOwnerId } from '@/lib/vaultOwner';
-import { subscriptionFromCloudRow } from '@/lib/cloudSubscription';
+import { idsToRemove, type CloudDeletion, type RowRemoval } from '@/lib/cloudDeletionQueue';
+import { changedRecords } from '@/lib/relationalDiff';
+import { baselineCloudSubscription, subscriptionFromCloudRow, withCloudSubscription } from '@/lib/cloudSubscription';
 import type { Session } from '@supabase/supabase-js';
 import type {
   DocumentRecord,
@@ -69,11 +76,40 @@ type RelationalMirrorResult = {
   documentsPersisted?: boolean;
 };
 
+export type CloudSaveOptions = {
+  /** Records a person deleted on this device; see `cloudDeletionQueue`. */
+  deletions?: readonly CloudDeletion[];
+  /**
+   * Make the cloud match this device exactly, removing every row it lacks.
+   * Only for an explicit "Push cloud" -- never for autosave or bootstrap.
+   */
+  replace?: boolean;
+  /**
+   * The copy this device last saved or loaded. Only records that differ from
+   * it are written (see `relationalDiff`); without it, every record is.
+   * Ignored by `replace`, which writes everything.
+   */
+  baseline?: unknown;
+};
+
 type CloudSaveResult = {
   ok: boolean;
   message: string;
   updatedAt?: string;
   workspaceId?: string;
+  /*
+   * Whether the deletions sent with this save are now in the cloud copy every
+   * device loads. Only then may a caller forget them: a relational save that
+   * failed part-way may never have reached the table a deletion was for.
+   */
+  deletionsApplied?: boolean;
+  /*
+   * Not saved, but nothing to settle by hand either: the relational write
+   * failed after the legacy snapshot landed, so the work is safe and the next
+   * save simply tries again. A caller that would otherwise lock autosave on
+   * `ok: false` keeps it running for this one.
+   */
+  retryable?: boolean;
   /*
    * Whether the RELATIONAL rows were written, which is not the same question as
    * `ok`. With the snapshot fallback enabled a rejected relational save still
@@ -88,6 +124,7 @@ type WorkspaceAccessProfile = {
   workspaceId: string | null;
   workspaceRole: UserRole;
   source: 'workspace-owner' | 'workspace-membership' | 'session';
+  lookupFailed?: boolean;
 };
 
 type RelationalWorkspaceRow = {
@@ -104,17 +141,6 @@ type RelationalMembershipRow = {
 };
 
 const userRoles: UserRole[] = ['Admin', 'Ranch Manager', 'Owner', 'Medical Lead', 'Sales Lead'];
-
-function sanitizeStorageSegment(value: string) {
-  return (
-    value
-      .toLowerCase()
-      .replace(/[^a-z0-9-]+/g, '-')
-      .replace(/-+/g, '-')
-      .replace(/^-|-$/g, '')
-      .slice(0, 80) || 'record'
-  );
-}
 
 function normalizeWorkspaceRole(value: unknown): UserRole | null {
   return typeof value === 'string' && userRoles.includes(value as UserRole) ? (value as UserRole) : null;
@@ -223,7 +249,10 @@ async function acceptPendingWorkspaceInvitation(session: Session) {
   };
 }
 
-export async function loadWorkspaceAccessProfile(sessionOverride?: Session | null): Promise<WorkspaceAccessProfile> {
+export async function loadWorkspaceAccessProfile(
+  sessionOverride?: Session | null,
+  options: { forEntitlements?: boolean } = {},
+): Promise<WorkspaceAccessProfile> {
   const session = sessionOverride ?? (await getActiveSession());
   if (!session?.user) {
     return {
@@ -233,7 +262,7 @@ export async function loadWorkspaceAccessProfile(sessionOverride?: Session | nul
     };
   }
 
-  if (!isRelationalCloudEnabled()) {
+  if (!isRelationalCloudEnabled() && !options.forEntitlements) {
     return {
       workspaceId: null,
       workspaceRole: resolveSessionRole(session),
@@ -257,6 +286,10 @@ export async function loadWorkspaceAccessProfile(sessionOverride?: Session | nul
     .eq('workspace_key', 'primary')
     .maybeSingle();
 
+  if (options.forEntitlements && ownedWorkspaceError) {
+    return { workspaceId: null, workspaceRole: resolveSessionRole(session), source: 'session', lookupFailed: true };
+  }
+
   if (!ownedWorkspaceError && ownedWorkspace?.id) {
     return {
       workspaceId: ownedWorkspace.id as string,
@@ -265,7 +298,9 @@ export async function loadWorkspaceAccessProfile(sessionOverride?: Session | nul
     };
   }
 
-  const acceptedInvitation = await acceptPendingWorkspaceInvitation(session);
+  // A billing read may resolve snapshot-only accounts, but must not accept an
+  // invitation or change membership as a side effect of reading entitlements.
+  const acceptedInvitation = options.forEntitlements ? null : await acceptPendingWorkspaceInvitation(session);
   if (acceptedInvitation?.workspaceId) {
     return {
       workspaceId: acceptedInvitation.workspaceId,
@@ -294,6 +329,7 @@ export async function loadWorkspaceAccessProfile(sessionOverride?: Session | nul
     workspaceId: null,
     workspaceRole: 'Admin',
     source: 'session',
+    ...(options.forEntitlements ? { lookupFailed: Boolean(membershipError) } : {}),
   };
 }
 
@@ -324,7 +360,7 @@ export async function refreshWorkspaceSubscriptionProfile(
 
   const { data, error } = await client
     .from('workspace_subscription_profiles')
-    .select('tier, billing_state, monthly_rate, payload, updated_at')
+    .select('tier, billing_state, monthly_rate, billing_period, payload, updated_at')
     .eq('workspace_id', workspaceId)
     .maybeSingle();
 
@@ -461,7 +497,6 @@ async function ensurePrimaryWorkspace(session: Session, backup: CloudWorkspaceBa
   const updatedAt = backup.exportedAt ?? new Date().toISOString();
   const workspaceName = profile?.ranchName?.trim() || 'Primary Ranch';
   const businessName = profile?.businessName?.trim() || 'XBAR';
-  const membershipRole = resolveSessionRole(session);
 
   // Match the workspace used by reads. A teammate must not bootstrap a new
   // personally owned ranch from the shared ranch's snapshot. Lookup failures
@@ -475,6 +510,8 @@ async function ensurePrimaryWorkspace(session: Session, backup: CloudWorkspaceBa
   if (ownedError) throw new WorkspaceSaveAccessError(ownedError.message);
 
   let workspaceId = '';
+  // The owner holds every Admin capability; a member is whatever their row says.
+  let memberRole = 'Admin';
   if (!ownedWorkspace?.id) {
     const { data: memberships, error: membershipError } = await client
       .from('workspace_memberships')
@@ -490,12 +527,14 @@ async function ensurePrimaryWorkspace(session: Session, backup: CloudWorkspaceBa
     }
     const membership = memberships?.[0];
     if (membership?.workspace_id) {
-      // Mirrors current server write policy; record access does not grant writes.
-      if (membership.role !== 'Admin') {
-        throw new WorkspaceSaveAccessError(
-          'Your ranch access is read-only. Ask the ranch administrator to save these changes.',
-        );
-      }
+      /*
+       * Staff save what their role may change (audit F04). The database decides
+       * table by table (20261002120000_staff_write_policies.sql), and a save
+       * writes only the records this device changed (relationalDiff), so a
+       * Medical Lead's treatment reaches the cloud without the save touching
+       * the sales or listing tables the role has no right to.
+       */
+      memberRole = typeof membership.role === 'string' ? membership.role : '';
       workspaceId = membership.workspace_id as string;
     } else if (
       backup.workspace?.workspaceMembers?.some(
@@ -533,6 +572,10 @@ async function ensurePrimaryWorkspace(session: Session, backup: CloudWorkspaceBa
 
     workspaceId = workspaceRow.id as string;
 
+    // This branch has established personal workspace ownership. Owner is the
+    // client-access role, not the ranch administrator, and Starter has no
+    // client seats. Do not derive this owner membership from session metadata.
+    const membershipRole = 'Admin';
     const { error: membershipError } = await client.from('workspace_memberships').upsert(
       {
         workspace_id: workspaceId,
@@ -559,6 +602,12 @@ async function ensurePrimaryWorkspace(session: Session, backup: CloudWorkspaceBa
     }
   }
 
+  // The ranch profile is the owner's and the Admins'. Anyone else's save skips
+  // it rather than failing on it -- and with it every record they did change.
+  if (memberRole !== 'Admin') {
+    return { workspaceId, role: memberRole };
+  }
+
   const { error: profileError } = await client.from('workspace_profiles').upsert(
     {
       workspace_id: workspaceId,
@@ -580,7 +629,7 @@ async function ensurePrimaryWorkspace(session: Session, backup: CloudWorkspaceBa
     throw new Error(profileError.message);
   }
 
-  return workspaceId;
+  return { workspaceId, role: memberRole };
 }
 
 async function replaceWorkspaceRows(params: {
@@ -596,26 +645,34 @@ async function replaceWorkspaceRows(params: {
   idColumn: string;
   workspaceId: string;
   rows: Record<string, unknown>[];
+  removal: RowRemoval;
 }) {
   const client = getSupabaseClient();
   if (!client) {
     throw new Error('Supabase is not configured for this build.');
   }
 
-  const { table, idColumn, workspaceId, rows } = params;
-  const { data: existingRows, error: existingError } = await client
-    .from(table)
-    .select(idColumn)
-    .eq('workspace_id', workspaceId);
-
-  if (existingError) {
-    throw new Error(existingError.message);
-  }
-
+  const { table, idColumn, workspaceId, rows, removal } = params;
   const nextIds = new Set(rows.map((row) => String(row[idColumn])));
-  const staleIds = ((existingRows ?? []) as unknown as Array<Record<string, unknown>>)
-    .map((row) => String(row[idColumn] ?? ''))
-    .filter((id) => id && !nextIds.has(id));
+
+  // Only a Push cloud (`absent`) reads what the cloud holds; an ordinary save
+  // deletes the ids a person deleted and nothing else -- see RowRemoval.
+  let existingIds: string[] = [];
+  if (removal.mode === 'absent') {
+    const { data: existingRows, error: existingError } = await client
+      .from(table)
+      .select(idColumn)
+      .eq('workspace_id', workspaceId);
+
+    if (existingError) {
+      throw new Error(existingError.message);
+    }
+
+    existingIds = ((existingRows ?? []) as unknown as Array<Record<string, unknown>>).map((row) =>
+      String(row[idColumn] ?? ''),
+    );
+  }
+  const staleIds = idsToRemove(removal, nextIds, existingIds);
 
   if (staleIds.length) {
     const { error: deleteError } = await client
@@ -672,6 +729,7 @@ async function saveWorkspaceSnapshotToCloud(backup: unknown, session: Session, u
 async function saveWorkspaceBackupToRelationalCloud(
   backup: unknown,
   session: Session,
+  options: CloudSaveOptions,
 ): Promise<RelationalMirrorResult> {
   const normalized = normalizeBackup(backup);
   if (!normalized) {
@@ -686,9 +744,30 @@ async function saveWorkspaceBackupToRelationalCloud(
   let documentsPersisted = false;
 
   try {
-    const workspaceId = await ensurePrimaryWorkspace(session, normalized);
+    const { workspaceId, role } = await ensurePrimaryWorkspace(session, normalized);
+    // Push cloud deletes every cloud record this device lacks. That is the
+    // ranch administrator's call, never a staff save's.
+    if (options.replace && role !== 'Admin') {
+      throw new WorkspaceSaveAccessError(
+        'Only a ranch administrator can replace the cloud copy. Your changes are still on this device.',
+      );
+    }
     const updatedAt = normalized.exportedAt ?? new Date().toISOString();
     const workspace = normalized.workspace ?? {};
+    // Only what changed since this device's last saved or loaded copy is
+    // written, so an older copy never rewrites rows another device has since
+    // saved (see relationalDiff). A replace writes everything.
+    const baseline = options.replace ? undefined : (normalizeBackup(options.baseline)?.workspace ?? undefined);
+    const changed = <T extends { id?: unknown }>(current: T[] | undefined, before: T[] | undefined) =>
+      changedRecords(current ?? [], baseline ? (before ?? []) : undefined);
+    const deletions = options.deletions ?? [];
+    const removal = (table: string): RowRemoval =>
+      options.replace
+        ? { mode: 'absent' }
+        : {
+            mode: 'listed',
+            ids: deletions.filter((entry) => entry.table === table).map((entry) => entry.id),
+          };
 
     // Access changes use explicit cloud operations. An old ranch snapshot must
     // never re-create members or reopen accepted/revoked invitations.
@@ -696,8 +775,9 @@ async function saveWorkspaceBackupToRelationalCloud(
     await replaceWorkspaceRows({
       table: 'horses',
       idColumn: 'horse_id',
+      removal: removal('horses'),
       workspaceId,
-      rows: (workspace.horses ?? []).map((horse) => ({
+      rows: changed(workspace.horses, baseline?.horses).map((horse) => ({
         workspace_id: workspaceId,
         horse_id: horse.id,
         name: horse.name,
@@ -714,8 +794,9 @@ async function saveWorkspaceBackupToRelationalCloud(
     await replaceWorkspaceRows({
       table: 'documents',
       idColumn: 'document_id',
+      removal: removal('documents'),
       workspaceId,
-      rows: (workspace.documents ?? []).map((document) => ({
+      rows: changed(workspace.documents, baseline?.documents).map((document) => ({
         workspace_id: workspaceId,
         document_id: document.id,
         horse_id: document.horseId ?? '',
@@ -740,8 +821,9 @@ async function saveWorkspaceBackupToRelationalCloud(
     await replaceWorkspaceRows({
       table: 'intake_batches',
       idColumn: 'intake_batch_id',
+      removal: removal('intake_batches'),
       workspaceId,
-      rows: (workspace.intakeBatches ?? []).map((batch) => ({
+      rows: changed(workspace.intakeBatches, baseline?.intakeBatches).map((batch) => ({
         workspace_id: workspaceId,
         intake_batch_id: batch.id,
         label: batch.label,
@@ -756,8 +838,9 @@ async function saveWorkspaceBackupToRelationalCloud(
     await replaceWorkspaceRows({
       table: 'ownership_records',
       idColumn: 'ownership_record_id',
+      removal: removal('ownership_records'),
       workspaceId,
-      rows: (workspace.ownershipRecords ?? []).map((record) => ({
+      rows: changed(workspace.ownershipRecords, baseline?.ownershipRecords).map((record) => ({
         workspace_id: workspaceId,
         ownership_record_id: record.id,
         horse_id: record.horseId,
@@ -772,8 +855,9 @@ async function saveWorkspaceBackupToRelationalCloud(
     await replaceWorkspaceRows({
       table: 'expense_receipts',
       idColumn: 'receipt_id',
+      removal: removal('expense_receipts'),
       workspaceId,
-      rows: (workspace.expenseReceipts ?? []).map((receipt) => ({
+      rows: changed(workspace.expenseReceipts, baseline?.expenseReceipts).map((receipt) => ({
         workspace_id: workspaceId,
         receipt_id: receipt.id,
         horse_id: receipt.horseId ?? '',
@@ -790,8 +874,9 @@ async function saveWorkspaceBackupToRelationalCloud(
     await replaceWorkspaceRows({
       table: 'ranch_assets',
       idColumn: 'asset_id',
+      removal: removal('ranch_assets'),
       workspaceId,
-      rows: (workspace.ranchAssets ?? []).map((asset) => ({
+      rows: changed(workspace.ranchAssets, baseline?.ranchAssets).map((asset) => ({
         workspace_id: workspaceId,
         asset_id: asset.id,
         name: asset.name,
@@ -807,8 +892,9 @@ async function saveWorkspaceBackupToRelationalCloud(
     await replaceWorkspaceRows({
       table: 'sales_leads',
       idColumn: 'lead_id',
+      removal: removal('sales_leads'),
       workspaceId,
-      rows: (workspace.salesLeads ?? []).map((lead) => ({
+      rows: changed(workspace.salesLeads, baseline?.salesLeads).map((lead) => ({
         workspace_id: workspaceId,
         lead_id: lead.id,
         horse_id: lead.horseId,
@@ -825,8 +911,9 @@ async function saveWorkspaceBackupToRelationalCloud(
     await replaceWorkspaceRows({
       table: 'shared_listings',
       idColumn: 'listing_id',
+      removal: removal('shared_listings'),
       workspaceId,
-      rows: (workspace.sharedListings ?? []).map((listing) => ({
+      rows: changed(workspace.sharedListings, baseline?.sharedListings).map((listing) => ({
         workspace_id: workspaceId,
         listing_id: listing.id,
         horse_id: listing.horseId,
@@ -899,7 +986,7 @@ async function loadWorkspaceBackupFromRelationalCloud(session: Session) {
     client.from('shared_listings').select('payload, updated_at').eq('workspace_id', workspaceId),
     client
       .from('workspace_subscription_profiles')
-      .select('tier, billing_state, monthly_rate, payload, updated_at')
+      .select('tier, billing_state, monthly_rate, billing_period, payload, updated_at')
       .eq('workspace_id', workspaceId)
       .maybeSingle(),
     client.from('workspace_profiles').select('payload, updated_at').eq('workspace_id', workspaceId).maybeSingle(),
@@ -1003,14 +1090,19 @@ async function loadWorkspaceBackupFromRelationalCloud(session: Session) {
     return { ok: false, message: 'No relational workspace records are stored for this account yet.' } as const;
   }
 
+  const authoritativeSubscription = subscriptionFromCloudRow(subscriptionResult.data) ?? baselineCloudSubscription();
   return {
     ok: true,
-    backup,
+    backup: withCloudSubscription(backup, authoritativeSubscription),
+    authoritativeSubscription,
     updatedAt: backup.exportedAt ?? '',
   } as const;
 }
 
-export async function saveWorkspaceBackupToCloud(backup: unknown): Promise<CloudSaveResult> {
+export async function saveWorkspaceBackupToCloud(
+  backup: unknown,
+  options: CloudSaveOptions = {},
+): Promise<CloudSaveResult> {
   const client = getSupabaseClient();
   if (!client) {
     return { ok: false, message: 'Supabase is not configured for this build.' };
@@ -1023,7 +1115,7 @@ export async function saveWorkspaceBackupToCloud(backup: unknown): Promise<Cloud
 
   const updatedAt = new Date().toISOString();
   if (isRelationalCloudEnabled()) {
-    const relational = await saveWorkspaceBackupToRelationalCloud(backup, session);
+    const relational = await saveWorkspaceBackupToRelationalCloud(backup, session, options);
     if (relational.ok) {
       if (isSnapshotFallbackEnabled()) {
         const snapshot = await saveWorkspaceSnapshotToCloud(backup, session, updatedAt);
@@ -1035,6 +1127,7 @@ export async function saveWorkspaceBackupToCloud(backup: unknown): Promise<Cloud
           updatedAt,
           workspaceId: relational.workspaceId,
           relationalRowsPersisted: relational.documentsPersisted === true,
+          deletionsApplied: true,
         };
       }
 
@@ -1044,6 +1137,7 @@ export async function saveWorkspaceBackupToCloud(backup: unknown): Promise<Cloud
         updatedAt,
         workspaceId: relational.workspaceId,
         relationalRowsPersisted: relational.documentsPersisted === true,
+        deletionsApplied: true,
       };
     }
 
@@ -1059,10 +1153,18 @@ export async function saveWorkspaceBackupToCloud(backup: unknown): Promise<Cloud
     const snapshot = await saveWorkspaceSnapshotToCloud(backup, session, updatedAt);
     if (snapshot.ok) {
       /*
+       * NOT a success. The snapshot is a safety copy, but every device loads
+       * the RELATIONAL tables first (`loadWorkspaceBackupFromCloud`), and those
+       * are what this save failed to write -- part-way, possibly: the tables go
+       * up one statement at a time. Reporting `ok` here told the rancher the
+       * ranch was saved while the next device to open it loaded the older, or
+       * half-written, relational copy. It is reported as failed so autosave
+       * keeps the change and retries, and the snapshot is mentioned so nobody
+       * thinks the work is gone.
+       *
        * `relationalRowsPersisted` is the DOCUMENTS question, not the `ok`
-       * question, and on this path the answer is usually no: the snapshot
-       * landed and the rancher's work is safe, which is what `ok` is about,
-       * while nothing a caller reads from `documents` has moved.
+       * question, and on this path the answer is usually no: nothing a caller
+       * reads from `documents` has moved.
        *
        * Usually, but not always. The relational save is a sequence of
        * statements rather than a transaction, so the documents upsert can
@@ -1073,8 +1175,9 @@ export async function saveWorkspaceBackupToCloud(backup: unknown): Promise<Cloud
        * forwarded rather than assumed either way.
        */
       return {
-        ok: true,
-        message: `Relational workspace unavailable. Saved a legacy snapshot instead. ${relational.message}`,
+        ok: false,
+        retryable: true,
+        message: `Cloud save incomplete: ${relational.message} A backup copy was saved; your changes stay on this device and will retry.`,
         updatedAt,
         relationalRowsPersisted: relational.documentsPersisted === true,
       };
@@ -1093,7 +1196,9 @@ export async function saveWorkspaceBackupToCloud(backup: unknown): Promise<Cloud
     return { ok: false, message: snapshot.message, updatedAt };
   }
 
-  return { ok: true, message: 'Cloud sync complete. Legacy snapshot updated.', updatedAt };
+  // Snapshot-only builds store the whole workspace as one document, so the
+  // device's copy -- deletions and all -- is what was written.
+  return { ok: true, message: 'Cloud sync complete. Legacy snapshot updated.', updatedAt, deletionsApplied: true };
 }
 
 export async function loadWorkspaceBackupFromCloud() {
@@ -1107,15 +1212,38 @@ export async function loadWorkspaceBackupFromCloud() {
     return { ok: false, message: 'Sign in before pulling cloud data.' } as const;
   }
 
+  let relationalError: { ok: false; message: string } | undefined;
   if (isRelationalCloudEnabled()) {
     const relational = await loadWorkspaceBackupFromRelationalCloud(session);
     if (relational.ok) {
       return relational;
     }
 
-    if (!isSnapshotFallbackEnabled()) {
-      return relational;
-    }
+    relationalError = relational;
+  }
+
+  // A snapshot preserves ranch records, not the authority to grant a plan.
+  // It can still say Starter after an operator grant, or paid after cancellation.
+  // Read the same canonical row as relational loading before trusting either.
+  const access = await loadWorkspaceAccessProfile(session, { forEntitlements: true });
+  if (access.lookupFailed) {
+    return {
+      ok: false,
+      message: 'The cloud workspace could not be verified. Your local records are unchanged.',
+    } as const;
+  }
+  // Legacy snapshot-only accounts may not own a relational workspace yet.
+  // Their records still load, with baseline access rather than a snapshot grant.
+  const subscription = access.workspaceId
+    ? await refreshWorkspaceSubscriptionProfile(access.workspaceId)
+    : { ok: true as const, profile: null };
+  if (!subscription.ok) return subscription;
+  const authoritativeSubscription = subscription.profile ?? baselineCloudSubscription();
+
+  // Entitlement reads are independent of record availability. A missing or
+  // unreadable snapshot must not leave a stale grant or cancellation in place.
+  if (relationalError && !isSnapshotFallbackEnabled()) {
+    return { ...relationalError, authoritativeSubscription } as const;
   }
 
   const { data, error } = await client
@@ -1126,21 +1254,28 @@ export async function loadWorkspaceBackupFromCloud() {
     .maybeSingle();
 
   if (error) {
-    return { ok: false, message: error.message } as const;
+    return { ok: false, message: error.message, authoritativeSubscription } as const;
   }
 
   if (!data?.payload) {
-    return { ok: false, message: 'No cloud workspace has been saved for this account yet.' } as const;
+    return {
+      ok: false,
+      // A failed relational read is not proof that the ranch is empty. Keep
+      // reconciliation locked rather than inviting an automatic local push.
+      message: relationalError?.message ?? 'No cloud workspace has been saved for this account yet.',
+      authoritativeSubscription,
+    } as const;
   }
 
   return {
     ok: true,
-    backup: data.payload,
+    backup: withCloudSubscription(data.payload, authoritativeSubscription),
+    authoritativeSubscription,
     updatedAt: typeof data.updated_at === 'string' ? data.updated_at : '',
   } as const;
 }
 
-export async function uploadMediaAssetToCloud(params: { file: File; horseId: string }) {
+export async function uploadMediaAssetToCloud(params: { file: File; horseId: string; target: IntakeIdentity }) {
   const client = getSupabaseClient();
   if (!client) {
     return null;
@@ -1151,9 +1286,28 @@ export async function uploadMediaAssetToCloud(params: { file: File; horseId: str
     return null;
   }
 
-  const extension = params.file.name.includes('.') ? params.file.name.split('.').pop() : 'bin';
-  const fileName = `${createId('media')}.${extension}`;
-  const path = `${session.user.id}/horses/${sanitizeStorageSegment(params.horseId)}/${fileName}`;
+  // Workspace first, like documents: the storage policy grants a photo to the
+  // members of the workspace named by its first segment, and to no one else.
+  // The earlier uploader-first key made a photo readable through any gallery
+  // that listed its path -- and a gallery is something an owner can edit.
+  //
+  // The workspace is the one the batch started in (resolved once by the
+  // caller, not re-queried per file), and the file is written only while the
+  // same account is still signed in: a photo must never be filed under a ranch
+  // the uploader has just switched away from.
+  const { target } = params;
+  if (!isWorkspaceStorageKey(target.workspaceId) || session.user.id !== target.userId) {
+    return null;
+  }
+  const path = buildMediaStoragePath({
+    workspaceId: target.workspaceId,
+    horseId: params.horseId,
+    objectId: createId('media'),
+    originalFileName: params.file.name,
+  });
+  if (!path) {
+    return null;
+  }
   const { error } = await client.storage.from(supabaseConfig.mediaBucket).upload(path, params.file, {
     upsert: false,
     contentType: params.file.type || undefined,
@@ -1185,9 +1339,8 @@ export const HORSE_MEDIA_SIGNED_URL_TTL_SECONDS = 15 * 60;
 /**
  * Mint a short-lived signed URL for a horse-media object.
  *
- * The caller must be signed in and entitled to read the object under the
- * bucket's storage policies (the uploader, or a member of the workspace whose
- * horse references it). Returns null when the client is unavailable, the
+ * The caller must be signed in and a member of the workspace the object's
+ * path is filed under (its first segment); the storage policy enforces it. Returns null when the client is unavailable, the
  * session is missing, or storage refuses -- the render layer treats null as
  * "no image" and shows its fallback, never a broken link.
  */
@@ -1441,6 +1594,7 @@ export async function getDocumentAccessUrl(
       storagePath: document.storagePath,
       viewerUserId: session.user.id,
       workspaceId: accessProfile.workspaceId,
+      refusalStatus: (error as { status?: number } | null)?.status,
     });
     return {
       ok: false,

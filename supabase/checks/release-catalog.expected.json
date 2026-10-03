@@ -1,5 +1,5 @@
 {
-  "sourceDigest": "bc4f4d4f8267bc9ce5c104f93987846f2bdf5ef3c4da6742f0132e8ba6576994",
+  "sourceDigest": "6c664efbd26f8f7a502977d7c952927056b1b2350ebc1d81cf7de9630c7f9a41",
   "requiredVersions": [
     "20260924120000",
     "20260924130000",
@@ -11,17 +11,47 @@
     "20260928120000",
     "20260928150000",
     "20260928163000",
-    "20260928170000"
+    "20260928170000",
+    "20261001090000",
+    "20261001090100",
+    "20261002090000",
+    "20261002100000",
+    "20261002120000",
+    "20261002182226",
+    "20261003021000"
   ],
   "catalog": {
     "rls": {
       "public.horses": true,
       "storage.objects": true,
       "public.documents": true,
+      "public.reminders": true,
+      "public.audit_logs": true,
+      "public.workspaces": true,
+      "public.sales_leads": true,
+      "public.ranch_assets": true,
+      "public.sale_packets": true,
+      "public.notifications": true,
+      "public.intake_batches": true,
+      "public.runtime_events": true,
+      "public.shared_listings": true,
+      "public.expense_receipts": true,
+      "public.horse_vet_access": true,
+      "public.ownership_records": true,
+      "public.document_templates": true,
+      "public.workspace_profiles": true,
+      "public.public_share_events": true,
+      "public.workspace_snapshots": true,
+      "public.workspace_invitations": true,
       "public.workspace_memberships": true,
+      "public.account_deletion_holds": true,
       "public.account_deletion_events": true,
+      "public.document_processing_jobs": true,
+      "public.account_deletion_receipts": true,
+      "public.account_deletion_requests": true,
       "public.reminder_email_deliveries": true,
       "public.workspace_billing_customers": true,
+      "public.workspace_subscription_events": true,
       "public.workspace_subscription_profiles": true
     },
     "buckets": {
@@ -30,15 +60,155 @@
       "horse-documents": false
     },
     "policies": {
-      "storage.objects.horse media update own": {
-        "check": "((bucket_id = 'horse-media'::text) AND ((auth.uid())::text = split_part(name, '/'::text, 1)))",
+      "public.horses.horses staff delete": {
+        "check": null,
         "roles": ["authenticated"],
-        "using": "((bucket_id = 'horse-media'::text) AND ((auth.uid())::text = split_part(name, '/'::text, 1)))",
+        "using": "public.xbar_has_workspace_capability(workspace_id, 'createHorse'::text)",
+        "command": "DELETE",
+        "permissive": "PERMISSIVE"
+      },
+      "public.horses.horses staff insert": {
+        "check": "(public.xbar_has_workspace_capability(workspace_id, 'createHorse'::text) OR (public.xbar_record_exists('horses'::text, workspace_id, horse_id) AND (public.xbar_has_workspace_capability(workspace_id, 'editHorse'::text) OR public.xbar_has_workspace_capability(workspace_id, 'manageMedical'::text) OR public.xbar_has_workspace_capability(workspace_id, 'uploadDocuments'::text) OR public.xbar_has_workspace_capability(workspace_id, 'reviewDocuments'::text) OR public.xbar_has_workspace_capability(workspace_id, 'uploadMedia'::text))))",
+        "roles": ["authenticated"],
+        "using": null,
+        "command": "INSERT",
+        "permissive": "PERMISSIVE"
+      },
+      "public.horses.horses staff update": {
+        "check": "(public.xbar_has_workspace_capability(workspace_id, 'editHorse'::text) OR public.xbar_has_workspace_capability(workspace_id, 'manageMedical'::text) OR public.xbar_has_workspace_capability(workspace_id, 'uploadDocuments'::text) OR public.xbar_has_workspace_capability(workspace_id, 'reviewDocuments'::text) OR public.xbar_has_workspace_capability(workspace_id, 'uploadMedia'::text) OR public.xbar_has_workspace_capability(workspace_id, 'createHorse'::text))",
+        "roles": ["authenticated"],
+        "using": "(public.xbar_has_workspace_capability(workspace_id, 'editHorse'::text) OR public.xbar_has_workspace_capability(workspace_id, 'manageMedical'::text) OR public.xbar_has_workspace_capability(workspace_id, 'uploadDocuments'::text) OR public.xbar_has_workspace_capability(workspace_id, 'reviewDocuments'::text) OR public.xbar_has_workspace_capability(workspace_id, 'uploadMedia'::text) OR public.xbar_has_workspace_capability(workspace_id, 'createHorse'::text))",
         "command": "UPDATE",
         "permissive": "PERMISSIVE"
       },
-      "storage.objects.horse media upload own": {
-        "check": "((bucket_id = 'horse-media'::text) AND ((auth.uid())::text = split_part(name, '/'::text, 1)))",
+      "public.horses.horses vet grant read": {
+        "check": null,
+        "roles": ["authenticated"],
+        "using": "(EXISTS ( SELECT 1\n   FROM public.horse_vet_access v\n  WHERE ((v.workspace_id = horses.workspace_id) AND (v.horse_id = horses.horse_id) AND (v.vet_user_id = auth.uid()) AND (v.status = 'active'::text))))",
+        "command": "SELECT",
+        "permissive": "PERMISSIVE"
+      },
+      "public.horses.horses workspace read": {
+        "check": null,
+        "roles": ["authenticated"],
+        "using": "public.xbar_has_workspace_access(workspace_id)",
+        "command": "SELECT",
+        "permissive": "PERMISSIVE"
+      },
+      "public.horses.horses workspace manage": {
+        "check": "public.xbar_can_manage_workspace(workspace_id)",
+        "roles": ["authenticated"],
+        "using": "public.xbar_can_manage_workspace(workspace_id)",
+        "command": "ALL",
+        "permissive": "PERMISSIVE"
+      },
+      "public.documents.documents staff insert": {
+        "check": "(public.xbar_has_workspace_capability(workspace_id, 'uploadDocuments'::text) OR public.xbar_has_workspace_capability(workspace_id, 'reviewDocuments'::text) OR public.xbar_has_workspace_capability(workspace_id, 'createHorse'::text))",
+        "roles": ["authenticated"],
+        "using": null,
+        "command": "INSERT",
+        "permissive": "PERMISSIVE"
+      },
+      "public.documents.documents staff update": {
+        "check": "(public.xbar_has_workspace_capability(workspace_id, 'uploadDocuments'::text) OR public.xbar_has_workspace_capability(workspace_id, 'reviewDocuments'::text) OR public.xbar_has_workspace_capability(workspace_id, 'createHorse'::text))",
+        "roles": ["authenticated"],
+        "using": "(public.xbar_has_workspace_capability(workspace_id, 'uploadDocuments'::text) OR public.xbar_has_workspace_capability(workspace_id, 'reviewDocuments'::text) OR public.xbar_has_workspace_capability(workspace_id, 'createHorse'::text))",
+        "command": "UPDATE",
+        "permissive": "PERMISSIVE"
+      },
+      "public.workspaces.workspaces insert own": {
+        "check": "(auth.uid() = owner_user_id)",
+        "roles": ["authenticated"],
+        "using": null,
+        "command": "INSERT",
+        "permissive": "PERMISSIVE"
+      },
+      "public.workspaces.workspaces select own": {
+        "check": null,
+        "roles": ["authenticated"],
+        "using": "(auth.uid() = owner_user_id)",
+        "command": "SELECT",
+        "permissive": "PERMISSIVE"
+      },
+      "public.workspaces.workspaces update own": {
+        "check": "(auth.uid() = owner_user_id)",
+        "roles": ["authenticated"],
+        "using": "(auth.uid() = owner_user_id)",
+        "command": "UPDATE",
+        "permissive": "PERMISSIVE"
+      },
+      "public.documents.documents vet grant read": {
+        "check": null,
+        "roles": ["authenticated"],
+        "using": "(EXISTS ( SELECT 1\n   FROM public.horse_vet_access v\n  WHERE ((v.workspace_id = documents.workspace_id) AND (v.horse_id = documents.horse_id) AND (v.vet_user_id = auth.uid()) AND (v.status = 'active'::text))))",
+        "command": "SELECT",
+        "permissive": "PERMISSIVE"
+      },
+      "public.documents.documents workspace read": {
+        "check": null,
+        "roles": ["authenticated"],
+        "using": "public.xbar_has_workspace_access(workspace_id)",
+        "command": "SELECT",
+        "permissive": "PERMISSIVE"
+      },
+      "public.reminders.reminders workspace read": {
+        "check": null,
+        "roles": ["authenticated"],
+        "using": "public.xbar_has_workspace_access(workspace_id)",
+        "command": "SELECT",
+        "permissive": "PERMISSIVE"
+      },
+      "public.audit_logs.audit logs workspace read": {
+        "check": null,
+        "roles": ["authenticated"],
+        "using": "public.xbar_can_manage_workspace(workspace_id)",
+        "command": "SELECT",
+        "permissive": "PERMISSIVE"
+      },
+      "public.documents.documents workspace manage": {
+        "check": "public.xbar_can_manage_workspace(workspace_id)",
+        "roles": ["authenticated"],
+        "using": "public.xbar_can_manage_workspace(workspace_id)",
+        "command": "ALL",
+        "permissive": "PERMISSIVE"
+      },
+      "public.reminders.reminders workspace manage": {
+        "check": "public.xbar_can_manage_workspace(workspace_id)",
+        "roles": ["authenticated"],
+        "using": "public.xbar_can_manage_workspace(workspace_id)",
+        "command": "ALL",
+        "permissive": "PERMISSIVE"
+      },
+      "public.sales_leads.sales leads staff delete": {
+        "check": null,
+        "roles": ["authenticated"],
+        "using": "public.xbar_has_workspace_capability(workspace_id, 'createHorse'::text)",
+        "command": "DELETE",
+        "permissive": "PERMISSIVE"
+      },
+      "public.sales_leads.sales leads staff insert": {
+        "check": "public.xbar_has_workspace_capability(workspace_id, 'manageSales'::text)",
+        "roles": ["authenticated"],
+        "using": null,
+        "command": "INSERT",
+        "permissive": "PERMISSIVE"
+      },
+      "public.sales_leads.sales leads staff update": {
+        "check": "public.xbar_has_workspace_capability(workspace_id, 'manageSales'::text)",
+        "roles": ["authenticated"],
+        "using": "public.xbar_has_workspace_capability(workspace_id, 'manageSales'::text)",
+        "command": "UPDATE",
+        "permissive": "PERMISSIVE"
+      },
+      "public.notifications.notifications mark read": {
+        "check": "((user_id = auth.uid()) OR public.xbar_can_manage_workspace(workspace_id))",
+        "roles": ["authenticated"],
+        "using": "((user_id = auth.uid()) OR public.xbar_can_manage_workspace(workspace_id))",
+        "command": "UPDATE",
+        "permissive": "PERMISSIVE"
+      },
+      "storage.objects.horse media insert workspace": {
+        "check": "((bucket_id = 'horse-media'::text) AND\nCASE\n    WHEN (split_part(name, '/'::text, 1) ~ '^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$'::text) THEN public.xbar_has_workspace_capability((split_part(name, '/'::text, 1))::uuid, 'uploadMedia'::text)\n    ELSE false\nEND)",
         "roles": ["authenticated"],
         "using": null,
         "command": "INSERT",
@@ -47,8 +217,78 @@
       "storage.objects.horse media select workspace": {
         "check": null,
         "roles": ["authenticated"],
-        "using": "((bucket_id = 'horse-media'::text) AND (((auth.uid())::text = split_part(name, '/'::text, 1)) OR (EXISTS ( SELECT 1\n   FROM public.horses h\n  WHERE (public.xbar_has_workspace_access(h.workspace_id) AND (jsonb_typeof((h.payload -> 'gallery'::text)) = 'array'::text) AND (EXISTS ( SELECT 1\n           FROM jsonb_array_elements((h.payload -> 'gallery'::text)) g(asset)\n          WHERE ((g.asset ->> 'storagePath'::text) = objects.name))))))))",
+        "using": "((bucket_id = 'horse-media'::text) AND\nCASE\n    WHEN (split_part(name, '/'::text, 1) ~ '^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$'::text) THEN public.xbar_has_workspace_access((split_part(name, '/'::text, 1))::uuid)\n    ELSE false\nEND)",
         "command": "SELECT",
+        "permissive": "PERMISSIVE"
+      },
+      "public.audit_logs.audit logs workspace insert": {
+        "check": "(public.xbar_has_workspace_access(workspace_id) AND (actor_user_id = auth.uid()))",
+        "roles": ["authenticated"],
+        "using": null,
+        "command": "INSERT",
+        "permissive": "PERMISSIVE"
+      },
+      "public.horse_vet_access.horse vet access read": {
+        "check": null,
+        "roles": ["authenticated"],
+        "using": "((vet_user_id = auth.uid()) OR public.xbar_has_workspace_access(workspace_id))",
+        "command": "SELECT",
+        "permissive": "PERMISSIVE"
+      },
+      "public.ranch_assets.ranch assets staff delete": {
+        "check": null,
+        "roles": ["authenticated"],
+        "using": "public.xbar_has_workspace_capability(workspace_id, 'manageAssets'::text)",
+        "command": "DELETE",
+        "permissive": "PERMISSIVE"
+      },
+      "public.ranch_assets.ranch assets staff insert": {
+        "check": "public.xbar_has_workspace_capability(workspace_id, 'manageAssets'::text)",
+        "roles": ["authenticated"],
+        "using": null,
+        "command": "INSERT",
+        "permissive": "PERMISSIVE"
+      },
+      "public.ranch_assets.ranch assets staff update": {
+        "check": "public.xbar_has_workspace_capability(workspace_id, 'manageAssets'::text)",
+        "roles": ["authenticated"],
+        "using": "public.xbar_has_workspace_capability(workspace_id, 'manageAssets'::text)",
+        "command": "UPDATE",
+        "permissive": "PERMISSIVE"
+      },
+      "public.sales_leads.sales leads workspace read": {
+        "check": null,
+        "roles": ["authenticated"],
+        "using": "public.xbar_has_workspace_access(workspace_id)",
+        "command": "SELECT",
+        "permissive": "PERMISSIVE"
+      },
+      "public.horse_vet_access.horse vet access manage": {
+        "check": "public.xbar_can_manage_workspace(workspace_id)",
+        "roles": ["authenticated"],
+        "using": "public.xbar_can_manage_workspace(workspace_id)",
+        "command": "ALL",
+        "permissive": "PERMISSIVE"
+      },
+      "public.ranch_assets.ranch assets workspace read": {
+        "check": null,
+        "roles": ["authenticated"],
+        "using": "public.xbar_has_workspace_access(workspace_id)",
+        "command": "SELECT",
+        "permissive": "PERMISSIVE"
+      },
+      "public.sale_packets.sale packets workspace read": {
+        "check": null,
+        "roles": ["authenticated"],
+        "using": "public.xbar_has_workspace_access(workspace_id)",
+        "command": "SELECT",
+        "permissive": "PERMISSIVE"
+      },
+      "public.sales_leads.sales leads workspace manage": {
+        "check": "public.xbar_can_manage_workspace(workspace_id)",
+        "roles": ["authenticated"],
+        "using": "public.xbar_can_manage_workspace(workspace_id)",
+        "command": "ALL",
         "permissive": "PERMISSIVE"
       },
       "storage.objects.horse documents insert workspace": {
@@ -61,15 +301,288 @@
       "storage.objects.horse documents select workspace": {
         "check": null,
         "roles": ["authenticated"],
-        "using": "((bucket_id = 'horse-documents'::text) AND (\nCASE\n    WHEN (split_part(name, '/'::text, 1) ~ '^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$'::text) THEN public.xbar_has_workspace_access((split_part(name, '/'::text, 1))::uuid)\n    ELSE false\nEND OR ((auth.uid())::text = split_part(name, '/'::text, 1))))",
+        "using": "((bucket_id = 'horse-documents'::text) AND\nCASE\n    WHEN (split_part(name, '/'::text, 1) ~ '^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$'::text) THEN public.xbar_has_workspace_access((split_part(name, '/'::text, 1))::uuid)\n    ELSE false\nEND)",
         "command": "SELECT",
         "permissive": "PERMISSIVE"
       },
       "storage.objects.horse documents update workspace": {
         "check": "((bucket_id = 'horse-documents'::text) AND\nCASE\n    WHEN (split_part(name, '/'::text, 1) ~ '^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$'::text) THEN public.xbar_can_manage_workspace((split_part(name, '/'::text, 1))::uuid)\n    ELSE false\nEND)",
         "roles": ["authenticated"],
-        "using": "((bucket_id = 'horse-documents'::text) AND (\nCASE\n    WHEN (split_part(name, '/'::text, 1) ~ '^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$'::text) THEN public.xbar_can_manage_workspace((split_part(name, '/'::text, 1))::uuid)\n    ELSE false\nEND OR ((auth.uid())::text = split_part(name, '/'::text, 1))))",
+        "using": "((bucket_id = 'horse-documents'::text) AND\nCASE\n    WHEN (split_part(name, '/'::text, 1) ~ '^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$'::text) THEN public.xbar_can_manage_workspace((split_part(name, '/'::text, 1))::uuid)\n    ELSE false\nEND)",
         "command": "UPDATE",
+        "permissive": "PERMISSIVE"
+      },
+      "public.document_templates.document templates read": {
+        "check": null,
+        "roles": ["authenticated"],
+        "using": "true",
+        "command": "SELECT",
+        "permissive": "PERMISSIVE"
+      },
+      "public.intake_batches.intake batches staff insert": {
+        "check": "(public.xbar_has_workspace_capability(workspace_id, 'uploadDocuments'::text) OR public.xbar_has_workspace_capability(workspace_id, 'reviewDocuments'::text) OR public.xbar_has_workspace_capability(workspace_id, 'createHorse'::text))",
+        "roles": ["authenticated"],
+        "using": null,
+        "command": "INSERT",
+        "permissive": "PERMISSIVE"
+      },
+      "public.intake_batches.intake batches staff update": {
+        "check": "(public.xbar_has_workspace_capability(workspace_id, 'uploadDocuments'::text) OR public.xbar_has_workspace_capability(workspace_id, 'reviewDocuments'::text) OR public.xbar_has_workspace_capability(workspace_id, 'createHorse'::text))",
+        "roles": ["authenticated"],
+        "using": "(public.xbar_has_workspace_capability(workspace_id, 'uploadDocuments'::text) OR public.xbar_has_workspace_capability(workspace_id, 'reviewDocuments'::text) OR public.xbar_has_workspace_capability(workspace_id, 'createHorse'::text))",
+        "command": "UPDATE",
+        "permissive": "PERMISSIVE"
+      },
+      "public.ranch_assets.ranch assets workspace manage": {
+        "check": "public.xbar_can_manage_workspace(workspace_id)",
+        "roles": ["authenticated"],
+        "using": "public.xbar_can_manage_workspace(workspace_id)",
+        "command": "ALL",
+        "permissive": "PERMISSIVE"
+      },
+      "public.sale_packets.sale packets workspace manage": {
+        "check": "public.xbar_can_manage_workspace(workspace_id)",
+        "roles": ["authenticated"],
+        "using": "public.xbar_can_manage_workspace(workspace_id)",
+        "command": "ALL",
+        "permissive": "PERMISSIVE"
+      },
+      "public.intake_batches.intake batches workspace read": {
+        "check": null,
+        "roles": ["authenticated"],
+        "using": "public.xbar_has_workspace_access(workspace_id)",
+        "command": "SELECT",
+        "permissive": "PERMISSIVE"
+      },
+      "public.runtime_events.runtime events workspace read": {
+        "check": null,
+        "roles": ["authenticated"],
+        "using": "public.xbar_has_workspace_access(workspace_id)",
+        "command": "SELECT",
+        "permissive": "PERMISSIVE"
+      },
+      "public.shared_listings.shared listings staff insert": {
+        "check": "public.xbar_has_workspace_capability(workspace_id, 'manageSharedAccess'::text)",
+        "roles": ["authenticated"],
+        "using": null,
+        "command": "INSERT",
+        "permissive": "PERMISSIVE"
+      },
+      "public.shared_listings.shared listings staff update": {
+        "check": "public.xbar_has_workspace_capability(workspace_id, 'manageSharedAccess'::text)",
+        "roles": ["authenticated"],
+        "using": "public.xbar_has_workspace_capability(workspace_id, 'manageSharedAccess'::text)",
+        "command": "UPDATE",
+        "permissive": "PERMISSIVE"
+      },
+      "public.expense_receipts.expense receipts staff delete": {
+        "check": null,
+        "roles": ["authenticated"],
+        "using": "public.xbar_has_workspace_capability(workspace_id, 'createHorse'::text)",
+        "command": "DELETE",
+        "permissive": "PERMISSIVE"
+      },
+      "public.expense_receipts.expense receipts staff insert": {
+        "check": "public.xbar_has_workspace_capability(workspace_id, 'manageAssets'::text)",
+        "roles": ["authenticated"],
+        "using": null,
+        "command": "INSERT",
+        "permissive": "PERMISSIVE"
+      },
+      "public.expense_receipts.expense receipts staff update": {
+        "check": "public.xbar_has_workspace_capability(workspace_id, 'manageAssets'::text)",
+        "roles": ["authenticated"],
+        "using": "public.xbar_has_workspace_capability(workspace_id, 'manageAssets'::text)",
+        "command": "UPDATE",
+        "permissive": "PERMISSIVE"
+      },
+      "public.intake_batches.intake batches workspace manage": {
+        "check": "public.xbar_can_manage_workspace(workspace_id)",
+        "roles": ["authenticated"],
+        "using": "public.xbar_can_manage_workspace(workspace_id)",
+        "command": "ALL",
+        "permissive": "PERMISSIVE"
+      },
+      "public.runtime_events.runtime events workspace insert": {
+        "check": "(public.xbar_has_workspace_access(workspace_id) AND ((user_id IS NULL) OR (user_id = auth.uid())))",
+        "roles": ["authenticated"],
+        "using": null,
+        "command": "INSERT",
+        "permissive": "PERMISSIVE"
+      },
+      "public.shared_listings.shared listings workspace read": {
+        "check": null,
+        "roles": ["authenticated"],
+        "using": "public.xbar_has_workspace_access(workspace_id)",
+        "command": "SELECT",
+        "permissive": "PERMISSIVE"
+      },
+      "public.workspace_profiles.workspace profiles managers": {
+        "check": "public.xbar_can_manage_workspace(workspace_id)",
+        "roles": ["authenticated"],
+        "using": "public.xbar_can_manage_workspace(workspace_id)",
+        "command": "ALL",
+        "permissive": "PERMISSIVE"
+      },
+      "public.workspaces.workspaces select active memberships": {
+        "check": null,
+        "roles": ["authenticated"],
+        "using": "public.xbar_has_workspace_access(id)",
+        "command": "SELECT",
+        "permissive": "PERMISSIVE"
+      },
+      "public.expense_receipts.expense receipts workspace read": {
+        "check": null,
+        "roles": ["authenticated"],
+        "using": "public.xbar_has_workspace_access(workspace_id)",
+        "command": "SELECT",
+        "permissive": "PERMISSIVE"
+      },
+      "public.ownership_records.ownership records staff insert": {
+        "check": "(public.xbar_has_workspace_capability(workspace_id, 'createHorse'::text) OR public.xbar_has_workspace_capability(workspace_id, 'manageOwnership'::text))",
+        "roles": ["authenticated"],
+        "using": null,
+        "command": "INSERT",
+        "permissive": "PERMISSIVE"
+      },
+      "public.ownership_records.ownership records staff update": {
+        "check": "public.xbar_has_workspace_capability(workspace_id, 'manageOwnership'::text)",
+        "roles": ["authenticated"],
+        "using": "public.xbar_has_workspace_capability(workspace_id, 'manageOwnership'::text)",
+        "command": "UPDATE",
+        "permissive": "PERMISSIVE"
+      },
+      "public.shared_listings.shared listings workspace manage": {
+        "check": "public.xbar_can_manage_workspace(workspace_id)",
+        "roles": ["authenticated"],
+        "using": "public.xbar_can_manage_workspace(workspace_id)",
+        "command": "ALL",
+        "permissive": "PERMISSIVE"
+      },
+      "public.notifications.notifications read own or workspace": {
+        "check": null,
+        "roles": ["authenticated"],
+        "using": "((user_id = auth.uid()) OR public.xbar_has_workspace_access(workspace_id))",
+        "command": "SELECT",
+        "permissive": "PERMISSIVE"
+      },
+      "public.expense_receipts.expense receipts workspace manage": {
+        "check": "public.xbar_can_manage_workspace(workspace_id)",
+        "roles": ["authenticated"],
+        "using": "public.xbar_can_manage_workspace(workspace_id)",
+        "command": "ALL",
+        "permissive": "PERMISSIVE"
+      },
+      "public.ownership_records.ownership records workspace read": {
+        "check": null,
+        "roles": ["authenticated"],
+        "using": "public.xbar_has_workspace_access(workspace_id)",
+        "command": "SELECT",
+        "permissive": "PERMISSIVE"
+      },
+      "public.workspace_snapshots.workspace snapshots insert own": {
+        "check": "(auth.uid() = user_id)",
+        "roles": ["authenticated"],
+        "using": null,
+        "command": "INSERT",
+        "permissive": "PERMISSIVE"
+      },
+      "public.workspace_snapshots.workspace snapshots select own": {
+        "check": null,
+        "roles": ["authenticated"],
+        "using": "(auth.uid() = user_id)",
+        "command": "SELECT",
+        "permissive": "PERMISSIVE"
+      },
+      "public.workspace_snapshots.workspace snapshots update own": {
+        "check": "(auth.uid() = user_id)",
+        "roles": ["authenticated"],
+        "using": "(auth.uid() = user_id)",
+        "command": "UPDATE",
+        "permissive": "PERMISSIVE"
+      },
+      "public.workspace_profiles.workspace profiles own workspace": {
+        "check": "(EXISTS ( SELECT 1\n   FROM public.workspaces w\n  WHERE ((w.id = workspace_profiles.workspace_id) AND (w.owner_user_id = auth.uid()))))",
+        "roles": ["authenticated"],
+        "using": "(EXISTS ( SELECT 1\n   FROM public.workspaces w\n  WHERE ((w.id = workspace_profiles.workspace_id) AND (w.owner_user_id = auth.uid()))))",
+        "command": "ALL",
+        "permissive": "PERMISSIVE"
+      },
+      "public.ownership_records.ownership records workspace manage": {
+        "check": "public.xbar_can_manage_workspace(workspace_id)",
+        "roles": ["authenticated"],
+        "using": "public.xbar_can_manage_workspace(workspace_id)",
+        "command": "ALL",
+        "permissive": "PERMISSIVE"
+      },
+      "public.public_share_events.public share events workspace read": {
+        "check": null,
+        "roles": ["authenticated"],
+        "using": "((EXISTS ( SELECT 1\n   FROM public.workspace_memberships m\n  WHERE ((m.workspace_id = public_share_events.workspace_id) AND (m.user_id = auth.uid()) AND (m.status = 'active'::text)))) OR (EXISTS ( SELECT 1\n   FROM public.workspaces w\n  WHERE ((w.id = public_share_events.workspace_id) AND (w.owner_user_id = auth.uid())))))",
+        "command": "SELECT",
+        "permissive": "PERMISSIVE"
+      },
+      "public.workspace_memberships.workspace memberships insert own or owner": {
+        "check": "public.xbar_can_manage_workspace(workspace_id)",
+        "roles": ["authenticated"],
+        "using": null,
+        "command": "INSERT",
+        "permissive": "PERMISSIVE"
+      },
+      "public.workspace_memberships.workspace memberships select own or owner": {
+        "check": null,
+        "roles": ["authenticated"],
+        "using": "((user_id = auth.uid()) OR public.xbar_has_workspace_access(workspace_id))",
+        "command": "SELECT",
+        "permissive": "PERMISSIVE"
+      },
+      "public.workspace_memberships.workspace memberships update own or owner": {
+        "check": "public.xbar_can_manage_workspace(workspace_id)",
+        "roles": ["authenticated"],
+        "using": "public.xbar_can_manage_workspace(workspace_id)",
+        "command": "UPDATE",
+        "permissive": "PERMISSIVE"
+      },
+      "public.workspace_profiles.workspace profiles select active memberships": {
+        "check": null,
+        "roles": ["authenticated"],
+        "using": "(EXISTS ( SELECT 1\n   FROM public.workspace_memberships m\n  WHERE ((m.workspace_id = workspace_profiles.workspace_id) AND (m.user_id = auth.uid()) AND (m.status = 'active'::text))))",
+        "command": "SELECT",
+        "permissive": "PERMISSIVE"
+      },
+      "public.document_processing_jobs.document processing jobs workspace read": {
+        "check": null,
+        "roles": ["authenticated"],
+        "using": "public.xbar_has_workspace_access(workspace_id)",
+        "command": "SELECT",
+        "permissive": "PERMISSIVE"
+      },
+      "public.workspace_invitations.workspace invitations delete owner or admin": {
+        "check": null,
+        "roles": ["authenticated"],
+        "using": "public.xbar_can_manage_workspace(workspace_id)",
+        "command": "DELETE",
+        "permissive": "PERMISSIVE"
+      },
+      "public.workspace_invitations.workspace invitations insert owner or admin": {
+        "check": "public.xbar_can_manage_workspace(workspace_id)",
+        "roles": ["authenticated"],
+        "using": null,
+        "command": "INSERT",
+        "permissive": "PERMISSIVE"
+      },
+      "public.workspace_memberships.workspace memberships delete owner or admin": {
+        "check": null,
+        "roles": ["authenticated"],
+        "using": "public.xbar_can_manage_workspace(workspace_id)",
+        "command": "DELETE",
+        "permissive": "PERMISSIVE"
+      },
+      "public.document_processing_jobs.document processing jobs workspace manage": {
+        "check": "public.xbar_can_manage_workspace(workspace_id)",
+        "roles": ["authenticated"],
+        "using": "public.xbar_can_manage_workspace(workspace_id)",
+        "command": "ALL",
         "permissive": "PERMISSIVE"
       },
       "public.workspace_billing_customers.workspace billing customers own workspace": {
@@ -77,6 +590,27 @@
         "roles": ["authenticated"],
         "using": "(EXISTS ( SELECT 1\n   FROM public.workspaces w\n  WHERE ((w.id = workspace_billing_customers.workspace_id) AND (w.owner_user_id = auth.uid()))))",
         "command": "ALL",
+        "permissive": "PERMISSIVE"
+      },
+      "public.workspace_invitations.workspace invitations update owner admin or invitee": {
+        "check": "public.xbar_can_manage_workspace(workspace_id)",
+        "roles": ["authenticated"],
+        "using": "public.xbar_can_manage_workspace(workspace_id)",
+        "command": "UPDATE",
+        "permissive": "PERMISSIVE"
+      },
+      "public.workspace_subscription_events.workspace subscription events own workspace": {
+        "check": null,
+        "roles": ["authenticated"],
+        "using": "(EXISTS ( SELECT 1\n   FROM public.workspaces w\n  WHERE ((w.id = workspace_subscription_events.workspace_id) AND (w.owner_user_id = auth.uid()))))",
+        "command": "SELECT",
+        "permissive": "PERMISSIVE"
+      },
+      "public.workspace_invitations.workspace invitations select own or workspace access": {
+        "check": null,
+        "roles": ["authenticated"],
+        "using": "((NULLIF(lower(btrim(email)), ''::text) = NULLIF(lower(btrim((auth.jwt() ->> 'email'::text))), ''::text)) OR public.xbar_has_workspace_access(workspace_id))",
+        "command": "SELECT",
         "permissive": "PERMISSIVE"
       },
       "public.workspace_subscription_profiles.subscription profiles select active memberships": {
@@ -92,6 +626,10 @@
         "enabled": "O",
         "definition": "CREATE TRIGGER trg_documents_enforce_storage BEFORE INSERT OR UPDATE ON public.documents FOR EACH ROW EXECUTE FUNCTION public.xbar_enforce_storage_limit()"
       },
+      "public.horses.trg_horses_guard_specialist_update": {
+        "enabled": "O",
+        "definition": "CREATE TRIGGER trg_horses_guard_specialist_update BEFORE UPDATE ON public.horses FOR EACH ROW EXECUTE FUNCTION public.xbar_guard_specialist_horse_update()"
+      },
       "public.shared_listings.trg_shared_listings_audit": {
         "enabled": "O",
         "definition": "CREATE TRIGGER trg_shared_listings_audit AFTER INSERT OR UPDATE ON public.shared_listings FOR EACH ROW EXECUTE FUNCTION public.xbar_audit_shared_listing_change()"
@@ -99,6 +637,10 @@
       "public.horses.trg_horses_enforce_commercial_limits": {
         "enabled": "O",
         "definition": "CREATE TRIGGER trg_horses_enforce_commercial_limits BEFORE INSERT OR UPDATE ON public.horses FOR EACH ROW EXECUTE FUNCTION public.xbar_enforce_commercial_resource_limits()"
+      },
+      "public.horses.trg_horses_guard_sale_media_approval": {
+        "enabled": "O",
+        "definition": "CREATE TRIGGER trg_horses_guard_sale_media_approval BEFORE INSERT OR UPDATE ON public.horses FOR EACH ROW EXECUTE FUNCTION public.xbar_guard_sale_media_approval()"
       },
       "public.sale_packets.trg_sale_packets_enforce_storage": {
         "enabled": "O",
@@ -116,6 +658,10 @@
         "enabled": "O",
         "definition": "CREATE TRIGGER trg_sale_packets_enforce_commercial_limits BEFORE INSERT OR UPDATE ON public.sale_packets FOR EACH ROW EXECUTE FUNCTION public.xbar_enforce_commercial_resource_limits()"
       },
+      "public.workspaces.trg_workspaces_refuse_ownership_during_deletion": {
+        "enabled": "O",
+        "definition": "CREATE TRIGGER trg_workspaces_refuse_ownership_during_deletion BEFORE INSERT OR UPDATE OF owner_user_id ON public.workspaces FOR EACH ROW EXECUTE FUNCTION public.xbar_refuse_workspace_ownership_during_deletion()"
+      },
       "public.shared_listings.trg_shared_listings_enforce_commercial_limits": {
         "enabled": "O",
         "definition": "CREATE TRIGGER trg_shared_listings_enforce_commercial_limits BEFORE INSERT OR UPDATE ON public.shared_listings FOR EACH ROW EXECUTE FUNCTION public.xbar_enforce_commercial_resource_limits()"
@@ -127,12 +673,26 @@
       "public.workspace_memberships.trg_workspace_memberships_enforce_limits": {
         "enabled": "O",
         "definition": "CREATE TRIGGER trg_workspace_memberships_enforce_limits BEFORE INSERT OR UPDATE ON public.workspace_memberships FOR EACH ROW EXECUTE FUNCTION public.xbar_enforce_workspace_seat_limits()"
+      },
+      "public.workspace_invitations.trg_workspace_invitations_refuse_during_deletion": {
+        "enabled": "O",
+        "definition": "CREATE TRIGGER trg_workspace_invitations_refuse_during_deletion BEFORE INSERT OR UPDATE ON public.workspace_invitations FOR EACH ROW EXECUTE FUNCTION public.xbar_refuse_access_during_account_deletion()"
+      },
+      "public.workspace_memberships.trg_workspace_memberships_refuse_during_deletion": {
+        "enabled": "O",
+        "definition": "CREATE TRIGGER trg_workspace_memberships_refuse_during_deletion BEFORE INSERT OR UPDATE ON public.workspace_memberships FOR EACH ROW EXECUTE FUNCTION public.xbar_refuse_access_during_account_deletion()"
       }
     },
     "functions": {
       "xbar_enforce_storage_limit()": {
         "anon": false,
         "definition": "3a019db8c477a2491725388e22bbdd84",
+        "service_role": false,
+        "authenticated": false
+      },
+      "xbar_guard_sale_media_approval()": {
+        "anon": false,
+        "definition": "2e607f975dadaf3af0ac5fb09cccc876",
         "service_role": false,
         "authenticated": false
       },
@@ -150,7 +710,13 @@
       },
       "xbar_enforce_workspace_seat_limits()": {
         "anon": false,
-        "definition": "530df416d991ef8d5b89661b30a15187",
+        "definition": "5229f9637757d3df4597ea5eac0230ed",
+        "service_role": false,
+        "authenticated": false
+      },
+      "xbar_guard_specialist_horse_update()": {
+        "anon": false,
+        "definition": "585d4d22abd21fb0dc989eadd3e35a0d",
         "service_role": false,
         "authenticated": false
       },
@@ -165,6 +731,12 @@
         "definition": "e0ae86d38896a73f730c70d9e26a4561",
         "service_role": false,
         "authenticated": true
+      },
+      "xbar_refuse_access_during_account_deletion()": {
+        "anon": false,
+        "definition": "0b643c28c455170a5650ffd1a44736ca",
+        "service_role": false,
+        "authenticated": false
       },
       "xbar_subscription_limits(p_workspace_id uuid)": {
         "anon": false,
@@ -184,11 +756,29 @@
         "service_role": false,
         "authenticated": true
       },
+      "xbar_refuse_workspace_ownership_during_deletion()": {
+        "anon": false,
+        "definition": "915740776ed94eab3e77d373f6c68730",
+        "service_role": false,
+        "authenticated": false
+      },
       "xbar_workspace_storage_bytes(p_workspace_id uuid)": {
         "anon": false,
         "definition": "fdbb980d37ebe88ce14c979ec81c746a",
         "service_role": true,
         "authenticated": true
+      },
+      "xbar_release_account_deletion_holds(p_user_id uuid)": {
+        "anon": false,
+        "definition": "6f47aa08a12f2fb9dbe2b4f62ab4a56e",
+        "service_role": true,
+        "authenticated": false
+      },
+      "xbar_hold_owned_workspaces_for_deletion(p_user_id uuid)": {
+        "anon": false,
+        "definition": "1a82ff8ecdef408a9d5ac7b5eac71086",
+        "service_role": true,
+        "authenticated": false
       },
       "xbar_resolve_public_listing(p_share_path text, p_share_token text)": {
         "anon": true,
@@ -202,9 +792,27 @@
         "service_role": true,
         "authenticated": true
       },
+      "xbar_has_workspace_capability(p_workspace_id uuid, p_capability text)": {
+        "anon": false,
+        "definition": "bf7c33f6f5891b535805a9739b7764fe",
+        "service_role": false,
+        "authenticated": true
+      },
+      "xbar_record_exists(p_table text, p_workspace_id uuid, p_record_id text)": {
+        "anon": false,
+        "definition": "943bc58f042bb9f21cb601b3e2f5ef01",
+        "service_role": false,
+        "authenticated": true
+      },
+      "xbar_hold_account_deletion_request(p_user_id uuid, p_request_token uuid)": {
+        "anon": false,
+        "definition": "10fec832b93d9151bea53bb86b619696",
+        "service_role": true,
+        "authenticated": false
+      },
       "xbar_resolve_public_listing_legacy(p_share_path text, p_share_token text)": {
         "anon": false,
-        "definition": "b7997bce8e3c59af8672b238c713dda7",
+        "definition": "844aa9e6036b4fbf02a9266b1d4e0e8f",
         "service_role": false,
         "authenticated": true
       },
@@ -214,9 +822,21 @@
         "service_role": false,
         "authenticated": true
       },
+      "xbar_release_account_deletion_request(p_user_id uuid, p_request_token uuid)": {
+        "anon": false,
+        "definition": "bdd130318f0693e4b81a800a6a4322db",
+        "service_role": true,
+        "authenticated": false
+      },
+      "xbar_confirm_account_deletion_request(p_user_id uuid, p_request_token uuid, p_workspace_ids uuid[])": {
+        "anon": false,
+        "definition": "127b57d08e42b6a6736312c7ff5119eb",
+        "service_role": true,
+        "authenticated": false
+      },
       "xbar_claim_checkout_lock(p_workspace_id uuid, p_stale_before timestamp with time zone, p_token text)": {
         "anon": false,
-        "definition": "9186539c2375e644d7f5dd855d5c837a",
+        "definition": "0823edef1db15121d77f06f7ac546d79",
         "service_role": true,
         "authenticated": false
       },
@@ -1362,6 +1982,60 @@
           }
         }
       },
+      "account_deletion_holds": {
+        "table": {
+          "anon": {
+            "DELETE": false,
+            "INSERT": false,
+            "SELECT": false,
+            "UPDATE": false,
+            "TRIGGER": false,
+            "MAINTAIN": false,
+            "TRUNCATE": false,
+            "REFERENCES": false
+          },
+          "service_role": {
+            "DELETE": true,
+            "INSERT": true,
+            "SELECT": true,
+            "UPDATE": true,
+            "TRIGGER": true,
+            "MAINTAIN": true,
+            "TRUNCATE": true,
+            "REFERENCES": true
+          },
+          "authenticated": {
+            "DELETE": false,
+            "INSERT": false,
+            "SELECT": false,
+            "UPDATE": false,
+            "TRIGGER": false,
+            "MAINTAIN": false,
+            "TRUNCATE": false,
+            "REFERENCES": false
+          }
+        },
+        "column": {
+          "anon": {
+            "INSERT": false,
+            "SELECT": false,
+            "UPDATE": false,
+            "REFERENCES": false
+          },
+          "service_role": {
+            "INSERT": true,
+            "SELECT": true,
+            "UPDATE": true,
+            "REFERENCES": true
+          },
+          "authenticated": {
+            "INSERT": false,
+            "SELECT": false,
+            "UPDATE": false,
+            "REFERENCES": false
+          }
+        }
+      },
       "account_deletion_events": {
         "table": {
           "anon": {
@@ -1467,6 +2141,114 @@
             "SELECT": true,
             "UPDATE": true,
             "REFERENCES": true
+          }
+        }
+      },
+      "account_deletion_receipts": {
+        "table": {
+          "anon": {
+            "DELETE": false,
+            "INSERT": false,
+            "SELECT": false,
+            "UPDATE": false,
+            "TRIGGER": false,
+            "MAINTAIN": false,
+            "TRUNCATE": false,
+            "REFERENCES": false
+          },
+          "service_role": {
+            "DELETE": true,
+            "INSERT": true,
+            "SELECT": true,
+            "UPDATE": true,
+            "TRIGGER": true,
+            "MAINTAIN": true,
+            "TRUNCATE": true,
+            "REFERENCES": true
+          },
+          "authenticated": {
+            "DELETE": false,
+            "INSERT": false,
+            "SELECT": false,
+            "UPDATE": false,
+            "TRIGGER": false,
+            "MAINTAIN": false,
+            "TRUNCATE": false,
+            "REFERENCES": false
+          }
+        },
+        "column": {
+          "anon": {
+            "INSERT": false,
+            "SELECT": false,
+            "UPDATE": false,
+            "REFERENCES": false
+          },
+          "service_role": {
+            "INSERT": true,
+            "SELECT": true,
+            "UPDATE": true,
+            "REFERENCES": true
+          },
+          "authenticated": {
+            "INSERT": false,
+            "SELECT": false,
+            "UPDATE": false,
+            "REFERENCES": false
+          }
+        }
+      },
+      "account_deletion_requests": {
+        "table": {
+          "anon": {
+            "DELETE": false,
+            "INSERT": false,
+            "SELECT": false,
+            "UPDATE": false,
+            "TRIGGER": false,
+            "MAINTAIN": false,
+            "TRUNCATE": false,
+            "REFERENCES": false
+          },
+          "service_role": {
+            "DELETE": true,
+            "INSERT": true,
+            "SELECT": true,
+            "UPDATE": true,
+            "TRIGGER": true,
+            "MAINTAIN": true,
+            "TRUNCATE": true,
+            "REFERENCES": true
+          },
+          "authenticated": {
+            "DELETE": false,
+            "INSERT": false,
+            "SELECT": false,
+            "UPDATE": false,
+            "TRIGGER": false,
+            "MAINTAIN": false,
+            "TRUNCATE": false,
+            "REFERENCES": false
+          }
+        },
+        "column": {
+          "anon": {
+            "INSERT": false,
+            "SELECT": false,
+            "UPDATE": false,
+            "REFERENCES": false
+          },
+          "service_role": {
+            "INSERT": true,
+            "SELECT": true,
+            "UPDATE": true,
+            "REFERENCES": true
+          },
+          "authenticated": {
+            "INSERT": false,
+            "SELECT": false,
+            "UPDATE": false,
+            "REFERENCES": false
           }
         }
       },
@@ -1761,6 +2543,178 @@
         "reminder_email_deliveries_status_check": "CHECK ((status = ANY (ARRAY['pending'::text, 'accepted'::text])))",
         "reminder_email_deliveries_workspace_id_fkey": "FOREIGN KEY (workspace_id) REFERENCES public.workspaces(id) ON DELETE CASCADE",
         "reminder_email_deliveries_workspace_id_reminder_id_due_date_key": "UNIQUE (workspace_id, reminder_id, due_date)"
+      }
+    },
+    "deletionLifecycle": {
+      "account_deletion_holds": {
+        "columns": {
+          "user_id": {
+            "type": "uuid",
+            "default": null,
+            "notNull": true
+          },
+          "created_at": {
+            "type": "timestamp with time zone",
+            "default": "now()",
+            "notNull": true
+          },
+          "workspace_id": {
+            "type": "uuid",
+            "default": null,
+            "notNull": true
+          }
+        },
+        "indexes": {
+          "account_deletion_holds_pkey": {
+            "ready": true,
+            "valid": true,
+            "definition": "CREATE UNIQUE INDEX account_deletion_holds_pkey ON public.account_deletion_holds USING btree (workspace_id)"
+          }
+        },
+        "constraints": {
+          "account_deletion_holds_pkey": "PRIMARY KEY (workspace_id)",
+          "account_deletion_holds_workspace_id_fkey": "FOREIGN KEY (workspace_id) REFERENCES public.workspaces(id) ON DELETE CASCADE"
+        }
+      },
+      "account_deletion_events": {
+        "columns": {
+          "id": {
+            "type": "uuid",
+            "default": "gen_random_uuid()",
+            "notNull": true
+          },
+          "phase": {
+            "type": "text",
+            "default": null,
+            "notNull": true
+          },
+          "created_at": {
+            "type": "timestamp with time zone",
+            "default": "now()",
+            "notNull": true
+          },
+          "operation_id": {
+            "type": "uuid",
+            "default": null,
+            "notNull": true
+          },
+          "actor_user_id": {
+            "type": "uuid",
+            "default": null,
+            "notNull": true
+          },
+          "workspace_ids": {
+            "type": "uuid[]",
+            "default": "'{}'::uuid[]",
+            "notNull": true
+          }
+        },
+        "indexes": {
+          "account_deletion_events_pkey": {
+            "ready": true,
+            "valid": true,
+            "definition": "CREATE UNIQUE INDEX account_deletion_events_pkey ON public.account_deletion_events USING btree (id)"
+          },
+          "account_deletion_events_operation": {
+            "ready": true,
+            "valid": true,
+            "definition": "CREATE INDEX account_deletion_events_operation ON public.account_deletion_events USING btree (operation_id, created_at)"
+          }
+        },
+        "constraints": {
+          "account_deletion_events_pkey": "PRIMARY KEY (id)",
+          "account_deletion_events_phase_check": "CHECK ((phase = ANY (ARRAY['started'::text, 'completed'::text, 'failed'::text])))"
+        }
+      },
+      "account_deletion_receipts": {
+        "columns": {
+          "id": {
+            "type": "uuid",
+            "default": "gen_random_uuid()",
+            "notNull": true
+          },
+          "status": {
+            "type": "text",
+            "default": "'pending'::text",
+            "notNull": true
+          },
+          "failure": {
+            "type": "text",
+            "default": "''::text",
+            "notNull": true
+          },
+          "user_id": {
+            "type": "uuid",
+            "default": null,
+            "notNull": true
+          },
+          "finished_at": {
+            "type": "timestamp with time zone",
+            "default": null,
+            "notNull": false
+          },
+          "requested_at": {
+            "type": "timestamp with time zone",
+            "default": "now()",
+            "notNull": true
+          },
+          "held_workspaces": {
+            "type": "uuid[]",
+            "default": "'{}'::uuid[]",
+            "notNull": true
+          },
+          "storage_leftovers": {
+            "type": "jsonb",
+            "default": "'[]'::jsonb",
+            "notNull": true
+          }
+        },
+        "indexes": {
+          "account_deletion_receipts_pkey": {
+            "ready": true,
+            "valid": true,
+            "definition": "CREATE UNIQUE INDEX account_deletion_receipts_pkey ON public.account_deletion_receipts USING btree (id)"
+          },
+          "account_deletion_receipts_user_idx": {
+            "ready": true,
+            "valid": true,
+            "definition": "CREATE INDEX account_deletion_receipts_user_idx ON public.account_deletion_receipts USING btree (user_id, requested_at DESC)"
+          }
+        },
+        "constraints": {
+          "account_deletion_receipts_pkey": "PRIMARY KEY (id)",
+          "account_deletion_receipts_status_check": "CHECK ((status = ANY (ARRAY['pending'::text, 'refused'::text, 'failed'::text, 'complete'::text, 'storage_incomplete'::text])))"
+        }
+      },
+      "account_deletion_requests": {
+        "columns": {
+          "user_id": {
+            "type": "uuid",
+            "default": null,
+            "notNull": true
+          },
+          "created_at": {
+            "type": "timestamp with time zone",
+            "default": "now()",
+            "notNull": true
+          },
+          "request_token": {
+            "type": "uuid",
+            "default": null,
+            "notNull": true
+          }
+        },
+        "indexes": {
+          "account_deletion_requests_pkey": {
+            "ready": true,
+            "valid": true,
+            "definition": "CREATE UNIQUE INDEX account_deletion_requests_pkey ON public.account_deletion_requests USING btree (user_id)"
+          }
+        },
+        "constraints": {
+          "account_deletion_requests_pkey": "PRIMARY KEY (user_id)",
+          "account_deletion_requests_user_id_fkey": "FOREIGN KEY (user_id) REFERENCES auth.users(id) ON DELETE CASCADE"
+        }
       }
     }
   }

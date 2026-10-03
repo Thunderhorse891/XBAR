@@ -104,8 +104,20 @@ const REQUIRED_BY_ROLE = {
     'xbar_commercial_limits(uuid)',
     'xbar_subscription_limits(uuid)',
     'xbar_accept_workspace_invitation(uuid, text)',
+    // The horse-media write policies call it; without EXECUTE every photo
+    // upload fails with "permission denied for function".
+    'xbar_has_workspace_capability(uuid, text)',
+    // The horse staff-insert policy calls it so a staff member's upsert of an
+    // existing horse passes; without EXECUTE every staff save of a horse fails.
+    'xbar_record_exists(text, uuid, text)',
   ],
-  service_role: ['xbar_workspace_storage_bytes(uuid)'],
+  service_role: [
+    'xbar_workspace_storage_bytes(uuid)',
+    // Account deletion holds every owned workspace before the auth delete and
+    // lifts the hold if that fails; without these it refuses every deletion.
+    'xbar_hold_owned_workspaces_for_deletion(uuid)',
+    'xbar_release_account_deletion_holds(uuid)',
+  ],
 };
 
 const roleMissing = Object.entries(REQUIRED_BY_ROLE).map(([role, required]) => ({
@@ -142,7 +154,7 @@ for (const { role, missing } of roleMissing) {
   console.log(
     role === 'authenticated'
       ? 'Signed-in operations will fail with "permission denied for function" until these are granted.'
-      : 'Storage capacity cannot be read, so the storage gate refuses every upload.',
+      : 'Storage capacity cannot be read, or account deletion cannot hold workspaces, until these are granted.',
   );
 }
 

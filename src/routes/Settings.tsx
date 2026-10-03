@@ -1,7 +1,9 @@
 import { useEffect, useRef, useState } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { PageHeader, Panel, Pill } from '@/components/app-ui';
+import { ConfirmActionDialog } from '@/components/ConfirmActionDialog';
 import { formatDateLabel } from '@/lib/format';
+import { clearCloudDeletions } from '@/lib/cloudDeletionQueue';
 import { loadWorkspaceBackupFromCloud, saveWorkspaceBackupToCloud } from '@/lib/cloudWorkspace';
 import {
   isBillingConfigured,
@@ -85,6 +87,7 @@ export default function Settings() {
   const [inviteEmail, setInviteEmail] = useState('');
   const [inviteRole, setInviteRole] = useState<UserRole>('Owner');
   const [cloudBusy, setCloudBusy] = useState(false);
+  const [pushConfirmOpen, setPushConfirmOpen] = useState(false);
   const [deleteConfirm, setDeleteConfirm] = useState('');
   const [deleting, setDeleting] = useState(false);
   const [exportingBackup, setExportingBackup] = useState(false);
@@ -250,7 +253,7 @@ export default function Settings() {
       message: cleared
         ? result.message
         : `${result.message} This browser would not remove the files stored on this device; close other XBAR tabs and clear this site's data to finish removing them.`,
-      tone: cleared ? 'success' : 'warning',
+      tone: cleared && !result.incomplete ? 'success' : 'warning',
     });
     navigate('/login', { replace: true });
   };
@@ -497,7 +500,14 @@ export default function Settings() {
   const handlePushCloud = async () => {
     setCloudBusy(true);
     const backup = exportWorkspaceBackup();
-    const result = await saveWorkspaceBackupToCloud(backup);
+    /*
+     * The one save that removes what this device lacks. A person pressed Push
+     * cloud -- usually from the conflict-lock message -- to make the cloud match
+     * this device, so rows that exist only in the cloud go, as they always did
+     * here. Every other save deletes only what was deleted (cloudDeletionQueue).
+     */
+    const result = await saveWorkspaceBackupToCloud(backup, { replace: true });
+    if (result.ok) clearCloudDeletions();
 
     /*
      * The same promotion CloudBootstrap performs, because this is the button
@@ -670,7 +680,7 @@ export default function Settings() {
                   <button
                     className="button button--primary button--compact"
                     type="button"
-                    onClick={handlePushCloud}
+                    onClick={() => setPushConfirmOpen(true)}
                     disabled={!canSyncCloud || cloudBusy}
                   >
                     {cloudBusy ? 'Working...' : 'Push cloud'}
@@ -1217,6 +1227,22 @@ export default function Settings() {
           </div>
         </Panel>
       ) : null}
+      <ConfirmActionDialog
+        open={pushConfirmOpen}
+        title="Replace the cloud copy with this device"
+        consequences={[
+          'The cloud copy of this ranch is replaced with the records on this device.',
+          'Records that exist only in the cloud — added on another phone or computer, or imported — are removed for everyone.',
+          "To keep the cloud's records instead, use Pull cloud, which replaces this device's copy.",
+        ]}
+        acknowledgements={['I want the cloud to match this device.']}
+        confirmLabel="Push and replace cloud"
+        onConfirm={() => {
+          setPushConfirmOpen(false);
+          void handlePushCloud();
+        }}
+        onCancel={() => setPushConfirmOpen(false)}
+      />
     </>
   );
 }

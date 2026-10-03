@@ -9,6 +9,7 @@ import {
 } from '../_lib/subscription-status.js';
 import { collectStripePages } from '../_lib/checkout-session.js';
 import { getSupabaseAdmin } from '../_lib/supabase-admin.js';
+import { subscriptionPeriodEnd } from '../_lib/stripe-objects.js';
 import { handleInvoicePaymentFailed } from '../_lib/lifecycleTriggers.js';
 
 export const config = {
@@ -17,8 +18,12 @@ export const config = {
   },
 };
 
-const stripeSecretKey = process.env.STRIPE_SECRET_KEY || '';
-const webhookSecret = process.env.STRIPE_WEBHOOK_SECRET || '';
+// Trimmed: a value pasted with a trailing newline puts the newline in the
+// Authorization header (ERR_INVALID_CHAR, seen in production on 2026-09-28) or
+// in the HMAC key, where it fails every signature. /api/health reads them the
+// same way, so what it calls well-formed is what these use.
+const stripeSecretKey = process.env.STRIPE_SECRET_KEY?.trim() || '';
+const webhookSecret = process.env.STRIPE_WEBHOOK_SECRET?.trim() || '';
 const stripe = stripeSecretKey ? new Stripe(stripeSecretKey, { apiVersion: '2026-02-25.clover' }) : null;
 
 /*
@@ -115,7 +120,13 @@ async function syncWorkspaceSubscription({
   // losing the purchased tier and its rate permanently rather than being marked
   // inactive. Throwing writes nothing and leaves the event for Stripe to retry.
   if (existingProfileError) {
-    throw new Error(`Could not read the existing subscription profile: ${existingProfileError.message}`);
+    // The database's text is logged, not thrown: the thrown message becomes the
+    // response body, which Stripe stores in its dashboard delivery log.
+    console.error('[stripe webhook] subscription profile read failed', {
+      workspaceId,
+      message: existingProfileError.message,
+    });
+    throw new Error('Could not read the existing subscription profile.');
   }
 
   // The asymmetry between granting and withdrawing access lives in
@@ -157,6 +168,13 @@ async function syncWorkspaceSubscription({
   if (nextProfile.billingPeriod == null) {
     const storedPeriod = existingProfile?.payload?.billingPeriod;
     nextProfile.billingPeriod = storedPeriod === 'monthly' || storedPeriod === 'annual' ? storedPeriod : null;
+  }
+
+  // The same rule for the renewal date: an event that does not carry a period
+  // end does not know the date, so it must not write a blank over a known one.
+  if (!nextProfile.renewalDate) {
+    const storedRenewal = existingProfile?.payload?.renewalDate;
+    if (typeof storedRenewal === 'string' && storedRenewal) nextProfile.renewalDate = storedRenewal;
   }
 
   /*
@@ -282,7 +300,7 @@ async function handler(req, res) {
           subscriptionId,
           priceId: lineItem?.price?.id || '',
           status: subscription.status,
-          currentPeriodEnd: subscription.current_period_end,
+          currentPeriodEnd: subscriptionPeriodEnd(subscription, lineItem),
           quantity: lineItem?.quantity || 1,
           eventId: event.id,
           eventType: event.type,
@@ -300,13 +318,50 @@ async function handler(req, res) {
 
       let resolvedWorkspaceId = directWorkspaceId;
       if (!resolvedWorkspaceId && customerId) {
+        /*
+         * A lookup that FAILED is not a customer with no workspace.
+         *
+         * Read as "no workspace", a timeout fell through to the 200 below: the
+         * cancellation (or renewal) was acknowledged, nothing was written, and
+         * Stripe never redelivered it. A non-2xx leaves it for Stripe's retry.
+         *
+         * `stripe_customer_id` is not unique, so more than one workspace is
+         * possible after a manual repair. Picking one would move a paid plan to
+         * whichever row came back first; the event is refused instead, and the
+         * failed delivery in Stripe's log is the signal to fix the mapping
+         * while Stripe is still retrying.
+         *
+         * Neither body carries the database's own error text: Stripe keeps the
+         * response in its dashboard delivery log.
+         */
         const supabase = getSupabaseAdmin();
-        const { data: billingCustomer } = await supabase
+        if (!supabase) {
+          return sendJson(res, 503, { ok: false, message: 'Supabase admin credentials are not configured.' });
+        }
+        const { data: billingCustomers, error: billingCustomerError } = await supabase
           .from('workspace_billing_customers')
           .select('workspace_id')
           .eq('stripe_customer_id', customerId)
-          .maybeSingle();
-        resolvedWorkspaceId = billingCustomer?.workspace_id || null;
+          .limit(2);
+        if (billingCustomerError) {
+          console.error('[stripe webhook] workspace lookup by customer failed', {
+            eventId: event.id,
+            customerId,
+            message: billingCustomerError.message,
+          });
+          return sendJson(res, 503, { ok: false, message: 'Could not look up the workspace for this customer.' });
+        }
+        if ((billingCustomers?.length ?? 0) > 1) {
+          console.error('[stripe webhook] customer is linked to more than one workspace', {
+            eventId: event.id,
+            customerId,
+          });
+          return sendJson(res, 409, {
+            ok: false,
+            message: 'This Stripe customer is linked to more than one workspace. Nothing was changed.',
+          });
+        }
+        resolvedWorkspaceId = billingCustomers?.[0]?.workspace_id || null;
       }
 
       if (resolvedWorkspaceId) {
@@ -373,7 +428,7 @@ async function handler(req, res) {
           subscriptionId: effective.id || payload.id,
           priceId: effectiveLineItem?.price?.id || '',
           status: effective.status,
-          currentPeriodEnd: effective.current_period_end,
+          currentPeriodEnd: subscriptionPeriodEnd(effective, effectiveLineItem),
           quantity: effectiveLineItem?.quantity || 1,
           eventId: event.id,
           eventType: event.type,
@@ -391,9 +446,9 @@ async function handler(req, res) {
      * customer is not emailed on every retry).
      *
      * A failed send returns a non-2xx so Stripe retries the delivery; the
-     * billing replay guard above already dedupes by event id, and the dunning
-     * claim is released on failure, so a retry re-sends rather than
-     * double-sends.
+     * billing replay guard above already dedupes by event id, and a dunning
+     * claim is released only after a known non-send. Ambiguous attempts stay
+     * pending for reconciliation, so webhook retries cannot duplicate mail.
      */
     if (event.type === 'invoice.payment_failed') {
       const supabaseForDunning = getSupabaseAdmin();

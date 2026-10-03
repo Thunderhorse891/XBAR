@@ -63,6 +63,25 @@ async function fixture(options = {}) {
     },
   };
   const stripe = {
+    prices: {
+      async retrieve(id) {
+        const tier = Object.keys(prices).find((name) => id.startsWith(`price_${prices[name]}_`));
+        const annual = id.endsWith('_annual');
+        const monthlyAmounts = { Starter: 1200, Professional: 2900, 'Ranch Ops': 7900, Enterprise: 19900 };
+        assert.ok(tier, `Unexpected fixture price ${id}`);
+        return {
+          id,
+          active: true,
+          type: 'recurring',
+          currency: 'usd',
+          billing_scheme: 'per_unit',
+          unit_amount: monthlyAmounts[tier] * (annual ? 10 : 1),
+          transform_quantity: null,
+          recurring: { interval: annual ? 'year' : 'month', interval_count: 1, usage_type: 'licensed' },
+          product: { id: 'prod_xbar_fixture', active: true },
+        };
+      },
+    },
     subscriptions: {
       async list() {
         return { data: [], has_more: false };
@@ -220,7 +239,11 @@ test('an old session without cadence metadata is closed before replacement', asy
 
 test('missing annual configuration never falls back to a monthly checkout', async () => {
   const app = await fixture({ noAnnual: true });
-  assert.equal((await app.request('Professional', 'annual')).status, 400);
+  const response = await app.request('Professional', 'annual');
+  // Refused in the buyer's terms, and coded so the client never falls back to a
+  // payment link either.
+  assert.equal(response.status, 409);
+  assert.equal(response.code, 'cadence_unavailable');
   assert.equal(app.sessions.length, 0);
   assert.deepEqual(app.events, []);
 });

@@ -13,7 +13,20 @@ import type { HorseRecord, OwnershipProofRequirement, OwnershipRecord } from '..
 const horse = { id: 'horse-test', name: 'Spirit', owner: 'Erin Wyrick' } as HorseRecord;
 
 function requirement(status: OwnershipProofRequirement['status']): OwnershipProofRequirement {
-  return { id: `proof-${status}-${Math.random()}`, kind: 'supporting', label: 'Supporting', status };
+  return {
+    id: `proof-${status}-${Math.random()}`,
+    kind: 'supporting',
+    label: 'Supporting',
+    status,
+    ...(status === 'verified'
+      ? {
+          verifiedBy: 'Tester',
+          verifiedAt: '2026-10-02',
+          reviewAttestedAt: '2026-10-02',
+          reviewedSourceKey: 'test-source',
+        }
+      : {}),
+  };
 }
 
 test('default proof requirements cover the legal transfer chain', () => {
@@ -30,8 +43,8 @@ test('default proof requirements cover the legal transfer chain', () => {
 test('confidence is earned from proof, not hardcoded', () => {
   assert.equal(computeOwnershipConfidence([]), 0);
   assert.equal(computeOwnershipConfidence([requirement('missing'), requirement('missing')]), 0);
-  assert.equal(computeOwnershipConfidence([requirement('linked'), requirement('missing')]), 25);
-  assert.equal(computeOwnershipConfidence([requirement('verified'), requirement('linked')]), 75);
+  assert.equal(computeOwnershipConfidence([requirement('linked'), requirement('missing')]), 0);
+  assert.equal(computeOwnershipConfidence([requirement('verified'), requirement('linked')]), 50);
   assert.equal(computeOwnershipConfidence([requirement('verified'), requirement('verified')]), 100);
 });
 
@@ -44,7 +57,14 @@ test('transfer cannot be marked Clear with unverified proof', () => {
 
   const verified: OwnershipRecord = {
     ...record,
-    proofRequirements: record.proofRequirements?.map((item) => ({ ...item, status: 'verified' as const })),
+    proofRequirements: record.proofRequirements?.map((item) => ({
+      ...item,
+      status: 'verified' as const,
+      verifiedBy: 'Tester',
+      verifiedAt: '2026-10-02',
+      reviewAttestedAt: '2026-10-02',
+      reviewedSourceKey: 'test-source',
+    })),
   };
   assert.equal(canMarkTransferClear(verified).ok, true);
 });

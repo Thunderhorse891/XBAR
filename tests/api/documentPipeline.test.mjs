@@ -321,7 +321,8 @@ test('tier entitlement ladder enforces template access', () => {
   assert.equal(tierIncludesPlan('Professional', 'Ranch Ops'), false);
 });
 
-test('server sale packet capacity blocks generation at the plan limit', async () => {
+test('server sale packet capacity blocks generation at the plan limit, counting the last 30 days', async () => {
+  const now = new Date('2026-10-02T12:00:00.000Z');
   const supabase = {
     from(table) {
       assert.equal(table, 'sale_packets');
@@ -330,10 +331,17 @@ test('server sale packet capacity blocks generation at the plan limit', async ()
           assert.equal(column, 'packet_id');
           assert.deepEqual(options, { count: 'exact', head: true });
           return {
-            async eq(field, value) {
+            eq(field, value) {
               assert.equal(field, 'workspace_id');
               assert.equal(value, 'workspace-1');
-              return { count: 2 };
+              return {
+                // Audit F11: the count is windowed, not lifetime.
+                async gte(windowField, windowStart) {
+                  assert.equal(windowField, 'created_at');
+                  assert.equal(windowStart, '2026-09-02T12:00:00.000Z');
+                  return { count: 2 };
+                },
+              };
             },
           };
         },
@@ -341,9 +349,10 @@ test('server sale packet capacity blocks generation at the plan limit', async ()
     },
   };
 
-  const blocked = await checkSalePacketCapacity(supabase, 'workspace-1', 1, { salePacketLimit: 2 });
+  const blocked = await checkSalePacketCapacity(supabase, 'workspace-1', 1, { salePacketLimit: 2 }, now);
   assert.equal(blocked.ok, false);
-  assert.match(blocked.message, /2 sale packet limit/);
+  assert.match(blocked.message, /2 sale packets per 30 days \(2 generated in the last 30 days\)/);
+  assert.match(blocked.message, /renews/);
 });
 
 test('zip extraction handles stored and deflated entries', () => {
@@ -547,12 +556,14 @@ test('an unnamed file still lands somewhere, under the workspace', () => {
 const fixtureUser = 'cccccccc-cccc-4ccc-8ccc-cccccccccccc';
 const foreignWorkspace = 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb';
 
-test('a caller may name a file in their own workspace, or their own older upload', () => {
+test('a caller may name a file in their own workspace, and not an uploader-keyed one', () => {
   const allowed = { workspaceId: fixtureWorkspace, userId: fixtureUser };
   assert.equal(mayUseClientStoragePath({ storagePath: `${fixtureWorkspace}/documents/doc-1/x.pdf`, ...allowed }), true);
-  // The legacy branch of the SELECT policy, mirrored: their own uploader-keyed
-  // object from before the storage migration.
-  assert.equal(mayUseClientStoragePath({ storagePath: `${fixtureUser}/documents/doc-1/x.pdf`, ...allowed }), true);
+  // The older `<user id>/...` layout is refused, even for the caller's own id:
+  // that object may belong to a DIFFERENT workspace the caller is also in, and
+  // reading it here would copy it into this workspace's packets and exports.
+  // Production holds no object in that layout (audit F02).
+  assert.equal(mayUseClientStoragePath({ storagePath: `${fixtureUser}/documents/doc-1/x.pdf`, ...allowed }), false);
 });
 
 test('a caller cannot make the server read another tenant file for them', () => {

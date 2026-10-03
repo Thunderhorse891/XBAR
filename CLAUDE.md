@@ -144,6 +144,6 @@ When something genuinely needs a paid plan, say so plainly with what it costs an
 
 ## Known open items
 
-- The account-deletion race is **narrowed, not closed**. Closing it needs a locking RPC, which needs a migration, which needs authorization.
+- The account-deletion race is closed at the database by a hold placed under the seat lock (`20261002100000_account_deletion_hold.sql`, pinned by `tests/api/accountDeletion.test.mjs` and proven by `supabase/checks/account-deletion-hold.sql`). Storage leftovers are recorded in `account_deletion_receipts` but not yet retried automatically.
 - `engines.node` declares 20.19 while CI runs Node 24.
 - **The official wordmark is served but never rendered.** `public/brand/xbar-wordmark.png` is deployed and smoke-tested for a 200, and `public/brand/README.md` lists it as sign-in artwork — but no component references it. What renders as the wordmark is `XbarWordmark` in `src/components/BrandMark.tsx`, which sets the letters XBAR in Outfit beside two hardcoded hexes, exactly the font approximation the brand README forbids. Swapping it to the master is a brand decision for Erin, not a silent refactor.

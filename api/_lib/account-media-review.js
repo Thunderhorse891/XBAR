@@ -5,7 +5,7 @@ import { requireWorkspaceAccess } from './supabase-admin.js';
 import { requireRoleCapability } from './permissions.js';
 
 // Narrow status transition only. Never accept a replacement horse/gallery or
-// grant whole-row horse writes to a Sales Lead. Buyer signing is a separate lane.
+// change the caller's horse-write permissions. Buyer signing is a separate lane.
 export default async function handler(req, res) {
   if (!applyCors(req, res, { methods: 'POST, OPTIONS' })) return;
   if (req.method !== 'POST') return sendJson(res, 405, { ok: false, message: 'Method not allowed.' });

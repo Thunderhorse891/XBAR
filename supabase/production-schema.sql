@@ -1053,6 +1053,10 @@ declare
   target_workspace_id uuid;
 begin
   target_workspace_id := coalesce(new.workspace_id, old.workspace_id);
+  -- One seat check at a time per workspace. Without it two acceptances, or an
+  -- acceptance and an invite, each count the other as not yet there and both
+  -- pass -- overfilling the plan.
+  perform pg_advisory_xact_lock(hashtextextended('xbar-seats:' || target_workspace_id::text, 0));
   select * into limits from public.xbar_subscription_limits(target_workspace_id);
 
   if TG_TABLE_NAME = 'workspace_invitations' then
@@ -1099,10 +1103,14 @@ begin
         and status = 'active'
         and email <> coalesce(new.email, '');
 
+      -- The pending invitation for THIS email is the seat this membership
+      -- takes. Counting it as well charged the accepted seat twice, so the
+      -- last reserved seat on a plan could never be accepted (audit F05).
       select count(*) into pending_invites
       from public.workspace_invitations
       where workspace_id = target_workspace_id
-        and status = 'pending';
+        and status = 'pending'
+        and lower(btrim(email)) <> lower(btrim(coalesce(new.email, '')));
 
       if active_members + pending_invites + 1 > limits.seat_limit then
         raise exception 'Seat limit reached for this workspace.';
@@ -1120,7 +1128,8 @@ begin
         from public.workspace_invitations
         where workspace_id = target_workspace_id
           and status = 'pending'
-          and role = 'Owner';
+          and role = 'Owner'
+          and lower(btrim(email)) <> lower(btrim(coalesce(new.email, '')));
 
         if limits.shared_access_seat_limit <= 0 or active_owners + pending_owner_invites + 1 > limits.shared_access_seat_limit then
           raise exception 'Shared access seat limit reached for this workspace.';

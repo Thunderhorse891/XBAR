@@ -1,4 +1,5 @@
 import { readJsonBody, sendJson } from './http.js';
+import { canonicalObjectSegments, isWorkspaceId, isWorkspaceObjectPath } from './document-storage.js';
 import { getSupabaseAdmin } from './supabase-admin.js';
 import { enforceRateLimit } from './rate-limit.js';
 import { applyCors } from './cors.js';
@@ -30,25 +31,33 @@ const RATE_LIMIT = { bucket: 'buyer-media', limit: 60, windowSeconds: 60 };
 const MEDIA_BUCKET = process.env.SUPABASE_MEDIA_BUCKET || process.env.VITE_SUPABASE_MEDIA_BUCKET || 'horse-media';
 
 /**
- * Horse-media storage keys look like `<uploader-id>/horses/<horse-id>/media-<id>.<ext>`.
- * Shape check only -- authorization is the gallery-membership check below.
+ * Horse-media storage keys look like `<workspace-id>/horses/<horse-id>/media-<id>.<ext>`,
+ * in the canonical shape every service-role read requires (see
+ * canonicalObjectSegments). Shape only; authorization is below.
  */
 export function isHorseMediaStoragePath(value) {
-  if (typeof value !== 'string' || value.length === 0 || value.length > 500) {
+  const segments = canonicalObjectSegments(value);
+  if (!segments || segments.length !== 4) {
     return false;
   }
-  if (value.includes('..')) {
-    return false;
-  }
-  const segments = value.split('/');
-  if (segments.length !== 4) {
-    return false;
-  }
-  const [uploaderId, horsesSegment, , fileName] = segments;
-  if (!uploaderId || horsesSegment !== 'horses' || !fileName) {
-    return false;
-  }
-  return fileName.startsWith('media-');
+  const [workspaceId, horsesSegment, , fileName] = segments;
+  return isWorkspaceId(workspaceId) && horsesSegment === 'horses' && fileName.startsWith('media-');
+}
+
+/**
+ * The workspace of the listing the share link resolved to, as the resolver
+ * returned it -- from the same row it returned the gallery from.
+ *
+ * The gallery is owner-editable JSON, so a path listed there proves nothing
+ * about whose file it is; the path's first segment must be this workspace for
+ * the server to sign it. Taking the workspace from the resolver's own row,
+ * rather than looking it up again by share path, means there is no second
+ * choice of row to disagree with the first. A resolver that does not return
+ * one (migration 20261001090000 not applied) yields '' and nothing is signed.
+ */
+export function listingWorkspaceId(listing) {
+  const workspaceId = listing?.sharedListing?.workspaceId;
+  return isWorkspaceId(workspaceId) ? workspaceId.toLowerCase() : '';
 }
 
 /**
@@ -92,6 +101,9 @@ export async function resolveBuyerMediaUrl({
   if (!isStoragePathInListingGallery(listing, storagePath)) {
     return { ok: false, status: 403, message: 'This photo is not part of the shared listing.' };
   }
+  if (!isWorkspaceObjectPath({ path: storagePath, workspaceId: listingWorkspaceId(listing) })) {
+    return { ok: false, status: 403, message: 'This photo is not part of the shared listing.' };
+  }
 
   const { data, error: signError } = await supabase.storage
     .from(mediaBucket)
@@ -110,7 +122,10 @@ export async function resolveBuyerMediaUrl({
   if (recheckError || !currentListing) {
     return { ok: false, status: 404, message: 'This listing link is not valid or has been retired.' };
   }
-  if (!isStoragePathInListingGallery(currentListing, storagePath)) {
+  if (
+    !isStoragePathInListingGallery(currentListing, storagePath) ||
+    !isWorkspaceObjectPath({ path: storagePath, workspaceId: listingWorkspaceId(currentListing) })
+  ) {
     return { ok: false, status: 403, message: 'This photo is not part of the shared listing.' };
   }
 

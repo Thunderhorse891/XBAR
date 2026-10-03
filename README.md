@@ -400,14 +400,19 @@ psql -v ON_ERROR_STOP=1 "$DATABASE_URL" -f supabase/migrations/20260928170000_re
 # with the owner's explicit approval (production engineering contract §15).
 ```
 
-**Stop after expansion while older production clients remain.** The live project
-has completed this phase. See [storage rollout evidence](docs/DOCUMENT-STORAGE-ROLLOUT.md).
-The separate contract phase below removes legacy uploads. Run it only after the
-workspace-path client and file upload/download behavior have been verified and
-older upload clients retired; it is not the next automatic deployment command.
+**The uploader-keyed contract for documents is now part of step 11.** The live
+project completed the document-storage expansion; see
+[storage rollout evidence](docs/DOCUMENT-STORAGE-ROLLOUT.md). `20260912060000` was
+the original contract phase for documents. Step 11's contract
+(`20261001090100`) supersedes it and removes the same uploader-keyed branches
+from both buckets. **Never run it after step 11:** it rebuilds the document
+policies WITH the uploader branch and would silently undo that contract. On a
+database that has had neither, running it is optional and only ever before
+step 11; once step 11 has begun it refuses to run. Its check script describes
+that intermediate state and nothing later.
 
 ```sh
-# Deferred contract phase: existing legacy files remain uploader-readable.
+# Superseded by step 11. Optional, and only BEFORE step 11's contract.
 psql -1 -v ON_ERROR_STOP=1 "$DATABASE_URL" -f supabase/migrations/20260912060000_workspace_keyed_document_storage.sql
 psql -v ON_ERROR_STOP=1 "$DATABASE_URL" -f supabase/checks/document-storage-live-rollback.sql
 ```
@@ -421,6 +426,76 @@ psql -v ON_ERROR_STOP=1 "$DATABASE_URL" -f supabase/checks/document-storage-live
 #    resolving the moment it runs, and rollback instructions live in the
 #    migration header.
 psql -1 -v ON_ERROR_STOP=1 "$DATABASE_URL" -f supabase/migrations/20260924134000_horse_media_private_signed_urls.sql
+
+# 11. Workspace-keyed storage (audit F02), in two phases.
+#    EXPAND first -- before the client that files photos under the workspace
+#    id is deployed. It closes the gallery-listing read and adds workspace
+#    reads and uploadMedia-gated writes, while keeping the uploader-keyed
+#    branches so a tab still running the previous bundle keeps working.
+psql -1 -v ON_ERROR_STOP=1 "$DATABASE_URL" -f supabase/migrations/20261001090000_workspace_keyed_storage_expand.sql
+psql -v ON_ERROR_STOP=1 "$DATABASE_URL" -f supabase/checks/workspace-keyed-storage-expand.sql
+#    Then deploy the client. CONTRACT only once it is live: it removes every
+#    uploader-keyed branch from horse-media and horse-documents. Moves no
+#    data; first confirm no object is still uploader-keyed:
+#      select bucket_id, count(*) from storage.objects
+#      where bucket_id in ('horse-media','horse-documents')
+#        and split_part(name,'/',1) not in (select id::text from public.workspaces)
+#      group by 1;
+psql -1 -v ON_ERROR_STOP=1 "$DATABASE_URL" -f supabase/migrations/20261001090100_workspace_keyed_storage_contract.sql
+#    Prove the final state under real RLS (synthetic users, all rolled back):
+psql -v ON_ERROR_STOP=1 "$DATABASE_URL" -f supabase/checks/workspace-keyed-storage.sql
+
+# 12. Seat reservations (audit F05). Accepting an invitation no longer counts
+#    its own reservation as a second seat, so the last reserved seat on a plan
+#    can be accepted; seat checks are serialized per workspace. CREATE OR
+#    REPLACE of the trigger function only -- no data, no new grants.
+psql -1 -v ON_ERROR_STOP=1 "$DATABASE_URL" -f supabase/migrations/20261002090000_seat_reservation_consumed_on_accept.sql
+#    Prove it with the real trigger and acceptance RPC (all rolled back):
+psql -v ON_ERROR_STOP=1 "$DATABASE_URL" -f supabase/checks/seat-reservation.sql
+
+# 13. Account deletion is decided at the database (audit F03). Adds the
+#    deletion hold (a hold refuses new members while the owner's account is
+#    deleted, under the seat lock) and the durable deletion receipt. Additive:
+#    two tables, three service-role functions, two triggers. Apply BEFORE
+#    deploying the /api/account-delete that calls the hold RPC -- without it,
+#    account deletion refuses with "Nothing was changed".
+psql -1 -v ON_ERROR_STOP=1 "$DATABASE_URL" -f supabase/migrations/20261002100000_account_deletion_hold.sql
+psql -v ON_ERROR_STOP=1 "$DATABASE_URL" -f supabase/checks/account-deletion-hold.sql
+#    Cleanup that did not finish stays on record:
+#      select user_id, status, storage_leftovers, requested_at
+#      from public.account_deletion_receipts where status <> 'complete';
+
+# 14. Staff saves reach the cloud (audit F04). Write policies per record
+#    table, following the role matrix, beside the existing manager policies;
+#    a guard limits a Medical Lead to a horse's medical and document fields;
+#    invited Admins can save the ranch profile. Additive only. Apply BEFORE
+#    deploying the client that lets staff saves through.
+psql -1 -v ON_ERROR_STOP=1 "$DATABASE_URL" -f supabase/migrations/20261002120000_staff_write_policies.sql
+#    Proven under real RLS in CI (.github/workflows/records-database.yml).
+#    staff-writes.sql deletes rows inside its rolled-back transaction; run it
+#    against a disposable database, not production.
+
+# 15. DRAFT RELEASE GATE: request-token account-deletion fence and billing
+#    safeguards. Requires explicit production migration approval. Drain/stop
+#    deletion requests first; old deletion handlers deliberately refuse after
+#    this migration until the matching handler is deployed. Read
+#    docs/ACCOUNT-DELETION-BILLING-SAFETY.md before applying or rolling back.
+#    The command is documented for approved rollout; it has NOT been applied.
+psql -1 -v ON_ERROR_STOP=1 "$DATABASE_URL" -f supabase/migrations/20261002182226_account_deletion_request_fence.sql
+#    Run this proof only on an approved disposable database. It supersedes the
+#    legacy account-deletion-hold.sql check after the protocol upgrade.
+psql -v ON_ERROR_STOP=1 "$DISPOSABLE_DATABASE_URL" -f supabase/checks/account-deletion-request-fence.sql
+
+# 16. HELD INTEGRATION GATE: staff horse writes must not grant sale-media
+#    approval to a non-reviewer or let a replacement image inherit approval.
+#    Requires reviewed rollout/recovery approval before release. Retains staff
+#    edits and pending uploads; changes no existing rows or storage policies.
+#    Documented command only; not evidence of production application.
+psql -1 -v ON_ERROR_STOP=1 "$DATABASE_URL" -f supabase/migrations/20261003021000_guard_sale_media_approval.sql
+psql -v ON_ERROR_STOP=1 "$DISPOSABLE_DATABASE_URL" -f supabase/checks/media-approval-writes.sql
+#    Read docs/MAIN-INTEGRATION-READINESS.md. Historical storage replay guards
+#    require separately reviewed ledger reconciliation, never a replay or
+#    invented migration row. The full current catalog must also match.
 ```
 
 **(4) and (5) are prerequisites for billing, not optimizations to schedule

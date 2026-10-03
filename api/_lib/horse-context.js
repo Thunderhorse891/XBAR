@@ -2,6 +2,8 @@
 // packet cover sheets: horse identity, owner/workspace profile, and the
 // latest compliance dates pulled from attached documents.
 
+import { recordedDocumentPath } from './document-storage.js';
+
 export async function loadHorseContext(supabase, workspaceId, horseId) {
   const [{ data: horse }, { data: profile }, { data: documents }, { data: ownership }] = await Promise.all([
     supabase
@@ -19,13 +21,15 @@ export async function loadHorseContext(supabase, workspaceId, horseId) {
       .maybeSingle(),
     supabase
       .from('documents')
-      .select('document_id, title, document_type, state, storage_path, mime_type, extracted_data, payload, created_at')
+      .select(
+        'document_id, horse_id, title, document_type, state, storage_path, mime_type, extracted_data, payload, created_at',
+      )
       .eq('workspace_id', workspaceId)
       .eq('horse_id', horseId)
       .order('created_at', { ascending: false }),
     supabase
       .from('ownership_records')
-      .select('legal_owner, transfer_status, compliance_deadline')
+      .select('legal_owner, transfer_status, compliance_deadline, payload')
       .eq('workspace_id', workspaceId)
       .eq('horse_id', horseId)
       .order('updated_at', { ascending: false })
@@ -41,7 +45,7 @@ export async function loadHorseContext(supabase, workspaceId, horseId) {
   // columns, so normalize both shapes into one.
   const docs = (documents || []).map((doc) => ({
     ...doc,
-    storage_path: doc.storage_path || doc.payload?.storagePath || '',
+    storage_path: recordedDocumentPath(doc),
     mime_type: doc.mime_type || doc.payload?.mimeType || '',
     extracted_data:
       doc.extracted_data && Object.keys(doc.extracted_data).length ? doc.extracted_data : doc.payload?.entities || {},
@@ -65,7 +69,7 @@ export async function loadHorseContext(supabase, workspaceId, horseId) {
       status: horse.status,
     },
     owner: {
-      name: ownershipRecord?.legal_owner || horse.owner_name || profile?.default_owner_name || '',
+      name: ownershipRecord?.legal_owner || horse.owner_name || '',
     },
     workspace: {
       businessName: profile?.business_name || '',

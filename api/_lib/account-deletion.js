@@ -115,42 +115,68 @@ export function documentPrefixesToPurge(plan) {
 /**
  * Which prefixes of the MEDIA bucket an account deletion may erase.
  *
- * Horse media is still keyed to whoever uploaded it -- `horse-media` is a
- * public bucket, so it never had the shared-read problem that moved documents
- * onto workspace paths -- which makes the departing account's own prefix the
- * only one that applies. A workspace id here would erase nothing today and
- * would be a loaded gun if media ever moved.
+ * Same two shapes as documents: `<user-id>/horses/...` from before photos were
+ * keyed to the workspace, and `<workspace-id>/horses/...` for every photo
+ * since. The same safety argument applies -- only purged workspaces, which by
+ * definition have no other active member, never a transferred one.
  *
- * @param {{ userId: string }} plan
+ * @param {{ userId: string, workspacesToPurge: string[] }} plan
  */
 export function mediaPrefixesToPurge(plan) {
-  return typeof plan?.userId === 'string' && plan.userId ? [plan.userId] : [];
+  return documentPrefixesToPurge(plan);
 }
 
 /**
- * Which of the planned purges are STILL private, moments before the delete.
+ * Which prefixes of the SALE-PACKET bucket an account deletion may erase.
  *
- * The plan is built before the account is removed, and the purge runs after.
- * In between, an invitation acceptance or an administrator's add can insert an
- * active membership: the invitation RPC locks the invitation row, not the
- * workspace, so nothing stops it. The stale plan then purges a workspace that
- * has become shared, cascading the new member's records and sweeping their
- * files.
+ * Packets are only ever written by the server, as `<workspace-id>/<horse>/...`,
+ * and each one embeds full copies of the horse's documents -- so leaving them
+ * would keep the Coggins and registration papers the deletion promised to
+ * erase. There is no uploader-keyed layout here, so only purged workspaces.
  *
- * So the membership is read again immediately before the delete and any
- * workspace that gained one is dropped from the purge. What remains is an
- * ownerless workspace with an active member -- which is the handoff case the
- * endpoint already refuses on, and recoverable, unlike the records.
- *
- * This NARROWS the window, it does not close it. Closing it needs the final
- * check and the delete in one locked transaction, which means a
- * security-definer RPC and a migration.
+ * @param {{ workspacesToPurge: string[] }} plan
  */
-export function workspacesStillPrivate(plannedWorkspaceIds, activeMembershipRows) {
-  const nowShared = new Set(
-    (activeMembershipRows ?? [])
-      .map((row) => row?.workspace_id)
-      .filter((id) => typeof id === 'string' && id.length > 0),
-  );
-  return (plannedWorkspaceIds ?? []).filter((id) => typeof id === 'string' && id.length > 0 && !nowShared.has(id));
+export function packetPrefixesToPurge(plan) {
+  return (plan?.workspacesToPurge ?? []).filter((prefix) => typeof prefix === 'string' && prefix.length > 0);
+}
+
+/**
+ * The workspaces the database agreed to hold, which is the set to purge.
+ *
+ * Read from the hold RPC's answer, not from the plan: the RPC re-checked each
+ * workspace under the seat lock, so it is the authoritative "still private"
+ * list. Anything that is not a non-empty string is dropped rather than passed
+ * on to a delete or a storage sweep.
+ *
+ * @param {{ held?: unknown }} hold
+ * @returns {string[]}
+ */
+export function heldWorkspaceIds(hold) {
+  const held = Array.isArray(hold?.held) ? hold.held : [];
+  return held.filter((id) => typeof id === 'string' && id.length > 0);
+}
+
+/**
+ * Storage paths under the departing account's own prefix that a SURVIVING
+ * workspace's documents still point at.
+ *
+ * Documents written before files were keyed to the workspace live at
+ * `<user-id>/...`. If the account had uploaded into a ranch it did not own,
+ * that ranch's records still name those objects, and sweeping the account's
+ * prefix would erase another ranch's papers. Rows in a workspace being purged
+ * are excluded -- those records are going too.
+ *
+ * @param {{ workspace_id?: unknown, storage_path?: unknown }[]} rows
+ * @param {string[]} purgedWorkspaceIds
+ * @returns {Set<string>}
+ */
+export function pathsStillReferenced(rows, purgedWorkspaceIds) {
+  const purged = new Set(purgedWorkspaceIds ?? []);
+  const keep = new Set();
+  for (const row of rows ?? []) {
+    if (typeof row?.storage_path !== 'string' || !row.storage_path) continue;
+    if (typeof row.workspace_id === 'string' && purged.has(row.workspace_id)) continue;
+    keep.add(row.storage_path);
+  }
+  return keep;
 }

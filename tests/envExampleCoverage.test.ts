@@ -112,24 +112,64 @@ test('the billing section states what happens with Stripe absent', () => {
  * Same invariant as the rest of this file — every X is registered in Y — which
  * is why it lives here rather than in a new file that would need registering to
  * check that files get registered.
+ *
+ * Being NAMED in the script is not being run. These checks used to ask whether
+ * the script text included a file, and `node a.test.js b.test.js` includes both
+ * while running only the first: Node hands b.test.js to a.test.js as an
+ * argument. Two audit F13/F14 suites were registered exactly that way and
+ * reported a green run they were never part of. So the script is read as the
+ * steps it actually executes: plain Node takes one entry script, while --test accepts multiple suites.
  */
+function executedSuites(script = unitScript()): { files: Set<string>; crowdedSteps: string[] } {
+  const files = new Set<string>();
+  const crowdedSteps: string[] = [];
+  for (const step of script.split('&&').map((part) => part.trim())) {
+    const words = step.split(/\s+/);
+    const runner = words[0] === 'node' || (words[0] === 'tsx' && words.includes('--test'));
+    if (!runner) continue;
+    const positional = words.slice(1).filter((word) => !word.startsWith('-'));
+    if (words.includes('--test')) {
+      positional.forEach((file) => files.add(file));
+    } else {
+      if (positional.length > 1) crowdedSteps.push(step);
+      if (positional[0]) files.add(positional[0]);
+    }
+  }
+  return { files, crowdedSteps };
+}
+
+test('every declared suite is executed by its runner', () => {
+  const { crowdedSteps } = executedSuites();
+  assert.deepEqual(crowdedSteps, [], 'a second file on one step is passed as an argument and never runs');
+});
+
 test('every test file is actually run by npm test', () => {
-  const script = unitScript();
-  const suites = readdirSync(path.join(repoRoot, 'tests'))
-    .filter((name) => name.endsWith('.test.ts'))
-    .map((name) => name.replace(/\.ts$/, '.js'));
+  const { files } = executedSuites();
+  const suites = readdirSync(path.join(repoRoot, 'tests')).filter(
+    (name) => name.endsWith('.test.ts') || name.endsWith('.test.mjs'),
+  );
 
   const missing = suites.filter(
-    (name) =>
-      !script.includes(`/tests/${name}`) && !script.includes(`tsx --test tests/${name.replace(/\.js$/, '.ts')}`),
+    (name) => !files.has(`.codex-test-dist/tests/${name.replace(/\.ts$/, '.js')}`) && !files.has(`tests/${name}`),
   );
   assert.deepEqual(missing, [], `these suites are never executed: ${missing.join(', ')}`);
 });
 
 test('every api test file is actually run by npm test', () => {
-  const script = unitScript();
+  const { files } = executedSuites();
   const suites = readdirSync(path.join(repoRoot, 'tests/api')).filter((name) => name.endsWith('.test.mjs'));
 
-  const missing = suites.filter((name) => !script.includes(`tests/api/${name}`));
+  const missing = suites.filter((name) => !files.has(`tests/api/${name}`));
   assert.deepEqual(missing, [], `these api suites are never executed: ${missing.join(', ')}`);
+});
+
+test('suite registration distinguishes script arguments from multiple --test suites', () => {
+  const plain = executedSuites('node tests/a.test.mjs tests/b.test.mjs');
+  assert.deepEqual([...plain.files], ['tests/a.test.mjs']);
+  assert.equal(plain.crowdedSteps.length, 1);
+  for (const runner of ['node', 'tsx']) {
+    const multiple = executedSuites(`${runner} --test tests/a.test.mjs tests/b.test.mjs`);
+    assert.deepEqual([...multiple.files], ['tests/a.test.mjs', 'tests/b.test.mjs']);
+    assert.deepEqual(multiple.crowdedSteps, []);
+  }
 });

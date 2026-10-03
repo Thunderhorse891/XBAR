@@ -5,7 +5,6 @@ import { ActionMenuButton } from '@/components/InteractionSystem';
 import { EmptyState } from '@/components/EmptyState';
 import { HorseMediaPreview } from '@/components/HorseMediaPreview';
 import { primaryHorseMedia } from '@/lib/horseMedia';
-import { SalePacketSlots } from '@/components/SalePacketSlots';
 import { Pill, ProgressBar, SurfaceTabs } from '@/components/app-ui';
 import { DotsIcon } from '@/components/icons';
 import { buildPublicShareUrl } from '@/lib/facebookSharing';
@@ -331,23 +330,13 @@ export default function Horses() {
   };
 
   return (
-    <>
-      <div className="surface-hero command-files-hero">
-        <div className="surface-hero__top">
+    <div className="hc-workspace">
+      <section className="hc-roster-head">
+        <div className="hc-roster-head__body">
           <div>
-            <span className="surface-hero__eyebrow">Sale readiness</span>
-            <h1>Every horse, ready to sell before the buyer asks.</h1>
-            <p className="page-description">
-              XBAR builds each horse record from its documents, scores sale readiness, and flags exactly which records
-              stand between a horse and a clean sale.
-            </p>
-            <ol className="hc-hero-flow" aria-label="How XBAR builds sale-ready records">
-              <li>Upload documents</li>
-              <li>Build the horse profile</li>
-              <li>Detect missing documents</li>
-              <li>Generate the sale packet</li>
-              <li>Start buyer follow-up</li>
-            </ol>
+            <span className="xs-eyebrow">Your horse records</span>
+            <h1 className="xs-title">Horses</h1>
+            <p className="xs-subtitle">Identity, care, documents, and sale readiness. All together.</p>
           </div>
           <div className="hc-kpis" aria-label="Sale readiness overview">
             <div className="hc-kpi">
@@ -371,7 +360,7 @@ export default function Horses() {
               <strong>{buyerPacketsLiveCount}</strong>
             </div>
           </div>
-          <div className="inline-actions" style={{ marginTop: '16px' }}>
+          <div className="inline-actions hc-roster-head__actions">
             <Link to="/documents?upload=1" className="button button--ghost button--compact">
               Upload Documents
             </Link>
@@ -385,7 +374,7 @@ export default function Horses() {
             </button>
           </div>
         </div>
-      </div>
+      </section>
 
       {/*
         Only when there is something to repair, and never a silent bulk edit:
@@ -806,8 +795,12 @@ export default function Horses() {
                       <div className="horse-card__body">
                         <div className="horse-card__metric-band">
                           <div className="horse-card__metric">
-                            <span>Sale readiness</span>
-                            <strong>{formatPercent(readiness)}</strong>
+                            <span>{showSaleSignals ? 'Documents' : 'Sale readiness'}</span>
+                            <strong>
+                              {showSaleSignals
+                                ? `${packet.saleSlots.filter((slot) => slot.status === 'ready').length}/${packet.saleSlots.length}`
+                                : formatPercent(readiness)}
+                            </strong>
                           </div>
                           <div className="horse-card__metric">
                             <span>{valueLabel}</span>
@@ -855,17 +848,6 @@ export default function Horses() {
                             </div>
                           </div>
                         )}
-
-                        <div className="horse-card__packet">
-                          <div className="horse-card__packet-head">
-                            <span>Release evidence</span>
-                            <strong>
-                              {packet.saleSlots.filter((slot) => slot.status === 'ready').length}/
-                              {packet.saleSlots.length}
-                            </strong>
-                          </div>
-                          <SalePacketSlots slots={packet.saleSlots} compact />
-                        </div>
 
                         <div className="horse-card__footer">
                           <div className="status-inline">
@@ -1020,6 +1002,6 @@ export default function Horses() {
         items={menuItems}
         onClose={() => setMenuState(null)}
       />
-    </>
+    </div>
   );
 }

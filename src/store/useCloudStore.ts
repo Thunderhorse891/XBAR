@@ -203,7 +203,8 @@ type CloudStore = {
   signInWithGoogle: () => Promise<CloudActionResult>;
   signInWithApple: () => Promise<CloudActionResult>;
   signOut: () => Promise<CloudActionResult>;
-  deleteAccount: (confirmation: string) => Promise<CloudActionResult>;
+  /* `incomplete`: the account is gone, but some stored files are not. */
+  deleteAccount: (confirmation: string) => Promise<CloudActionResult & { incomplete?: boolean }>;
 };
 
 /*
@@ -2168,7 +2169,9 @@ export const useCloudStore = create<CloudStore>((set, get) => ({
       return { ok: false, message: 'Could not reach the server. Check your connection and try again.' };
     }
 
-    const payload = await response.json().catch(() => ({}) as { ok?: boolean; message?: string });
+    const payload = await response
+      .json()
+      .catch(() => ({}) as { ok?: boolean; message?: string; storageCleanupComplete?: boolean });
     if (!response.ok || !payload.ok) {
       return { ok: false, message: payload.message || 'Account deletion failed. Please try again.' };
     }
@@ -2195,6 +2198,14 @@ export const useCloudStore = create<CloudStore>((set, get) => ({
       autosaveUnlocked: false,
       stagedStorageBytes: 0,
     });
-    return { ok: true, message: 'Your account and data have been deleted.' };
+    // The account is gone either way; say so when stored files are not.
+    return payload.storageCleanupComplete === false
+      ? {
+          ok: true,
+          incomplete: true,
+          message:
+            'Your account has been deleted, but some cloud files could not be erased yet. Email Xbarje@gmail.com and we will finish removing them.',
+        }
+      : { ok: true, message: 'Your account and data have been deleted.' };
   },
 }));

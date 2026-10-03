@@ -171,6 +171,9 @@ test('pushing a workspace preserves another member account binding', async ({ pa
   await page.getByRole('button', { name: 'Pull cloud', exact: true }).click();
   await expect(page.getByRole('button', { name: 'Push cloud', exact: true })).toBeEnabled();
   await page.getByRole('button', { name: 'Push cloud', exact: true }).click();
+  // Push cloud replaces the cloud copy, so it asks first (audit F01).
+  await page.getByRole('checkbox', { name: 'I want the cloud to match this device.' }).check();
+  await page.getByRole('button', { name: 'Push and replace cloud', exact: true }).click();
   await expect(page.getByText('Cloud sync complete', { exact: true })).toBeVisible();
   expect(membershipWrites.some((row) => row.email === RECOVERY_EMAIL && row.user_id === USER_ID)).toBe(true);
   // Ranch saves must leave other accounts' server-owned access bindings alone.

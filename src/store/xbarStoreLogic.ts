@@ -1,3 +1,4 @@
+import { isOwnershipProofReviewed, assessOwnershipDocument } from '../lib/ownershipDocumentReview.js';
 import { createId, todayStamp } from '../lib/xbarRuntime.js';
 import type {
   AssetCondition,
@@ -117,8 +118,7 @@ export function computeOwnershipConfidence(requirements: OwnershipProofRequireme
     return 0;
   }
   const score = requirements.reduce((sum, requirement) => {
-    if (requirement.status === 'verified') return sum + 1;
-    if (requirement.status === 'linked') return sum + 0.5;
+    if (isOwnershipProofReviewed(requirement)) return sum + 1;
     return sum;
   }, 0);
   return Math.round((100 * score) / requirements.length);
@@ -127,9 +127,26 @@ export function computeOwnershipConfidence(requirements: OwnershipProofRequireme
 // Backfills the structured proof chain onto records persisted before the
 // proof model existed. Idempotent: normalized records pass through unchanged
 // apart from the recomputed confidence.
-export function normalizeOwnershipRecord(record: OwnershipRecord): OwnershipRecord {
+export function normalizeOwnershipRecord(
+  record: OwnershipRecord,
+  documents?: DocumentRecord[],
+  horse?: HorseRecord,
+): OwnershipRecord {
   const proofRequirements = record.proofRequirements?.length
-    ? record.proofRequirements
+    ? record.proofRequirements.map((item) => {
+        const document = documents?.find((source) => source.id === item.documentId);
+        return item.status === 'verified' &&
+          (!isOwnershipProofReviewed(item, document) ||
+            (documents &&
+              (!document ||
+                document.state !== 'Ready' ||
+                document.horseId !== record.horseId ||
+                document.identityReviewRequired ||
+                (document.duplicateRisk === 'Possible Duplicate' && !document.duplicateReviewedAt))) ||
+            (horse && !assessOwnershipDocument(document, horse, item.kind).ok))
+          ? { ...item, status: 'linked' as const }
+          : item;
+      })
     : defaultOwnershipProofRequirements();
   return {
     ...record,
@@ -144,7 +161,7 @@ export function canMarkTransferClear(record: OwnershipRecord): { ok: boolean; bl
     ? record.proofRequirements
     : defaultOwnershipProofRequirements();
   const blockers = requirements
-    .filter((requirement) => requirement.status !== 'verified')
+    .filter((requirement) => !isOwnershipProofReviewed(requirement))
     .map((requirement) => `${requirement.label} — ${requirement.status}`);
   return { ok: blockers.length === 0, blockers };
 }
@@ -254,6 +271,9 @@ export function validateExpenseReceiptInput(input: ExpenseReceiptInput) {
     validateExpenseQuantity(input)
   );
 }
+
+/** Receipts bought by the unit — the ones whose quantity feeds the supplier price watch. */
+export const PRICED_BY_UNIT_CATEGORIES: ReadonlySet<ExpenseCategory> = new Set(['Feed', 'Supplements', 'Bedding']);
 
 /**
  * A typed quantity as a number: undefined when blank, NaN when it is not a
@@ -443,4 +463,31 @@ export type IntakeIdentity = { userId: string; workspaceId: string };
 
 export function intakeIdentityChanged(before: IntakeIdentity, after: IntakeIdentity): boolean {
   return before.userId !== after.userId || before.workspaceId !== after.workspaceId;
+}
+
+/*
+ * The same question for a photo batch, asked after the files are ALREADY
+ * stored. A different account, or a sign-out, is still a change. But a blank
+ * workspace id with the same account signed in is the access profile
+ * reloading after a token refresh, not a move to another ranch -- the files
+ * are already filed under the batch's workspace, and discarding them would
+ * strand them there for good (clients cannot delete storage objects).
+ */
+export function photoBatchIdentityChanged(before: IntakeIdentity, after: IntakeIdentity): boolean {
+  if (before.userId !== after.userId) return true;
+  return after.workspaceId !== '' && after.workspaceId !== before.workspaceId;
+}
+
+/*
+ * Whether a Storage upload error is a policy refusal (RLS or authorization)
+ * rather than a transport failure. Storage reports an RLS refusal as 403 /
+ * "new row violates row-level security policy"; older responses carry it as a
+ * 400 with that message, so the message is checked too.
+ */
+export function isStoragePolicyRefusal(error: unknown): boolean {
+  if (!error || typeof error !== 'object') return false;
+  const candidate = error as { status?: unknown; statusCode?: unknown; message?: unknown };
+  if (candidate.status === 401 || candidate.status === 403) return true;
+  if (candidate.statusCode === '401' || candidate.statusCode === '403') return true;
+  return typeof candidate.message === 'string' && /row-level security|unauthorized/i.test(candidate.message);
 }

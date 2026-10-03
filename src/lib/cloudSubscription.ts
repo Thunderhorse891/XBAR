@@ -39,12 +39,21 @@ export function subscriptionFromCloudRow(
     trialValue && typeof trialValue === 'object' && !Array.isArray(trialValue)
       ? (trialValue as Record<string, unknown>).startedAt
       : undefined;
+  // Audit F14: the server records the cadence (column and payload) and the
+  // annual price, and this mapper used to drop both, so an annual subscriber's
+  // billing screen read as monthly. The column wins; the payload covers rows
+  // read without it. Anything else is unknown, not monthly.
+  const period = row.billing_period ?? payload.billingPeriod;
+  const billingPeriod = period === 'monthly' || period === 'annual' ? period : undefined;
+  const annualRate = nonnegative(payload.annualRate);
 
   const profile: SubscriptionProfile = {
     tier,
     purchasedTier,
     billingState,
     monthlyRate: nonnegative(row.monthly_rate),
+    ...(billingPeriod ? { billingPeriod } : {}),
+    ...(annualRate > 0 ? { annualRate } : {}),
     renewalDate: typeof payload.renewalDate === 'string' ? payload.renewalDate : '',
     ...(recoverable == null ? {} : { subscriptionRecoverable: typeof recoverable === 'boolean' ? recoverable : true }),
     ...(typeof trialStart === 'string' && trialStart.length > 0 ? { trialStart } : {}),
@@ -64,4 +73,35 @@ export function subscriptionFromCloudRow(
   // An active trial grants Professional on top of whatever the billing state
   // says; an expired or absent one leaves the profile exactly as computed.
   return applyTrialToProfile(profile);
+}
+
+/** Billing and limits are authoritative; usage belongs to the records on this device. */
+export function mergeCloudSubscription(current: unknown, authoritative: SubscriptionProfile): SubscriptionProfile {
+  return {
+    ...authoritative,
+    usage: {
+      ...authoritative.usage,
+      ...record(record(current).usage),
+      ...subscriptionTierConfig[authoritative.tier].limits,
+    },
+  };
+}
+
+/** Replace only server-controlled subscription data; ranch records stay untouched. */
+export function withCloudSubscription<T>(backup: T, subscription: SubscriptionProfile): T {
+  if (!backup || typeof backup !== 'object' || Array.isArray(backup)) return backup;
+  const envelope = backup as Record<string, unknown>;
+  const workspace = envelope.workspace;
+  if (workspace && typeof workspace === 'object' && !Array.isArray(workspace)) {
+    return {
+      ...envelope,
+      workspace: { ...workspace, subscription: mergeCloudSubscription(record(workspace).subscription, subscription) },
+    } as T;
+  }
+  return { ...envelope, subscription: mergeCloudSubscription(envelope.subscription, subscription) } as T;
+}
+
+/** No canonical row is the ordinary unpaid setup state, never a snapshot grant. */
+export function baselineCloudSubscription(): SubscriptionProfile {
+  return subscriptionFromCloudRow({ tier: 'Starter', billing_state: 'Manual Billing', monthly_rate: 0 })!;
 }

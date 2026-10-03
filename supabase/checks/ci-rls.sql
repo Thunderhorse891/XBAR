@@ -40,9 +40,14 @@ end $$;
 select set_config('request.jwt.claim.sub','10000000-0000-4000-8000-000000000004',true);
 do $$ declare n integer; begin
  if (select count(*) from public.horses) <> 1 then raise exception 'sales lead cannot read horse'; end if;
- update public.horses set name='Unauthorized whole-row edit';
+ -- The integrated staff capability policies deliberately permit editHorse.
+ -- Media approval authority is checked independently in media-approval-writes.sql.
+ update public.horses set name='Authorized sales edit';
  get diagnostics n = row_count;
- if n <> 0 then raise exception 'sales lead gained whole-row horse writes'; end if;
+ if n <> 1 then raise exception 'sales lead lost authorized horse edits'; end if;
+ delete from public.horses;
+ get diagnostics n = row_count;
+ if n <> 0 then raise exception 'sales lead gained horse deletion'; end if;
 end $$;
 select set_config('request.jwt.claim.sub','10000000-0000-4000-8000-000000000003',true);
 do $$ begin
@@ -63,6 +68,7 @@ do $$ begin
 end $$;
 -- Audit receipts survive an auth/workspace cascade and cannot be altered by
 -- the service role or read by an authenticated user.
+select set_config('request.jwt.claim.sub','',true);
 set local role service_role;
 do $$ declare n integer; original jsonb; begin
  select payload into original from public.horses where horse_id='review-horse';

@@ -1,3 +1,7 @@
+import Stripe from 'stripe';
+import { randomUUID } from 'node:crypto';
+import { claimCheckoutLock, renewCheckoutLock, releaseCheckoutLock } from './checkout-session.js';
+import { BILLING_UNVERIFIED, verifyAccountDeletionBilling } from './account-deletion-billing.js';
 import { readJsonBody, sendJson } from './http.js';
 import { getSupabaseAdmin } from './supabase-admin.js';
 import {
@@ -5,11 +9,12 @@ import {
   documentPrefixesToPurge,
   loadAccountDeletionPlan,
   mediaPrefixesToPurge,
-  workspacesStillPrivate,
+  packetPrefixesToPurge,
+  heldWorkspaceIds,
+  pathsStillReferenced,
 } from './account-deletion.js';
 import { enforceRateLimit } from './rate-limit.js';
 import { applyCors } from './cors.js';
-import { randomUUID } from 'node:crypto';
 import { recordDeletionAudit } from './deletion-audit.js';
 
 // In-app account deletion. Irreversible. Deletes the
@@ -18,14 +23,20 @@ import { recordDeletionAudit } from './deletion-audit.js';
 // a workspace owner alone does not transfer its stored files or their access.
 // Requires the user to type their exact email to confirm.
 //
-// Prerequisite checks precede membership removal and auth deletion. File cleanup
-// follows auth deletion. This ordering does not make the multi-request operation
-// transactional; concurrency and shared-file lifecycle remain separate checks.
+// Order: plan (read) -> database hold on every owned workspace (refuses if any
+// is shared, and blocks new members until the delete) -> acknowledged receipt
+// and append-only started event -> auth delete (memberships cascade with it)
+// -> cleanup -> acknowledged outcome. Refusals preserve account access and
+// release this request's holds; audit records deliberately survive the account.
+
+const stripeSecretKey = process.env.STRIPE_SECRET_KEY?.trim() || '';
+const stripe = stripeSecretKey ? new Stripe(stripeSecretKey, { apiVersion: '2026-02-25.clover' }) : null;
 
 const RATE_LIMIT = { bucket: 'account-delete', limit: 5, windowSeconds: 300 };
 const DOCUMENT_BUCKET =
   process.env.SUPABASE_DOCUMENT_BUCKET || process.env.VITE_SUPABASE_DOCUMENT_BUCKET || 'horse-documents';
 const MEDIA_BUCKET = process.env.SUPABASE_MEDIA_BUCKET || process.env.VITE_SUPABASE_MEDIA_BUCKET || 'horse-media';
+const PACKET_BUCKET = process.env.SUPABASE_SALE_PACKET_BUCKET || 'sale-packets';
 
 export default async function handler(req, res) {
   if (!applyCors(req, res, { methods: 'POST, OPTIONS' })) {
@@ -69,8 +80,27 @@ export default async function handler(req, res) {
     });
   }
 
+  const billingClaims = [];
+  const deletionToken = randomUUID();
+  let releaseHolds = null;
+  let accountDeleted = false;
   let auditEvent;
   let auditStarted = false;
+  let auditFailureRecorded = false;
+  let auditOutcomeFailed = false;
+  let finishReceipt;
+  let receiptFinalized = false;
+  let receiptOutcomeFailed = false;
+  const recordFailure = async () => {
+    if (auditStarted && !auditFailureRecorded) {
+      await recordDeletionAudit(supabase, { ...auditEvent, phase: 'failed' });
+      auditFailureRecorded = true;
+    }
+  };
+  const refuseReceipt = async (fields) => {
+    await finishReceipt(fields);
+    await recordFailure();
+  };
   try {
     // Build the plan: for every owned workspace, look up its OTHER active members
     // so a shared workspace cannot be mistaken for private data to purge.
@@ -88,171 +118,306 @@ export default async function handler(req, res) {
       });
     }
 
-    /*
-     * Re-read membership BEFORE anything is mutated.
-     *
-     * An earlier version of this ran the same query after
-     * `auth.admin.deleteUser`, which made it worse than useless.
-     * `production-schema.sql` declares `workspaces.owner_user_id ... on delete
-     * cascade` and `workspace_memberships.workspace_id ... on delete cascade`,
-     * so deleting the auth user destroys the owned workspaces AND their
-     * membership rows first. The re-check then read an empty table, concluded
-     * that nothing was shared, and marked EVERY planned workspace purgeable --
-     * a guard that could only ever widen the purge, reading as protection.
-     *
-     * Asked here, the query sees live rows. The user's own membership is
-     * excluded in JS rather than with `.neq`, because `user_id` is nullable and
-     * SQL would silently drop a NULL row: an active membership belonging to
-     * nobody identifiable is evidence of sharing, not of privacy.
-     */
-    let purgeable = plan.workspacesToPurge;
-    if (plan.workspacesToPurge.length) {
-      const { data: liveMemberships, error: recheckError } = await supabase
-        .from('workspace_memberships')
-        .select('workspace_id, user_id')
-        .in('workspace_id', plan.workspacesToPurge)
-        .eq('status', 'active');
-
-      // Unreadable membership is never evidence that a workspace is private.
-      if (recheckError) {
-        return sendJson(res, 502, {
-          ok: false,
-          message: 'Unable to confirm who still has access to your workspaces. Nothing was changed.',
-        });
-      }
-
-      const otherMembers = (liveMemberships ?? []).filter((row) => row?.user_id !== user.id);
-      purgeable = workspacesStillPrivate(plan.workspacesToPurge, otherMembers);
-
-      /*
-       * A workspace that gained a member since the plan was built cannot be
-       * kept while this account is deleted: the owner FK cascades, so deleting
-       * the user destroys that workspace whatever this endpoint does about
-       * storage. Refusing is the only outcome that does not take someone
-       * else's records with it, and it matches what a workspace shared at plan
-       * time already gets.
-       */
-      if (purgeable.length !== plan.workspacesToPurge.length) {
-        return sendJson(res, 409, {
-          ok: false,
-          code: 'shared_workspace_handoff_required',
-          message:
-            'Someone was given access to one of your workspaces while this request was being prepared. Shared records and files need a reviewed ownership handoff before this account can be deleted. Nothing was changed.',
-        });
-      }
+    // Serialize deletion with checkout AND other deletion requests before
+    // touching membership holds. A losing deletion must not replace or release
+    // the winning request's per-user hold.
+    for (const workspaceId of [...plan.workspacesToPurge].sort()) {
+      const token = await claimCheckoutLock(supabase, workspaceId);
+      if (!token) return sendJson(res, BILLING_UNVERIFIED.status, BILLING_UNVERIFIED);
+      billingClaims.push({ workspaceId, token });
     }
 
-    auditEvent = { operation_id: randomUUID(), actor_user_id: user.id, workspace_ids: purgeable };
+    /*
+     * Hold every owned workspace at the database before anything irreversible.
+     *
+     * The plan above is a read; between it and `deleteUser`, an invitation
+     * could be accepted, and the owner foreign key would then cascade the
+     * account delete into a workspace that had just become shared -- taking a
+     * new member's access and records with it. Re-reading membership here
+     * only narrowed that window (audit F03).
+     *
+     * `xbar_hold_account_deletion_request` closes it. Under the same
+     * per-workspace lock the seat trigger takes, it re-checks every owned
+     * workspace for another active member (a NULL user_id counts as one) and,
+     * only if all are private, records a hold that makes the database refuse
+     * any new member or invitation. An acceptance and this hold now serialize:
+     * either the member is in first and deletion is refused, or the hold is in
+     * first and the acceptance is refused with a reason. The held set it
+     * returns is the authoritative list to purge.
+     *
+     * Unreadable is never private: any error refuses and changes nothing.
+     */
+    const { data: hold, error: holdError } = await supabase.rpc('xbar_hold_account_deletion_request', {
+      p_user_id: user.id,
+      p_request_token: deletionToken,
+    });
+    if (holdError || !hold || typeof hold.ok !== 'boolean') {
+      if (holdError) console.error('account deletion: hold failed', { userId: user.id, message: holdError.message });
+      return sendJson(res, 502, {
+        ok: false,
+        message: 'Unable to confirm who still has access to your workspaces. Nothing was changed.',
+      });
+    }
+    if (!hold.ok) {
+      if (hold.reason === 'deletion_in_progress') return sendJson(res, BILLING_UNVERIFIED.status, BILLING_UNVERIFIED);
+      return sendJson(res, 409, {
+        ok: false,
+        code: 'shared_workspace_handoff_required',
+        message:
+          'Someone was given access to one of your workspaces while this request was being prepared. Shared records and files need a reviewed ownership handoff before this account can be deleted. Nothing was changed.',
+      });
+    }
+    const purgeable = heldWorkspaceIds(hold);
+    releaseHolds = () =>
+      supabase
+        .rpc('xbar_release_account_deletion_request', { p_user_id: user.id, p_request_token: deletionToken })
+        .then(
+          ({ error }) => {
+            if (error)
+              console.error('account deletion: holds not released', { userId: user.id, message: error.message });
+          },
+          (error) => console.error('account deletion: holds not released', { userId: user.id, message: String(error) }),
+        );
+
+    // Ownership changing between planning and the hold cannot expand deletion
+    // beyond the workspaces whose checkout leases this request actually owns.
+    if (
+      purgeable.length !== billingClaims.length ||
+      purgeable.some((workspaceId) => !billingClaims.some((claim) => claim.workspaceId === workspaceId))
+    ) {
+      return sendJson(res, BILLING_UNVERIFIED.status, BILLING_UNVERIFIED);
+    }
+    // Check even while managed checkout is disabled: older Stripe subscriptions
+    // and cached payment pages can still exist.
+    for (const { workspaceId } of billingClaims) {
+      const billing = await verifyAccountDeletionBilling(supabase, workspaceId, stripe);
+      if (!billing.ok) return sendJson(res, billing.status, billing);
+    }
+
+    /*
+     * The receipt outlives the account (no foreign key), so what was deleted
+     * and any cleanup that did not finish stay on record. Without it, a
+     * failure after the account is gone has nowhere to be written.
+     */
+    const { data: receipt, error: receiptError } = await supabase
+      .from('account_deletion_receipts')
+      .insert({ id: deletionToken, user_id: user.id, held_workspaces: purgeable })
+      .select('id')
+      .single();
+    if (receiptError || receipt?.id !== deletionToken) {
+      return sendJson(res, 502, { ok: false, message: 'Unable to start account deletion. Nothing was changed.' });
+    }
+    // The mutable operational receipt keeps cleanup details; the append-only
+    // phase trail has separate durability/privilege guarantees. One request ID
+    // correlates both without replacing either role or changing historical SQL.
+    finishReceipt = async (fields) => {
+      try {
+        const { data, error } = await supabase
+          .from('account_deletion_receipts')
+          .update({ ...fields, finished_at: new Date().toISOString() })
+          .eq('id', receipt.id)
+          .select('id')
+          .single();
+        if (error || data?.id !== receipt.id) throw new Error('receipt_outcome_unconfirmed');
+        receiptFinalized = true;
+      } catch {
+        receiptOutcomeFailed = true;
+        throw new Error('receipt_outcome_unconfirmed');
+      }
+    };
+    auditEvent = { operation_id: deletionToken, actor_user_id: user.id, workspace_ids: purgeable };
     try {
       await recordDeletionAudit(supabase, { ...auditEvent, phase: 'started' });
       auditStarted = true;
     } catch {
+      await finishReceipt({ status: 'failed', failure: 'start audit unavailable' });
       return sendJson(res, 503, {
         ok: false,
         code: 'deletion_audit_unavailable',
+        operationId: deletionToken,
         message: 'Deletion could not be recorded. Nothing was deleted. Please try again later.',
       });
     }
 
-    // 2. Remove the user from every workspace they belong to (non-destructive).
-    const { error: membershipRemovalError } = await supabase
-      .from('workspace_memberships')
-      .delete()
-      .eq('user_id', user.id);
-    if (membershipRemovalError) {
-      throw new Error('membership_removal_failed');
+    /*
+     * Files under the account's own legacy prefix that another workspace still
+     * points at are not this account's to erase: they back a surviving
+     * ranch's records. Read before the delete, and refused if unreadable --
+     * guessing would either erase someone else's documents or keep files the
+     * deletion promised to remove.
+     */
+    const { data: sharedRefs, error: sharedRefsError } = await supabase
+      .from('documents')
+      .select('workspace_id, storage_path')
+      .like('storage_path', `${user.id}/%`);
+    if (sharedRefsError || !Array.isArray(sharedRefs)) {
+      await refuseReceipt({ status: 'refused', failure: 'shared file references unreadable' });
+      return sendJson(res, 502, {
+        ok: false,
+        message: 'Unable to confirm which stored files are still shared. Nothing was changed.',
+      });
     }
-
-    // 3. Delete the auth account itself. Nothing destructive to the account's
-    //    data has happened yet, so a failure here leaves it recoverable.
-    const { error: deleteUserError } = await supabase.auth.admin.deleteUser(user.id);
-    if (deleteUserError) {
-      throw new Error('auth_deletion_failed');
-    }
+    const protectedPaths = pathsStillReferenced(sharedRefs, purgeable);
 
     /*
-     * 4. Account is gone — now purge the workspaces confirmed private above.
+     * Delete the account. Its memberships go with it (the user_id foreign key
+     * cascades), so nothing is removed beforehand: a failure here used to
+     * leave the person still signed up but already locked out of every other
+     * owner's ranch. Now a failure releases the holds and changes nothing.
+     */
+    // Slow reads must not outlive the checkout fence. A lost lease preserves
+    // the account instead of deleting it beside a newly admitted purchase.
+    for (const { workspaceId, token } of billingClaims) {
+      if (!(await renewCheckoutLock(supabase, workspaceId, token))) {
+        await refuseReceipt({ status: 'refused', failure: 'billing lease lost' });
+        return sendJson(res, BILLING_UNVERIFIED.status, BILLING_UNVERIFIED);
+      }
+    }
+    const { data: confirmed, error: confirmError } = await supabase.rpc('xbar_confirm_account_deletion_request', {
+      p_user_id: user.id,
+      p_request_token: deletionToken,
+      p_workspace_ids: purgeable,
+    });
+    if (confirmError || confirmed !== true) {
+      await refuseReceipt({ status: 'refused', failure: 'deletion request fence lost' });
+      return sendJson(res, BILLING_UNVERIFIED.status, BILLING_UNVERIFIED);
+    }
+    const { error: deleteUserError } = await supabase.auth.admin.deleteUser(user.id);
+    if (deleteUserError) {
+      console.error('account deletion: auth delete failed', { userId: user.id, message: deleteUserError.message });
+      await refuseReceipt({ status: 'failed', failure: 'auth delete failed' });
+      return sendJson(res, 502, {
+        ok: false,
+        message: 'Your account could not be deleted. Nothing was removed; try again.',
+      });
+    }
+
+    accountDeleted = true;
+
+    /*
+     * Account is gone -- now purge the workspaces that were held.
      *
      * The owner FK has already cascaded these rows away; the delete below is
      * kept because it is the statement that expresses the intent, and it is
      * harmless when the rows are already gone. Storage is NOT cascaded by
      * anything, which is the part that genuinely still has to run here.
      */
+    let workspaceCleanupComplete = true;
     if (purgeable.length) {
-      const { error: cleanupError } = await supabase.from('workspaces').delete().in('id', purgeable);
-      if (cleanupError) throw new Error('workspace_cleanup_failed');
+      try {
+        const { error } = await supabase.from('workspaces').delete().in('id', purgeable);
+        workspaceCleanupComplete = !error;
+      } catch {
+        workspaceCleanupComplete = false;
+      }
     }
-    // Documents moved onto workspace-keyed paths, so sweeping only the
-    // departing user's own prefix would leave every file in a purged private
-    // workspace sitting in the bucket after this endpoint reported success --
-    // while the Settings screen promises those documents were erased. Which
-    // prefixes are safe to sweep is decided in account-deletion.js, where the
-    // rule that a transferred workspace is never swept can be tested.
-    await removeStoragePrefixes(
-      supabase,
-      DOCUMENT_BUCKET,
-      documentPrefixesToPurge({ ...plan, workspacesToPurge: purgeable }),
-    );
-    await removeStoragePrefixes(
-      supabase,
-      MEDIA_BUCKET,
-      mediaPrefixesToPurge({ ...plan, workspacesToPurge: purgeable }),
-    );
-
-    await recordDeletionAudit(supabase, { ...auditEvent, phase: 'completed' });
+    /*
+     * Each sweep reports what it could not finish rather than swallowing it.
+     * The account is already gone, so there is nothing to roll back -- but a
+     * response that says "erased" while packet PDFs full of Coggins and
+     * registration copies are still in the bucket is the silent success this
+     * codebase keeps paying for. The receipt records it so it can be finished.
+     */
+    const purge = { ...plan, workspacesToPurge: purgeable };
+    const leftovers = [];
+    for (const [bucket, prefixes] of [
+      [DOCUMENT_BUCKET, documentPrefixesToPurge(purge)],
+      [MEDIA_BUCKET, mediaPrefixesToPurge(purge)],
+      [PACKET_BUCKET, packetPrefixesToPurge(purge)],
+    ]) {
+      const failed = await removeStoragePrefixes(supabase, bucket, prefixes, protectedPaths).catch(() => prefixes);
+      if (failed.length) leftovers.push({ bucket, prefixes: failed });
+    }
+    if (leftovers.length) {
+      console.error('account deletion: stored files could not all be removed', { userId: user.id, leftovers });
+    }
+    await finishReceipt({
+      status: leftovers.length ? 'storage_incomplete' : workspaceCleanupComplete ? 'complete' : 'failed',
+      storage_leftovers: leftovers,
+      ...(!workspaceCleanupComplete ? { failure: 'workspace cleanup incomplete' } : {}),
+    });
+    if (leftovers.length || !workspaceCleanupComplete) throw new Error('cleanup_incomplete');
+    try {
+      await recordDeletionAudit(supabase, { ...auditEvent, phase: 'completed' });
+    } catch {
+      auditOutcomeFailed = true;
+      throw new Error('completion_audit_unavailable');
+    }
 
     return sendJson(res, 200, {
       ok: true,
+      operationId: deletionToken,
       purgedWorkspaces: purgeable.length,
       transferredWorkspaces: plan.workspacesToTransfer.length,
+      storageCleanupComplete: leftovers.length === 0,
     });
   } catch {
-    let auditFailed = false;
-    if (auditStarted) {
+    if (finishReceipt && !receiptFinalized) {
       try {
-        await recordDeletionAudit(supabase, { ...auditEvent, phase: 'failed' });
+        await finishReceipt({ status: 'failed', failure: 'deletion outcome unconfirmed' });
       } catch {
-        auditFailed = true;
-        console.error('Account deletion outcome audit unavailable', auditEvent.operation_id);
+        console.error('Account deletion receipt outcome unavailable', deletionToken);
       }
     }
-    return sendJson(res, auditFailed ? 503 : 502, {
+    try {
+      await recordFailure();
+    } catch {
+      auditOutcomeFailed = true;
+      console.error('Account deletion audit outcome unavailable', deletionToken);
+    }
+    return sendJson(res, auditOutcomeFailed || receiptOutcomeFailed ? 503 : 502, {
       ok: false,
-      code: auditFailed ? 'deletion_audit_incomplete' : 'deletion_incomplete',
-      operationId: auditEvent?.operation_id,
-      message:
-        'Account deletion could not be fully confirmed. Some steps may have completed. Contact support with this operation ID before retrying.',
+      code: auditOutcomeFailed ? 'deletion_audit_incomplete' : 'deletion_incomplete',
+      operationId: deletionToken,
+      accountDeleted,
+      message: accountDeleted
+        ? 'Your account was deleted, but cleanup or its confirmation is incomplete. Contact support with this operation ID.'
+        : 'Account deletion could not be confirmed. Contact support with this operation ID before retrying.',
     });
+  } finally {
+    if (!accountDeleted && releaseHolds) await releaseHolds();
+    for (const { workspaceId, token } of billingClaims) {
+      await releaseCheckoutLock(supabase, workspaceId, token);
+    }
   }
 }
 
 // Recursively collect every object under a prefix. Supabase Storage `list`
 // returns only the immediate children of a prefix and marks folders with a null
 // id, so nested upload paths (`${user}/horses/<id>/<file>`) require walking.
+// Returns false when a listing failed, so the caller can tell "nothing here"
+// from "could not look".
 async function listAllObjects(supabase, bucket, prefix, out) {
   let offset = 0;
   const pageSize = 100;
   for (;;) {
     const { data: entries, error } = await supabase.storage.from(bucket).list(prefix, { limit: pageSize, offset });
-    if (error) throw new Error('storage_list_failed');
-    if (!entries?.length) break;
+    if (error) return false;
+    if (!entries?.length) return true;
     for (const entry of entries) {
       const path = `${prefix}/${entry.name}`;
       if (entry.id) out.push(path);
-      else await listAllObjects(supabase, bucket, path, out); // folder → recurse
+      else if (!(await listAllObjects(supabase, bucket, path, out))) return false; // folder → recurse
     }
-    if (entries.length < pageSize) break;
+    if (entries.length < pageSize) return true;
     offset += pageSize;
   }
 }
 
-async function removeStoragePrefixes(supabase, bucket, prefixes) {
+// Removes every object under each prefix; returns the prefixes it could not
+// fully clear (a listing or a removal failed).
+export async function removeStoragePrefixes(supabase, bucket, prefixes, keep = new Set()) {
+  const failed = [];
   for (const prefix of prefixes) {
-    const paths = [];
-    await listAllObjects(supabase, bucket, prefix, paths);
+    const listed = [];
+    let complete = await listAllObjects(supabase, bucket, prefix, listed);
+    // Objects another surviving workspace still references are kept.
+    const paths = listed.filter((path) => !keep.has(path));
     for (let i = 0; i < paths.length; i += 100) {
       const { error } = await supabase.storage.from(bucket).remove(paths.slice(i, i + 100));
-      if (error) throw new Error('storage_remove_failed');
+      if (error) complete = false;
     }
+    if (!complete) failed.push(prefix);
   }
+  return failed;
 }

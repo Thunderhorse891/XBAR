@@ -7,11 +7,14 @@ import {
   confirmationSatisfied,
   documentPrefixesToPurge,
   mediaPrefixesToPurge,
+  packetPrefixesToPurge,
   pickSuccessorOwner,
   planAccountDeletion,
   loadAccountDeletionPlan,
-  workspacesStillPrivate,
+  heldWorkspaceIds,
+  pathsStillReferenced,
 } from '../../api/_lib/account-deletion.js';
+import { verifyAccountDeletionBilling } from '../../api/_lib/account-deletion-billing.js';
 
 test('confirmation requires the exact account email (trimmed, case-insensitive)', () => {
   assert.equal(confirmationSatisfied('rancher@example.com', 'rancher@example.com'), true);
@@ -134,7 +137,14 @@ test('verified private and shared workspaces produce distinct deletion plans', a
   assert.deepEqual(sharedPlan.workspacesToTransfer, [{ workspaceId: 'workspace', newOwnerUserId: 'u2' }]);
 });
 
-test('the real handler refuses failed prerequisites and shared-workspace deletion before destructive calls', async (t) => {
+/*
+ * The real handler, against a scripted Supabase (REST, RPC, auth admin and
+ * storage all go through fetch). Each scenario asserts what reached the
+ * irreversible calls -- the auth delete and storage -- and what did not.
+ */
+const FIXTURE_USER = '11111111-1111-4111-8111-111111111111';
+
+function deletionFixture(t) {
   const envKeys = [
     'SUPABASE_URL',
     'SUPABASE_SERVICE_ROLE_KEY',
@@ -158,60 +168,303 @@ test('the real handler refuses failed prerequisites and shared-workspace deletio
   process.env.NODE_ENV = 'test';
   process.env.RATE_LIMIT_MODE = 'memory';
   delete process.env.VERCEL;
-  let scenario;
-  let writes = [];
+
+  const state = { scenario: '', calls: [], receiptUpdates: [], auditEvents: [] };
   t.mock.method(globalThis, 'fetch', async (input, init = {}) => {
     const url = new URL(typeof input === 'string' || input instanceof URL ? input : input.url);
     assert.equal(url.hostname, 'deletion-fixture.invalid', 'test must not contact a real service');
     const method = init.method ?? 'GET';
-    if (method !== 'GET') writes.push(`${method} ${url.pathname}`);
+    const scenario = state.scenario;
+    state.calls.push(`${method} ${url.pathname}`);
     const reply = (data, status = 200) =>
-      new Response(JSON.stringify(data), { status, headers: { 'Content-Type': 'application/json' } });
+      new Response(status === 204 ? null : JSON.stringify(data), {
+        status,
+        headers: { 'Content-Type': 'application/json' },
+      });
     const failure = () => reply({ message: 'Fixture database failure', code: 'XX000' }, 400);
-    if (url.pathname === '/rest/v1/account_deletion_events') return reply({ id: 'receipt' });
-    if (url.pathname === '/auth/v1/user') return reply({ id: 'u1', email: 'owner@example.invalid' });
+
+    if (url.pathname === '/auth/v1/user') return reply({ id: FIXTURE_USER, email: 'owner@example.invalid' });
     if (url.pathname === '/rest/v1/workspaces' && method === 'GET')
       return scenario === 'owned' ? failure() : reply([{ id: 'ws1' }]);
     if (url.pathname === '/rest/v1/workspace_memberships' && method === 'GET')
       return scenario === 'members'
         ? failure()
-        : reply(scenario === 'transfer' ? [{ user_id: 'u2', role: 'Admin' }] : []);
-    if (url.pathname === '/rest/v1/workspaces' && method === 'PATCH') return reply(null);
-    if (url.pathname === '/rest/v1/workspace_memberships' && method === 'DELETE') return failure();
+        : reply(scenario === 'transfer' ? [{ user_id: '22222222-2222-4222-8222-222222222222', role: 'Admin' }] : []);
+    if (url.pathname === '/rest/v1/rpc/xbar_hold_account_deletion_request') {
+      state.deletionToken = JSON.parse(init.body).p_request_token;
+      assert.match(state.deletionToken, /^[0-9a-f-]{36}$/);
+      if (scenario === 'hold') return failure();
+      if (scenario === 'joined') return reply({ ok: false, shared: ['ws1'], held: [] });
+      if (scenario === 'ownership-changed') return reply({ ok: true, shared: [], held: ['ws1', 'ws-new'] });
+      return reply({ ok: true, shared: [], held: ['ws1'] });
+    }
+    if (url.pathname === '/rest/v1/rpc/xbar_release_account_deletion_request') {
+      assert.equal(JSON.parse(init.body).p_request_token, state.deletionToken);
+      return reply(1);
+    }
+    if (url.pathname === '/rest/v1/rpc/xbar_confirm_account_deletion_request') {
+      assert.equal(JSON.parse(init.body).p_request_token, state.deletionToken);
+      assert.deepEqual(JSON.parse(init.body).p_workspace_ids, ['ws1']);
+      if (scenario === 'fence-error') return failure();
+      return reply(scenario !== 'fence-lost');
+    }
+    if (url.pathname === '/rest/v1/workspace_subscription_profiles') return reply(null);
+    if (url.pathname === '/rest/v1/account_deletion_events' && method === 'POST') {
+      const event = JSON.parse(init.body);
+      state.auditEvents.push(event);
+      if (scenario === `audit-${event.phase}-error`) return failure();
+      if (scenario === `audit-${event.phase}-empty`) return reply(null);
+      return reply({ id: `event-${event.phase}` }, 201);
+    }
+    if (url.pathname === '/rest/v1/account_deletion_receipts' && method === 'POST') {
+      state.receiptInsert = JSON.parse(init.body);
+      state.receiptId = state.receiptInsert.id ?? 'receipt-1';
+      if (scenario === 'receipt') return failure();
+      if (scenario === 'receipt-empty') return reply(null);
+      if (scenario === 'receipt-wrong-id') return reply({ id: 'another-operation' }, 201);
+      return reply({ id: state.receiptId }, 201);
+    }
+    if (url.pathname === '/rest/v1/account_deletion_receipts' && method === 'PATCH') {
+      assert.equal(url.searchParams.get('id'), `eq.${state.receiptId}`);
+      state.receiptUpdates.push(JSON.parse(init.body));
+      if (scenario === 'outcome-error') return failure();
+      if (scenario === 'outcome-empty') return reply(null);
+      if (scenario === 'outcome-wrong-id') return reply({ id: 'another-operation' });
+      return reply({ id: state.receiptId });
+    }
+    if (url.pathname === '/rest/v1/rpc/xbar_claim_checkout_lock') {
+      state.claimToken = JSON.parse(init.body).p_token;
+      return scenario === 'billing-lock' ? reply(false) : reply(true);
+    }
+    if (url.pathname === '/rest/v1/workspace_billing_customers' && method === 'GET') {
+      if (scenario === 'billing-read') return failure();
+      if (scenario === 'billing-missing') return reply(null);
+      return reply({
+        workspace_id: 'ws1',
+        stripe_customer_id: scenario === 'billing-active' ? 'cus_active' : '',
+        stripe_subscription_id: scenario === 'billing-active' ? 'sub_active' : '',
+      });
+    }
+    if (url.pathname === '/rest/v1/workspace_billing_customers' && method === 'PATCH') {
+      assert.equal(
+        url.searchParams.get('checkout_lock_token'),
+        `eq.${state.claimToken}`,
+        'only our lease may be changed',
+      );
+      const fields = JSON.parse(init.body);
+      if (fields.checkout_lock_token === null) {
+        state.calls.push('billing-lease-release');
+        return reply(null, 204);
+      }
+      state.calls.push('billing-lease-renew');
+      return reply(scenario === 'billing-lease-lost' ? [] : [{ workspace_id: 'ws1' }]);
+    }
+    if (url.pathname === '/rest/v1/documents' && method === 'GET')
+      return scenario === 'refs'
+        ? failure()
+        : reply([
+            { workspace_id: 'ws-other', storage_path: `${FIXTURE_USER}/documents/shared.pdf` },
+            { workspace_id: 'ws1', storage_path: `${FIXTURE_USER}/documents/mine.pdf` },
+          ]);
+    if (url.pathname === `/auth/v1/admin/users/${FIXTURE_USER}` && method === 'DELETE')
+      return scenario === 'auth' ? reply({ message: 'Fixture auth failure' }, 500) : reply({});
+    if (url.pathname === '/rest/v1/workspaces' && method === 'DELETE')
+      return scenario === 'cleanup-error' ? failure() : reply(null, 204);
+    if (url.pathname.startsWith('/storage/v1/object/list/')) {
+      const { prefix } = JSON.parse(init.body);
+      if (scenario === 'packet-list-error' && url.pathname.endsWith('/sale-packets')) return failure();
+      // Only the documents bucket holds the legacy files in this scenario.
+      if (url.pathname !== '/storage/v1/object/list/horse-documents') return reply([]);
+      if (prefix === `${FIXTURE_USER}/documents`)
+        return reply([
+          { name: 'shared.pdf', id: 'o1' },
+          { name: 'mine.pdf', id: 'o2' },
+        ]);
+      if (prefix === FIXTURE_USER) return reply([{ name: 'documents', id: null }]);
+      return reply([]);
+    }
+    if (url.pathname.startsWith('/storage/v1/object/') && method === 'DELETE') {
+      if (scenario === 'storage-remove-error') return failure();
+      state.removed = [...(state.removed ?? []), ...JSON.parse(init.body).prefixes];
+      return reply([]);
+    }
     throw new Error(`Unexpected request: ${method} ${url.pathname}`);
   });
+  return state;
+}
+
+async function deleteAccount(handler, ip) {
+  const req = {
+    method: 'POST',
+    headers: { authorization: 'Bearer fixture-token', 'x-real-ip': ip },
+    async *[Symbol.asyncIterator]() {
+      yield JSON.stringify({ confirmation: 'owner@example.invalid' });
+    },
+  };
+  const res = {
+    statusCode: 0,
+    body: '',
+    setHeader() {},
+    end(body) {
+      this.body = body;
+    },
+  };
+  await handler(req, res);
+  return { status: res.statusCode, body: JSON.parse(res.body) };
+}
+
+test('every refusal before the auth delete changes nothing irreversible', async (t) => {
+  const state = deletionFixture(t);
   const { default: handler } = await import('../../api/_lib/account-delete.js');
-  for (scenario of ['owned', 'members', 'transfer', 'removal']) {
-    writes = [];
-    const req = {
-      method: 'POST',
-      headers: { authorization: 'Bearer fixture-token', 'x-real-ip': `fixture-${scenario}` },
-      async *[Symbol.asyncIterator]() {
-        yield JSON.stringify({ confirmation: 'owner@example.invalid' });
-      },
-    };
-    const res = {
-      statusCode: 0,
-      body: '',
-      setHeader() {},
-      end(body) {
-        this.body = body;
-      },
-    };
-    await handler(req, res);
+  const expectations = {
+    owned: '5xx', // ownership unreadable
+    members: '5xx', // shared-member check unreadable
+    transfer: 409, // shared at plan time
+    hold: 502, // the database hold could not be placed
+    joined: 409, // someone joined before the hold -- the race, refused at the database
+    receipt: 502, // no durable receipt, so no deletion
+    refs: 502, // shared file references unreadable
+    'billing-lock': 503, // checkout is in flight
+    'billing-read': 503, // billing mapping unreadable
+    'billing-missing': 503, // a claimed row must exist
+    'billing-lease-lost': 503, // another request took over during a slow read
+    'fence-lost': 503,
+    'fence-error': 503,
+    'ownership-changed': 503, // newly owned workspaces were never leased
+  };
+  for (const [scenario, status] of Object.entries(expectations)) {
+    state.scenario = scenario;
+    state.calls = [];
+    const response = await deleteAccount(handler, `fixture-${scenario}`);
+    if (status === '5xx') assert.ok(response.status >= 500, `${scenario} must refuse with a 5xx`);
+    else assert.equal(response.status, status, `${scenario} must refuse with ${status}`);
+    assert.equal(response.body.ok, false);
     assert.ok(
-      scenario === 'transfer' ? res.statusCode === 409 : res.statusCode >= 500,
-      `${scenario} must refuse deletion`,
+      !state.calls.some((call) => call.includes('/auth/v1/admin/') || call.includes('/storage/')),
+      `${scenario} reached an irreversible call: ${state.calls.join(', ')}`,
     );
-    assert.equal(JSON.parse(res.body).ok, false);
     assert.ok(
-      !writes.some((request) => request.includes('/auth/') || request.includes('/storage/')),
-      `${scenario} reached irreversible deletion`,
+      !state.calls.some((call) => call.startsWith('DELETE ')),
+      `${scenario} deleted something: ${state.calls.join(', ')}`,
     );
-    if (scenario !== 'removal') assert.deepEqual(writes, []);
-    if (scenario === 'transfer') assert.equal(JSON.parse(res.body).code, 'shared_workspace_handoff_required');
+    if (scenario === 'transfer' || scenario === 'joined') {
+      assert.equal(response.body.code, 'shared_workspace_handoff_required');
+    }
+    // A hold that was placed is always lifted again on the way out.
+    const held = state.calls.includes('POST /rest/v1/rpc/xbar_hold_account_deletion_request');
+    const placed = held && !['hold', 'joined'].includes(scenario);
+    assert.equal(
+      state.calls.includes('POST /rest/v1/rpc/xbar_release_account_deletion_request'),
+      placed,
+      `${scenario}: holds released exactly when they were placed`,
+    );
   }
 });
+
+test('a failed auth delete removes nothing, releases the holds and records the failure', async (t) => {
+  const state = deletionFixture(t);
+  const { default: handler } = await import('../../api/_lib/account-delete.js');
+  state.scenario = 'auth';
+  state.calls = [];
+  state.receiptUpdates = [];
+  const response = await deleteAccount(handler, 'fixture-auth');
+  assert.equal(response.status, 502);
+  assert.match(response.body.message, /Nothing was removed/);
+  // The old handler deleted every membership first, so this left the person
+  // signed up but locked out of every other owner's ranch.
+  assert.ok(!state.calls.some((call) => call.includes('workspace_memberships') && call.startsWith('DELETE')));
+  assert.ok(
+    !state.calls.some((call) => call.includes('/storage/')),
+    'no file was swept for an account that still exists',
+  );
+  assert.ok(state.calls.includes('POST /rest/v1/rpc/xbar_release_account_deletion_request'));
+  assert.equal(state.receiptUpdates.at(-1)?.status, 'failed');
+  assert.doesNotMatch(JSON.stringify(response.body), /Fixture auth failure/, 'provider text stays in the log');
+});
+
+test('a completed deletion keeps files another ranch still uses and records the outcome', async (t) => {
+  const state = deletionFixture(t);
+  const { default: handler } = await import('../../api/_lib/account-delete.js');
+  state.scenario = 'success';
+  state.calls = [];
+  state.receiptUpdates = [];
+  state.removed = [];
+  const response = await deleteAccount(handler, 'fixture-success');
+  assert.equal(response.status, 200);
+  assert.equal(response.body.ok, true);
+  assert.equal(response.body.storageCleanupComplete, true);
+  assert.deepEqual(state.removed, [`${FIXTURE_USER}/documents/mine.pdf`], 'only the file no surviving ranch points at');
+  assert.equal(state.receiptUpdates.at(-1)?.status, 'complete');
+  const holdAt = state.calls.indexOf('POST /rest/v1/rpc/xbar_hold_account_deletion_request');
+  const deleteAt = state.calls.indexOf(`DELETE /auth/v1/admin/users/${FIXTURE_USER}`);
+  assert.ok(holdAt > -1 && deleteAt > holdAt, 'the database hold comes before the auth delete');
+  const claimAt = state.calls.indexOf('POST /rest/v1/rpc/xbar_claim_checkout_lock');
+  const billingAt = state.calls.indexOf('GET /rest/v1/workspace_billing_customers');
+  const renewAt = state.calls.indexOf('billing-lease-renew');
+  assert.ok(claimAt > -1 && holdAt > claimAt && billingAt > holdAt && renewAt > billingAt && deleteAt > renewAt);
+  assert.ok(state.calls.indexOf('billing-lease-release') > deleteAt);
+  assert.deepEqual(
+    state.auditEvents.map((event) => event.phase),
+    ['started', 'completed'],
+  );
+  assert.equal(state.receiptId, state.deletionToken);
+  assert.ok(state.auditEvents.every((event) => event.operation_id === state.receiptId));
+  assert.ok(state.calls.indexOf('POST /rest/v1/account_deletion_events') < deleteAt);
+  assert.ok(state.calls.indexOf('PATCH /rest/v1/account_deletion_receipts') > deleteAt);
+});
+
+for (const scenario of ['receipt-empty', 'receipt-wrong-id', 'audit-started-error', 'audit-started-empty']) {
+  test(`deletion requires acknowledged receipt and append-only start (${scenario})`, async (t) => {
+    const state = deletionFixture(t);
+    state.scenario = scenario;
+    const { default: handler } = await import('../../api/_lib/account-delete.js');
+    const response = await deleteAccount(handler, `fixture-${scenario}`);
+    assert.ok(response.status >= 500);
+    assert.equal(response.body.ok, false);
+    assert.ok(!state.calls.some((call) => call.includes('/auth/v1/admin/') || call.includes('/storage/')));
+    assert.ok(!state.calls.some((call) => call.startsWith('DELETE ')));
+    assert.ok(state.calls.includes('POST /rest/v1/rpc/xbar_release_account_deletion_request'));
+  });
+}
+
+for (const scenario of [
+  'outcome-error',
+  'outcome-empty',
+  'outcome-wrong-id',
+  'audit-completed-error',
+  'audit-completed-empty',
+  'cleanup-error',
+  'packet-list-error',
+  'storage-remove-error',
+]) {
+  test(`post-delete incompleteness stays visible and correlated (${scenario})`, async (t) => {
+    const state = deletionFixture(t);
+    state.scenario = scenario;
+    const { default: handler } = await import('../../api/_lib/account-delete.js');
+    const response = await deleteAccount(handler, `fixture-${scenario}`);
+    assert.ok(response.status >= 500, `${scenario} must never report successful deletion`);
+    assert.equal(response.body.ok, false);
+    assert.equal(response.body.operationId, state.deletionToken);
+    assert.equal(response.body.accountDeleted, true);
+    assert.doesNotMatch(JSON.stringify(response.body), /Fixture|XX000|stack|workspace_cleanup_failed/);
+    assert.equal(state.auditEvents[0]?.phase, 'started');
+    assert.equal(state.auditEvents.at(-1)?.phase, 'failed');
+    assert.ok(state.calls.includes(`DELETE /auth/v1/admin/users/${FIXTURE_USER}`));
+    assert.ok(!state.calls.includes('POST /rest/v1/rpc/xbar_release_account_deletion_request'));
+    if (scenario === 'cleanup-error') {
+      assert.ok(
+        state.calls.some((call) => call.includes('/storage/v1/object/list/sale-packets')),
+        'safe storage cleanup still runs after a workspace cleanup error',
+      );
+      assert.equal(state.receiptUpdates.at(-1)?.failure, 'workspace cleanup incomplete');
+    }
+    if (scenario === 'packet-list-error' || scenario === 'storage-remove-error') {
+      assert.equal(state.receiptUpdates.at(-1)?.status, 'storage_incomplete');
+      assert.ok(state.receiptUpdates.at(-1)?.storage_leftovers.length);
+      assert.ok(!state.auditEvents.some((event) => event.phase === 'completed'));
+    }
+  });
+}
 
 test('a purged private workspace has its documents erased, not orphaned', () => {
   // Documents are keyed to the workspace now, so sweeping only the departing
@@ -234,12 +487,17 @@ test('a transferred workspace is never swept, in either bucket', () => {
   assert.deepEqual(documentPrefixesToPurge(plan), ['user-1', 'ws-solo']);
 });
 
-test('media is swept by uploader only, because that is how media is keyed', () => {
-  // horse-media is a public bucket and never had the shared-read problem that
-  // moved documents onto workspace paths, so a workspace prefix here would
-  // erase nothing today and be a loaded gun if that ever changed.
-  const plan = planAccountDeletion('user-1', [{ id: 'ws-solo', otherActiveMembers: [] }]);
-  assert.deepEqual(mediaPrefixesToPurge(plan), ['user-1']);
+test('media is swept under the purged workspace too, because photos are keyed to it', () => {
+  // Photos are written under `<workspace-id>/horses/...` (audit F02). Sweeping
+  // only the departing user's prefix left a purged ranch's photos in the
+  // bucket after the endpoint reported the account erased.
+  const plan = planAccountDeletion('user-1', [
+    { id: 'ws-solo', otherActiveMembers: [] },
+    { id: 'ws-shared', otherActiveMembers: [{ userId: 'user-2', role: 'Admin' }] },
+  ]);
+  assert.deepEqual(mediaPrefixesToPurge(plan), ['user-1', 'ws-solo']);
+  // A workspace someone else stays in is never swept.
+  assert.ok(!mediaPrefixesToPurge(plan).includes('ws-shared'));
 });
 
 test('an account owning nothing still has its own uploads erased', () => {
@@ -257,111 +515,379 @@ test('a malformed plan sweeps nothing rather than the whole bucket', () => {
   assert.deepEqual(mediaPrefixesToPurge({ userId: undefined }), []);
 });
 
+test('sale packets of a purged workspace are swept, and never by user id or for a transferred one', () => {
+  // Every packet embeds full copies of the horse's documents. Leaving them in
+  // the bucket kept the papers the deletion promised to erase.
+  const plan = planAccountDeletion('user-1', [
+    { id: 'ws-solo', otherActiveMembers: [] },
+    { id: 'ws-shared', otherActiveMembers: [{ userId: 'user-2', role: 'Admin' }] },
+  ]);
+  assert.deepEqual(packetPrefixesToPurge(plan), ['ws-solo']);
+  assert.deepEqual(packetPrefixesToPurge({ userId: 'user-1', workspacesToPurge: ['', null] }), []);
+  assert.deepEqual(packetPrefixesToPurge(undefined), []);
+});
+
 test('the deletion endpoint actually uses those prefix lists', () => {
   // A rule nothing calls is not a fix. This pins the wiring, since the sweep
   // itself needs a live Supabase project to exercise end to end.
   const source = readFileSync(new URL('../../api/_lib/account-delete.js', import.meta.url), 'utf8');
   assert.ok(source.includes('documentPrefixesToPurge('), 'document prefixes are not used by the endpoint');
   assert.ok(source.includes('mediaPrefixesToPurge('), 'media prefixes are not used by the endpoint');
+  assert.match(
+    source,
+    /\[PACKET_BUCKET, packetPrefixesToPurge\(purge\)\]/,
+    'sale-packet PDFs of a purged workspace are not swept',
+  );
+  assert.match(source, /const purge = \{ \.\.\.plan, workspacesToPurge: purgeable \};/);
   assert.ok(!source.includes('removeUserStorage'), 'the uploader-only sweep is still present');
 
   /*
-   * And they are built from the RE-CHECKED set, not the stale plan. Sweeping
-   * `plan.workspacesToPurge` would erase the files of a workspace the re-check
-   * had just spared -- deleting the new member's documents while leaving their
-   * rows, which is the worse half of the race rather than a fix for it.
+   * And they are built from the HELD set, not the stale plan. Sweeping
+   * `plan.workspacesToPurge` would erase the files of a workspace someone
+   * joined after the plan was read -- the worse half of the race.
    */
   assert.ok(
-    !source.includes('documentPrefixesToPurge(plan)') && !source.includes('mediaPrefixesToPurge(plan)'),
-    'the storage sweep must follow the re-check, not the plan it was built before the account was deleted',
+    !source.includes('documentPrefixesToPurge(plan)') &&
+      !source.includes('mediaPrefixesToPurge(plan)') &&
+      !source.includes('packetPrefixesToPurge(plan)'),
+    'the storage sweep must follow the database hold, not the plan read before it',
   );
-  assert.ok(
-    source.includes('workspacesStillPrivate(plan.workspacesToPurge'),
-    'the endpoint must re-read membership before purging',
-  );
+  assert.ok(source.includes('const purgeable = heldWorkspaceIds(hold);'), 'the purge set is what the database held');
 
   /*
-   * And the re-check must run BEFORE the auth user is deleted.
-   *
-   * This is the ordering bug that shipped in the first version, found in
-   * review. `production-schema.sql` declares both
-   * `workspaces.owner_user_id ... on delete cascade` and
-   * `workspace_memberships.workspace_id ... on delete cascade`, so deleting the
-   * auth user destroys the owned workspaces and their membership rows first.
-   * A re-check asked afterwards reads an empty table, concludes nothing is
-   * shared, and marks EVERY planned workspace purgeable. The guard could only
-   * ever widen the purge while reading as protection -- strictly worse than
-   * having no guard, because it invited trust.
+   * The re-check is the database hold, and it must run BEFORE the auth user is
+   * deleted. `workspaces.owner_user_id` cascades, so a check asked afterwards
+   * reads an emptied table and can only widen the purge -- the ordering bug
+   * that shipped in the first version.
    */
-  const recheckAt = source.indexOf('workspacesStillPrivate(plan.workspacesToPurge');
-  // The CALL, not the prose. The comment above the re-check names
-  // `auth.admin.deleteUser` to explain the ordering, and matching that instead
-  // would make this assertion pass for the wrong reason.
+  const holdAt = source.indexOf("supabase.rpc('xbar_hold_account_deletion_request'");
   const deleteUserAt = source.indexOf('await supabase.auth.admin.deleteUser(');
-  assert.ok(recheckAt > 0 && deleteUserAt > 0, 'precondition: both statements were found');
-  assert.ok(
-    recheckAt < deleteUserAt,
-    'the membership re-check must run before deleteUser, or the owner cascade has already erased what it reads',
+  assert.ok(holdAt > 0 && deleteUserAt > 0, 'precondition: both calls were found');
+  assert.ok(holdAt < deleteUserAt, 'the hold must be placed before deleteUser');
+
+  // Unreadable is never private, and someone joining refuses the whole request.
+  assert.match(
+    source,
+    /if \(holdError \|\| !hold \|\| typeof hold\.ok !== 'boolean'\) \{[\s\S]*?return sendJson\(res, 502,/,
   );
+  assert.match(source, /if \(!hold\.ok\) \{[\s\S]*?code: 'shared_workspace_handoff_required'/);
+  assert.match(source, /hold.reason === 'deletion_in_progress'/);
+
+  // Nothing is removed ahead of the auth delete: memberships cascade with it.
+  assert.doesNotMatch(source, /from\('workspace_memberships'\)\s*\.delete\(\)/);
 
   /*
-   * Unreadable membership is never evidence that a workspace is private, and
-   * because the owner FK cascades there is no "purge nothing but delete anyway"
-   * option: deleting the user destroys the workspace regardless. So the only
-   * safe answer to either doubt is to refuse and change nothing.
+   * The hold's sharing test is in SQL now, so the NULL-user_id rule is pinned
+   * there: `<>` would silently skip a membership row with no user, and an
+   * active membership belonging to nobody identifiable is evidence of sharing.
    */
+  const migration = readFileSync(
+    new URL('../../supabase/migrations/20261002100000_account_deletion_hold.sql', import.meta.url),
+    'utf8',
+  );
+  assert.match(migration, /m\.user_id is distinct from p_user_id/);
+  assert.match(
+    migration,
+    /perform pg_advisory_xact_lock\(hashtextextended\('xbar-seats:' \|\| workspace_row\.id::text, 0\)\);/,
+  );
+  assert.match(
+    migration,
+    /perform pg_advisory_xact_lock\(hashtextextended\('xbar-seats:' \|\| new\.workspace_id::text, 0\)\);/,
+    'the refusal trigger must take the same lock as the hold, or the two can interleave',
+  );
+});
+
+test('only well-formed held ids reach the purge', () => {
+  assert.deepEqual(heldWorkspaceIds({ ok: true, held: ['ws-a', '', null, 42, 'ws-b'] }), ['ws-a', 'ws-b']);
+  assert.deepEqual(heldWorkspaceIds({ ok: true }), []);
+  assert.deepEqual(heldWorkspaceIds(null), []);
+});
+
+test("files a surviving ranch still points at are kept; a purged ranch's are not", () => {
+  const keep = pathsStillReferenced(
+    [
+      { workspace_id: 'ws-other', storage_path: 'u1/documents/shared.pdf' },
+      { workspace_id: 'ws-purged', storage_path: 'u1/documents/mine.pdf' },
+      { workspace_id: 'ws-other', storage_path: '' },
+      { workspace_id: null, storage_path: 'u1/documents/orphan-row.pdf' },
+      null,
+    ],
+    ['ws-purged'],
+  );
+  assert.deepEqual([...keep].sort(), ['u1/documents/orphan-row.pdf', 'u1/documents/shared.pdf']);
+});
+
+test('a storage sweep reports every prefix it could not clear, instead of claiming success', async () => {
+  const { removeStoragePrefixes } = await import('../../api/_lib/account-delete.js');
+  const removed = [];
+  const fake = (behaviour) => ({
+    storage: {
+      from: () => ({
+        list: async (prefix) => {
+          if (behaviour.listFails?.includes(prefix)) return { data: null, error: { message: 'timeout' } };
+          if (prefix === 'ws-a')
+            return {
+              data: [
+                { name: 'p.pdf', id: '1' },
+                { name: 'horse-1', id: null },
+              ],
+              error: null,
+            };
+          if (prefix === 'ws-a/horse-1') return { data: [{ name: 'q.pdf', id: '2' }], error: null };
+          return { data: [], error: null };
+        },
+        remove: async (paths) => {
+          removed.push(...paths);
+          return behaviour.removeFails ? { data: null, error: { message: 'denied' } } : { data: paths, error: null };
+        },
+      }),
+    },
+  });
+
+  assert.deepEqual(await removeStoragePrefixes(fake({}), 'b', ['ws-a', 'ws-empty']), []);
+  assert.deepEqual(removed, ['ws-a/p.pdf', 'ws-a/horse-1/q.pdf']);
+  // A listing that fails part-way is "could not look", not "nothing here".
+  assert.deepEqual(await removeStoragePrefixes(fake({ listFails: ['ws-a/horse-1'] }), 'b', ['ws-a']), ['ws-a']);
+  assert.deepEqual(await removeStoragePrefixes(fake({ listFails: ['ws-a'] }), 'b', ['ws-a', 'ws-empty']), ['ws-a']);
+  assert.deepEqual(await removeStoragePrefixes(fake({ removeFails: true }), 'b', ['ws-a']), ['ws-a']);
+
+  // A kept path is listed but never removed, and does not count as a failure.
+  removed.length = 0;
+  assert.deepEqual(await removeStoragePrefixes(fake({}), 'b', ['ws-a'], new Set(['ws-a/p.pdf'])), []);
+  assert.deepEqual(removed, ['ws-a/horse-1/q.pdf']);
+});
+
+test('the deletion response says when stored files were left behind', () => {
+  const source = readFileSync(new URL('../../api/_lib/account-delete.js', import.meta.url), 'utf8');
+  assert.match(source, /storageCleanupComplete: leftovers\.length === 0/);
+  assert.ok(!/removeStoragePrefixes\([^)]*\)\s*\.catch\(\(\) => \{\}\)/.test(source), 'a sweep failure is swallowed');
+  const client = readFileSync(new URL('../../src/store/useCloudStore.ts', import.meta.url), 'utf8');
+  assert.match(client, /payload\.storageCleanupComplete === false/);
+});
+
+// Regression: deleting Supabase records does not stop Stripe billing.
+test('a linked subscription is checked before account deletion removes its recovery path', async (t) => {
+  const state = deletionFixture(t);
+  const { default: handler } = await import('../../api/_lib/account-delete.js');
+  state.scenario = 'billing-active';
+  const response = await deleteAccount(handler, 'fixture-billing-active');
+  assert.ok(response.status >= 400, 'billing that has not been verified must prevent deletion');
+  assert.ok(!state.calls.some((call) => call.startsWith('DELETE ')), 'account and billing mapping must survive');
+});
+
+function billingReviewFixture({
+  row,
+  rowError,
+  profile = null,
+  profileError = null,
+  subscriptions = [],
+  sessions = [],
+  invoices = [],
+  schedules = [],
+  malformed,
+  fail,
+} = {}) {
+  const calls = [];
+  const billingRow =
+    row === undefined ? { workspace_id: 'ws1', stripe_customer_id: 'cus1', stripe_subscription_id: '' } : row;
+  const query = {
+    select() {
+      return this;
+    },
+    eq() {
+      return this;
+    },
+    async single() {
+      return { data: billingRow, error: rowError ?? null };
+    },
+  };
+  const profileQuery = {
+    select() {
+      return this;
+    },
+    eq() {
+      return this;
+    },
+    async maybeSingle() {
+      return { data: profile, error: profileError };
+    },
+  };
+  const supabase = { from: (table) => (table === 'workspace_subscription_profiles' ? profileQuery : query) };
+  const list = (kind, data) => async (params) => {
+    calls.push({ kind, params });
+    assert.equal(params.customer, 'cus1');
+    if (fail === kind) throw new Error('Provider unavailable');
+    if (malformed?.kind === kind) return malformed.response;
+    return typeof data === 'function' ? data(params, calls) : { data, has_more: false };
+  };
+  const stripe = {
+    subscriptions: { list: list('subscriptions', subscriptions) },
+    checkout: { sessions: { list: list('sessions', sessions) } },
+    invoices: { list: list('invoices', invoices) },
+    subscriptionSchedules: { list: list('schedules', schedules) },
+  };
+  return { calls, verify: () => verifyAccountDeletionBilling(supabase, 'ws1', stripe) };
+}
+
+for (const status of ['active', 'trialing', 'past_due', 'unpaid', 'paused', 'incomplete', '', 'new_unknown_status']) {
+  test(`deletion preserves the billing recovery path for ${status || 'missing'} Stripe status`, async () => {
+    const fixture = billingReviewFixture({ subscriptions: [{ id: 'sub1', status, cancel_at_period_end: true }] });
+    assert.equal((await fixture.verify()).code, 'billing_pending');
+    assert.equal(fixture.calls[0].params.status, 'all');
+  });
+}
+
+for (const status of ['canceled', 'incomplete_expired']) {
+  test(`a settled ${status} subscription allows account deletion without mutating Stripe`, async () => {
+    const fixture = billingReviewFixture({
+      row: { workspace_id: 'ws1', stripe_customer_id: 'cus1', stripe_subscription_id: 'sub1' },
+      subscriptions: [{ id: 'sub1', status }],
+      schedules: [{ id: 'sched1', status: 'released' }],
+    });
+    assert.deepEqual(await fixture.verify(), { ok: true });
+    assert.deepEqual(
+      fixture.calls.map(({ kind }) => kind),
+      ['subscriptions', 'sessions', 'invoices', 'invoices', 'schedules', 'subscriptions'],
+    );
+    assert.deepEqual(
+      fixture.calls.filter(({ kind }) => kind === 'invoices').map(({ params }) => params.status),
+      ['open', 'draft'],
+    );
+  });
+}
+
+test('an unfinished checkout blocks deletion before its webhook has written a subscription id', async () => {
+  assert.equal(
+    (await billingReviewFixture({ sessions: [{ id: 'cs1', status: 'open', mode: 'subscription' }] }).verify()).code,
+    'billing_pending',
+  );
+});
+
+for (const scenario of [
+  { invoices: [{ id: 'in1', status: 'open' }] },
+  { invoices: (params) => ({ data: params.status === 'draft' ? [{ id: 'in1' }] : [], has_more: false }) },
+  { schedules: [{ id: 'sched1', status: 'not_started' }] },
+  { schedules: [{ id: 'sched1', status: 'active' }] },
+  { schedules: [{ id: 'sched1', status: 'unknown' }] },
+]) {
+  test(`unsettled invoices or future billing block deletion: ${JSON.stringify(scenario)}`, async () => {
+    assert.equal((await billingReviewFixture(scenario).verify()).code, 'billing_pending');
+  });
+}
+
+test('a hosted checkout completing between the two lists still blocks deletion', async () => {
+  const fixture = billingReviewFixture({
+    subscriptions: (_params, calls) => ({
+      data:
+        calls.filter(({ kind }) => kind === 'subscriptions').length > 1 ? [{ id: 'sub_late', status: 'active' }] : [],
+      has_more: false,
+    }),
+  });
+  assert.equal((await fixture.verify()).code, 'billing_pending');
+});
+
+test('a paying sibling on page two is not mistaken for a settled customer', async () => {
+  const fixture = billingReviewFixture({
+    subscriptions: (params) =>
+      params.starting_after
+        ? { data: [{ id: 'sub_live', status: 'active' }], has_more: false }
+        : { data: [{ id: 'sub_old', status: 'canceled' }], has_more: true },
+  });
+  assert.equal((await fixture.verify()).code, 'billing_pending');
+  assert.equal(fixture.calls[1].params.starting_after, 'sub_old');
+});
+
+for (const kind of ['subscriptions', 'sessions', 'invoices', 'schedules']) {
+  test(`an unreadable ${kind} list preserves the account`, async () => {
+    assert.equal((await billingReviewFixture({ fail: kind }).verify()).code, 'billing_unverified');
+  });
+  for (const response of [null, {}, { data: [], has_more: true }, { data: [null], has_more: false }]) {
+    test(`malformed or incomplete ${kind} response refuses: ${JSON.stringify(response)}`, async () => {
+      assert.equal((await billingReviewFixture({ malformed: { kind, response } }).verify()).code, 'billing_unverified');
+    });
+  }
+}
+
+test('a subscription list beyond the paging budget cannot authorize deletion', async () => {
+  // A complete API-shaped page on every call, always with another page unread.
+  const endless = billingReviewFixture({
+    subscriptions: (_params, calls) => ({ data: [{ id: `sub_${calls.length}`, status: 'canceled' }], has_more: true }),
+  });
+  assert.equal((await endless.verify()).code, 'billing_unverified');
+  assert.equal(endless.calls.length, 10);
+});
+
+for (const row of [
+  null,
+  {},
+  { workspace_id: 'other' },
+  { workspace_id: 'ws1', stripe_customer_id: '', stripe_subscription_id: 'sub1' },
+  { workspace_id: 'ws1', stripe_customer_id: 'cus1', stripe_subscription_id: 'sub_missing' },
+]) {
+  test(`an incomplete or mismatched billing mapping refuses deletion: ${JSON.stringify(row)}`, async () => {
+    assert.equal((await billingReviewFixture({ row }).verify()).code, 'billing_unverified');
+  });
+}
+
+test('an empty, verified billing row needs no Stripe key and makes no Stripe call', async () => {
+  const fixture = billingReviewFixture({
+    row: { workspace_id: 'ws1', stripe_customer_id: '', stripe_subscription_id: '' },
+  });
+  assert.deepEqual(await fixture.verify(), { ok: true });
+  assert.deepEqual(fixture.calls, []);
+});
+
+test('a competing deletion that loses the billing lease never touches the winner’s membership hold', async (t) => {
+  const state = deletionFixture(t);
+  const { default: handler } = await import('../../api/_lib/account-delete.js');
+  state.scenario = 'billing-lock';
+  const response = await deleteAccount(handler, 'fixture-competing-delete');
+  assert.equal(response.status, 503);
+  assert.ok(state.calls.includes('POST /rest/v1/rpc/xbar_claim_checkout_lock'));
   assert.ok(
-    /if \(recheckError\) \{\s*return sendJson\(res, 502,/.test(source),
-    'an unreadable membership re-check must refuse the deletion, not proceed on an assumption',
+    !state.calls.some((call) => /xbar_(hold_account_deletion_request|release_account_deletion_request)/.test(call)),
+    'a losing deletion must not alter another request’s holds',
   );
-  assert.ok(
-    /if \(purgeable\.length !== plan\.workspacesToPurge\.length\) \{\s*return sendJson\(res, 409,/.test(source),
-    'a workspace that gained a member must refuse the deletion, since the owner cascade would destroy it anyway',
-  );
-
-  /*
-   * The user's own membership is excluded in JS, not with `.neq`. `user_id` is
-   * nullable in the schema, and SQL would silently drop a NULL row -- an active
-   * membership belonging to nobody identifiable is evidence of sharing, not of
-   * privacy.
-   */
-  assert.ok(
-    source.includes('filter((row) => row?.user_id !== user.id)'),
-    'the self-membership exclusion must not be done in SQL, where a null user_id would vanish',
-  );
+  assert.ok(!state.calls.some((call) => call.startsWith('DELETE ')));
 });
 
-/*
- * The plan is built before the account is deleted and the purge runs after.
- * In between, an invitation acceptance or an administrator's add can insert an
- * active membership -- the invitation RPC locks the invitation row, not the
- * workspace. Purging on the stale plan cascades that member's records and
- * sweeps their files, which is the one outcome this endpoint exists to avoid.
- */
-test('a workspace that gained a member between the plan and the purge is not purged', () => {
-  assert.deepEqual(workspacesStillPrivate(['ws-private', 'ws-just-shared'], [{ workspace_id: 'ws-just-shared' }]), [
-    'ws-private',
-  ]);
-});
-
-test('a workspace nobody joined is still purged', () => {
-  assert.deepEqual(workspacesStillPrivate(['ws-a', 'ws-b'], []), ['ws-a', 'ws-b']);
-});
-
-/*
- * Unreadable membership is never evidence that a workspace is private. The
- * handler passes [] on a failed re-check, so the pure function must not treat
- * "no rows" as "definitely safe" on its own -- the CALLER decides. What it must
- * do is never invent a purge from junk.
- */
-test('malformed membership rows cannot smuggle a workspace back into the purge', () => {
-  assert.deepEqual(
-    workspacesStillPrivate(['ws-a'], [{ workspace_id: null }, {}, { workspace_id: '' }, null]),
-    ['ws-a'],
-    'junk rows are not memberships, but they must not crash the narrowing either',
+for (const profile of [
+  { billing_state: 'Active' },
+  { billing_state: 'Past Due' },
+  { billing_state: 'Inactive', payload: { subscriptionRecoverable: true } },
+  { billing_state: 'Inactive', payload: { billingState: 'Active' } },
+]) {
+  test(`a missing Stripe mapping cannot erase positive billing evidence: ${JSON.stringify(profile)}`, async () => {
+    const row = { workspace_id: 'ws1', stripe_customer_id: '', stripe_subscription_id: '' };
+    assert.equal((await billingReviewFixture({ row, profile }).verify()).code, 'billing_unverified');
+  });
+}
+for (const profile of [
+  null,
+  { billing_state: 'Manual Billing' },
+  { billing_state: 'Inactive', payload: { trial: { startedAt: '2026-10-01' } } },
+]) {
+  test(`a never-paid, manual or first-party trial workspace is not trapped by the billing guard: ${JSON.stringify(profile)}`, async () => {
+    const row = { workspace_id: 'ws1', stripe_customer_id: '', stripe_subscription_id: '' };
+    assert.deepEqual(await billingReviewFixture({ row, profile }).verify(), { ok: true });
+  });
+}
+test('an unreadable profile or recoverable billing payload cannot masquerade as a never-paid workspace', async () => {
+  const row = { workspace_id: 'ws1', stripe_customer_id: '', stripe_subscription_id: '' };
+  assert.equal(
+    (await billingReviewFixture({ row, profileError: { message: 'database failure' } }).verify()).code,
+    'billing_unverified',
+  );
+  assert.equal(
+    (await billingReviewFixture({ row: { ...row, entitlement_payload: { subscriptionRecoverable: true } } }).verify())
+      .code,
+    'billing_unverified',
   );
 });
 
-test('a planned id that is not a string is never purged', () => {
-  assert.deepEqual(workspacesStillPrivate([null, '', 42, 'ws-real'], []), ['ws-real']);
+test('expired deletion A cannot clear replacement B’s membership fence', async (t) => {
+  deletionFixture(t);
+  const { default: handler } = await import('../../api/_lib/account-delete.js');
+  const { assertDeletionRace } = await import('./fixtures/accountDeletionRace.mjs');
+  await assertDeletionRace(t, handler);
 });

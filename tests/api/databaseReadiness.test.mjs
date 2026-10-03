@@ -122,6 +122,16 @@ test('verified project-specific hosted batches satisfy only their exact mapped s
   evidence.migrationVersions = evidence.migrationVersions.filter((v) => v !== '20260925180000');
   assert.equal(checkBundled(evidence).ok, false, 'an unrelated unapplied migration stays blocked');
 });
+test('the historical batch cannot cover the superseded media source with its new replay-refusal guard', () => {
+  const file = '20260924134000_horse_media_private_signed_urls.sql';
+  assert.ok(ledgerMap.historicalExclusions[file]);
+  assert.ok(ledgerMap.batches.every((batch) => !(file in batch.sourceFiles)));
+  const evidence = bundled();
+  evidence.migrationVersions = evidence.migrationVersions.filter((version) => version !== '20260924134000');
+  const result = checkBundled(evidence);
+  assert.equal(result.ok, false);
+  assert.ok(result.failures.some((failure) => failure.includes('20260924134000')));
+});
 test('batch IDs alone, altered SQL metadata, duplicates and a different project never satisfy missing versions', () => {
   for (const mutate of [
     (e) => {

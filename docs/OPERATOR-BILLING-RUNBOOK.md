@@ -1,27 +1,41 @@
-# Operator billing runbook — taking money before managed checkout exists
+# Operator billing runbook — manual grants, comps, revocation and repricing
 
-This is how XBAR gets paid **today**, with Stripe Payment Links and a grant you
-run by hand. It needs no code deploy, no Stripe webhook, no `MANAGED_BILLING_ENABLED`,
-and none of the self-serve checkout work.
+Self-serve checkout is the primary way XBAR gets paid. A buyer picks a plan,
+pays by card on Stripe Checkout, and the Stripe webhook writes their
+`workspace_subscription_profiles` row with `billing_state = 'Active'`. Nothing
+on this page is needed for that path.
 
-It exists because self-serve checkout is a scaling fix, not a revenue unlock.
-The first customers can be served entirely from this page. Do not wait on the
-checkout pipeline to start selling.
+This page is for everything that is not a plain self-serve purchase: a ranch
+that pays by invoice or check, an annual deal, a comp, a revocation, and
+changing prices without locking existing subscribers out.
 
 ---
 
 ## Before the first sale
 
-1. **The database must not be paused.** The Supabase free tier auto-pauses a
-   project after about a week idle, and a paused project means every customer
-   sees a dead app with no warning to you. Check the project status before you
-   sell anything.
-2. **Be on Supabase Pro.** This is the single cheapest thing that separates a
-   product from a demo. A paying rancher whose records are on a database that
-   sleeps is a refund and a bad word in a small community.
-3. **Create two Stripe Payment Links per tier** — one monthly and one
-   annual — in the Stripe dashboard. No code. Annual is 10× the monthly
-   price (2 months free):
+1. **The database must not be paused.** Supabase stays on the free tier until
+   launch (owner's decision). A free project pauses after about seven days with
+   no database activity; Supabase emails a warning about a week ahead, and a
+   paused project can be restored from the dashboard for 90 days. A paused
+   project means every customer sees a dead app. Check the project status
+   before you sell anything.
+2. **Read `/api/health` on production.** It must answer `200` with
+   `checks.billingReady: true`. Read its `reasons` (each one blocks billing)
+   and `warnings` (each one is a promise the product is not keeping yet):
+   - `subsystems.stripeLiveKey` must be `true` in production. `false` with
+     `stripeBilling: true` means a test key: checkout works, no money moves.
+   - A warning about `STRIPE_PRICE_ID_*_ANNUAL` means annual checkout refuses
+     on those plans.
+   - A warning about email means welcome, trial, payment-failed and packet
+     emails are not being sent. Set `RESEND_API_KEY` (or `SENDGRID_API_KEY`)
+     and an `EMAIL_FROM_ADDRESS` on a domain verified with that provider.
+
+   Health proves each value is the right _kind_ of value without calling
+   Stripe. `npm run preflight` and one controlled real purchase prove they are
+   the right account's.
+
+3. **Prices.** Annual is 10× monthly (two months free). Checkout takes cards
+   only.
 
    | Tier         | Monthly | Annual    | Notes                                                |
    | ------------ | ------- | --------- | ---------------------------------------------------- |
@@ -30,28 +44,28 @@ checkout pipeline to start selling.
    | Ranch Ops    | $79/mo  | $790/yr   | teams, breeding, equipment at scale                  |
    | Enterprise   | $199/mo | $1,990/yr | large rosters                                        |
 
-   Paste the monthly links into `VITE_STRIPE_PAYMENT_LINK_*` and the annual
-   links into `VITE_STRIPE_PAYMENT_LINK_*_ANNUAL` in Vercel. A tier without
-   its annual link cannot be bought annually in the app — it reports "not
-   configured" rather than selling the monthly link.
-
-   In each link's settings, turn on **collect customer email**. That email is
-   how you find their workspace in step 2 below.
+   Managed checkout sells the Stripe Price ids in `STRIPE_PRICE_ID_<TIER>` and
+   `STRIPE_PRICE_ID_<TIER>_ANNUAL`. Hosted Payment Links
+   (`VITE_STRIPE_PAYMENT_LINK_*`, `..._ANNUAL`) are the fallback when managed
+   checkout is off; a link payment is granted by hand (below), because no
+   webhook ties it to a workspace. If you use links, turn on **collect customer
+   email** in each link's settings — that email is how you find the workspace.
 
 ---
 
-## Granting a tier after someone pays
+## Granting a tier after someone pays outside checkout
 
-Two values decide everything: `tier` and `billing_state`. The database derives
-seat, storage, document and horse limits from `tier` on its own — you do not set
-limits by hand. `monthly_rate` is for your own reporting.
+Two values decide access: `tier` and `billing_state`. The database derives
+seat, storage, document and horse limits from them — you never set limits by
+hand. `monthly_rate` is the plan's monthly list rate, for reporting;
+`billing_period` is the cadence the app shows on the billing screen.
 
-`'Manual Billing'` is the state that says _an operator granted this deliberately,
-outside Stripe_. It grants the purchased tier, by design, and the reconciliation
-in `20260821_reconcile_legacy_manual_billing.sql` deliberately leaves rows like
-these alone precisely so a hand-granted account is never downgraded by a cleanup.
+`'Manual Billing'` means _an operator granted this deliberately, outside
+Stripe_. It entitles the tier, and the reconciliation in
+`20260821_reconcile_legacy_manual_billing.sql` leaves these rows alone so a
+hand-granted account is never downgraded by a cleanup.
 
-### 1. Find the workspace from the email Stripe collected
+### 1. Find the workspace
 
 ```sql
 select w.id as workspace_id, w.name, m.email, m.role
@@ -60,77 +74,67 @@ join public.workspace_memberships m on m.workspace_id = w.id
 where lower(m.email) = lower('buyer@example.com');
 ```
 
-If this returns nothing, they have not signed up yet. Have them create the
-account first — the grant needs a workspace to attach to.
-
-If it returns more than one row, read the `role` column and take the `Owner`.
+No rows: they have not signed up yet. Have them create the account first — the
+grant needs a workspace. More than one row: read `role` and take the owner's
+workspace.
 
 ### 2. Grant the tier
 
 ```sql
 insert into public.workspace_subscription_profiles
-  (workspace_id, tier, billing_state, monthly_rate)
-values ('PASTE-WORKSPACE-UUID', 'Professional', 'Manual Billing', 79)
+  (workspace_id, tier, billing_state, monthly_rate, billing_period)
+values ('PASTE-WORKSPACE-UUID', 'Professional', 'Manual Billing', 29, 'monthly')
 on conflict (workspace_id) do update
-  set tier          = excluded.tier,
-      billing_state = excluded.billing_state,
-      monthly_rate  = excluded.monthly_rate,
-      updated_at    = now();
+  set tier           = excluded.tier,
+      billing_state  = excluded.billing_state,
+      monthly_rate   = excluded.monthly_rate,
+      billing_period = excluded.billing_period,
+      updated_at     = now();
 ```
 
-`tier` must be exactly one of `Starter`, `Professional`, `Ranch Ops`,
-`Enterprise` — the strings are compared literally, and a typo silently produces
-an unrecognised tier rather than an error.
+`tier` must be exactly `Starter`, `Professional`, `Ranch Ops` or `Enterprise`.
+The strings are compared literally: a typo is not an error, it silently gives
+the workspace Starter limits. `billing_period` is `'monthly'` or `'annual'`
+(the column refuses anything else).
 
 ### 3. Confirm it took
 
 ```sql
-select tier, billing_state, monthly_rate, updated_at
+select tier, billing_state, monthly_rate, billing_period, updated_at
 from public.workspace_subscription_profiles
 where workspace_id = 'PASTE-WORKSPACE-UUID';
 ```
 
 Then have the customer **reload the app** and check the billing screen shows the
-tier they bought. A reload is required, not optional — the client normalizes its
-stored subscription on rehydrate.
+plan and cadence they bought. The reload is required — the client normalizes
+its stored subscription on load.
 
 ---
 
-## Revoking or downgrading — read this before you need it
+## Revoking or downgrading
 
-**Setting `billing_state = 'Inactive'` does not revoke access until migration
-`20260820_entitlement_helpers_honor_inactive.sql` has been applied.**
+The database entitles a tier only while `billing_state` is `'Active'` or
+`'Manual Billing'` (read from production's `xbar_subscription_limits`,
+2026-10-02). Every other state — `'Inactive'`, `'Past Due'`, anything else —
+gets Starter limits, unless an unexpired trial says otherwise.
 
-The helper currently live in production comes from
-`20260611_commercial_entitlements.sql`, and it demotes on exactly one value:
+- Canceled, lapsed, or revoked: `'Inactive'`.
+- A payment that failed but may still recover: `'Past Due'`.
 
-```sql
-case when billing_state = 'Past Due' then 'Starter' else tier end
-```
-
-Everything else — `Inactive`, `Manual Billing`, a canceled subscription, an
-empty string — keeps the full purchased tier. So on today's database:
-
-- To actually cut access off, set **`'Past Due'`**, not `'Inactive'`.
-- Once `20260820` is applied, `'Inactive'` becomes the correct value and
-  `'Past Due'` keeps its own meaning (a payment that failed but may recover).
-
-Whichever you use, drop the tier as well rather than relying on the state alone:
+Leave `tier` as it was. It records what was bought, which is how the billing
+screen names the plan that lapsed and how recovery restores it; it grants
+nothing on its own.
 
 ```sql
 update public.workspace_subscription_profiles
-set tier          = 'Starter',
-    billing_state = 'Past Due',   -- 'Inactive' once 20260820 is applied
-    monthly_rate  = 0,
+set billing_state = 'Inactive',
     updated_at    = now()
 where workspace_id = 'PASTE-WORKSPACE-UUID';
 ```
 
-Setting `tier` down is what makes this safe on either side of that migration.
-
-**Cancel the Stripe subscription too.** The payment link created a real recurring
-subscription; revoking in the database does not stop the charge, and charging
-someone you have cut off is the worst version of this mistake.
+**Cancel the Stripe subscription too.** Revoking in the database does not stop
+the charge, and charging someone you have cut off is the worst version of this
+mistake.
 
 ---
 
@@ -149,14 +153,29 @@ paid account, grant a real profile row with `'Manual Billing'` instead.
 
 ---
 
-## What changes when managed checkout goes live
+## Changing prices without locking anyone out
 
-Once `MANAGED_BILLING_ENABLED=true` and the Stripe webhook are both configured,
-the webhook writes these same rows for you and `billing_state` becomes `'Active'`
-rather than `'Manual Billing'`. Nothing in this runbook stops working — the two
-paths coexist deliberately, and hand-granted rows are protected from the
-reconciliation precisely so they survive the transition.
+A Stripe Price pins its amount, so a new price is a new Price id. Existing
+subscribers stay on their old id until they change plan. The webhook refuses
+to grant access on a price it cannot place, so an old id that the deployment no
+longer recognizes would cost a paying customer their access at their next
+renewal.
 
-Keep using this page for anything that is not a plain self-serve purchase:
-invoiced ranches, annual deals, comps, and anyone who would rather write you a
-check than type a card number. In this market that is not an edge case.
+1. Create the new Prices in Stripe. **Do not archive or delete the old ones**
+   while anyone is billed on them.
+2. Put the new ids in `STRIPE_PRICE_ID_<TIER>` / `..._ANNUAL`. Only these are
+   sold to new buyers.
+3. Move every replaced id into `STRIPE_LEGACY_PRICE_IDS`, comma-separated, as
+   `price_id=Tier:monthly` or `price_id=Tier:annual`:
+
+   ```
+   STRIPE_LEGACY_PRICE_IDS="price_1OldPro=Professional:monthly, price_1OldProY=Professional:annual"
+   ```
+
+   These are recognized for existing subscribers and never offered at checkout.
+
+4. Redeploy and read `/api/health`. An entry it cannot read exactly — an
+   unknown tier, a missing cadence, an id listed twice with different meanings,
+   or an id that is also a current price — fails readiness and is named in
+   `reasons`. It is never mapped to a guess.
+5. Update the price table above and the pricing page in the same change.

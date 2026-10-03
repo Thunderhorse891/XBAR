@@ -40,6 +40,9 @@ try {
     assert.equal(query(sql, target.href), query(sql, source), `restored rows differ: ${table}`);
   }
   call('psql', ['-X', '-v', 'ON_ERROR_STOP=1', '-f', 'supabase/checks/ci-rls.sql'], target.href);
+  for (const file of ['media-approval-writes.sql', 'staff-writes.sql', 'account-deletion-request-fence.sql']) {
+    call('psql', ['-X', '-v', 'ON_ERROR_STOP=1', '-f', `supabase/checks/${file}`], target.href);
+  }
   // The target is now populated. Re-running restore must refuse, not overwrite.
   assert.throws(() => restoreBackup({ archivePath: output, key, url: target.href }), /must be empty/);
   console.log(

@@ -54,10 +54,10 @@ do $$ declare applied boolean; begin
  then raise exception 'event lost period or trial history'; end if;
 end $$;
 reset role;
--- RLS visibility of an uploader's synthetic object. Storage HTTP and forged
+-- RLS visibility of a workspace's synthetic object. Storage HTTP and forged
 -- gallery references require separate acceptance; this does not clear those.
 insert into storage.objects(bucket_id,name) values
- ('horse-media','71000000-0000-4000-8000-000000000001/horses/release/photo.jpg');
+ ('horse-media','72000000-0000-4000-8000-000000000001/horses/release/photo.jpg');
 do $$ begin
  if (select public from storage.buckets where id='horse-media') is distinct from false
  then raise exception 'horse-media bucket is not private'; end if;
@@ -65,7 +65,7 @@ end $$;
 set local role authenticated;
 do $$ begin
  if (select count(*) from storage.objects where bucket_id='horse-media') <> 1
- then raise exception 'uploader cannot read own media'; end if;
+ then raise exception 'workspace owner cannot read own media'; end if;
 end $$;
 select set_config('request.jwt.claim.sub','71000000-0000-4000-8000-000000000002',true);
 do $$ begin

@@ -49,6 +49,33 @@ const cases = [
   ],
   ['drop index public.reminder_email_retry_due;', 'reminderDelivery.indexes'],
   ['alter table public.reminder_email_deliveries drop column request;', 'reminderDelivery.columns'],
+  ['alter table public.account_deletion_requests disable row level security;', 'rls.public.account_deletion_requests'],
+  ['alter table public.account_deletion_holds disable row level security;', 'rls.public.account_deletion_holds'],
+  ['alter table public.account_deletion_receipts disable row level security;', 'rls.public.account_deletion_receipts'],
+  [
+    'create policy unreviewed_receipt_read on public.account_deletion_receipts for select to authenticated using(true);',
+    'policies.public.account_deletion_receipts.unreviewed_receipt_read',
+  ],
+  [
+    'alter table public.account_deletion_requests alter column request_token drop not null;',
+    'deletionLifecycle.account_deletion_requests',
+  ],
+  [
+    'alter table public.account_deletion_holds drop constraint account_deletion_holds_workspace_id_fkey;',
+    'deletionLifecycle.account_deletion_holds',
+  ],
+  [
+    'alter table public.account_deletion_receipts drop constraint account_deletion_receipts_status_check;',
+    'deletionLifecycle.account_deletion_receipts',
+  ],
+  ['drop index public.account_deletion_receipts_user_idx;', 'deletionLifecycle.account_deletion_receipts'],
+  ['grant update on public.account_deletion_events to service_role;', 'tableGrants.account_deletion_events'],
+  ['drop policy "horses staff update" on public.horses;', 'policies.public.horses.horses staff update'],
+  ['alter table public.sales_leads disable row level security;', 'rls.public.sales_leads'],
+  [
+    'alter table public.horses disable trigger trg_horses_guard_sale_media_approval;',
+    'triggers.public.horses.trg_horses_guard_sale_media_approval',
+  ],
 ];
 for (const [mutation, label] of cases) {
   const result = spawnSync('psql', ['-XqAt', '-v', 'ON_ERROR_STOP=1'], {

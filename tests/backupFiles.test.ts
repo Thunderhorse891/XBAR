@@ -1397,9 +1397,9 @@ test('a record that installs but crashes the route it lands on is refused', asyn
    * this cannot be re-excluded by reading the template-string sites alone.
    */
   assert.match(
-    await readFile('src/store/useXbarStore.ts', 'utf8'),
-    /norm\(horse\.registrationNumber\)/,
-    "the duplicate check dereferences it through a `?? ''` that catches absence, not type",
+    await readFile('src/lib/xbarRuntime.ts', 'utf8'),
+    /registrationKey\(horse\.registrationNumber \|\| horse\.aqhaNumber\)/,
+    'the shared identity check requires registration strings',
   );
 
   /*
@@ -1606,7 +1606,7 @@ test('a record that installs but crashes the route it lands on is refused', asyn
    */
   assert.match(
     ownershipEntry,
-    /optionalStrings: \['documentTitle', 'linkedAt', 'verifiedAt', 'verifiedBy'\]/,
+    /optionalStrings: \[\s*'documentTitle',\s*'linkedAt',\s*'verifiedAt',\s*'verifiedBy',\s*'reviewAttestedAt',\s*'reviewedSourceKey',?\s*\]/,
     "requirement.documentTitle ?? 'Linked document' is a bare React child",
   );
   assert.match(
@@ -2093,7 +2093,7 @@ test('a record that installs but crashes the route it lands on is refused', asyn
    */
   assert.match(
     shapeTable,
-    /documents: \{\s*objects: \['entities'\],\s*strings: \['id', 'title', 'type', 'source', 'duplicateRisk', 'uploadedAt', 'summary', 'uploadedBy'\],\s*numbers: \['confidence'\],/,
+    /documents: \{\s*objects: \['entities'\],\s*optionalBooleans: \['identityReviewRequired'\],\s*strings: \['id', 'title', 'type', 'source', 'duplicateRisk', 'uploadedAt', 'summary', 'uploadedBy'\],\s*numbers: \['confidence'\],/,
   );
   const documentEntry = (shapeTable.match(/documents: \{[\s\S]*?\n {4}\},/) ?? [''])[0];
   assert.ok(documentEntry.length > 0, 'the documents entry must be findable');
@@ -2286,9 +2286,9 @@ test('a record that installs but crashes the route it lands on is refused', asyn
    * as dead weight if a route ever starts guarding.
    */
   assert.match(
-    await readFile('src/routes/OwnershipChain.tsx', 'utf8'),
-    /o\.pendingDocuments\.length/,
-    'OwnershipChain maps the RAW store records',
+    await readFile('src/lib/localSalePacketGenerator.ts', 'utf8'),
+    /ownershipRecord\?\.pendingDocuments\.join/,
+    'the packet generator still consumes the required pending-document list',
   );
   assert.match(
     await readFile('src/lib/xbarPhaseTwo.ts', 'utf8'),
@@ -2768,13 +2768,18 @@ test('a restored registration flag must be a boolean, because a seal asserts it'
    * enabled; being wrong about one costs a click, not a false statement about
    * the animal, so requiring them would be caution paid for with good backups.
    */
-  assert.equal((source.match(/optionalBooleans: \[/g) ?? []).length, 1);
+  assert.equal((source.match(/optionalBooleans: \[/g) ?? []).length, 2);
+  assert.match(
+    source,
+    /documents: \{\s*objects: \['entities'\],\s*optionalBooleans: \['identityReviewRequired'\]/,
+    'the intake identity hold is also a boolean, not a truthy backup value',
+  );
   for (const field of ['socialReady', 'savedListing', 'shareReady']) {
     assert.doesNotMatch(source, new RegExp(`optionalBooleans: \\[[^\\]]*'${field}'`), `${field} does not belong here`);
   }
 });
 
-test('a restored owner entity must be a string, because document intake normalizes it', async () => {
+test('a restored owner entity remains a required string without treating it as horse identity', async () => {
   const shapeTable = await readFile('src/store/xbarStoreHelpers.ts', 'utf8');
   const runtime = await readFile('src/lib/xbarRuntime.ts', 'utf8');
   const store = await readFile('src/store/useXbarStore.ts', 'utf8');
@@ -2789,16 +2794,16 @@ test('a restored owner entity must be a string, because document intake normaliz
   const horsesShape = shapeTable.slice(horsesStart, shapeTable.indexOf('documents: {', horsesStart));
   assert.match(horsesShape, /^\s*'ownerEntity',$/m, 'the owner entity must be a required string');
 
-  // Reader one: `{}` survives `filter(Boolean)` and reaches `normalizeToken`.
+  // Owner fields are still required archive data. They are no longer horse
+  // identity: matching on an owner attached one paper to an arbitrary horse
+  // in that owner's herd. Pin the safer contract instead of the removed reader.
+  assert.doesNotMatch(runtime, /function buildKnownOwners\(/);
+  assert.doesNotMatch(runtime, /\[horse\.owner(?:Entity)?, 0\./);
+  assert.match(runtime, /function normalizeToken\(value: string\) \{\s*return normalizeDocumentIdentityText\(value\)/);
   assert.match(
-    runtime,
-    /\[horse\.owner, horse\.ownerEntity\]\)\.filter\(Boolean\)/,
-    'buildKnownOwners still passes the owner entity through a truthiness filter',
+    await readFile('src/lib/registrationExtraction.ts', 'utf8'),
+    /function normalizeDocumentIdentityText\(value: string\) \{\s*return value\s*\.toLowerCase\(\)/,
   );
-  // Reader two: no filter at all, so ABSENCE throws as surely as a wrong type —
-  // which is why this is a required string rather than an optional one.
-  assert.match(runtime, /\[horse\.ownerEntity, 0\.73,/, 'searchChecks still passes it in unfiltered');
-  assert.match(runtime, /function normalizeToken\(value: string\) \{\s*return value\s*\.toLowerCase\(\)/);
 
   /*
    * And why the throw costs more than a failed intake: the file is already in

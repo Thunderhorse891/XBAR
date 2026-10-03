@@ -1,6 +1,8 @@
 import { useEffect, useRef } from 'react';
 import { createLatestWriteGate } from '@/lib/authBootstrap';
+import { acknowledgeCloudDeletions, pendingCloudDeletions } from '@/lib/cloudDeletionQueue';
 import { loadWorkspaceBackupFromCloud, saveWorkspaceBackupToCloud } from '@/lib/cloudWorkspace';
+import { mergeCloudSubscription, withCloudSubscription } from '@/lib/cloudSubscription';
 import { decideCloudReconciliation, serializeWorkspaceBackup } from '@/lib/cloudSyncPolicy';
 import { promoteLocalVaultFiles } from '@/lib/workspacePromotion';
 import { vaultOwnerId } from '@/lib/vaultOwner';
@@ -56,6 +58,13 @@ export function CloudBootstrap() {
    */
   const sawSessionRef = useRef(false);
   const lastPersistedSignatureRef = useRef('');
+  /*
+   * The copy this device last saved to, or loaded from, the cloud -- the
+   * baseline a save diffs against so it writes only what changed here (see
+   * src/lib/relationalDiff.ts). Null whenever this device's copy is not known
+   * to match the cloud's; a save then writes every record, as before.
+   */
+  const lastPersistedBackupRef = useRef<unknown>(null);
 
   useEffect(() => {
     let dispose: (() => void) | void;
@@ -80,6 +89,7 @@ export function CloudBootstrap() {
       // Whatever was loading was loading for somebody else.
       hydrationGateRef.current.retireInFlight();
       lastPersistedSignatureRef.current = serializeWorkspaceBackup(exportWorkspaceBackup());
+      lastPersistedBackupRef.current = null;
 
       /*
        * A workspace with no session to wait for is already settled.
@@ -138,7 +148,14 @@ export function CloudBootstrap() {
     if (hydrationKeyRef.current === hydrationKey) return;
     hydrationKeyRef.current = hydrationKey;
     setAutosaveReady(false, false);
-    const owns = hydrationGateRef.current.begin();
+    const ticketOwns = hydrationGateRef.current.begin();
+    const owns = () => {
+      const current = useCloudStore.getState();
+      // Auth publishes a new identity before React retires this effect. A
+      // delayed previous-account response must not win during that interval.
+      // workspaceReady may temporarily be false for a same-user token refresh.
+      return ticketOwns() && current.session?.user.id === session.user.id && current.workspaceId === workspaceId;
+    };
 
     /*
      * A promotion that only half-moved the files must say so.
@@ -164,9 +181,17 @@ export function CloudBootstrap() {
         ? ok
         : `${failed.length} of this device's files could not be moved to the cloud workspace and cannot be opened yet. They are retried automatically the next time this ranch loads.`;
 
-    const finish = (unlocked: boolean, state: 'idle' | 'error', message: string) => {
+    /*
+     * `matched`: the exact copy known to equal the cloud's -- captured BEFORE
+     * any await, never re-exported here. Exporting the live state at this
+     * point would fold in an edit made while vault files were being promoted,
+     * mark it as already in the cloud, and neither the diff nor the autosave
+     * signature would ever send it.
+     */
+    const finish = (unlocked: boolean, state: 'idle' | 'error', message: string, matched: unknown = null) => {
       if (!owns()) return;
-      lastPersistedSignatureRef.current = serializeWorkspaceBackup(exportWorkspaceBackup());
+      lastPersistedSignatureRef.current = serializeWorkspaceBackup(matched ?? exportWorkspaceBackup());
+      lastPersistedBackupRef.current = matched;
       setSyncState(state, message);
       // `unlocked` is false for `conflict-lock` and for a failed remote load.
       // Ready means hydration stopped; unlocked means it settled on a copy.
@@ -174,10 +199,23 @@ export function CloudBootstrap() {
     };
 
     const hydrate = async () => {
-      const local = exportWorkspaceBackup();
+      let local = exportWorkspaceBackup();
+      // Captured with `local`, before any await: a deletion made while the cloud
+      // copy loads is not reflected in `local`, so it must not be acknowledged
+      // by a push of `local`. It stays queued for the first autosave instead.
+      const deletions = pendingCloudDeletions();
       setSyncState('syncing', 'Reconciling this ranch with cloud records...');
       const remote = await loadWorkspaceBackupFromCloud();
       if (!owns()) return;
+      if ('authoritativeSubscription' in remote && remote.authoritativeSubscription) {
+        // Entitlements are server-owned, independent of any ranch-data conflict.
+        // Updating only this field preserves local horses/documents and prevents
+        // a stale Starter snapshot from trapping an already-granted owner.
+        useXbarStore.setState((current) => ({
+          subscription: mergeCloudSubscription(current.subscription, remote.authoritativeSubscription),
+        }));
+        local = withCloudSubscription(local, remote.authoritativeSubscription);
+      }
       const decision = decideCloudReconciliation({
         local,
         ...(remote.ok ? { remote: remote.backup } : { remoteError: remote.message }),
@@ -185,17 +223,21 @@ export function CloudBootstrap() {
 
       if (decision === 'import-remote' && remote.ok) {
         const imported = importWorkspaceBackup(remote.backup);
+        // Synchronously after the import: exactly the cloud copy, as installed.
+        const installed = imported.ok ? exportWorkspaceBackup() : null;
         if (imported.ok && remote.updatedAt) setLastSyncAt(remote.updatedAt);
         finish(
           imported.ok,
           imported.ok ? 'idle' : 'error',
           imported.ok ? 'Cloud workspace loaded safely.' : imported.message,
+          installed,
         );
         return;
       }
 
       if (decision === 'push-local') {
-        const saved = await saveWorkspaceBackupToCloud(local);
+        const saved = await saveWorkspaceBackupToCloud(local, { deletions });
+        if (saved.ok && saved.deletionsApplied) acknowledgeCloudDeletions(deletions);
         if (!owns()) return;
         if (saved.ok && saved.updatedAt) setLastSyncAt(saved.updatedAt);
         if (saved.ok && saved.workspaceId && saved.workspaceId !== workspaceId) {
@@ -222,10 +264,14 @@ export function CloudBootstrap() {
           promotionFailed = promoted.failed;
         }
 
+        // `retryable`: the relational write failed but the snapshot landed.
+        // Locking autosave there would contradict the "will retry" the
+        // message promises; autosave is what retries it.
         finish(
-          saved.ok,
+          saved.ok || saved.retryable === true,
           saved.ok && promotionFailed.length === 0 ? 'idle' : 'error',
           saved.ok ? promotionMessage(promotionFailed, saved.message) : saved.message,
+          saved.ok ? local : null,
         );
         return;
       }
@@ -255,12 +301,13 @@ export function CloudBootstrap() {
           true,
           promoted.failed.length === 0 ? 'idle' : 'error',
           promotionMessage(promoted.failed, 'Cloud workspace connected.'),
+          local,
         );
         return;
       }
 
       if (decision === 'empty-ready') {
-        finish(true, 'idle', remote.ok ? 'Cloud workspace ready.' : remote.message);
+        finish(true, 'idle', remote.ok ? 'Cloud workspace ready.' : remote.message, remote.ok ? local : null);
         return;
       }
 
@@ -344,7 +391,19 @@ export function CloudBootstrap() {
       if (signature === lastPersistedSignatureRef.current) return;
       saving = true;
       setSyncState('syncing', 'Saving ranch changes to cloud...');
-      const result = await saveWorkspaceBackupToCloud(backup);
+      /*
+       * Only what a person deleted is deleted. This device's copy can be older
+       * than the cloud's -- another phone, or a server-side import, may have
+       * added rows since it loaded -- so a row it lacks is not a row to remove.
+       * The queue is captured before the request and only that capture is
+       * acknowledged: a deletion made while the save is in flight is not in it.
+       */
+      const deletions = pendingCloudDeletions();
+      const result = await saveWorkspaceBackupToCloud(backup, {
+        deletions,
+        baseline: lastPersistedBackupRef.current ?? undefined,
+      });
+      if (result.ok && result.deletionsApplied) acknowledgeCloudDeletions(deletions);
       saving = false;
       if (disposed) return;
       /*
@@ -370,6 +429,9 @@ export function CloudBootstrap() {
           setWorkspaceAccessProfile(result.workspaceId, 'Admin');
         }
         lastPersistedSignatureRef.current = signature;
+        // The copy just saved -- not the live state, which may have moved on
+        // while the request was in flight and is not in the cloud yet.
+        lastPersistedBackupRef.current = backup;
         if (result.updatedAt) setLastSyncAt(result.updatedAt);
         setSyncState('idle', result.message);
       } else {

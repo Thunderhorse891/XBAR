@@ -14,6 +14,8 @@ export const SITE_ORIGIN = (
 ).replace(/\/+$/, '');
 export const APP_LOGIN = '/app/login';
 export const APP_SIGNUP = '/app/login?mode=signup';
+// Contact parity with legalDocuments.ts is enforced by marketingSite.test.ts.
+export const SUPPORT_EMAIL = 'xbarje@gmail.com';
 
 export function esc(value) {
   return String(value)
@@ -30,6 +32,7 @@ export function esc(value) {
 const NAV_LINKS = [
   { href: '/features', label: 'Features' },
   { href: '/pricing', label: 'Pricing' },
+  { href: `mailto:${SUPPORT_EMAIL}`, label: 'Help & support' },
 ];
 const NAV_MENUS = [
   {
@@ -128,6 +131,7 @@ function footer() {
     <div>
       <a class="brand" href="/"><img src="/brand/apple-touch-icon.png" alt="" width="30" height="30" /><span>XBAR</span></a>
       <p>One trusted operational record for every horse — documents, ownership, care, and sale-ready buyer packets.</p>
+      <p>Need help? <a href="mailto:${SUPPORT_EMAIL}">${SUPPORT_EMAIL}</a></p>
     </div>
     <div>
       <h3>Product</h3>

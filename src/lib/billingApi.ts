@@ -143,6 +143,43 @@ export async function startManagedCheckout(params: {
   }
 }
 
+/**
+ * Which plan and cadence pairs the server can sell, keyed by tier.
+ *
+ * Read before a cadence is offered, so the billing screen never walks a buyer
+ * to a checkout that refuses them. Every failure -- no response, a refusal, a
+ * body of the wrong shape -- returns null, and null offers nothing beyond
+ * monthly: guessing that annual works is the mistake this exists to stop.
+ */
+export type SellablePrices = {
+  managed: boolean;
+  monthly: Partial<Record<SubscriptionTier, boolean>>;
+  annual: Partial<Record<SubscriptionTier, boolean>>;
+};
+
+function tierFlags(value: unknown): Partial<Record<SubscriptionTier, boolean>> | null {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return null;
+  const flags: Partial<Record<SubscriptionTier, boolean>> = {};
+  for (const [tier, sellable] of Object.entries(value as Record<string, unknown>)) {
+    flags[tier as SubscriptionTier] = sellable === true;
+  }
+  return flags;
+}
+
+export async function loadSellablePrices(): Promise<SellablePrices | null> {
+  try {
+    const response = await fetch(buildApiUrl('/api/stripe/checkout'), { method: 'GET' });
+    if (!response.ok) return null;
+    const payload = (await response.json()) as { ok?: unknown; managed?: unknown; sellable?: Record<string, unknown> };
+    const monthly = tierFlags(payload?.sellable?.monthly);
+    const annual = tierFlags(payload?.sellable?.annual);
+    if (payload?.ok !== true || !monthly || !annual) return null;
+    return { managed: payload.managed === true, monthly, annual };
+  } catch {
+    return null;
+  }
+}
+
 export type TrialRecord = {
   startedAt: string;
   endsAt: string;

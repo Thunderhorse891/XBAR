@@ -42,6 +42,7 @@ function failingQuery() {
     select: () => query,
     eq: () => query,
     neq: () => query,
+    gte: () => query,
     // getWorkspaceEntitlements terminates with .maybeSingle(); the capacity
     // gates await the builder directly. Supporting both keeps one mock.
     maybeSingle: () => Promise.resolve({ data: null, error: dbError }),

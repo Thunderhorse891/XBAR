@@ -183,3 +183,28 @@ test('the server seal is built over the filtered seller identity', () => {
   assert.ok(filterAt < sealAt, 'the identity filter must run before the seal so the seal covers the filtered names');
   assert.ok(/sellerIdentity:\s*identity/.test(handlerSrc), 'the filtered identity must be passed into the seal');
 });
+
+test('provider failures distinguish explicit rejections from ambiguous acceptance', async () => {
+  const { sendEmail } = await import('../../api/_lib/email.js');
+  const prior = { resend: process.env.RESEND_API_KEY, sendgrid: process.env.SENDGRID_API_KEY, fetch: globalThis.fetch };
+  try {
+    for (const provider of ['resend', 'sendgrid']) {
+      process.env.RESEND_API_KEY = provider === 'resend' ? 'synthetic-key' : '';
+      process.env.SENDGRID_API_KEY = provider === 'sendgrid' ? 'synthetic-key' : '';
+      for (const status of [400, 401, 403, 408, 429, 500, 503]) {
+        globalThis.fetch = async () =>
+          new Response('synthetic rejection', { status, headers: { 'Retry-After': '60' } });
+        const result = await sendEmail({ to: 'synthetic@example.test', subject: 'Test', text: 'Test' });
+        assert.equal(result.ok, false);
+        assert.equal(Boolean(result.retryable), status === 429);
+        assert.equal(Boolean(result.rejected), [400, 401, 403].includes(status));
+      }
+    }
+  } finally {
+    if (prior.resend === undefined) delete process.env.RESEND_API_KEY;
+    else process.env.RESEND_API_KEY = prior.resend;
+    if (prior.sendgrid === undefined) delete process.env.SENDGRID_API_KEY;
+    else process.env.SENDGRID_API_KEY = prior.sendgrid;
+    globalThis.fetch = prior.fetch;
+  }
+});

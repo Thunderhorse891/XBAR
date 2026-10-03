@@ -1,6 +1,13 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
-import { canUsePaymentLinkFallback, checkoutRouteFor, requestTrialStart, startManagedCheckout } from '@/lib/billingApi';
+import {
+  canUsePaymentLinkFallback,
+  checkoutRouteFor,
+  loadSellablePrices,
+  requestTrialStart,
+  startManagedCheckout,
+  type SellablePrices,
+} from '@/lib/billingApi';
 import {
   CHECKOUT_CONFIRMATION_POLL_INTERVAL_MS,
   CHECKOUT_CONFIRMATION_TIMEOUT_MS,
@@ -68,7 +75,23 @@ export default function Subscriptions() {
   // months free). The server fails closed when an annual price id is not
   // configured, so selecting annual before Stripe is set up cannot sell the
   // wrong period — checkout refuses instead.
-  const [billingPeriod, setBillingPeriod] = useState<'monthly' | 'annual'>('monthly');
+  //
+  // It opens on the cadence the workspace already pays (audit F14): an annual
+  // subscriber who lands here is shown annual prices, not monthly ones.
+  const [chosenPeriod, setBillingPeriod] = useState<'monthly' | 'annual'>(subscription.billingPeriod ?? 'monthly');
+  // What the server can sell, read before a cadence is offered. Null until it
+  // answers, and null if it never does -- either way only monthly is offered.
+  const [sellable, setSellable] = useState<SellablePrices | null>(null);
+  useEffect(() => {
+    if (!stripeConfig.managedBillingEnabled) return;
+    let cancelled = false;
+    void loadSellablePrices().then((prices) => {
+      if (!cancelled) setSellable(prices);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
   // After a lapse, `tier` is the baseline the workspace fell back to, so
   // recommending from it offers Professional to someone who just lost
   // Enterprise. purchasedTier is what they had.
@@ -115,10 +138,17 @@ export default function Subscriptions() {
     };
   }, [hasManagedIdentity, workspaceId, subscription, session?.access_token]);
   const billingEnabled = stripeConfig.managedBillingEnabled;
+  // Annual is offered only where it can actually be bought: an annual price the
+  // server confirms it holds, or an annual payment link. Managed billing being
+  // on is not that -- production offered annual with no annual price set, and a
+  // buyer who chose it got a refusal at the moment of paying.
+  const annualManaged =
+    billingEnabled && Boolean(sellable?.managed && tiers.some((tier) => sellable.annual[tier] === true));
+  const annualAvailable = annualManaged || tiers.some((tier) => Boolean(getStripePaymentLink(tier, 'annual')));
+  // The cadence every price, label and checkout below uses: the one chosen when
+  // it can be sold, monthly otherwise, so no screen quotes a price nobody can pay.
+  const billingPeriod: 'monthly' | 'annual' = annualAvailable ? chosenPeriod : 'monthly';
   const selectedPaymentLink = Boolean(getStripePaymentLink(decisionTier, billingPeriod));
-  // The annual toggle is only useful when annual can actually be bought:
-  // managed billing (server price ids) or at least one annual payment link.
-  const annualAvailable = billingEnabled || tiers.some((tier) => Boolean(getStripePaymentLink(tier, 'annual')));
   /*
    * Read once per render and passed to every billing decision below.
    *
@@ -677,7 +707,7 @@ export default function Subscriptions() {
         </div>
         <ul>
           <li>{formatLimit(config.limits.horseLimit, 'horses')}</li>
-          <li>{formatLimit(config.limits.salePacketLimit, 'sale packets')}</li>
+          <li>{formatLimit(config.limits.salePacketLimit, 'sale packets')} every 30 days</li>
         </ul>
         {/* Seat, document and storage quotas are already included in this
             canonical feature copy; show each once in the comparison card.
@@ -937,7 +967,7 @@ export default function Subscriptions() {
               <>
                 <div>
                   <span>Billing</span>
-                  <strong>Monthly</strong>
+                  <strong>{billingPeriod === 'annual' ? 'Annual' : 'Monthly'}</strong>
                 </div>
                 <div>
                   <span>Payment</span>

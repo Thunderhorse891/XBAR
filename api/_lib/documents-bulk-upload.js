@@ -115,7 +115,7 @@ async function processBatch({ supabase, workspaceId, user, body, mode }) {
     // sale-packets.js. A caller who sends bytes AND a foreign path would
     // otherwise skip the download and still persist the path.
     const suppliedPath = typeof file.storagePath === 'string' ? file.storagePath : '';
-    if (suppliedPath && !mayUseClientStoragePath({ storagePath: suppliedPath, workspaceId, userId: user.id })) {
+    if (suppliedPath && !mayUseClientStoragePath({ storagePath: suppliedPath, workspaceId })) {
       skipped.push({ fileName, reason: 'storage path does not belong to this workspace' });
       continue;
     }

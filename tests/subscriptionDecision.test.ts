@@ -86,7 +86,7 @@ test('relational subscription loading selects canonical access fields and uses t
   const source = await readFile(path.resolve('src/lib/cloudWorkspace.ts'), 'utf8');
   assert.match(
     source,
-    /from\('workspace_subscription_profiles'\)\s*\.select\('tier, billing_state, monthly_rate, payload, updated_at'\)/,
+    /from\('workspace_subscription_profiles'\)\s*\.select\('tier, billing_state, monthly_rate, billing_period, payload, updated_at'\)/,
   );
   assert.match(source, /subscription: subscriptionFromCloudRow\(subscriptionResult.data\)/);
 });

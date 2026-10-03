@@ -10,10 +10,11 @@ import { useUiStore } from '@/store/useUiStore';
 import { useXbarStore } from '@/store/useXbarStore';
 import './cleanEntryExperience.css';
 import './loginHero.css';
-import { canPresentThirdPartySignIn, canPresentPurchaseFlow } from '@/lib/nativePlatform';
+import { canPresentThirdPartySignIn, canPresentPurchaseFlow, publicSiteHref } from '@/lib/nativePlatform';
 import { presentableOAuthProviders } from '@/lib/authProviders';
 import { readBrowserStorage, removeBrowserStorage, writeBrowserStorage } from '@/lib/browserStorage';
 import { markCommandCenterEntry } from '@/lib/commandCenterEntry';
+import { SUPPORT_CONTACT } from '@/lib/legalDocuments';
 
 type AuthMode = 'signin' | 'signup';
 type BusyState = 'password' | 'google' | 'facebook' | 'apple' | 'reset' | 'code' | 'verify' | 'resend' | '';
@@ -287,10 +288,10 @@ export default function Login() {
       result.ok
         ? result.outcome === 'signed-in'
           ? 'Account created'
-          : 'Check your email'
+          : 'Choose your next step'
         : 'We could not create that account',
       result,
-      // Only the signed-in outcome created a session; the others are an inbox.
+      // Only the signed-in outcome created a session; the others still need a next step.
       result.outcome === 'signed-in' ? 'session' : 'notice',
       // The dedicated confirmation screen is the announcement; a toast would cover it.
       !(result.ok && result.outcome !== 'signed-in'),
@@ -433,9 +434,9 @@ export default function Login() {
           <div className="clean-auth-card__header">
             <p>{label}</p>
             <h1 ref={entryHeading} tabIndex={-1}>
-              {confirmationEmail ? 'Check your email' : title}
+              {confirmationEmail ? 'Choose your next step' : title}
             </h1>
-            <span>{confirmationEmail ? 'New accounts need email confirmation.' : description}</span>
+            <span>{confirmationEmail ? 'Sign in to an existing account, or confirm a new one.' : description}</span>
           </div>
 
           {/*
@@ -485,8 +486,8 @@ export default function Login() {
                 </button>
               </div>
               <p>
-                <strong>New to XBAR?</strong> Open the confirmation link in your email to continue. Check your spam
-                folder if it hasn’t arrived.
+                <strong>New to XBAR?</strong> Check your inbox and spam folder for a confirmation link. Open it to
+                continue if this is your first signup.
               </p>
               <div className="clean-confirmation__existing">
                 <p>
@@ -499,13 +500,13 @@ export default function Login() {
                   disabled={busy !== ''}
                   onClick={() => setMode('signin')}
                 >
-                  Back to sign in
+                  Go to sign in
                 </button>
               </div>
               <div className="clean-confirmation__resend">
                 <span>Still waiting for a new-account email?</span>
                 <button type="button" disabled={busy !== ''} onClick={() => void resendConfirmation()}>
-                  {busy === 'resend' ? 'Sending...' : 'Send it again'}
+                  {busy === 'resend' ? 'Sending...' : 'Request confirmation email'}
                 </button>
               </div>
               {messagePanel}
@@ -642,6 +643,17 @@ export default function Login() {
               </div>
             )}
             {!confirmationEmail && canPresentPurchaseFlow() && <a href="/pricing">View plans</a>}
+            <nav aria-label="Legal and support">
+              <a href={publicSiteHref('/terms')} target="_blank" rel="noopener noreferrer">
+                Terms of Service
+              </a>
+              {' · '}
+              <a href={publicSiteHref('/privacy')} target="_blank" rel="noopener noreferrer">
+                Privacy Policy
+              </a>
+              {' · '}
+              <a href={`mailto:${SUPPORT_CONTACT.email}`}>Help &amp; support</a>
+            </nav>
             <span>© 2026 XBAR</span>
           </div>
         </section>

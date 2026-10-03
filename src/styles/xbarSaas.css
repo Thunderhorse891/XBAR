@@ -1,6 +1,6 @@
 /* =========================================================================
-   XBAR SaaS — light-only Cake-style operating shell
-   Warm ivory, graphite, saddle tan, muted brass, dark olive, soft sand.
+   XBAR workspace — graphite navigation, silver records, metallic identity.
+   Working surfaces stay light; brand and interaction roles share one palette.
    All classes are prefixed `xs-` so they never collide with legacy styles.
    ========================================================================= */
 
@@ -9,27 +9,26 @@
 
 :root {
   color-scheme: light;
-  --xbar-bg: #f7f8f8;
-  --xbar-surface: #ffffff;
-  --xbar-surface-warm: #f1f3f3;
-  --xbar-surface-cool: #eceff0;
-  --xbar-sidebar: #ffffff;
+  --xbar-bg: var(--bg);
+  --xbar-surface: var(--surface);
+  --xbar-surface-warm: var(--surface-strong);
+  --xbar-surface-cool: var(--bg-deep);
+  --xbar-sidebar: var(--xbar-black);
   --xbar-border: #dde2e4;
   --xbar-border-strong: #b9c2c6;
-  --xbar-text: #171b1d;
-  --xbar-text-muted: #667074;
-  --xbar-carbon: #101314;
-  --xbar-graphite: #101314;
-  --xbar-graphite-2: #1f2527;
+  --xbar-text: var(--text);
+  --xbar-text-muted: var(--muted-strong);
+  --xbar-carbon: var(--xbar-black);
+  --xbar-graphite-2: var(--xbar-gunmetal);
   --xbar-chrome: #c9d0d3;
   --xbar-chrome-dark: #8e989d;
-  --xbar-cyan: #18d8f2;
-  --xbar-cyan-soft: #ddfbff;
-  --xbar-cyan-ink: #0c7a8c;
+  --xbar-cyan: var(--accent-edge);
+  --xbar-cyan-soft: var(--blue-soft);
+  --xbar-cyan-ink: var(--accent-ink);
   /* legacy accent aliases remapped to the cool brand system */
   --xbar-olive: #1f2527;
-  --xbar-brass: #18d8f2;
-  --xbar-saddle: #0c7a8c;
+  --xbar-brass: var(--accent-edge);
+  --xbar-saddle: var(--accent-ink);
   --xbar-sand: #c9d0d3;
   --xbar-success: #2e7d5b;
   --xbar-warning: #c98222;
@@ -40,7 +39,7 @@
   --xbar-warning-soft: #fff1dd;
   --xbar-danger-soft: #fbe7e4;
   --xbar-info-soft: rgba(63, 103, 115, 0.1);
-  --xbar-brass-soft: #ddfbff;
+  --xbar-brass-soft: var(--blue-soft);
   --xbar-sand-soft: #eceff0;
 
   --xbar-font-display: var(--font-ui);
@@ -58,7 +57,7 @@
 
 .xs-shell {
   display: grid;
-  grid-template-columns: 264px 1fr;
+  grid-template-columns: 246px minmax(0, 1fr);
   min-height: 100vh;
   background: var(--xbar-bg);
   color: var(--xbar-text);
@@ -85,13 +84,31 @@
   flex-direction: column;
   gap: 18px;
   min-height: 100vh;
-  padding: 18px 14px 16px;
+  padding: 24px 16px 18px;
   background: var(--xbar-sidebar);
   border-right: 1px solid var(--xbar-border);
   position: sticky;
   top: 0;
   max-height: 100vh;
   overflow-y: auto;
+  scrollbar-width: thin;
+  scrollbar-color: var(--xbar-steel) transparent;
+}
+
+.xs-sidebar,
+.xs-navigation-sheet {
+  color: var(--xbar-text);
+  --xbar-text: var(--xbar-warm-white);
+  --xbar-text-muted: var(--xbar-silver);
+  --xbar-surface: var(--xbar-gunmetal);
+  --xbar-surface-warm: var(--xbar-gunmetal);
+  --xbar-surface-cool: var(--xbar-gunmetal);
+  --xbar-border: var(--workspace-dark-border);
+  --xbar-border-strong: var(--xbar-steel);
+  --xbar-sand-soft: var(--xbar-gunmetal);
+  --xbar-saddle: var(--xbar-warm-white);
+  --xbar-cyan-ink: var(--xbar-warm-white);
+  --xbar-brass-soft: var(--xbar-gunmetal);
 }
 
 @media (max-width: 1023px) {
@@ -122,8 +139,8 @@
 }
 
 .xs-workspace__logo {
-  height: 34px;
-  width: 34px;
+  height: 40px;
+  width: 40px;
   flex: none;
   display: flex;
   align-items: center;
@@ -143,6 +160,7 @@
 }
 
 .xs-workspace__name {
+  display: block;
   font-weight: 600;
   font-size: 13.5px;
   color: var(--xbar-text);
@@ -299,9 +317,9 @@
   display: flex;
   align-items: center;
   gap: 12px;
-  flex-wrap: wrap;
-  min-height: 62px;
-  padding: 10px 22px;
+  flex-wrap: nowrap;
+  min-height: 76px;
+  padding: 14px 32px;
   background: rgba(247, 248, 248, 0.85);
   backdrop-filter: blur(10px);
   border-bottom: 1px solid var(--xbar-border);
@@ -321,8 +339,12 @@
 .xs-topbar__right {
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: 10px;
   flex-wrap: wrap;
+}
+
+.xs-topbar > .xs-topbar__right {
+  flex-wrap: nowrap;
 }
 
 .xs-toggle {
@@ -358,8 +380,8 @@
 
 .xs-iconbtn {
   position: relative;
-  height: 34px;
-  width: 34px;
+  height: 40px;
+  width: 40px;
   flex: none;
   display: inline-flex;
   align-items: center;
@@ -401,13 +423,13 @@
   align-items: center;
   justify-content: center;
   gap: 7px;
-  height: 34px;
-  padding: 0 15px;
+  min-height: 40px;
+  padding: 0 16px;
   border: 1px solid var(--xbar-border);
   border-radius: 9px;
   background: var(--xbar-surface);
   color: var(--xbar-text);
-  font-size: 12.5px;
+  font-size: 13px;
   font-weight: 600;
   cursor: pointer;
   white-space: nowrap;
@@ -475,8 +497,8 @@
 }
 
 .xs-avatar {
-  height: 34px;
-  width: 34px;
+  height: 40px;
+  width: 40px;
   flex: none;
   border-radius: 50%;
   display: inline-flex;
@@ -494,10 +516,10 @@
 
 .xs-page {
   flex: 1;
-  padding: 22px 24px 64px;
+  padding: 32px 32px 64px;
   display: flex;
   flex-direction: column;
-  gap: 18px;
+  gap: 24px;
   max-width: 1480px;
   width: 100%;
   margin: 0 auto;
@@ -1147,74 +1169,6 @@
   letter-spacing: 0.04em;
 }
 
-/* -------------------------------------------------------------------------
-   Legacy-skin neutralizers.
-   Older global stylesheets (xbarCommandSystem.css, metalBrandSystem.css)
-   force the bare `aside`/`aside a` elements into a dark "brand" shell with
-   !important. The new XBAR shell is light-only, so re-assert the light
-   surface with higher-specificity selectors (class beats element) + !important.
-   ------------------------------------------------------------------------- */
-
-.xs-shell .xs-sidebar {
-  background: var(--xbar-sidebar) !important;
-  color: var(--xbar-text) !important;
-  border-right: 1px solid var(--xbar-border) !important;
-  box-shadow: none !important;
-}
-
-.xs-shell .xs-sidebar .xs-nav__item,
-.xs-shell .xs-sidebar .xs-nav__item .xs-nav__label {
-  color: var(--xbar-text) !important;
-}
-
-.xs-shell .xs-sidebar .xs-nav__item {
-  background: transparent !important;
-  border-color: transparent !important;
-  box-shadow: none !important;
-}
-
-.xs-shell .xs-sidebar .xs-nav__item:hover {
-  background: var(--xbar-sand-soft) !important;
-  border-color: transparent !important;
-  box-shadow: none !important;
-}
-
-.xs-shell .xs-sidebar .xs-nav__item--active,
-.xs-shell .xs-sidebar a.xs-nav__item--active[aria-current='page'] {
-  background: var(--xbar-surface-cool) !important;
-  color: var(--xbar-text) !important;
-  border-color: transparent !important;
-  box-shadow: inset 3px 0 0 var(--xbar-cyan) !important;
-}
-
-.xs-shell .xs-sidebar .xs-nav__item .xs-nav__icon {
-  color: var(--xbar-text-muted) !important;
-}
-
-.xs-shell .xs-sidebar .xs-nav__item--active .xs-nav__icon {
-  color: var(--xbar-cyan-ink) !important;
-}
-
-.xs-shell .xs-sidebar .xs-workspace {
-  background: var(--xbar-surface) !important;
-  color: var(--xbar-text) !important;
-  border: 1px solid var(--xbar-border) !important;
-}
-
-.xs-shell .xs-sidebar .xs-workspace:hover {
-  border-color: var(--xbar-border-strong) !important;
-}
-
-.xs-shell .xs-sidebar .xs-workspace__logo {
-  background: var(--xbar-carbon) !important;
-  color: #ffffff !important;
-}
-
-.xs-shell .xs-sidebar .xs-nav__badge {
-  color: var(--xbar-saddle) !important;
-  background: var(--xbar-brass-soft) !important;
-}
-
 /* mobile top nav fallback */
 
 .xs-mobilebar {
@@ -1837,7 +1791,7 @@
   display: flex;
   align-items: center;
   gap: 8px;
-  height: 34px;
+  height: 40px;
   padding: 0 12px;
   border: 1px solid var(--xbar-border);
   border-radius: 10px;
@@ -1956,61 +1910,53 @@ aside.xs-drawer .xs-drawer__sub {
 
 .xs-brand {
   display: flex;
-  align-items: center;
-  gap: 11px;
-  padding: 4px 8px 4px 6px;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 8px;
+  padding: 0 8px 8px;
 }
 
-.xs-brand__tile {
-  height: 38px;
-  width: 38px;
-  flex: none;
-  border-radius: 10px;
+.xs-brand__wordmark {
+  display: block;
+  width: 156px;
+  height: auto;
   object-fit: contain;
-  box-shadow: 0 2px 10px rgba(16, 19, 20, 0.22);
-}
-
-.xs-brand__word {
-  font-family: var(--xbar-font-display);
-  font-weight: 800;
-  font-size: 19px;
-  letter-spacing: 0.1em;
-  color: var(--xbar-text);
-  line-height: 1;
+  border-radius: 4px;
 }
 
 .xs-brand__sub {
-  font-size: 9px;
-  letter-spacing: 0.22em;
+  display: block;
+  font-size: 10px;
+  letter-spacing: 0.2em;
   text-transform: uppercase;
   color: var(--xbar-text-muted);
-  margin-top: 4px;
 }
 
-/* Subtle brand motif — oversized faded X behind the sidebar lower field */
-
-.xs-sidebar__footer {
-  position: relative;
+.xs-topbar__ranch {
+  font-size: 14px;
+  font-weight: 600;
+  max-width: 220px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
-.xs-sidebar__wm {
-  position: absolute;
-  left: 50%;
-  bottom: -34px;
-  width: 250px;
-  height: 250px;
-  transform: translateX(-50%);
-  opacity: 0.05;
-  pointer-events: none;
-  filter: grayscale(1) contrast(1.05);
-  -webkit-mask-image: radial-gradient(circle at center, #000 34%, transparent 70%);
-  mask-image: radial-gradient(circle at center, #000 34%, transparent 70%);
-  z-index: 0;
+.xs-mobile-menu,
+.xs-mobile-brand {
+  display: none;
 }
 
-.xs-sidebar__footer > *:not(.xs-sidebar__wm) {
-  position: relative;
-  z-index: 1;
+[role='dialog'].xs-navigation-sheet {
+  width: min(88vw, 340px);
+  overflow-y: auto;
+  padding: 28px 20px;
+  color: var(--xbar-text);
+  background: var(--xbar-black);
+  border-color: var(--xbar-border);
+}
+
+.xs-navigation-sheet .xs-nav {
+  margin-top: 24px;
 }
 
 /* Focus rings — cyan precision accent everywhere */
@@ -2122,8 +2068,8 @@ aside.xs-drawer .xs-drawer__sub {
 }
 
 .xs-mdrow__avatar {
-  height: 34px;
-  width: 34px;
+  height: 40px;
+  width: 40px;
   flex: none;
   border-radius: 8px;
   background: var(--xbar-surface-warm);
@@ -2252,20 +2198,21 @@ aside.xs-drawer .xs-drawer__sub {
   border: 1px solid var(--xbar-border);
   border-radius: var(--xbar-radius);
   background: var(--xbar-surface);
-  padding: 18px 20px;
+  padding: 28px;
   box-shadow: var(--xbar-shadow-card);
 }
 
 .xs-objhead__id {
   display: flex;
   align-items: center;
-  gap: 14px;
+  gap: 22px;
+  min-width: 0;
 }
 
 .xs-objhead__avatar {
   position: relative;
-  height: 52px;
-  width: 52px;
+  height: 96px;
+  width: 96px;
   flex: none;
   border-radius: 12px;
   background: var(--xbar-surface-warm);
@@ -2309,8 +2256,9 @@ aside.xs-drawer .xs-drawer__sub {
 
 .xs-objhead__name {
   font-family: var(--xbar-font-display);
-  font-size: 22px;
-  font-weight: 800;
+  font-size: 30px;
+  font-weight: 650;
+  overflow-wrap: anywhere;
   letter-spacing: -0.02em;
   line-height: 1.1;
 }
@@ -2449,33 +2397,30 @@ aside.xs-drawer .xs-drawer__sub {
 .xs-hero {
   position: relative;
   overflow: hidden;
-  border: 1px solid var(--xbar-border);
+  border: 1px solid var(--xbar-steel);
   border-radius: 20px;
-  background:
-    radial-gradient(120% 140% at 100% 0%, var(--xbar-cyan-soft) 0%, transparent 42%),
-    linear-gradient(180deg, var(--xbar-surface) 0%, var(--xbar-surface) 100%);
-  box-shadow: var(--xbar-shadow-card);
-  padding: 30px 32px;
+  background: linear-gradient(115deg, var(--xbar-black), var(--xbar-gunmetal));
+  box-shadow: var(--xbar-shadow-lift);
+  padding: 36px;
+  min-height: 290px;
 }
 
 .xs-hero__wm {
   position: absolute;
-  right: -40px;
+  right: 36px;
   top: 50%;
   transform: translateY(-50%);
-  width: 300px;
-  height: 300px;
-  opacity: 0.05;
+  width: 172px;
+  height: 172px;
+  border-radius: 24px;
+  object-fit: contain;
   pointer-events: none;
-  filter: grayscale(1);
-  -webkit-mask-image: radial-gradient(circle at center, #000 40%, transparent 72%);
-  mask-image: radial-gradient(circle at center, #000 40%, transparent 72%);
 }
 
 .xs-hero__body {
   position: relative;
   z-index: 1;
-  max-width: 760px;
+  padding-right: 205px;
 }
 
 .xs-hero__eyebrow {
@@ -2483,7 +2428,7 @@ aside.xs-drawer .xs-drawer__sub {
   font-weight: 700;
   letter-spacing: 0.16em;
   text-transform: uppercase;
-  color: var(--xbar-cyan-ink);
+  color: var(--xbar-silver);
   display: flex;
   align-items: center;
   gap: 8px;
@@ -2491,22 +2436,34 @@ aside.xs-drawer .xs-drawer__sub {
 
 .xs-hero__headline {
   font-family: var(--xbar-font-display);
-  font-size: 34px;
-  font-weight: 800;
+  font-size: clamp(28px, 2.5vw, 38px);
+  font-weight: 600;
   letter-spacing: -0.025em;
   line-height: 1.08;
   margin: 12px 0 0;
-  color: var(--xbar-text);
+  color: var(--xbar-warm-white);
 }
 
 .xs-hero__headline em {
   font-style: normal;
-  color: var(--xbar-danger);
+  color: var(--xbar-warm-white);
+}
+
+.xs-hero__status {
+  color: var(--xbar-warm-white);
+  font-size: 17px;
+  font-weight: 500;
+  line-height: 1.45;
+  margin: 16px 0 0;
+}
+
+.xs-hero__status em {
+  font-style: normal;
 }
 
 .xs-hero__sub {
-  font-size: 14px;
-  color: var(--xbar-text-muted);
+  font-size: 15px;
+  color: var(--xbar-silver);
   margin: 10px 0 0;
   line-height: 1.55;
   max-width: 60ch;
@@ -2517,6 +2474,27 @@ aside.xs-drawer .xs-drawer__sub {
   gap: 10px;
   margin-top: 20px;
   flex-wrap: wrap;
+}
+
+.xs-hero__actions .xs-btn {
+  background: transparent;
+  border-color: var(--xbar-steel);
+  color: var(--xbar-warm-white);
+}
+
+.xs-hero__actions .xs-btn--primary {
+  background: linear-gradient(180deg, var(--xbar-warm-white), var(--xbar-silver));
+  color: var(--xbar-black);
+  border-color: var(--xbar-silver);
+}
+
+.xs-hero__actions .xs-btn:hover {
+  border-color: var(--accent-edge);
+  box-shadow: 0 0 0 1px var(--accent-edge);
+}
+
+.xs-hero__actions .xs-btn--ghost {
+  border-color: transparent;
 }
 
 /* KPI ribbon */
@@ -2541,7 +2519,7 @@ aside.xs-drawer .xs-drawer__sub {
   display: flex;
   flex-direction: column;
   gap: 3px;
-  padding: 16px 18px;
+  padding: 22px;
   border-left: 1px solid var(--xbar-border);
   cursor: pointer;
   background: none;
@@ -2633,7 +2611,7 @@ aside.xs-drawer .xs-drawer__sub {
 
 .xs-homegrid {
   display: grid;
-  grid-template-columns: 1fr 348px;
+  grid-template-columns: minmax(0, 1fr) minmax(270px, 320px);
   gap: 20px;
   align-items: start;
 }
@@ -2726,55 +2704,21 @@ aside.xs-drawer .xs-drawer__sub {
 
 .xs-signal__title {
   display: block;
-  font-size: 14.5px;
-  font-weight: 700;
+  font-size: 15px;
+  font-weight: 600;
+  line-height: 1.4;
 }
 
 .xs-signal__meta {
   display: block;
   font-size: 12.5px;
   color: var(--xbar-text-muted);
-  margin-top: 2px;
+  margin-top: 5px;
+  line-height: 1.5;
 }
 
 .xs-signal__cta {
   flex: none;
-}
-
-/* Compact work preview */
-
-.xs-workmini {
-  display: flex;
-  flex-direction: column;
-}
-
-.xs-workmini__row {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-  padding: 11px 2px;
-  border-bottom: 1px solid var(--xbar-border);
-  cursor: pointer;
-}
-
-.xs-workmini__row:last-child {
-  border-bottom: 0;
-}
-
-.xs-workmini__row:hover .xs-workmini__title {
-  color: var(--xbar-cyan-ink);
-}
-
-.xs-workmini__title {
-  font-size: 13.5px;
-  font-weight: 600;
-  flex: 1;
-}
-
-.xs-workmini__due {
-  font-size: 12px;
-  color: var(--xbar-text-muted);
-  white-space: nowrap;
 }
 
 /* Cohesive intelligence panel (one card, hairline sections) */
@@ -2853,12 +2797,6 @@ aside.xs-drawer .xs-drawer__sub {
   margin-top: 2px;
 }
 
-.xs-intel__qc {
-  display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: 8px;
-}
-
 /* =========================================================================
    Legacy → brand bridge
    The legacy pages (Settings, Subscriptions, Expenses, Horses, Sales, …)
@@ -2907,4 +2845,163 @@ aside.xs-drawer .xs-drawer__sub {
   background: var(--xbar-surface) !important;
   color: var(--xbar-text) !important;
   box-shadow: var(--xbar-shadow-card) !important;
+}
+
+/* Responsive workspace controls: every section remains reachable on a phone. */
+@media (max-width: 1200px) {
+  .xs-topbar__ranch {
+    max-width: 150px;
+  }
+  .xs-topbar {
+    gap: 10px;
+    padding-inline: 24px;
+  }
+  .xs-hero__wm {
+    width: 140px;
+    height: 140px;
+    right: 28px;
+  }
+  .xs-hero__body {
+    padding-right: 165px;
+  }
+}
+
+@media (max-width: 1023px) {
+  .xs-mobile-menu,
+  .xs-mobile-brand {
+    display: inline-flex;
+    flex: none;
+  }
+  .xs-topbar {
+    padding: 12px 20px;
+  }
+  .xs-topbar__ranch {
+    display: none;
+  }
+  .xs-page {
+    padding: 24px 20px 108px;
+  }
+}
+
+@media (max-width: 600px) {
+  .xs-topbar {
+    min-height: 68px;
+    padding: 10px 16px;
+    gap: 8px;
+  }
+  .xs-topbar__left {
+    gap: 8px;
+  }
+  .xs-topbar__right {
+    gap: 8px;
+  }
+  .xs-topbar .xs-search {
+    flex: none;
+    width: 40px;
+    min-width: 40px;
+    padding: 0;
+    justify-content: center;
+  }
+  .xs-search__placeholder,
+  .xs-search__kbd {
+    display: none;
+  }
+  .xs-topbar .xs-iconbtn[aria-label='Notifications'] {
+    display: none;
+  }
+  .xs-topbar__spacer {
+    display: none;
+  }
+  .xs-topbar > .xs-topbar__right {
+    margin-left: auto;
+  }
+  .xs-topbar .xs-btn {
+    padding-inline: 12px;
+  }
+  .xs-hero {
+    padding: 26px 22px;
+    min-height: 0;
+  }
+  .xs-hero__wm {
+    width: 68px;
+    height: 68px;
+    top: 22px;
+    right: 20px;
+    transform: none;
+  }
+  .xs-hero__body {
+    padding-right: 0;
+  }
+  .xs-hero__eyebrow {
+    padding-right: 72px;
+    min-height: 52px;
+    font-size: 10px;
+    line-height: 1.6;
+  }
+  .xs-hero__headline {
+    margin-top: 18px;
+    font-size: 29px;
+    line-height: 1.15;
+  }
+  .xs-hero__sub {
+    font-size: 14px;
+  }
+  .xs-hero__actions {
+    gap: 8px;
+  }
+  .xs-hero__actions .xs-btn {
+    min-height: 44px;
+  }
+  .xs-home {
+    gap: 24px;
+  }
+  .xs-ribbon {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+  .xs-ribbon__item {
+    min-width: 0;
+    padding: 18px;
+    border-bottom: 1px solid var(--xbar-border);
+  }
+  .xs-ribbon__item:last-child {
+    grid-column: 1 / -1;
+    border-bottom: 0;
+  }
+  .xs-ribbon__item:nth-child(odd) {
+    border-left: 0;
+  }
+  .xs-signal {
+    padding: 16px;
+    gap: 12px;
+    flex-wrap: wrap;
+  }
+  .xs-signal__body {
+    flex-basis: calc(100% - 58px);
+  }
+  .xs-signal__cta {
+    margin-left: 54px;
+  }
+  .xs-objhead {
+    padding: 20px;
+  }
+  .xs-objhead__id {
+    align-items: flex-start;
+    gap: 14px;
+  }
+  .xs-objhead__avatar {
+    width: 72px;
+    height: 72px;
+  }
+  .xs-objhead__name {
+    font-size: 25px;
+  }
+  .xs-objhead__actions {
+    width: 100%;
+  }
+  .xs-tabbar__tab {
+    min-height: 44px;
+  }
+  .xs-mobilebar {
+    bottom: max(12px, env(safe-area-inset-bottom));
+  }
 }
