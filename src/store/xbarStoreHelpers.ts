@@ -1513,8 +1513,12 @@ export function canRestorePersistedState(raw: unknown): boolean {
        * profitIntelligence.ts:28 and :268 calls a string method on whatever
        * `??` let through — during report construction, not on a screen.
        */
-      optionalStrings: ['nextFollowUp', 'notes', 'offerUpdatedAt'],
-      optionalNumbers: ['offerAmount', 'counterOfferAmount', 'depositAmount'],
+      /*
+       * `amountReceivedOn` is trimmed by the Sales close-out validator, and
+       * `amountReceived` feeds "collected" and "profit banked" (audit F08).
+       */
+      optionalStrings: ['nextFollowUp', 'notes', 'offerUpdatedAt', 'amountReceivedOn'],
+      optionalNumbers: ['offerAmount', 'counterOfferAmount', 'depositAmount', 'amountReceived'],
     },
     /*
      * `listing.channels.includes()` — SharedAccess.tsx:33 — was the container

@@ -1,5 +1,6 @@
 import type { ExpenseCategory, ExpenseReceipt, HorseRecord, SalesLead } from '../types/xbar.js';
-import { compareTimestampDesc } from './format.js';
+import { compareTimestampDesc, localIsoDate } from './format.js';
+import { isCalendarDay } from './salePayment.js';
 
 export type OfferDecisionStatus = 'no-offer' | 'missing-costs' | 'loss' | 'thin-margin' | 'protected-margin';
 
@@ -168,8 +169,15 @@ export type AnimalFinancialRow = {
   status: AnimalFinancialStatus;
   /** Capital in the animal: cost basis + linked expenses (its break-even). */
   invested: number;
-  /** Realized proceeds (sold), live offer (pipeline), or asking price (held). 0 means unpriced. */
+  /**
+   * Recorded sale value (sold) -- what was agreed, not what was collected -- live
+   * offer (pipeline), or asking price (held). 0 means unpriced.
+   */
   value: number;
+  /** Sold only: money recorded as received on the sale, never more than `value`. 0 otherwise. */
+  received: number;
+  /** Sold only: agreed sale value not yet recorded as received. 0 otherwise. */
+  outstanding: number;
   /** value − invested. Realized for sold animals; projected otherwise. */
   profit: number;
   marginPercent: number;
@@ -195,13 +203,25 @@ export type FinancialInsight = {
 };
 
 export type RanchFinancials = {
-  // Realized — money already made on closed (Won) deals with a RECORDED sale amount.
-  // A Won deal with no amount is never assumed; it is an integrity gap (see below).
-  realizedProceeds: number;
+  // Closed (Won) deals with a RECORDED sale amount. A Won deal with no amount is
+  // never assumed; it is an integrity gap (see below). Closing a deal records what
+  // was agreed, not what was paid (audit F08), so agreed value, money received and
+  // money still owed are three separate figures.
+  /** Agreed value of closed sales with a recorded amount. Agreed, not collected. */
+  closedSaleValue: number;
+  /** Money recorded as received on those sales. Never more than closedSaleValue. */
+  collectedFromSales: number;
+  /** closedSaleValue − collectedFromSales: owed by buyers, not banked. */
+  outstandingFromSales: number;
+  /** Priced sales not yet recorded as paid in full. */
+  soldUnsettledCount: number;
   realizedCost: number;
   /** Gross profit on sold animals: recorded proceeds − their break-even. */
   grossProfitOnSales: number;
-  /** Bottom line: gross profit on sales − operating overhead. What's actually banked. */
+  /**
+   * Bottom line: gross profit on sales − operating overhead. It is "banked" only
+   * when buildBankedHeadline says complete -- every sale priced, costed and paid.
+   */
   netProfit: number;
   realizedMarginPercent: number;
   soldCount: number;
@@ -248,7 +268,9 @@ export type BankedHeadline = {
 };
 
 export function buildBankedHeadline(fin: RanchFinancials): BankedHeadline {
-  const gaps = fin.soldMissingCostCount + fin.soldMissingPriceCount;
+  // A sale that has not been paid in full is not banked (audit F08): money a
+  // buyer still owes keeps the figure partial, exactly like a missing price.
+  const gaps = fin.soldMissingCostCount + fin.soldMissingPriceCount + fin.soldUnsettledCount;
   if (gaps === 0) {
     return { state: 'complete', netProfit: fin.netProfit, fixPhrase: '' };
   }
@@ -258,8 +280,16 @@ export function buildBankedHeadline(fin: RanchFinancials): BankedHeadline {
   const soldRows = fin.perAnimal.filter((row) => row.status === 'sold');
   const needsPrice = soldRows.some((row) => row.saleValueUnknown);
   const needsCost = soldRows.some((row) => row.costBlindSpot);
-  const fixPhrase =
-    needsPrice && needsCost ? 'add sale prices and costs' : needsPrice ? 'record the sale amount' : 'add costs';
+  const needsPayment = soldRows.some((row) => row.outstanding > 0);
+  const recordPhrase =
+    needsPrice && needsCost
+      ? 'add sale prices and costs'
+      : needsPrice
+        ? 'record the sale amount'
+        : needsCost
+          ? 'add costs'
+          : '';
+  const fixPhrase = [recordPhrase, needsPayment ? 'record payments received' : ''].filter(Boolean).join(', and ');
   // A nonzero net here is only the overhead floor / costed-sale subtotal, not a
   // verdict — that's `partial`; with nothing concrete to show it's `unknown`.
   return { state: fin.netProfit !== 0 ? 'partial' : 'unknown', netProfit: fin.netProfit, fixPhrase };
@@ -274,6 +304,39 @@ const ACTIVE_OFFER_STATUSES = new Set(['Accepted', 'Deposit Due', 'Deposit Paid'
 // offer is dead. Neither may stand in as pipeline value. A status-less legacy lead
 // is not in this set, so it still counts through the stage fallback.
 export const NON_LIVE_OFFER_STATUSES = new Set(['Draft', 'Rejected']);
+
+/*
+ * Money received on a Won sale (audit F08). Closing a lead records what was
+ * agreed; it does not settle it. Only a recorded amount received counts or,
+ * when none has been recorded, a deposit marked Paid. Never negative, never
+ * more than the sale value, and an unreadable figure is nothing received.
+ */
+export function saleAmountReceived(lead: SalesLead, saleValue: number, today = localIsoDate()): number {
+  // Persisted/restored records can bypass the close-out form. An explicit
+  // receipt must carry the same real, non-future local day before it counts.
+  // Do not fall back to a deposit when an explicit receipt is invalid.
+  if (
+    lead.amountReceived !== undefined &&
+    lead.amountReceived !== null &&
+    (!Number.isFinite(lead.amountReceived) ||
+      lead.amountReceived < 0 ||
+      ((lead.amountReceived > 0 ||
+        (lead.amountReceivedOn !== undefined && lead.amountReceivedOn !== null && lead.amountReceivedOn !== '')) &&
+        (!isCalendarDay(lead.amountReceivedOn) || lead.amountReceivedOn > today)))
+  ) {
+    return 0;
+  }
+  const recorded =
+    lead.amountReceived === undefined || lead.amountReceived === null ? NaN : Number(lead.amountReceived);
+  const deposit = lead.depositStatus === 'Paid' ? Number(lead.depositAmount) : 0;
+  // A valid total includes the separately recorded paid deposit. Legacy restored
+  // totals below that deposit are contradictory: the paid deposit is the known
+  // minimum. Zero claims no new receipt and needs no date; invalid positive
+  // receipts still fail closed above. The editor/store require correction.
+  const paidDeposit = Number.isFinite(deposit) ? Math.max(0, deposit) : 0;
+  const received = Number.isFinite(recorded) ? Math.max(recorded, paidDeposit) : paidDeposit;
+  return Math.min(Math.max(0, received), Math.max(0, saleValue));
+}
 
 export function buildRanchFinancials(
   horses: HorseRecord[],
@@ -294,12 +357,15 @@ export function buildRanchFinancials(
       const value = wonLead.counterOfferAmount || wonLead.offerAmount || 0;
       const saleValueUnknown = value <= 0;
       const profit = saleValueUnknown ? 0 : value - invested;
+      const received = saleValueUnknown ? 0 : saleAmountReceived(wonLead, value);
       return {
         horseId: horse.id,
         horseName: horse.name,
         status: 'sold',
         invested,
         value,
+        received,
+        outstanding: saleValueUnknown ? 0 : value - received,
         profit,
         marginPercent: value > 0 ? (profit / value) * 100 : 0,
         underwater: false,
@@ -331,6 +397,8 @@ export function buildRanchFinancials(
       status: isPipeline ? 'pipeline' : 'held',
       invested,
       value,
+      received: 0,
+      outstanding: 0,
       profit,
       marginPercent: value > 0 ? (profit / value) * 100 : 0,
       underwater: value > 0 && value < invested,
@@ -346,14 +414,22 @@ export function buildRanchFinancials(
   // figure derived from a missing cost basis (invested = 0) would overstate the
   // gain, so those rows are proceeds we can show but profit we won't invent.
   const hasKnownProfit = (row: AnimalFinancialRow) => row.value > 0 && !row.costBlindSpot;
-  const soldWithPrice = sold.filter((row) => !row.saleValueUnknown); // cash collected is known
-  const soldBanked = soldWithPrice.filter((row) => !row.costBlindSpot); // profit is knowable
+  const soldWithPrice = sold.filter((row) => !row.saleValueUnknown); // the agreed amount is known
+  const soldCosted = soldWithPrice.filter((row) => !row.costBlindSpot); // profit is knowable
+  // Banked is narrower still: a sale's profit is banked only once it is paid in
+  // full (audit F08). An unpaid or part-paid sale's margin is agreed, not banked,
+  // so it adds nothing to the banked figure until the money is in.
+  const soldBanked = soldCosted.filter((row) => row.outstanding === 0);
   const pipeline = rows.filter((row) => row.status === 'pipeline');
   const held = rows.filter((row) => row.status === 'held');
   const unrealized = [...pipeline, ...held];
 
-  // "Collected" is every known sale price; profit is only the fully-costed subset.
-  const realizedProceeds = soldWithPrice.reduce((sum, row) => sum + row.value, 0);
+  // Agreed value is every known sale price; collected is only what was recorded
+  // as received on them; profit is only the fully-costed subset.
+  const closedSaleValue = soldWithPrice.reduce((sum, row) => sum + row.value, 0);
+  const collectedFromSales = soldWithPrice.reduce((sum, row) => sum + row.received, 0);
+  const unsettled = soldWithPrice.filter((row) => row.outstanding > 0);
+  const outstandingFromSales = unsettled.reduce((sum, row) => sum + row.outstanding, 0);
   const bankedProceeds = soldBanked.reduce((sum, row) => sum + row.value, 0);
   const realizedCost = soldBanked.reduce((sum, row) => sum + row.invested, 0);
   const grossProfitOnSales = bankedProceeds - realizedCost;
@@ -371,8 +447,8 @@ export function buildRanchFinancials(
     .reduce((sum, receipt) => sum + receipt.amount, 0);
   const totalInvested = investedInHerd + investedInSold + overheadSpend;
 
-  // The bottom line: gross profit on sold animals, less operating overhead. This is
-  // what the operation actually banked — a real P&L nets overhead out.
+  // The bottom line: gross profit on sold animals, less operating overhead — a real
+  // P&L nets overhead out. It is banked only once every sale is paid in full.
   const netProfit = grossProfitOnSales - overheadSpend;
 
   const categoryTotals = receipts.reduce<Map<ExpenseCategory, number>>((totals, receipt) => {
@@ -390,7 +466,10 @@ export function buildRanchFinancials(
   const soldMissingCostCount = soldWithPrice.filter((row) => row.costBlindSpot).length;
 
   return {
-    realizedProceeds,
+    closedSaleValue,
+    collectedFromSales,
+    outstandingFromSales,
+    soldUnsettledCount: unsettled.length,
     realizedCost,
     grossProfitOnSales,
     netProfit,
@@ -413,7 +492,10 @@ export function buildRanchFinancials(
     soldMissingPriceCount,
     perAnimal: sortAnimalRows(rows),
     topCostCategories,
-    insights: buildFinancialInsights(soldBanked, held, topCostCategories, {
+    // Best and worst sale read the agreed margin -- a fact of the deal whether or
+    // not it has been paid; what is still owed is its own insight.
+    insights: buildFinancialInsights(soldCosted, held, topCostCategories, {
+      unsettled,
       costBlindSpotCount,
       unpricedHeldCount,
       soldMissingPriceCount,
@@ -435,6 +517,7 @@ function buildFinancialInsights(
   held: AnimalFinancialRow[],
   topCostCategories: { category: ExpenseCategory; amount: number }[],
   integrity: {
+    unsettled: AnimalFinancialRow[];
     costBlindSpotCount: number;
     unpricedHeldCount: number;
     soldMissingPriceCount: number;
@@ -445,13 +528,28 @@ function buildFinancialInsights(
   const insights: FinancialInsight[] = [];
   const money = (value: number) => `$${Math.round(value).toLocaleString()}`;
 
+  // Money a buyer still owes leads: it is the one figure here that is cash at risk.
+  const owed = integrity.unsettled.reduce((sum, row) => sum + row.outstanding, 0);
+  const largestOwed = [...integrity.unsettled].sort((left, right) => right.outstanding - left.outstanding)[0];
+  if (largestOwed && owed > 0) {
+    const count = integrity.unsettled.length;
+    insights.push({
+      id: 'sale-payment-outstanding',
+      tone: 'risk',
+      title: `${money(owed)} from closed sales is still owed`,
+      detail: `${count === 1 ? '1 sale is' : `${count} sales are`} not recorded as paid in full — ${largestOwed.horseName} has the most outstanding (${money(largestOwed.outstanding)}). Record each payment when it lands; profit counts as banked only when the full sale price has been received.`,
+      horseId: largestOwed.horseId,
+      amount: owed,
+    });
+  }
+
   const bestSale = [...soldPriced].sort((left, right) => right.profit - left.profit)[0];
   if (bestSale && bestSale.profit > 0) {
     insights.push({
       id: `win-${bestSale.horseId}`,
       tone: 'win',
-      title: `${bestSale.horseName} was your best sale`,
-      detail: `Sold for ${money(bestSale.value)} — ${money(bestSale.profit)} profit at ${bestSale.marginPercent.toFixed(0)}% margin.`,
+      title: `${bestSale.horseName} had your highest agreed sale margin`,
+      detail: `Agreed sale value ${money(bestSale.value)} gives a ${money(bestSale.profit)} margin (${bestSale.marginPercent.toFixed(0)}%). ${money(bestSale.received)} received; ${money(bestSale.outstanding)} still owed.`,
       horseId: bestSale.horseId,
       amount: bestSale.profit,
     });
@@ -463,7 +561,7 @@ function buildFinancialInsights(
       id: `loss-${worstSale.horseId}`,
       tone: 'risk',
       title: `${worstSale.horseName} sold below break-even`,
-      detail: `Proceeds of ${money(worstSale.value)} came in ${money(-worstSale.profit)} under the ${money(worstSale.invested)} it cost to get there.`,
+      detail: `Agreed sale value ${money(worstSale.value)} is ${money(-worstSale.profit)} below the ${money(worstSale.invested)} invested. ${money(worstSale.received)} received; ${money(worstSale.outstanding)} still owed.`,
       horseId: worstSale.horseId,
       amount: worstSale.profit,
     });
@@ -515,8 +613,8 @@ function buildFinancialInsights(
     insights.push({
       id: 'overhead-drag',
       tone: 'risk',
-      title: 'Overhead is outrunning your sales profit',
-      detail: `${money(grossFromSales)} gross on sold horses, but ${money(integrity.overheadSpend)} of operating overhead puts the operation ${money(integrity.overheadSpend - grossFromSales)} in the red. Sell more margin or cut overhead.`,
+      title: 'Overhead exceeds your agreed sale margins',
+      detail: `Agreed gross margin on sold horses is ${money(grossFromSales)} before payment status; operating overhead of ${money(integrity.overheadSpend)} exceeds those margins by ${money(integrity.overheadSpend - grossFromSales)}. Banked profit separately counts only fully paid sales with recorded costs.`,
       amount: grossFromSales - integrity.overheadSpend,
     });
   }
@@ -527,7 +625,7 @@ function buildFinancialInsights(
       id: 'blindspot-sale-price',
       tone: 'info',
       title: `${n} sold ${n === 1 ? 'horse has' : 'horses have'} no recorded sale price`,
-      detail: `Record what ${n === 1 ? 'it' : 'they'} sold for so your banked profit is accurate — until then ${n === 1 ? "it's" : "they're"} left out of the total.`,
+      detail: `Record the agreed sale price and payments received. Until the price is known, ${n === 1 ? 'this sale is' : 'these sales are'} excluded from the totals; banked profit also requires recorded costs and full payment.`,
     });
   }
 
@@ -537,7 +635,7 @@ function buildFinancialInsights(
       id: 'blindspot-sold-cost',
       tone: 'info',
       title: `${n} sold ${n === 1 ? 'horse has' : 'horses have'} a price but no recorded cost`,
-      detail: `The sale amount counts as collected, but without a cost basis the profit is unknown — add ${n === 1 ? 'its' : 'their'} cost so the sale lands in banked profit.`,
+      detail: `The agreed sale value is recorded; only recorded payments count as received, and any unpaid balance remains owed. Add ${n === 1 ? 'its' : 'their'} cost to calculate profit; the sale is banked only when paid in full.`,
     });
   }
 

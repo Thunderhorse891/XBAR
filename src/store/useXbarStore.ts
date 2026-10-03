@@ -35,6 +35,7 @@ import { featureGate } from '@/lib/commercialEngine';
 import { hasActivePaidPlan, isCurrentPaidPlan } from '@/lib/subscriptionDecision';
 import { applyTrialToProfile, parseTrialStart } from '@/lib/trialSubscription';
 import { buildOfferDecision } from '@/lib/profitIntelligence';
+import { receivedTotalBelowPaidDeposit } from '@/lib/salePayment';
 import { scheduleBuyerActivityFollowUp } from '@/lib/salesFollowUp';
 import {
   createWorkspaceInvitationInCloud,
@@ -1874,6 +1875,35 @@ export const useXbarStore = create<XbarStore>()(
         const lead = get().salesLeads.find((item) => item.id === leadId);
         if (!lead) {
           return { ok: false, message: 'Lead not found.' };
+        }
+        // Money received on a sale feeds "collected" and "profit banked" (audit
+        // F08). The close-out form validates it fully; this is the backstop for
+        // any other caller.
+        if (
+          patch.amountReceived !== undefined &&
+          !(Number.isFinite(patch.amountReceived) && patch.amountReceived >= 0)
+        ) {
+          return { ok: false, message: 'Amount received must be $0 or more.' };
+        }
+
+        if (
+          ['amountReceived', 'depositAmount', 'depositStatus'].some((key) =>
+            Object.prototype.hasOwnProperty.call(patch, key),
+          )
+        ) {
+          const payment = { ...lead, ...patch };
+          if (
+            receivedTotalBelowPaidDeposit(
+              payment.amountReceived,
+              payment.depositStatus === 'Paid' ? (payment.depositAmount ?? 0) : 0,
+            )
+          ) {
+            return {
+              ok: false,
+              message:
+                'Amount received includes the paid deposit. Correct the total received or the deposit record first.',
+            };
+          }
         }
 
         const nextOfferStatus = patch.offerStatus ?? lead.offerStatus;

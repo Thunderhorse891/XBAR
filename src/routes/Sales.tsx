@@ -13,8 +13,10 @@ import { OfferDecisionPanel } from '@/components/OfferDecisionPanel';
 import { MetricCard, Panel, Pill } from '@/components/app-ui';
 import { DotsIcon } from '@/components/icons';
 import { buildPublicShareUrl } from '@/lib/facebookSharing';
-import { formatCompactCurrency, formatDateLabel } from '@/lib/format';
-import { buildOfferDecision } from '@/lib/profitIntelligence';
+import { formatCompactCurrency, formatDateLabel, localIsoDate } from '@/lib/format';
+import { buildOfferDecision, saleAmountReceived } from '@/lib/profitIntelligence';
+import { validateSalePayment } from '@/lib/salePayment';
+import type { SalesLead } from '@/types/xbar';
 import { buildSaleHold } from '@/lib/saleTrustEngine';
 import { useUiStore } from '@/store/useUiStore';
 import { buildHorsePacketCompleteness } from '@/lib/xbarPhaseTwo';
@@ -53,7 +55,7 @@ export default function Sales() {
     ]),
   );
   const liveShareCount = saleHorses.filter((horse) => packetByHorseId[horse.id]?.buyerSafe).length;
-  const today = new Date().toISOString().slice(0, 10);
+  const today = localIsoDate();
   const overdueLeads = salesLeads.filter(
     (lead) => lead.stage !== 'Closed' && lead.nextFollowUp && lead.nextFollowUp <= today,
   );
@@ -63,7 +65,7 @@ export default function Sales() {
   const [selectedLeadId, setSelectedLeadId] = useState(salesLeads[0]?.id ?? '');
   const selectedLead = salesLeads.find((lead) => lead.id === selectedLeadId) ?? salesLeads[0];
   const [leadStage, setLeadStage] = useState(selectedLead?.stage ?? 'New');
-  const [leadLastTouch, setLeadLastTouch] = useState(selectedLead?.lastTouch ?? new Date().toISOString().slice(0, 10));
+  const [leadLastTouch, setLeadLastTouch] = useState(selectedLead?.lastTouch ?? localIsoDate());
   const [leadNextFollowUp, setLeadNextFollowUp] = useState(selectedLead?.nextFollowUp ?? '');
   const [leadOfferAmount, setLeadOfferAmount] = useState(
     selectedLead?.offerAmount ? String(selectedLead.offerAmount) : '',
@@ -78,6 +80,12 @@ export default function Sales() {
   const [leadDepositStatus, setLeadDepositStatus] = useState(selectedLead?.depositStatus ?? 'Not Requested');
   const [leadNotes, setLeadNotes] = useState(selectedLead?.notes ?? '');
   const [leadOutcome, setLeadOutcome] = useState(selectedLead?.outcome ?? 'Won');
+  const [leadAmountReceived, setLeadAmountReceived] = useState(
+    selectedLead?.amountReceived !== undefined ? String(selectedLead.amountReceived) : '',
+  );
+  const [leadAmountReceivedOn, setLeadAmountReceivedOn] = useState(
+    typeof selectedLead?.amountReceivedOn === 'string' ? selectedLead.amountReceivedOn : '',
+  );
   const [acceptMarginOverride, setAcceptMarginOverride] = useState(false);
   const [leadError, setLeadError] = useState('');
   const [menuState, setMenuState] = useState<{ type: 'lead' | 'horse'; id: string; x: number; y: number } | null>(null);
@@ -96,6 +104,8 @@ export default function Sales() {
     setLeadDepositStatus(selectedLead.depositStatus ?? 'Not Requested');
     setLeadNotes(selectedLead.notes ?? '');
     setLeadOutcome(selectedLead.outcome ?? 'Won');
+    setLeadAmountReceived(selectedLead.amountReceived !== undefined ? String(selectedLead.amountReceived) : '');
+    setLeadAmountReceivedOn(typeof selectedLead.amountReceivedOn === 'string' ? selectedLead.amountReceivedOn : '');
     setAcceptMarginOverride(false);
     setLeadError('');
   }, [selectedLead]);
@@ -111,6 +121,21 @@ export default function Sales() {
         Number(leadCounterOfferAmount) || 0,
       )
     : null;
+  // The agreed price on a close-out: the counteroffer when there is one, as
+  // buildRanchFinancials reads it.
+  const agreedSaleValue = Number(leadCounterOfferAmount) || Number(leadOfferAmount) || 0;
+  const closedWon = leadStage === 'Closed' && leadOutcome === 'Won';
+  // What the money engine will count as received for this close-out -- with the
+  // same paid-deposit fallback -- so "still owed" here matches the dashboard.
+  const receivedPreview = saleAmountReceived(
+    {
+      amountReceived: leadAmountReceived.trim() ? Number(leadAmountReceived) : undefined,
+      amountReceivedOn: leadAmountReceivedOn,
+      depositAmount: Number(leadDepositAmount) || undefined,
+      depositStatus: leadDepositStatus,
+    } as SalesLead,
+    agreedSaleValue,
+  );
   const menuLead = menuState?.type === 'lead' ? salesLeads.find((lead) => lead.id === menuState.id) : undefined;
   const menuHorse = menuState?.type === 'horse' ? saleHorses.find((horse) => horse.id === menuState.id) : undefined;
   const menuListing = menuHorse
@@ -177,7 +202,7 @@ export default function Sales() {
                 onSelect: () => {
                   const result = updateSalesLead(menuLead.id, {
                     stage: 'Qualified',
-                    lastTouch: new Date().toISOString().slice(0, 10),
+                    lastTouch: localIsoDate(),
                   });
                   pushToast({
                     title: result.ok ? 'Lead updated' : 'Lead update blocked',
@@ -192,7 +217,7 @@ export default function Sales() {
                 onSelect: () => {
                   const result = updateSalesLead(menuLead.id, {
                     stage: 'Offer',
-                    lastTouch: new Date().toISOString().slice(0, 10),
+                    lastTouch: localIsoDate(),
                   });
                   pushToast({
                     title: result.ok ? 'Lead updated' : 'Lead update blocked',
@@ -696,6 +721,53 @@ export default function Sales() {
                     <option value="Lost">Lost</option>
                   </select>
                 </label>
+                {closedWon ? (
+                  <>
+                    {/* Closing a deal records what was agreed, not what was paid
+                        (audit F08). Profit counts as banked only once the money
+                        received here covers the sale. */}
+                    <label className="field-stack">
+                      <span className="field-label">Amount received (incl. deposit)</span>
+                      <input
+                        className="field-input"
+                        type="number"
+                        min="0"
+                        value={leadAmountReceived}
+                        onChange={(event) => setLeadAmountReceived(event.target.value)}
+                        disabled={!canManageSales}
+                      />
+                    </label>
+                    <label className="field-stack">
+                      <span className="field-label">Received on</span>
+                      <input
+                        className="field-input"
+                        type="date"
+                        max={localIsoDate()}
+                        value={leadAmountReceivedOn}
+                        onChange={(event) => setLeadAmountReceivedOn(event.target.value)}
+                        disabled={!canManageSales}
+                      />
+                    </label>
+                    <div className="field-stack">
+                      <span className="field-label">
+                        {agreedSaleValue > 0
+                          ? `${formatCompactCurrency(agreedSaleValue - receivedPreview)} still owed`
+                          : 'Record the sale amount first'}
+                      </span>
+                      <button
+                        className="button button--ghost button--compact"
+                        type="button"
+                        onClick={() => {
+                          setLeadAmountReceived(String(agreedSaleValue));
+                          if (!leadAmountReceivedOn) setLeadAmountReceivedOn(localIsoDate());
+                        }}
+                        disabled={!canManageSales || !(agreedSaleValue > 0)}
+                      >
+                        Paid in full
+                      </button>
+                    </div>
+                  </>
+                ) : null}
                 <label className="field-stack field-stack--wide">
                   <span className="field-label">Notes</span>
                   <textarea
@@ -759,6 +831,19 @@ export default function Sales() {
                       setLeadError('Mark the deposit status Paid before completing the deposit-paid step.');
                       return;
                     }
+                    const payment = closedWon
+                      ? validateSalePayment({
+                          amount: leadAmountReceived,
+                          receivedOn: leadAmountReceivedOn,
+                          saleValue: agreedSaleValue,
+                          paidDepositAmount: leadDepositStatus === 'Paid' ? Number(leadDepositAmount) : 0,
+                          today: localIsoDate(),
+                        })
+                      : null;
+                    if (payment && !payment.ok) {
+                      setLeadError(payment.message);
+                      return;
+                    }
 
                     const result = updateSalesLead(selectedLead.id, {
                       stage: leadStage,
@@ -771,6 +856,11 @@ export default function Sales() {
                       depositAmount: leadDepositAmount ? Number(leadDepositAmount) : undefined,
                       depositStatus: leadDepositStatus,
                       outcome: leadStage === 'Closed' ? leadOutcome : undefined,
+                      // Only a Won close-out carries money received; any other
+                      // save leaves what was recorded untouched.
+                      ...(payment?.ok
+                        ? { amountReceived: payment.amountReceived, amountReceivedOn: payment.amountReceivedOn }
+                        : {}),
                     });
 
                     pushToast({

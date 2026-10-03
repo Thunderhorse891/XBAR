@@ -1521,7 +1521,16 @@ test('a record that installs but crashes the route it lands on is refused', asyn
    * `pipelineValue` — the "Open offers" figure — at ranchReport.ts:325, and
    * `lead.depositAmount ?? 0` into `depositsHeld` at :339.
    */
-  assert.match(leadsEntry, /optionalNumbers: \['offerAmount', 'counterOfferAmount', 'depositAmount'\]/);
+  assert.match(
+    leadsEntry,
+    /optionalNumbers: \['offerAmount', 'counterOfferAmount', 'depositAmount', 'amountReceived'\]/,
+  );
+  /*
+   * Money received on a sale (audit F08): `amountReceived` feeds "collected"
+   * and "profit banked", and the close-out validator calls `.trim()` on
+   * `amountReceivedOn`, so an object there would throw on save.
+   */
+  assert.match(leadsEntry, /optionalStrings: \[[^\]]*'amountReceivedOn'[^\]]*\]/);
   /*
    * The loop that makes the whole category mean anything, and the `continue`
    * that keeps it from becoming a required check. Without that line every one

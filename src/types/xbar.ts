@@ -528,6 +528,13 @@ export interface SalesLead {
   depositStatus?: 'Not Requested' | 'Due' | 'Paid';
   offerUpdatedAt?: string;
   outcome?: 'Won' | 'Lost';
+  /**
+   * Money actually received on a Won sale, and the day the latest payment
+   * landed (audit F08). A closed deal's amount is what was agreed; this is
+   * what was collected. Unset means nothing has been recorded as received.
+   */
+  amountReceived?: number;
+  amountReceivedOn?: string;
   savedListing: boolean;
   shareReady: boolean;
 }
