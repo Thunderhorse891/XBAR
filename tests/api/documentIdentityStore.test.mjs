@@ -173,7 +173,7 @@ test('a mixed batch preserves its duplicate warning even while creating two new 
   const route = await readFile('src/routes/Documents.tsx', 'utf8');
   assert.match(
     route,
-    /if \(result\.duplicateCount\) \{\s*goToStage\('Review'\);\s*\} else if \(createdHorseIds\.length === 1\)[\s\S]*?\} else if \(createdHorseIds\.length > 1\)/,
+    /if \(result\.duplicateCount \|\| result\.heldForReviewCount\) \{\s*goToStage\('Review'\);\s*\} else if \(createdHorseIds\.length === 1\)[\s\S]*?\} else if \(createdHorseIds\.length > 1\)/,
     'New profiles must not override the duplicate review destination',
   );
 });
@@ -192,6 +192,7 @@ test('complementary registration and name-only sale papers create one profile wi
     ),
   ]);
   assert.equal(result.createdHorseIds.length, 1);
+  assert.equal(result.heldForReviewCount, 0, 'Attached sources do not steal the valid profile destination');
   const state = useXbarStore.getState();
   assert.equal(state.horses.length, 1);
   assert.equal(state.horses[0].registrationNumber, '7654321');
@@ -365,3 +366,365 @@ test('out-of-order document reads keep one profile and stable source association
   );
   assert.ok(state.documents.every((document) => document.horseId === state.horses[0].id));
 });
+
+test('one valid profile plus contradictory source group exposes review work without losing any source', async () => {
+  const sources = [
+    ['good-source.txt', 'GOOD HORSE', '9990001'],
+    ['conflict-one.txt', 'CONFLICT HORSE', '9990002'],
+    ['conflict-two.txt', 'CONFLICT HORSE', '9990003'],
+  ].map(
+    ([name, horseName, registration]) =>
+      new File(
+        [`CERTIFICATE OF REGISTRATION\nRegistered Name: ${horseName}\nRegistration Number: ${registration}`],
+        name,
+        { type: 'text/plain' },
+      ),
+  );
+  const result = await intake(sources);
+  assert.equal(result.ok, true);
+  assert.equal(result.createdHorseIds.length, 1);
+  assert.equal(result.duplicateCount, 0);
+  assert.equal(useXbarStore.getState().documents.length, 3);
+  assert.equal(useXbarStore.getState().horses[0].name, 'GOOD HORSE');
+  assert.equal(useXbarStore.getState().documents.filter((document) => document.batchReviewNote).length, 2);
+  assert.equal(result.heldForReviewCount, 2, 'Callers need the held count before choosing the destination');
+  const { readFile } = await import('node:fs/promises');
+  const route = await readFile('src/routes/Documents.tsx', 'utf8');
+  const drawer = await readFile('src/components/saas/flows.tsx', 'utf8');
+  assert.match(route, /if \(result\.duplicateCount \|\| result\.heldForReviewCount\) \{\s*goToStage\('Review'\)/);
+  assert.match(
+    drawer,
+    /const destination =\s*result\.duplicateCount \|\| result\.heldForReviewCount\s*\? '\/documents\?stage=Review'/,
+  );
+});
+
+test('one valid profile plus one internally conflicting source still exposes unassigned review work', async () => {
+  const result = await intake([
+    new File(['Registered Name: GOOD HORSE\nRegistration Number: 9990001'], 'good.txt', { type: 'text/plain' }),
+    new File(
+      [
+        'Registered Name: BLUE MOON\nRegistration Number: 1234567\nRegistered Name: RED SUN\nRegistration Number: 7654321',
+      ],
+      'conflicting-subjects.txt',
+      { type: 'text/plain' },
+    ),
+  ]);
+  assert.equal(result.createdHorseIds.length, 1);
+  assert.equal(result.duplicateCount, 0);
+  const held = useXbarStore.getState().documents.find((document) => document.identityReviewRequired);
+  assert.ok(held);
+  assert.equal(held.horseId, undefined);
+  assert.equal(held.state, 'Needs Review');
+  assert.equal(useXbarStore.getState().documents.length, 2);
+  assert.equal(result.heldForReviewCount, 1);
+});
+
+for (const [label, source, entities] of [
+  ['stale name', 'Registered Name: RED SUN\nRegistration Number: 1234567', {}],
+  ['stale registration', 'Registered Name: BLUE MOON\nRegistration Number: 7654321', {}],
+  [
+    'stale sire',
+    'Registered Name: BLUE MOON\nRegistration Number: 1234567\nSire: SHINING SPARK',
+    { sire: 'EXPECTED SIRE' },
+  ],
+  [
+    'conflicting microchips',
+    'Registered Name: BLUE MOON\nRegistration Number: 1234567\nMicrochip: 985000000000001\nMicrochip: 985000000000002',
+    {},
+  ],
+]) {
+  for (const existingMatch of [false, true]) {
+    test(`fresh ${label} controls ${existingMatch ? 'existing attachment' : 'new records'}, including retries`, async () => {
+      await intake([paper('BLUE MOON', '1234567')], false);
+      const document = {
+        ...useXbarStore.getState().documents[0],
+        extractedTextPreview: source,
+        entities: { horseName: 'BLUE MOON', registrationNumber: '1234567', ...entities },
+        identityReviewRequired: undefined,
+      };
+      const unrelated = horse('UNRELATED HORSE', '9990001');
+      const existing = {
+        ...horse('BLUE MOON', '1234567'),
+        ...(label === 'stale sire' ? { bloodline: { sire: 'EXPECTED SIRE', dam: '' } } : {}),
+      };
+      const { createOwnershipRecord } = await import('../../src/store/xbarStoreLogic.ts');
+      const horses = existingMatch ? [unrelated, existing] : [unrelated];
+      useXbarStore.setState({ documents: [document], horses, ownershipRecords: horses.map(createOwnershipRecord) });
+      const before = structuredClone({
+        horses: useXbarStore.getState().horses,
+        ownershipRecords: useXbarStore.getState().ownershipRecords,
+        documents: useXbarStore.getState().documents,
+      });
+      if (existingMatch || label === 'conflicting microchips') {
+        for (let attempt = 0; attempt < 2; attempt += 1) {
+          const result = useXbarStore.getState().createHorseFromDocument(document.id);
+          assert.equal(result.ok, false, 'The fresh source conflicts with the actual existing target or itself');
+          assert.match(result.message, /source|identit|microchip/i);
+          assert.deepEqual(useXbarStore.getState().horses, before.horses);
+          assert.deepEqual(useXbarStore.getState().ownershipRecords, before.ownershipRecords);
+          assert.deepEqual(useXbarStore.getState().documents, before.documents);
+        }
+      } else {
+        // The old fixture treated a stale cache as a contradiction even with no
+        // existing target. A clear original must now create its real identity.
+        const result = useXbarStore.getState().createHorseFromDocument(document.id);
+        assert.equal(result.ok, true);
+        const created = useXbarStore.getState().horses.find((item) => item.id === result.id);
+        assert.equal(created.name, label === 'stale name' ? 'RED SUN' : 'BLUE MOON');
+        assert.equal(created.registrationNumber, label === 'stale registration' ? '7654321' : '1234567');
+        assert.equal(created.bloodline.sire, label === 'stale sire' ? 'SHINING SPARK' : '');
+        const after = structuredClone({
+          horses: useXbarStore.getState().horses,
+          ownershipRecords: useXbarStore.getState().ownershipRecords,
+        });
+        assert.equal(useXbarStore.getState().createHorseFromDocument(document.id).ok, false);
+        assert.deepEqual(useXbarStore.getState().horses, after.horses);
+        assert.deepEqual(useXbarStore.getState().ownershipRecords, after.ownershipRecords);
+      }
+    });
+  }
+}
+
+test('bulk creation holds conflicting microchips without adding or changing horse and ownership records', async () => {
+  const existing = horse('UNRELATED HORSE', '9990001');
+  const { createOwnershipRecord } = await import('../../src/store/xbarStoreLogic.ts');
+  useXbarStore.setState({ horses: [existing], ownershipRecords: [createOwnershipRecord(existing)] });
+  const before = structuredClone({
+    horses: useXbarStore.getState().horses,
+    ownershipRecords: useXbarStore.getState().ownershipRecords,
+  });
+  const result = await intake([
+    sourceFile('conflicting-chips.txt', [
+      'Registered Name: BLUE MOON',
+      'Registration Number: 1234567',
+      'Microchip: 985000000000001',
+      'Microchip: 985000000000002',
+    ]),
+  ]);
+  assert.deepEqual(result.createdHorseIds, []);
+  assert.deepEqual(useXbarStore.getState().horses, before.horses);
+  assert.deepEqual(useXbarStore.getState().ownershipRecords, before.ownershipRecords);
+  assert.equal(result.heldForReviewCount, 1);
+  assert.equal(useXbarStore.getState().documents[0].horseId, undefined);
+  assert.equal(useXbarStore.getState().documents[0].state, 'Needs Review');
+});
+
+test('fresh compatible source still creates one horse and one ownership record; retry cannot duplicate them', async () => {
+  await intake([paper('BLUE MOON', '1234567')], false);
+  const id = useXbarStore.getState().documents[0].id;
+  const result = useXbarStore.getState().createHorseFromDocument(id);
+  assert.equal(result.ok, true);
+  assert.equal(useXbarStore.getState().horses.length, 1);
+  assert.equal(useXbarStore.getState().ownershipRecords.length, 1);
+  const before = structuredClone({
+    horses: useXbarStore.getState().horses,
+    ownershipRecords: useXbarStore.getState().ownershipRecords,
+  });
+  assert.equal(useXbarStore.getState().createHorseFromDocument(id).ok, false);
+  assert.deepEqual(useXbarStore.getState().horses, before.horses);
+  assert.deepEqual(useXbarStore.getState().ownershipRecords, before.ownershipRecords);
+});
+
+test('grouped sources with different single microchips cannot create horse or ownership records', async () => {
+  const result = await intake([
+    sourceFile('first-chip.txt', [
+      'Registered Name: BLUE MOON',
+      'Registration Number: 1234567',
+      'Microchip: 985000000000001',
+    ]),
+    sourceFile('second-chip.txt', [
+      'Registered Name: BLUE MOON',
+      'Registration Number: 1234567',
+      'Microchip: 985000000000002',
+    ]),
+  ]);
+  assert.deepEqual(result.createdHorseIds, []);
+  assert.deepEqual(useXbarStore.getState().horses, []);
+  assert.deepEqual(useXbarStore.getState().ownershipRecords, []);
+  assert.equal(result.heldForReviewCount, 2);
+  assert.ok(
+    useXbarStore.getState().documents.every((document) => !document.horseId && document.state === 'Needs Review'),
+  );
+});
+
+test('existing match is screened against its own microchip before attaching a source', async () => {
+  await intake(
+    [
+      sourceFile('one-chip.txt', [
+        'Registered Name: BLUE MOON',
+        'Registration Number: 1234567',
+        'Microchip: 985000000000001',
+      ]),
+    ],
+    false,
+  );
+  const existing = { ...horse('BLUE MOON', '1234567'), microchipId: '985000000000002' };
+  const { createOwnershipRecord } = await import('../../src/store/xbarStoreLogic.ts');
+  useXbarStore.setState({ horses: [existing], ownershipRecords: [createOwnershipRecord(existing)] });
+  const before = structuredClone({
+    horses: useXbarStore.getState().horses,
+    ownershipRecords: useXbarStore.getState().ownershipRecords,
+    documents: useXbarStore.getState().documents,
+  });
+  const result = useXbarStore.getState().createHorseFromDocument(before.documents[0].id);
+  assert.equal(result.ok, false);
+  assert.deepEqual(useXbarStore.getState().horses, before.horses);
+  assert.deepEqual(useXbarStore.getState().ownershipRecords, before.ownershipRecords);
+  assert.deepEqual(useXbarStore.getState().documents, before.documents);
+});
+
+for (const [label, patch] of [
+  ['archived', { state: 'Archived' }],
+  ['queued', { state: 'Queued' }],
+  [
+    'fresh identity review',
+    {
+      identityReviewRequired: false,
+      extractedTextPreview: 'Registered Name: BLUE MOON\nRegistered Name: RED SUN\nRegistration Number: 1234567',
+    },
+  ],
+]) {
+  test(`creation preserves the ${label} gate without changing records`, async () => {
+    await intake([paper('BLUE MOON', '1234567')], false);
+    const document = { ...useXbarStore.getState().documents[0], ...patch };
+    useXbarStore.setState({ documents: [document] });
+    assert.equal(useXbarStore.getState().createHorseFromDocument(document.id).ok, false);
+    assert.deepEqual(useXbarStore.getState().horses, []);
+    assert.deepEqual(useXbarStore.getState().ownershipRecords, []);
+    assert.deepEqual(useXbarStore.getState().documents, [document]);
+  });
+}
+
+test('creation preserves role denial without changing records', async () => {
+  await intake([paper('BLUE MOON', '1234567')], false);
+  const document = structuredClone(useXbarStore.getState().documents[0]);
+  useXbarStore.setState({ currentRole: 'Viewer' });
+  assert.equal(useXbarStore.getState().createHorseFromDocument(document.id).ok, false);
+  assert.deepEqual(useXbarStore.getState().horses, []);
+  assert.deepEqual(useXbarStore.getState().ownershipRecords, []);
+  assert.deepEqual(useXbarStore.getState().documents, [document]);
+});
+
+test('grouped sources with equivalent microchip formatting still create one profile', async () => {
+  const result = await intake([
+    sourceFile('chip-one.txt', [
+      'Registered Name: BLUE MOON',
+      'Registration Number: 1234567',
+      'Microchip: 985000000000001',
+    ]),
+    sourceFile('chip-two.txt', [
+      'Registered Name: BLUE MOON',
+      'Registration Number: 1234567',
+      'Microchip: 985 000 000 000 001',
+    ]),
+  ]);
+  assert.equal(result.createdHorseIds.length, 1);
+  assert.equal(result.heldForReviewCount, 0);
+  assert.equal(useXbarStore.getState().horses.length, 1);
+  assert.equal(useXbarStore.getState().ownershipRecords.length, 1);
+  assert.ok(useXbarStore.getState().documents.every((document) => document.horseId === result.createdHorseIds[0]));
+});
+
+for (const existingMatch of [false, true]) {
+  test(`identity-free source cannot promote cached entities into ${existingMatch ? 'an existing attachment' : 'new horse and ownership records'}`, async () => {
+    await intake([paper('BLUE MOON', '1234567')], false);
+    const document = {
+      ...useXbarStore.getState().documents[0],
+      title: 'BLUE MOON registration',
+      extractedTextPreview: 'CERTIFICATE OF REGISTRATION',
+      entities: { horseName: 'BLUE MOON', registrationNumber: '1234567', ownerName: 'Unsupported Owner', color: 'Bay' },
+    };
+    const existing = horse('BLUE MOON', '1234567');
+    const { createOwnershipRecord } = await import('../../src/store/xbarStoreLogic.ts');
+    useXbarStore.setState({
+      documents: [document],
+      horses: existingMatch ? [existing] : [],
+      ownershipRecords: existingMatch ? [createOwnershipRecord(existing)] : [],
+    });
+    const before = structuredClone(
+      Object.fromEntries(
+        ['horses', 'ownershipRecords', 'documents', 'subscription'].map((key) => [key, useXbarStore.getState()[key]]),
+      ),
+    );
+    for (let attempt = 0; attempt < 2; attempt += 1) {
+      const result = useXbarStore.getState().createHorseFromDocument(document.id);
+      assert.equal(result.ok, false);
+      assert.match(result.message, /no .*identity|identity.*not.*read|identity.*missing/i);
+      assert.doesNotMatch(result.message, /conflict|contradict/i);
+      for (const key of ['horses', 'ownershipRecords', 'documents', 'subscription']) {
+        assert.deepEqual(useXbarStore.getState()[key], before[key]);
+      }
+    }
+  });
+}
+
+test('registration-only source can find an existing profile but cannot create a name from stale cache', async () => {
+  await intake([paper('BLUE MOON', '1234567')], false);
+  const document = {
+    ...useXbarStore.getState().documents[0],
+    extractedTextPreview: 'CERTIFICATE OF REGISTRATION\nRegistration Number: 1234567',
+    entities: { horseName: 'BLUE MOON', registrationNumber: '1234567', ownerName: 'Unsupported Owner' },
+  };
+  useXbarStore.setState({ documents: [document] });
+  assert.equal(useXbarStore.getState().createHorseFromDocument(document.id).ok, false);
+  assert.deepEqual(useXbarStore.getState().horses, []);
+  assert.deepEqual(useXbarStore.getState().ownershipRecords, []);
+  assert.deepEqual(useXbarStore.getState().documents, [document]);
+  const existing = horse('BLUE MOON', '1234567');
+  useXbarStore.setState({ horses: [existing] });
+  assert.equal(useXbarStore.getState().createHorseFromDocument(document.id).ok, true);
+  assert.equal(useXbarStore.getState().documents[0].horseId, existing.id);
+  assert.deepEqual(useXbarStore.getState().ownershipRecords, []);
+  assert.equal(useXbarStore.getState().horses[0].owner, existing.owner);
+});
+
+test('creation takes fresh source facts and never promotes an unsupported cached legal owner', async () => {
+  await intake([paper('BLUE MOON', '1234567')], false);
+  const document = {
+    ...useXbarStore.getState().documents[0],
+    entities: {
+      horseName: 'BLUE MOON',
+      registrationNumber: '1234567',
+      ownerName: 'Unsupported Owner',
+      color: 'Bay',
+      sire: 'Unsupported Sire',
+    },
+  };
+  useXbarStore.setState({ documents: [document] });
+  assert.equal(useXbarStore.getState().createHorseFromDocument(document.id).ok, true);
+  const created = useXbarStore.getState().horses[0];
+  assert.equal(created.owner, '');
+  assert.equal(created.color, '');
+  assert.equal(created.bloodline.sire, '');
+  assert.equal(useXbarStore.getState().ownershipRecords[0].legalOwner, '');
+});
+
+for (const existingMatch of [false, true]) {
+  test(`clear source can ${existingMatch ? 'attach to its real existing match' : 'create the real horse'} despite stale cached identity and review flag`, async () => {
+    await intake([paper('BLUE MOON', '1234567')], false);
+    const document = {
+      ...useXbarStore.getState().documents[0],
+      entities: { horseName: 'OLD WRONG CACHE', registrationNumber: '9999999', ownerName: 'Unsupported Owner' },
+      identityReviewRequired: true,
+    };
+    const existing = horse('BLUE MOON', '1234567');
+    useXbarStore.setState({ documents: [document], horses: existingMatch ? [existing] : [] });
+    const result = useXbarStore.getState().createHorseFromDocument(document.id);
+    assert.equal(result.ok, true);
+    const created = useXbarStore.getState().horses[0];
+    assert.equal(created.name, 'BLUE MOON');
+    assert.equal(created.registrationNumber, '1234567');
+    assert.equal(useXbarStore.getState().horses.length, 1);
+    assert.equal(useXbarStore.getState().ownershipRecords.length, existingMatch ? 0 : 1);
+    assert.equal(useXbarStore.getState().documents[0].identityReviewRequired, false);
+    assert.deepEqual(
+      useXbarStore.getState().documents[0].entities,
+      document.entities,
+      'Keep the historical cache without promoting it',
+    );
+    if (existingMatch) assert.equal(result.id, existing.id);
+    else assert.equal(created.owner, '');
+    assert.equal(useXbarStore.getState().createHorseFromDocument(document.id).ok, false);
+    assert.equal(useXbarStore.getState().horses.length, 1);
+  });
+}

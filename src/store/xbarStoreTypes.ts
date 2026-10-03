@@ -44,6 +44,8 @@ export type ActionResult = {
   id?: string;
   createdHorseIds?: string[];
   duplicateCount?: number;
+  /** Unassigned sources still needing review after automatic creation and matching. */
+  heldForReviewCount?: number;
 };
 
 export type HorsePatch = Partial<

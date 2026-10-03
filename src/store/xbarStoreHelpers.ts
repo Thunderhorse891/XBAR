@@ -2185,7 +2185,11 @@ export function createHorseFromDocuments(documents: DocumentRecord[], workspaceP
   };
 }
 
-export function promoteDocument(horse: HorseRecord, document: DocumentRecord): HorseRecord {
+export function promoteDocument(
+  horse: HorseRecord,
+  document: DocumentRecord,
+  { factsOnly = false }: { factsOnly?: boolean } = {},
+): HorseRecord {
   const nextDocumentIds = horse.documents.includes(document.id) ? horse.documents : [...horse.documents, document.id];
   const nextFacts = [...horse.documentFacts];
   Object.entries(document.entities)
@@ -2202,6 +2206,10 @@ export function promoteDocument(horse: HorseRecord, document: DocumentRecord): H
         });
       }
     });
+
+  // Re-reading an attached source refreshes its claims, not its one-time
+  // readiness contribution, sale flags, or attachment activity.
+  if (factsOnly) return { ...horse, documents: nextDocumentIds, documentFacts: nextFacts };
 
   const nextReadiness = { ...horse.readiness };
   if (document.type === 'Media Kit') {

@@ -1039,3 +1039,238 @@ test('complementary source papers create one durable horse record without copyin
   await expect.poll(() => read(restored)).toEqual(saved);
   await restored.close();
 });
+
+test('archived library keeps the actual original readable after archive and reload without exposing unsafe recovery controls', async ({
+  page,
+  context,
+}) => {
+  await bootstrapWorkspace(page);
+  await seedHorse(page, 'Library Horse');
+  const libraryHorseId = new URL(page.url()).pathname.split('/').at(-1)!;
+  await page.getByRole('button', { name: 'Create', exact: true }).click();
+  await page.getByRole('menuitem', { name: 'Upload Document' }).click();
+  const upload = page.getByRole('dialog', { name: 'Upload Document' });
+  const disclosure =
+    'When cloud storage is available, original files are uploaded to your workspace. Text is extracted on this device.';
+  await expect(upload.getByText(disclosure, { exact: true })).toBeVisible();
+  const original = 'Care notes for manual review. Original scan retained.';
+  await upload
+    .locator('input[type="file"]')
+    .setInputFiles({ name: 'library-original.txt', mimeType: 'text/plain', buffer: Buffer.from(original) });
+  await upload.getByRole('checkbox').uncheck();
+  await upload.getByRole('button', { name: 'Upload for review' }).click();
+  await expect(page).toHaveURL(/\/documents/);
+  const review = page.getByRole('group', { name: 'library-original review actions' });
+  await expect(review).toBeVisible();
+  await review.getByRole('button', { name: 'Archive', exact: true }).click();
+  await expect(review).not.toBeVisible();
+  await page.getByRole('tab', { name: /Upload/ }).click();
+  await expect(page.getByText(disclosure, { exact: true })).toBeVisible();
+  await page.getByRole('tab', { name: /^Library/ }).click();
+  await expect(page.getByRole('button', { name: /^Active \(0\)/ })).toBeVisible();
+  await page.getByRole('button', { name: /^Archived \(1\)/ }).click();
+  const row = page.getByRole('row', { name: 'library-original library actions' });
+  await expect(row).toContainText('Archived');
+  await expect(row.getByRole('button', { name: 'Restore', exact: true })).toHaveCount(0);
+  await expect(row.getByRole('button', { name: 'Move', exact: true })).toHaveCount(0);
+  await expect(
+    page.getByText('Archived originals stay here. Restore and move controls aren’t available yet.'),
+  ).toBeVisible();
+  const opened = context.waitForEvent('page');
+  await row.getByRole('button', { name: 'Open file', exact: true }).click();
+  const originalTab = await opened;
+  await expect(originalTab).toHaveURL(/^blob:/);
+  await expect(originalTab.locator('body')).toHaveText(original);
+  await originalTab.close();
+
+  const reloaded = await context.newPage();
+  await reloaded.goto(`/app/documents?stage=Library&horse=${libraryHorseId}&from=profile`);
+  await expect(reloaded.getByRole('tab', { name: 'Library (1)', exact: true })).toBeVisible();
+  await expect(reloaded.getByRole('button', { name: 'Back to horse', exact: true })).toBeVisible();
+  await reloaded.getByRole('button', { name: /^Archived \(1\)/ }).click();
+  const retained = reloaded.getByRole('row', { name: 'library-original library actions' });
+  await expect(retained).toContainText('On this device');
+  const reopened = context.waitForEvent('page');
+  await retained.getByRole('button', { name: 'Open file', exact: true }).click();
+  const retainedTab = await reopened;
+  await expect(retainedTab).toHaveURL(/^blob:/);
+  await expect(retainedTab.locator('body')).toHaveText(original);
+  await retainedTab.close();
+  await reloaded.getByRole('button', { name: 'Back to horse', exact: true }).click();
+  await expect(reloaded).toHaveURL(new RegExp(`/horses/${libraryHorseId}$`));
+  await reloaded.close();
+});
+
+for (const conflict of ['cross-file', 'single-file'] as const) {
+  for (const surface of ['drawer', 'documents'] as const) {
+    test(`mixed valid and ${conflict} identity conflicts prioritize review from the ${surface}`, async ({ page }) => {
+      await bootstrapWorkspace(page);
+      const sourceText = (name: string, registration: string) =>
+        `CERTIFICATE OF REGISTRATION\nRegistered Name: ${name}\nRegistration Number: ${registration}`;
+      const sources =
+        conflict === 'cross-file'
+          ? [
+              ['good-source.txt', sourceText('GOOD HORSE', '9990001')],
+              ['conflict-one.txt', sourceText('CONFLICT HORSE', '9990002')],
+              ['conflict-two.txt', sourceText('CONFLICT HORSE', '9990003')],
+            ]
+          : [
+              ['good-source.txt', sourceText('GOOD HORSE', '9990001')],
+              [
+                'conflicting-subjects.txt',
+                `${sourceText('BLUE MOON', '1234567')}\nRegistered Name: RED SUN\nRegistration Number: 7654321`,
+              ],
+            ];
+      const files = sources.map(([name, text]) => ({ name, mimeType: 'text/plain', buffer: Buffer.from(text) }));
+      if (surface === 'drawer') {
+        await page.getByRole('button', { name: 'Create', exact: true }).click();
+        await page.getByRole('menuitem', { name: 'Upload Document' }).click();
+        const upload = page.getByRole('dialog', { name: 'Upload Document' });
+        await upload.locator('input[type="file"]').setInputFiles(files);
+        await upload.getByRole('checkbox').check();
+        await upload.getByRole('button', { name: 'Upload for review' }).click();
+      } else {
+        await page.evaluate(() => {
+          window.history.pushState({}, '', '/app/documents?stage=Upload');
+          window.dispatchEvent(new PopStateEvent('popstate'));
+        });
+        await page.locator('#documents-intake input[type="file"]').setInputFiles(files);
+        await page.getByRole('button', { name: 'Review only', exact: true }).click();
+        await expect(page.getByRole('button', { name: 'Create horse profiles', exact: true })).toBeVisible();
+        await page.getByRole('button', { name: 'Add docs', exact: true }).click();
+      }
+      await expect(page).toHaveURL(/\/app\/documents(?:\?|$)/);
+      await expect(page.getByRole('tab', { name: /^3\. Review/ })).toHaveAttribute('aria-selected', 'true');
+      const heldNames = conflict === 'cross-file' ? ['conflict-one', 'conflict-two'] : ['conflicting-subjects'];
+      for (const name of heldNames) {
+        await expect(page.getByRole('group', { name: `${name} review actions` })).toBeVisible();
+      }
+      const saved = await page.evaluate(async () => {
+        const modulePath = '/src/store/useXbarStore.ts';
+        const { useXbarStore } = await import(/* @vite-ignore */ modulePath);
+        const state = useXbarStore.getState();
+        return {
+          horseNames: state.horses.map((horse: { name: string }) => horse.name),
+          documentCount: state.documents.length,
+          held: state.documents
+            .filter(
+              (document: { horseId?: string; state: string }) => !document.horseId && document.state === 'Needs Review',
+            )
+            .map((document: { horseId?: string; state: string }) => ({
+              horseId: document.horseId ?? '',
+              state: document.state,
+            })),
+          originalsRetained: state.documents.every((document: { localFileKey?: string }) =>
+            Boolean(document.localFileKey),
+          ),
+        };
+      });
+      expect(saved).toEqual({
+        horseNames: ['GOOD HORSE'],
+        documentCount: files.length,
+        held: heldNames.map(() => ({ horseId: '', state: 'Needs Review' })),
+        originalsRetained: true,
+      });
+    });
+  }
+}
+
+test('unknown microchip text allows facts and approval while preserving the recorded identifier', async ({ page }) => {
+  await bootstrapWorkspace(page);
+  await seedHorse(page, 'Chip Review Horse');
+  const horseId = await page.evaluate(async () => {
+    const modulePath = '/src/store/useXbarStore.ts';
+    const { useXbarStore } = await import(/* @vite-ignore */ modulePath);
+    const horse = useXbarStore.getState().horses[0];
+    useXbarStore.setState({ horses: [{ ...horse, color: '', microchipId: '982000123456789' }] });
+    return horse.id as string;
+  });
+  await page.getByRole('button', { name: 'Create', exact: true }).click();
+  await page.getByRole('menuitem', { name: 'Upload Document' }).click();
+  const drawer = page.getByRole('dialog', { name: 'Upload Document' });
+  await drawer.locator('input[type="file"]').setInputFiles({
+    name: 'unknown-chip-source.txt',
+    mimeType: 'text/plain',
+    buffer: Buffer.from(
+      'CERTIFICATE OF REGISTRATION\nRegistered Name: CHIP REVIEW HORSE\nColor: Bay\nMicrochip: UNKNOWN\nSire: UNKNOWN\nDam: Pending',
+    ),
+  });
+  await drawer.locator('select').first().selectOption(horseId);
+  await drawer.getByRole('button', { name: 'Upload for review' }).click();
+  await expect(page).toHaveURL(/\/app\/documents(?:\?|$)/);
+  await expect(page.getByRole('tab', { name: /^3\. Review/ })).toHaveAttribute('aria-selected', 'true');
+  const actions = page.getByRole('group', { name: 'unknown-chip-source review actions' });
+  await actions.getByRole('button', { name: 'Apply facts', exact: true }).click();
+  await expect(page.getByText('Facts applied to record', { exact: true })).toBeVisible();
+  await actions.getByRole('button', { name: 'Approve', exact: true }).click();
+  const saved = await page.evaluate(async () => {
+    const modulePath = '/src/store/useXbarStore.ts';
+    const { useXbarStore } = await import(/* @vite-ignore */ modulePath);
+    const state = useXbarStore.getState();
+    return {
+      color: state.horses[0].color,
+      chip: state.horses[0].microchipId,
+      sire: state.horses[0].bloodline.sire,
+      dam: state.horses[0].bloodline.dam,
+      documentState: state.documents[0].state,
+      sourceRetained: Boolean(state.documents[0].localFileKey),
+    };
+  });
+  expect(saved).toEqual({
+    color: 'Bay',
+    chip: '982000123456789',
+    sire: '',
+    dam: '',
+    documentState: 'Ready',
+    sourceRetained: true,
+  });
+});
+
+test('a second chip in a source list blocks facts and approval without altering the horse', async ({ page }) => {
+  await bootstrapWorkspace(page);
+  await seedHorse(page, 'Chip List Horse');
+  const horseId = await page.evaluate(async () => {
+    const modulePath = '/src/store/useXbarStore.ts';
+    const { useXbarStore } = await import(/* @vite-ignore */ modulePath);
+    const horse = useXbarStore.getState().horses[0];
+    useXbarStore.setState({ horses: [{ ...horse, color: '', microchipId: '900123456789012' }] });
+    return horse.id as string;
+  });
+  await page.getByRole('button', { name: 'Create', exact: true }).click();
+  await page.getByRole('menuitem', { name: 'Upload Document' }).click();
+  const drawer = page.getByRole('dialog', { name: 'Upload Document' });
+  await drawer.locator('input[type="file"]').setInputFiles({
+    name: 'chip-list-source.txt',
+    mimeType: 'text/plain',
+    buffer: Buffer.from(
+      'CERTIFICATE OF REGISTRATION\nRegistered Name: CHIP LIST HORSE\nColor: Bay\nMicrochip scanned: 900123456789012, 900123456789099',
+    ),
+  });
+  await drawer.locator('select').first().selectOption(horseId);
+  await drawer.getByRole('button', { name: 'Upload for review' }).click();
+  const actions = page.getByRole('group', { name: 'chip-list-source review actions' });
+  await expect(actions).toBeVisible();
+  const initialState = await page.evaluate(async () => {
+    const modulePath = '/src/store/useXbarStore.ts';
+    const { useXbarStore } = await import(/* @vite-ignore */ modulePath);
+    return useXbarStore.getState().documents[0].state;
+  });
+  // Matched is a tentative horse assignment in the Review queue, not approval.
+  expect(initialState).toBe('Matched');
+  await actions.getByRole('button', { name: 'Apply facts', exact: true }).click();
+  await expect(
+    page.getByText('The source microchip conflicts with this horse. Review the original and correct the record.', {
+      exact: true,
+    }),
+  ).toBeVisible();
+  await actions.getByRole('button', { name: 'Approve', exact: true }).click();
+  await expect(page.getByText('Approval blocked', { exact: true })).toBeVisible();
+  await expect(actions).toBeVisible();
+  const saved = await page.evaluate(async () => {
+    const modulePath = '/src/store/useXbarStore.ts';
+    const { useXbarStore } = await import(/* @vite-ignore */ modulePath);
+    const state = useXbarStore.getState();
+    return { color: state.horses[0].color, chip: state.horses[0].microchipId, documentState: state.documents[0].state };
+  });
+  expect(saved).toEqual({ color: '', chip: '900123456789012', documentState: initialState });
+});

@@ -8,6 +8,7 @@ import {
   computeHeroStatus,
   computeStageBuckets,
   computeStageCounts,
+  stageFromParam,
 } from '../src/features/documents/pipeline.js';
 import type { DocumentRecord, IntakeBatch, OwnershipRecord } from '../src/types/xbar.js';
 
@@ -127,7 +128,7 @@ test('stage counts mirror the buckets and cover every pipeline stage', () => {
   const buckets = computeStageBuckets(documents, [], [], NOW);
   const counts = computeStageCounts(documents, buckets);
 
-  assert.deepEqual(counts, { Upload: 3, Processing: 1, Review: 1, Proof: 1, Share: 1 });
+  assert.deepEqual(counts, { Upload: 3, Processing: 1, Review: 1, Proof: 1, Share: 1, Library: 3 });
   // Every advertised stage has a count entry.
   for (const stage of PIPELINE_STAGES) {
     assert.ok(stage.id in counts, `missing count for ${stage.id}`);
@@ -189,4 +190,14 @@ test('proof links map document ids to the requirement labels they back', () => {
   const links = buildProofLinks(records);
   assert.deepEqual(links.get('doc-a'), ['Registration paper', 'Transfer report']);
   assert.equal(links.has('doc-missing'), false);
+});
+
+test('archived duplicate sources are retained in the library without polluting active review counts', () => {
+  const archived = makeDocument({ id: 'archived-copy', state: 'Archived', duplicateRisk: 'Possible Duplicate' });
+  const buckets = computeStageBuckets([archived], [], [], NOW);
+  assert.equal(buckets.reviewQueue.length, 0);
+  assert.equal(buckets.duplicates.length, 0);
+  assert.equal(buckets.readyDocuments.length, 0);
+  assert.equal(computeStageCounts([archived], buckets).Library, 1);
+  assert.equal(stageFromParam('Library'), 'Library');
 });

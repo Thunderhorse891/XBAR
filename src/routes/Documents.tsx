@@ -1,6 +1,12 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import type { MouseEvent } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
+import { DocumentLibrary } from '@/components/DocumentLibrary';
+import {
+  documentWithFreshSource,
+  documentIdentityCacheNeedsReview,
+  inspectDocumentHorseIdentity,
+} from '@/lib/ownershipDocumentReview';
 import { ConfirmActionDialog } from '@/components/ConfirmActionDialog';
 import { documentDuplicateNeedsReview } from '@/lib/documentDuplicates';
 import { CommandBrief } from '@/components/CommandBrief';
@@ -20,7 +26,7 @@ import { useCurrentRoleCapability, useXbarStore } from '@/store/useXbarStore';
 import { extractionProducedNothing, readableProcessingNote } from '@/lib/documentIntelligence';
 import { buildHorseEnrichmentFromEntities, normalizeOwnershipRecord } from '@/store/xbarStoreLogic';
 import type { DocumentRecord, DocumentSource, SalePacketBuild } from '@/types/xbar';
-import { documentSources } from '@/features/documents/constants';
+import { documentIntakeDisclosure, documentSources } from '@/features/documents/constants';
 import { useEffectiveSubscription } from '@/hooks/useOwnerPreview';
 import { isNavigableFileUrl } from '@/lib/navigableFileUrl';
 import { canPresentPurchaseFlow } from '@/lib/nativePlatform';
@@ -42,8 +48,28 @@ type SurfaceId = 'review' | 'buyer' | 'intake' | 'batches' | 'duplicates' | 'pro
 export default function Documents() {
   const navigate = useNavigate();
   const [searchParams, setSearchParams] = useSearchParams();
-  const documents = useXbarStore((state) => state.documents);
+  const storedDocuments = useXbarStore((state) => state.documents);
   const horses = useXbarStore((state) => state.horses);
+  // Display the same source-read identities and facts used by review actions.
+  // Keep obsolete cache values in storage, outside the current review view.
+  const documents = useMemo(
+    () =>
+      storedDocuments.map((document) => {
+        const source = documentWithFreshSource(document);
+        // An old operational warning still needs explicit approval before proof
+        // attestation; a fresh ambiguity also belongs in review.
+        return document.state === 'Ready' &&
+          (document.identityReviewRequired ||
+            source.identityReviewRequired ||
+            documentIdentityCacheNeedsReview(
+              document,
+              horses.find((horse) => horse.id === document.horseId),
+            ))
+          ? { ...source, state: 'Needs Review' as const }
+          : source;
+      }),
+    [storedDocuments, horses],
+  );
   const intakeBatches = useXbarStore((state) => state.intakeBatches);
   const subscription = useEffectiveSubscription();
   const ownershipRecords = useXbarStore((state) => state.ownershipRecords);
@@ -75,6 +101,7 @@ export default function Documents() {
   const [files, setFiles] = useState<File[]>([]);
   const [source, setSource] = useState<DocumentSource>('Bulk Intake');
   const requestedHorseId = searchParams.get('horse') ?? '';
+  const fromHorseProfile = searchParams.get('from') === 'profile';
   const requestedHorse = horses.find((horse) => horse.id === requestedHorseId);
   const [horseId, setHorseId] = useState(requestedHorse?.id ?? '');
   useEffect(() => {
@@ -113,17 +140,17 @@ export default function Documents() {
     }
   }, [uploadOpen, requestedStage]);
 
-  // Stage buckets — each document lives in exactly one workflow stage.
-  const stageBuckets = useMemo(
+  const scopedDocuments = useMemo(
     () =>
-      computeStageBuckets(
-        requestedHorse
-          ? documents.filter((document) => document.horseId === requestedHorse.id || !document.horseId)
-          : documents,
-        horses,
-        intakeBatches,
-      ),
-    [documents, horses, intakeBatches, requestedHorse],
+      requestedHorse
+        ? documents.filter((document) => document.horseId === requestedHorse.id || !document.horseId)
+        : documents,
+    [documents, requestedHorse],
+  );
+  // Stage counts and visible rows share the same horse scope.
+  const stageBuckets = useMemo(
+    () => computeStageBuckets(scopedDocuments, horses, intakeBatches),
+    [scopedDocuments, horses, intakeBatches],
   );
   const {
     queuedDocuments,
@@ -137,11 +164,11 @@ export default function Documents() {
 
   // Proof chain context: which documents already back an ownership requirement.
   const proofLinksByDocumentId = useMemo(() => buildProofLinks(ownershipRecords), [ownershipRecords]);
-  const proofLinkedCount = documents.filter((document) => proofLinksByDocumentId.has(document.id)).length;
+  const proofLinkedCount = scopedDocuments.filter((document) => proofLinksByDocumentId.has(document.id)).length;
 
-  const stageCounts: Record<PipelineStage, number> = computeStageCounts(documents, stageBuckets);
+  const stageCounts: Record<PipelineStage, number> = computeStageCounts(scopedDocuments, stageBuckets);
 
-  const heroStatus = documents.length
+  const heroStatus = scopedDocuments.length
     ? computeHeroStatus(stageBuckets)
     : { label: 'No documents yet', tone: 'blue' as const };
 
@@ -150,18 +177,21 @@ export default function Documents() {
   const applyExtractedFacts = (document: DocumentRecord) => {
     const targetId = reviewAssignments[document.id] ?? document.horseId ?? '';
     const horse = horses.find((item) => item.id === targetId);
-    if (!horse) {
+    const identityReview = horse && inspectDocumentHorseIdentity(document, horse);
+    if (!horse || !identityReview || identityReview.conflictReason || identityReview.missingIdentityReason) {
       pushToast({
-        title: 'Pick a horse first',
-        message: 'Select which horse these facts belong to, then apply.',
+        title: identityReview?.missingIdentityReason ? 'Source identity missing' : 'Facts need review',
+        message:
+          identityReview?.conflictReason ||
+          identityReview?.missingIdentityReason ||
+          'Choose a horse that matches the original document before applying its facts.',
         tone: 'warning',
       });
       return;
     }
-    // Copy every fact the paper extracted (name, reg #, registry, owner, color,
-    // breed, foaled date, sire, dam) onto the horse — filling only empty fields
-    // so verified data is never overwritten.
-    const { patch, applied } = buildHorseEnrichmentFromEntities(document.entities, horse);
+    // Re-read facts from the original. Legacy cached entities may contain fields
+    // copied from a selected profile that never appeared in this source.
+    const { patch, applied } = buildHorseEnrichmentFromEntities(identityReview.sourceEntities, horse);
     if (!applied.length) {
       pushToast({
         title: 'Nothing new to apply',
@@ -291,11 +321,11 @@ export default function Documents() {
               },
               {
                 id: 'discard',
-                label: 'Discard document',
+                label: 'Archive document',
                 onSelect: () => {
                   const result = discardDocument(menuDocument.id);
                   pushToast({
-                    title: result.ok ? 'Document discarded' : 'Discard blocked',
+                    title: result.ok ? 'Document archived' : 'Archive blocked',
                     message: result.message,
                     tone: result.ok ? 'warning' : 'error',
                   });
@@ -363,7 +393,7 @@ export default function Documents() {
                   : []),
                 {
                   id: 'go-processing-from-intake',
-                  label: 'Go to OCR / Processing stage',
+                  label: 'Go to Text extraction stage',
                   onSelect: () => goToStage('Processing'),
                 },
                 // Neutral navigation, but gated for the same reason as the
@@ -385,7 +415,7 @@ export default function Documents() {
             ? [
                 {
                   id: 'go-processing-from-batches',
-                  label: 'Go to OCR / Processing stage',
+                  label: 'Go to Text extraction stage',
                   onSelect: () => goToStage('Processing'),
                 },
                 {
@@ -470,7 +500,7 @@ export default function Documents() {
       setBatchLabel('Live upload batch');
       setCreateHorseFromBatch(false);
       if (!requestedHorse) setSearchParams({});
-      if (result.duplicateCount) {
+      if (result.duplicateCount || result.heldForReviewCount) {
         goToStage('Review');
       } else if (createdHorseIds.length === 1) {
         navigate(`/horses/${createdHorseIds[0]}`);
@@ -540,9 +570,15 @@ export default function Documents() {
           <span>Documents for {requestedHorse.name} and unassigned uploads</span>
           <button
             className="button button--ghost"
-            onClick={() => navigate(`/sale-packets?horse=${encodeURIComponent(requestedHorse.id)}&resume=1`)}
+            onClick={() =>
+              navigate(
+                fromHorseProfile
+                  ? `/horses/${encodeURIComponent(requestedHorse.id)}`
+                  : `/sale-packets?horse=${encodeURIComponent(requestedHorse.id)}&resume=1`,
+              )
+            }
           >
-            Return to sale packet
+            {fromHorseProfile ? 'Back to horse' : 'Return to sale packet'}
           </button>
         </div>
       ) : null}
@@ -550,9 +586,9 @@ export default function Documents() {
         eyebrow="Documents"
         entity="Your Documents"
         status={heroStatus}
-        summary="Every file moves through one path: upload, local OCR, human review, ownership support, then watermarked sharing."
+        summary="Every file moves through one path: upload, text extraction, human review, ownership support, then watermarked sharing."
         evidence={[
-          { label: 'Uploaded total', value: String(documents.length) },
+          { label: 'Uploaded total', value: String(scopedDocuments.length) },
           { label: 'Processing', value: String(queuedDocuments.length) },
           { label: 'Needs review', value: String(reviewQueue.length) },
           { label: 'Ownership-linked', value: String(proofLinkedCount) },
@@ -584,7 +620,8 @@ export default function Documents() {
               className={`surface-tab${activeStage === stage.id ? ' surface-tab--active' : ''}`}
               onClick={() => setActiveStage(stage.id)}
             >
-              {index + 1}. {stage.label} ({stageCounts[stage.id]})
+              {stage.id === 'Library' ? '' : `${index + 1}. `}
+              {stage.label} ({stageCounts[stage.id]})
             </button>
           ))}
         </div>
@@ -593,11 +630,25 @@ export default function Documents() {
         </p>
       </section>
 
+      {activeStage === 'Library' ? (
+        <DocumentLibrary
+          documents={scopedDocuments}
+          horses={horses}
+          openingDocumentId={openingDocumentId}
+          onOpen={(document) => void openDocument(document)}
+          onReview={(document) => {
+            const reviewHorseId = document.horseId || requestedHorse?.id;
+            navigate(
+              `/documents?stage=${document.state === 'Ready' ? 'Proof' : document.state === 'Queued' ? 'Processing' : 'Review'}${reviewHorseId ? `&horse=${encodeURIComponent(reviewHorseId)}` : ''}${fromHorseProfile ? '&from=profile' : ''}`,
+            );
+          }}
+        />
+      ) : null}
+
       {activeStage === 'Upload' ? (
         <>
           <Panel
             title="Stage 1 · Upload"
-            description="New files enter the pipeline here, then move to local OCR automatically."
             action={
               <Pill tone={uploadOpen ? 'blue' : 'slate'}>
                 {uploadOpen
@@ -608,6 +659,7 @@ export default function Documents() {
             className="cursor-context-menu"
             onContextMenu={(event) => openSurfaceMenu('intake', event)}
           >
+            <p className="stack-item__copy">{documentIntakeDisclosure}</p>
             <div id="documents-intake" className="form-grid">
               <label className="field-stack">
                 <span className="field-label">Batch label</span>
@@ -668,7 +720,7 @@ export default function Documents() {
                   ))}
                 </select>
               </label>
-              <label className="field-stack">
+              <div className="field-stack">
                 <span className="field-label">Horse</span>
                 <button
                   type="button"
@@ -678,7 +730,7 @@ export default function Documents() {
                 >
                   {createHorseFromBatch ? 'Create horse profiles' : 'Review only'}
                 </button>
-              </label>
+              </div>
               <label className="field-stack field-stack--wide">
                 <span className="field-label">Files</span>
                 <input
@@ -755,8 +807,8 @@ export default function Documents() {
 
       {activeStage === 'Processing' ? (
         <Panel
-          title="Stage 2 · OCR / Processing"
-          description="OCR runs locally; fields below were extracted automatically."
+          title="Stage 2 · Text extraction"
+          description="Review extracted text against the original."
           className="cursor-context-menu"
           onContextMenu={(event) => openSurfaceMenu('processing', event)}
         >
@@ -836,7 +888,7 @@ export default function Documents() {
         <>
           <Panel
             title="Stage 3 · Review"
-            description="Confirm OCR matches, assign the horse, then approve or discard."
+            description="Confirm OCR matches, assign the horse, then approve or archive."
             className="cursor-context-menu"
             onContextMenu={(event) => openSurfaceMenu('review', event)}
           >
@@ -1035,14 +1087,14 @@ export default function Documents() {
                                 onClick={() => {
                                   const result = discardDocument(document.id);
                                   pushToast({
-                                    title: result.ok ? 'Document discarded' : 'Discard blocked',
+                                    title: result.ok ? 'Document archived' : 'Archive blocked',
                                     message: result.message,
                                     tone: result.ok ? 'warning' : 'error',
                                   });
                                 }}
                                 disabled={!canReviewDocuments}
                               >
-                                Discard
+                                Archive
                               </button>
                             </div>
                           </td>
@@ -1116,7 +1168,7 @@ export default function Documents() {
               {proofDocuments.map((document) => {
                 const horse = horses.find((item) => item.id === document.horseId);
                 const record = ownershipRecords.find((item) => item.horseId === document.horseId);
-                const normalized = record ? normalizeOwnershipRecord(record, documents, horse) : undefined;
+                const normalized = record ? normalizeOwnershipRecord(record, storedDocuments, horse) : undefined;
                 const requirements = normalized?.proofRequirements ?? [];
                 const linkedLabels = proofLinksByDocumentId.get(document.id) ?? [];
                 return (
@@ -1417,7 +1469,7 @@ export default function Documents() {
         title="Review possible duplicate"
         consequences={[
           duplicateDocument?.duplicateReason || 'A related document is already on file.',
-          'Keeping a copy preserves both files. You can cancel and discard the extra from the review queue.',
+          'Keeping a copy preserves both files. You can cancel and archive the extra from the review queue.',
         ]}
         proofSummary={
           <div className="inline-actions">

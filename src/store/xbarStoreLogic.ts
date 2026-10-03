@@ -1,5 +1,10 @@
-import { isOwnershipProofReviewed, assessOwnershipDocument } from '../lib/ownershipDocumentReview.js';
+import {
+  isOwnershipProofReviewed,
+  assessOwnershipDocument,
+  documentIdentityCacheNeedsReview,
+} from '../lib/ownershipDocumentReview.js';
 import { createId, todayStamp } from '../lib/xbarRuntime.js';
+import { normalizePedigreeValue } from '../lib/registrationExtraction.js';
 import type {
   AssetCondition,
   AssetStatus,
@@ -142,6 +147,7 @@ export function normalizeOwnershipRecord(
                 document.state !== 'Ready' ||
                 document.horseId !== record.horseId ||
                 document.identityReviewRequired ||
+                documentIdentityCacheNeedsReview(document, horse) ||
                 (document.duplicateRisk === 'Possible Duplicate' && !document.duplicateReviewedAt))) ||
             (horse && !assessOwnershipDocument(document, horse, item.kind).ok))
           ? { ...item, status: 'linked' as const }
@@ -340,9 +346,9 @@ export function summarizeBatch(batch: IntakeBatch, documents: DocumentRecord[]):
 // Compose a parent's name with its registration number for the bloodline
 // field, e.g. "SHINING SPARK (AQHA 3038883)". Mirrors createHorseRecord.
 export function composeParentField(name?: string, registration?: string): string {
-  const trimmedName = name?.trim() ?? '';
+  const trimmedName = normalizePedigreeValue(name) ?? '';
   if (!trimmedName) return '';
-  const trimmedReg = registration?.trim();
+  const trimmedReg = normalizePedigreeValue(registration);
   return trimmedReg ? `${trimmedName} (${trimmedReg})` : trimmedName;
 }
 
