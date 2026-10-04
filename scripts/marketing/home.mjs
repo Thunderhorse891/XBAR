@@ -1,4 +1,3 @@
-import { signatureSvg } from './signature.mjs';
 import { esc, APP_SIGNUP, SITE_ORIGIN } from './render.mjs';
 
 const stages = [
@@ -59,7 +58,6 @@ export function cinematicHome(plans) {
     <div class="landing-art" data-parallax>
       <div class="landing-art-plane">
         <picture><source srcset="/brand/xbar-report-horse-landing.webp" type="image/webp" /><img class="landing-horse" src="/brand/xbar-report-horse.png" width="1672" height="941" alt="XBAR's metallic horse and wordmark, edged in electric blue" fetchpriority="high" decoding="async" /></picture>
-        ${signatureSvg({ hero: true })}
       </div>
       <div class="landing-art-caption"><span class="landing-rim" aria-hidden="true"></span><span>A record worth standing behind.</span></div>
     </div>
@@ -95,7 +93,7 @@ export function cinematicHome(plans) {
 </section>
 
 <section class="landing-section wrap landing-sharing" aria-labelledby="sharing-title">
-  <div class="landing-x-art" data-landing-reveal>${deferredImage(`<img src="/brand/xbar-signature-horse-512.png" width="512" height="512" loading="lazy" alt="XBAR horse signature" />`, 512, 512)}</div>
+  <div class="landing-x-art" data-landing-reveal>${deferredImage(`<img src="/brand/xbar-original-icon-512.png" width="512" height="512" loading="lazy" alt="XBAR original metallic horse and wordmark" />`, 512, 512)}</div>
   <div data-landing-reveal><p class="landing-eyebrow">Put your records to work</p><h2 id="sharing-title">Make the next<br />handoff count.</h2><p class="landing-lead">Give a buyer a clearer view of the horse. Bring identity, source documents, and ownership details together in a watermarked sale packet.</p><a class="btn" href="/samples/sample-sale-packet.html">Open a sample packet <span aria-hidden="true">↗</span></a><p class="landing-note">Sample packet uses fictional data.</p></div>
 </section>
 

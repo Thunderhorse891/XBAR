@@ -497,6 +497,15 @@ export function canRestorePersistedState(raw: unknown): boolean {
       if (typeof id !== 'string' || id.trim() === '') return false;
       if (seen.has(id)) return false;
       seen.add(id);
+      if (collection === 'horses') {
+        const archive = (entry as { archive?: unknown }).archive;
+        if (archive !== undefined) {
+          if (!archive || typeof archive !== 'object' || Array.isArray(archive)) return false;
+          const { id: archiveId, archivedAt } = archive as Record<string, unknown>;
+          if (typeof archiveId !== 'string' || !archiveId.trim()) return false;
+          if (typeof archivedAt !== 'string' || !Number.isFinite(Date.parse(archivedAt))) return false;
+        }
+      }
     }
   }
 

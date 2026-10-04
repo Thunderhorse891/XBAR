@@ -406,7 +406,6 @@ export default function Login() {
               fetchPriority="high"
               alt="XBAR horse emblem"
             />
-            <XbarMark variant="hero" />
           </div>
           <div className="clean-login-visual__copy">
             <h2>

@@ -1,64 +1,34 @@
-/* One static horse signature; the optional highlight is finite and additive. */
+/* Original B artwork stays intact. Its quiet silver frame separates dark surfaces. */
 .xbar-signature {
   display: block;
   flex: none;
-  overflow: visible;
-  color: var(--xbar-gunmetal);
+  overflow: hidden;
+  width: 72px;
+  height: auto;
+  aspect-ratio: 1672 / 941;
+  border: 1px solid var(--xbar-silver);
+  border-radius: 5px;
+  background: var(--xbar-graphite);
 }
-.xbar-signature__base {
-  fill: currentColor;
-  stroke: none;
-  stroke-linecap: round;
-  stroke-linejoin: round;
-}
-.xbar-signature__trace {
-  fill: none;
-  stroke: var(--xbar-ice);
-  stroke-width: 24;
-  stroke-linecap: round;
-  stroke-linejoin: round;
-  stroke-dasharray: 0.18 1;
-  stroke-dashoffset: 0.18;
-  opacity: 0;
-  pointer-events: none;
-}
-.xbar-signature[data-tone='mono'] {
-  color: inherit;
-}
-.xs-sidebar .xbar-signature,
-.xs-mobile-menu .xbar-signature,
-.xs-navigation-sheet .xbar-signature {
-  color: var(--xbar-silver);
-}
-.xbar-signature--hero {
-  position: absolute;
-  inset: 0;
-  width: 100%;
-  height: 100%;
-  color: var(--xbar-silver);
-}
-.xbar-signature--hero .xbar-signature__base {
-  fill: none;
-  stroke: currentColor;
-  stroke-width: 1;
-  opacity: 0.6;
-}
-.xbar-signature--hero .xbar-signature__trace {
-  stroke-width: 3.5;
-}
-@media (prefers-reduced-motion: reduce) {
-  .xbar-signature__trace {
-    display: none;
-  }
-}
-
 .brand .xbar-signature {
-  width: 38px;
-  height: 38px;
+  width: 76px;
+  height: auto;
 }
-
+.clean-entry-shell .clean-brand__mark {
+  width: 80px;
+  height: 48px;
+  flex: none;
+}
 .clean-brand__mark .xbar-signature {
-  width: 32px;
-  height: 32px;
-  color: var(--xbar-silver);
+  width: 72px;
+  height: auto;
+}
+.xs-sidebar .xs-brand__signature,
+.xs-navigation-sheet .xs-brand__signature {
+  width: 96px;
+  height: auto;
+}
+.xs-mobile-brand .xbar-signature {
+  width: 64px;
+  height: auto;
 }

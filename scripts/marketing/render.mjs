@@ -193,7 +193,7 @@ export function renderPage(
       '@id': `${SITE_ORIGIN}/#organization`,
       name: 'XBAR',
       url: `${SITE_ORIGIN}/`,
-      logo: `${SITE_ORIGIN}/brand/xbar-signature-horse-512.png`,
+      logo: `${SITE_ORIGIN}/brand/xbar-original-icon-512.png`,
       description: 'Records, ownership, and sale-readiness software for performance horse and ranch operations.',
     },
     {
@@ -244,9 +244,8 @@ export function renderPage(
     <link rel="stylesheet" href="/brand/xbar-brand-tokens.css" />
     <link rel="stylesheet" href="/site.css" />
     <link rel="stylesheet" href="/brand/xbar-signature.css" />${isLanding ? '\n    <link rel="stylesheet" href="/landing.css" />' : ''}
-    <link rel="icon" type="image/svg+xml" href="/brand/xbar-signature-icon.svg" />
-    <link rel="icon" type="image/png" href="/brand/xbar-signature-horse-32.png" />
-    <link rel="apple-touch-icon" href="/brand/xbar-signature-horse-180.png" />
+    <link rel="icon" type="image/png" href="/brand/xbar-original-icon-32.png" />
+    <link rel="apple-touch-icon" href="/brand/xbar-original-icon-180.png" />
     <script type="application/ld+json">${JSON.stringify(baseJsonLd)}</script>
     <script defer src="/site.js"></script>
     <script type="module" src="${esc(signatureScript)}"></script>${isLanding ? `\n    <script type="module" src="${esc(landingScript)}"></script>` : ''}
