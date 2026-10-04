@@ -75,7 +75,7 @@ export function cinematicHome(plans) {
   </div>
   <figure class="landing-product" data-landing-reveal>
     <div class="landing-product-bar"><span><i aria-hidden="true"></i> Your horse’s record</span><a href="/demo">View the product tour</a></div>
-    ${deferredImage('<img src="/brand/screenshots/app-horse-roster-signature.png" width="1440" height="1272" loading="lazy" alt="XBAR horse roster with search, filters, document gaps, and quick-review actions" />', 1440, 1272)}
+    ${deferredImage('<img src="/brand/screenshots/app-horse-roster-original.png" width="1440" height="1404" loading="lazy" alt="XBAR horse roster with search, filters, document gaps, and quick-review actions" />', 1440, 1404)}
     <figcaption>Actual XBAR preview, shown with fictional example data.</figcaption>
   </figure>
   <div class="landing-capabilities">

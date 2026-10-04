@@ -1,21 +1,23 @@
 import { expect, test, type Locator } from '@playwright/test';
 
-async function expectOriginalArtwork(svg: Locator) {
+async function expectOriginalArtwork(svg: Locator, verifyDecode = true) {
   await expect(svg).toBeVisible();
   await expect(svg).toHaveAttribute('viewBox', '0 0 1672 941');
   await expect(svg).toHaveAttribute('preserveAspectRatio', 'xMidYMid meet');
   await expect(svg.locator('image')).toHaveAttribute('href', '/brand/xbar-original-lockup-480.png');
   await expect(svg.locator('image')).toHaveAttribute('preserveAspectRatio', 'xMidYMid meet');
-  const loaded = await svg.locator('image').evaluate(
-    (element) =>
-      new Promise<boolean>((resolve) => {
-        const image = new Image();
-        image.onload = () => resolve(image.naturalWidth === 480 && image.naturalHeight === 270);
-        image.onerror = () => resolve(false);
-        image.src = element.getAttribute('href')!;
-      }),
-  );
-  expect(loaded, 'the original raster must actually decode, not merely occupy an SVG box').toBe(true);
+  if (verifyDecode) {
+    const loaded = await svg.locator('image').evaluate(
+      (element) =>
+        new Promise<boolean>((resolve) => {
+          const image = new Image();
+          image.onload = () => resolve(image.naturalWidth === 480 && image.naturalHeight === 270);
+          image.onerror = () => resolve(false);
+          image.src = element.getAttribute('href')!;
+        }),
+    );
+    expect(loaded, 'the original raster must actually decode, not merely occupy an SVG box').toBe(true);
+  }
   await expect(svg.locator('path, text, foreignObject')).toHaveCount(0);
   const bounds = await svg.boundingBox();
   expect(bounds).not.toBeNull();
@@ -54,12 +56,25 @@ test('hero uses the unchanged original with no approximate outline overlay', asy
   await page.screenshot({ path: info.outputPath('workspace-signature-original-b-home.png') });
 });
 
-test('original artwork remains recognizable with JavaScript disabled', async ({ browser, baseURL }) => {
+test('original artwork remains recognizable with JavaScript disabled', async ({ browser, baseURL }, info) => {
   const context = await browser.newContext({ javaScriptEnabled: false, baseURL });
   try {
     const page = await context.newPage();
+    // Observe the real browser image request; an onload callback created inside
+    // the page cannot fire when scripting is disabled.
+    const original = page.waitForResponse(
+      (response) =>
+        response.url().endsWith('/brand/xbar-original-lockup-480.png') && response.request().resourceType() === 'image',
+    );
     await page.goto('/features');
-    await expectOriginalArtwork(page.locator('.site-header [data-xbar-signature]'));
+    const imageResponse = await original;
+    expect(imageResponse.ok()).toBe(true);
+    const bytes = await imageResponse.body();
+    expect(bytes.subarray(0, 8).toString('hex')).toBe('89504e470d0a1a0a');
+    expect(bytes.readUInt32BE(16)).toBe(480);
+    expect(bytes.readUInt32BE(20)).toBe(270);
+    await expectOriginalArtwork(page.locator('.site-header [data-xbar-signature]'), false);
+    await page.screenshot({ path: info.outputPath('workspace-signature-original-b-no-javascript.png') });
     await page.getByRole('link', { name: 'XBAR home', exact: true }).click();
     await expect(page).toHaveURL(/\/$/);
     await expect(page.locator('.landing-horse')).toHaveAttribute('src', '/brand/xbar-report-horse.png');
