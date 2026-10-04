@@ -1,4 +1,4 @@
-import { apiConfig } from '@/lib/platformConfig';
+import { apiConfig } from './platformConfig.js';
 
 /*
  * Client for the XBAR backend pipeline (Vercel serverless api/). These calls
@@ -20,7 +20,7 @@ type AuthParams = {
   accessToken: string;
 };
 
-function buildApiUrl(path: string) {
+export function buildApiUrl(path: string) {
   const normalizedPath = path.startsWith('/') ? path : `/${path}`;
   if (apiConfig.baseUrl) {
     return `${apiConfig.baseUrl.replace(/\/$/, '')}${normalizedPath}`;

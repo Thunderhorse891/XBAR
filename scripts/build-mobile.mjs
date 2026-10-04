@@ -26,6 +26,9 @@ import { SITE_ORIGIN } from './marketing/render.mjs';
 // operator had correctly set in .env.production or .env.local — a custom-domain
 // build would ship the default origin while looking configured.
 const fileEnv = loadEnv('production', process.cwd(), 'VITE_');
+if (process.env.CAP_SERVER_URL) {
+  throw new Error('Unset CAP_SERVER_URL before building the bundled store app. Live reload is development-only.');
+}
 const configuredSiteUrl = (process.env.VITE_PUBLIC_SITE_URL || fileEnv.VITE_PUBLIC_SITE_URL || '').trim();
 const configuredAppUrl = (process.env.VITE_PUBLIC_APP_URL || fileEnv.VITE_PUBLIC_APP_URL || '').trim();
 /*
@@ -64,6 +67,36 @@ const publicSiteUrl = (
  */
 const publicAppUrl = (configuredAppUrl || publicSiteUrl).replace(/\/+$/, '');
 
+// A Capacitor app is served from capacitor://localhost, which has no API.
+// Use the app backend origin (not an /app route or marketing-only host).
+const configuredApiUrl = (process.env.VITE_API_BASE_URL || fileEnv.VITE_API_BASE_URL || '').trim();
+// Supplying the native backend must not silently opt users into the telemetry
+// API fallback, whose runtime default otherwise changes when an API URL exists.
+// Preserve the flag/default that applied before this build supplied its origin.
+const telemetryApiFlag = (
+  process.env.VITE_RUNTIME_TELEMETRY_API_ENABLED ??
+  fileEnv.VITE_RUNTIME_TELEMETRY_API_ENABLED ??
+  ''
+)
+  .trim()
+  .toLowerCase();
+const telemetryApiEnabled = ['1', 'true', 'yes', 'on'].includes(telemetryApiFlag)
+  ? true
+  : ['0', 'false', 'no', 'off'].includes(telemetryApiFlag)
+    ? false
+    : Boolean(configuredApiUrl);
+const apiUrl = new URL(configuredApiUrl || publicAppUrl);
+if (
+  apiUrl.protocol !== 'https:' ||
+  apiUrl.username ||
+  apiUrl.password ||
+  apiUrl.search ||
+  apiUrl.hash ||
+  (configuredApiUrl && apiUrl.pathname !== '/')
+) {
+  throw new Error('VITE_API_BASE_URL must be an HTTPS origin without credentials, path, query or fragment.');
+}
+
 const env = {
   ...process.env,
   XBAR_SKIP_MARKETING: '1',
@@ -90,6 +123,8 @@ const env = {
    */
   VITE_PUBLIC_SITE_URL: publicSiteUrl,
   VITE_PUBLIC_APP_URL: publicAppUrl,
+  VITE_API_BASE_URL: apiUrl.origin,
+  VITE_RUNTIME_TELEMETRY_API_ENABLED: String(telemetryApiEnabled),
 };
 
 console.log(`[mobile] legal links resolve to ${publicSiteUrl}; in-app links resolve to ${publicAppUrl}`);
