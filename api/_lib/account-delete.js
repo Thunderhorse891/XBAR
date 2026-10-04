@@ -83,6 +83,8 @@ export default async function handler(req, res) {
   const deletionToken = randomUUID();
   let releaseHolds = null;
   let accountDeleted = false;
+  let receiptId;
+  let receiptOutcomeFailed = false;
   try {
     // Build the plan: for every owned workspace, look up its OTHER active members
     // so a shared workspace cannot be mistaken for private data to purge.
@@ -189,17 +191,21 @@ export default async function handler(req, res) {
     if (receiptError || !receipt?.id) {
       return sendJson(res, 502, { ok: false, message: 'Unable to start account deletion. Nothing was changed.' });
     }
-    const finishReceipt = (fields) =>
-      supabase
-        .from('account_deletion_receipts')
-        .update({ ...fields, finished_at: new Date().toISOString() })
-        .eq('id', receipt.id)
-        .then(
-          ({ error }) => {
-            if (error) console.error('account deletion: receipt not updated', { receiptId: receipt.id, fields });
-          },
-          () => console.error('account deletion: receipt not updated', { receiptId: receipt.id, fields }),
-        );
+    receiptId = receipt.id;
+    const finishReceipt = async (fields) => {
+      try {
+        const { data, error } = await supabase
+          .from('account_deletion_receipts')
+          .update({ ...fields, finished_at: new Date().toISOString() })
+          .eq('id', receipt.id)
+          .select('id')
+          .single();
+        if (error || data?.id !== receipt.id) throw new Error('receipt_outcome_unconfirmed');
+      } catch {
+        receiptOutcomeFailed = true;
+        throw new Error('receipt_outcome_unconfirmed');
+      }
+    };
 
     /*
      * Files under the account's own legacy prefix that another workspace still
@@ -302,8 +308,15 @@ export default async function handler(req, res) {
       transferredWorkspaces: plan.workspacesToTransfer.length,
       storageCleanupComplete: leftovers.length === 0,
     });
-  } catch (error) {
-    return sendJson(res, 500, { ok: false, message: `Account deletion failed: ${error.message}` });
+  } catch {
+    return sendJson(res, receiptOutcomeFailed ? 503 : 500, {
+      ok: false,
+      accountDeleted,
+      ...(receiptId ? { operationId: receiptId } : {}),
+      message: accountDeleted
+        ? 'Your account was deleted, but cleanup or its confirmation is incomplete. Contact support with this operation ID.'
+        : 'Account deletion could not finish. Your account was not deleted. Contact support before retrying.',
+    });
   } finally {
     if (!accountDeleted && releaseHolds) await releaseHolds();
     for (const { workspaceId, token } of billingClaims) {

@@ -202,7 +202,11 @@ function deletionFixture(t) {
       return scenario === 'receipt' ? failure() : reply({ id: 'receipt-1' }, 201);
     if (url.pathname === '/rest/v1/account_deletion_receipts' && method === 'PATCH') {
       state.receiptUpdates.push(JSON.parse(init.body));
-      return reply(null, 204);
+      if (scenario === 'outcome-error') return failure();
+      if (scenario === 'outcome-empty') return reply(null);
+      if (scenario === 'outcome-wrong') return reply({ id: 'other-receipt' });
+      if (scenario === 'outcome-throws') throw new Error('Private fixture failure');
+      return url.searchParams.get('select') === 'id' ? reply({ id: 'receipt-1' }) : reply(null, 204);
     }
     if (url.pathname === '/rest/v1/rpc/xbar_claim_checkout_lock') {
       state.claimToken = JSON.parse(init.body).p_token;
@@ -373,6 +377,23 @@ test('a completed deletion keeps files another ranch still uses and records the 
   assert.ok(claimAt > -1 && holdAt > claimAt && billingAt > holdAt && renewAt > billingAt && deleteAt > renewAt);
   assert.ok(state.calls.indexOf('billing-lease-release') > deleteAt);
 });
+
+for (const scenario of ['outcome-error', 'outcome-empty', 'outcome-wrong', 'outcome-throws']) {
+  test(`unacknowledged ${scenario} reports deleted account but unconfirmed completion`, async (t) => {
+    const state = deletionFixture(t);
+    state.scenario = scenario;
+    const { default: handler } = await import('../../api/_lib/account-delete.js');
+    const response = await deleteAccount(handler, `fixture-${scenario}`);
+    assert.equal(response.status, 503);
+    assert.equal(response.body.ok, false);
+    assert.equal(response.body.accountDeleted, true);
+    assert.equal(response.body.operationId, 'receipt-1');
+    assert.match(response.body.message, /deleted.*confirmation.*incomplete/i);
+    assert.doesNotMatch(response.body.message, /Private fixture|XX000/);
+    assert.ok(state.calls.includes(`DELETE /auth/v1/admin/users/${FIXTURE_USER}`));
+    assert.ok(!state.calls.includes('POST /rest/v1/rpc/xbar_release_account_deletion_request'));
+  });
+}
 
 test('a purged private workspace has its documents erased, not orphaned', () => {
   // Documents are keyed to the workspace now, so sweeping only the departing
