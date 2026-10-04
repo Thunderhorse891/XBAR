@@ -754,3 +754,103 @@ for (const [STRIPE_ACCOUNT_ID, managed] of [
     assert.doesNotMatch(JSON.stringify(response.body), /acct_|not-an-account/);
   });
 }
+
+// Diagnostics must distinguish configuration failures without ever logging Stripe
+// response bodies, credentials, identifiers or arbitrary exception properties.
+test('checkout price diagnostics are fixed reason codes and never raw Stripe data', async () => {
+  const { verifyCheckoutPrice } = await import('../../api/_lib/checkout-price.js');
+  const validPrice = {
+    id: 'price_fixture',
+    livemode: true,
+    active: true,
+    type: 'recurring',
+    currency: 'usd',
+    billing_scheme: 'per_unit',
+    unit_amount: 1200,
+    recurring: { interval: 'month', interval_count: 1, usage_type: 'licensed' },
+    product: { active: true },
+  };
+  const options = {
+    tier: 'Starter',
+    billingPeriod: 'monthly',
+    priceId: validPrice.id,
+    expectedAccountId: 'acct_expected',
+    expectedLivemode: true,
+  };
+  const cases = [
+    ['account_pin_invalid', { options: { expectedAccountId: 'invalid_private_pin' } }],
+    ['account_mismatch', { account: { id: 'acct_private' } }],
+    [
+      'account_authentication_failed',
+      { accountError: Object.assign(new Error('sk_live_private'), { type: 'StripeAuthenticationError' }) },
+    ],
+    [
+      'account_permission_denied',
+      { accountError: Object.assign(new Error('private token'), { type: 'StripePermissionError' }) },
+    ],
+    [
+      'account_read_failed',
+      {
+        accountError: Object.assign(new Error('private body'), {
+          type: 'malicious_private_type',
+          code: 'private_code',
+        }),
+      },
+    ],
+    [
+      'price_not_found',
+      { priceError: Object.assign(new Error('private account price'), { code: 'resource_missing' }) },
+    ],
+    [
+      'price_permission_denied',
+      { priceError: Object.assign(new Error('private token'), { type: 'StripePermissionError' }) },
+    ],
+    [
+      'price_authentication_failed',
+      { priceError: Object.assign(new Error('private key'), { type: 'StripeAuthenticationError' }) },
+    ],
+    ['price_read_failed', { priceError: new Error('private response') }],
+    ['price_mode_mismatch', { price: { livemode: false } }],
+    ['price_amount_mismatch', { price: { unit_amount: 1300 } }],
+    ['price_contract_mismatch', { price: { active: false } }],
+  ];
+  const originalWarn = console.warn;
+  const logs = [];
+  console.warn = (...args) => logs.push(args);
+  try {
+    for (const [reason, scenario] of cases) {
+      logs.length = 0;
+      const stripe = {
+        accounts: {
+          retrieve: async () => {
+            if (scenario.accountError) throw scenario.accountError;
+            return scenario.account || { id: options.expectedAccountId };
+          },
+        },
+        prices: {
+          retrieve: async () => {
+            if (scenario.priceError) throw scenario.priceError;
+            return { ...validPrice, ...scenario.price };
+          },
+        },
+      };
+      assert.equal(await verifyCheckoutPrice(stripe, { ...options, ...scenario.options }), false, reason);
+      assert.deepEqual(logs, [['Stripe checkout price verification refused.', { reason }]], reason);
+      assert.doesNotMatch(JSON.stringify(logs), /private|acct_|price_fixture|sk_live/);
+    }
+    logs.length = 0;
+    assert.equal(
+      await verifyCheckoutPrice(
+        {
+          accounts: { retrieve: async () => ({ id: options.expectedAccountId }) },
+          prices: { retrieve: async () => validPrice },
+        },
+        options,
+      ),
+      true,
+    );
+    assert.deepEqual(logs, []);
+  } finally {
+    console.warn = originalWarn;
+  }
+});
