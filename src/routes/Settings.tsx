@@ -474,11 +474,9 @@ export default function Settings() {
        * The order is load-bearing in both directions. Files must land before
        * the records that point at them, or a record briefly references a blob
        * that is not there yet. But the vault must not be touched at all until
-       * the workspace payload is known to be acceptable: restoration preserves
-       * keys and uses `put`, so writing first and rejecting after would
-       * overwrite blobs belonging to the workspace currently loaded and then
-       * report "Import blocked" — leaving real documents silently pointing at
-       * some other file's bytes.
+       * the workspace payload is known to be acceptable. Staged file writes
+       * use fresh keys, so failed or stopped restores preserve the current
+       * records and original bytes. Only successful writes return a remap.
        */
       const workspace = workspaceBackupPayload(payload);
       if (!workspace) {
@@ -507,9 +505,8 @@ export default function Settings() {
         return;
       }
 
-      // Restored under their ORIGINAL keys — a fresh key would leave every
-      // document pointing at nothing. A backup written before this shipped has
-      // no `files`, and restores exactly as it always did.
+      // Stage files under fresh keys and remap their records only after writes
+      // succeed. Older backups without `files` retain their existing references.
       /*
        * A restored file is NEVER treated as XBAR-generated.
        *

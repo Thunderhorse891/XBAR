@@ -135,6 +135,29 @@ test('staged restore never changes original bytes or metadata before records are
   }
 });
 
+for (const failure of ['decode', 'write'] as const) {
+  test(`failed staged ${failure} keeps the original key and file usable`, async () => {
+    let rejectWrites = false;
+    const restore = installFakeIndexedDb({ failWrites: () => rejectWrites });
+    try {
+      const key = await storeLocalFile(new Blob(['original']), 'original.pdf', undefined, TEST_WORKSPACE);
+      const { files } = await exportLocalFiles([key], TEST_WORKSPACE);
+      rejectWrites = failure === 'write';
+      const result = await importLocalFiles(
+        [{ ...files[0], data: failure === 'decode' ? '!!! invalid !!!' : btoa('replacement') }],
+        { workspaceId: TEST_WORKSPACE, freshKeys: true },
+      );
+      assert.equal(result.restored, 0);
+      assert.equal(result.failed.length, 1);
+      assert.deepEqual(result.remapped, {});
+      assert.equal(await (await readLocalFile(key))?.blob.text(), 'original');
+      assert.equal((await listLocalFiles()).length, 1);
+    } finally {
+      restore();
+    }
+  });
+}
+
 test('a file too large for the budget is named, not dropped', async () => {
   const restore = installFakeIndexedDb();
   try {

@@ -580,7 +580,6 @@ export async function importLocalFiles(
       let key = file.key;
       if (context.freshKeys || (existing && existing.workspaceId !== context.workspaceId)) {
         key = createVaultKey();
-        remapped[file.key] = key;
       }
 
       const bytes = base64ToBytes(file.data);
@@ -615,6 +614,8 @@ export async function importLocalFiles(
       // A staged restore must never overwrite a file still referenced by the
       // original records, even if the caller loses its scope before commit.
       await withStore('readwrite', (store) => (context.freshKeys ? store.add(entry) : store.put(entry)));
+      // Only committed bytes may become a restored record's new target.
+      if (key !== file.key) remapped[file.key] = key;
       // Marked only after the write landed, so a failed entry does not make a
       // later identical repeat look like a duplicate of something restored.
       takenKeys.add(file.key);
