@@ -6,13 +6,17 @@ for (const width of [1440, 390]) {
     await page.goto('/pricing');
     await expect(page.getByText('Monthly billing is available.', { exact: false })).toBeVisible();
     await expect(page.getByRole('rowheader', { name: 'Annual price (2 months free)' })).toHaveCount(0);
+    // Public pages share the homepage's native mobile Menu. Prove support
+    // is reachable there rather than assuming the retired horizontal rail.
+    if (width === 390) await page.locator('.landing-mobile-nav > summary').click();
     await expect(page.locator('header').getByRole('link', { name: 'Help & support', exact: true })).toBeInViewport();
     await expect(page.locator('header').getByRole('link', { name: 'Help & support', exact: true })).toHaveAttribute(
       'href',
       'mailto:xbarje@gmail.com',
     );
+    if (width === 390) await page.locator('.landing-mobile-nav > summary').click();
     expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
-    await page.screenshot({ path: `test-results/public-pricing-${width}.png` });
+    await page.screenshot({ path: `test-results/public-pricing-${width}.png`, animations: 'disabled' });
 
     await page.goto('/demo');
     await expect(page.getByText('No account is needed to view this tour.', { exact: false })).toBeVisible();

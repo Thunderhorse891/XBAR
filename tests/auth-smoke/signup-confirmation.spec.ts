@@ -42,6 +42,16 @@ test('after signup the screen offers next steps instead of claiming an email was
   await expect(page.getByRole('heading', { name: 'Choose your next step' })).toBeFocused();
   for (const width of [390, 1440]) {
     await page.setViewportSize({ width, height: 900 });
+    // Shared entry CSS can load after the login chunk. The focused second
+    // step must still use one full-width column when switching breakpoints.
+    const layout = page.locator('.clean-login-layout--confirmation');
+    const geometry = await layout.evaluate((element) => ({
+      columns: getComputedStyle(element).gridTemplateColumns.split(' ').length,
+      availableWidth: element.clientWidth,
+      cardWidth: element.querySelector('.clean-auth-card--login')!.getBoundingClientRect().width,
+    }));
+    expect(geometry.columns).toBe(1);
+    expect(geometry.cardWidth).toBeCloseTo(geometry.availableWidth, 0);
     await expect(page.getByRole('heading', { name: 'Choose your next step' })).toBeInViewport();
     await expect(page.getByRole('button', { name: 'Go to sign in' })).toBeInViewport();
     await page.screenshot({ path: `test-results/confirmation-${width}.png`, fullPage: true });

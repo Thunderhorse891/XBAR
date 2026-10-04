@@ -26,6 +26,8 @@ async function addHorse(page: Page) {
   await drawer.getByPlaceholder('e.g. THR Copper Canyon').fill('Copper Canyon');
   await drawer.getByRole('button', { name: 'Add Horse', exact: true }).click();
   await expect(page.locator('.xs-objhead__name')).toHaveText(/copper canyon/i);
+  await expect(page.locator('.xs-objhead__meta')).toContainText('Age not recorded');
+  await expect(page.locator('.xs-objhead__meta')).not.toContainText('0 yrs');
 }
 
 async function screenshot(page: Page, info: TestInfo, name: string) {
@@ -48,13 +50,16 @@ test('desktop workspace preserves brand, horse creation and navigation', async (
   await page.setViewportSize({ width: 1440, height: 1000 });
   await page.emulateMedia({ reducedMotion: 'reduce' });
   await setupWorkspace(page);
-  const wordmark = page.locator('.xs-sidebar .xs-brand__wordmark');
-  await expect(wordmark).toHaveAttribute('src', '/brand/xbar-wordmark.png');
-  await expect.poll(() => wordmark.evaluate((img: HTMLImageElement) => img.naturalWidth)).toBeGreaterThan(0);
-  await expect(page.locator('.xs-hero__wm')).toHaveCSS('filter', 'none');
-  await expect(page.locator('.xs-hero__headline')).toHaveCSS('color', 'rgb(245, 242, 236)');
+  const signature = page.locator('.xs-sidebar .xs-brand__signature');
+  await expect(signature).toBeVisible();
+  await expect(signature.locator('image')).toHaveAttribute('href', '/brand/xbar-original-lockup-480.png');
+  await expect(signature.locator('path, text')).toHaveCount(0);
+  await expect(signature).toHaveAttribute('width', '96');
+  await expect(signature).toHaveAttribute('height', '54');
+  await expect(page.locator('.xs-hero__wm')).toHaveCount(0);
+  await expect(page.locator('.xs-hero__headline')).toHaveCSS('color', 'rgb(32, 36, 40)');
   await expect(page.locator('.xs-ranchcard__name')).toHaveCSS('color', 'rgb(245, 242, 236)');
-  await expect(page.locator('.xs-sidebar')).toHaveCSS('background-color', 'rgb(11, 13, 15)');
+  await expect(page.locator('.xs-sidebar')).toHaveCSS('background-color', 'rgb(23, 27, 32)');
   await noPageOverflow(page);
   await screenshot(page, info, 'dashboard-desktop');
   await addHorse(page);
@@ -71,6 +76,8 @@ test('desktop workspace preserves brand, horse creation and navigation', async (
   await expect(page.getByRole('link', { name: 'Horse record' })).toBeVisible();
   await page.getByRole('link', { name: 'Horse record' }).click();
   await expect(page.locator('.xs-objhead__name')).toHaveText(/copper canyon/i);
+  await expect(page.locator('.xs-objhead__meta')).toContainText('Age not recorded');
+  await expect(page.locator('.xs-objhead__meta')).not.toContainText('0 yrs');
   // Seed a previously saved legacy photo reference for contrast QA. This local
   // bundle deliberately has no cloud upload service; it must not claim upload success.
   const photoUrl = 'https://fixture.xbar.test/bright.png';
@@ -125,7 +132,7 @@ test('desktop workspace preserves brand, horse creation and navigation', async (
     .getByRole('link', { name: 'Horses', exact: true })
     .click();
   await expect(page.locator('.horse-card__image')).toBeVisible();
-  await expect(page.locator('.horse-card__media-bottom')).toHaveCSS('background-color', 'rgba(11, 13, 15, 0.86)');
+  await expect(page.locator('.horse-card__media-bottom')).toHaveCSS('background-color', 'rgba(23, 27, 32, 0.86)');
   await screenshot(page, info, 'horses-bright-photo');
   await page.reload();
   await expect(page.locator('.horse-card__image')).toBeVisible();
@@ -148,7 +155,7 @@ test('mobile all-sections navigation closes, restores focus, and preserves recor
   await menu.click();
   const navigation = page.getByRole('dialog', { name: 'Ranch navigation' });
   await expect(navigation).toBeVisible();
-  await expect(navigation).toHaveCSS('background-color', 'rgb(11, 13, 15)');
+  await expect(navigation).toHaveCSS('background-color', 'rgb(23, 27, 32)');
   await expect(navigation.getByRole('link', { name: 'Horses', exact: true })).toHaveCSS('color', 'rgb(245, 242, 236)');
   await screenshot(page, info, 'navigation-mobile');
   await navigation.getByRole('link', { name: 'Documents', exact: true }).click();
@@ -175,9 +182,13 @@ test('mobile all-sections navigation closes, restores focus, and preserves recor
     await filter.click();
     await expect(filter).toHaveAttribute('aria-selected', 'true');
   }
-  const filtersBox = await segments.boundingBox();
+  // On phones, search is intentionally first. Both tab groups must stay below
+  // its full height; wrapped segment rows must never overlap the search field.
+  const controlsBox = await page.locator('.portfolio-toolbar__controls').boundingBox();
   const searchBox = await page.getByRole('textbox', { name: 'Search horse records' }).boundingBox();
-  expect(searchBox!.y).toBeGreaterThanOrEqual(filtersBox!.y + filtersBox!.height);
+  expect(controlsBox).not.toBeNull();
+  expect(searchBox).not.toBeNull();
+  expect(controlsBox!.y).toBeGreaterThanOrEqual(searchBox!.y + searchBox!.height);
   await screenshot(page, info, 'horses-mobile');
   await page.getByRole('button', { name: 'Account menu' }).click();
   await expect(page.getByRole('menuitem', { name: 'Notifications' })).toBeVisible();

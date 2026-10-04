@@ -44,6 +44,8 @@ export type ActionResult = {
   id?: string;
   createdHorseIds?: string[];
   duplicateCount?: number;
+  /** Unassigned sources still needing review after automatic creation and matching. */
+  heldForReviewCount?: number;
 };
 
 export type HorsePatch = Partial<
@@ -182,6 +184,8 @@ export type XbarStore = {
    * push an arbitrary name through this path.
    */
   applyHorseNameRepairs: (horseIds: readonly string[]) => ActionResult;
+  archiveHorse: (horseId: string) => ActionResult & { archiveId?: string };
+  restoreHorse: (horseId: string, archiveId: string, expectedOwnerId?: string) => ActionResult;
   deleteHorse: (horseId: string) => ActionResult;
   updateMedicalEvent: (
     horseId: string,

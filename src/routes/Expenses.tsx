@@ -3,7 +3,7 @@ import { useNavigate, useSearchParams } from 'react-router-dom';
 import { CommandBrief } from '@/components/CommandBrief';
 import { EmptyState } from '@/components/EmptyState';
 import { MetricCard, Panel, Pill, ProgressBar } from '@/components/app-ui';
-import { billingPath } from '@/lib/billingRoutes';
+import { requestFeatureUpgrade } from '@/store/useUpgradeStore';
 import { formatCompactCurrency, formatCurrency, formatDateLabel, localIsoDate } from '@/lib/format';
 import { buildProfitPortfolio } from '@/lib/profitIntelligence';
 import { profitIntelligenceGate } from '@/lib/subscriptionGates';
@@ -379,7 +379,7 @@ export default function Expenses() {
                 <button
                   className="button button--primary button--compact"
                   type="button"
-                  onClick={() => navigate(billingPath)}
+                  onClick={() => requestFeatureUpgrade('profitIntelligence')}
                 >
                   Upgrade to unlock
                 </button>

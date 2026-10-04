@@ -1,10 +1,11 @@
 import { useEffect, useState } from 'react';
+import { normalizePacketWebsite, validatePacketProfile } from '../../api/_lib/packet-branding.js';
 import { create } from 'zustand';
 import { createJSONStorage, persist } from 'zustand/middleware';
 import {
   buildDocumentRecord,
+  documentIdentityReviewNote,
   resolveDocumentHorseMatch,
-  horseIdentityConflicts,
   buildSubscriptionForTier,
   createId,
   createShareAccessToken,
@@ -20,8 +21,12 @@ import { hasRoleCapability } from '@/lib/permissions';
 import { hasHorsePhoto, isHorsePhotoAsset } from '@/lib/animalPassport';
 import { groupDocumentBatchCandidates } from '@/lib/documentBatchIdentity';
 import { flagDocumentDuplicates, documentDuplicateNeedsReview, fingerprintDocument } from '@/lib/documentDuplicates';
+import { extractionProducedNothing } from '@/lib/documentIntelligence';
 import {
   assessOwnershipDocument,
+  documentWithFreshSource,
+  documentIdentityCacheNeedsReview,
+  inspectDocumentHorseIdentity,
   ownershipReviewBlockers,
   ownershipDocumentReviewKey,
 } from '@/lib/ownershipDocumentReview';
@@ -77,6 +82,7 @@ import {
 import type { IntakeIdentity } from '@/store/xbarStoreLogic';
 import type {
   BreedingEconomics,
+  HorseRecord,
   HorseNote,
   IntakeBatch,
   OwnershipStake,
@@ -109,6 +115,46 @@ import {
   selectPersistedState,
   syncDerivedValues,
 } from '@/store/xbarStoreHelpers';
+
+/** Rebuild one readable source's derived claims without changing canonical horse data. */
+function promoteSourceDocument(horse: HorseRecord, document: DocumentRecord): HorseRecord {
+  const review = inspectDocumentHorseIdentity(document, horse);
+  if (
+    review.conflictReason ||
+    !document.extractedTextPreview?.trim() ||
+    extractionProducedNothing(document.processingNote)
+  ) {
+    return { ...horse, documents: [...new Set([...horse.documents, document.id])] };
+  }
+  // A fixed source cache is insufficient while its previously promoted values
+  // remain on the horse. Replace only this source's derived facts, never other
+  // sources or the user's canonical horse fields.
+  const sourceFacts = horse.documentFacts.filter((fact) => fact.sourceDocumentId === document.id);
+  const refreshedHorse = {
+    ...horse,
+    documentFacts: horse.documentFacts.filter((fact) => fact.sourceDocumentId !== document.id),
+  };
+  if (review.missingIdentityReason) {
+    return { ...refreshedHorse, documents: [...new Set([...horse.documents, document.id])] };
+  }
+  // A link or source fact may represent an earlier promotion, including a
+  // zero-fact source sent back to review. Without a contribution ledger, do not
+  // award speculative readiness points or replay attachment side effects.
+  const factsOnly = sourceFacts.length > 0 || horse.documents.includes(document.id);
+  const promoted = promoteDocument(refreshedHorse, { ...document, entities: review.sourceEntities }, { factsOnly });
+  return {
+    ...promoted,
+    documentFacts: promoted.documentFacts.map((fact) => {
+      if (fact.sourceDocumentId !== document.id) return fact;
+      // Preserve human decisions only for an unchanged claim. An acceptance or
+      // rejection of an old value must not silently carry onto its replacement.
+      const previous = sourceFacts.find(
+        (prior) => prior.id === fact.id && prior.label === fact.label && prior.value === fact.value,
+      );
+      return previous?.decision ? { ...fact, decision: previous.decision } : fact;
+    }),
+  };
+}
 
 /**
  * The subscription a gate INSIDE a store action must evaluate: the real one.
@@ -192,6 +238,30 @@ function serializeDocumentIntake<T>(run: () => Promise<T>): Promise<T> {
   return result;
 }
 
+function horseArchiveContextError(): string | null {
+  const cloud = useCloudStore.getState();
+  const owner = vaultOwnerId();
+  const recordedOwner = readRecordsOwner();
+  if (recordedOwner && recordedOwner !== owner) {
+    return 'These records belong to another workspace. Reopen their workspace before changing the roster.';
+  }
+  // A configured local record set can remain visible while cloud reconciliation
+  // is pending or locked. Never archive it under a new identity or stale role.
+  if (isSupabaseConfigured() || cloud.session || cloud.workspaceId) {
+    if (
+      !cloud.session?.user?.id ||
+      !cloud.workspaceReady ||
+      !cloud.autosaveReady ||
+      !cloud.autosaveUnlocked ||
+      !recordedOwner
+    ) {
+      return 'Wait for this workspace to finish loading, or resolve its sync warning, before changing the roster.';
+    }
+    return requireRoleCapability(cloud.workspaceRole, 'editHorse') ?? null;
+  }
+  return null;
+}
+
 export const useXbarStore = create<XbarStore>()(
   persist(
     (set, get) => ({
@@ -272,7 +342,16 @@ export const useXbarStore = create<XbarStore>()(
         }
 
         const current = get();
-        const nextProfile = restoreWorkspaceProfile({ ...current.workspaceProfile, ...patch });
+        const merged = { ...current.workspaceProfile, ...patch };
+        try {
+          validatePacketProfile(merged);
+        } catch (error) {
+          return { ok: false, message: error instanceof Error ? error.message : 'Ranch branding is invalid.' };
+        }
+        const nextProfile = restoreWorkspaceProfile({
+          ...merged,
+          ...(merged.website !== undefined ? { website: normalizePacketWebsite(merged.website) } : {}),
+        });
         const workspaceMembers = current.workspaceMembers.map((member, index) =>
           index === 0 && member.source === 'Owner'
             ? {
@@ -1086,7 +1165,9 @@ export const useXbarStore = create<XbarStore>()(
             const batchConflicts = new Map<string, string>();
             let createdHorseBundles =
               !selectedHorse && createHorseFromBatch
-                ? groupDocumentBatchCandidates(documents.filter((document) => !document.horseId))
+                ? groupDocumentBatchCandidates(
+                    documents.filter((document) => !document.horseId).map(documentWithFreshSource),
+                  )
                     .map(({ documents: groupedDocuments, reviewReason }) => {
                       if (reviewReason) {
                         groupedDocuments.forEach((document) => batchConflicts.set(document.id, reviewReason));
@@ -1095,8 +1176,23 @@ export const useXbarStore = create<XbarStore>()(
                       // A duplicate hint must never remove contradictory identity
                       // evidence from the batch. Hold the entire group for review.
                       if (groupedDocuments.some(documentDuplicateNeedsReview)) return null;
-                      const horseInput = buildHorseInputFromDocuments(groupedDocuments, state.workspaceProfile);
+                      const sourceDocuments = groupedDocuments;
+                      const horseInput = buildHorseInputFromDocuments(sourceDocuments, state.workspaceProfile);
                       if (!horseInput) return null;
+                      const proposedHorse = createHorseRecord(horseInput, state.workspaceProfile);
+                      const sourceScreens = groupedDocuments.map((document) =>
+                        inspectDocumentHorseIdentity(document, proposedHorse),
+                      );
+                      const sourceConflict =
+                        sourceScreens.find((screen) => screen.conflictReason)?.conflictReason ||
+                        sourceScreens.find((screen) => screen.missingIdentityReason)?.missingIdentityReason ||
+                        (new Set(sourceScreens.flatMap((screen) => screen.sourceChips)).size > 1
+                          ? 'These sources contain conflicting microchips. Compare the originals before creating a horse.'
+                          : undefined);
+                      if (sourceConflict) {
+                        groupedDocuments.forEach((document) => batchConflicts.set(document.id, sourceConflict));
+                        return null;
+                      }
                       const resolution = resolveDocumentHorseMatch(
                         currentHorses,
                         groupedDocuments.map((document) => document.extractedTextPreview).join('\n'),
@@ -1107,7 +1203,7 @@ export const useXbarStore = create<XbarStore>()(
                         },
                       );
                       if (resolution.match || resolution.needsReview) return null;
-                      return createHorseFromDocuments(groupedDocuments, state.workspaceProfile);
+                      return createHorseFromDocuments(sourceDocuments, state.workspaceProfile);
                     })
                     .filter((bundle): bundle is NonNullable<typeof bundle> => Boolean(bundle))
                 : [];
@@ -1129,7 +1225,10 @@ export const useXbarStore = create<XbarStore>()(
                   bundle.documents.map((document) => [document.id, document] as const),
                 ),
               );
-              documents = documents.map((document) => createdDocumentMap.get(document.id) ?? document);
+              documents = documents.map((document) => {
+                const created = createdDocumentMap.get(document.id);
+                return created ? { ...created, entities: document.entities } : document;
+              });
             }
             // Only the files nobody can open. A document held in the on-device
             // vault has its bytes and opens on this device, so counting it as
@@ -1248,7 +1347,7 @@ export const useXbarStore = create<XbarStore>()(
                   (document) =>
                     document.horseId === horse.id && (document.state === 'Matched' || document.state === 'Ready'),
                 );
-                return matchedDocuments.reduce(promoteDocument, horse);
+                return matchedDocuments.reduce(promoteSourceDocument, horse);
               });
 
               return {
@@ -1274,6 +1373,8 @@ export const useXbarStore = create<XbarStore>()(
               id: batch.id,
               createdHorseIds: createdHorses.map((horse) => horse.id),
               duplicateCount,
+              heldForReviewCount: documents.filter((document) => !document.horseId && document.state === 'Needs Review')
+                .length,
             };
           } catch (error) {
             console.error('Document upload failed', error);
@@ -1298,11 +1399,10 @@ export const useXbarStore = create<XbarStore>()(
           return { ok: false, message: 'Document not found.' };
         }
 
-        if (document.identityReviewRequired) {
+        if (document.state === 'Archived' || document.state === 'Queued') {
           return {
             ok: false,
-            message:
-              'This file contains conflicting horse identities. Upload separate or corrected papers before approving.',
+            message: 'Archived documents cannot be approved. Queued documents must finish processing first.',
           };
         }
 
@@ -1316,12 +1416,12 @@ export const useXbarStore = create<XbarStore>()(
           return { ok: false, message: 'Selected horse record was not found.' };
         }
 
-        if (horseIdentityConflicts(matchedHorse, document.entities)) {
-          return {
-            ok: false,
-            message:
-              'The source identity conflicts with the selected horse. Choose the correct horse or upload corrected papers.',
-          };
+        const identityReview = inspectDocumentHorseIdentity(document, matchedHorse);
+        if (identityReview.conflictReason) {
+          return { ok: false, message: identityReview.conflictReason };
+        }
+        if (identityReview.missingIdentityReason && Object.values(document.entities).some(Boolean)) {
+          return { ok: false, message: identityReview.missingIdentityReason };
         }
         if (documentDuplicateNeedsReview(document) && !keepDuplicate) {
           return {
@@ -1329,31 +1429,112 @@ export const useXbarStore = create<XbarStore>()(
             message: 'Compare the duplicate files, then choose Keep copy and approve or discard the extra.',
           };
         }
+        // Every approved source-clear cache must describe the current original,
+        // including non-identity facts used by buyer views and trust scoring.
+        // Sort keys and omit undefined values so equivalent caches are idempotent.
+        const sourceEntitiesChanged =
+          !identityReview.missingIdentityReason &&
+          JSON.stringify(document.entities, Object.keys(document.entities).sort()) !==
+            JSON.stringify(identityReview.sourceEntities, Object.keys(identityReview.sourceEntities).sort());
+        const requiresOwnershipRereview =
+          !identityReview.missingIdentityReason &&
+          Boolean(
+            sourceEntitiesChanged ||
+            document.identityReviewRequired ||
+            document.processingNote?.includes(documentIdentityReviewNote),
+          );
+        const sourceRefreshAudit = sourceEntitiesChanged
+          ? createAuditEvent({
+              actor: state.currentRole,
+              action: 'updated',
+              entityType: 'document',
+              entityId: documentId,
+              summary: 'Document extraction cache refreshed from source-read facts during explicit approval.',
+              context: {
+                horseId: matchedHorse.id,
+                previousEntities: JSON.stringify(document.entities),
+                sourceEntities: JSON.stringify(identityReview.sourceEntities),
+              },
+            })
+          : undefined;
         const nextDocument: DocumentRecord = {
           ...document,
+          entities: identityReview.missingIdentityReason ? document.entities : identityReview.sourceEntities,
+          // Clear only the canonical generated identity warning after explicit
+          // source-clear approval. Coverage and document-purpose notes survive.
+          processingNote:
+            !identityReview.missingIdentityReason && document.processingNote?.includes(documentIdentityReviewNote)
+              ? document.processingNote.replace(documentIdentityReviewNote, '').trim()
+              : document.processingNote,
           duplicateReviewedAt: documentDuplicateNeedsReview(document)
             ? new Date().toISOString()
             : document.duplicateReviewedAt,
           horseId: nextHorseId,
           state: 'Ready',
+          identityReviewRequired: identityReview.sourceIdentityReviewRequired,
           batchReviewNote: undefined,
           // Approval records a human action; it must not inflate OCR confidence.
           confidence: document.confidence,
           duplicateRisk: keepDuplicate ? 'Low' : document.duplicateRisk,
-          summary: `${document.title} is approved and attached to ${matchedHorse.name}.`,
+          summary: identityReview.missingIdentityReason
+            ? `${document.title} is manually attached to ${matchedHorse.name}. No extracted facts or ownership evidence were approved.`
+            : `${document.title} is approved and attached to ${matchedHorse.name}.`,
         };
 
         set((current) => {
           const nextDocuments = current.documents.map((item) => (item.id === documentId ? nextDocument : item));
-          const nextHorses = current.horses.map((horse) =>
-            horse.id === matchedHorse.id ? promoteDocument(horse, nextDocument) : horse,
-          );
+          const nextHorses = current.horses.map((horse) => {
+            if (horse.id !== matchedHorse.id) return horse;
+            // This successful manual action explicitly approves no extracted
+            // claims. Clear only this source's old derived facts, even when
+            // OCR is absent/failed; automatic failed reads still preserve them.
+            if (identityReview.missingIdentityReason) {
+              return {
+                ...horse,
+                documents: [...new Set([...horse.documents, documentId])],
+                documentFacts: horse.documentFacts.filter((fact) => fact.sourceDocumentId !== documentId),
+              };
+            }
+            return promoteSourceDocument(horse, nextDocument);
+          });
           const nextBatches = current.intakeBatches.map((batch) => summarizeBatch(batch, nextDocuments));
 
           return {
             documents: nextDocuments,
             horses: nextHorses,
             intakeBatches: nextBatches,
+            auditEvents: sourceRefreshAudit ? [sourceRefreshAudit, ...current.auditEvents] : current.auditEvents,
+            // Refreshing facts or identity metadata must not preserve an old attestation.
+            // Keep its source link and require a new human ownership review.
+            ownershipRecords: requiresOwnershipRereview
+              ? current.ownershipRecords.map((record) => {
+                  const requirements = record.proofRequirements;
+                  if (
+                    !requirements?.some(
+                      (requirement) =>
+                        requirement.documentId === documentId &&
+                        (requirement.status === 'verified' ||
+                          requirement.reviewAttestedAt ||
+                          requirement.reviewedSourceKey),
+                    )
+                  )
+                    return record;
+                  const proofRequirements = requirements.map((requirement) =>
+                    requirement.documentId === documentId &&
+                    (requirement.status === 'verified' || requirement.reviewAttestedAt || requirement.reviewedSourceKey)
+                      ? {
+                          ...requirement,
+                          status: 'linked' as const,
+                          verifiedBy: undefined,
+                          verifiedAt: undefined,
+                          reviewAttestedAt: undefined,
+                          reviewedSourceKey: undefined,
+                        }
+                      : requirement,
+                  );
+                  return { ...record, proofRequirements, confidence: computeOwnershipConfidence(proofRequirements) };
+                })
+              : current.ownershipRecords,
           };
         });
 
@@ -1370,11 +1551,10 @@ export const useXbarStore = create<XbarStore>()(
         if (!document) {
           return { ok: false, message: 'Document not found.' };
         }
-        if (document.identityReviewRequired) {
+        if (document.state === 'Archived' || document.state === 'Queued') {
           return {
             ok: false,
-            message:
-              'This file contains conflicting horse identities. Upload separate or corrected papers before approving.',
+            message: 'Archived documents cannot be approved. Queued documents must finish processing first.',
           };
         }
 
@@ -1382,13 +1562,32 @@ export const useXbarStore = create<XbarStore>()(
           return { ok: false, message: 'This document is already linked to a horse.' };
         }
 
-        // Re-check current profiles with the same fail-closed identity rule as
-        // upload. A paper left in review can outlive changes to the herd.
-        const proposed = buildHorseInputFromDocuments([document], state.workspaceProfile);
+        // Re-read the original before using any cached identity or profile fact.
+        // A legacy document can contain copied horse fields absent from the source.
+        const sourceReview = inspectDocumentHorseIdentity(document);
+        const sourceBlocker = sourceReview.conflictReason || sourceReview.missingIdentityReason;
+        if (sourceBlocker) return { ok: false, message: sourceBlocker };
+        const sourceDocument = {
+          ...document,
+          entities: sourceReview.sourceEntities,
+          identityReviewRequired: sourceReview.sourceIdentityReviewRequired,
+          state: document.identityReviewRequired ? ('Needs Review' as const) : document.state,
+        };
+        // Re-check current profiles; a paper can outlive changes to the herd.
+        const proposed = buildHorseInputFromDocuments([sourceDocument], state.workspaceProfile);
+        // Screen source-only proposed identity before attaching or creating.
+        // Historical cached identities neither authorize nor veto this choice.
+        if (proposed) {
+          const { conflictReason } = inspectDocumentHorseIdentity(
+            document,
+            createHorseRecord(proposed, state.workspaceProfile),
+          );
+          if (conflictReason) return { ok: false, message: conflictReason };
+        }
         const resolution = resolveDocumentHorseMatch(
           state.horses,
           `${document.title} ${document.extractedTextPreview}`,
-          { ...document.entities, horseName: document.entities.horseName || proposed?.name },
+          sourceReview.sourceIdentity,
         );
         if (resolution.needsReview) {
           return {
@@ -1399,12 +1598,16 @@ export const useXbarStore = create<XbarStore>()(
         }
         const existingHorse = resolution.match?.horse;
         if (existingHorse) {
+          const { conflictReason } = inspectDocumentHorseIdentity(document, existingHorse);
+          if (conflictReason) return { ok: false, message: conflictReason };
           set((current) => {
             const nextDocuments = current.documents.map((item) =>
               item.id === documentId
                 ? {
                     ...item,
                     horseId: existingHorse.id,
+                    identityReviewRequired: sourceReview.sourceIdentityReviewRequired,
+                    state: item.identityReviewRequired ? ('Needs Review' as const) : item.state,
                     summary: `${item.title} is attached to ${existingHorse.name}. Review the source before approving its facts.`,
                   }
                 : item,
@@ -1434,7 +1637,7 @@ export const useXbarStore = create<XbarStore>()(
           return { ok: false, message: 'Your plan’s horse limit is reached. Upgrade to add more horses.' };
         }
 
-        const bundle = createHorseFromDocuments([document], state.workspaceProfile);
+        const bundle = createHorseFromDocuments([sourceDocument], state.workspaceProfile);
         if (!bundle) {
           return {
             ok: false,
@@ -1443,7 +1646,10 @@ export const useXbarStore = create<XbarStore>()(
           };
         }
 
-        const readyDocument = bundle.documents.find((item) => item.id === documentId) ?? document;
+        const readyDocument = {
+          ...(bundle.documents.find((item) => item.id === documentId) ?? document),
+          entities: document.entities,
+        };
         set((current) => {
           const nextDocuments = current.documents.map((item) => (item.id === documentId ? readyDocument : item));
           const nextBatches = current.intakeBatches.map((batch) => summarizeBatch(batch, nextDocuments));
@@ -2341,6 +2547,80 @@ export const useXbarStore = create<XbarStore>()(
               : `Renamed ${repairs.length} horses from their documents.`,
         };
       },
+      archiveHorse: (horseId) => {
+        const contextError = horseArchiveContextError();
+        if (contextError) return { ok: false, message: contextError };
+        const state = get();
+        const deniedMessage = requireRoleCapability(state.currentRole, 'editHorse');
+        if (deniedMessage) return { ok: false, message: deniedMessage };
+        const matches = state.horses.filter((horse) => horse.id === horseId);
+        if (matches.length !== 1) return { ok: false, message: 'A unique horse record could not be found.' };
+        const horse = matches[0];
+        if (horse.archive) return { ok: false, message: 'This horse is already archived.' };
+        const archive = { id: createId('horse-archive'), archivedAt: nowStamp() };
+        // Archive is a roster filter, never a deletion or a snapshot of the
+        // horse. All history and subsequent edits remain on the same record.
+        set({
+          horses: state.horses.map((item) => (item.id === horseId ? { ...item, archive } : item)),
+          auditEvents: [
+            createAuditEvent({
+              actor: state.currentRole,
+              action: 'updated',
+              entityType: 'horse',
+              entityId: horseId,
+              summary: `Horse record "${horse.name}" archived from the active roster`,
+            }),
+            ...state.auditEvents,
+          ].slice(0, 500),
+        });
+        return {
+          ok: true,
+          message: 'Horse archived from the active roster. Records and reminders are retained.',
+          id: horseId,
+          archiveId: archive.id,
+        };
+      },
+      restoreHorse: (horseId, archiveId, expectedOwnerId) => {
+        const contextError = horseArchiveContextError();
+        if (contextError) return { ok: false, message: contextError };
+        const state = get();
+        if (expectedOwnerId !== undefined && expectedOwnerId !== vaultOwnerId()) {
+          return {
+            ok: false,
+            message: 'The workspace has changed. Open Archived horses in the current workspace to restore.',
+          };
+        }
+        const deniedMessage = requireRoleCapability(state.currentRole, 'editHorse');
+        if (deniedMessage) return { ok: false, message: deniedMessage };
+        const matches = state.horses.filter((horse) => horse.id === horseId);
+        if (matches.length !== 1) return { ok: false, message: 'A unique horse record could not be found.' };
+        const horse = matches[0];
+        if (!horse.archive) return { ok: false, message: 'This horse is already in the active roster.' };
+        // A toast can outlive a restore/rearchive, a permission change, or a
+        // workspace change. Only the exact archive it refers to may be undone.
+        if (!archiveId || horse.archive.id !== archiveId) {
+          return {
+            ok: false,
+            message: 'This archive has changed. Open Archived horses and restore the current record.',
+          };
+        }
+        const restored = { ...horse };
+        delete restored.archive;
+        set({
+          horses: state.horses.map((item) => (item.id === horseId ? restored : item)),
+          auditEvents: [
+            createAuditEvent({
+              actor: state.currentRole,
+              action: 'updated',
+              entityType: 'horse',
+              entityId: horseId,
+              summary: `Horse record "${horse.name}" restored to the active roster`,
+            }),
+            ...state.auditEvents,
+          ].slice(0, 500),
+        });
+        return { ok: true, message: 'Horse restored to the active roster.', id: horseId };
+      },
       deleteHorse: (horseId) => {
         // Deleting a horse takes its leads and receipts with it, so it needs the
         // capability that creates horses (Admin, Ranch Manager) -- the same rule
@@ -2587,6 +2867,18 @@ export const useXbarStore = create<XbarStore>()(
         }
 
         const document = get().documents.find((item) => item.id === requirement.documentId);
+        // Refresh an obsolete operational warning through explicit document
+        // approval before creating an attestation that normalization would reject.
+        if (
+          document &&
+          (document.identityReviewRequired ||
+            documentIdentityCacheNeedsReview(
+              document,
+              get().horses.find((horse) => horse.id === record.horseId),
+            ))
+        ) {
+          return { ok: false, message: 'Review and approve this document again before confirming ownership support.' };
+        }
         const assessment = assessOwnershipDocument(
           document,
           get().horses.find((horse) => horse.id === record.horseId),
@@ -2939,8 +3231,14 @@ export const useXbarStore = create<XbarStore>()(
         }
 
         const normalizedActor = event.actor.trim().toLowerCase();
+        // A completed deal owns its historical receipt. A new offer must not
+        // reuse that receipt (or erase it); create a separate unpaid lead.
         let lead = get().salesLeads.find(
-          (item) => item.horseId === event.horseId && item.name.trim().toLowerCase() === normalizedActor,
+          (item) =>
+            item.stage !== 'Closed' &&
+            !item.outcome &&
+            item.horseId === event.horseId &&
+            item.name.trim().toLowerCase() === normalizedActor,
         );
         if (!lead) {
           const created = get().createSalesLead({

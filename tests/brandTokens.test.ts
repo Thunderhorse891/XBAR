@@ -1,6 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
+import { createHash } from 'node:crypto';
 
 /*
  * The brand layer, checked by measurement rather than by eye.
@@ -142,4 +143,342 @@ test('sign-in brand images reserve their real shape and keep the rim light', asy
   );
   assert.ok(watermark.length > 0, 'the watermark rule must be findable');
   assert.ok(!/grayscale\(/.test(watermark), 'the brand mark must not be desaturated on the sign-in panel');
+});
+
+test('public and application palettes share the owner-selected signature colors', async () => {
+  const app = withoutComments(await readFile('src/styles/brandTokens.css', 'utf8'));
+  const publicTokens = withoutComments(await readFile('public/brand/xbar-brand-tokens.css', 'utf8'));
+  const expected = {
+    '--xbar-black': '#0b0d0f',
+    '--xbar-graphite': '#171b20',
+    '--xbar-gunmetal': '#202d3c',
+    '--xbar-steel': '#596168',
+    '--xbar-silver': '#d6dde5',
+    '--xbar-blue': '#0078d7',
+    '--xbar-ice': '#94d8f2',
+    '--xbar-white': '#ffffff',
+  };
+  for (const [token, color] of Object.entries(expected)) {
+    assert.equal(tokenValue(app, token).toLowerCase(), color, `app ${token} must match the signature palette`);
+    assert.equal(tokenValue(publicTokens, token).toLowerCase(), color, `public ${token} must match the app`);
+  }
+  const constants = (css: string) =>
+    [...css.matchAll(/(--xbar-[\w-]+):\s*(#[\da-f]{6})/gi)]
+      .map((match) => [match[1], match[2].toLowerCase()])
+      .sort(([a], [b]) => a.localeCompare(b));
+  assert.deepEqual(constants(publicTokens), constants(app), 'every duplicated brand constant must stay in parity');
+  assert.equal(tokenValue(app, '--accent-ink'), expected['--xbar-gunmetal']);
+  assert.equal(tokenValue(app, '--accent-ink-press'), expected['--xbar-graphite']);
+  assert.ok(
+    contrastRatio(expected['--xbar-steel'], expected['--xbar-white']) >= 4.5,
+    'secondary text remains readable on white',
+  );
+  assert.ok(
+    contrastRatio(expected['--xbar-ice'], expected['--xbar-white']) < 3,
+    'pale ice is decorative, never a standalone focus boundary',
+  );
+  assert.match(app, /--accent-edge:\s*var\(--xbar-blue\)/, 'accessible focus edges must not become pale ice');
+});
+
+test('the signature derivative preserves every supplied source master byte for byte', async () => {
+  const originals = {
+    'xbar-horse-outline-safe.png': '66c6710e8ba1428923a60cae5f15101cfa4a4b0e489990c8f4f04fc9a7cb17ac',
+    'xbar-report-horse.png': '8a8cc3c6215d2b2f45f260ff3d26848313391fab605799321f11eb9f8503eb54',
+    'xbar-report-mark.png': '58e1fd7ed972f146311dda41806a8f9420a17c46452ccfabcb3143ac7d91ada8',
+    'xbar-wordmark.png': '319e0ed1dce00354184955e4399887035a6e6b487e675ef0c5f9e0176dc79928',
+    'apple-touch-icon.png': 'f442212afe2e48d591081cfd3860a0f601e85911626e579a74d8287cdbe238c1',
+  };
+  for (const [file, hash] of Object.entries(originals)) {
+    assert.equal(
+      createHash('sha256')
+        .update(await readFile(`public/brand/${file}`))
+        .digest('hex'),
+      hash,
+      `${file} is an unchanged supplied master`,
+    );
+  }
+});
+
+test('original metallic artwork is the only rendered XBAR logo, without a traced replacement', async () => {
+  const component = await readFile('src/components/BrandMark.tsx', 'utf8');
+  const publicLogo = await readFile('scripts/marketing/signature.mjs', 'utf8');
+  assert.match(component, /import\.meta\.env\.BASE_URL/, 'compact artwork must respect the supported deployment base');
+  for (const [name, source] of [
+    ['application', component],
+    ['public site', publicLogo],
+  ]) {
+    assert.match(source, /xbar-original-lockup-480\.png/, `${name} must render the selected original B artwork`);
+    assert.match(source, /preserveAspectRatio=["']xMidYMid meet["']/, `${name} must contain the complete original`);
+    assert.doesNotMatch(
+      source,
+      /compactPaths|geometry\.paths|<path\b|signatureMotion/,
+      `${name} must not redraw the horse`,
+    );
+  }
+  const email = await readFile('api/_lib/email.js', 'utf8');
+  const sample = await readFile('scripts/marketing/sample-packet.mjs', 'utf8');
+  const reports = await readFile('src/lib/reportBranding.ts', 'utf8');
+  const manifest = await readFile('public/site.webmanifest', 'utf8');
+  for (const [name, source] of [
+    ['email', email],
+    ['sample', sample],
+    ['report', reports],
+    ['manifest', manifest],
+  ]) {
+    assert.doesNotMatch(
+      source,
+      /xbar-signature-(?:horse|print|email|icon)/,
+      `${name} must not publish the rejected silhouette`,
+    );
+  }
+  assert.match(email, /xbar-original-lockup-480\.png/);
+  assert.match(sample, /xbar-original-lockup-480\.png/);
+  assert.match(manifest, /xbar-original-icon-512\.png/);
+  const icon = await readFile('public/brand/xbar-original-icon-512.png');
+  assert.equal(icon.readUInt32BE(16), 512);
+  assert.equal(icon.readUInt32BE(20), 512);
+});
+
+// Run the shared controller against the browser boundary it consumes, without
+// launching a browser. Scheduling and cancellation are measured on real code.
+type SignatureAnimation = {
+  keyframes: Keyframe[];
+  options: KeyframeAnimationOptions;
+  cancelled: boolean;
+  onfinish: (() => void) | null;
+  cancel: () => void;
+};
+
+function signatureEvents() {
+  const listeners = new Map<string, Set<(event: unknown) => void>>();
+  return {
+    addEventListener(name: string, listener: (event: unknown) => void) {
+      const registered = listeners.get(name) ?? new Set();
+      registered.add(listener);
+      listeners.set(name, registered);
+    },
+    removeEventListener(name: string, listener: (event: unknown) => void) {
+      listeners.get(name)?.delete(listener);
+    },
+    dispatch(name: string, event: unknown = {}) {
+      listeners.get(name)?.forEach((listener) => listener(event));
+    },
+    listenerCount: () => [...listeners.values()].reduce((total, entries) => total + entries.size, 0),
+  };
+}
+
+async function signatureHarness(
+  options: {
+    reduced?: boolean;
+    saveData?: boolean;
+    hidden?: boolean;
+    paused?: boolean;
+    finePointer?: boolean;
+    geometryThrows?: boolean;
+    lengths?: number[];
+    animationSupported?: boolean;
+  } = {},
+) {
+  const { installSignatureMotion, SIGNATURE_DURATION_MS } = await import('../src/lib/signatureMotion.js');
+  const animations: SignatureAnimation[] = [];
+  const reduced = { ...signatureEvents(), matches: options.reduced ?? false };
+  const pointer = { ...signatureEvents(), matches: options.finePointer ?? true };
+  const connection = { ...signatureEvents(), saveData: options.saveData ?? false };
+  let scheduledFrame: FrameRequestCallback | undefined;
+  const win = {
+    ...signatureEvents(),
+    navigator: { connection },
+    matchMedia: (query: string) => (query.includes('prefers-reduced-motion') ? reduced : pointer),
+    requestAnimationFrame: (callback: FrameRequestCallback) => {
+      scheduledFrame = callback;
+      return 1;
+    },
+    cancelAnimationFrame: () => {
+      scheduledFrame = undefined;
+    },
+  };
+  const doc = { ...signatureEvents(), hidden: options.hidden ?? false, defaultView: win };
+  const attributes = new Map<string, string>();
+  const paths = (options.lengths ?? [10, 20, 30]).map((length) => ({
+    getTotalLength: () => {
+      if (options.geometryThrows) throw new Error('SVG geometry is unavailable');
+      return length;
+    },
+    animate: (keyframes: Keyframe[], animationOptions: KeyframeAnimationOptions) => {
+      const animation: SignatureAnimation = {
+        keyframes,
+        options: animationOptions,
+        cancelled: false,
+        onfinish: null,
+        cancel() {
+          this.cancelled = true;
+        },
+      };
+      animations.push(animation);
+      return animation;
+    },
+  }));
+  const svg = {
+    ...signatureEvents(),
+    ownerDocument: doc,
+    closest: () => null,
+    ...(options.animationSupported === false ? {} : { animate() {} }),
+    querySelectorAll: (selector: string) => (selector === '.xbar-signature__trace' ? paths : []),
+    setAttribute: (name: string, value: string) => {
+      attributes.set(name, value);
+    },
+    removeAttribute: (name: string) => {
+      attributes.delete(name);
+    },
+  };
+  let paused = options.paused ?? false;
+  const controller = installSignatureMotion(svg as unknown as SVGSVGElement, () => paused);
+  return {
+    animations,
+    attributes,
+    controller,
+    duration: SIGNATURE_DURATION_MS,
+    enter: () => {
+      const callback = scheduledFrame;
+      scheduledFrame = undefined;
+      callback?.(0);
+    },
+    hover: (pointerType = 'mouse') => svg.dispatch('pointerenter', { pointerType }),
+    reduce: () => {
+      reduced.matches = true;
+      reduced.dispatch('change');
+    },
+    save: () => {
+      connection.saveData = true;
+      connection.dispatch('change');
+    },
+    hide: () => {
+      doc.hidden = true;
+      doc.dispatch('visibilitychange');
+    },
+    exit: () => win.dispatch('pagehide'),
+    pause: () => {
+      paused = true;
+      controller.cancel();
+    },
+    listenerCount: () =>
+      svg.listenerCount() +
+      doc.listenerCount() +
+      win.listenerCount() +
+      reduced.listenerCount() +
+      connection.listenerCount(),
+  };
+}
+
+test('the signature traces actual paths sequentially for exactly 1500ms and then becomes static', async () => {
+  const harness = await signatureHarness();
+  assert.equal(harness.duration, 1500);
+  harness.enter();
+  assert.equal(harness.attributes.get('data-tracing'), 'true');
+  assert.equal(harness.animations.length, 3);
+  let end = 0;
+  for (const [index, animation] of harness.animations.entries()) {
+    assert.equal(animation.options.duration, [250, 500, 750][index], 'timing follows real path length');
+    assert.equal(animation.options.delay, end, 'path traces are sequential, not simultaneous raster fades');
+    assert.equal(animation.options.iterations ?? 1, 1, 'signature motion must never loop');
+    assert.equal(animation.options.fill, 'backwards', 'the highlight must not hold its last frame');
+    assert.equal(animation.keyframes[0].strokeDashoffset, '0.18');
+    assert.equal(animation.keyframes.at(-1)?.strokeDashoffset, '-1');
+    assert.equal(animation.keyframes.at(-1)?.opacity, 0, 'the trace disappears into the static base');
+    assert.ok(
+      animation.keyframes.every((frame) => !('transform' in frame)),
+      'tracing does not pulse or scale the horse',
+    );
+    end += Number(animation.options.duration);
+    animation.onfinish?.();
+  }
+  assert.equal(end, 1500);
+  assert.equal(harness.attributes.has('data-tracing'), false);
+  harness.enter();
+  assert.equal(harness.animations.length, 3, 'entry runs once');
+  harness.controller.dispose();
+});
+
+test('signature hover replay is limited to a fine mouse pointer and replaces rather than stacks traces', async () => {
+  const harness = await signatureHarness();
+  harness.enter();
+  harness.hover('touch');
+  harness.hover('pen');
+  assert.equal(harness.animations.length, 3);
+  harness.hover();
+  assert.equal(harness.animations.length, 6);
+  assert.ok(harness.animations.slice(0, 3).every((animation) => animation.cancelled));
+  assert.equal(
+    Math.max(
+      ...harness.animations
+        .slice(3)
+        .map((animation) => Number(animation.options.delay) + Number(animation.options.duration)),
+    ),
+    1500,
+  );
+  harness.controller.dispose();
+  const coarse = await signatureHarness({ finePointer: false });
+  coarse.enter();
+  coarse.hover();
+  assert.equal(coarse.animations.length, 3, 'a coarse pointer never causes hover replay');
+  coarse.controller.dispose();
+});
+
+test('signature preferences, page lifecycle, and pause cancel the highlight while retaining static recognition', async () => {
+  for (const action of ['reduce', 'save', 'hide', 'exit', 'pause'] as const) {
+    const harness = await signatureHarness();
+    harness.enter();
+    harness[action]();
+    assert.ok(
+      harness.animations.every((animation) => animation.cancelled),
+      `${action}: all paths must stop`,
+    );
+    assert.equal(harness.attributes.has('data-tracing'), false);
+    // Cancellation removes only its own tracing flag, never the static SVG.
+    assert.deepEqual([...harness.attributes.keys()], []);
+    harness.controller.dispose();
+  }
+  for (const options of [{ reduced: true }, { saveData: true }, { hidden: true }, { paused: true }]) {
+    const harness = await signatureHarness(options);
+    harness.enter();
+    harness.hover();
+    assert.equal(harness.animations.length, 0, 'disabled motion stays static from entry and hover');
+    assert.equal(harness.attributes.has('data-tracing'), false);
+    harness.controller.dispose();
+  }
+});
+
+test('signature disposal and unsupported geometry leave a safe static fallback', async () => {
+  const harness = await signatureHarness();
+  assert.ok(harness.listenerCount() > 0);
+  harness.controller.dispose();
+  assert.equal(harness.listenerCount(), 0, 'unmount removes every lifecycle listener');
+  harness.enter();
+  harness.hover();
+  assert.equal(harness.controller.play(), false);
+  assert.equal(harness.animations.length, 0, 'an unmounted mark cannot resume');
+  for (const options of [
+    { geometryThrows: true },
+    { lengths: [] },
+    { lengths: [0] },
+    { lengths: [Number.NaN] },
+    { animationSupported: false },
+  ]) {
+    const fallback = await signatureHarness(options);
+    fallback.enter();
+    assert.equal(fallback.animations.length, 0);
+    assert.equal(fallback.attributes.has('data-tracing'), false);
+    fallback.controller.dispose();
+  }
+});
+
+test('original artwork styling uses brand tokens and never recolours or retraces the horse', async () => {
+  const css = withoutComments(await readFile('public/brand/xbar-signature.css', 'utf8'));
+  assert.doesNotMatch(css, /filter:|mask-image:|stroke-dash|infinite|#[\da-f]{3,8}\b/i);
+  assert.match(css, /aspect-ratio:\s*1672 \/ 941/);
+  assert.match(css, /border: 1px solid var\(--xbar-silver\)/);
+  const login = await readFile('src/routes/Login.tsx', 'utf8');
+  const home = await readFile('scripts/marketing/home.mjs', 'utf8');
+  assert.doesNotMatch(login, /XbarMark variant="hero"/);
+  assert.doesNotMatch(home, /signatureSvg\(\{ hero: true/);
 });

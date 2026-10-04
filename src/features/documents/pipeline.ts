@@ -7,7 +7,7 @@ import type { DocumentRecord, HorseRecord, IntakeBatch, OwnershipRecord } from '
 // Documents left in "Needs Review" longer than this are surfaced as stale.
 export const STALE_REVIEW_MS = 3 * 24 * 60 * 60 * 1000;
 
-export type PipelineStage = 'Upload' | 'Processing' | 'Review' | 'Proof' | 'Share';
+export type PipelineStage = 'Upload' | 'Processing' | 'Review' | 'Proof' | 'Share' | 'Library';
 
 export const PIPELINE_STAGES: { id: PipelineStage; label: string; hint: string }[] = [
   {
@@ -17,19 +17,24 @@ export const PIPELINE_STAGES: { id: PipelineStage; label: string; hint: string }
   },
   {
     id: 'Processing',
-    label: 'OCR / Processing',
-    hint: 'OCR runs locally; extracted fields appear here while files are queued.',
+    label: 'Text extraction',
+    hint: 'Text is read on this device. Review it against the original.',
   },
   {
     id: 'Review',
     label: 'Review',
-    hint: 'Confirm the extracted match, assign the right horse, then approve or discard.',
+    hint: 'Confirm the extracted match, assign the right horse, then approve or archive.',
   },
   { id: 'Proof', label: 'Ownership', hint: 'Use approved documents to support the horse ownership record.' },
   {
     id: 'Share',
     label: 'Share',
     hint: 'Bundle approved documents into watermarked sale packets and hand off to Shared Access.',
+  },
+  {
+    id: 'Library',
+    label: 'Library',
+    hint: 'Find active and archived originals.',
   },
 ];
 
@@ -73,7 +78,9 @@ export function computeStageBuckets(
   const reviewQueue = documents.filter((document) => document.state === 'Needs Review' || document.state === 'Matched');
   const readyDocuments = documents.filter((document) => document.state === 'Ready');
   const proofDocuments = readyDocuments.filter((document) => Boolean(document.horseId));
-  const duplicates = documents.filter((document) => document.duplicateRisk === 'Possible Duplicate');
+  const duplicates = documents.filter(
+    (document) => document.state !== 'Archived' && document.duplicateRisk === 'Possible Duplicate',
+  );
   const buyerSafeDocuments = documents.filter(
     (document) => buildDocumentTrustProfile(document, horses).readyForProfile,
   );
@@ -123,6 +130,7 @@ export function computeStageCounts(
     Review: buckets.reviewQueue.length,
     Proof: buckets.proofDocuments.length,
     Share: buckets.readyDocuments.length,
+    Library: documents.length,
   };
 }
 

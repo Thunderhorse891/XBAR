@@ -397,14 +397,16 @@ export default function Login() {
         aria-label={authMode === 'signin' ? 'Sign in to XBAR' : 'Create an XBAR account'}
       >
         <aside className="clean-login-visual motion-brand-in" aria-label="XBAR brand">
-          <img
-            className="clean-login-visual__art"
-            src="/brand/xbar-report-horse.png"
-            width="1672"
-            height="941"
-            fetchPriority="high"
-            alt="XBAR horse emblem"
-          />
+          <div className="clean-login-visual__art-frame">
+            <img
+              className="clean-login-visual__art"
+              src="/brand/xbar-report-horse.png"
+              width="1672"
+              height="941"
+              fetchPriority="high"
+              alt="XBAR horse emblem"
+            />
+          </div>
           <div className="clean-login-visual__copy">
             <h2>
               Your ranch.

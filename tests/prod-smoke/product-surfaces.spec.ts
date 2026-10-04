@@ -42,20 +42,24 @@ async function goToRoute(page: Page, path: string) {
   await page.waitForURL((url) => url.pathname === path, { timeout: 15_000 });
 }
 
-test('documents pipeline renders all five workflow stages', async ({ page }) => {
+test('documents pipeline renders five workflow stages and the read-only library', async ({ page }) => {
   const errors = collectPageErrors(page);
   await completeLocalOnboarding(page);
   await goToRoute(page, '/app/documents');
 
   await expect(page.getByText('Your Documents')).toBeVisible({ timeout: 15_000 });
   const tabs = page.getByRole('tablist', { name: 'Document pipeline stages' }).getByRole('tab');
-  await expect(tabs).toHaveCount(5);
-  for (const label of ['Upload', 'OCR / Processing', 'Review', 'Ownership', 'Share']) {
+  await expect(tabs).toHaveCount(6);
+  for (const label of ['Upload', 'Text extraction', 'Review', 'Ownership', 'Share', 'Library']) {
     await expect(tabs.filter({ hasText: label }).first()).toBeVisible();
   }
 
   // Stage switching is client-state only and must not throw.
   await tabs.filter({ hasText: 'Review' }).first().click();
+  await tabs.filter({ hasText: 'Library' }).first().click();
+  await page.getByRole('button', { name: 'Archived (0)', exact: true }).click();
+  await expect(page.getByText('No archived documents', { exact: true })).toBeVisible();
+  await expect(page.getByRole('button', { name: /^(Restore|Move)$/ })).toHaveCount(0);
   await tabs.filter({ hasText: 'Upload' }).first().click();
   expect(errors, `runtime errors on /documents:\n${errors.join('\n')}`).toEqual([]);
 });

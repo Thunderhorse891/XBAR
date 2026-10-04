@@ -6,7 +6,7 @@ import { ContextMenu } from '@/components/ContextMenu';
 import { EmptyState } from '@/components/EmptyState';
 import { DocumentBlock, Timeline } from '@/components/InteractionSystem';
 import { MetricCard, Panel, Pill } from '@/components/app-ui';
-import { billingPath } from '@/lib/billingRoutes';
+import { requestFeatureUpgrade } from '@/store/useUpgradeStore';
 import { buildBreedingRevenueProfile, emptyBreedingEconomics } from '@/lib/breedingRevenue';
 import { buildBreedingProgram, type MareStatus } from '@/lib/breedingIntelligence';
 import { formatCompactCurrency, formatDateLabel } from '@/lib/format';
@@ -396,7 +396,7 @@ export default function Breeding() {
                     <button
                       className="button button--primary button--compact"
                       type="button"
-                      onClick={() => navigate(billingPath)}
+                      onClick={() => requestFeatureUpgrade('breedingRevenue')}
                     >
                       Upgrade to unlock
                     </button>

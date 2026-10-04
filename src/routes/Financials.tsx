@@ -3,7 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { ArrowUpRight, Check, Coins, Lock, TrendingUp } from 'lucide-react';
 import { Card, PageHead, StatusChip } from '@/components/saas';
 import { ProgressBar } from '@/components/app-ui';
-import { billingPath } from '@/lib/billingRoutes';
+import { requestFeatureUpgrade } from '@/store/useUpgradeStore';
 import { formatCurrency, formatPercent } from '@/lib/format';
 import {
   type AnimalFinancialStatus,
@@ -187,7 +187,7 @@ export default function Financials() {
                 <button
                   type="button"
                   className="button button--primary motion-press"
-                  onClick={() => navigate(billingPath)}
+                  onClick={() => requestFeatureUpgrade('profitIntelligence')}
                 >
                   <TrendingUp size={16} /> Upgrade to Ranch Ops
                 </button>

@@ -1,0 +1,128 @@
+/* Scoped functional surfaces; palette comes from the shared brand roles. */
+.hc-filter-summary {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 12px;
+}
+
+.hc-workspace .horse-card__title button {
+  display: block;
+  width: 100%;
+  min-height: 44px;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.hc-workspace button:focus-visible,
+.hc-workspace a:focus-visible {
+  outline: 2px solid var(--accent-edge);
+  outline-offset: 4px;
+}
+
+.hc-workspace .button,
+.hc-workspace .surface-tab,
+.hc-workspace .icon-button,
+.right-drawer .button {
+  min-height: 44px;
+}
+
+.hc-document-gaps,
+.hc-upload-context,
+.hc-upload-outcome {
+  padding: 20px;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  background: var(--surface);
+  color: var(--text);
+}
+
+.hc-document-gaps h2 {
+  margin: 0 0 8px;
+  font-size: 1.15rem;
+}
+
+.hc-document-gaps__horse {
+  margin-top: 20px;
+}
+
+.hc-document-gaps ul {
+  padding: 0;
+  margin: 8px 0 0;
+  list-style: none;
+}
+
+.hc-document-gaps li {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 12px 0;
+  border-top: 1px solid var(--border);
+}
+
+.hc-document-gaps li > span,
+.hc-upload-context,
+.hc-upload-outcome {
+  display: grid;
+  gap: 6px;
+}
+
+.hc-document-gaps small {
+  line-height: 1.5;
+}
+
+.hc-upload-fields {
+  min-width: 0;
+  border: 0;
+  padding: 0;
+  margin: 0;
+}
+
+.hc-upload-progress {
+  min-height: 3.5em;
+  padding: 12px 0;
+  line-height: 1.5;
+}
+
+.hc-upload-outcome--error {
+  border-color: var(--rose);
+}
+
+.right-drawer .right-drawer__header {
+  display: grid;
+  padding-right: 32px;
+}
+
+.right-drawer > button:last-child {
+  min-width: 44px;
+  min-height: 44px;
+}
+
+@media (max-width: 600px) {
+  .hc-workspace .portfolio-toolbar {
+    display: grid;
+    gap: 16px;
+  }
+  .hc-workspace .portfolio-toolbar > input {
+    grid-row: 1;
+    width: 100%;
+  }
+  .hc-document-gaps li {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .right-drawer {
+    animation: none;
+    transition: none;
+  }
+}

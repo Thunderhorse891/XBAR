@@ -37,17 +37,6 @@ function startMotion() {
   }
 
   if (firstEntrance && window.scrollY < 80) {
-    const sweep = document.querySelector<HTMLElement>('.landing-light-sweep');
-    if (sweep) {
-      animated.add(sweep);
-      controls.push(
-        animateElements(
-          sweep,
-          { opacity: [0, 0.8, 0], transform: ['translateX(-60%)', 'translateX(65%)'] },
-          { duration: 1.2 },
-        ),
-      );
-    }
     document.querySelectorAll<HTMLElement>('[data-hero-reveal]').forEach((el, i) => reveal(el, 0.25 + i * 0.09));
   }
   firstEntrance = false;
