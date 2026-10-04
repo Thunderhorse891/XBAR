@@ -66,7 +66,7 @@ test('a late cloud pull cannot replace a different workspace or mark it synced',
       };
       return chain;
     };
-    useCloudStore.setState({ workspaceId: 'workspace-a', session, lastSyncAt: '' });
+    useCloudStore.setState({ workspaceId: 'workspace-a', workspaceRole: 'Admin', session, lastSyncAt: '' });
   });
   await page.getByRole('button', { name: 'Pull cloud', exact: true }).click();
   await page.waitForFunction(() => Boolean((window as typeof window & { releasePull?: () => void }).releasePull));
@@ -111,7 +111,14 @@ async function openSettings(page: Page) {
   await expect(page.getByRole('heading', { name: 'Settings' })).toBeVisible();
 }
 
-for (const change of ['workspace', 'account', 'permission', 'round trip'] as const) {
+for (const change of [
+  'workspace',
+  'account',
+  'permission',
+  'round trip',
+  'cloud permission',
+  'cloud role round trip',
+] as const) {
   test(`a delayed backup read is stopped after ${change} changes`, async ({ page }) => {
     await openSettings(page);
     const backup = await page.evaluate(async () => {
@@ -119,7 +126,11 @@ for (const change of ['workspace', 'account', 'permission', 'round trip'] as con
       const storePath = '/src/store/useXbarStore.ts';
       const { useCloudStore } = await import(/* @vite-ignore */ cloudPath);
       const { useXbarStore } = await import(/* @vite-ignore */ storePath);
-      useCloudStore.setState({ workspaceId: 'workspace-a' });
+      useCloudStore.setState({
+        workspaceId: 'workspace-a',
+        workspaceRole: 'Admin',
+        session: { access_token: 'synthetic', user: { id: 'account-a' } },
+      });
       const backup = useXbarStore.getState().exportWorkspaceBackup();
       backup.workspace.workspaceProfile.ranchName = 'Imported Ranch A';
       const original = File.prototype.text;
@@ -140,7 +151,10 @@ for (const change of ['workspace', 'account', 'permission', 'round trip'] as con
       const storePath = '/src/store/useXbarStore.ts';
       const { useCloudStore } = await import(/* @vite-ignore */ cloudPath);
       const { useXbarStore } = await import(/* @vite-ignore */ storePath);
-      if (change === 'permission') useXbarStore.setState({ currentRole: 'Owner' });
+      if (change === 'cloud permission' || change === 'cloud role round trip') {
+        useCloudStore.setState({ workspaceRole: 'Owner' });
+        if (change === 'cloud role round trip') useCloudStore.setState({ workspaceRole: 'Admin' });
+      } else if (change === 'permission') useXbarStore.setState({ currentRole: 'Owner' });
       else if (change === 'account')
         useCloudStore.setState({ session: { access_token: 'synthetic', user: { id: 'other-account' } } });
       else {

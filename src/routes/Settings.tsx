@@ -152,7 +152,11 @@ export default function Settings() {
   const transferGeneration = useRef(0);
   useEffect(() => {
     const unsubscribe = useCloudStore.subscribe((next, previous) => {
-      if (next.workspaceId !== previous.workspaceId || next.session?.user.id !== previous.session?.user.id) {
+      if (
+        next.workspaceId !== previous.workspaceId ||
+        next.session?.user.id !== previous.session?.user.id ||
+        next.workspaceRole !== previous.workspaceRole
+      ) {
         transferGeneration.current += 1;
       }
     });
@@ -166,11 +170,16 @@ export default function Settings() {
     ownerId: vaultOwnerId(),
     accountId: useCloudStore.getState().session?.user.id,
   });
-  const transferIsCurrent = (target: ReturnType<typeof captureTransfer>, capability: RoleCapability) =>
-    target.generation === transferGeneration.current &&
-    target.ownerId === vaultOwnerId() &&
-    target.accountId === useCloudStore.getState().session?.user.id &&
-    hasRoleCapability(useXbarStore.getState().currentRole, capability);
+  const transferIsCurrent = (target: ReturnType<typeof captureTransfer>, capability: RoleCapability) => {
+    const cloud = useCloudStore.getState();
+    return (
+      target.generation === transferGeneration.current &&
+      target.ownerId === vaultOwnerId() &&
+      target.accountId === cloud.session?.user.id &&
+      hasRoleCapability(useXbarStore.getState().currentRole, capability) &&
+      (!cloud.session || (!!cloud.workspaceRole && hasRoleCapability(cloud.workspaceRole, capability)))
+    );
+  };
   const reportTransferStopped = () =>
     pushToast({
       title: 'Restore stopped',
