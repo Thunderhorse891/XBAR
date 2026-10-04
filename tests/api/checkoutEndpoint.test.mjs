@@ -736,3 +736,21 @@ for (const [label, env, managed] of [
     assert.deepEqual(stripeScenario.calls, [], 'public readiness never calls privileged Stripe APIs');
   });
 }
+
+for (const [STRIPE_ACCOUNT_ID, managed] of [
+  [undefined, true],
+  ['', true],
+  ['acct_expected', true],
+  ['acct_', false],
+  ['not-an-account', false],
+]) {
+  test(`GET reflects optional account-pin shape: ${STRIPE_ACCOUNT_ID || 'unset'}`, async () => {
+    stripeScenario.reset();
+    const handler = await importWithEnv({ STRIPE_ACCOUNT_ID }, `account-readiness-${STRIPE_ACCOUNT_ID}`);
+    const response = await invoke(handler, { method: 'GET', token: null });
+    assert.equal(response.statusCode, 200);
+    assert.equal(response.body.managed, managed);
+    assert.deepEqual(stripeScenario.calls, []);
+    assert.doesNotMatch(JSON.stringify(response.body), /acct_|not-an-account/);
+  });
+}

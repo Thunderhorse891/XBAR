@@ -1,4 +1,4 @@
-import { serverManagedBillingEnabled, serverStripeModeReady } from '../_lib/managed-billing.js';
+import { serverManagedBillingEnabled, serverStripeModeReady, stripeAccountIdReady } from '../_lib/managed-billing.js';
 import Stripe from 'stripe';
 import { readJsonBody, sendJson } from '../_lib/http.js';
 import { buildSubscriptionProfile, getStripePriceIdByTier, sellablePrices } from '../_lib/subscription-plans.js';
@@ -80,7 +80,7 @@ export default async function handler(req, res) {
     res.setHeader('Cache-Control', 'no-store, max-age=0');
     return sendJson(res, 200, {
       ok: true,
-      managed: managedBillingEnabled && Boolean(stripe) && stripeModeReady,
+      managed: managedBillingEnabled && Boolean(stripe) && stripeModeReady && stripeAccountIdReady(expectedAccountId),
       sellable: sellablePrices(),
     });
   }

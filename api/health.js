@@ -5,6 +5,7 @@ import {
   clientManagedBillingEnabled,
   serverManagedBillingEnabled,
   serverStripeModeReady,
+  stripeAccountIdReady,
 } from './_lib/managed-billing.js';
 import { readLegacyPriceIds } from './_lib/subscription-plans.js';
 
@@ -165,6 +166,9 @@ export default function handler(req, res) {
    * fails at the customer's moment of payment, not before.
    */
   const malformed = [];
+  if (!stripeAccountIdReady(envValue('STRIPE_ACCOUNT_ID'))) {
+    malformed.push('STRIPE_ACCOUNT_ID is set but is not a Stripe account id (acct_...).');
+  }
   if (secretKey && !stripeMode) {
     malformed.push('STRIPE_SECRET_KEY is set but is not a Stripe secret key (sk_live_, sk_test_ or rk_...).');
   }

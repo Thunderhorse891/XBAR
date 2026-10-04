@@ -17,6 +17,7 @@ const HEALTH_ENV = [
   'VITE_SUPABASE_URL',
   'SUPABASE_SERVICE_ROLE_KEY',
   'STRIPE_SECRET_KEY',
+  'STRIPE_ACCOUNT_ID',
   'STRIPE_WEBHOOK_SECRET',
   'STRIPE_LEGACY_PRICE_IDS',
   'MANAGED_BILLING_ENABLED',
@@ -194,5 +195,19 @@ test('preview test mode and production live mode retain healthy readiness', asyn
   ]) {
     const response = await health({ ...READY, VERCEL_ENV, STRIPE_SECRET_KEY });
     assert.equal(response.statusCode, 200, reasons(response));
+  }
+});
+
+test('health refuses a malformed optional account pin and accepts unset or valid pins', async () => {
+  for (const STRIPE_ACCOUNT_ID of [undefined, '', '   ', 'acct_1NF0M3HcLUCzzEB3']) {
+    const response = await health({ ...READY, VERCEL_ENV: 'production', STRIPE_ACCOUNT_ID });
+    assert.equal(response.statusCode, 200, reasons(response));
+  }
+  for (const STRIPE_ACCOUNT_ID of ['acct_', 'acct_bad value', 'not-an-account']) {
+    const response = await health({ ...READY, VERCEL_ENV: 'production', STRIPE_ACCOUNT_ID });
+    assert.equal(response.statusCode, 503);
+    assert.equal(response.body.checks.billingReady, false);
+    assert.match(reasons(response), /STRIPE_ACCOUNT_ID is set but is not a Stripe account id/);
+    assert.doesNotMatch(JSON.stringify(response.body), /acct_bad value|not-an-account/);
   }
 });

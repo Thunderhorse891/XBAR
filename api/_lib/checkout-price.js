@@ -1,4 +1,5 @@
 import { subscriptionPlans } from './subscription-plans.js';
+import { stripeAccountIdReady } from './managed-billing.js';
 
 /** Check the actual Stripe price against the same plan table used for entitlements.
  * Do not trust a price ID, product name, or metadata as proof of its amount.
@@ -15,7 +16,7 @@ export async function verifyCheckoutPrice(
     // Account IDs are nonsecret configuration, never a client-supplied value.
     // A failed identity read must not fall back to an unpinned checkout.
     if (expectedAccountId) {
-      if (!/^acct_[A-Za-z0-9]+$/.test(expectedAccountId)) return false;
+      if (!stripeAccountIdReady(expectedAccountId)) return false;
       const account = await stripe.accounts.retrieve();
       if (account.id !== expectedAccountId) return false;
     }
