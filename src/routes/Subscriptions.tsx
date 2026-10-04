@@ -12,6 +12,7 @@ import { parseCheckoutReturn, stripCheckoutReturnParam, watchCheckoutConfirmatio
 import { refreshWorkspaceSubscriptionProfile } from '@/lib/cloudWorkspace';
 import { formatCurrency } from '@/lib/format';
 import { isNativeApp } from '@/lib/nativePlatform';
+import { hasRoleCapability } from '@/lib/permissions';
 import {
   claimPendingHostedPurchase,
   clearPendingHostedPurchase,
@@ -65,6 +66,40 @@ export default function Subscriptions() {
   const startTrialSubscription = useXbarStore((state) => state.startTrialSubscription);
   const [checkoutTier, setCheckoutTier] = useState<SubscriptionTier | null>(null);
   const [trialStarting, setTrialStarting] = useState(false);
+  const billingGeneration = useRef(0);
+  const billingMounted = useRef(true);
+  useEffect(() => {
+    billingMounted.current = true;
+    const unsubscribe = useCloudStore.subscribe((next, previous) => {
+      if (next.workspaceId !== previous.workspaceId || next.session?.user.id !== previous.session?.user.id) {
+        billingGeneration.current += 1;
+      }
+    });
+    return () => {
+      billingMounted.current = false;
+      billingGeneration.current += 1;
+      unsubscribe();
+    };
+  }, []);
+  const billingResponseIsCurrent = (generation: number) => {
+    const current = useCloudStore.getState();
+    return (
+      billingMounted.current &&
+      generation === billingGeneration.current &&
+      current.workspaceId === workspaceId &&
+      current.session?.user.id === session?.user.id &&
+      hasRoleCapability(useXbarStore.getState().currentRole, 'manageBilling')
+    );
+  };
+  const reportStoppedBillingRequest = () => {
+    if (!billingMounted.current) return;
+    pushToast({
+      title: 'Billing request stopped',
+      message:
+        'Your account, workspace, or billing permission changed. Check billing in the workspace where you started this request.',
+      tone: 'warning',
+    });
+  };
   // Billing period for plan display and checkout. Annual is 10x monthly (2
   // months free). The server fails closed when an annual price id is not
   // configured, so selecting annual before Stripe is set up cannot sell the
@@ -461,6 +496,8 @@ export default function Subscriptions() {
   };
 
   const beginCheckout = async (tier: SubscriptionTier) => {
+    const generation = billingGeneration.current;
+    if (!billingResponseIsCurrent(generation)) return;
     selectTier(tier);
     setCheckoutTier(tier);
     emit(productEventNames.checkoutStarted, {
@@ -525,6 +562,11 @@ export default function Subscriptions() {
       accessToken: session?.access_token ?? '',
       billingPeriod,
     });
+    if (!billingResponseIsCurrent(generation)) {
+      reportStoppedBillingRequest();
+      setCheckoutTier(null);
+      return;
+    }
     if (managed.ok) {
       emit(productEventNames.checkoutRedirected, { tier, method: 'managed' });
       window.location.assign(managed.url);
@@ -567,13 +609,14 @@ export default function Subscriptions() {
     emit(productEventNames.checkoutFailed, { tier, reason: managed.message }, 'warning');
     pushToast({
       title: 'Checkout needs attention',
-      message: `${managed.message} Your workspace and current plan were not changed.`,
+      message: managed.message,
       tone: 'error',
     });
     setCheckoutTier(null);
   };
 
   const startTrial = async () => {
+    const generation = billingGeneration.current;
     if (trialVerificationBlocked) return;
     if (subscriptionRecoverable && billingPortalAction) {
       openBillingPortal();
@@ -599,6 +642,7 @@ export default function Subscriptions() {
       return;
     }
 
+    if (!billingResponseIsCurrent(generation)) return;
     setTrialStarting(true);
     try {
       // Cloud workspaces record the trial on the server: the client cannot
@@ -607,6 +651,10 @@ export default function Subscriptions() {
       const startedAt = hasManagedIdentity
         ? await requestTrialStart({ workspaceId: workspaceId ?? '', accessToken: session?.access_token ?? '' }).then(
             (result) => {
+              if (!billingResponseIsCurrent(generation)) {
+                reportStoppedBillingRequest();
+                return null;
+              }
               if (!result.ok) {
                 pushToast({ title: 'Trial could not start', message: result.message, tone: 'error' });
                 return null;
@@ -616,7 +664,7 @@ export default function Subscriptions() {
           )
         : new Date().toISOString();
 
-      if (!startedAt) return;
+      if (!startedAt || !billingResponseIsCurrent(generation)) return;
       const applied = startTrialSubscription(startedAt);
       if (applied.ok) {
         emit(productEventNames.trialStarted, { plan: 'Professional' });

@@ -87,6 +87,34 @@ function buildApiUrl(path: string) {
   return normalizedPath;
 }
 
+const BILLING_REQUEST_TIMEOUT_MS = 30_000;
+class BillingRequestTimeout extends Error {}
+
+// Bound both response headers and body consumption. Aborting a request cannot
+// undo a server write, so the caller must report uncertainty, not failure to pay.
+async function readBillingResponse(path: string, init: RequestInit) {
+  const controller = new AbortController();
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  const deadline = new Promise<never>((_resolve, reject) => {
+    timer = setTimeout(() => {
+      reject(new BillingRequestTimeout());
+      controller.abort();
+    }, BILLING_REQUEST_TIMEOUT_MS);
+  });
+  try {
+    return await Promise.race([
+      (async () => {
+        const response = await fetch(buildApiUrl(path), { ...init, signal: controller.signal });
+        const payload: unknown = await response.json();
+        return { response, payload };
+      })(),
+      deadline,
+    ]);
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
 export async function startManagedCheckout(params: {
   tier: SubscriptionTier;
   workspaceId: string;
@@ -105,7 +133,7 @@ export async function startManagedCheckout(params: {
   }
 
   try {
-    const response = await fetch(buildApiUrl('/api/stripe/checkout'), {
+    const result = await readBillingResponse('/api/stripe/checkout', {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
@@ -119,7 +147,8 @@ export async function startManagedCheckout(params: {
       }),
     });
 
-    const payload = (await response.json()) as { ok?: boolean; message?: string; url?: string; code?: string };
+    const { response } = result;
+    const payload = result.payload as { ok?: boolean; message?: string; url?: string; code?: string };
     if (!response.ok || !payload.ok || !payload.url) {
       return {
         ok: false,
@@ -135,10 +164,12 @@ export async function startManagedCheckout(params: {
       ok: true,
       url: payload.url,
     };
-  } catch {
+  } catch (error) {
     return {
       ok: false,
-      message: 'Secure checkout is not ready yet.',
+      code: error instanceof BillingRequestTimeout ? 'request_timeout' : undefined,
+      message:
+        'We could not confirm the checkout request. Check billing before trying again; a session may already exist.',
     };
   }
 }
@@ -219,7 +250,7 @@ export async function requestTrialStart(params: {
   }
 
   try {
-    const response = await fetch(buildApiUrl('/api/account/trial-start'), {
+    const result = await readBillingResponse('/api/account/trial-start', {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
@@ -228,7 +259,8 @@ export async function requestTrialStart(params: {
       body: JSON.stringify({ workspaceId: params.workspaceId }),
     });
 
-    const payload = (await response.json()) as { ok?: boolean; message?: string; trial?: TrialRecord; code?: string };
+    const { response } = result;
+    const payload = result.payload as { ok?: boolean; message?: string; trial?: TrialRecord; code?: string };
     if (!response.ok || !payload.ok || !payload.trial) {
       return {
         ok: false,
@@ -238,10 +270,12 @@ export async function requestTrialStart(params: {
     }
 
     return { ok: true, trial: payload.trial };
-  } catch {
+  } catch (error) {
     return {
       ok: false,
-      message: 'The trial could not be started. Check your connection and try again.',
+      code: error instanceof BillingRequestTimeout ? 'request_timeout' : undefined,
+      message:
+        'We could not confirm whether the trial started. Reload billing to check its status before trying again.',
     };
   }
 }
