@@ -8,6 +8,7 @@ import {
   isCheckoutConfirmationComplete,
   parseCheckoutReturn,
   stripCheckoutReturnParam,
+  watchCheckoutConfirmation,
 } from '../src/lib/checkoutReturn.js';
 import { subscriptionFromCloudRow } from '../src/lib/cloudSubscription.js';
 
@@ -111,14 +112,14 @@ test('billing screen reads the checkout return and cleans the URL', () => {
   assert.match(source, /stripCheckoutReturnParam\(window\.location\.search\)/);
   assert.match(
     source,
-    /window\.history\.replaceState\(null, '', `\$\{window\.location\.pathname\}\$\{cleaned\}\$\{window\.location\.hash\}`\)/,
-    'the return parameter must be cleaned with replaceState so refresh cannot re-trigger it',
+    /navigate\(\{ search: cleaned, hash: window\.location\.hash \}, \{ replace: true \}/,
+    'cleanup must replace the router location while preserving the path and fragment',
   );
 });
 
-test('billing screen shows a success toast and a confirming state on ?checkout=success', () => {
+test('billing screen verifies a return without claiming that the query string proves payment', () => {
   const source = readRepoFile('src/routes/Subscriptions.tsx');
-  assert.match(source, /title: 'Payment completed'/);
+  assert.doesNotMatch(source, /Payment completed|Payment received|Your payment went through/);
   assert.match(source, /Confirming your payment/);
   assert.match(source, /role="status"/);
 });
@@ -126,15 +127,15 @@ test('billing screen shows a success toast and a confirming state on ?checkout=s
 test('billing screen polls the cloud profile and activates the plan only when the row says paid', () => {
   const source = readRepoFile('src/routes/Subscriptions.tsx');
   assert.match(source, /refreshWorkspaceSubscriptionProfile\(workspaceId\)/);
-  assert.match(source, /isCheckoutConfirmationComplete\(profile\)/);
+  assert.match(source, /watchCheckoutConfirmation\(\{/);
+  assert.match(source, /refreshWorkspaceSubscriptionProfile\(workspaceId, signal\)/);
   assert.match(source, /useXbarStore\.setState\(\{ subscription: profile \}\)/);
-  assert.match(source, /CHECKOUT_CONFIRMATION_TIMEOUT_MS/);
 });
 
 test('a checkout the screen cannot confirm yet says "still confirming", never that it failed', () => {
   const source = readRepoFile('src/routes/Subscriptions.tsx');
   assert.match(source, /still confirming your payment/);
-  assert.match(source, /Check back shortly/);
+  assert.match(source, /Check again/);
   const staleBlock = source.slice(source.indexOf('still confirming your payment') - 400);
   assert.equal(
     /payment failed/i.test(staleBlock.slice(0, 900)),
@@ -145,8 +146,144 @@ test('a checkout the screen cannot confirm yet says "still confirming", never th
 
 test('billing screen answers ?checkout=cancelled with a quiet dismissible notice', () => {
   const source = readRepoFile('src/routes/Subscriptions.tsx');
-  assert.match(source, /Checkout cancelled — no charge was made\./);
+  assert.match(source, /Checkout cancelled\./);
+  assert.doesNotMatch(source, /no charge was made/);
   assert.match(source, /checkout-return-banner--quiet/);
+});
+
+const paidProfile = subscriptionFromCloudRow({
+  tier: 'Professional',
+  billing_state: 'Active',
+  monthly_rate: 29,
+  payload: {},
+})!;
+
+// Flush async reads without advancing the independent timeout.
+async function settle() {
+  for (let i = 0; i < 5; i += 1) await Promise.resolve();
+}
+
+test('confirmation times out and aborts a hung read; a late paid row cannot reverse it', async (context) => {
+  context.mock.timers.enable({ apis: ['setTimeout'] });
+  let resolveRead!: (profile: typeof paidProfile) => void;
+  let readSignal: AbortSignal | undefined;
+  const confirmed: unknown[] = [];
+  let timeouts = 0;
+  watchCheckoutConfirmation({
+    readProfile: (signal) => {
+      readSignal = signal;
+      return new Promise((resolve) => {
+        resolveRead = resolve;
+      });
+    },
+    onConfirmed: (profile) => confirmed.push(profile),
+    onTimeout: () => {
+      timeouts += 1;
+    },
+  });
+  context.mock.timers.tick(CHECKOUT_CONFIRMATION_TIMEOUT_MS);
+  assert.equal(timeouts, 1);
+  assert.equal(readSignal?.aborted, true);
+  resolveRead(paidProfile);
+  await settle();
+  context.mock.timers.tick(CHECKOUT_CONFIRMATION_TIMEOUT_MS);
+  assert.deepEqual(confirmed, []);
+  assert.equal(timeouts, 1);
+});
+
+test('a thrown transport error retries and only the later verified profile confirms', async (context) => {
+  context.mock.timers.enable({ apis: ['setTimeout'] });
+  let reads = 0;
+  let timeouts = 0;
+  const confirmed: unknown[] = [];
+  watchCheckoutConfirmation({
+    readProfile: async () => {
+      if (++reads === 1) throw new Error('Offline');
+      return paidProfile;
+    },
+    onConfirmed: (profile) => confirmed.push(profile),
+    onTimeout: () => {
+      timeouts += 1;
+    },
+  });
+  await settle();
+  assert.deepEqual(confirmed, []);
+  context.mock.timers.tick(CHECKOUT_CONFIRMATION_POLL_INTERVAL_MS);
+  await settle();
+  assert.deepEqual(confirmed, [paidProfile]);
+  context.mock.timers.tick(CHECKOUT_CONFIRMATION_TIMEOUT_MS);
+  assert.equal(timeouts, 0);
+  assert.equal(reads, 2);
+});
+
+test('missing and unpaid profiles never confirm; a fresh check can later succeed', async (context) => {
+  context.mock.timers.enable({ apis: ['setTimeout'] });
+  let reads = 0;
+  let timeouts = 0;
+  const confirmed: unknown[] = [];
+  const onConfirmed = (profile: typeof paidProfile) => confirmed.push(profile);
+  const onTimeout = () => {
+    timeouts += 1;
+  };
+  watchCheckoutConfirmation({
+    readProfile: async () => (++reads === 1 ? null : { ...paidProfile, billingState: 'Past Due' }),
+    onConfirmed,
+    onTimeout,
+  });
+  await settle();
+  context.mock.timers.tick(CHECKOUT_CONFIRMATION_POLL_INTERVAL_MS);
+  await settle();
+  context.mock.timers.tick(CHECKOUT_CONFIRMATION_TIMEOUT_MS);
+  await settle();
+  assert.equal(timeouts, 1);
+  assert.deepEqual(confirmed, []);
+  watchCheckoutConfirmation({ readProfile: async () => paidProfile, onConfirmed, onTimeout });
+  await settle();
+  assert.deepEqual(confirmed, [paidProfile]);
+});
+
+test('workspace change or unmount cancels the read and discards its late result', async (context) => {
+  context.mock.timers.enable({ apis: ['setTimeout'] });
+  let resolveRead!: (profile: typeof paidProfile) => void;
+  let readSignal: AbortSignal | undefined;
+  let callbacks = 0;
+  const cancel = watchCheckoutConfirmation({
+    readProfile: (signal) => {
+      readSignal = signal;
+      return new Promise((resolve) => {
+        resolveRead = resolve;
+      });
+    },
+    onConfirmed: () => {
+      callbacks += 1;
+    },
+    onTimeout: () => {
+      callbacks += 1;
+    },
+  });
+  cancel();
+  assert.equal(readSignal?.aborted, true);
+  resolveRead(paidProfile);
+  await settle();
+  context.mock.timers.tick(CHECKOUT_CONFIRMATION_TIMEOUT_MS);
+  assert.equal(callbacks, 0);
+});
+
+test('cleanup also cancels a scheduled retry', async (context) => {
+  context.mock.timers.enable({ apis: ['setTimeout'] });
+  let reads = 0;
+  const cancel = watchCheckoutConfirmation({
+    readProfile: async () => {
+      reads += 1;
+      return null;
+    },
+    onConfirmed: () => assert.fail('unexpected confirmation'),
+    onTimeout: () => assert.fail('unexpected timeout'),
+  });
+  await settle();
+  cancel();
+  context.mock.timers.tick(CHECKOUT_CONFIRMATION_TIMEOUT_MS);
+  assert.equal(reads, 1);
 });
 
 test('the cloud subscription refresher reads the canonical profile row', () => {

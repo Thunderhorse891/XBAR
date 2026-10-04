@@ -41,8 +41,9 @@ function getTrustedReturnUrl(requestedReturnUrl) {
     .filter(Boolean);
 
   const fallbackOrigin = configuredOrigins[0] || 'https://xbar-horse-management-app.vercel.app';
+  const fallbackUrl = new URL('/app/billing', fallbackOrigin).toString();
   try {
-    const requestedUrl = new URL(requestedReturnUrl || fallbackOrigin);
+    const requestedUrl = new URL(requestedReturnUrl || fallbackUrl);
     if (configuredOrigins.includes(requestedUrl.origin)) {
       return requestedUrl.toString();
     }
@@ -50,7 +51,15 @@ function getTrustedReturnUrl(requestedReturnUrl) {
     // Fall through to the trusted application origin.
   }
 
-  return fallbackOrigin;
+  return fallbackUrl;
+}
+
+function checkoutReturnUrl(returnUrl, outcome) {
+  const url = new URL(returnUrl);
+  // Replace stale outcomes and put the query before any fragment. Appending
+  // text can hide checkout=success inside #professional or behind an old value.
+  url.searchParams.set('checkout', outcome);
+  return url.toString();
 }
 
 export default async function handler(req, res) {
@@ -483,8 +492,8 @@ export default async function handler(req, res) {
             quantity: seatCount,
           },
         ],
-        success_url: `${returnUrl}${returnUrl.includes('?') ? '&' : '?'}checkout=success`,
-        cancel_url: `${returnUrl}${returnUrl.includes('?') ? '&' : '?'}checkout=cancelled`,
+        success_url: checkoutReturnUrl(returnUrl, 'success'),
+        cancel_url: checkoutReturnUrl(returnUrl, 'cancelled'),
         metadata: {
           workspace_id: workspaceId,
           workspace_tier: tier,

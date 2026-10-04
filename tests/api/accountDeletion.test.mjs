@@ -242,8 +242,10 @@ function deletionFixture(t) {
             { workspace_id: 'ws-other', storage_path: `${FIXTURE_USER}/documents/shared.pdf` },
             { workspace_id: 'ws1', storage_path: `${FIXTURE_USER}/documents/mine.pdf` },
           ]);
-    if (url.pathname === `/auth/v1/admin/users/${FIXTURE_USER}` && method === 'DELETE')
+    if (url.pathname === `/auth/v1/admin/users/${FIXTURE_USER}` && method === 'DELETE') {
+      if (scenario === 'auth-response-lost') throw new Error('Fixture response lost after deletion');
       return scenario === 'auth' ? reply({ message: 'Fixture auth failure' }, 500) : reply({});
+    }
     if (url.pathname === '/rest/v1/workspaces' && method === 'DELETE') return reply(null, 204);
     if (url.pathname.startsWith('/storage/v1/object/list/')) {
       const { prefix } = JSON.parse(init.body);
@@ -334,7 +336,7 @@ test('every refusal before the auth delete changes nothing irreversible', async 
   }
 });
 
-test('a failed auth delete removes nothing, releases the holds and records the failure', async (t) => {
+test('an ambiguous auth error reports an unknown outcome and retains deletion holds', async (t) => {
   const state = deletionFixture(t);
   const { default: handler } = await import('../../api/_lib/account-delete.js');
   state.scenario = 'auth';
@@ -342,7 +344,8 @@ test('a failed auth delete removes nothing, releases the holds and records the f
   state.receiptUpdates = [];
   const response = await deleteAccount(handler, 'fixture-auth');
   assert.equal(response.status, 502);
-  assert.match(response.body.message, /Nothing was removed/);
+  assert.equal(response.body.accountDeleted, null);
+  assert.match(response.body.message, /could not be confirmed/);
   // The old handler deleted every membership first, so this left the person
   // signed up but locked out of every other owner's ranch.
   assert.ok(!state.calls.some((call) => call.includes('workspace_memberships') && call.startsWith('DELETE')));
@@ -350,7 +353,7 @@ test('a failed auth delete removes nothing, releases the holds and records the f
     !state.calls.some((call) => call.includes('/storage/')),
     'no file was swept for an account that still exists',
   );
-  assert.ok(state.calls.includes('POST /rest/v1/rpc/xbar_release_account_deletion_request'));
+  assert.ok(!state.calls.includes('POST /rest/v1/rpc/xbar_release_account_deletion_request'));
   assert.equal(state.receiptUpdates.at(-1)?.status, 'failed');
   assert.doesNotMatch(JSON.stringify(response.body), /Fixture auth failure/, 'provider text stays in the log');
 });
@@ -819,4 +822,17 @@ test('expired deletion A cannot clear replacement B’s membership fence', async
   const { default: handler } = await import('../../api/_lib/account-delete.js');
   const { assertDeletionRace } = await import('./fixtures/accountDeletionRace.mjs');
   await assertDeletionRace(t, handler);
+});
+
+test('lost auth response never claims the account survived or sweeps unconfirmed storage', async (t) => {
+  const state = deletionFixture(t);
+  const { default: handler } = await import('../../api/_lib/account-delete.js');
+  state.scenario = 'auth-response-lost';
+  const response = await deleteAccount(handler, 'fixture-auth-response-lost');
+  assert.equal(response.body.ok, false);
+  assert.equal(response.body.accountDeleted, null);
+  assert.equal(response.body.operationId, 'receipt-1');
+  assert.match(response.body.message, /could not be confirmed/);
+  assert.ok(!state.calls.some((call) => call.includes('/storage/')));
+  assert.ok(!state.calls.includes('POST /rest/v1/rpc/xbar_release_account_deletion_request'));
 });
