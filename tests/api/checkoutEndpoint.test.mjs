@@ -245,6 +245,51 @@ function supabaseFor({ role = 'Admin', billingRow = null, lockClaimed = true, re
 
 const FALLBACK_ORIGIN = 'https://xbar-horse-management-app.vercel.app';
 
+test('checkout return URLs preserve the billing page and replace old outcomes before the fragment', async () => {
+  const savedOrigin = process.env.PUBLIC_APP_URL;
+  process.env.PUBLIC_APP_URL = FALLBACK_ORIGIN;
+  try {
+    for (const suffix of [
+      '/app/billing#professional',
+      '/app/billing?plan=Professional#professional',
+      '/app/billing?checkout=cancelled&plan=Professional&checkout=success#professional',
+    ]) {
+      stripeScenario.reset();
+      supabaseFor();
+      const response = await invoke(fullHandler, {
+        body: { tier: 'Professional', workspaceId: 'ws_1', returnUrl: `${FALLBACK_ORIGIN}${suffix}` },
+      });
+      assert.equal(response.statusCode, 200);
+      for (const [key, outcome] of [
+        ['success_url', 'success'],
+        ['cancel_url', 'cancelled'],
+      ]) {
+        const actual = new URL(stripeScenario.createdSessions[0][key]);
+        assert.equal(actual.pathname, '/app/billing');
+        assert.equal(actual.hash, '#professional');
+        assert.deepEqual(actual.searchParams.getAll('checkout'), [outcome]);
+        assert.equal(actual.searchParams.get('plan'), new URL(`${FALLBACK_ORIGIN}${suffix}`).searchParams.get('plan'));
+      }
+    }
+  } finally {
+    if (savedOrigin === undefined) delete process.env.PUBLIC_APP_URL;
+    else process.env.PUBLIC_APP_URL = savedOrigin;
+  }
+});
+
+test('missing or untrusted return URLs land on the trusted billing screen', async () => {
+  for (const returnUrl of [undefined, 'https://untrusted.example/app/billing']) {
+    stripeScenario.reset();
+    supabaseFor();
+    const response = await invoke(fullHandler, { body: { tier: 'Professional', workspaceId: 'ws_1', returnUrl } });
+    assert.equal(response.statusCode, 200);
+    const actual = new URL(stripeScenario.createdSessions[0].success_url);
+    assert.equal(actual.origin, FALLBACK_ORIGIN);
+    assert.equal(actual.pathname, '/app/billing');
+    assert.equal(actual.searchParams.get('checkout'), 'success');
+  }
+});
+
 function expectedSessionParams({ tier, priceId, seatCount, billingPeriod, customerId, userId = 'user_admin' }) {
   return {
     mode: 'subscription',
@@ -252,8 +297,8 @@ function expectedSessionParams({ tier, priceId, seatCount, billingPeriod, custom
     payment_method_types: ['card'],
     customer: customerId,
     line_items: [{ price: priceId, quantity: seatCount }],
-    success_url: `${FALLBACK_ORIGIN}?checkout=success`,
-    cancel_url: `${FALLBACK_ORIGIN}?checkout=cancelled`,
+    success_url: `${FALLBACK_ORIGIN}/app/billing?checkout=success`,
+    cancel_url: `${FALLBACK_ORIGIN}/app/billing?checkout=cancelled`,
     metadata: {
       workspace_id: 'ws_1',
       workspace_tier: tier,
