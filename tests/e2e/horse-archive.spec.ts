@@ -21,6 +21,7 @@ async function createTestHorse(page: Page) {
   await drawer.getByRole('button', { name: 'Add Horse', exact: true }).click();
   await expect(page).toHaveURL(/\/horses\//);
   const profileUrl = page.url();
+  await expect(page.locator('.xs-objhead__name')).toHaveText('ARCHIVE TEST HORSE');
   await page.getByRole('button', { name: 'Horses', exact: true }).click();
   await expect(page.getByRole('heading', { name: 'Horses', exact: true })).toBeVisible();
   return profileUrl;
@@ -78,7 +79,7 @@ test('the horse profile offers Archive, Undo, and persistent Restore without los
   await page.getByRole('button', { name: 'Archive from roster', exact: true }).click();
   await page.reload();
   await expect(page).toHaveURL(profileUrl);
-  await expect(page.locator('.xs-objhead__name')).toHaveText('Archive Test Horse');
+  await expect(page.locator('.xs-objhead__name')).toHaveText('ARCHIVE TEST HORSE');
   await page.screenshot({
     path: testInfo.outputPath('ranch-horse-archived-profile.png'),
     fullPage: true,
@@ -93,7 +94,7 @@ test('the horse profile offers Archive, Undo, and persistent Restore without los
 test('table archiving and restoring preserve the current search and view through history', async ({ page }) => {
   await createTestHorse(page);
   await page.goto('/app/horses?view=Table&search=Archive');
-  await page.getByRole('row', { name: 'Open Archive Test Horse horse record' }).press('Shift+F10');
+  await page.getByRole('button', { name: 'Open ARCHIVE TEST HORSE horse record', exact: true }).press('Shift+F10');
   await page.getByRole('menuitem', { name: 'Archive from roster', exact: true }).click();
   await expect(page.getByRole('button', { name: 'Active (0)', exact: true })).toHaveAttribute('aria-pressed', 'true');
   await page.getByRole('button', { name: 'Archived (1)', exact: true }).click();
@@ -102,11 +103,11 @@ test('table archiving and restoring preserve the current search and view through
   await page.goBack();
   await expect(page.getByRole('button', { name: 'Active (0)', exact: true })).toHaveAttribute('aria-pressed', 'true');
   await page.goForward();
-  await page.getByRole('row', { name: 'Open Archive Test Horse horse record' }).press('Shift+F10');
+  await page.getByRole('button', { name: 'Open ARCHIVE TEST HORSE horse record', exact: true }).press('Shift+F10');
   await page.getByRole('menuitem', { name: 'Restore horse', exact: true }).click();
   await page.getByRole('button', { name: 'Active (1)', exact: true }).click();
   await expect(page.getByLabel('Search horse records')).toHaveValue('Archive');
-  await expect(page.getByRole('row', { name: 'Open Archive Test Horse horse record' })).toBeVisible();
+  await expect(page.getByRole('button', { name: 'Open ARCHIVE TEST HORSE horse record', exact: true })).toBeVisible();
 });
 
 test('archive controls respect the current role on roster and profile', async ({ page }) => {
@@ -120,7 +121,7 @@ test('archive controls respect the current role on roster and profile', async ({
   await expect(page.getByRole('menuitem', { name: 'Archive from roster', exact: true })).toHaveCount(0);
   await page.getByRole('menuitem', { name: 'Open horse record', exact: true }).click();
   await expect(page).toHaveURL(profileUrl);
-  await expect(page.locator('.xs-objhead__name')).toHaveText('Archive Test Horse');
+  await expect(page.locator('.xs-objhead__name')).toHaveText('ARCHIVE TEST HORSE');
   await expect(page.getByRole('button', { name: 'Archive from roster', exact: true })).toHaveCount(0);
 });
 
