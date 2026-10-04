@@ -2174,13 +2174,16 @@ export const useCloudStore = create<CloudStore>((set, get) => ({
           ok?: boolean;
           message?: string;
           storageCleanupComplete?: boolean;
-          accountDeleted?: boolean;
+          accountDeleted?: boolean | null;
           operationId?: string;
         },
     );
     const deletedWithIncompleteOutcome = payload.accountDeleted === true && (!response.ok || !payload.ok);
     if ((!response.ok || !payload.ok) && !deletedWithIncompleteOutcome) {
-      return { ok: false, message: payload.message || 'Account deletion failed. Please try again.' };
+      return {
+        ok: false,
+        message: `${payload.message || 'Account deletion failed. Please try again.'}${typeof payload.operationId === 'string' && payload.operationId ? ` Operation ID: ${payload.operationId}` : ''}`,
+      };
     }
 
     // The server has already deleted the auth user; clear the local session so

@@ -836,3 +836,30 @@ test('lost auth response never claims the account survived or sweeps unconfirmed
   assert.ok(!state.calls.some((call) => call.includes('/storage/')));
   assert.ok(!state.calls.includes('POST /rest/v1/rpc/xbar_release_account_deletion_request'));
 });
+
+test('client preserves the recovery operation ID for an unknown deletion outcome', async () => {
+  const { spawnSync } = await import('node:child_process');
+  const result = spawnSync(
+    process.execPath,
+    [
+      '--import=tsx',
+      '--input-type=module',
+      '-e',
+      `
+    import assert from 'node:assert/strict';
+    import {supabaseConfig} from './src/lib/platformConfig.ts';
+    import {useCloudStore} from './src/store/useCloudStore.ts';
+    supabaseConfig.url='https://synthetic.invalid';supabaseConfig.anonKey='fixture';
+    const session={access_token:'synthetic',user:{id:'synthetic-user'}};
+    useCloudStore.setState({session});
+    globalThis.fetch=async()=>new Response(JSON.stringify({ok:false,accountDeleted:null,operationId:'receipt-1',message:'Deletion could not be confirmed.'}),{status:502});
+    const response=await useCloudStore.getState().deleteAccount('synthetic@example.invalid');
+    assert.equal(response.ok,false);
+    assert.match(response.message,/receipt-1/);
+    assert.equal(useCloudStore.getState().session,session);
+  `,
+    ],
+    { encoding: 'utf8' },
+  );
+  assert.equal(result.status, 0, result.stderr);
+});
