@@ -36,7 +36,14 @@ type UiStore = {
   quickCreate: QuickCreateRequest | null;
   openQuickCreate: (request: QuickCreateRequest) => void;
   closeQuickCreate: () => void;
-  pushToast: (toast: { id?: string; title?: string; message: string; tone?: ToastTone; duration?: number }) => string;
+  pushToast: (toast: {
+    id?: string;
+    title?: string;
+    message: string;
+    tone?: ToastTone;
+    duration?: number;
+    action?: { label: string; onClick: () => void };
+  }) => string;
   removeToast: (id: string) => void;
   clearToasts: () => void;
   sendSurfaceEvent: (id: string, event: SurfaceEvent) => void;
@@ -75,9 +82,9 @@ export const useUiStore = create<UiStore>((set) => ({
   quickCreate: null,
   openQuickCreate: (quickCreate) => set({ quickCreate }),
   closeQuickCreate: () => set({ quickCreate: null }),
-  pushToast: ({ id, duration = 4000, tone = 'info', ...toast }) => {
+  pushToast: ({ id, duration = 4000, tone = 'info', action, ...toast }) => {
     const toastId = id ?? createToastId();
-    const options = { id: toastId, description: toast.title ? toast.message : undefined, duration };
+    const options = { id: toastId, description: toast.title ? toast.message : undefined, duration, action };
     const message = toast.title ?? toast.message;
     if (tone === 'success') sonnerToast.success(message, options);
     else if (tone === 'error') sonnerToast.error(message, options);

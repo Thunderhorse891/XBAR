@@ -5,10 +5,13 @@ import { buildLocalSalePacket } from '../../src/lib/localSalePacketGenerator.js'
 import { PACKET_VERIFIER_SCRIPT } from '../../src/lib/packetVerifierScript.js';
 import type { HorseRecord, OwnershipRecord, WorkspaceProfile } from '../../src/types/xbar.js';
 
+const RANCH_LOGO =
+  'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAACgAAAAUCAIAAABwJOjsAAAAJUlEQVR4nO3NMQEAAAgDoGn/zhpjDxRgkkvDVlaxWCwWi8XiigcuqQEnnWbPLQAAAABJRU5ErkJggg==';
+
 // Exercise the exported file with Chromium's actual parser and DOM. The Node
 // attack harness cannot model HTMLCollection vs childNodes, table foster
 // parenting, collapsed details, or visible input values on its own.
-function packet({ photo = true, seller = true, escaped = false, unnamed = false } = {}) {
+function packet({ photo = true, seller = true, escaped = false, unnamed = false, branded = false } = {}) {
   const horse = {
     id: 'browser-seal-horse',
     name: unnamed ? '' : escaped ? 'Bella & "Blue" <Star>' : 'Bella',
@@ -37,6 +40,14 @@ function packet({ photo = true, seller = true, escaped = false, unnamed = false 
       businessName: '',
       defaultOwnerName: seller ? (escaped ? 'Jo "J" & Lee' : 'Test Seller') : '',
       operationsEmail: seller ? 'ranch@example.com' : '',
+      ...(branded
+        ? {
+            contactPhone: '+1 555 0100',
+            website: 'https://ranch.example.test/',
+            businessName: 'Ranch Business',
+            packetLogoDataUrl: RANCH_LOGO,
+          }
+        : {}),
     } as WorkspaceProfile,
     ownershipRecord: {
       legalOwner: 'Test Seller',
@@ -394,4 +405,84 @@ test('compatibility checks preserve ordinary HTML and download-only uploads', as
   expect(await download.failure()).toBeNull();
   expect(await readFile((await download.path())!, 'utf8')).toBe(olderPacket());
   expect(result.foreign).toBeNull();
+});
+
+for (const photo of [false, true]) {
+  test(`ranch logo and complete contact verify with hero photo ${photo}`, async ({ page }, testInfo) => {
+    const original = packet({ branded: true, photo });
+    await openPacket(page, original.html, testInfo.outputPath('ranch-packet.html'));
+    await expect(page.locator('#xbar-ranch-logo')).toBeVisible();
+    await expect(page.locator('#xbar-seller-phone')).toHaveText('+1 555 0100');
+    await expect(page.locator('#xbar-seller-website')).toHaveText('https://ranch.example.test/');
+    await expectVerdict(page, 'pass');
+    await page.screenshot({ path: testInfo.outputPath('ranch-packet.png'), fullPage: true });
+  });
+}
+
+for (const attack of ['remove', 'duplicate', 'move', 'src', 'alt', 'srcset', 'width', 'height', 'hidden', 'class']) {
+  test(`ranch logo rejects ${attack} tampering`, async ({ page }, testInfo) => {
+    await openPacket(page, packet({ branded: true }).html, testInfo.outputPath('ranch-packet.html'));
+    await page.locator('#xbar-ranch-logo').evaluate((logo, action) => {
+      if (action === 'remove') logo.remove();
+      else if (action === 'duplicate') logo.after(logo.cloneNode(true));
+      else if (action === 'move') document.querySelector('.verify__manual')!.append(logo);
+      else
+        logo.setAttribute(
+          action,
+          action === 'src'
+            ? 'data:image/png;base64,AAAA'
+            : action === 'srcset'
+              ? 'data:image/png;base64,AAAA 2x'
+              : action === 'hidden'
+                ? ''
+                : 'forged',
+        );
+    }, attack);
+    await expectVerdict(page, 'fail');
+  });
+}
+for (const field of ['business', 'phone', 'website']) {
+  test(`ranch contact rejects changed ${field}`, async ({ page }, testInfo) => {
+    await openPacket(page, packet({ branded: true }).html, testInfo.outputPath('ranch-packet.html'));
+    await page.locator(`#xbar-seller-${field}`).evaluate((node) => {
+      node.textContent = 'forged payment destination';
+    });
+    await expectVerdict(page, 'fail');
+  });
+}
+for (const currentVerifier of [false, true]) {
+  test(`saved v5 packet still verifies with ${currentVerifier ? 'current' : 'original'} verifier`, async ({
+    page,
+  }, testInfo) => {
+    const old = await readFile('tests/fixtures/packet-v5.generated.html', 'utf8');
+    const html = currentVerifier
+      ? old.replace(/<script>[\s\S]*<\/script>/i, `<script>${PACKET_VERIFIER_SCRIPT}</script>`)
+      : old;
+    await openPacket(page, html, testInfo.outputPath('historic-packet.html'));
+    await expectVerdict(page, 'pass');
+  });
+}
+
+test('a reviewed v5 saved packet opens through the vault and verifies under production CSP', async ({ page }) => {
+  const oldHtml = await readFile('tests/fixtures/packet-v5.generated.html', 'utf8');
+  await openVaultHost(page);
+  const popupPromise = page.waitForEvent('popup');
+  const result = await page.evaluate(async (content) => {
+    const vaultPath = '/src/lib/localFileVault.ts';
+    const openerPath = '/src/lib/openStoredFile.ts';
+    const ownerPath = '/src/lib/vaultOwner.ts';
+    const vault = await import(/* @vite-ignore */ vaultPath);
+    const { openStoredFileInTab } = await import(/* @vite-ignore */ openerPath);
+    const { vaultOwnerId } = await import(/* @vite-ignore */ ownerPath);
+    const key = await vault.storeLocalFile(
+      new Blob([content], { type: 'text/html' }),
+      'current-packet.html',
+      'text/html',
+      vaultOwnerId(),
+      { generated: true },
+    );
+    return openStoredFileInTab({ localFileKey: key });
+  }, oldHtml);
+  expect(result).toEqual({ ok: true, delivery: 'tab' });
+  await expectVerdict(await popupPromise, 'pass');
 });

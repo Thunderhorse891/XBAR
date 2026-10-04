@@ -4,7 +4,7 @@ import { readFileSync } from 'node:fs';
 const headline = 'Every horse. One clear picture.';
 
 test('short-screen menu can reach signup without dynamic viewport units', async ({ page }) => {
-  await page.route('**/landing.css', async (route) => {
+  await page.route(/\/(?:site|landing)\.css$/, async (route) => {
     const response = await route.fetch();
     await route.fulfill({ response, body: (await response.text()).replace(/max-height:[^;]*dvh[^;]*;/g, '') });
   });
@@ -59,9 +59,11 @@ test('below-fold artwork waits for the viewport without native image lazy loadin
   await page.setViewportSize({ width: 1440, height: 900 });
   await page.goto('/');
   await page.locator('.landing-horse').evaluate((img: HTMLImageElement) => img.decode());
-  expect(images.some((url) => url.includes('xbar-report-mark') || url.includes('app-horse-record.jpg'))).toBe(false);
+  expect(
+    images.some((url) => url.includes('xbar-original-icon-512') || url.includes('app-horse-roster-original.png')),
+  ).toBe(false);
   await page.locator('.landing-x-art').scrollIntoViewIfNeeded();
-  await expect.poll(() => images.some((url) => url.endsWith('xbar-report-mark.png'))).toBe(true);
+  await expect.poll(() => images.some((url) => url.endsWith('xbar-original-icon-512.png'))).toBe(true);
   await expect
     .poll(() => page.locator('.landing-x-art img').evaluate((img: HTMLImageElement) => img.naturalWidth))
     .toBeGreaterThan(0);
@@ -81,7 +83,7 @@ test('artwork stays available without IntersectionObserver', async ({ page }) =>
 test('light navigation remains readable when CSS color mixing is unsupported', async ({ page }) => {
   // Emulate discarded unsupported declarations in the served stylesheet,
   // preserving earlier fallback declarations as an older CSS parser would.
-  await page.route('**/landing.css', async (route) => {
+  await page.route(/\/(?:site|landing)\.css$/, async (route) => {
     const response = await route.fetch();
     const css = (await response.text()).replace(/[\w-]+\s*:\s*[^;{}]*color-mix\([^;{}]*;/g, '');
     await route.fulfill({ response, body: css });

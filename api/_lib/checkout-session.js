@@ -65,6 +65,9 @@ export function planCheckoutSession(openSessions, intent) {
       String(session.metadata?.workspace_seats ?? '') === seatCount &&
       String(session.metadata?.workspace_billing_period ?? '') === billingPeriod &&
       String(session.metadata?.workspace_price_id ?? '') === priceId &&
+      // Upgrade offers bind extra terms; ordinary checkout must never reuse them.
+      String(session.metadata?.upgrade_offer_attempt_id ?? '') === String(intent?.offerAttemptId ?? '') &&
+      String(session.metadata?.upgrade_offer_coupon_id ?? '') === String(intent?.couponId ?? '') &&
       typeof session.url === 'string' &&
       session.url.length > 0,
   );
