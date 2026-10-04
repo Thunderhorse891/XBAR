@@ -253,12 +253,22 @@ test('the homepage retains approved artwork, accurate prices, and static signup 
   );
 });
 
-test('public launch pricing publishes monthly billing without unavailable annual offers', async () => {
+test('public pricing publishes approved monthly and annual totals without promising checkout readiness', async () => {
   const { marketingPages } = (await load('scripts/marketing/pages.mjs')) as { marketingPages: MarketingPage[] };
+  const { marketingPlans } = (await load('scripts/marketing/pricing-data.mjs')) as { marketingPlans: MarketingPlan[] };
   const pricing = marketingPages.find((page) => page.path === '/pricing')!;
-  assert.match(pricing.body, /Monthly billing is available/);
-  assert.match(pricing.body, /Annual billing is not currently offered/);
-  assert.doesNotMatch(pricing.body, /Annual price|2 months free/);
+  assert.match(pricing.body, /Review the billing options available to your workspace inside XBAR/);
+  assert.match(pricing.body, /Annual prices are the total billed each year/);
+  assert.doesNotMatch(
+    pricing.body,
+    /Annual billing is not currently offered|Monthly billing is available|2 months free/,
+  );
+  for (const plan of marketingPlans) {
+    const amount = plan.annualRate.toLocaleString('en-US');
+    assert.ok(pricing.body.includes(`$${plan.monthlyRate}<small>/month</small>`), `${plan.tier}: monthly card price`);
+    assert.ok(pricing.body.includes(`$${amount}/year, billed annually`), `${plan.tier}: annual card total`);
+    assert.ok(pricing.body.includes(`<td>$${amount}/year</td>`), `${plan.tier}: annual comparison total`);
+  }
   assert.doesNotMatch(pricing.body, /before cloud sync is configured|before enabling cloud services/);
 });
 
