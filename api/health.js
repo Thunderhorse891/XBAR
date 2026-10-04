@@ -1,7 +1,11 @@
 import { isEmailConfigured } from './_lib/email.js';
 import { gmailSmtpStatus } from './_lib/gmail-smtp.js';
 import { sendJson } from './_lib/http.js';
-import { clientManagedBillingEnabled, serverManagedBillingEnabled } from './_lib/managed-billing.js';
+import {
+  clientManagedBillingEnabled,
+  serverManagedBillingEnabled,
+  serverStripeModeReady,
+} from './_lib/managed-billing.js';
 import { readLegacyPriceIds } from './_lib/subscription-plans.js';
 
 /*
@@ -108,7 +112,8 @@ export default function handler(req, res) {
       subsystems.stripeWebhook &&
       subsystems.stripePriceIds &&
       subsystems.managedBilling &&
-      subsystems.clientManagedBilling);
+      subsystems.clientManagedBilling &&
+      serverStripeModeReady());
   const reasons = [];
   const warnings = [];
 
@@ -196,8 +201,8 @@ export default function handler(req, res) {
   if (managedBillingTouched && !annualPriceIds) {
     warnings.push('Managed annual checkout is unavailable for plans missing STRIPE_PRICE_ID_*_ANNUAL.');
   }
-  if (stripeMode === 'test' && process.env.VERCEL_ENV === 'production') {
-    warnings.push('Production is using a Stripe TEST key. Checkout works, but no real payment is taken.');
+  if (managedBillingTouched && !serverStripeModeReady()) {
+    reasons.push('Production managed checkout requires a Stripe LIVE key. Test-mode checkout is unavailable.');
   }
   const gmail = gmailSmtpStatus();
   const gmailSelected = gmail.enabled && !hasEnv('RESEND_API_KEY') && !hasEnv('SENDGRID_API_KEY');

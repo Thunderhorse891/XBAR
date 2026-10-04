@@ -673,8 +673,13 @@ test('an unchanged correctly priced Enterprise checkout is reused without a seco
 });
 
 for (const [label, env, priceOverrides, accountId, accountError] of [
-  ['test price in production', { VERCEL_ENV: 'production' }, { livemode: false }],
-  ['unknown mode in production', { VERCEL_ENV: 'production' }, { livemode: undefined }],
+  ['test price in production', { VERCEL_ENV: 'production', STRIPE_SECRET_KEY: 'sk_live_fixture' }, { livemode: false }],
+  [
+    'unknown mode in production',
+    { VERCEL_ENV: 'production', STRIPE_SECRET_KEY: 'sk_live_fixture' },
+    { livemode: undefined },
+  ],
+  ['test key in production', { VERCEL_ENV: 'production' }, { livemode: true }],
   ['live price with a test key', {}, { livemode: true }],
   ['wrong Stripe account', { STRIPE_ACCOUNT_ID: 'acct_expected' }, {}, 'acct_other'],
   ['malformed expected account', { STRIPE_ACCOUNT_ID: 'not-an-account' }, {}],
@@ -716,3 +721,18 @@ test('production checkout accepts the verified live price and pinned account', a
   assert.deepEqual(stripeScenario.calls[0], ['accounts.retrieve']);
   assert.equal(stripeScenario.createdSessions.length, 1);
 });
+
+for (const [label, env, managed] of [
+  ['production test mode', { VERCEL_ENV: 'production', STRIPE_SECRET_KEY: 'sk_test_fixture' }, false],
+  ['production live mode', { VERCEL_ENV: 'production', STRIPE_SECRET_KEY: 'sk_live_fixture' }, true],
+  ['preview test mode', { VERCEL_ENV: 'preview', STRIPE_SECRET_KEY: 'sk_test_fixture' }, true],
+]) {
+  test(`GET availability reports ${label} truthfully`, async () => {
+    stripeScenario.reset();
+    const handler = await importWithEnv(env, `readiness-${label}`);
+    const response = await invoke(handler, { method: 'GET', token: null });
+    assert.equal(response.statusCode, 200);
+    assert.equal(response.body.managed, managed);
+    assert.deepEqual(stripeScenario.calls, [], 'public readiness never calls privileged Stripe APIs');
+  });
+}

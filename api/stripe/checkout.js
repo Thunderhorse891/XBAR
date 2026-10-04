@@ -1,4 +1,4 @@
-import { serverManagedBillingEnabled } from '../_lib/managed-billing.js';
+import { serverManagedBillingEnabled, serverStripeModeReady } from '../_lib/managed-billing.js';
 import Stripe from 'stripe';
 import { readJsonBody, sendJson } from '../_lib/http.js';
 import { buildSubscriptionProfile, getStripePriceIdByTier, sellablePrices } from '../_lib/subscription-plans.js';
@@ -27,6 +27,7 @@ const stripeSecretKey = process.env.STRIPE_SECRET_KEY?.trim() || '';
 const stripe = stripeSecretKey ? new Stripe(stripeSecretKey, { apiVersion: '2026-02-25.clover' }) : null;
 const managedBillingEnabled = serverManagedBillingEnabled();
 // Pin validation to the same import-time environment as the Stripe client.
+const stripeModeReady = serverStripeModeReady();
 const expectedAccountId = process.env.STRIPE_ACCOUNT_ID?.trim() || '';
 const expectedLivemode = process.env.VERCEL_ENV === 'production' || /^(sk|rk)_live_/.test(stripeSecretKey);
 
@@ -79,7 +80,7 @@ export default async function handler(req, res) {
     res.setHeader('Cache-Control', 'no-store, max-age=0');
     return sendJson(res, 200, {
       ok: true,
-      managed: managedBillingEnabled && Boolean(stripe),
+      managed: managedBillingEnabled && Boolean(stripe) && stripeModeReady,
       sellable: sellablePrices(),
     });
   }
@@ -106,6 +107,14 @@ export default async function handler(req, res) {
 
   if (!stripe) {
     return sendJson(res, 503, { ok: false, message: 'Stripe server billing is not configured.' });
+  }
+
+  if (!stripeModeReady) {
+    return sendJson(res, 503, {
+      ok: false,
+      code: 'price_unavailable',
+      message: 'Production checkout is unavailable while live billing is configured. No payment session was created.',
+    });
   }
 
   const parsed = parseBody(checkoutSchema, body);
