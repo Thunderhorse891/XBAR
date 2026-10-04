@@ -581,3 +581,32 @@ Managed checkout is restricted to workspace admins and only returns customers to
 - Proof Vault for document intake, review, matching, approval, and buyer-safe release
 - Operating Ledger for receipt intake, cost allocation, and ranch-level expense visibility
 - Buyer Desk, buyer follow-ups, shared buyer packets, ranch assets, action queue, and field conditions
+
+### Upgrade-offer rollout (disabled pending approval)
+
+The feature-click upgrade API uses `20261003200000_upgrade_offers.sql` for
+account-scoped attempts, explicit declines, immutable checkout retries, and a
+single account-wide first-period discount claim. This migration is **draft**:
+keep `UPGRADE_OFFERS_ENABLED=false` until Erin explicitly approves the database
+change and the correct Stripe account/configuration is reviewed. Do not apply
+it merely because the application or CI is green.
+
+After explicit approval, first rehearse on an approved disposable database:
+
+```sh
+psql "$STAGING_DATABASE_URL" -v ON_ERROR_STOP=1 -f supabase/migrations/20261003200000_upgrade_offers.sql
+psql "$STAGING_DATABASE_URL" -v ON_ERROR_STOP=1 -f supabase/checks/upgrade-offers.sql
+```
+
+Only after the rehearsal and production approval:
+
+```sh
+psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f supabase/migrations/20261003200000_upgrade_offers.sql
+```
+
+Verify service-role-only RPC/table access before enabling the API. Missing
+schema/configuration fails closed. No coupon or portal configuration is created
+by the application. See [the billing runbook](docs/OPERATOR-BILLING-RUNBOOK.md)
+for the separate Stripe verification gates. Rollback is to disable the feature
+and restore application code, preserving these additive tables and claims so
+retries, workspace deletion, or redeployment cannot reset promotion eligibility.

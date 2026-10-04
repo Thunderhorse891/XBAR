@@ -6,7 +6,8 @@ import { sha256Bytes } from './sha256.js';
 import { base64ToBytes } from './localFileVault.js';
 import { type PacketDisclosure, toPacketDisclosure } from './salePacketDisclosure.js';
 import { PACKET_VERIFIER_SCRIPT } from './packetVerifierScript.js';
-import { isQuickStartSentinel } from './workspaceIdentity.js';
+import { normalizePacketBranding } from '../../api/_lib/packet-branding.js';
+import { validatePacketLogoRaster } from '../../api/_lib/packet-branding-raster.js';
 import type { LocalPacketAttachment, UnattachedDocument } from './localPacketAttachments.js';
 import type { DocumentRecord, HorseRecord, OwnershipRecord, WorkspaceProfile } from '../types/xbar.js';
 
@@ -112,7 +113,7 @@ function row(label: string, value: unknown) {
  * learns whom to write to and pay, so an edit to it must fail the check, not
  * merely differ from a readout the buyer may never compare.
  */
-function sellerRow(label: string, field: 'name' | 'ranch' | 'email', value: string) {
+function sellerRow(label: string, field: 'name' | 'ranch' | 'business' | 'email' | 'phone' | 'website', value: string) {
   return `<tr><th>${escapeHtml(label)}</th><td id="xbar-seller-${field}">${escapeHtml(value)}</td></tr>`;
 }
 
@@ -127,13 +128,8 @@ function sellerRow(label: string, field: 'name' | 'ranch' | 'email', value: stri
  * omitted rather than filled with a role.
  */
 export function resolveSellerByline(workspaceProfile?: WorkspaceProfile): string {
-  const rawName = (workspaceProfile?.defaultOwnerName || workspaceProfile?.ranchManagerName || '').trim();
-  const rawRanch = (workspaceProfile?.ranchName || '').trim();
-  // A sentinel is a placeholder, not a person or a ranch — printing it as
-  // the byline would present invented identity as the seller.
-  const name = isQuickStartSentinel(rawName) ? '' : rawName;
-  const ranch = isQuickStartSentinel(rawRanch) ? '' : rawRanch;
-  return [name, ranch].filter(Boolean).join(' · ');
+  const branding = normalizePacketBranding(workspaceProfile);
+  return [branding.name, branding.displayName].filter(Boolean).join(' · ');
 }
 
 export function getBuyerSafePacketDocuments(documents: DocumentRecord[], horseId: string): LocalSalePacketDocument[] {
@@ -238,15 +234,20 @@ function photoContentDigest(photoUrl: string): string {
  * watermark, resolved once above the seal.)
  */
 function resolveSealedSeller(workspaceProfile: WorkspaceProfile | undefined, horse: HorseRecord) {
-  const name = (workspaceProfile?.defaultOwnerName || workspaceProfile?.ranchManagerName || '').trim();
-  const ranch = (workspaceProfile?.ranchName || '').trim();
-  const email = (workspaceProfile?.operationsEmail || '').trim();
+  const branding = normalizePacketBranding(workspaceProfile);
   const heroPhotoUrl = toPublicPassport(horse).photoUrl;
   return {
-    // Quick-start placeholders are not contact details (see above).
-    name: isQuickStartSentinel(name) ? '' : name,
-    ranch: isQuickStartSentinel(ranch) ? '' : ranch,
-    email: isQuickStartSentinel(email) ? '' : email,
+    name: branding.name,
+    ranch: branding.ranch,
+    business: branding.business,
+    email: branding.email,
+    phone: branding.phone,
+    website: branding.website,
+    displayName: branding.displayName,
+    logoDataUrl: branding.logoDataUrl,
+    logoDigest: branding.logoBytes ? sha256Bytes(branding.logoBytes) : '',
+    logoWidth: branding.logoWidth,
+    logoHeight: branding.logoHeight,
     heroPhotoUrl,
     heroPhotoDigest: photoContentDigest(heroPhotoUrl),
   };
@@ -263,7 +264,10 @@ function resolveSealedSeller(workspaceProfile: WorkspaceProfile | undefined, hor
  * verified). The seller-side release verdict is covered nowhere in the buyer
  * payload: it is not buyer-visible, so sealing it would publish it.
  */
-export function buildPacketCredential(params: PacketCredentialParams): SaleCredential {
+export function buildPacketCredential(
+  params: PacketCredentialParams,
+  seller = resolveSealedSeller(params.workspaceProfile, params.horse),
+): SaleCredential {
   const now = params.now ?? new Date();
   const buyerSafeDocs = getBuyerSafePacketDocuments(params.documents, params.horse.id);
   const selectedDocs = buyerSafeDocs.filter((record) => params.selectedDocumentIds.includes(record.id));
@@ -288,7 +292,6 @@ export function buildPacketCredential(params: PacketCredentialParams): SaleCrede
   // verdict is deliberately NOT: the sealed payload is printed inside the
   // buyer packet for hand-verification, and the verdict was stripped from the
   // buyer artifact — sealing it would publish it again.
-  const seller = resolveSealedSeller(params.workspaceProfile, params.horse);
 
   return buildSaleCredential({
     attachments: (params.attachments ?? []).map((file) => ({
@@ -331,10 +334,12 @@ export function buildPacketCredential(params: PacketCredentialParams): SaleCrede
     // Attributed to the seller by name, never by workspace role: when the
     // byline is filtered or unset, a role ("Admin"/"Owner") is not a person,
     // and sealing it would contradict the byline the packet omits.
-    sealedBy: resolveSellerByline(params.workspaceProfile),
+    sealedBy: [seller.name, seller.displayName].filter(Boolean).join(' · '),
   });
 }
 
+/** Low-level deterministic renderer for already validated inputs. Application
+ * generation must use buildValidatedLocalSalePacket before storing an artifact. */
 export function buildLocalSalePacket(params: {
   horse: HorseRecord;
   workspaceProfile: WorkspaceProfile;
@@ -380,20 +385,24 @@ export function buildLocalSalePacket(params: {
   // sealed one would come to disagree.
   const watermark = resolvePacketWatermark(params.watermark);
 
-  const credential = buildPacketCredential({
-    horse: params.horse,
-    documents: params.documents,
-    ownershipRecord: params.ownershipRecord,
-    // The seller contact block is buyer-visible and sealed — the seal gets
-    // the SAME profile the renderer does, never an empty default.
-    workspaceProfile: params.workspaceProfile,
-    disclosure: shown,
-    selectedDocumentIds: params.selectedDocumentIds,
-    generatedBy: params.generatedBy,
-    attachments: params.attachments,
-    watermark,
-    now,
-  });
+  const sealedSeller = resolveSealedSeller(params.workspaceProfile, params.horse);
+  const credential = buildPacketCredential(
+    {
+      horse: params.horse,
+      documents: params.documents,
+      ownershipRecord: params.ownershipRecord,
+      // The seller contact block is buyer-visible and sealed — the seal gets
+      // the SAME profile the renderer does, never an empty default.
+      workspaceProfile: params.workspaceProfile,
+      disclosure: shown,
+      selectedDocumentIds: params.selectedDocumentIds,
+      generatedBy: params.generatedBy,
+      attachments: params.attachments,
+      watermark,
+      now,
+    },
+    sealedSeller,
+  );
 
   const attachments = params.attachments ?? [];
   const unattached = params.unattached ?? [];
@@ -431,17 +440,28 @@ export function buildLocalSalePacket(params: {
    * Resolved through resolveSealedSeller — the same values the seal covers —
    * so the printed block and the fingerprinted block are the same object.
    */
-  const sealedSeller = resolveSealedSeller(params.workspaceProfile, params.horse);
   const sellerName = sealedSeller.name;
   const sellerRanch = sealedSeller.ranch;
   const sellerEmail = sealedSeller.email;
-  const sellerByline = resolveSellerByline(params.workspaceProfile);
+  const sellerByline = [sealedSeller.name, sealedSeller.displayName].filter(Boolean).join(' · ');
   const heroPhotoUrl = sealedSeller.heroPhotoUrl;
   const contactRows = [
     sellerName ? sellerRow('Seller', 'name', sellerName) : '',
     sellerRanch ? sellerRow('Ranch', 'ranch', sellerRanch) : '',
+    sealedSeller.business ? sellerRow('Business', 'business', sealedSeller.business) : '',
     sellerEmail ? sellerRow('Email', 'email', sellerEmail) : '',
+    sealedSeller.phone ? sellerRow('Phone', 'phone', sealedSeller.phone) : '',
+    sealedSeller.website ? sellerRow('Website', 'website', sealedSeller.website) : '',
   ].join('');
+  const logoScale = sealedSeller.logoDataUrl
+    ? Math.min(180 / sealedSeller.logoWidth, 72 / sealedSeller.logoHeight, 1)
+    : 1;
+  const logo = sealedSeller.logoDataUrl
+    ? `<img id="xbar-ranch-logo" src="${escapeHtml(sealedSeller.logoDataUrl)}" alt="${escapeHtml(sealedSeller.displayName || 'Seller')} logo" width="${Math.max(1, Math.floor(sealedSeller.logoWidth * logoScale))}" height="${Math.max(1, Math.floor(sealedSeller.logoHeight * logoScale))}">`
+    : '';
+  const packetEyebrow = sealedSeller.displayName
+    ? `${sealedSeller.displayName} · Buyer Sale Packet`
+    : 'XBAR™ Buyer Sale Packet';
   const sellerSection =
     contactRows || heroPhotoUrl
       ? `<section><h2>Contact the seller</h2>${heroPhotoUrl ? `<img src="${escapeHtml(heroPhotoUrl)}" alt="${escapeHtml(horseName)}" width="100%">` : ''}${contactRows ? `<table id="xbar-seller-contact">${contactRows}</table>` : ''}</section>`
@@ -481,12 +501,13 @@ export function buildLocalSalePacket(params: {
    * tooling — but none of it renders here. The wizard warns the seller
    * instead.
    */
-  const html = `<!doctype html><html><head><meta charset="utf-8"><title>${escapeHtml(title)}</title><style>${PACKET_STYLESHEET}</style></head><body><div class="packet"><div class="watermark ${watermarkClass}" id="xbar-watermark">${escapeHtml(watermark)}</div><div class="content"><header><div class="eyebrow">XBAR™ Buyer Sale Packet</div><h1>${escapeHtml(horseName)}</h1><div class="meta" id="xbar-packet-meta"><span>Generated ${escapeHtml(generatedAt)}</span>${sellerByline ? `<span id="xbar-seller-byline">Prepared by ${escapeHtml(sellerByline)}</span>` : ``}</div></header>${sellerSection}<section class="notice"><strong>Buyer verification notice:</strong><p>${escapeHtml(disclaimer)}</p></section><section><h2>Horse identity</h2><table>${[row('Registered name', shown.identity.name), row('Barn name', shown.identity.barnName), row('Breed', shown.identity.breed), row('Sex', shown.identity.sex), row('Color', shown.identity.color), row('Foaled', shown.identity.foaledOn), row('Registry', shown.identity.registry), row('Registration number', shown.identity.registrationNumber), row('Microchip', shown.identity.microchipId)].join('')}</table></section><section><h2>Sale terms</h2><table>${[row('Ask price', money(shown.sale.askPrice)), row('Listing state', shown.sale.listingState)].join('')}</table></section><section><h2>Ownership and transfer</h2><table>${[row('Recorded owner (seller supplied)', shown.ownership.legalOwner), row('Owner entity', shown.ownership.ownerEntity), row('Seller-recorded transfer status', shown.ownership.transferStatus), row('Pending documents', pendingDocuments), row('Compliance deadline', shown.ownership.complianceDeadline)].join('')}</table></section><section><h2>Care and disclosure summary</h2>${careRows ? `<table>${careRows}</table>` : '<p>No care summary was provided for this horse.</p>'}<p class="disclosure-note">Health and care disclosure for this horse is the attached vet records and Coggins, listed below. Ask the seller for anything you need that is not here — this summary is a pointer to the documents, not a substitute for reading them.</p></section><section><h2>Included documents</h2>${selectedDocs.length ? selectedDocs.map((record) => `<div class="doc-card"><strong>${escapeHtml(record.type)} · ${escapeHtml(record.title)}</strong><span>Uploaded ${escapeHtml(record.uploadedAt)}</span><p>${escapeHtml(record.summary || 'No summary provided.')}</p></div>`).join('') : '<p>No documents selected for this packet.</p>'}</section><section><h2>Attached files</h2>${attachments.length ? `<p>The ${attachments.length} file${attachments.length === 1 ? ' below is' : 's below are'} included in this packet. Open or save ${attachments.length === 1 ? 'it' : 'them'} straight from this page — there is nothing to sign in to and nothing to install.</p><ul class="file-list">${attachments.map((file) => `<li><a data-xbar-file="${escapeHtml(file.id)}" download="${escapeHtml(file.fileName)}" href="${escapeHtml(file.dataUrl)}">${escapeHtml(file.label)}</a> <span class="file-size">${escapeHtml(fileSize(file.sizeBytes))}</span></li>`).join('')}</ul>` : '<p>No files are embedded in this packet.</p>'}${unattached.length ? `<div class="notice"><strong>Not included in this packet:</strong><ul>${unattached.map((item) => `<li>${escapeHtml(item.title)} — ${escapeHtml(item.reason)}</li>`).join('')}</ul><p>Ask the seller to send ${unattached.length === 1 ? 'this file' : 'these files'} separately.</p></div>` : ''}</section><section class="seal"><p class="seal__note"><strong>Verification seal.</strong> The fingerprint below covers every fact in this packet. Recompute it from this page and compare it with the seal code the seller gave you directly — if the two differ, this packet was changed after it was sealed.</p><div class="seal__code">${escapeHtml(credential.sealCode)}</div><div class="seal__meta">Sealed ${escapeHtml(generatedAt)} · Passport ${escapeHtml(credential.passportId)} · XBAR Verifiable Sale Credential v${credential.version}</div><p class="seal__note">This seal is a SHA-256 fingerprint of every buyer-facing fact in this packet — identity, sale terms, ownership, transfer status, the care &amp; disclosure summary, the seller contact block${sealedDocClause}${sealedAttachmentClause}.</p><p class="seal__note">The hero photo is sealed by its source address. When the photo's bytes are in hand at seal time they are sealed by content hash instead — but a remote photo's bytes can change at that address without breaking the seal.</p><p class="seal__note"><strong>Reading the code above proves nothing by itself.</strong> It is printed text inside this file, and anyone who altered the packet could leave it exactly as it is. What proves something is <em>recomputing</em> the fingerprint from what this packet actually contains right now, and comparing the result against the seal code the seller gave you through a channel you trust — a phone call, a separate message, the listing page. Recompute first, then compare. A recomputed code that does not match the one printed above means this packet was changed after it was sealed on ${generatedAt}.</p><p class="seal__note">The seal covers alteration, not truthfulness: it cannot tell you whether the seller's records were accurate when they were sealed (see the buyer notice above).</p><div class="seal__facts"><strong>Sealed facts</strong><ul>${credential.manifest.map((line) => `<li>${escapeHtml(line)}</li>`).join('')}</ul></div><div class="seal__digest">SHA-256 ${escapeHtml(credential.digest)}</div><div class="verify"><strong>Recompute the seal</strong><p class="verify__lead">This rehashes the sealed record and every embedded file out of this page, and prints the facts the seal actually covers &mdash; read out of the record rather than off the page above.</p><p><button class="verify__btn" id="xbar-verify-btn" type="button">Recompute from this packet</button></p><div class="verify__out" data-digest="${escapeHtml(credential.digest)}" id="xbar-verify-out">Not checked yet.</div><details class="verify__manual"><summary>Check it by hand instead &mdash; this does not trust the button above</summary><p>Whoever could alter this packet could alter the script behind that button too. For a packet you have any reason to doubt, do this instead; it needs no software beyond what your computer already has.</p><ol><li>Select the sealed record printed below and save it to a plain text file, with no characters added and no trailing newline.</li><li>Run <code>shasum -a 256 thefile.txt</code> on macOS or Linux, or <code>certutil -hashfile thefile.txt SHA256</code> on Windows.</li><li>That hash must equal the SHA-256 printed above. Its first twelve characters, uppercased, are the seal code for this packet: <code>${escapeHtml(credential.sealCode)}</code>.</li><li>Compare that seal code with the one the seller gave you directly. Only this comparison &mdash; recomputed against independently supplied &mdash; tells you the packet is unaltered.</li><li>For each embedded file: save it from the list above and hash it the same way. The result must equal that file's <code>digest</code> in the record below.</li></ol><pre class="verify__payload" id="xbar-credential-payload">${escapeHtml(credential.payload)}</pre></details></div></section><div class="footer">Generated by XBAR LLC. XBAR™ is a trademark of XBAR LLC. This packet is not legal, veterinary, tax, registry, insurance, escrow, or brokerage advice.</div></div></div><script>${PACKET_VERIFIER_SCRIPT}</script></body></html>`;
+  const html = `<!doctype html><html><head><meta charset="utf-8"><title>${escapeHtml(title)}</title><style>${PACKET_STYLESHEET}</style></head><body><div class="packet"><div class="watermark ${watermarkClass}" id="xbar-watermark">${escapeHtml(watermark)}</div><div class="content"><header>${logo}<div class="eyebrow">${escapeHtml(packetEyebrow)}</div><h1>${escapeHtml(horseName)}</h1><div class="meta" id="xbar-packet-meta"><span>Generated ${escapeHtml(generatedAt)}</span>${sellerByline ? `<span id="xbar-seller-byline">Prepared by ${escapeHtml(sellerByline)}</span>` : ``}</div></header>${sellerSection}<section class="notice"><strong>Buyer verification notice:</strong><p>${escapeHtml(disclaimer)}</p></section><section><h2>Horse identity</h2><table>${[row('Registered name', shown.identity.name), row('Barn name', shown.identity.barnName), row('Breed', shown.identity.breed), row('Sex', shown.identity.sex), row('Color', shown.identity.color), row('Foaled', shown.identity.foaledOn), row('Registry', shown.identity.registry), row('Registration number', shown.identity.registrationNumber), row('Microchip', shown.identity.microchipId)].join('')}</table></section><section><h2>Sale terms</h2><table>${[row('Ask price', money(shown.sale.askPrice)), row('Listing state', shown.sale.listingState)].join('')}</table></section><section><h2>Ownership and transfer</h2><table>${[row('Recorded owner (seller supplied)', shown.ownership.legalOwner), row('Owner entity', shown.ownership.ownerEntity), row('Seller-recorded transfer status', shown.ownership.transferStatus), row('Pending documents', pendingDocuments), row('Compliance deadline', shown.ownership.complianceDeadline)].join('')}</table></section><section><h2>Care and disclosure summary</h2>${careRows ? `<table>${careRows}</table>` : '<p>No care summary was provided for this horse.</p>'}<p class="disclosure-note">Health and care disclosure for this horse is the attached vet records and Coggins, listed below. Ask the seller for anything you need that is not here — this summary is a pointer to the documents, not a substitute for reading them.</p></section><section><h2>Included documents</h2>${selectedDocs.length ? selectedDocs.map((record) => `<div class="doc-card"><strong>${escapeHtml(record.type)} · ${escapeHtml(record.title)}</strong><span>Uploaded ${escapeHtml(record.uploadedAt)}</span><p>${escapeHtml(record.summary || 'No summary provided.')}</p></div>`).join('') : '<p>No documents selected for this packet.</p>'}</section><section><h2>Attached files</h2>${attachments.length ? `<p>The ${attachments.length} file${attachments.length === 1 ? ' below is' : 's below are'} included in this packet. Open or save ${attachments.length === 1 ? 'it' : 'them'} straight from this page — there is nothing to sign in to and nothing to install.</p><ul class="file-list">${attachments.map((file) => `<li><a data-xbar-file="${escapeHtml(file.id)}" download="${escapeHtml(file.fileName)}" href="${escapeHtml(file.dataUrl)}">${escapeHtml(file.label)}</a> <span class="file-size">${escapeHtml(fileSize(file.sizeBytes))}</span></li>`).join('')}</ul>` : '<p>No files are embedded in this packet.</p>'}${unattached.length ? `<div class="notice"><strong>Not included in this packet:</strong><ul>${unattached.map((item) => `<li>${escapeHtml(item.title)} — ${escapeHtml(item.reason)}</li>`).join('')}</ul><p>Ask the seller to send ${unattached.length === 1 ? 'this file' : 'these files'} separately.</p></div>` : ''}</section><section class="seal"><p class="seal__note"><strong>Verification seal.</strong> The fingerprint below covers every fact in this packet. Recompute it from this page and compare it with the seal code the seller gave you directly — if the two differ, this packet was changed after it was sealed.</p><div class="seal__code">${escapeHtml(credential.sealCode)}</div><div class="seal__meta">Sealed ${escapeHtml(generatedAt)} · Passport ${escapeHtml(credential.passportId)} · XBAR Verifiable Sale Credential v${credential.version}</div><p class="seal__note">This seal is a SHA-256 fingerprint of every buyer-facing fact in this packet — identity, sale terms, ownership, transfer status, the care &amp; disclosure summary, the ranch branding and seller contact block${sealedDocClause}${sealedAttachmentClause}.</p><p class="seal__note">The hero photo is sealed by its source address. When the photo's bytes are in hand at seal time they are sealed by content hash instead — but a remote photo's bytes can change at that address without breaking the seal.</p><p class="seal__note"><strong>Reading the code above proves nothing by itself.</strong> It is printed text inside this file, and anyone who altered the packet could leave it exactly as it is. What proves something is <em>recomputing</em> the fingerprint from what this packet actually contains right now, and comparing the result against the seal code the seller gave you through a channel you trust — a phone call, a separate message, the listing page. Recompute first, then compare. A recomputed code that does not match the one printed above means this packet was changed after it was sealed on ${generatedAt}.</p><p class="seal__note">The seal covers alteration, not truthfulness: it cannot tell you whether the seller's records were accurate when they were sealed (see the buyer notice above).</p><div class="seal__facts"><strong>Sealed facts</strong><ul>${credential.manifest.map((line) => `<li>${escapeHtml(line)}</li>`).join('')}</ul></div><div class="seal__digest">SHA-256 ${escapeHtml(credential.digest)}</div><div class="verify"><strong>Recompute the seal</strong><p class="verify__lead">This rehashes the sealed record and every embedded file out of this page, and prints the facts the seal actually covers &mdash; read out of the record rather than off the page above.</p><p><button class="verify__btn" id="xbar-verify-btn" type="button">Recompute from this packet</button></p><div class="verify__out" data-digest="${escapeHtml(credential.digest)}" id="xbar-verify-out">Not checked yet.</div><details class="verify__manual"><summary>Check it by hand instead &mdash; this does not trust the button above</summary><p>Whoever could alter this packet could alter the script behind that button too. For a packet you have any reason to doubt, do this instead; it needs no software beyond what your computer already has.</p><ol><li>Select the sealed record printed below and save it to a plain text file, with no characters added and no trailing newline.</li><li>Run <code>shasum -a 256 thefile.txt</code> on macOS or Linux, or <code>certutil -hashfile thefile.txt SHA256</code> on Windows.</li><li>That hash must equal the SHA-256 printed above. Its first twelve characters, uppercased, are the seal code for this packet: <code>${escapeHtml(credential.sealCode)}</code>.</li><li>Compare that seal code with the one the seller gave you directly. Only this comparison &mdash; recomputed against independently supplied &mdash; tells you the packet is unaltered.</li><li>For each embedded file: save it from the list above and hash it the same way. The result must equal that file's <code>digest</code> in the record below.</li></ol><pre class="verify__payload" id="xbar-credential-payload">${escapeHtml(credential.payload)}</pre></details></div></section><div class="footer">Generated by XBAR LLC. XBAR™ is a trademark of XBAR LLC. This packet is not legal, veterinary, tax, registry, insurance, escrow, or brokerage advice.</div></div></div><script>${PACKET_VERIFIER_SCRIPT}</script></body></html>`;
 
   const plainText = [
     title,
     `Generated ${generatedAt}`,
     sellerByline ? `Prepared by ${sellerByline}` : '',
+    [sealedSeller.email, sealedSeller.phone, sealedSeller.website].filter(Boolean).join(' · '),
     `Included documents: ${selectedDocs.map((record) => record.title).join('; ') || 'None'}`,
     `Attached files: ${attachments.map((file) => file.fileName).join('; ') || 'None'}`,
     // Named here too, not only in the HTML. This is the summary a seller reads
@@ -512,4 +533,12 @@ export function buildLocalSalePacket(params: {
     releaseStatus: releaseGate.status,
     credential,
   };
+}
+
+/** Validate actual compressed image content before the app may persist a packet. */
+export async function buildValidatedLocalSalePacket(
+  params: Parameters<typeof buildLocalSalePacket>[0],
+): Promise<LocalSalePacket> {
+  await validatePacketLogoRaster(params.workspaceProfile.packetLogoDataUrl);
+  return buildLocalSalePacket(params);
 }

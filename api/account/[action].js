@@ -2,6 +2,7 @@ import { sendJson } from '../_lib/http.js';
 import deleteHandler from '../_lib/account-delete.js';
 import sendWelcomeHandler from '../_lib/account-send-welcome.js';
 import trialStartHandler from '../_lib/account-trial-start.js';
+import upgradeOfferHandler from '../_lib/upgrade-offer.js';
 
 /*
  * Single Vercel function serving the account routes:
@@ -34,6 +35,9 @@ export default async function handler(req, res) {
   }
   if (action === 'trial-start') {
     return trialStartHandler(req, res);
+  }
+  if (action === 'upgrade-offer') {
+    return upgradeOfferHandler(req, res);
   }
   return sendJson(res, 404, { ok: false, message: 'Unknown account action.' });
 }

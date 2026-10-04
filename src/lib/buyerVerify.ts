@@ -27,6 +27,14 @@ export interface VerifiedFacts {
   /** The sealed seller identity the PDF's "Presented By" line must match. */
   sellerBusinessName: string;
   sellerRanchName: string;
+  /** Present on v3+ sealed snapshots; absent on historical packet responses. */
+  sellerDisplayName?: string;
+  sellerName?: string;
+  sellerEmail?: string;
+  sellerPhone?: string;
+  sellerWebsite?: string;
+  sellerLogoDataUrl?: string;
+  sellerLogoDigest?: string;
   documents: Array<{ type: string; title: string }>;
   sealedAt: string;
 }

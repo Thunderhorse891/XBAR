@@ -1,27 +1,27 @@
 {
-  "name": "XBAR — Horse records & sales",
+  "name": "XBAR \u2014 Horse records & sales",
   "short_name": "XBAR",
-  "description": "One verified, sale-ready record per horse — documents, ownership, care, and buyer packets.",
+  "description": "One verified, sale-ready record per horse \u2014 documents, ownership, care, and buyer packets.",
   "start_url": "/app",
   "scope": "/",
   "display": "standalone",
-  "theme_color": "#05070A",
-  "background_color": "#05070A",
+  "theme_color": "#171b20",
+  "background_color": "#ffffff",
   "icons": [
     {
-      "src": "/brand/icon-192.png",
+      "src": "/brand/xbar-original-icon-192.png",
       "sizes": "192x192",
       "type": "image/png",
       "purpose": "any"
     },
     {
-      "src": "/brand/icon-512.png",
+      "src": "/brand/xbar-original-icon-512.png",
       "sizes": "512x512",
       "type": "image/png",
       "purpose": "any"
     },
     {
-      "src": "/brand/icon-512-maskable.png",
+      "src": "/brand/xbar-original-icon-maskable-512.png",
       "sizes": "512x512",
       "type": "image/png",
       "purpose": "maskable"

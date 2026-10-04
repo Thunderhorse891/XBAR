@@ -71,12 +71,12 @@ test('the stamped watermark and the sealed watermark are the same value', async 
 
   // Resolved once, above the seal.
   const resolveAt = code.indexOf('const watermark = resolvePacketWatermark(params.watermark);');
-  const sealAt = code.indexOf('const credential = buildPacketCredential({');
+  const sealAt = code.indexOf('const credential = buildPacketCredential(');
   assert.ok(resolveAt > -1, 'the packet must resolve its watermark once');
   assert.ok(sealAt > resolveAt, 'and do it before sealing, or the seal cannot use it');
 
   // Both bounds measured from the same anchor.
-  const seal = code.slice(sealAt, code.indexOf('});', sealAt));
+  const seal = code.slice(sealAt, code.indexOf('sealedSeller,', sealAt));
   assert.match(seal, /\r?\n\s*watermark,\r?\n/, 'the resolved value must be what is sealed');
 
   assert.doesNotMatch(

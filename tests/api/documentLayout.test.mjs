@@ -414,7 +414,7 @@ async function helveticaBold() {
 test('branded reports embed the supplied images on every page and retain all report rows', async () => {
   const branding = {
     logo: readFileSync(new URL('../../public/brand/xbar-report-horse.png', import.meta.url)),
-    mark: readFileSync(new URL('../../public/brand/xbar-report-mark.png', import.meta.url)),
+    mark: readFileSync(new URL('../../public/brand/xbar-original-lockup-480.png', import.meta.url)),
     watermark: readFileSync(new URL('../../public/brand/xbar-report-watermark.png', import.meta.url)),
   };
   const bytes = await createSectionedPdf({

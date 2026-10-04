@@ -1,4 +1,5 @@
 import { PDFDocument, StandardFonts, rgb, degrees } from 'pdf-lib';
+import { validatePacketLogoRaster } from './packet-branding-raster.js';
 
 const PAGE_WIDTH = 612; // US Letter
 const PAGE_HEIGHT = 792;
@@ -302,6 +303,9 @@ export function fieldsInLine(line) {
   return fields.every(Boolean) ? fields : null;
 }
 
+// pdf-lib's PNG decoder can pad a truncated compressed raster with zeroes.
+// Check the exact bounded scanline stream before embedding, so malformed image
+// bytes never silently turn the customer's logo into a blank rectangle. This
 export async function createSectionedPdf(input) {
   // Folded once, here, so every downstream measurement and draw sees the same
   // text. See toDrawableText: the standard font throws on anything outside
@@ -321,6 +325,20 @@ export async function createSectionedPdf(input) {
   const font = await pdf.embedFont(StandardFonts.Helvetica);
   const bold = await pdf.embedFont(StandardFonts.HelveticaBold);
   const maxWidth = PAGE_WIDTH - MARGIN * 2;
+  // Customer letterhead is separate from XBAR artwork. It is always inline,
+  // validated before decoding, and never triggers a network request.
+  const customerLogo = await validatePacketLogoRaster(input.customerLogoDataUrl);
+  let customerImage = null;
+  if (customerLogo) {
+    try {
+      customerImage =
+        customerLogo.mimeType === 'image/jpeg'
+          ? await pdf.embedJpg(customerLogo.bytes)
+          : await pdf.embedPng(customerLogo.bytes);
+    } catch {
+      throw new Error('The packet logo could not be decoded. Replace it with a valid PNG or JPEG in Settings.');
+    }
+  }
   const brandLogo = input.branding ? await pdf.embedPng(input.branding.logo) : null;
   const brandMark = input.branding ? await pdf.embedPng(input.branding.mark) : null;
   const brandWatermark = input.branding ? await pdf.embedPng(input.branding.watermark) : null;
@@ -390,6 +408,15 @@ export async function createSectionedPdf(input) {
     page.drawImage(brandLogo, { x: MARGIN, y: y - size.height, ...size });
     page.drawText('XBAR™', { x: MARGIN + size.width + 14, y: y - 20, size: 13, font: bold, color: ACCENT });
     y -= size.height + 8;
+  }
+
+  if (customerImage) {
+    const scale = Math.min(180 / customerImage.width, 72 / customerImage.height, 1);
+    const width = customerImage.width * scale;
+    const height = customerImage.height * scale;
+    ensureRoom(height + 16);
+    page.drawImage(customerImage, { x: MARGIN, y: y - height, width, height });
+    y -= height + 12;
   }
 
   // Letterhead: whose document this is, before what it is.
@@ -512,7 +539,8 @@ export async function createSectionedPdf(input) {
   const pages = pdf.getPages();
   pages.forEach((footerPage, index) => {
     if (brandMark) {
-      footerPage.drawImage(brandMark, { x: MARGIN, y: MARGIN - 25, width: 16, height: 16 });
+      const size = brandMark.scaleToFit(32, 18);
+      footerPage.drawImage(brandMark, { x: MARGIN, y: MARGIN - 25, ...size });
     }
     footerPage.drawLine({
       start: { x: MARGIN, y: MARGIN - 6 },
@@ -541,7 +569,7 @@ export async function createSectionedPdf(input) {
       // only the page margin beneath it, so a second line would print outside
       // the document's own frame. The page stamp is the part that must stay
       // legible — a reader needs to know whether they have the whole document.
-      const brandInset = brandMark ? 23 : 0;
+      const brandInset = brandMark ? 39 : 0;
       const available = PAGE_WIDTH - 2 * MARGIN - stampWidth - FOOTER_GAP - brandInset;
       footerPage.drawText(truncateToWidth(footer, font, 8, available), {
         x: MARGIN + brandInset,

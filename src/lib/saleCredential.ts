@@ -70,7 +70,8 @@ import { sha256 } from './sha256.js';
  *    photo left the digest untouched. The photo is sealed by content digest
  *    when its bytes were available at seal time (data: URL), otherwise by URL.
  */
-export const SALE_CREDENTIAL_VERSION = 5 as const;
+// v6 seals customer branding, inline raster logo bytes, phone and website.
+export const SALE_CREDENTIAL_VERSION = 6 as const;
 
 /** Every buyer-facing metadata field of one included document. File bytes are
  * generated server-side; these fields are what the packet renders, so covering
@@ -147,6 +148,14 @@ export interface CredentialCare {
  * packet printed contact details the fingerprint did not cover.
  */
 export interface CredentialSeller {
+  business?: string;
+  displayName?: string;
+  phone?: string;
+  website?: string;
+  logoDataUrl?: string;
+  logoDigest?: string;
+  logoWidth?: number;
+  logoHeight?: number;
   name: string;
   ranch: string;
   email: string;
@@ -308,6 +317,14 @@ export function buildCredentialPayload(input: SaleCredentialInput): string {
     documents,
     attachments,
     seller: {
+      business: input.seller.business || '',
+      displayName: input.seller.displayName || input.seller.ranch || '',
+      phone: input.seller.phone || '',
+      website: input.seller.website || '',
+      logoDataUrl: input.seller.logoDataUrl || '',
+      logoDigest: input.seller.logoDigest || '',
+      logoWidth: input.seller.logoWidth || 0,
+      logoHeight: input.seller.logoHeight || 0,
       name: input.seller.name,
       ranch: input.seller.ranch,
       email: input.seller.email,
@@ -381,13 +398,16 @@ function issuedToLine(watermark: string): string {
  * photo URL after sealing must read as a different sealed fact, not as the
  * same packet. */
 function sellerLine(seller: CredentialSeller): string {
-  const contact = [seller.name, seller.ranch, seller.email].filter(Boolean).join(' · ') || 'not provided';
+  const contact =
+    [seller.name, seller.ranch, seller.business, seller.email, seller.phone, seller.website]
+      .filter(Boolean)
+      .join(' · ') || 'not provided';
   const photo = !seller.heroPhotoUrl
     ? 'no photo'
     : seller.heroPhotoDigest
       ? 'photo sealed by content digest'
       : 'photo sealed by URL';
-  return `Seller contact: ${contact} · hero ${photo}`;
+  return `Seller contact: ${contact} · hero ${photo}${seller.logoDataUrl ? ' · ranch logo sealed by content digest' : ''}`;
 }
 
 function buildManifest(input: SaleCredentialInput): string[] {
