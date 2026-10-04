@@ -335,7 +335,9 @@ export function saleAmountReceived(lead: SalesLead, saleValue: number, today = l
   // receipts still fail closed above. The editor/store require correction.
   const paidDeposit = Number.isFinite(deposit) ? Math.max(0, deposit) : 0;
   const received = Number.isFinite(recorded) ? Math.max(recorded, paidDeposit) : paidDeposit;
-  return Math.min(Math.max(0, received), Math.max(0, saleValue));
+  // Contradictory receipts are not proof of full settlement.
+  if (received > saleValue) return 0;
+  return Math.max(0, received);
 }
 
 export function buildRanchFinancials(

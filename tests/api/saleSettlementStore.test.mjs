@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { beforeEach, test } from 'node:test';
-import { createEmptyWorkspaceState } from '../../src/store/xbarStoreHelpers.ts';
+import { canRestorePersistedState, createEmptyWorkspaceState } from '../../src/store/xbarStoreHelpers.ts';
 import { useXbarStore } from '../../src/store/useXbarStore.ts';
 import { buildSubscriptionForTier } from '../../src/lib/xbarRuntime.ts';
 
@@ -89,4 +89,37 @@ test('a new buyer offer on a sold horse is refused without changing its receipt'
   assert.equal(result.ok, false);
   assert.match(result.message, /already sold/);
   assert.deepEqual(useXbarStore.getState().salesLeads, [historical]);
+});
+
+test('restore refuses a future receipt before installing it; the actual store refuses it too', () => {
+  const workspace = {
+    ...createEmptyWorkspaceState(),
+    salesLeads: [
+      {
+        id: 'receipt',
+        name: 'Buyer',
+        horseId: 'horse',
+        channel: 'Site Inquiry',
+        stage: 'Closed',
+        lastTouch: '2026-05-01',
+        offerAmount: 25000,
+        amountReceived: 25000,
+        amountReceivedOn: '9999-12-31',
+      },
+    ],
+  };
+  assert.equal(
+    canRestorePersistedState({
+      ...workspace,
+      salesLeads: [{ ...workspace.salesLeads[0], amountReceivedOn: '2026-05-01' }],
+    }),
+    true,
+  );
+  assert.equal(canRestorePersistedState(workspace), false);
+  const before = useXbarStore.getState().salesLeads;
+  const result = useXbarStore
+    .getState()
+    .updateSalesLead('sale', { amountReceived: 25000, amountReceivedOn: '9999-12-31' });
+  assert.equal(result.ok, false);
+  assert.deepEqual(useXbarStore.getState().salesLeads, before);
 });

@@ -111,7 +111,8 @@ test('a recorded amount replaces the deposit, and is never negative or more than
     ),
     8000,
   );
-  assert.equal(saleAmountReceived(auditLead({ amountReceived: 30000, amountReceivedOn: '2026-05-01' }), 25000), 25000);
+  // Over-sale receipts are contradictory, not a fully paid sale.
+  assert.equal(saleAmountReceived(auditLead({ amountReceived: 30000, amountReceivedOn: '2026-05-01' }), 25000), 0);
   assert.equal(saleAmountReceived(auditLead({ amountReceived: -500, amountReceivedOn: '2026-05-01' }), 25000), 0);
   // An unreadable figure (a restored backup can carry anything) is nothing received.
   assert.equal(
@@ -338,3 +339,20 @@ for (const extra of [
     assert.equal(fin.netProfit, 0);
   });
 }
+
+for (const extra of [
+  { amountReceived: 30000, amountReceivedOn: '2026-05-01' },
+  { depositAmount: 30000, depositStatus: 'Paid' as const },
+]) {
+  test(`over-sale receipt ${JSON.stringify(extra)} cannot be normalized into fully paid`, () => {
+    assert.equal(saleAmountReceived(auditLead(extra), 25000), 0);
+    assert.notEqual(buildBankedHeadline(financials(auditLead(extra))).state, 'complete');
+  });
+}
+test('a paid deposit exceeding the sale is refused even with a blank total', () => {
+  assert.equal(
+    validateSalePayment({ amount: '', receivedOn: '', saleValue: 25000, paidDepositAmount: 30000, today: '2026-10-04' })
+      .ok,
+    false,
+  );
+});

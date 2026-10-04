@@ -1,3 +1,4 @@
+import { localIsoDate } from '@/lib/format';
 import { useEffect, useState } from 'react';
 import { normalizePacketWebsite, validatePacketProfile } from '../../api/_lib/packet-branding.js';
 import { create } from 'zustand';
@@ -40,7 +41,7 @@ import { featureGate } from '@/lib/commercialEngine';
 import { hasActivePaidPlan, isCurrentPaidPlan } from '@/lib/subscriptionDecision';
 import { applyTrialToProfile, parseTrialStart } from '@/lib/trialSubscription';
 import { buildOfferDecision } from '@/lib/profitIntelligence';
-import { receivedTotalBelowPaidDeposit } from '@/lib/salePayment';
+import { receivedTotalBelowPaidDeposit, validateSalePayment } from '@/lib/salePayment';
 import { scheduleBuyerActivityFollowUp } from '@/lib/salesFollowUp';
 import {
   createWorkspaceInvitationInCloud,
@@ -2090,6 +2091,27 @@ export const useXbarStore = create<XbarStore>()(
           !(Number.isFinite(patch.amountReceived) && patch.amountReceived >= 0)
         ) {
           return { ok: false, message: 'Amount received must be $0 or more.' };
+        }
+
+        if (
+          [
+            'amountReceived',
+            'amountReceivedOn',
+            'offerAmount',
+            'counterOfferAmount',
+            'depositAmount',
+            'depositStatus',
+          ].some((key) => Object.prototype.hasOwnProperty.call(patch, key))
+        ) {
+          const next = { ...lead, ...patch };
+          const payment = validateSalePayment({
+            amount: next.amountReceived === undefined ? '' : String(next.amountReceived),
+            receivedOn: typeof next.amountReceivedOn === 'string' ? next.amountReceivedOn : '',
+            saleValue: next.counterOfferAmount || next.offerAmount || 0,
+            paidDepositAmount: next.depositStatus === 'Paid' ? next.depositAmount : 0,
+            today: localIsoDate(),
+          });
+          if (!payment.ok) return payment;
         }
 
         if (

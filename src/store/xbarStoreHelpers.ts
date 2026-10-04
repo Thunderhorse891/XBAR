@@ -1,3 +1,5 @@
+import { localIsoDate } from '@/lib/format';
+import { isCalendarDay } from '@/lib/salePayment';
 import {
   expenseReceiptsSeed,
   ownershipSeed,
@@ -1806,6 +1808,19 @@ export function canRestorePersistedState(raw: unknown): boolean {
         }
       }
     }
+  }
+
+  // Do not admit a future receipt that would silently become collected as
+  // the calendar advances. Reject before files or records are installed.
+  const today = localIsoDate();
+  for (const lead of normalized.salesLeads) {
+    if (lead.amountReceivedOn && (!isCalendarDay(lead.amountReceivedOn) || lead.amountReceivedOn > today)) return false;
+    const price = lead.counterOfferAmount || lead.offerAmount || 0;
+    if (
+      price > 0 &&
+      ((lead.amountReceived ?? 0) > price || (lead.depositStatus === 'Paid' && (lead.depositAmount ?? 0) > price))
+    )
+      return false;
   }
 
   return true;

@@ -52,6 +52,13 @@ export function validateSalePayment(input: {
   const rawAmount = input.amount.trim();
   const receivedOn = input.receivedOn.trim();
 
+  if ((input.paidDepositAmount ?? 0) > input.saleValue && input.saleValue > 0) {
+    return {
+      ok: false,
+      message: 'The paid deposit exceeds the agreed sale price. Correct the deposit or price first.',
+    };
+  }
+
   if (!rawAmount) {
     if (receivedOn) return { ok: false, message: 'Enter the amount received, or clear the payment date.' };
     return { ok: true };
