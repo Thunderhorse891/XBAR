@@ -60,6 +60,8 @@ const stripeScenario = {
   openSessions: [],
   priceOverrides: {},
   priceError: null,
+  accountId: 'acct_expected',
+  accountError: null,
   reset() {
     this.calls = [];
     this.createdCustomers = [];
@@ -68,6 +70,8 @@ const stripeScenario = {
     this.openSessions = [];
     this.priceOverrides = {};
     this.priceError = null;
+    this.accountId = 'acct_expected';
+    this.accountError = null;
   },
 };
 
@@ -81,6 +85,13 @@ const stripePriceAmounts = {
 };
 
 __setBillingStripe({
+  accounts: {
+    retrieve: async () => {
+      stripeScenario.calls.push(['accounts.retrieve']);
+      if (stripeScenario.accountError) throw stripeScenario.accountError;
+      return { id: stripeScenario.accountId };
+    },
+  },
   prices: {
     retrieve: async (id) => {
       stripeScenario.calls.push(['prices.retrieve', id]);
@@ -88,6 +99,7 @@ __setBillingStripe({
       return {
         id,
         active: true,
+        livemode: false,
         type: 'recurring',
         currency: 'usd',
         billing_scheme: 'per_unit',
@@ -658,4 +670,49 @@ test('an unchanged correctly priced Enterprise checkout is reused without a seco
   assert.deepEqual(stripeScenario.createdSessions, []);
   assert.deepEqual(calls.upserts, []);
   assert.deepEqual(stripeScenario.calls[0], ['prices.retrieve', PRICES.Enterprise.monthly]);
+});
+
+for (const [label, env, priceOverrides, accountId, accountError] of [
+  ['test price in production', { VERCEL_ENV: 'production' }, { livemode: false }],
+  ['unknown mode in production', { VERCEL_ENV: 'production' }, { livemode: undefined }],
+  ['live price with a test key', {}, { livemode: true }],
+  ['wrong Stripe account', { STRIPE_ACCOUNT_ID: 'acct_expected' }, {}, 'acct_other'],
+  ['malformed expected account', { STRIPE_ACCOUNT_ID: 'not-an-account' }, {}],
+  [
+    'unreadable Stripe account',
+    { STRIPE_ACCOUNT_ID: 'acct_expected' },
+    {},
+    'acct_expected',
+    new Error('private account details'),
+  ],
+]) {
+  test(`checkout refuses ${label} before customer, session, or billing writes`, async () => {
+    stripeScenario.reset();
+    stripeScenario.priceOverrides = priceOverrides;
+    if (accountId) stripeScenario.accountId = accountId;
+    stripeScenario.accountError = accountError;
+    const calls = supabaseFor();
+    const handler = await importWithEnv({ VERCEL_ENV: undefined, STRIPE_ACCOUNT_ID: undefined, ...env }, label);
+    const response = await invoke(handler, { body: { tier: 'Enterprise', workspaceId: 'ws_1' } });
+    assert.equal(response.statusCode, 503);
+    assert.equal(response.body.code, 'price_unavailable');
+    assert.deepEqual(stripeScenario.createdCustomers, []);
+    assert.deepEqual(stripeScenario.createdSessions, []);
+    assert.deepEqual(calls.upserts, []);
+    assert.doesNotMatch(JSON.stringify(response.body), /acct_other|private account details/);
+  });
+}
+
+test('production checkout accepts the verified live price and pinned account', async () => {
+  stripeScenario.reset();
+  stripeScenario.priceOverrides = { livemode: true };
+  supabaseFor();
+  const handler = await importWithEnv(
+    { VERCEL_ENV: 'production', STRIPE_SECRET_KEY: 'sk_live_endpoint_fixture', STRIPE_ACCOUNT_ID: 'acct_expected' },
+    'verified-live-account',
+  );
+  const response = await invoke(handler, { body: { tier: 'Enterprise', workspaceId: 'ws_1' } });
+  assert.equal(response.statusCode, 200);
+  assert.deepEqual(stripeScenario.calls[0], ['accounts.retrieve']);
+  assert.equal(stripeScenario.createdSessions.length, 1);
 });

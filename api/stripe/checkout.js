@@ -26,6 +26,9 @@ const RATE_LIMIT = { bucket: 'checkout', limit: 10, windowSeconds: 60 };
 const stripeSecretKey = process.env.STRIPE_SECRET_KEY?.trim() || '';
 const stripe = stripeSecretKey ? new Stripe(stripeSecretKey, { apiVersion: '2026-02-25.clover' }) : null;
 const managedBillingEnabled = serverManagedBillingEnabled();
+// Pin validation to the same import-time environment as the Stripe client.
+const expectedAccountId = process.env.STRIPE_ACCOUNT_ID?.trim() || '';
+const expectedLivemode = process.env.VERCEL_ENV === 'production' || /^(sk|rk)_live_/.test(stripeSecretKey);
 
 function getTrustedReturnUrl(requestedReturnUrl) {
   const vercelOrigin = process.env.VERCEL_URL ? `https://${process.env.VERCEL_URL}` : '';
@@ -230,7 +233,7 @@ export default async function handler(req, res) {
     // A configured ID proves nothing about what Stripe will actually charge.
     // Revalidate before both new sessions and reuse, and before any Stripe write.
     // Prices are immutable: a successful check pins the amount/cadence of this ID.
-    if (!(await verifyCheckoutPrice(stripe, { tier, billingPeriod, priceId }))) {
+    if (!(await verifyCheckoutPrice(stripe, { tier, billingPeriod, priceId, expectedAccountId, expectedLivemode }))) {
       return sendJson(res, 503, {
         ok: false,
         code: 'price_unavailable',
