@@ -520,7 +520,7 @@ export default function Settings() {
        * verifier runs there with no CSP to satisfy.
        */
       const { restored, failed, remapped } = Array.isArray(payload.files)
-        ? await importLocalFiles(payload.files, { workspaceId: target.ownerId })
+        ? await importLocalFiles(payload.files, { workspaceId: target.ownerId, freshKeys: true })
         : { restored: 0, failed: [] as UnbackedUpFile[], remapped: {} as Record<string, string> };
       if (!transferIsCurrent(target, 'manageSettings')) {
         reportTransferStopped();

@@ -112,6 +112,29 @@ test('only the files the workspace still references are carried', async () => {
   }
 });
 
+test('staged restore never changes original bytes or metadata before records are installed', async () => {
+  const restore = installFakeIndexedDb();
+  try {
+    const key = await storeLocalFile(new Blob(['original']), 'original.pdf', undefined, TEST_WORKSPACE);
+    const before = await readLocalFile(key);
+    const context = { workspaceId: TEST_WORKSPACE, freshKeys: true };
+    const result = await importLocalFiles(
+      [{ key, name: 'replacement.pdf', type: 'text/plain', size: 7, storedAt: '', data: btoa('changed') }],
+      context,
+    );
+    assert.equal(result.restored, 1);
+    assert.notEqual(result.remapped[key], key);
+    assert.ok(result.remapped[key]);
+    const original = await readLocalFile(key);
+    assert.equal(original?.name, before?.name);
+    assert.equal(await original?.blob.text(), 'original');
+    assert.equal(await (await readLocalFile(result.remapped[key]))?.blob.text(), 'changed');
+    // A stopped restore installs no remapped records; the original stays usable.
+  } finally {
+    restore();
+  }
+});
+
 test('a file too large for the budget is named, not dropped', async () => {
   const restore = installFakeIndexedDb();
   try {
