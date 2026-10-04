@@ -2,7 +2,7 @@ export type ReportBranding = { logo: Uint8Array; mark: Uint8Array; watermark: Ui
 
 export function reportBrandAssetPaths(base = '/') {
   const prefix = base.endsWith('/') ? base : `${base}/`;
-  return ['xbar-report-horse.png', 'xbar-signature-print-512.png', 'xbar-report-watermark.png'].map(
+  return ['xbar-report-horse.png', 'xbar-original-lockup-480.png', 'xbar-report-watermark.png'].map(
     (name) => `${prefix}brand/${name}`,
   );
 }

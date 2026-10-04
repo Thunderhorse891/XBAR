@@ -199,70 +199,44 @@ test('the signature derivative preserves every supplied source master byte for b
   }
 });
 
-test('signature geometry contains real traceable paths and static vector/raster fallbacks', async () => {
-  const geometry = JSON.parse(await readFile('public/brand/xbar-signature-paths.json', 'utf8')) as {
-    viewBox: string;
-    compactViewBox: string;
-    source: { file: string; width: number; height: number; sha256: string };
-    paths: { id: string; d: string; detail: boolean }[];
-    compactPaths: { id: string; d: string; fillRule: string }[];
-  };
-  assert.equal(geometry.source.file, '/brand/xbar-report-horse.png');
-  assert.equal(geometry.viewBox, `0 0 ${geometry.source.width} ${geometry.source.height}`);
-  const master = await readFile(`public${geometry.source.file}`);
-  assert.equal(createHash('sha256').update(master).digest('hex'), geometry.source.sha256);
-  assert.equal(master.readUInt32BE(16), geometry.source.width);
-  assert.equal(master.readUInt32BE(20), geometry.source.height);
-  assert.ok(geometry.paths.length > 0, 'a signature cannot be an empty SVG wrapper');
-  assert.equal(
-    new Set(geometry.paths.map((path) => path.id)).size,
-    geometry.paths.length,
-    'path identities must be unique',
-  );
-  for (const path of geometry.paths) {
-    assert.match(path.d, /^M\s*[-\d.]/, `${path.id}: missing vector geometry`);
-    assert.match(path.d, /C\s*[-\d.]/, `${path.id}: contours must be actual Bezier curves`);
-    assert.doesNotMatch(path.d, /NaN|Infinity|<|>/);
-    assert.equal(typeof path.detail, 'boolean', `${path.id}: compact geometry selection must be explicit`);
-  }
-  assert.ok(geometry.compactPaths.length > 0, 'small marks need the approved filled silhouette');
-  for (const path of geometry.compactPaths) {
-    assert.match(path.d, /^M\s*[-\d.]/);
-    assert.match(path.d, /Z\s*$/, 'filled contours must close deliberately');
-    assert.equal(path.fillRule, 'evenodd', 'eye and nostril cutouts must remain recognizable');
-  }
-  for (const file of [
-    'xbar-signature-horse-silhouette.svg',
-    'xbar-signature-horse-dark.svg',
-    'xbar-signature-horse-small.svg',
+test('original metallic artwork is the only rendered XBAR logo, without a traced replacement', async () => {
+  const component = await readFile('src/components/BrandMark.tsx', 'utf8');
+  const publicLogo = await readFile('scripts/marketing/signature.mjs', 'utf8');
+  assert.match(component, /import\.meta\.env\.BASE_URL/, 'compact artwork must respect the supported deployment base');
+  for (const [name, source] of [
+    ['application', component],
+    ['public site', publicLogo],
   ]) {
-    const svg = await readFile(`public/brand/${file}`, 'utf8');
-    assert.ok(svg.includes(`viewBox="${geometry.compactViewBox}"`), `${file}: source proportions must be preserved`);
+    assert.match(source, /xbar-original-lockup-480\.png/, `${name} must render the selected original B artwork`);
+    assert.match(source, /preserveAspectRatio=["']xMidYMid meet["']/, `${name} must contain the complete original`);
     assert.doesNotMatch(
-      svg,
-      /<image\b|<text\b|data:image|<animate\b|<script\b/i,
-      `${file}: static recognizable geometry cannot be a raster or typed wordmark`,
+      source,
+      /compactPaths|geometry\.paths|<path\b|signatureMotion/,
+      `${name} must not redraw the horse`,
     );
-    for (const path of geometry.compactPaths)
-      assert.ok(svg.includes(`d="${path.d}"`), `${file}: ${path.id} diverged from canonical geometry`);
   }
-  for (const file of ['xbar-signature-horse.svg', 'xbar-signature-report-overlay.svg']) {
-    const svg = await readFile(`public/brand/${file}`, 'utf8');
-    const expectedViewBox = file.includes('report-overlay') ? geometry.viewBox : geometry.compactViewBox;
-    assert.ok(svg.includes(`viewBox="${expectedViewBox}"`));
-    assert.doesNotMatch(svg, /<image\b|<text\b|data:image|<animate\b/i);
-    for (const path of geometry.paths)
-      assert.ok(svg.includes(`d="${path.d}"`), `${file}: detailed source contour ${path.id} must remain intact`);
+  const email = await readFile('api/_lib/email.js', 'utf8');
+  const sample = await readFile('scripts/marketing/sample-packet.mjs', 'utf8');
+  const reports = await readFile('src/lib/reportBranding.ts', 'utf8');
+  const manifest = await readFile('public/site.webmanifest', 'utf8');
+  for (const [name, source] of [
+    ['email', email],
+    ['sample', sample],
+    ['report', reports],
+    ['manifest', manifest],
+  ]) {
+    assert.doesNotMatch(
+      source,
+      /xbar-signature-(?:horse|print|email|icon)/,
+      `${name} must not publish the rejected silhouette`,
+    );
   }
-  const small = await readFile('public/brand/xbar-signature-horse-small.svg', 'utf8');
-  assert.match(small, /<path\b/);
-  assert.doesNotMatch(small, /<image\b|<text\b|data:image|<animate\b/i);
-  for (const size of [32, 64, 180, 192, 512]) {
-    const png = await readFile(`public/brand/xbar-signature-horse-${size}.png`);
-    assert.equal(png.subarray(0, 8).toString('hex'), '89504e470d0a1a0a');
-    assert.equal(png.readUInt32BE(16), size);
-    assert.equal(png.readUInt32BE(20), size);
-  }
+  assert.match(email, /xbar-original-lockup-480\.png/);
+  assert.match(sample, /xbar-original-lockup-480\.png/);
+  assert.match(manifest, /xbar-original-icon-512\.png/);
+  const icon = await readFile('public/brand/xbar-original-icon-512.png');
+  assert.equal(icon.readUInt32BE(16), 512);
+  assert.equal(icon.readUInt32BE(20), 512);
 });
 
 // Run the shared controller against the browser boundary it consumes, without
@@ -498,53 +472,13 @@ test('signature disposal and unsupported geometry leave a safe static fallback',
   }
 });
 
-test('public and React signature rendering share canonical geometry and finite motion', async () => {
-  const component = await readFile('src/components/BrandMark.tsx', 'utf8');
-  const publicRenderer = await readFile('scripts/marketing/signature.mjs', 'utf8');
-  const publicEntry = await readFile('src/marketing/signatureMotion.ts', 'utf8');
-  const signatureCss = withoutComments(await readFile('public/brand/xbar-signature.css', 'utf8'));
-  for (const source of [component, publicRenderer]) {
-    assert.match(source, /xbar-signature-paths\.json/, 'all inline marks use the same canonical paths');
-    assert.doesNotMatch(
-      source,
-      /<image\b|<text\b/,
-      'recognition is horse geometry, never an embedded raster or typed wordmark',
-    );
-  }
-  for (const source of [component, publicEntry])
-    assert.match(source, /import \{ installSignatureMotion \} from '[^']*lib\/signatureMotion'/);
-  assert.match(component, /motion\.dispose\(\)/, 'React unmount must clean up listeners and running traces');
-  assert.match(signatureCss, /@media\s*\(prefers-reduced-motion:\s*reduce\)/);
-  assert.doesNotMatch(signatureCss, /infinite|#[\da-f]{3,8}\b/i, 'signature styles use shared colors and never loop');
-  const landingCss = withoutComments(await readFile('scripts/marketing/landing.css', 'utf8'));
-  const landingMotion = await readFile('src/marketing/landingMotion.ts', 'utf8');
-  assert.doesNotMatch(landingCss, /\.landing-horse-light|horse-light-pulse/);
-  assert.doesNotMatch(landingMotion, /landing-horse-light|horse-light-pulse/);
-});
-
-test('the signature dash enters at the path start and exits at the end without wrapping', async () => {
+test('original artwork styling uses brand tokens and never recolours or retraces the horse', async () => {
   const css = withoutComments(await readFile('public/brand/xbar-signature.css', 'utf8'));
-  const dash = css.match(/stroke-dasharray:\s*([\d.]+)\s+([\d.]+)\s*;/);
-  assert.ok(dash, 'signature tracing requires an explicit dash and gap');
-  const dashLength = Number(dash[1]);
-  assert.equal(dashLength, 0.18);
-  assert.equal(Number(dash[2]), 1, 'one whole path of gap prevents multiple visible highlights');
-  const harness = await signatureHarness();
-  harness.enter();
-  assert.ok(harness.animations.length > 0);
-  for (const animation of harness.animations) {
-    const frames = animation.keyframes;
-    const offsets = frames.map((frame) => Number(frame.strokeDashoffset));
-    assert.equal(offsets[0], dashLength, 'start with the leading end of the dash at path position zero');
-    assert.equal(offsets.at(-1), -1, 'finish with the trailing end beyond the complete normalized path');
-    for (let index = 1; index < offsets.length; index++) {
-      assert.ok(offsets[index] < offsets[index - 1], 'the highlight moves forward once without a phase reset');
-    }
-    const times = [0, 0.08, 0.92, 1];
-    offsets.forEach((offset, index) => {
-      const expected = dashLength - (1 + dashLength) * times[index];
-      assert.ok(Math.abs(offset - expected) < 1e-8, 'opacity keyframes must not change the speed or dash phase');
-    });
-  }
-  harness.controller.dispose();
+  assert.doesNotMatch(css, /filter:|mask-image:|stroke-dash|infinite|#[\da-f]{3,8}\b/i);
+  assert.match(css, /aspect-ratio:\s*1672 \/ 941/);
+  assert.match(css, /border: 1px solid var\(--xbar-silver\)/);
+  const login = await readFile('src/routes/Login.tsx', 'utf8');
+  const home = await readFile('scripts/marketing/home.mjs', 'utf8');
+  assert.doesNotMatch(login, /XbarMark variant="hero"/);
+  assert.doesNotMatch(home, /signatureSvg\(\{ hero: true/);
 });

@@ -60,7 +60,7 @@ export function brandEmailHtml(html, text) {
     `<div style="font-family:${EMAIL_FONT_STACK};background:#f5f6f7;padding:24px 16px;">` +
     `<div style="max-width:560px;margin:0 auto;background:#ffffff;border:1px solid #e0e3e6;border-radius:10px;overflow:hidden;">` +
     `<div style="background:#171b20;padding:18px 24px;border-bottom:2px solid #94d8f2;">` +
-    `<img src="https://xbar-horse-management-app.vercel.app/brand/xbar-signature-email-192.png" width="48" height="48" alt="XBAR horse signature" style="display:block;width:48px;height:48px;margin:0 0 10px;border:0;" />` +
+    `<img src="https://xbar-horse-management-app.vercel.app/brand/xbar-original-lockup-480.png" width="144" height="81" alt="XBAR original metallic horse and wordmark" style="display:block;width:144px;height:auto;margin:0 0 10px;border:1px solid #d6dde5;border-radius:5px;" />` +
     `<span style="color:#d6dde5;font-size:15px;font-weight:800;letter-spacing:0.28em;">XBAR</span>` +
     `</div>` +
     `<div style="padding:24px;color:#202428;font-size:14px;line-height:1.6;">${inner}</div>` +

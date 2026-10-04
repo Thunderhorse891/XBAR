@@ -143,7 +143,7 @@ function PromptContent({ prompt }: { prompt: UpgradePromptRequest }) {
         }}
       >
         <div className="upgrade-prompt__identity">
-          <XbarMark width={34} height={34} />
+          <XbarMark width={72} height={41} />
           <span>More from your ranch records</span>
         </div>
         <p className="upgrade-prompt__eyebrow">Included with {feature.tier}</p>

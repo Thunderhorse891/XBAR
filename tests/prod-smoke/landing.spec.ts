@@ -60,10 +60,10 @@ test('below-fold artwork waits for the viewport without native image lazy loadin
   await page.goto('/');
   await page.locator('.landing-horse').evaluate((img: HTMLImageElement) => img.decode());
   expect(
-    images.some((url) => url.includes('xbar-signature-horse-512') || url.includes('app-horse-roster-signature.png')),
+    images.some((url) => url.includes('xbar-original-icon-512') || url.includes('app-horse-roster-original.png')),
   ).toBe(false);
   await page.locator('.landing-x-art').scrollIntoViewIfNeeded();
-  await expect.poll(() => images.some((url) => url.endsWith('xbar-signature-horse-512.png'))).toBe(true);
+  await expect.poll(() => images.some((url) => url.endsWith('xbar-original-icon-512.png'))).toBe(true);
   await expect
     .poll(() => page.locator('.landing-x-art img').evaluate((img: HTMLImageElement) => img.naturalWidth))
     .toBeGreaterThan(0);

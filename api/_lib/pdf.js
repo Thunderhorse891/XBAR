@@ -539,7 +539,8 @@ export async function createSectionedPdf(input) {
   const pages = pdf.getPages();
   pages.forEach((footerPage, index) => {
     if (brandMark) {
-      footerPage.drawImage(brandMark, { x: MARGIN, y: MARGIN - 25, width: 16, height: 16 });
+      const size = brandMark.scaleToFit(32, 18);
+      footerPage.drawImage(brandMark, { x: MARGIN, y: MARGIN - 25, ...size });
     }
     footerPage.drawLine({
       start: { x: MARGIN, y: MARGIN - 6 },
@@ -568,7 +569,7 @@ export async function createSectionedPdf(input) {
       // only the page margin beneath it, so a second line would print outside
       // the document's own frame. The page stamp is the part that must stay
       // legible — a reader needs to know whether they have the whole document.
-      const brandInset = brandMark ? 23 : 0;
+      const brandInset = brandMark ? 39 : 0;
       const available = PAGE_WIDTH - 2 * MARGIN - stampWidth - FOOTER_GAP - brandInset;
       footerPage.drawText(truncateToWidth(footer, font, 8, available), {
         x: MARGIN + brandInset,

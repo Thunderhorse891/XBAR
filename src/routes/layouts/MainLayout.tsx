@@ -214,7 +214,7 @@ export default function MainLayout() {
       {/* ---------------------------------------------------------- Sidebar */}
       <div className="xs-sidebar" role="complementary" aria-label="Workspace sidebar">
         <NavLink to="/" className="xs-brand" aria-label="XBAR dashboard">
-          <XbarMark title="XBAR" className="xs-brand__signature" width={44} height={44} />
+          <XbarMark title="XBAR" className="xs-brand__signature" width={96} height={54} />
           <span className="xs-brand__sub">Ranch workspace</span>
         </NavLink>
 
@@ -266,12 +266,12 @@ export default function MainLayout() {
               <SheetContent side="left" className="xs-navigation-sheet">
                 <SheetTitle className="sr-only">Ranch navigation</SheetTitle>
                 <SheetDescription className="sr-only">Open any area of your ranch workspace.</SheetDescription>
-                <XbarMark title="XBAR" className="xs-brand__signature" width={44} height={44} />
+                <XbarMark title="XBAR" className="xs-brand__signature" width={96} height={54} />
                 {renderNavigation('All sections')}
               </SheetContent>
             </Sheet>
             <NavLink className="xs-mobile-brand" to="/" aria-label="XBAR dashboard">
-              <XbarMark width={38} height={38} />
+              <XbarMark width={64} height={36} />
             </NavLink>
             <span className="xs-topbar__ranch">{ranchName}</span>
           </div>

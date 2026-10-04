@@ -2,7 +2,7 @@ import { horseAgeLabel } from '@/lib/horseDocumentActions';
 import { useMemo, useRef, useState } from 'react';
 import type { CSSProperties } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
-import { ArrowLeft, Camera, Copy, FileText, HeartPulse, Move, Pencil, Plus, Upload } from 'lucide-react';
+import { Archive, ArrowLeft, Camera, Copy, FileText, HeartPulse, Move, Pencil, Plus, Upload } from 'lucide-react';
 import { HorsesIcon } from '@/components/icons';
 import { ActionButton, Card, StatusChip } from '@/components/saas';
 import { useUiStore } from '@/store/useUiStore';
@@ -27,6 +27,7 @@ import { SaleReadinessCard } from '@/components/SaleReadinessCard';
 import { HorsePhotoSourceDialog } from '@/components/HorsePhotoSourceDialog';
 import { useHorsePhotoSelection } from '@/hooks/useHorsePhotoSelection';
 import type { PhotoSelectionTicket } from '@/lib/photoSelection';
+import { useHorseArchiveActions } from '@/hooks/useHorseArchiveActions';
 
 // Stagger index for the motion system; the CSS var drives each child's delay.
 const motionIndex = (index: number): CSSProperties => ({ ['--motion-index' as string]: index }) as CSSProperties;
@@ -67,6 +68,7 @@ export default function AnimalProfile() {
   const openQuickCreate = useUiStore((s) => s.openQuickCreate);
   const pushToast = useUiStore((s) => s.pushToast);
   const uploadHorseMedia = useXbarStore((s) => s.uploadHorseMedia);
+  const { handleArchive, handleRestore } = useHorseArchiveActions();
   const currentRole = useXbarStore((s) => s.currentRole);
   const expenseReceipts = useXbarStore((s) => s.expenseReceipts);
   const salesLeads = useXbarStore((s) => s.salesLeads);
@@ -228,6 +230,15 @@ export default function AnimalProfile() {
         <ArrowLeft size={14} /> Horses
       </button>
 
+      {animal.archive ? (
+        <div className="panel" role="status">
+          <p>This horse is archived from the roster. Its records, reminders, and buyer packets are retained.</p>
+          {hasRoleCapability(currentRole, 'editHorse') ? (
+            <ActionButton onClick={() => handleRestore(animal.id, animal.archive!.id)}>Restore horse</ActionButton>
+          ) : null}
+        </div>
+      ) : null}
+
       <div className="xs-objhead">
         <div className="xs-objhead__id">
           {canUploadMedia ? (
@@ -297,6 +308,11 @@ export default function AnimalProfile() {
           </div>
         </div>
         <div className="xs-objhead__actions">
+          {!animal.archive && hasRoleCapability(currentRole, 'editHorse') ? (
+            <ActionButton size="sm" icon={<Archive size={14} />} onClick={() => handleArchive(animal.id)}>
+              Archive from roster
+            </ActionButton>
+          ) : null}
           <ActionButton
             size="sm"
             icon={<Pencil size={14} />}

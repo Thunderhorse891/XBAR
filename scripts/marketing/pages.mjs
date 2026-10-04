@@ -27,8 +27,8 @@ function ctaBlock(heading, copy) {
 }
 
 // Real product imagery: captures of the running preview with fictional
-// browser-local records. Signature screenshots are from CI run37142424448
-// at cb76f11. Never replace them with imagined interfaces.
+// browser-local records. Original-artwork screenshots are from CI run37176785301
+// at e536254. Never replace them with imagined interfaces.
 function productShot(file, alt, caption, { eager = false, width = 1440, height = 900 } = {}) {
   return `<figure class="shot">
   <div class="shot-frame">
@@ -41,10 +41,10 @@ function productShot(file, alt, caption, { eager = false, width = 1440, height =
 
 function recordShot(eager = false) {
   return productShot(
-    'app-horse-roster-signature.png',
+    'app-horse-roster-original.png',
     'XBAR horse roster showing search, filters, document gaps, and quick-review actions',
     'Actual XBAR preview interface with fictional example records — <a href="/demo">see the full tour</a>.',
-    { eager, width: 1440, height: 1272 },
+    { eager, width: 1440, height: 1404 },
   );
 }
 
@@ -851,7 +851,7 @@ const demo = {
   <div class="wrap">
     <h2>2 · Priorities with a next step</h2>
     <p class="intro">Missing documents and readiness signals lead to the records and actions that need attention. This is the actual preview dashboard in a browser-local demonstration workspace, not customer data.</p>
-    ${productShot('app-dashboard-signature.png', 'XBAR dashboard with actionable horse and document priorities', 'Actual preview dashboard with fictional example records.', { width: 1440, height: 1214 })}
+    ${productShot('app-dashboard-original.png', 'XBAR dashboard with actionable horse and document priorities', 'Actual preview dashboard with fictional example records.', { width: 1440, height: 1214 })}
   </div>
 </section>
 

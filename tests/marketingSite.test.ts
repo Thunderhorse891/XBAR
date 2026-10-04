@@ -239,7 +239,7 @@ test('the homepage retains approved artwork, accurate prices, and static signup 
   assert.match(html, /href="\/app\/login\?mode=signup"/);
   assert.match(html, /href="\/samples\/sample-sale-packet.html"/);
   assert.match(html, /\/brand\/xbar-report-horse.png/);
-  assert.match(html, /\/brand\/xbar-signature-horse-512.png/);
+  assert.match(html, /\/brand\/xbar-original-icon-512.png/);
   assert.match(html, /example data/);
   for (const plan of marketingPlans) {
     assert.ok(html.includes(`$${plan.monthlyRate}<span>/month</span>`), `${plan.tier} price must remain accurate`);
@@ -462,30 +462,18 @@ test('missing observer or animation support preserves static public content', as
   }
 });
 
-test('all public routes load one lightweight signature bundle with real path geometry', async () => {
+test('all public routes show the complete original B artwork without traced substitutions', async () => {
   const { renderPage } = await load('scripts/marketing/render.mjs');
   for (const page of await allPublicPages()) {
     const html = renderPage(page);
-    assert.equal(
-      [...html.matchAll(/<script[^>]*src="\/brand-motion\/signature[^"<>]*\.js"/g)].length,
-      1,
-      `${page.path}: missing or duplicated shared signature motion`,
-    );
     assert.equal(html.split('href="/brand/xbar-signature.css"').length - 1, 1);
     const signatures = [...html.matchAll(/<svg[^>]*data-xbar-signature[^>]*>[\s\S]*?<\/svg>/g)];
-    assert.ok(signatures.length >= 2, `${page.path}: header and footer signature required`);
+    assert.ok(signatures.length >= 2, `${page.path}: header and footer original artwork required`);
     for (const [svg] of signatures) {
-      assert.match(svg, /class="xbar-signature__base"/, 'recognition must remain visible when motion is disabled');
-      assert.match(
-        svg,
-        /class="xbar-signature__trace"[^>]*pathLength="1"/,
-        'the highlight must trace actual normalized paths',
-      );
-      assert.doesNotMatch(
-        svg,
-        /<image\b|<text\b|data:image/i,
-        'the signature must be real horse geometry independent of raster or typeset XBAR text',
-      );
+      assert.match(svg, /<image[^>]*href="\/brand\/xbar-original-lockup-480.png"/);
+      assert.match(svg, /viewBox="0 0 1672 941"/);
+      assert.match(svg, /preserveAspectRatio="xMidYMid meet"/);
+      assert.doesNotMatch(svg, /<path\b|<text\b|xbar-signature__trace/);
     }
   }
 });

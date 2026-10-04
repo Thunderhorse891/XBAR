@@ -109,3 +109,28 @@ Customer branding is distinct from XBAR's verification seal and link, which
 remain visible. This feature does not change plans, limits, pricing or offer
 white-label removal of the verification identity. Supplied XBAR assets remain
 unchanged.
+
+## Original artwork restoration (October 4, 2026)
+
+The owner selected B, the unchanged `xbar-report-horse.png` master, as the default
+for every XBAR surface and rejected the flat filled signature C. React and
+public navigation embed the complete raster proportionally, using the 480px
+`xbar-original-lockup-480.png` export to avoid downloading the 2.39 MB master
+for a compact badge. Auth, email,
+sample packets and report footers use the same original. Silver framing or
+backplates separate its dark ground from dark navigation without recolouring,
+cropping or redrawing the horse. The new `xbar-original-icon-*` PNGs contain
+only a proportional resize of the full master on a silver square; the maskable
+variant keeps the complete artwork within the safe area. The master hash is
+pinned by tests. A is available only inside the supplied visual reference, so
+no extracted or invented A asset is used.
+
+The old `xbar-signature-horse*`, email/print/icon derivatives and traced paths
+are retained as historical review files and have no live logo consumers. The
+approximate outline overlay is removed rather than tracing a different horse
+over the original. Existing general UI entrance motion is unchanged. This
+restoration does not alter customer logos, sealed packets or their verification.
+
+Generate original exports with `python scripts/brand/original-build.py`; use
+`--verify` to compare decoded output pixels with the exact proportional resize
+and verify the maskable safe circle. Pillow is a tooling dependency only.

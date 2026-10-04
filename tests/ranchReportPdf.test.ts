@@ -34,7 +34,7 @@ function fixture(count = 18): RanchReportInput {
 }
 const branding = async () => ({
   logo: await readFile('public/brand/xbar-report-horse.png'),
-  mark: await readFile('public/brand/xbar-signature-print-512.png'),
+  mark: await readFile('public/brand/xbar-original-lockup-480.png'),
   watermark: await readFile('public/brand/xbar-report-watermark.png'),
 });
 
@@ -292,7 +292,7 @@ test('report artwork honors the deployment base and survives offline after cachi
   const { reportBrandAssetPaths, loadReportBranding } = await import('../src/lib/reportBranding.js');
   assert.deepEqual(reportBrandAssetPaths('/XBAR/'), [
     '/XBAR/brand/xbar-report-horse.png',
-    '/XBAR/brand/xbar-signature-print-512.png',
+    '/XBAR/brand/xbar-original-lockup-480.png',
     '/XBAR/brand/xbar-report-watermark.png',
   ]);
   const originals = await branding();
@@ -414,4 +414,31 @@ test('report generation refuses a corrupt restored logo instead of exporting a b
     }),
     /logo could not be decoded/,
   );
+});
+
+test('every report footer preserves the original metallic horse artwork aspect ratio', async () => {
+  const assets = await branding();
+  const expectedRatio = assets.mark.readUInt32BE(16) / assets.mark.readUInt32BE(20);
+  const bytes = await renderReportPdf(buildRanchReport(fixture(1), now), 'Example ranch', assets);
+  const raw = Buffer.from(bytes).toString('latin1');
+  let marks = 0;
+  for (const match of raw.matchAll(/stream\r?\n/g)) {
+    const start = match.index! + match[0].length;
+    let ops: string;
+    try {
+      ops = inflateSync(Buffer.from(raw.slice(start, raw.indexOf('endstream', start)), 'latin1')).toString('latin1');
+    } catch {
+      continue;
+    }
+    for (const mark of ops.matchAll(/1 0 0 1 36 29 cm\s+1 0 0 1 0 0 cm\s+([\d.]+) 0 0 ([\d.]+) 0 0 cm/g)) {
+      marks += 1;
+      assert.ok(
+        Math.abs(Number(mark[1]) / Number(mark[2]) - expectedRatio) < 0.0001,
+        'B must never stretch into a square',
+      );
+      assert.ok(Number(mark[1]) <= 24 && Number(mark[2]) <= 14, 'artwork stays inside its reserved footer slot');
+    }
+  }
+  assert.equal(marks, (await PDFDocument.load(bytes)).getPageCount(), 'every non-white-label page has the original');
+  await assertFits(bytes);
 });

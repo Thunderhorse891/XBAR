@@ -600,9 +600,15 @@ export async function renderReportPdf(
         );
     }
     rect(36, 746, 540, 0.5, line);
-    if (!style.whiteLabel) page.drawImage(mark, { x: 36, y: 29, width: 12, height: 12 });
+    if (!style.whiteLabel) page.drawImage(mark, { x: 36, y: 29, ...mark.scaleToFit(24, 14) });
     // The rancher's name is the masthead; the platform gets small footer type.
-    text('Unaudited management estimates from ranch records · Prepared with XBAR', 55, 754, 7, muted);
+    text(
+      'Unaudited management estimates from ranch records · Prepared with XBAR',
+      style.whiteLabel ? 55 : 66,
+      754,
+      7,
+      muted,
+    );
     text(`${index + 1} / ${pdf.getPageCount()}`, 550, 754, 7, muted);
   });
   pdf.setTitle(

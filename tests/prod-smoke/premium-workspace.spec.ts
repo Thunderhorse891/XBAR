@@ -52,10 +52,10 @@ test('desktop workspace preserves brand, horse creation and navigation', async (
   await setupWorkspace(page);
   const signature = page.locator('.xs-sidebar .xs-brand__signature');
   await expect(signature).toBeVisible();
-  await expect(signature.locator('.xbar-signature__base path')).not.toHaveCount(0);
-  await expect(signature.locator('image, text')).toHaveCount(0);
-  await expect(signature).toHaveAttribute('width', '44');
-  await expect(signature).toHaveAttribute('height', '44');
+  await expect(signature.locator('image')).toHaveAttribute('href', '/brand/xbar-original-lockup-480.png');
+  await expect(signature.locator('path, text')).toHaveCount(0);
+  await expect(signature).toHaveAttribute('width', '96');
+  await expect(signature).toHaveAttribute('height', '54');
   await expect(page.locator('.xs-hero__wm')).toHaveCount(0);
   await expect(page.locator('.xs-hero__headline')).toHaveCSS('color', 'rgb(32, 36, 40)');
   await expect(page.locator('.xs-ranchcard__name')).toHaveCSS('color', 'rgb(245, 242, 236)');

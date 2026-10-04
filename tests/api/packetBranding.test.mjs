@@ -451,7 +451,7 @@ test('JPEG customer logos embed at their actual aspect ratio and remain separate
   const dimensions = validatePacketLogo(logo);
   const branding = {
     logo: await readFile(new URL('../../public/brand/xbar-report-horse.png', import.meta.url)),
-    mark: await readFile(new URL('../../public/brand/xbar-signature-print-512.png', import.meta.url)),
+    mark: await readFile(new URL('../../public/brand/xbar-original-lockup-480.png', import.meta.url)),
     watermark: await readFile(new URL('../../public/brand/xbar-report-watermark.png', import.meta.url)),
   };
   const bytes = await createSectionedPdf({ title: 'Seller Packet', customerLogoDataUrl: logo, branding, sections: [] });
