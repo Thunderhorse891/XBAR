@@ -8,13 +8,7 @@ import {
   startManagedCheckout,
   type SellablePrices,
 } from '@/lib/billingApi';
-import {
-  CHECKOUT_CONFIRMATION_POLL_INTERVAL_MS,
-  CHECKOUT_CONFIRMATION_TIMEOUT_MS,
-  isCheckoutConfirmationComplete,
-  parseCheckoutReturn,
-  stripCheckoutReturnParam,
-} from '@/lib/checkoutReturn';
+import { parseCheckoutReturn, stripCheckoutReturnParam, watchCheckoutConfirmation } from '@/lib/checkoutReturn';
 import { refreshWorkspaceSubscriptionProfile } from '@/lib/cloudWorkspace';
 import { formatCurrency } from '@/lib/format';
 import { isNativeApp } from '@/lib/nativePlatform';
@@ -350,24 +344,17 @@ export default function Subscriptions() {
     const kind = parseCheckoutReturn(window.location.search);
     if (!kind) return;
     const cleaned = stripCheckoutReturnParam(window.location.search);
-    window.history.replaceState(null, '', `${window.location.pathname}${cleaned}${window.location.hash}`);
+    // Update the router as well as the address bar. Direct replaceState leaves
+    // useSearchParams stale, so selecting a plan resurrects the old outcome.
+    void navigate({ search: cleaned, hash: window.location.hash }, { replace: true });
     if (kind === 'cancelled') {
       setCheckoutReturnState('cancelled');
       return;
     }
-    pushToast({
-      title: 'Payment completed',
-      message: 'Your payment went through. Confirming your plan now.',
-      tone: 'success',
-    });
-    /*
-     * Managed checkout always has a workspace id; without one there is no
-     * profile to poll, so the toast is the whole story.
-     */
-    if (workspaceId) {
-      setCheckoutReturnState('confirming');
-    }
-  }, [pushToast, workspaceId]);
+    // The workspace may still be loading after the full-page Stripe return.
+    // Keep the verification state so polling starts when its identity arrives.
+    setCheckoutReturnState('confirming');
+  }, [navigate]);
 
   /*
    * Confirm the completed checkout against the cloud profile.
@@ -382,15 +369,15 @@ export default function Subscriptions() {
    */
   useEffect(() => {
     if (checkoutReturnState !== 'confirming') return;
-    let cancelled = false;
-    let timer: number | undefined;
-    const startedAt = Date.now();
-    const poll = async () => {
-      if (cancelled) return;
-      const refreshed = await refreshWorkspaceSubscriptionProfile(workspaceId);
-      if (cancelled) return;
-      const profile = refreshed.ok ? refreshed.profile : null;
-      if (profile && isCheckoutConfirmationComplete(profile)) {
+    return watchCheckoutConfirmation({
+      readProfile: async (signal) => {
+        const refreshed = await refreshWorkspaceSubscriptionProfile(workspaceId, signal);
+        return refreshed.ok ? refreshed.profile : null;
+      },
+      onConfirmed: (profile) => {
+        // Recheck identity at the actual write, including the brief interval
+        // between a workspace switch and React cleaning up this effect.
+        if (useCloudStore.getState().workspaceId !== workspaceId) return;
         useXbarStore.setState({ subscription: profile });
         emit(productEventNames.checkoutConfirmed, { tier: profile.tier });
         pushToast({
@@ -399,20 +386,12 @@ export default function Subscriptions() {
           tone: 'success',
         });
         setCheckoutReturnState('confirmed');
-        return;
-      }
-      if (Date.now() - startedAt >= CHECKOUT_CONFIRMATION_TIMEOUT_MS) {
+      },
+      onTimeout: () => {
         emit(productEventNames.checkoutConfirmationStale, {}, 'warning');
         setCheckoutReturnState('stale');
-        return;
-      }
-      timer = window.setTimeout(poll, CHECKOUT_CONFIRMATION_POLL_INTERVAL_MS);
-    };
-    void poll();
-    return () => {
-      cancelled = true;
-      if (timer !== undefined) window.clearTimeout(timer);
-    };
+      },
+    });
   }, [checkoutReturnState, workspaceId, emit, pushToast]);
 
   /*
@@ -770,14 +749,14 @@ export default function Subscriptions() {
 
           {checkoutReturnState === 'confirming' && (
             <div className="checkout-return-banner" role="status">
-              <span>Payment received</span>
+              <span>Checking your plan</span>
               <strong>Confirming your payment…</strong>
               <p>Your plan activates here as soon as the payment is confirmed — usually within a few seconds.</p>
             </div>
           )}
           {checkoutReturnState === 'confirmed' && (
             <div className="checkout-return-banner" role="status">
-              <span>Payment confirmed</span>
+              <span>Plan confirmed</span>
               <strong>Your plan is active.</strong>
               <button type="button" className="checkout-inline-action" onClick={() => setCheckoutReturnState(null)}>
                 Dismiss
@@ -786,12 +765,19 @@ export default function Subscriptions() {
           )}
           {checkoutReturnState === 'stale' && (
             <div className="checkout-return-banner" role="status">
-              <span>Payment received</span>
+              <span>Confirmation pending</span>
               <strong>We&apos;re still confirming your payment.</strong>
               <p>
-                Check back shortly — your plan will appear here once confirmation lands. Your receipt from the payment
-                processor is proof the payment went through.
+                We haven&apos;t verified an active plan yet. Check again in a moment. If you received a Stripe receipt,
+                keep it and avoid starting another payment while activation is pending.
               </p>
+              <button
+                type="button"
+                className="checkout-inline-action"
+                onClick={() => setCheckoutReturnState('confirming')}
+              >
+                Check again
+              </button>
               <button type="button" className="checkout-inline-action" onClick={() => setCheckoutReturnState(null)}>
                 Dismiss
               </button>
@@ -799,7 +785,7 @@ export default function Subscriptions() {
           )}
           {checkoutReturnState === 'cancelled' && (
             <div className="checkout-return-banner checkout-return-banner--quiet" role="status">
-              <p>Checkout cancelled — no charge was made.</p>
+              <p>Checkout cancelled.</p>
               <button type="button" className="checkout-inline-action" onClick={() => setCheckoutReturnState(null)}>
                 Dismiss
               </button>

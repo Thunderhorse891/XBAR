@@ -3230,9 +3230,17 @@ export const useXbarStore = create<XbarStore>()(
           return { ok: false, message: 'Buyer offer event not found.' };
         }
 
+        // Financials model one completed sale per horse. Refuse a fresh offer
+        // rather than hiding that sale or reusing its settled receipt.
+        if (get().salesLeads.some((item) => item.horseId === event.horseId && item.outcome === 'Won')) {
+          return {
+            ok: false,
+            message: 'This horse is already sold. Review its existing sale before recording another offer.',
+          };
+        }
+
         const normalizedActor = event.actor.trim().toLowerCase();
-        // A completed deal owns its historical receipt. A new offer must not
-        // reuse that receipt (or erase it); create a separate unpaid lead.
+        // Keep closed, unsuccessful deals separate from a fresh unpaid lead.
         let lead = get().salesLeads.find(
           (item) =>
             item.stage !== 'Closed' &&
@@ -3267,20 +3275,6 @@ export const useXbarStore = create<XbarStore>()(
           offerStatus: 'Submitted',
           shareReady: true,
           notes,
-          /*
-           * Reopening a closed lead clears its outcome.
-           *
-           * This reuses an existing lead matched on the buyer, and that lead
-           * may already be closed. Leaving `outcome: 'Won'` in place while
-           * moving the stage back to `Offer` produces a record that is
-           * simultaneously sold and live, which the ranch report then reads
-           * both ways at once: `soldHorseIds` counts the horse as sold while
-           * the new amount lands in open pipeline.
-           *
-           * A buyer submitting a fresh offer is the deal being live again, so
-           * the outcome no longer describes it. `undefined` rather than a
-           * delete because the patch is applied as `{ ...item, ...patch }`.
-           */
           outcome: undefined,
         });
         if (!updated.ok) {
