@@ -7,10 +7,10 @@ export type OfferDecisionStatus = 'no-offer' | 'missing-costs' | 'loss' | 'thin-
 export type OfferDecision = {
   status: OfferDecisionStatus;
   effectiveOffer: number;
-  breakEven: number;
-  safeSalePrice: number;
-  expectedProfit: number;
-  marginPercent: number;
+  breakEven: number | null;
+  safeSalePrice: number | null;
+  expectedProfit: number | null;
+  marginPercent: number | null;
   acceptanceBlocked: boolean;
   overrideRequired: boolean;
   label: string;
@@ -56,6 +56,7 @@ export function buildHorseProfitProfile(
     horseName: horse.name,
     costBasis,
     incompleteCosts,
+    costsKnown: breakEven > 0 && !incompleteCosts,
     spend,
     breakEven,
     safeSalePrice: Math.ceil((breakEven * 1.15) / 100) * 100,
@@ -74,15 +75,16 @@ export function buildOfferDecision(
 ): OfferDecision {
   const profile = buildHorseProfitProfile(horse, receipts, []);
   const effectiveOffer = Math.max(0, counterOfferAmount || offerAmount);
-  const expectedProfit = effectiveOffer - profile.breakEven;
-  const marginPercent = effectiveOffer > 0 ? (expectedProfit / effectiveOffer) * 100 : 0;
+  const knownCosts = profile.costsKnown;
+  const expectedProfit = knownCosts ? effectiveOffer - profile.breakEven : null;
+  const marginPercent = expectedProfit !== null && effectiveOffer > 0 ? (expectedProfit / effectiveOffer) * 100 : null;
 
   if (effectiveOffer <= 0) {
     return {
       status: 'no-offer',
       effectiveOffer,
-      breakEven: profile.breakEven,
-      safeSalePrice: profile.safeSalePrice,
+      breakEven: knownCosts ? profile.breakEven : null,
+      safeSalePrice: knownCosts ? profile.safeSalePrice : null,
       expectedProfit,
       marginPercent,
       acceptanceBlocked: true,
@@ -96,8 +98,8 @@ export function buildOfferDecision(
     return {
       status: 'missing-costs',
       effectiveOffer,
-      breakEven: profile.breakEven,
-      safeSalePrice: profile.safeSalePrice,
+      breakEven: knownCosts ? profile.breakEven : null,
+      safeSalePrice: knownCosts ? profile.safeSalePrice : null,
       expectedProfit,
       marginPercent,
       acceptanceBlocked: false,
@@ -112,8 +114,8 @@ export function buildOfferDecision(
     return {
       status: 'loss',
       effectiveOffer,
-      breakEven: profile.breakEven,
-      safeSalePrice: profile.safeSalePrice,
+      breakEven: knownCosts ? profile.breakEven : null,
+      safeSalePrice: knownCosts ? profile.safeSalePrice : null,
       expectedProfit,
       marginPercent,
       acceptanceBlocked: true,
@@ -127,8 +129,8 @@ export function buildOfferDecision(
     return {
       status: 'thin-margin',
       effectiveOffer,
-      breakEven: profile.breakEven,
-      safeSalePrice: profile.safeSalePrice,
+      breakEven: knownCosts ? profile.breakEven : null,
+      safeSalePrice: knownCosts ? profile.safeSalePrice : null,
       expectedProfit,
       marginPercent,
       acceptanceBlocked: false,
@@ -141,8 +143,8 @@ export function buildOfferDecision(
   return {
     status: 'protected-margin',
     effectiveOffer,
-    breakEven: profile.breakEven,
-    safeSalePrice: profile.safeSalePrice,
+    breakEven: knownCosts ? profile.breakEven : null,
+    safeSalePrice: knownCosts ? profile.safeSalePrice : null,
     expectedProfit,
     marginPercent,
     acceptanceBlocked: false,
@@ -155,7 +157,7 @@ export function buildOfferDecision(
 export function buildProfitPortfolio(horses: HorseRecord[], receipts: ExpenseReceipt[], leads: SalesLead[]) {
   return horses
     .map((horse) => buildHorseProfitProfile(horse, receipts, leads))
-    .sort((left, right) => right.profitLoss - left.profitLoss);
+    .sort((left, right) => Number(right.costsKnown) - Number(left.costsKnown) || right.profitLoss - left.profitLoss);
 }
 
 // ---------------------------------------------------------------------------

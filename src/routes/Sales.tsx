@@ -550,6 +550,7 @@ export default function Sales() {
           canManageSales={canManageSales}
           onOverrideApproved={setAcceptMarginOverride}
           onCounterAtFloor={() => {
+            if (offerDecision.safeSalePrice === null) return;
             setLeadCounterOfferAmount(String(offerDecision.safeSalePrice));
             setLeadOfferStatus('Countered');
             setLeadStage('Offer');

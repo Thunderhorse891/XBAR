@@ -250,3 +250,13 @@ test('sale hold blocks missing Coggins and ownership proof', () => {
   );
   assert.match(buildSaleHold(horse, documents, ownership).ownershipReviewBlockers[0], /not been reviewed/);
 });
+
+test('incomplete dated costs cannot supply a counter floor or apparent profit', () => {
+  const decision = buildOfferDecision(horse, [{ ...receipt, amount: 9000, receiptDate: 'unreadable' }], 12000);
+  assert.equal(decision.status, 'missing-costs');
+  assert.equal(buildHorseProfitProfile(horse, [{ ...receipt, receiptDate: 'unreadable' }], []).costsKnown, false);
+  assert.equal(decision.breakEven, null);
+  assert.equal(decision.safeSalePrice, null);
+  assert.equal(decision.expectedProfit, null);
+  assert.equal(decision.marginPercent, null);
+});

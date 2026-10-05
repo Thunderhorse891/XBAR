@@ -482,3 +482,27 @@ test('unknown costs and sold losses remain distinct in the actual PDF registers'
   assert.ok(!text.includes('100% High'));
   await assertFits(bytes);
 });
+
+test('closed-sale disclaimer precedes its table below the masthead, including continued registers', async () => {
+  const data = fixture(65);
+  data.salesLeads = data.horses.map(
+    (horse) =>
+      ({
+        id: `won-${horse.id}`,
+        horseId: horse.id,
+        stage: 'Closed',
+        outcome: 'Won',
+        offerAmount: 5000,
+      }) as RanchReportInput['salesLeads'][number],
+  );
+  const bytes = await renderReportPdf(buildRanchReport(data, now), 'Synthetic Long Sold Register', await branding());
+  const items = drawn(bytes);
+  const disclaimer = items.findIndex((item) => item.text.startsWith('These are agreed sale amounts'));
+  const firstHeader = items.findIndex((item) => item.text === 'Recorded sale');
+  assert.ok(disclaimer >= 0 && firstHeader >= 0);
+  assert.ok(disclaimer < firstHeader, 'disclaimer must be on the first closed-sale page, before pagination');
+  const top = 792 - items[disclaimer].y - items[disclaimer].size;
+  assert.ok(top >= 125, 'masthead rule at 115 must not strike through the disclaimer');
+  assert.ok(items[firstHeader].y < items[disclaimer].y - 22, 'wrapped disclaimer clears the table header');
+  await assertFits(bytes);
+});

@@ -74,5 +74,36 @@ for (const width of [1440, 390]) {
     expect(csv).toContain('not cash received');
     expect(csv).not.toContain('9000');
     await page.screenshot({ path: info.outputPath(`financial-truth-${width}.png`), fullPage: true });
+    await page.evaluate(async () => {
+      const storePath = '/src/store/useXbarStore.ts';
+      const helperPath = '/src/store/xbarStoreHelpers.ts';
+      const { useXbarStore } = await import(storePath);
+      const { restorePersistedState } = await import(helperPath);
+      const state = useXbarStore.getState();
+      useXbarStore.setState(
+        restorePersistedState({
+          ...state,
+          horses: [{ ...state.horses[0], costBasis: 10000 }],
+          expenseReceipts: [
+            { id: 'bad-date', horseId: 'unknown', category: 'Feed', amount: 9000, receiptDate: 'unreadable' },
+          ],
+          salesLeads: [
+            {
+              id: 'open',
+              horseId: 'unknown',
+              name: 'Synthetic Buyer',
+              stage: 'Offer',
+              offerStatus: 'Received',
+              offerAmount: 12000,
+            },
+          ],
+        }),
+      );
+      history.pushState({}, '', '/app/sales');
+      dispatchEvent(new PopStateEvent('popstate'));
+    });
+    await expect(page.getByRole('button', { name: 'Counter at protected floor', exact: true })).toBeDisabled();
+    await expect(page.getByText('Cost records incomplete', { exact: true })).toBeVisible();
+    await page.screenshot({ path: info.outputPath(`incomplete-cost-guard-${width}.png`), fullPage: true });
   });
 }

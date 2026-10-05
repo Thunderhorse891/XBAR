@@ -26,3 +26,12 @@ Independent focused review found the original earliest-receipt completeness infe
 ## Boundaries and coexistence
 
 No data migration, paid AI, production data mutation, receipt confirmation, configurable pricing scenario or invented transaction is included. Payment collection/receivable work stays with existing PR #304. Its settlement fields and Sales close-out UI are not recreated here. The shared financial module gains optional as-of dates and incomplete-cost detection; settlement integration must preserve those changes. Sales/social PR #331 remains independently owned; SalePacketWizard changes here only make the shared economics' unknown values truthful.
+
+## PR review corrections
+
+The first remote review identified two additional defects, both reproduced before correction:
+
+- Incomplete cost dates were flagged but still exposed a partial numeric counter floor in the offer panel. Offer decisions now return unknown pricing/profit fields, the protected-floor action and its handler refuse unknown floors, and the Expenses profit panel respects the same cost-knowledge flag. Existing explicit acceptance override policy is unchanged.
+- The closed-sale disclaimer was drawn after table pagination at a masthead-overlapping coordinate. It is now drawn first below the masthead; its measured height determines the table start. A 65-sale PDF regression pins first-page order and vertical clearance, including continuation pages.
+
+The browser cases also exercise the incomplete-cost Sales guard. These corrections require fresh final-head checks and review rather than relying on earlier green checks.

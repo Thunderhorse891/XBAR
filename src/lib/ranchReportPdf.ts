@@ -444,6 +444,13 @@ export async function renderReportPdf(
   const closed = report.horses.filter((horse) => horse.financialStatus === 'sold');
   if (closed.length) {
     newPage('Closed-sale results', 'Recorded deal values and costs / payment collection is separate');
+    const disclaimerHeight = paragraph(
+      'These are agreed sale amounts less recorded costs, before overhead. They do not establish cash received or profit banked. Unknown costs or sale prices remain unknown.',
+      36,
+      130,
+      540,
+      8,
+    );
     table(
       ['Horse', 'Recorded sale', 'Recorded costs', 'Gross result'],
       [180, 120, 120, 120],
@@ -453,18 +460,11 @@ export async function renderReportPdf(
         { value: dollars(horse.investedToDate) },
         { value: dollars(horse.closedSaleProfit) },
       ]),
-      140,
+      130 + disclaimerHeight + 12,
       687,
       'Closed-sale results',
       'Continued',
       '',
-    );
-    paragraph(
-      'These are agreed sale amounts less recorded costs, before overhead. They do not establish cash received or profit banked. Unknown costs or sale prices remain unknown.',
-      36,
-      110,
-      540,
-      8,
     );
   }
   newPage('Horse-level economics', 'Ranked by projected profit / priced sale inventory first');
