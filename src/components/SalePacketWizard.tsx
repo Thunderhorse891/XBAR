@@ -8,11 +8,16 @@ import { Input } from '@/components/ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { type RemoteSalePacketSeal, createSalePacketRemote, hasBackendIdentity } from '@/lib/backendApi';
-import { type LocalSalePacket, buildLocalSalePacket, isBuyerSafeDocumentType } from '@/lib/localSalePacketGenerator';
+import {
+  type LocalSalePacket,
+  buildValidatedLocalSalePacket,
+  isBuyerSafeDocumentType,
+} from '@/lib/localSalePacketGenerator';
 import { resolvePacketAttachments } from '@/lib/localPacketAttachments';
 import { beginVaultWrite, endVaultWrite, storeLocalFile } from '@/lib/localFileVault';
 import { openStoredFileInTab } from '@/lib/openStoredFile';
 import { vaultOwnerId } from '@/lib/vaultOwner';
+import { readRecordsOwner } from '@/lib/recordsOwner';
 import type { DocumentRecord, SaleCredentialSeal } from '@/types/xbar';
 import { packetExportGate } from '@/lib/subscriptionGates';
 import {
@@ -42,6 +47,20 @@ import { canPresentPurchaseFlow } from '@/lib/nativePlatform';
  * in local mode) → buyer follow-up opens automatically (sales lead +
  * sales lead) with the next money action offered.
  */
+
+function packetIdentityKey() {
+  const cloud = useCloudStore.getState();
+  return JSON.stringify([
+    cloud.session?.user.id ?? '',
+    cloud.workspaceId,
+    cloud.workspaceRole,
+    cloud.autosaveReady,
+    cloud.autosaveUnlocked,
+    useXbarStore.getState().currentRole,
+    vaultOwnerId(),
+    readRecordsOwner(),
+  ]);
+}
 
 const STEPS = ['Horse', 'Release gate', 'Documents', 'Buyer', 'Generate'] as const;
 
@@ -84,6 +103,54 @@ export function SalePacketWizard({
   const [selectedDocIds, setSelectedDocIds] = useState<string[] | null>(null);
   const [cogginsDisclosed, setCogginsDisclosed] = useState(false);
   const [isGenerating, setIsGenerating] = useState(false);
+  const generation = useRef({ epoch: 0, mounted: false, busy: false });
+  const publishing = useRef(false);
+  const selection = useRef({ open, horseId: horseId || initialHorseId || '' });
+  selection.current = { open, horseId: horseId || initialHorseId || '' };
+  useEffect(() => {
+    const activeGeneration = generation.current;
+    activeGeneration.mounted = true;
+    let identity = packetIdentityKey();
+    const invalidate = () => {
+      const wasBusy = generation.current.busy;
+      generation.current.epoch += 1;
+      generation.current.busy = false;
+      setIsGenerating(false);
+      if (wasBusy)
+        setGenerationFailure(
+          packetFailureGuidance(
+            { message: 'The ranch, horse records or permissions changed. Review this packet and generate it again.' },
+            canPresentPurchaseFlow,
+          ),
+        );
+    };
+    const checkIdentity = () => {
+      const next = packetIdentityKey();
+      if (next !== identity) {
+        identity = next;
+        invalidate();
+      }
+    };
+    const cloudStop = useCloudStore.subscribe(checkIdentity);
+    const workspaceStop = useXbarStore.subscribe((state, previous) => {
+      checkIdentity();
+      if (
+        !publishing.current &&
+        (state.workspaceProfile !== previous.workspaceProfile ||
+          state.horses !== previous.horses ||
+          state.documents !== previous.documents ||
+          state.ownershipRecords !== previous.ownershipRecords)
+      )
+        invalidate();
+    });
+    return () => {
+      activeGeneration.mounted = false;
+      activeGeneration.epoch += 1;
+      activeGeneration.busy = false;
+      cloudStop();
+      workspaceStop();
+    };
+  }, []);
   const [generated, setGenerated] = useState<{
     packetId: string;
     downloadUrl?: string;
@@ -176,6 +243,9 @@ export function SalePacketWizard({
   if (!open) return null;
 
   const reset = () => {
+    generation.current.epoch += 1;
+    generation.current.busy = false;
+    setIsGenerating(false);
     clearPacketDraft(draftScope, effectiveHorseId);
     setGenerationFailure(null);
     setStep(0);
@@ -191,6 +261,8 @@ export function SalePacketWizard({
   };
 
   const goToRepair = (to: string) => {
+    generation.current.epoch += 1;
+    generation.current.busy = false;
     savePacketDraft(draftScope, { horseId: effectiveHorseId, step, selectedDocIds, buyerName, buyerEmail, watermark });
     onClose();
     const returnTo = `/sale-packets?horse=${encodeURIComponent(effectiveHorseId)}&resume=1`;
@@ -250,7 +322,7 @@ export function SalePacketWizard({
               : '';
 
   const generate = async () => {
-    if (!horse || isGenerating) return;
+    if (!horse || isGenerating || generation.current.busy) return;
     if (ownershipBlockers.length || ((cogginsBlocked || careHold) && !cogginsDisclosed)) {
       setStep(1);
       return;
@@ -265,6 +337,16 @@ export function SalePacketWizard({
       );
       return;
     }
+    const epoch = generation.current.epoch;
+    const identity = packetIdentityKey();
+    const ownerAtStart = vaultOwnerId();
+    const current = () =>
+      generation.current.mounted &&
+      generation.current.epoch === epoch &&
+      packetIdentityKey() === identity &&
+      selection.current.open &&
+      selection.current.horseId === horse.id;
+    generation.current.busy = true;
     setGenerationFailure(null);
     setIsGenerating(true);
     /*
@@ -275,6 +357,7 @@ export function SalePacketWizard({
      */
     try {
       await beginVaultWrite();
+      if (!current()) return;
       const auth = { workspaceId, accessToken: session?.access_token ?? '' };
       let downloadUrl: string | undefined;
       let serverSeal: RemoteSalePacketSeal | undefined;
@@ -303,6 +386,7 @@ export function SalePacketWizard({
           watermarkText: effectiveWatermark,
           documentIds: docSelection,
         });
+        if (!current()) return;
         if (!remote.ok) {
           setGenerationFailure(packetFailureGuidance(remote, canPresentPurchaseFlow));
           return;
@@ -330,10 +414,11 @@ export function SalePacketWizard({
           docSelection
             .map((id) => documents.find((record) => record.id === id))
             .filter((record): record is DocumentRecord => Boolean(record)),
-          vaultOwnerId(),
+          ownerAtStart,
         );
+        if (!current()) return;
 
-        localPacket = buildLocalSalePacket({
+        localPacket = await buildValidatedLocalSalePacket({
           horse,
           workspaceProfile,
           documents,
@@ -344,6 +429,7 @@ export function SalePacketWizard({
           attachments: resolved.attachments,
           unattached: resolved.unattached,
         });
+        if (!current()) return;
         localSeal = { ...localPacket.credential, anchor: 'local' as const };
 
         // Kept in the on-device vault rather than only as an object URL: a
@@ -354,7 +440,7 @@ export function SalePacketWizard({
             new Blob([localPacket.html], { type: 'text/html' }),
             localPacket.fileName,
             'text/html',
-            vaultOwnerId(),
+            ownerAtStart,
             // XBAR wrote this file, so it may open as a document and run the
             // verifier the CSP allows. An uploaded .html never gets that.
             { generated: true },
@@ -364,6 +450,8 @@ export function SalePacketWizard({
         }
       }
 
+      if (!current()) return;
+      publishing.current = true;
       const build = createSalePacketBuild({
         horseId: horse.id,
         buyerName: buyerName.trim() || undefined,
@@ -378,6 +466,7 @@ export function SalePacketWizard({
         localFileKey,
         fileName: localPacket?.fileName,
       });
+      publishing.current = false;
       setIsGenerating(false);
 
       if (!build.ok || !build.packet) {
@@ -391,7 +480,9 @@ export function SalePacketWizard({
           (lead) => lead.horseId === horse.id && lead.name.toLowerCase() === buyerName.trim().toLowerCase(),
         );
         if (!existingLead) {
+          publishing.current = true;
           createSalesLead({ name: buyerName.trim(), channel: 'Referral', horseId: horse.id, shareReady: true });
+          publishing.current = false;
         }
       }
 
@@ -434,6 +525,7 @@ export function SalePacketWizard({
           pushToast({ title: 'Packet could not be opened', message: opened.message, tone: 'warning' });
         }
       }
+      if (!current()) return;
       clearPacketDraft(draftScope, effectiveHorseId);
       setGenerated({
         packetId: build.packet.id,
@@ -495,6 +587,7 @@ export function SalePacketWizard({
             : 'warning',
       });
     } catch (error) {
+      if (!current()) return;
       setGenerationFailure(
         packetFailureGuidance(
           { message: error instanceof Error ? error.message : 'The packet could not be generated.' },
@@ -502,7 +595,11 @@ export function SalePacketWizard({
         ),
       );
     } finally {
-      setIsGenerating(false);
+      publishing.current = false;
+      if (generation.current.epoch === epoch) {
+        generation.current.busy = false;
+        if (generation.current.mounted) setIsGenerating(false);
+      }
       endVaultWrite();
     }
   };
@@ -548,6 +645,9 @@ export function SalePacketWizard({
               <Select
                 value={effectiveHorseId}
                 onValueChange={(value) => {
+                  generation.current.epoch += 1;
+                  generation.current.busy = false;
+                  setIsGenerating(false);
                   setHorseId(value);
                   setSelectedDocIds(null);
                   setCogginsDisclosed(false);
@@ -676,14 +776,25 @@ export function SalePacketWizard({
               )}
               {economics && (
                 <div className="confirm-dialog__proof" style={{ marginTop: 14 }}>
-                  <strong>Pricing:</strong> cost to date {formatCompactCurrency(economics.costToDate)} · burn{' '}
-                  {formatCompactCurrency(economics.monthlyBurn)}/mo · break-even{' '}
-                  {formatCompactCurrency(economics.breakEvenPrice)} ·{' '}
-                  <strong>do not discount below {formatCompactCurrency(economics.safeDiscountFloor)}</strong>
+                  <strong>Pricing:</strong> cost to date {formatCompactCurrency(economics.costToDate)} · recorded
+                  monthly avg{' '}
+                  {economics.monthlyBurn === null ? 'Unknown' : formatCompactCurrency(economics.monthlyBurn)}/mo ·
+                  break-even{' '}
+                  {economics.breakEvenPrice === null ? 'Unknown' : formatCompactCurrency(economics.breakEvenPrice)} ·{' '}
+                  <strong>
+                    recorded-cost floor{' '}
+                    {economics.safeDiscountFloor === null
+                      ? 'Unknown'
+                      : formatCompactCurrency(economics.safeDiscountFloor)}
+                  </strong>
                   {economics.askPrice > 0 ? (
                     <>
                       {' '}
-                      · margin at ask {formatCompactCurrency(economics.projectedMargin)} ({economics.marginPercent}%)
+                      · margin at ask{' '}
+                      {economics.projectedMargin === null
+                        ? 'Unknown'
+                        : formatCompactCurrency(economics.projectedMargin)}{' '}
+                      ({economics.marginPercent === null ? 'cost records missing' : `${economics.marginPercent}%`})
                     </>
                   ) : (
                     ' · set an asking price on the horse record'

@@ -56,3 +56,81 @@ When adding an asset, record its provenance, intended surfaces, canonical filena
 The preview now animates the unchanged `xbar-report-horse.png` master (1672x941) using browser-native opacity and scale keyframes. The supplied Meta-marked `horse.mp4` and its extracted `poster.jpg` have been removed from published assets; Erin's original desktop files remain unchanged. The sample card also uses the original PNG.
 
 The entrance plays once and offers pause/replay. Reduced-motion and data-saving visitors begin with static artwork. No video or external media service is loaded. Figures and horse names remain illustrative. This is a separate preview, not the production shell or a new vector logo master.
+
+## Signature refinement preview (October 3, 2026)
+
+The owner requested a recognizable horse-only signature, a finite 1.5-second
+silver/icy-blue outline highlight, graphite/charcoal navigation, and spacious
+white working surfaces. This preview is held for visual approval; it is not a
+recovered official vector master.
+
+- `xbar-signature-paths.json` is the single geometry source for the derivative.
+  Its source SHA pins the unchanged `xbar-report-horse.png`. Detailed `paths`
+  trace the intro; nine filled `compactPaths` close corresponding contour
+  ribbons for clean navigation and icons. The full viewBox
+  overlays that supplied master; the compact viewBox crops the same coordinates.
+- `xbar-signature-horse*.svg` and the corresponding PNGs are generated from
+  that geometry, with compact exports using the filled profile and minimal eye/mane gaps.
+- `xbar-signature-icon.svg`, icon PNGs, and the maskable PNG use an opaque
+  graphite ground so the silver horse remains visible in light and dark chrome.
+- React `XbarMark` and public header/footer/hero markup use those same real paths.
+  `src/lib/signatureMotion.ts` gives the entire highlight exactly 1,500 ms,
+  once on entry or pointer hover. The static base is always present; reduced
+  motion, data saving, a hidden tab, or the homepage pause control stop it.
+- Email and sample-packet headers use static PNG fallbacks. Existing report
+  masthead artwork remains; the small footer mark uses the signature print PNG.
+- Sealed buyer packets are deliberately unchanged: their format and verifier
+  reject extra image/SVG elements. A future signature insertion needs its own
+  reviewed format revision; branding must never weaken that verification.
+
+All pre-existing supplied assets are preserved byte-for-byte. The tracing
+proof and small-size/maskable checks document this derivative for approval;
+no generic horse, replacement wordmark, or perpetual flashing is introduced.
+
+## Customer ranch branding in seller packets (October 2026)
+
+Customers can save a ranch logo, public phone and website in Settings → Ranch
+profile. Existing ranch/business names, seller name and operations email appear
+alongside them. These fields travel in the workspace profile payload; no new
+storage bucket or schema migration is required. Uploads accept PNG/JPEG, at most
+256 KiB and 2048 × 2048 pixels, and are decoded then re-encoded as PNG. Only
+embedded validated raster bytes are used; no remote logo URL is fetched.
+
+Local HTML packets use credential format v6: customer header/logo/contact are
+sealed, including the logo's content digest, and the verifier pins the logo's
+attributes, position, count and dimensions. The packet stylesheet is unchanged.
+Previously saved v5 packets and their exact CSP script hash remain supported.
+Cloud PDFs use server credential v3 with the same normalized ranch identity and
+contact. The public verification page shows the sealed snapshot, including logo
+and contact, rather than the customer's subsequently edited profile. Historical
+v1/v2 server payloads are verified by their original canonical bytes.
+
+Customer branding is distinct from XBAR's verification seal and link, which
+remain visible. This feature does not change plans, limits, pricing or offer
+white-label removal of the verification identity. Supplied XBAR assets remain
+unchanged.
+
+## Original artwork restoration (October 4, 2026)
+
+The owner selected B, the unchanged `xbar-report-horse.png` master, as the default
+for every XBAR surface and rejected the flat filled signature C. React and
+public navigation embed the complete raster proportionally, using the 480px
+`xbar-original-lockup-480.png` export to avoid downloading the 2.39 MB master
+for a compact badge. Auth, email,
+sample packets and report footers use the same original. Silver framing or
+backplates separate its dark ground from dark navigation without recolouring,
+cropping or redrawing the horse. The new `xbar-original-icon-*` PNGs contain
+only a proportional resize of the full master on a silver square; the maskable
+variant keeps the complete artwork within the safe area. The master hash is
+pinned by tests. A is available only inside the supplied visual reference, so
+no extracted or invented A asset is used.
+
+The old `xbar-signature-horse*`, email/print/icon derivatives and traced paths
+are retained as historical review files and have no live logo consumers. The
+approximate outline overlay is removed rather than tracing a different horse
+over the original. Existing general UI entrance motion is unchanged. This
+restoration does not alter customer logos, sealed packets or their verification.
+
+Generate original exports with `python scripts/brand/original-build.py`; use
+`--verify` to compare decoded output pixels with the exact proportional resize
+and verify the maskable safe circle. Pillow is a tooling dependency only.

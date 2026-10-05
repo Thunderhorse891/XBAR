@@ -6,10 +6,10 @@ import { ContextMenu } from '@/components/ContextMenu';
 import { EmptyState } from '@/components/EmptyState';
 import { DocumentBlock, Timeline } from '@/components/InteractionSystem';
 import { MetricCard, Panel, Pill } from '@/components/app-ui';
-import { billingPath } from '@/lib/billingRoutes';
+import { requestFeatureUpgrade } from '@/store/useUpgradeStore';
 import { buildBreedingRevenueProfile, emptyBreedingEconomics } from '@/lib/breedingRevenue';
 import { buildBreedingProgram, type MareStatus } from '@/lib/breedingIntelligence';
-import { BREEDING_ENTRY_KINDS, PREGNANCY_RESULTS } from '@/lib/breedingEntry';
+import { BREEDING_ENTRY_KINDS, FOALING_RESULTS, PREGNANCY_RESULTS } from '@/lib/breedingEntry';
 import { formatCompactCurrency, formatDateLabel, localIsoDate } from '@/lib/format';
 import { breedingRevenueGate } from '@/lib/subscriptionGates';
 import { useCloudStore } from '@/store/useCloudStore';
@@ -172,6 +172,8 @@ export default function Breeding() {
                   'near-term': 'amber',
                   'foaled-live': 'blue',
                   'foaled-loss': 'rose',
+                  'foaling-unknown': 'amber',
+                  'pregnancy-unknown': 'amber',
                   'not-breeding': 'slate',
                 };
                 return (
@@ -403,7 +405,7 @@ export default function Breeding() {
                     <button
                       className="button button--primary button--compact"
                       type="button"
-                      onClick={() => navigate(billingPath)}
+                      onClick={() => requestFeatureUpgrade('breedingRevenue')}
                     >
                       Upgrade to unlock
                     </button>
@@ -525,9 +527,9 @@ export default function Breeding() {
                 ))}
               </select>
             </label>
-            {eventKind === 'pregnancy-check' ? (
+            {eventKind === 'pregnancy-check' || eventKind === 'foaling' ? (
               <label className="field-stack">
-                <span className="field-label">Check result</span>
+                <span className="field-label">{eventKind === 'foaling' ? 'Foaling outcome' : 'Check result'}</span>
                 <select
                   className="field-input"
                   value={eventResult}
@@ -538,7 +540,7 @@ export default function Breeding() {
                   disabled={!canManageBreeding}
                 >
                   <option value="">Choose…</option>
-                  {PREGNANCY_RESULTS.map((result) => (
+                  {(eventKind === 'foaling' ? FOALING_RESULTS : PREGNANCY_RESULTS).map((result) => (
                     <option key={result.value} value={result.value}>
                       {result.label}
                     </option>

@@ -179,3 +179,79 @@ renewal.
    or an id that is also a current price — fails readiness and is named in
    `reasons`. It is never mapped to a guess.
 5. Update the price table above and the pricing page in the same change.
+
+## Feature-click upgrade offers: release gates
+
+This implementation is inactive by default. Do not point it at an unrelated
+Stripe account or create a coupon merely to remove an unavailable-state message.
+A connected Stripe plugin account is not proof that the deployed server key uses
+that account. No live coupon, customer, subscription, portal configuration, or
+migration was changed as part of the local implementation.
+
+1. Get explicit approval for `20261003200000_upgrade_offers.sql`; rehearse the
+   migration and `supabase/checks/upgrade-offers.sql` on a disposable database.
+2. Verify `STRIPE_UPGRADE_ACCOUNT_ID` against the account reached by the server
+   key. Set `STRIPE_UPGRADE_LIVEMODE` deliberately; production requires `true`.
+   All target prices are retrieved and checked against the canonical plan
+   amounts, USD, active product, one-month/one-year licensed recurring interval,
+   and expected Stripe mode before any amount is displayed.
+3. Review an existing `STRIPE_UPGRADE_COUPON_ID`: exactly 10 percent, duration
+   `once`, valid, unexpired, with redemptions remaining and applicable to each
+   target product. Never use a forever/repeating coupon. With no valid coupon,
+   the UI honestly offers verified regular price. A checkout request cannot
+   silently replace a displayed discount with full price.
+4. For paid subscription changes, review a dedicated existing
+   `STRIPE_UPGRADE_PORTAL_CONFIGURATION_ID`. It must enable price changes to the
+   actual target products/prices, set `billing_cycle_anchor=now` and
+   `proration_behavior=always_invoice`, and have no period-end scheduling
+   conditions. The hosted confirmation shows unused-time credits, taxes, the
+   new billing date and recurring terms. Do not alter a shared default portal
+   blindly. Current implementation supports one quantity-1 classic-mode active
+   subscription, a paid latest invoice, and no pending/scheduled/canceled,
+   paused, existing-discount, or ambiguous billing state. Other states are sent
+   to billing review rather than creating a second subscription.
+5. Keep `STRIPE_UPGRADE_PAID_CONFIRMATIONS_VERIFIED=false`. Stripe portal sessions
+   cannot be invalidated via the API. Unopened sessions expire after five
+   minutes; opened sessions can last one hour from their latest activity. The
+   application's four-minute reopen guard **does not revoke an already handed
+   out URL**. All new direct paid-subscription confirmation sessions are therefore
+   unavailable by default, including full-price ones. Customers can use the
+   existing standard billing-management portal, which is unchanged.
+6. Before setting the separate paid-confirmations verification flag, use the
+   correct authorized Stripe sandbox to prove all of the following: open a
+   discounted upgrade then a different feature/plan confirmation; complete them
+   in each order; revisit and repeatedly confirm the earlier URL; retry after
+   a network timeout and an expired page; change plan/cadence in another tab;
+   verify only the intended existing subscription was changed, no coupon was
+   reapplied, no unintended cycle reset occurred, and the renewal invoice uses
+   normal price. Check exact Stripe subscription, invoice, discount and event
+   records. If stale/sibling confirmations are unsafe, leave the flag false and
+   design an enforceable confirmation strategy before release.
+7. With the approved account, price/coupon proof and migration in place, enable
+   `UPGRADE_OFFERS_ENABLED=true`. Run the full customer flow: first deliberate
+   feature click; decline; exact second click with a new request UUID; verify
+   one-period discounted subtotal; confirm in Stripe; process webhook; refresh
+   entitlement. Test monthly and annual, repeated click/retry, third attempt,
+   account/workspace switches, a second feature after a discount was claimed,
+   and an existing paid subscription. New-subscription Checkout expires stale
+   sibling sessions under the existing shared billing lease.
+
+Attempt history is per account and feature across devices/workspaces. Discount
+checkout is at most once per account across all features; the reservation is
+made before calling Stripe and survives timeouts and workspace deletion. A
+failed reservation is not reset by deleting local storage or making another
+workspace. A declined or old request cannot create a new checkout. Hosted
+payment/subscription confirmation is always required; opening an offer does not
+charge money or grant entitlements.
+
+Local verification covers injected Stripe/Supabase boundaries and the real SQL
+state machine on an isolated PostgreSQL engine. It is not evidence of live
+Stripe prices, promotion availability, payment settlement, webhook delivery,
+portal stale-link safety, or production migration application.
+
+Stripe references:
+
+- [Portal deep-link confirmations and discounts](https://docs.stripe.com/customer-management/portal-deep-links)
+- [Portal session lifetime](https://docs.stripe.com/customer-management)
+- [Customer portal billing-cycle anchors](https://docs.stripe.com/changelog/clover/2025-12-15/customer-portal-billing-cycle-anchor)
+- [Coupon duration semantics](https://docs.stripe.com/api/coupons)

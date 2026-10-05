@@ -14,16 +14,14 @@ import {
 import { HorsesIcon } from '@/components/icons';
 import { ActionButton } from '@/components/saas';
 import { buyerFollowUpPath } from '@/lib/buyerRoutes';
+import { buildHorseDocumentActions } from '@/lib/horseDocumentActions';
 import { buildBudgetSummary, buildCareBoardRows, buildTransferGapRows } from '@/lib/dashboardOps';
 import { buildBankedHeadline, buildRanchFinancials } from '@/lib/profitIntelligence';
 import { formatCompactCurrency } from '@/lib/format';
 import { events, track } from '@/lib/telemetry';
+import { buildRanchReport } from '@/lib/ranchReport';
+import { useDayKey } from '@/hooks/useDayKey';
 import { useXbarStore } from '@/store/useXbarStore';
-
-// Used only for the large faded hero watermark (300x300), so it needs a
-// source bigger than the 180px touch icon — icon-512 stays crisp while still
-// being ~4x lighter than the 1.53MB app icon.
-const XBAR_ICON = '/brand/icon-512.png';
 
 // Stagger index for the motion system; the CSS var drives each child's delay.
 const motionIndex = (index: number): CSSProperties => ({ ['--motion-index' as string]: index }) as CSSProperties;
@@ -37,10 +35,12 @@ type Signal = {
   chip: string;
   to: string;
   icon: 'coins' | 'stethoscope' | 'doc' | 'horse' | 'shield';
+  actionLabel?: string;
 };
 
 export default function Dashboard() {
   const navigate = useNavigate();
+  const dayKey = useDayKey();
   const horses = useXbarStore((s) => s.horses);
   const documents = useXbarStore((s) => s.documents);
   const ownershipRecords = useXbarStore((s) => s.ownershipRecords);
@@ -52,18 +52,37 @@ export default function Dashboard() {
   const isEmpty = horses.length === 0;
 
   const model = useMemo(() => {
+    const documentActions = horses.flatMap((horse) =>
+      buildHorseDocumentActions(
+        horse,
+        documents,
+        ownershipRecords.find((record) => record.horseId === horse.id),
+      ),
+    );
+    const documentGapHorseCount = new Set(documentActions.map((action) => action.horseId)).size;
     const reviewQueue = documents.filter((d) => d.state === 'Needs Review' || d.state === 'Matched');
     const transferGaps = buildTransferGapRows(horses, ownershipRecords, documents);
     const careBoard = buildCareBoardRows(horses, documents, expenseReceipts);
     const careDue = careBoard.filter((row) => row.signals.some((sig) => sig.status === 'due'));
     const budget = buildBudgetSummary(expenseReceipts);
     const activeSales = salesLeads.filter((l) => l.stage !== 'Closed');
-    const readiness = horses.length
-      ? Math.round(horses.reduce((sum, h) => sum + (h.readiness?.score ?? 0), 0) / horses.length)
-      : 0;
+    const readiness = buildRanchReport(
+      { horses, documents, ownershipRecords, expenseReceipts, salesLeads },
+      new Date(`${dayKey}T12:00:00`),
+    ).readiness.average;
     const openItems = transferGaps.length + careDue.length + reviewQueue.length;
-    return { reviewQueue, transferGaps, careDue, budget, activeSales, readiness, openItems };
-  }, [horses, documents, ownershipRecords, expenseReceipts, salesLeads]);
+    return {
+      reviewQueue,
+      transferGaps,
+      careDue,
+      budget,
+      activeSales,
+      readiness,
+      openItems,
+      documentActions,
+      documentGapHorseCount,
+    };
+  }, [horses, documents, ownershipRecords, expenseReceipts, salesLeads, dayKey]);
 
   // The money story on the front door — same honest engine as the Money view, so
   // the Dashboard and /financials never disagree. These are all ungated figures
@@ -156,7 +175,6 @@ export default function Dashboard() {
     return (
       <div className="xs-home">
         <section className="xs-hero">
-          <img className="xs-hero__wm" src={XBAR_ICON} alt="" aria-hidden="true" />
           <div className="xs-hero__body">
             <div className="xs-hero__eyebrow">
               <Sparkles size={13} /> {ranchName} · Getting started
@@ -260,9 +278,31 @@ export default function Dashboard() {
   }
 
   /* ------------------------------------------------------------ Populated */
-  const { reviewQueue, transferGaps, careDue, budget, activeSales, readiness, openItems } = model;
+  const {
+    reviewQueue,
+    transferGaps,
+    careDue,
+    budget,
+    activeSales,
+    readiness,
+    openItems,
+    documentActions,
+    documentGapHorseCount,
+  } = model;
 
-  const signals: Signal[] = [];
+  const signals: Signal[] = documentActions.slice(0, 3).map((action) => ({
+    key: `document-gap-${action.horseId}-${action.key}`,
+    tone: 'warning',
+    icon: 'doc',
+    title:
+      action.intent === 'upload'
+        ? `${action.horseName} needs ${action.label}`
+        : `${action.horseName}: ${action.action}`,
+    meta: `Sale-packet checklist · ${action.detail}`,
+    chip: action.intent === 'upload' ? 'Upload' : action.intent === 'review' ? 'Review' : 'View',
+    actionLabel: `${action.action} for ${action.horseName}`,
+    to: action.path,
+  }));
   transferGaps.slice(0, 2).forEach((g) =>
     signals.push({
       key: `t-${g.horseId}`,
@@ -316,22 +356,23 @@ export default function Dashboard() {
   }
 
   const primary = signals[0];
-  const heroLine =
-    primary.tone === 'danger' ? (
-      <>
-        Missing documents are holding up a sale — <em>{transferGaps.length} to finish</em>.
-      </>
-    ) : primary.tone === 'warning' ? (
-      <>
-        {careDue.length} horse{careDue.length === 1 ? '' : 's'} need care today.
-      </>
-    ) : primary.tone === 'info' ? (
-      <>
-        {reviewQueue.length} document{reviewQueue.length === 1 ? '' : 's'} need review.
-      </>
-    ) : (
-      <>Everything looks good across {horses.length} horses.</>
-    );
+  const heroLine = primary.key.startsWith('document-gap-') ? (
+    <>{primary.title}.</>
+  ) : primary.tone === 'danger' ? (
+    <>
+      Missing documents are holding up a sale — <em>{transferGaps.length} to finish</em>.
+    </>
+  ) : primary.tone === 'warning' ? (
+    <>
+      {careDue.length} horse{careDue.length === 1 ? '' : 's'} need care today.
+    </>
+  ) : primary.tone === 'info' ? (
+    <>
+      {reviewQueue.length} document{reviewQueue.length === 1 ? '' : 's'} need review.
+    </>
+  ) : (
+    <>Everything looks good across {horses.length} horses.</>
+  );
 
   const iconFor = (k: Signal['icon']) =>
     k === 'coins' ? (
@@ -350,14 +391,18 @@ export default function Dashboard() {
     { v: horses.length, l: 'Horses', to: '/horses' },
     { v: activeSales.length, l: 'For sale', to: '/sales' },
     { v: reviewQueue.length, l: 'Needs Review', to: '/documents', warn: reviewQueue.length > 0 },
-    { v: transferGaps.length, l: 'Missing documents', to: '/ownership-chain', danger: transferGaps.length > 0 },
-    { v: `${readiness}%`, l: 'Ready to sell', to: '/reports' },
+    {
+      v: documentGapHorseCount,
+      l: 'Missing documents',
+      to: '/horses?documents=missing',
+      danger: documentGapHorseCount > 0,
+    },
+    { v: `${readiness}%`, l: 'Record readiness', to: '/reports' },
   ];
 
   return (
     <div className="xs-home">
       <section className="xs-hero">
-        <img className="xs-hero__wm" src={XBAR_ICON} alt="" aria-hidden="true" />
         <div className="xs-hero__body">
           <div className="xs-hero__eyebrow">
             <Sparkles size={13} /> {ranchName} · Dashboard
@@ -365,13 +410,15 @@ export default function Dashboard() {
           <h1 className="xs-hero__headline">Your ranch at a glance.</h1>
           <p className="xs-hero__status">{heroLine}</p>
           <p className="xs-hero__sub">
-            {openItems > 0
-              ? `${openItems} thing${openItems === 1 ? '' : 's'} need attention. Start with what's most likely to hold up a sale or a horse's care.`
-              : `Nothing needs attention right now. ${activeSales.length} buyer${activeSales.length === 1 ? '' : 's'} in progress.`}
+            {documentActions.length > 0
+              ? `${documentGapHorseCount} horse${documentGapHorseCount === 1 ? ' has' : 's have'} missing or unreviewed sale-packet documents. Open a requirement to work on that horse.`
+              : openItems > 0
+                ? `${openItems} thing${openItems === 1 ? '' : 's'} need attention. Start with what's most likely to hold up a sale or a horse's care.`
+                : `Nothing needs attention right now. ${activeSales.length} buyer${activeSales.length === 1 ? '' : 's'} in progress.`}
           </p>
           <div className="xs-hero__actions">
             <ActionButton variant="primary" icon={<ArrowRight size={15} />} onClick={() => navigate(primary.to)}>
-              Review priority
+              {primary.actionLabel ?? 'Review priority'}
             </ActionButton>
             <ActionButton onClick={() => navigate('/horses')}>Horses</ActionButton>
             <ActionButton variant="ghost" onClick={() => navigate('/reports')}>

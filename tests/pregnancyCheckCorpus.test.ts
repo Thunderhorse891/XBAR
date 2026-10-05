@@ -197,9 +197,12 @@ test('a mare confirmed in foal with no cover on file is in foal, with no invente
   assert.equal(program.inFoal, 1);
   assert.equal(program.projectedProgramValue, 9000);
 
-  // Open, pending or unreadable stays open -- nothing is inferred.
+  // Only a definite negative establishes open; pending is unconfirmed.
   for (const result of ['open', 'pending']) {
-    assert.equal(buildMareBreedingState(mare([check('Ultrasound', '', result, '2026-05-20')]), now).status, 'open');
+    assert.equal(
+      buildMareBreedingState(mare([check('Ultrasound', '', result, '2026-05-20')]), now).status,
+      result === 'open' ? 'open' : 'pregnancy-unknown',
+    );
   }
   // A positive check from before her last foaling was an earlier pregnancy.
   const foaled = {
@@ -213,7 +216,7 @@ test('a mare confirmed in foal with no cover on file is in foal, with no invente
   } as TimelineEvent;
   assert.equal(
     buildMareBreedingState(mare([foaled, check('Ultrasound', '', 'in-foal', '2025-06-01')]), now).status,
-    'open',
+    'foaled-live',
   );
 });
 

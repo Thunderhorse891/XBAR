@@ -44,6 +44,8 @@ export type ActionResult = {
   id?: string;
   createdHorseIds?: string[];
   duplicateCount?: number;
+  /** Unassigned sources still needing review after automatic creation and matching. */
+  heldForReviewCount?: number;
 };
 
 export type HorsePatch = Partial<
@@ -134,6 +136,11 @@ export type XbarStore = {
   createHorseFromDocument: (documentId: string) => ActionResult;
   discardDocument: (documentId: string) => ActionResult;
   uploadHorseMedia: (input: MediaUploadInput) => Promise<ActionResult>;
+  changeHorsePhoto: (
+    horseId: string,
+    assetId: string,
+    action: import('../lib/horsePhotoGallery').HorsePhotoAction,
+  ) => ActionResult;
   addExpenseReceipt: (input: ExpenseReceiptInput) => Promise<ActionResult>;
   createSalesLead: (input: LeadInput) => ActionResult;
   updateSalesLead: (
@@ -181,6 +188,8 @@ export type XbarStore = {
    * push an arbitrary name through this path.
    */
   applyHorseNameRepairs: (horseIds: readonly string[]) => ActionResult;
+  archiveHorse: (horseId: string) => ActionResult & { archiveId?: string };
+  restoreHorse: (horseId: string, archiveId: string, expectedOwnerId?: string) => ActionResult;
   deleteHorse: (horseId: string) => ActionResult;
   updateMedicalEvent: (
     horseId: string,

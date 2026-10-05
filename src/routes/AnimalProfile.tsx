@@ -1,13 +1,16 @@
+import { HorseDocuments } from '@/components/HorseDocuments';
+import { HorsePhotoGallery } from '@/components/HorsePhotoGallery';
+import { horseAgeLabel } from '@/lib/horseDocumentActions';
 import { useMemo, useRef, useState } from 'react';
-import type { ChangeEvent, CSSProperties } from 'react';
+import type { CSSProperties } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
-import { ArrowLeft, Camera, Copy, FileText, HeartPulse, Move, Pencil, Plus, Upload } from 'lucide-react';
+import { Archive, ArrowLeft, Camera, Copy, FileText, HeartPulse, Move, Pencil, Plus, Upload } from 'lucide-react';
 import { HorsesIcon } from '@/components/icons';
 import { ActionButton, Card, StatusChip } from '@/components/saas';
 import { useUiStore } from '@/store/useUiStore';
 import { useHorseRecord, useXbarStore } from '@/store/useXbarStore';
 import { formatCurrency, formatPercent } from '@/lib/format';
-import { billingPath } from '@/lib/billingRoutes';
+import { requestFeatureUpgrade } from '@/store/useUpgradeStore';
 import { buyerFollowUpPath } from '@/lib/buyerRoutes';
 import { hasRoleCapability } from '@/lib/permissions';
 import { hasActiveListing } from '@/lib/xbarPhaseTwo';
@@ -23,6 +26,10 @@ import { canPresentPurchaseFlow } from '@/lib/nativePlatform';
 import { buildSaleReadinessScore, readinessNextStep } from '@/lib/saleReadinessScore';
 import { buildBuyerPacketReleaseGate } from '@/lib/buyerPacketReleaseGate';
 import { SaleReadinessCard } from '@/components/SaleReadinessCard';
+import { HorsePhotoSourceDialog } from '@/components/HorsePhotoSourceDialog';
+import { useHorsePhotoSelection } from '@/hooks/useHorsePhotoSelection';
+import type { PhotoSelectionTicket } from '@/lib/photoSelection';
+import { useHorseArchiveActions } from '@/hooks/useHorseArchiveActions';
 
 // Stagger index for the motion system; the CSS var drives each child's delay.
 const motionIndex = (index: number): CSSProperties => ({ ['--motion-index' as string]: index }) as CSSProperties;
@@ -63,6 +70,7 @@ export default function AnimalProfile() {
   const openQuickCreate = useUiStore((s) => s.openQuickCreate);
   const pushToast = useUiStore((s) => s.pushToast);
   const uploadHorseMedia = useXbarStore((s) => s.uploadHorseMedia);
+  const { handleArchive, handleRestore } = useHorseArchiveActions();
   const currentRole = useXbarStore((s) => s.currentRole);
   const expenseReceipts = useXbarStore((s) => s.expenseReceipts);
   const salesLeads = useXbarStore((s) => s.salesLeads);
@@ -75,7 +83,9 @@ export default function AnimalProfile() {
   const profitGate = profitIntelligenceGate(subscription);
   const [tab, setTab] = useState<string>('Overview');
   const [uploadingPhoto, setUploadingPhoto] = useState(false);
-  const photoInputRef = useRef<HTMLInputElement>(null);
+  const photoSelection = useHorsePhotoSelection(id);
+  const photoOpenerRef = useRef<HTMLElement | null>(null);
+  const photoUploadPending = useRef(false);
   const animal = useHorseRecord(id);
 
   // This animal's honest money picture, straight from the shared engine (same
@@ -109,21 +119,27 @@ export default function AnimalProfile() {
   const passportId = animalPassportId(animal?.id);
   const canUploadMedia = hasRoleCapability(currentRole, 'uploadMedia');
 
-  async function onPhotoSelected(event: ChangeEvent<HTMLInputElement>) {
-    const input = event.target;
-    const files = input.files ? Array.from(input.files) : [];
-    input.value = ''; // allow re-selecting the same file after an error
-    if (!animal || !files.length) return;
+  function openPhotoSource() {
+    if (!canUploadMedia || photoUploadPending.current) return;
+    photoOpenerRef.current = document.activeElement instanceof HTMLElement ? document.activeElement : null;
+    photoSelection.open();
+  }
+
+  async function onPhotoSelected(files: File[], ticket: PhotoSelectionTicket) {
+    if (!files.length || photoUploadPending.current) return;
+    const targetHorseId = photoSelection.consume(ticket);
+    if (!targetHorseId) return;
+    photoUploadPending.current = true;
     setUploadingPhoto(true);
     try {
-      // This is a horse-photo capture control (camera / image picker), so tag the
+      // These are horse-photo sources (library / camera / files), so tag the
       // asset with a real horse-photo kind rather than guessing from the filename
       // — otherwise a file named e.g. "pedigree.jpg" would be classed as a
       // document, yet still get promoted to the primary image. Both entry points
       // set the primary: add the hero when none exists, replace it otherwise;
       // extra files join the gallery.
       const result = await uploadHorseMedia({
-        horseId: animal.id,
+        horseId: targetHorseId,
         files,
         kind: 'Conformation',
         makePrimary: true,
@@ -136,6 +152,7 @@ export default function AnimalProfile() {
     } catch {
       pushToast({ title: 'Upload failed', message: 'The photo could not be uploaded. Try again.', tone: 'error' });
     } finally {
+      photoUploadPending.current = false;
       setUploadingPhoto(false);
     }
   }
@@ -186,11 +203,19 @@ export default function AnimalProfile() {
     );
   }
 
+  const activeDocumentFacts = animal.documentFacts.filter((fact) =>
+    documents.some(
+      (document) =>
+        document.id === fact.sourceDocumentId &&
+        (document.horseId === animal.id || (!document.horseId && animal.documents.includes(document.id))) &&
+        document.state !== 'Archived',
+    ),
+  );
   const packetReady = saleReadiness?.proofPacketReady ?? false;
   const identity = identityCompleteness(animal);
   const identityTone: Tone = identity.percent >= 90 ? 'success' : identity.percent >= 60 ? 'info' : 'warning';
   // Every identity gap except a Photo is filled from the Edit Horse drawer; a
-  // Photo is added through the camera-capture control on the avatar. So the
+  // Photo is added through the photo-source chooser on the avatar. So the
   // "Complete passport" (drawer) CTA only lists gaps the drawer can resolve —
   // the Photo gap is handled by its own Add Photo control instead of dead-ending.
   const drawerFixableMissing = identity.missing.filter((label) => label !== 'Photo');
@@ -207,13 +232,22 @@ export default function AnimalProfile() {
         <ArrowLeft size={14} /> Horses
       </button>
 
+      {animal.archive ? (
+        <div className="panel" role="status">
+          <p>This horse is archived from the roster. Its records, reminders, and buyer packets are retained.</p>
+          {hasRoleCapability(currentRole, 'editHorse') ? (
+            <ActionButton onClick={() => handleRestore(animal.id, animal.archive!.id)}>Restore horse</ActionButton>
+          ) : null}
+        </div>
+      ) : null}
+
       <div className="xs-objhead">
         <div className="xs-objhead__id">
           {canUploadMedia ? (
             <button
               type="button"
               className="xs-objhead__avatar xs-objhead__avatar--action"
-              onClick={() => photoInputRef.current?.click()}
+              onClick={openPhotoSource}
               disabled={uploadingPhoto}
               title={photoUrl ? 'Replace photo' : 'Add a photo'}
               aria-label={photoUrl ? 'Replace horse photo' : 'Add horse photo'}
@@ -236,19 +270,21 @@ export default function AnimalProfile() {
               )}
             </span>
           )}
-          <input
-            ref={photoInputRef}
-            type="file"
-            accept="image/*"
-            capture="environment"
-            multiple
-            hidden
-            onChange={onPhotoSelected}
-          />
+          {canUploadMedia && photoSelection.ticket ? (
+            <HorsePhotoSourceDialog
+              key={photoSelection.ticket.generation}
+              open
+              onOpenChange={(open) => {
+                if (!open) photoSelection.cancel();
+              }}
+              onFilesSelected={(files) => void onPhotoSelected(files, photoSelection.ticket!)}
+              onRestoreFocus={() => photoOpenerRef.current?.focus()}
+            />
+          ) : null}
           <div>
             <div className="xs-objhead__name">{animal.name}</div>
             <div className="xs-objhead__meta">
-              {animal.breed || 'Horse'} · {animal.sex} · {animal.age} yrs · {location}
+              {animal.breed || 'Horse'} · {animal.sex} · {horseAgeLabel(animal)} · {location}
             </div>
             <button
               type="button"
@@ -274,6 +310,11 @@ export default function AnimalProfile() {
           </div>
         </div>
         <div className="xs-objhead__actions">
+          {!animal.archive && hasRoleCapability(currentRole, 'editHorse') ? (
+            <ActionButton size="sm" icon={<Archive size={14} />} onClick={() => handleArchive(animal.id)}>
+              Archive from roster
+            </ActionButton>
+          ) : null}
           <ActionButton
             size="sm"
             icon={<Pencil size={14} />}
@@ -295,16 +336,17 @@ export default function AnimalProfile() {
           >
             Add Health
           </ActionButton>
-          <ActionButton size="sm" icon={<Upload size={14} />} onClick={() => navigate('/documents')}>
+          <ActionButton
+            size="sm"
+            icon={<Upload size={14} />}
+            onClick={() =>
+              navigate(`/documents?${new URLSearchParams({ horse: animal.id, from: 'profile', upload: '1' })}`)
+            }
+          >
             Upload Doc
           </ActionButton>
           {canUploadMedia && !photoUrl ? (
-            <ActionButton
-              size="sm"
-              icon={<Camera size={14} />}
-              onClick={() => photoInputRef.current?.click()}
-              disabled={uploadingPhoto}
-            >
+            <ActionButton size="sm" icon={<Camera size={14} />} onClick={openPhotoSource} disabled={uploadingPhoto}>
               {uploadingPhoto ? 'Uploading…' : 'Add Photo'}
             </ActionButton>
           ) : null}
@@ -312,12 +354,14 @@ export default function AnimalProfile() {
             size="sm"
             variant="primary"
             icon={<FileText size={14} />}
-            onClick={() => navigate('/sale-packets')}
+            onClick={() => navigate(`/sale-packets?${new URLSearchParams({ horse: animal.id })}`)}
           >
             Build Sale Packet
           </ActionButton>
         </div>
       </div>
+
+      <HorsePhotoGallery key={animal.id} horse={animal} onAdd={openPhotoSource} uploading={uploadingPhoto} />
 
       <div className="xs-tabbar">
         {TABS.map((t) => (
@@ -338,7 +382,7 @@ export default function AnimalProfile() {
             <SaleReadinessCard
               horseId={animal.id}
               readiness={saleReadiness}
-              onAddPhoto={canUploadMedia ? () => photoInputRef.current?.click() : undefined}
+              onAddPhoto={canUploadMedia ? openPhotoSource : undefined}
             />
           ) : null}
           <div className="xs-grid-2">
@@ -427,7 +471,11 @@ export default function AnimalProfile() {
                     Open Care Tasks
                   </ActionButton>
                 )}
-                <ActionButton size="sm" variant="primary" onClick={() => navigate('/sale-packets')}>
+                <ActionButton
+                  size="sm"
+                  variant="primary"
+                  onClick={() => navigate(`/sale-packets?${new URLSearchParams({ horse: animal.id })}`)}
+                >
                   Open Sale Packets
                 </ActionButton>
               </div>
@@ -443,7 +491,7 @@ export default function AnimalProfile() {
                 {profitGate}
               </p>
               {canPresentPurchaseFlow() ? (
-                <ActionButton size="sm" variant="primary" onClick={() => navigate(billingPath)}>
+                <ActionButton size="sm" variant="primary" onClick={() => requestFeatureUpgrade('profitIntelligence')}>
                   Upgrade to Ranch Ops
                 </ActionButton>
               ) : null}
@@ -564,29 +612,38 @@ export default function AnimalProfile() {
       ) : null}
 
       {tab === 'Documents' ? (
-        <Card title="Documents" link="Open documents" onLink={() => navigate('/documents')}>
-          {animal.documentFacts.length ? (
-            <div className="xs-mlist">
-              {animal.documentFacts.slice(0, 10).map((f) => (
-                <div key={f.id} className="xs-mrow">
-                  <span className="xs-mrow__main">
-                    <span className="xs-mrow__title">{f.label}</span>
-                    <span className="xs-mrow__detail">{f.value}</span>
-                  </span>
-                  <StatusChip
-                    tone={f.decision === 'Accepted' ? 'success' : f.decision === 'Rejected' ? 'danger' : 'warning'}
-                  >
-                    {f.decision ?? 'Review'}
-                  </StatusChip>
+        <>
+          <HorseDocuments key={animal.id} horse={animal} />
+          {activeDocumentFacts.length ? (
+            <Card
+              title="Extracted document facts"
+              link="Open documents"
+              onLink={() => navigate(`/documents?stage=Library&horse=${encodeURIComponent(animal.id)}&from=profile`)}
+            >
+              {activeDocumentFacts.length ? (
+                <div className="xs-mlist">
+                  {activeDocumentFacts.slice(0, 10).map((f) => (
+                    <div key={f.id} className="xs-mrow">
+                      <span className="xs-mrow__main">
+                        <span className="xs-mrow__title">{f.label}</span>
+                        <span className="xs-mrow__detail">{f.value}</span>
+                      </span>
+                      <StatusChip
+                        tone={f.decision === 'Accepted' ? 'success' : f.decision === 'Rejected' ? 'danger' : 'warning'}
+                      >
+                        {f.decision ?? 'Review'}
+                      </StatusChip>
+                    </div>
+                  ))}
                 </div>
-              ))}
-            </div>
-          ) : (
-            <p className="xs-muted" style={{ fontSize: 13, marginTop: 0 }}>
-              No documents linked to this horse yet.
-            </p>
-          )}
-        </Card>
+              ) : (
+                <p className="xs-muted" style={{ fontSize: 13, marginTop: 0 }}>
+                  No documents linked to this horse yet.
+                </p>
+              )}
+            </Card>
+          ) : null}
+        </>
       ) : null}
 
       {tab === 'Ownership' ? (
@@ -697,7 +754,7 @@ export default function AnimalProfile() {
           <SaleReadinessCard
             horseId={animal.id}
             readiness={saleReadiness}
-            onAddPhoto={canUploadMedia ? () => photoInputRef.current?.click() : undefined}
+            onAddPhoto={canUploadMedia ? openPhotoSource : undefined}
             detailed
           />
         </>

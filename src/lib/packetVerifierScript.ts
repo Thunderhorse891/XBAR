@@ -555,6 +555,36 @@ export const PACKET_VERIFIER_SCRIPT = `
           problems.push('The sealed record is not readable, so the files cannot be checked against it.');
         }
         var expected = (parsed && parsed.attachments) || [];
+        var brandingFormat = parsed && parsed.version === 6;
+        var logoSeller = brandingFormat && parsed.seller ? parsed.seller : null;
+        var sealedLogo = logoSeller && typeof logoSeller.logoDataUrl === 'string' ? logoSeller.logoDataUrl : '';
+        var logoCheck = Promise.resolve(null);
+        if (sealedLogo) {
+          var logoBase64 = sealedLogo.split(',')[1] || '';
+          var logoPrefix = sealedLogo.slice(0, sealedLogo.indexOf(','));
+          if ((logoPrefix !== 'data:image/png;base64' && logoPrefix !== 'data:image/jpeg;base64') ||
+              logoBase64.length > 349528 || !logoSeller.logoWidth || !logoSeller.logoHeight ||
+              logoSeller.logoWidth > 2048 || logoSeller.logoHeight > 2048) {
+            problems.push('The sealed ranch logo is not a supported embedded raster image.');
+          } else {
+            try {
+              var logoImage = document.getElementById('xbar-ranch-logo');
+              var decodedLogo = logoImage && typeof logoImage.decode === 'function'
+                ? logoImage.decode().catch(function () { problems.push('The ranch logo image cannot be decoded.'); })
+                : Promise.resolve();
+              logoCheck = decodedLogo.then(function () {
+                if (!logoImage || !logoImage.complete || logoImage.naturalWidth !== logoSeller.logoWidth ||
+                    logoImage.naturalHeight !== logoSeller.logoHeight) problems.push('The ranch logo image dimensions do not match the sealed image.');
+                return hash(bytesOf(logoBase64));
+              }).then(function (logoDigest) {
+                if (logoDigest !== logoSeller.logoDigest) problems.push('The ranch logo bytes do not match their sealed content digest.');
+                return null;
+              });
+            } catch (error) {
+              problems.push('The sealed ranch logo cannot be decoded.');
+            }
+          }
+        }
         /*
          * EVERY link in the packet, not the ones that agreed to be checked.
          *
@@ -617,8 +647,9 @@ export const PACKET_VERIFIER_SCRIPT = `
             return hash(bytes).then(function (digest) {
               return { id: id, fileName: fileName, digest: digest, embedded: true };
             });
-          }),
+          }).concat([logoCheck]),
         ).then(function (found) {
+          found = found.filter(function (file) { return file !== null; });
           found.forEach(function (file) {
             var match = null;
             for (var i = 0; i < expected.length; i += 1) {
@@ -680,6 +711,15 @@ export const PACKET_VERIFIER_SCRIPT = `
               : '';
           var sealedPhotoSeen = 0;
           var heroNode = null;
+          var logoNode = null;
+          var sealedLogoSeen = 0;
+          var logoScale = sealedLogo ? Math.min(180 / logoSeller.logoWidth, 72 / logoSeller.logoHeight, 1) : 1;
+          var logoAttrs = sealedLogo ? {
+            id: 'xbar-ranch-logo', src: sealedLogo,
+            alt: (logoSeller.displayName || 'Seller') + ' logo',
+            width: String(Math.max(1, Math.floor(logoSeller.logoWidth * logoScale))),
+            height: String(Math.max(1, Math.floor(logoSeller.logoHeight * logoScale))),
+          } : null;
           var EMBEDS =
             'img,iframe,embed,object,video,audio,source,track,link,base,svg,frame,frameset,applet,portal,form';
           [].slice.call(document.querySelectorAll(EMBEDS)).forEach(function (node) {
@@ -707,6 +747,12 @@ export const PACKET_VERIFIER_SCRIPT = `
               }
               return seen.src === sealedPhoto && seen.alt === expectedAlt && seen.width === '100%';
             }
+            if (tag === 'img' && sealedLogo && exactly(node, 'IMG', logoAttrs)) {
+              sealedLogoSeen += 1;
+              if (!logoNode) logoNode = node;
+              if (sealedLogoSeen > 1) problems.push('The sealed ranch logo appears more than once.');
+              return;
+            }
             if (tag === 'img' && sealedPhoto && from === sealedPhoto && isUnmodifiedHeroImg(node, parsed)) {
               sealedPhotoSeen += 1;
               if (!heroNode) heroNode = node;
@@ -725,6 +771,7 @@ export const PACKET_VERIFIER_SCRIPT = `
                 ', which the seal does not cover. A sealed packet embeds nothing but its own attachments and its one sealed hero photo, so this was put here after it was sealed. Do not trust what it shows you.',
             );
           });
+          if (sealedLogo && sealedLogoSeen !== 1) problems.push('The sealed ranch logo was removed or changed.');
           if (sealedPhoto && sealedPhotoSeen === 0) {
             problems.push(
               'The hero photo the seal covers is missing from this packet. It was sealed as "' +
@@ -861,7 +908,9 @@ export const PACKET_VERIFIER_SCRIPT = `
             var wanted = [
               ['name', 'Seller', 'seller name'],
               ['ranch', 'Ranch', 'ranch'],
+              ...(brandingFormat ? [['business', 'Business', 'business']] : []),
               ['email', 'Email', 'seller email'],
+              ...(brandingFormat ? [['phone', 'Phone', 'seller phone'], ['website', 'Website', 'seller website']] : []),
             ].filter(function (field) {
               return typeof sealedSeller[field[0]] === 'string' && sealedSeller[field[0]] !== '';
             });
@@ -992,13 +1041,15 @@ export const PACKET_VERIFIER_SCRIPT = `
             var metaItems = metaLine && metaLine.children ? metaLine.children : [];
             var byline = wantByline && metaItems.length === 2 ? metaItems[1] : null;
             var head = metaLine ? metaLine.parentElement : null;
+            var headerOffset = sealedLogo ? 1 : 0;
             var bylinePlaced =
               exactly(metaLine, 'DIV', { class: 'meta', id: 'xbar-packet-meta' }) &&
               exactly(head, 'HEADER', {}) &&
               head.parentElement === sealedContent &&
               !!head.children &&
-              head.children.length === 3 &&
-              head.children[2] === metaLine &&
+              head.children.length === 3 + headerOffset &&
+              (!sealedLogo || (head.children[0] === logoNode && logoNode.parentElement === head)) &&
+              head.children[2 + headerOffset] === metaLine &&
               metaItems.length === (wantByline ? 2 : 1) &&
               leaf(metaItems[0], 'SPAN', {}) &&
               document.querySelectorAll('#xbar-seller-byline').length === (wantByline ? 1 : 0) &&
@@ -1015,10 +1066,10 @@ export const PACKET_VERIFIER_SCRIPT = `
             if (bylinePlaced) {
               var wantHeading = parsed.identity && parsed.identity.name ? parsed.identity.name : 'Unnamed horse';
               if (
-                !leaf(head.children[0], 'DIV', { class: 'eyebrow' }) ||
-                head.children[0].textContent !== 'XBAR™ Buyer Sale Packet' ||
-                !leaf(head.children[1], 'H1', {}) ||
-                head.children[1].textContent !== wantHeading
+                !leaf(head.children[headerOffset], 'DIV', { class: 'eyebrow' }) ||
+                head.children[headerOffset].textContent !== (brandingFormat && logoSeller.displayName ? logoSeller.displayName + ' · Buyer Sale Packet' : 'XBAR™ Buyer Sale Packet') ||
+                !leaf(head.children[1 + headerOffset], 'H1', {}) ||
+                head.children[1 + headerOffset].textContent !== wantHeading
               ) {
                 problems.push('The title or horse name in this packet header was changed after sealing. Do not trust instructions added there.');
               }

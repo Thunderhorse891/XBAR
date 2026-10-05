@@ -145,6 +145,21 @@ export function installFakeIndexedDb(options: FakeOptions = {}) {
             };
 
             transaction.objectStore = () => ({
+              add: (value: StoredEntry, key?: string) => {
+                const id = key ?? (value as StoredRecord).key;
+                if (data.has(id)) {
+                  const request: Record<string, unknown> = { error: new Error('ConstraintError') };
+                  later(() => {
+                    settled = true;
+                    (transaction.onabort as (() => void) | undefined)?.();
+                  });
+                  return request;
+                }
+                return issue(
+                  () => undefined,
+                  () => data.set(id, value),
+                );
+              },
               // The second argument is IndexedDB's out-of-line key. Ignoring it
               // is what made workspace writes vanish under `undefined`.
               put: (value: StoredEntry, key?: string) =>

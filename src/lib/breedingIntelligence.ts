@@ -1,4 +1,6 @@
 import type { HorseRecord, TimelineEvent, BreedingRecordDetails } from '../types/xbar.js';
+import { localIsoDate } from './format.js';
+import { breedingDate as toDate } from './breedingEntry.js';
 
 /*
  * Breeding operations intelligence. Pure domain logic over the breeding
@@ -21,7 +23,15 @@ const RECENT_OVERDUE_WINDOW_DAYS = 21;
 const DAY_MS = 86_400_000;
 
 export type MareStatus =
-  'open' | 'bred-awaiting-check' | 'in-foal' | 'near-term' | 'foaled-live' | 'foaled-loss' | 'not-breeding';
+  | 'open'
+  | 'bred-awaiting-check'
+  | 'in-foal'
+  | 'near-term'
+  | 'foaled-live'
+  | 'foaled-loss'
+  | 'foaling-unknown'
+  | 'pregnancy-unknown'
+  | 'not-breeding';
 
 export type GuaranteeState = 'none' | 'covered' | 'fulfilled' | 'rebreed-owed';
 
@@ -65,12 +75,6 @@ export interface BreedingProgram {
   projectedProgramValue: number;
   projectedProgramMargin: number;
   mares: MareBreedingState[];
-}
-
-function toDate(value: string | undefined): Date | null {
-  if (!value) return null;
-  const date = new Date(value);
-  return Number.isNaN(date.getTime()) ? null : date;
 }
 
 function isoDate(date: Date): string {
@@ -254,6 +258,40 @@ export function currentPregnancyOutcome(events: TimelineEvent[], afterISO: strin
   return 'unknown';
 }
 
+/** A birth never proves a live outcome by the absence of loss wording. */
+export function foalingOutcome(event: TimelineEvent): 'live' | 'loss' | 'unknown' {
+  const raw = breedingDetails(event)?.result;
+  const structured = typeof raw === 'string' ? raw.trim().toLowerCase() : '';
+  if (structured === 'live' || structured === 'loss' || structured === 'unknown') return structured;
+  const text = outcomeText(event);
+  if (/\bunknown\b|unconfirmed|not recorded|pending|scheduled|planned|expected|\?/.test(text)) return 'unknown';
+  if (/\b(?:foal|colt|filly)\s+(?:is\s+|was\s+)?not alive\b|\bno live (?:foal|colt|filly)\b/.test(text)) return 'loss';
+  for (const match of text.matchAll(/\bloss\b|stillborn|still.?birth|\bdead\b|\bdied\b|abort|slipped/g)) {
+    const before = text.slice(0, match.index);
+    if (/\b(?:no(?: signs of| evidence of)?(?: foaling)?|not(?: a)?(?: foaling)?|without(?: any)?)\s+$/.test(before))
+      continue;
+    return 'loss';
+  }
+  // A healthy mare is not evidence about the foal; negated statements are not positive outcomes.
+  const liveWording =
+    /\b(?:live|living|healthy)\s+(?:foal|colt|filly)\b|\b(?:foal|colt|filly)\s+(?:is\s+|was\s+|still\s+)?(?:alive|healthy|doing well)\b/g;
+  for (const match of text.matchAll(liveWording)) {
+    const before = text.slice(0, match.index).split(CLAUSE_BREAK).pop() ?? '';
+    const after = text.slice((match.index ?? 0) + match[0].length).split(CLAUSE_BREAK)[0] ?? '';
+    if (!CLAUSE_NEGATION.test(before) && !CLAUSE_NEGATION.test(after)) return 'live';
+  }
+  return 'unknown';
+}
+
+export function chronologicalBreedingEvents(events: TimelineEvent[], now = new Date()): TimelineEvent[] {
+  return events
+    .filter((event) => {
+      const date = toDate(event.date);
+      return date && isoDate(date) <= localIsoDate(now);
+    })
+    .sort((left, right) => toDate(right.date)!.getTime() - toDate(left.date)!.getTime());
+}
+
 // Live-foal-guarantee: a confirmed cover is "covered"; a recorded live
 // foaling fulfils it; a loss leaves a rebreed owed to the mare owner.
 function guaranteeFor(status: MareStatus): GuaranteeState {
@@ -278,11 +316,13 @@ const STATUS_LABELS: Record<MareStatus, string> = {
   'near-term': 'Near term',
   'foaled-live': 'Foaled — live',
   'foaled-loss': 'Foaling loss',
+  'foaling-unknown': 'Foaling recorded — outcome unconfirmed',
+  'pregnancy-unknown': 'Pregnancy outcome unconfirmed',
   'not-breeding': 'Not in breeding program',
 };
 
 export function buildMareBreedingState(horse: HorseRecord, now: Date = new Date()): MareBreedingState {
-  const events = horse.breedingTimeline ?? [];
+  const events = chronologicalBreedingEvents(horse.breedingTimeline ?? [], now);
   const breeding = latestByRecordType(events, 'breeding');
   const breedingDetail = breeding ? breedingDetails(breeding) : undefined;
   const bredOn = toDate(breeding?.date);
@@ -345,30 +385,49 @@ export function buildMareBreedingState(horse: HorseRecord, now: Date = new Date(
         actionRoute: '/breeding',
       };
     }
-    if (!breeding || !bredOn) {
+    const latestCheck = latestByRecordType(currentEvents, 'pregnancy-check');
+    if (latestCheck) {
+      const outcome = currentPregnancyOutcome(currentEvents, '');
+      const status: MareStatus = outcome === 'negative' ? 'open' : 'pregnancy-unknown';
       return {
         ...base,
-        status: 'open',
-        statusLabel: STATUS_LABELS.open,
+        status,
+        statusLabel: STATUS_LABELS[status],
+        bredOn: undefined,
+        mateName: undefined,
+        method: undefined,
         guarantee: 'none',
-        actionLabel: `Log a breeding for ${horse.name}`,
+        actionLabel:
+          outcome === 'negative'
+            ? `Log a breeding for ${horse.name}`
+            : `Confirm the pregnancy outcome for ${horse.name}`,
         actionRoute: '/breeding',
       };
     }
-  }
-
-  if (foaling && completedCycle) {
-    const result = outcomeText(foaling);
-    // Loss-specific terms only — a bare "still" (e.g. "mare and foal still
-    // doing well") must not flip a live foaling to a loss.
-    const live = !/\bloss\b|stillborn|still.?birth|\bdead\b|\bdied\b|abort|slipped/.test(result);
-    const status: MareStatus = live ? 'foaled-live' : 'foaled-loss';
+    if (foaling && completedCycle) {
+      const outcome = foalingOutcome(foaling);
+      const status: MareStatus =
+        outcome === 'live' ? 'foaled-live' : outcome === 'loss' ? 'foaled-loss' : 'foaling-unknown';
+      return {
+        ...base,
+        status,
+        statusLabel: STATUS_LABELS[status],
+        guarantee: guaranteeFor(status),
+        actionLabel:
+          outcome === 'live'
+            ? `Register the foal for ${horse.name}`
+            : outcome === 'loss'
+              ? `Schedule rebreed for ${horse.name}`
+              : `Confirm the foaling outcome for ${horse.name}`,
+        actionRoute: '/breeding',
+      };
+    }
     return {
       ...base,
-      status,
-      statusLabel: STATUS_LABELS[status],
-      guarantee: guaranteeFor(status),
-      actionLabel: live ? `Register the foal for ${horse.name}` : `Schedule rebreed for ${horse.name}`,
+      status: 'open',
+      statusLabel: 'No breeding outcome recorded',
+      guarantee: 'none',
+      actionLabel: `Log a breeding for ${horse.name}`,
       actionRoute: '/breeding',
     };
   }

@@ -76,6 +76,15 @@ jobs:
       - name: Product surfaces, document intake and report export
         run: npm run test:e2e -- --retries=0
 
+      - name: Upload ranch branding review screenshots
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: ranch-branding-review
+          path: test-results/**/ranch-*.png
+          if-no-files-found: ignore
+          retention-days: 7
+
       # Drives the password-recovery flow on a rendered, Supabase-configured
       # web bundle. The prod-smoke suite above cannot cover it: build:local
       # strips the Supabase credentials to enable local mode, so the reset

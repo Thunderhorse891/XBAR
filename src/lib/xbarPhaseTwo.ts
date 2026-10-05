@@ -65,6 +65,17 @@ export type SalePacketSlot = {
   tone: Tone;
 };
 
+/** Canonical source types for the document slots, also used to route their UI actions. */
+export const salePacketDocumentTypes: Record<
+  Exclude<SalePacketSlot['key'], 'aqha-photos'>,
+  DocumentRecord['type'][]
+> = {
+  'aqha-papers': ['Registration', 'Bill of Sale'],
+  'transfer-papers': ['Ownership Memo', 'Transfer Packet'],
+  coggins: ['Coggins'],
+  'health-cert': ['Vet Record'],
+};
+
 export type DocumentTrustProfile = {
   trustScore: number;
   tone: Tone;
@@ -227,18 +238,19 @@ export function buildHorsePacketCompleteness(
   ownershipRecord?: PacketOwnershipInput,
   asOfDate: Date = new Date(),
 ): PacketCompleteness {
-  const registrationDocs = collectDocuments(documents, ['Registration', 'Bill of Sale']);
-  const ownershipDocs = collectDocuments(documents, ['Ownership Memo', 'Transfer Packet']);
+  const activeGallery = horse.gallery.filter((asset) => asset.status !== 'Archived');
+  const registrationDocs = collectDocuments(documents, salePacketDocumentTypes['aqha-papers']);
+  const ownershipDocs = collectDocuments(documents, salePacketDocumentTypes['transfer-papers']);
   const medicalDocs = collectDocuments(documents, ['Vet Record', 'Coggins']);
   const mediaDocs = collectDocuments(documents, ['Media Kit']);
-  const hasApprovedHero = horse.gallery.some((asset) => asset.kind === 'Hero' && asset.status === 'Approved');
-  const hasApprovedSaleStill = horse.gallery.some(
+  const hasApprovedHero = activeGallery.some((asset) => asset.kind === 'Hero' && asset.status === 'Approved');
+  const hasApprovedSaleStill = activeGallery.some(
     (asset) => asset.kind === 'Sale Still' && asset.status === 'Approved',
   );
-  const hasApprovedConformation = horse.gallery.some(
+  const hasApprovedConformation = activeGallery.some(
     (asset) => asset.kind === 'Conformation' && asset.status === 'Approved',
   );
-  const approvedSalePhotos = horse.gallery.filter(
+  const approvedSalePhotos = activeGallery.filter(
     (asset) =>
       asset.status === 'Approved' &&
       (asset.kind === 'Hero' || asset.kind === 'Conformation' || asset.kind === 'Sale Still'),
@@ -250,8 +262,8 @@ export function buildHorsePacketCompleteness(
   );
   const activeListing = hasActiveListing(horse);
 
-  const cogginsDocs = collectDocuments(documents, ['Coggins']);
-  const vetDocs = collectDocuments(documents, ['Vet Record']);
+  const cogginsDocs = collectDocuments(documents, salePacketDocumentTypes.coggins);
+  const vetDocs = collectDocuments(documents, salePacketDocumentTypes['health-cert']);
   const hasCurrentCoggins = hasCurrentReadyDocument(cogginsDocs, CURRENT_COGGINS_DAYS, asOfDate);
   const hasCurrentHealthSupport = hasCurrentReadyDocument(vetDocs, CURRENT_HEALTH_SUPPORT_DAYS, asOfDate);
   const medicalDocsCurrent = hasCurrentReadyDocument(medicalDocs, CURRENT_HEALTH_SUPPORT_DAYS, asOfDate);
@@ -319,7 +331,7 @@ export function buildHorsePacketCompleteness(
       key: 'aqha-photos',
       label: 'Sale photo set',
       ready: hasApprovedHero && (hasApprovedConformation || hasApprovedSaleStill) && approvedSalePhotos.length >= 2,
-      review: approvedSalePhotos.length > 0 || horse.gallery.length > 0 || mediaDocs.some(isDocumentResolved),
+      review: approvedSalePhotos.length > 0 || activeGallery.length > 0 || mediaDocs.some(isDocumentResolved),
       readyDetail: 'Approved hero and conformation photos are ready for the share view.',
       reviewDetail: 'Photos exist, but the sale set still needs stronger approved coverage.',
       missingDetail: 'No sale photos are attached yet.',
@@ -389,13 +401,13 @@ export function buildHorsePacketCompleteness(
       status:
         hasApprovedHero && (hasApprovedSaleStill || mediaDocs.some(isDocumentReady))
           ? 'ready'
-          : horse.gallery.length || mediaDocs.length
+          : activeGallery.length || mediaDocs.length
             ? 'review'
             : 'missing',
       detail:
         hasApprovedHero && (hasApprovedSaleStill || mediaDocs.some(isDocumentReady))
           ? 'Hero imagery and packet media are approved for sale presentation.'
-          : horse.gallery.length || mediaDocs.length
+          : activeGallery.length || mediaDocs.length
             ? 'Visual assets exist, but the packet still needs stronger coverage.'
             : 'No media packet is attached yet.',
       weight: 18,

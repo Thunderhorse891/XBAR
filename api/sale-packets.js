@@ -16,6 +16,7 @@ import { enforceRateLimit } from './_lib/rate-limit.js';
 import { applyCors } from './_lib/cors.js';
 import { packetOmissionSection, selectPacketDocuments } from './_lib/packet-selection.js';
 import { sellerIdentity } from './_lib/workspace-identity.js';
+import { normalizePacketBranding } from './_lib/packet-branding.js';
 import {
   PACKET_FILE_NOT_STORED,
   PACKET_PATH_REFUSED,
@@ -122,10 +123,14 @@ export default async function handler(req, res) {
   }
 
   try {
-    const loaded = await loadHorseContext(supabase, workspaceId, horseId);
+    const loaded = await loadHorseContext(supabase, workspaceId, horseId, { requireProfile: true });
     if (!loaded.horse) {
       return sendJson(res, 404, { ok: false, message: `Horse ${horseId} not found in this workspace.` });
     }
+
+    // Only the workspace profile read after authorization may supply seller
+    // branding. Request-body branding and remote image URLs are never used.
+    const packetBranding = normalizePacketBranding(loaded.context.workspace);
 
     const buyerName = typeof body.buyerName === 'string' ? body.buyerName.trim() : '';
     const buyerEmail = typeof body.buyerEmail === 'string' ? body.buyerEmail.trim().toLowerCase() : '';
@@ -227,6 +232,7 @@ export default async function handler(req, res) {
       documents: includedDocs,
       sealedAt: new Date().toISOString(),
       sellerIdentity: identity,
+      packetBranding,
     });
     const appOrigin =
       process.env.PUBLIC_APP_URL ||
@@ -249,6 +255,9 @@ export default async function handler(req, res) {
 
     const coverBytes = await createSectionedPdf({
       title: `Sale Packet: ${context.horse.name}`,
+      letterhead: packetBranding.displayName,
+      customerLogoDataUrl: packetBranding.logoDataUrl,
+      continuationHeaders: true,
       sections: [
         {
           heading: 'Horse Summary',
@@ -271,12 +280,11 @@ export default async function handler(req, res) {
           // and quick-start placeholders (My Ranch LLC, Main Ranch) are not
           // the seller's identity.
           lines: [
-            [
-              identity.business || identity.ranch || 'A horse seller',
-              identity.business && identity.ranch ? `(${identity.ranch})` : '',
-            ]
-              .filter(Boolean)
-              .join(' '),
+            packetBranding.displayName || 'A horse seller',
+            ...(packetBranding.name ? [`Seller: ${packetBranding.name}`] : []),
+            ...(packetBranding.email ? [`Email: ${packetBranding.email}`] : []),
+            ...(packetBranding.phone ? [`Phone: ${packetBranding.phone}`] : []),
+            ...(packetBranding.website ? [`Website: ${packetBranding.website}`] : []),
             buyerName ? `Prepared for: ${buyerName}` : 'Prepared for: prospective buyer',
             `Prepared on: ${context.today_date}`,
           ],
