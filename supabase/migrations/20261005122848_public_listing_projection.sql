@@ -109,7 +109,8 @@ begin
 
   select jsonb_build_object(
     'id', ownership_record_id, 'horseId', horse_id,
-    'transferStatus', coalesce(nullif(transfer_status, ''), 'Pending Signatures'),
+    'transferStatus', coalesce(nullif(transfer_status, ''),
+      case when jsonb_typeof(payload -> 'transferStatus') = 'string' then payload ->> 'transferStatus' end, 'Pending Signatures'),
     'confidence', case when jsonb_typeof(payload -> 'confidence') = 'number' then payload -> 'confidence' else to_jsonb(0) end
   ) into ownership_payload
   from public.ownership_records

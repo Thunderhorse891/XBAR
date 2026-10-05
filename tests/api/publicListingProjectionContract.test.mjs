@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import test from 'node:test';
 const historical = readFileSync('supabase/migrations/20261001090000_workspace_keyed_storage_expand.sql', 'utf8');
-const candidate = readFileSync('supabase/checks/public-listing-projection.candidate.sql', 'utf8');
+const candidate = readFileSync('supabase/migrations/20261005122848_public_listing_projection.sql', 'utf8');
 const runner = readFileSync('tests/database/verify-public-listing-projection.sh', 'utf8');
 
 test('projection preserves selected-row release and token conditions verbatim', () => {
@@ -41,7 +41,8 @@ test('runtime harness is isolated and executes the historical trigger, correctio
     assert.ok(runner.includes(guard));
   assert.ok(runner.indexOf('exit 2') < runner.indexOf('psql -X'));
   assert.ok(runner.includes('expect_fixed=0'));
-  assert.equal((runner.match(/expect_fixed=1/g) ?? []).length, 2);
+  assert.equal((runner.match(/expect_fixed=1/g) ?? []).length, 3);
+  assert.ok(runner.includes('expect_fixed=closed'));
   const fixture = readFileSync('tests/database/public-listing-projection.sql', 'utf8');
   assert.match(fixture, /set local role anon/);
   assert.match(fixture, /987654/);

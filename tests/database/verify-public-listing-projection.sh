@@ -17,8 +17,13 @@ writeFileSync(process.argv[2],source.slice(start,end));
 JS
 psql -X -v ON_ERROR_STOP=1 -f "$historical_file"
 psql -X -v ON_ERROR_STOP=1 -v expect_fixed=0 -f tests/database/public-listing-projection.sql
-psql -X -v ON_ERROR_STOP=1 -f supabase/checks/public-listing-projection.candidate.sql
+psql -X -v ON_ERROR_STOP=1 -f supabase/migrations/20261005122848_public_listing_projection.sql
 psql -X -v ON_ERROR_STOP=1 -v expect_fixed=1 -f tests/database/public-listing-projection.sql
 # CREATE OR REPLACE must be idempotent.
-psql -X -v ON_ERROR_STOP=1 -f supabase/checks/public-listing-projection.candidate.sql
+psql -X -v ON_ERROR_STOP=1 -f supabase/migrations/20261005122848_public_listing_projection.sql
+psql -X -v ON_ERROR_STOP=1 -v expect_fixed=1 -f tests/database/public-listing-projection.sql
+# Verify the documented emergency fallback and recovery without restoring exposure.
+psql -X -v ON_ERROR_STOP=1 -f supabase/checks/public-listing-projection.fail-closed.sql
+psql -X -v ON_ERROR_STOP=1 -v expect_fixed=closed -f tests/database/public-listing-projection.sql
+psql -X -v ON_ERROR_STOP=1 -f supabase/migrations/20261005122848_public_listing_projection.sql
 psql -X -v ON_ERROR_STOP=1 -v expect_fixed=1 -f tests/database/public-listing-projection.sql

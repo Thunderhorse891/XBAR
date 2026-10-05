@@ -12,6 +12,7 @@ insert into public.documents(workspace_id,document_id,horse_id,title,document_ty
  '10000000-0000-4000-8000-000000000051','doc-projection','horse-projection','Public certificate','Registration','Ready',
  '{"summary":"Public certificate summary","fileName":"certificate.pdf","mimeType":"application/pdf","fileSizeBytes":42,"fileUrl":"PRIVATE_SENTINEL","storagePath":"PRIVATE_SENTINEL","entities":{"registrationNumber":"12345","sire":"Public sire","private":"PRIVATE_SENTINEL"}}'
 );
+insert into public.ownership_records(workspace_id,ownership_record_id,horse_id,payload) values ('10000000-0000-4000-8000-000000000051','ownership-projection','horse-projection','{"transferStatus":"Complete","confidence":95,"legalOwner":"PRIVATE_SENTINEL","auditTrail":["PRIVATE_SENTINEL"]}');
 insert into public.shared_listings(workspace_id,listing_id,horse_id,share_path,state,access_mode,share_token,channels,payload) values (
  '10000000-0000-4000-8000-000000000051','listing-projection','horse-projection','synthetic-projection','Live','Private Token','synthetic-token',array['Direct Link'],
  '{"releaseConfirmedAt":"2026-10-05","releaseConfirmedBy":"PRIVATE_SENTINEL","workspaceId":"PRIVATE_SENTINEL","internalNote":"PRIVATE_SENTINEL"}'
@@ -22,7 +23,14 @@ declare result jsonb; broken_first text; fixed boolean := current_setting('xbar.
 begin
  set local role anon;
  result := public.xbar_resolve_public_listing('synthetic-projection','synthetic-token');
+ if current_setting('xbar.fixture_fixed')='closed' then
+  if result is not null then raise exception 'Emergency fallback exposed a listing'; end if;
+  reset role;
+  raise notice 'CLOSED: emergency fallback denies an otherwise valid synthetic buyer link';
+  return;
+ end if;
  if result is null or result #>> '{horse,name}' <> 'Synthetic horse' then raise exception 'Valid buyer link did not resolve'; end if;
+ if result #>> '{ownershipRecord,transferStatus}' <> 'Complete' or result #>> '{ownershipRecord,confidence}' <> '95' then raise exception 'Legacy ownership summary regressed'; end if;
  if result #>> '{sharedListing,workspaceId}' <> '10000000-0000-4000-8000-000000000051' then raise exception 'Canonical workspace lost'; end if;
  if public.xbar_resolve_public_listing('synthetic-projection',null) is not null or public.xbar_resolve_public_listing('synthetic-projection','wrong') is not null then raise exception 'Private token gate bypass'; end if;
  if fixed then
