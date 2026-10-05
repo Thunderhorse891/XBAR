@@ -44,8 +44,13 @@ jobs:
       - name: Require Xcode 26 and iOS 26 SDK
         run: |
           set -euo pipefail
-          xcode_path=$(find /Applications -maxdepth 1 -name 'Xcode_26*.app' | sort -V | tail -1)
-          test -n "$xcode_path"
+          # Control the toolchain rather than floating to the newest preinstalled
+          # Xcode. Run 37252088326 reached two different simulator infrastructure
+          # failures on Xcode 26.6/iOS 26.5: AX startup and event synthesis.
+          # Compare the same app and unchanged XCTest on a matched iOS 26.2
+          # SDK/runtime using the preinstalled, supported Xcode 26.3 toolchain.
+          xcode_path=/Applications/Xcode_26.3.app
+          test -d "$xcode_path"
           sudo xcode-select -s "$xcode_path/Contents/Developer"
           xcodebuild -version
           xcrun --sdk iphoneos --show-sdk-version | grep '^26\.'
