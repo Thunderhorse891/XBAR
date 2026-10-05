@@ -1,119 +1,150 @@
-import { useMemo, useState } from 'react';
-import { useNavigate } from 'react-router-dom';
-import { ArrowRight, Check, CheckCircle2, Plus } from 'lucide-react';
+import { useEffect, useMemo, useRef, useState } from 'react';
+import { useNavigate, useSearchParams } from 'react-router-dom';
+import { ArrowRight, CheckCircle2, EyeOff, Plus } from 'lucide-react';
 import { ActionButton, Card, PageHead, SlideOverDrawer, StatusChip } from '@/components/saas';
 import { useUiStore } from '@/store/useUiStore';
 import { useXbarStore } from '@/store/useXbarStore';
-import { buyerFollowUpPath } from '@/lib/buyerRoutes';
-import { buildCareBoardRows, buildTransferGapRows } from '@/lib/dashboardOps';
+import { useCloudStore } from '@/store/useCloudStore';
+import { buildCareTasks, type CareTask, type CareTaskCategory } from '@/lib/careTasks';
+import { formatDateLabel, localIsoDate } from '@/lib/format';
+import { useDayKey } from '@/hooks/useDayKey';
 import { track, events } from '@/lib/telemetry';
+import {
+  SNOOZE_CHOICES,
+  addTaskDays,
+  taskDeferralsKey,
+  loadTaskDeferrals,
+  taskIsDeferred,
+  writeTaskDeferral,
+  restoreTaskDeferrals,
+  type TaskDeferrals,
+} from '@/lib/taskDeferrals';
+import './TodayWork.css';
 
-type TaskCategory = 'Documents' | 'Care' | 'Sales';
-type Task = {
-  id: string;
-  title: string;
-  detail: string;
-  category: TaskCategory;
-  priority: 'Blocker' | 'High' | 'Normal';
-  linkedName: string;
-  to: string;
-  due: string;
-};
-
-const TABS: Array<'All' | TaskCategory> = ['All', 'Documents', 'Care', 'Sales'];
+const TABS: Array<'All' | CareTaskCategory> = ['All', 'Documents', 'Care', 'Sales'];
 const priorityTone = { Blocker: 'danger', High: 'warning', Normal: 'neutral' } as const;
 
 export default function TodayWork() {
+  const workspaceId = useCloudStore((state) => state.workspaceId);
+  const userId = useCloudStore((state) => state.session?.user?.id ?? '');
+  const recoveryContext = useCloudStore((state) => state.recoveryContext);
+  const localWorkspaceCreatedAt = useXbarStore((state) => state.workspaceProfile.setupCompleteAt);
+  const storageKey = taskDeferralsKey(workspaceId, userId, localWorkspaceCreatedAt, recoveryContext);
+  return <TaskBoard key={storageKey} storageKey={storageKey} />;
+}
+
+function TaskBoard({ storageKey }: { storageKey: string }) {
   const navigate = useNavigate();
-  const pushToast = useUiStore((s) => s.pushToast);
-  const horses = useXbarStore((s) => s.horses);
-  const documents = useXbarStore((s) => s.documents);
-  const ownershipRecords = useXbarStore((s) => s.ownershipRecords);
-  const expenseReceipts = useXbarStore((s) => s.expenseReceipts);
-  const salesLeads = useXbarStore((s) => s.salesLeads);
-  const [tab, setTab] = useState<'All' | TaskCategory>('All');
-  // Dismissals persist per-day in localStorage: a dismissed task really stays
-  // dismissed across reloads, and returns tomorrow if the record is still due.
-  const dismissKey = `xbar-care-dismissed-${new Date().toISOString().slice(0, 10)}`;
-  const [done, setDone] = useState<Set<string>>(() => {
-    try {
-      return new Set(JSON.parse(localStorage.getItem(dismissKey) ?? '[]') as string[]);
-    } catch {
-      return new Set();
-    }
-  });
-  const [open, setOpen] = useState<Task | null>(null);
-  const toast = (m: string) => pushToast({ title: 'Care Tasks', message: m, tone: 'success' });
-
-  const tasks = useMemo<Task[]>(() => {
-    const out: Task[] = [];
-    buildTransferGapRows(horses, ownershipRecords, documents).forEach((g) =>
-      out.push({
-        id: `gap-${g.horseId}`,
-        title: `Finish ownership documents — ${g.horseName}`,
-        detail: g.reasons.slice(0, 2).join(' · ') || 'Missing transfer documents',
-        category: 'Documents',
-        priority: 'Blocker',
-        linkedName: g.horseName,
-        to: `/horses/${g.horseId}`,
-        due: g.dueDate || 'Now',
-      }),
-    );
-    buildCareBoardRows(horses, documents, expenseReceipts).forEach((row) => {
-      const due = row.signals.filter((s) => s.status === 'due');
-      if (due.length) {
-        out.push({
-          id: `care-${row.horseId}`,
-          title: `Care due — ${row.horseName}`,
-          detail: due.map((s) => s.label).join(' · '),
-          category: 'Care',
-          priority: 'High',
-          linkedName: row.horseName,
-          to: `/horses/${row.horseId}`,
-          due: due[0].dueDate ?? 'Today',
-        });
+  const [searchParams, setSearchParams] = useSearchParams();
+  const segment = searchParams.get('segment') || undefined;
+  const pushToast = useUiStore((state) => state.pushToast);
+  const horses = useXbarStore((state) => state.horses);
+  const documents = useXbarStore((state) => state.documents);
+  const ownershipRecords = useXbarStore((state) => state.ownershipRecords);
+  const expenseReceipts = useXbarStore((state) => state.expenseReceipts);
+  const salesLeads = useXbarStore((state) => state.salesLeads);
+  const [tab, setTab] = useState<'All' | CareTaskCategory>('All');
+  const today = useDayKey();
+  const allTasks = useMemo(
+    () =>
+      buildCareTasks(
+        { horses, documents, ownershipRecords, expenseReceipts, salesLeads, segment },
+        new Date(`${today}T12:00:00`),
+      ),
+    [horses, documents, ownershipRecords, expenseReceipts, salesLeads, segment, today],
+  );
+  const [deferrals, setDeferrals] = useState<TaskDeferrals>({});
+  const [deferralError, setDeferralError] = useState(false);
+  const observedTasks = useRef<{ segment: string | undefined; tasks: CareTask[] }>({ segment, tasks: [] });
+  useEffect(() => {
+    const previous = observedTasks.current;
+    // Changing the group is navigation, not evidence that the other group's work ended.
+    const previouslyObserved = previous.segment === segment ? previous.tasks : [];
+    observedTasks.current = { segment, tasks: allTasks };
+    const refresh = () => {
+      try {
+        setDeferrals(loadTaskDeferrals(window.localStorage, storageKey, allTasks, localIsoDate(), previouslyObserved));
+      } catch {
+        setDeferrals({});
+        setDeferralError(true);
       }
+    };
+    const changed = (event: StorageEvent) => {
+      if (event.key === null || event.key.startsWith(`${storageKey}:`)) refresh();
+    };
+    refresh();
+    window.addEventListener('storage', changed);
+    window.addEventListener('focus', refresh);
+    return () => {
+      window.removeEventListener('storage', changed);
+      window.removeEventListener('focus', refresh);
+    };
+  }, [storageKey, allTasks, segment]);
+  const [openTask, setOpenTask] = useState<CareTask | null>(null);
+  // Never keep an obsolete action open after the source record changes.
+  const open = allTasks.find((task) => task.id === openTask?.id && task.revision === openTask.revision) ?? null;
+  useEffect(() => {
+    if (openTask && !open) setOpenTask(null);
+  }, [openTask, open]);
+  const categoryTasks = allTasks.filter((task) => tab === 'All' || task.category === tab);
+  const activeDeferrals = deferralError ? {} : deferrals;
+  const hiddenTasks = categoryTasks.filter((task) => taskIsDeferred(activeDeferrals, task, today));
+  const filtered = categoryTasks.filter((task) => !taskIsDeferred(activeDeferrals, task, today));
+  const failure = () =>
+    pushToast({
+      title: 'Task not deferred',
+      message:
+        'Could not confirm saving the deferral in browser storage. The task remains visible here. Check site storage and try again.',
+      tone: 'error',
     });
-    documents
-      .filter((d) => d.state === 'Needs Review' || d.state === 'Queued' || d.state === 'Matched')
-      .forEach((d) =>
-        out.push({
-          id: `doc-${d.id}`,
-          title: `Review document — ${d.title}`,
-          detail: `${d.type} waiting to be checked`,
-          category: 'Documents',
-          priority: 'Normal',
-          linkedName: d.title,
-          to: '/documents',
-          due: 'Today',
-        }),
-      );
-    salesLeads
-      .filter((l) => l.stage !== 'Closed' && l.nextFollowUp)
-      .forEach((l) =>
-        out.push({
-          id: `lead-${l.id}`,
-          title: `Follow up with ${l.name}`,
-          detail: l.notes ?? 'Buyer follow-up',
-          category: 'Sales',
-          priority: 'Normal',
-          linkedName: l.name,
-          to: buyerFollowUpPath(l.id),
-          due: l.nextFollowUp ?? 'Soon',
-        }),
-      );
-    return out.filter((t) => !done.has(t.id));
-  }, [horses, documents, ownershipRecords, expenseReceipts, salesLeads, done]);
-
-  const filtered = tab === 'All' ? tasks : tasks.filter((t) => t.category === tab);
-  const markDone = (id: string) => {
-    setDone((cur) => {
-      const next = new Set(cur).add(id);
-      localStorage.setItem(dismissKey, JSON.stringify([...next]));
-      return next;
+  const defer = (task: CareTask, days: number, kind: 'dismiss' | 'snooze') => {
+    if (deferralError) {
+      failure();
+      return;
+    }
+    const currentDay = localIsoDate();
+    const until = addTaskDays(currentDay, days);
+    let result;
+    try {
+      result = writeTaskDeferral(window.localStorage, storageKey, task, until, currentDay);
+    } catch {
+      failure();
+      return;
+    }
+    if (!result.ok) {
+      failure();
+      return;
+    }
+    setDeferrals((previous) => ({ ...previous, ...result.deferrals }));
+    setOpenTask(null);
+    track(kind === 'dismiss' ? events.taskDismissed : events.taskSnoozed, {
+      id: task.id,
+      category: task.category,
+      until,
+      scope: 'browser',
     });
-    setOpen(null);
-    toast('Dismissed for today — it comes back tomorrow if the record is still due');
+    pushToast({
+      title: kind === 'dismiss' ? 'Dismissed today' : 'Task snoozed',
+      message: `Hidden on this browser until ${formatDateLabel(`${until}T12:00:00`)}. The linked work is still due.`,
+      tone: 'success',
+    });
+  };
+  const showDeferred = () => {
+    let result;
+    try {
+      result = restoreTaskDeferrals(window.localStorage, storageKey, hiddenTasks, localIsoDate());
+    } catch {
+      result = { ok: false, restoredIds: [] as string[] };
+    }
+    setDeferrals((previous) =>
+      Object.fromEntries(Object.entries(previous).filter(([id]) => !result.restoredIds.includes(id))),
+    );
+    if (!result.ok)
+      pushToast({
+        title: 'Could not restore all tasks',
+        message: `${result.restoredIds.length} restored. Could not confirm the remaining tasks in browser storage. Reload to check their status, then retry if needed.`,
+        tone: 'error',
+      });
   };
 
   return (
@@ -121,15 +152,22 @@ export default function TodayWork() {
       <PageHead
         eyebrow="Daily work"
         title="Care Tasks"
-        subtitle="Everything that needs doing today — documents to finish, care that's due, and buyers to follow up with."
+        subtitle="Documents to finish, care that's due, and buyer follow-ups due today or earlier. Deferrals are saved on this browser only."
         actions={
           <ActionButton variant="primary" icon={<Plus size={15} />} onClick={() => navigate('/horses?new=1')}>
             Add Horse
           </ActionButton>
         }
       />
-
-      {horses.length === 0 ? (
+      {deferralError ? (
+        <Card>
+          <p role="status">
+            Task preferences could not be verified. Due tasks are shown without deferrals in this tab. Check site
+            storage before reloading; older saved deferrals may return if cleanup was not saved.
+          </p>
+        </Card>
+      ) : null}
+      {horses.length === 0 && allTasks.length === 0 ? (
         <Card>
           <div className="xs-empty">
             <span className="xs-empty__icon">
@@ -137,8 +175,8 @@ export default function TodayWork() {
             </span>
             <div className="xs-empty__title">Nothing to do yet</div>
             <div className="xs-empty__sub">
-              Add your horses and their documents — XBAR will show you what care is due and what needs finishing before
-              a sale.
+              Add your horses and their documents. XBAR will show you what care is due and what needs finishing before a
+              sale.
             </div>
             <ActionButton variant="primary" icon={<Plus size={15} />} onClick={() => navigate('/horses?new=1')}>
               Add first horse
@@ -147,7 +185,24 @@ export default function TodayWork() {
         </Card>
       ) : (
         <>
-          <div className="xs-stickybar">
+          <div className="xs-stickybar" role="group" aria-label="Task filters">
+            {segment ? (
+              <div className="care-task-group-filter">
+                <span>Group: {segment}</span>
+                <button
+                  type="button"
+                  className="xs-fchip"
+                  aria-label="Clear group filter"
+                  onClick={() => {
+                    const next = new URLSearchParams(searchParams);
+                    next.delete('segment');
+                    setSearchParams(next);
+                  }}
+                >
+                  All groups
+                </button>
+              </div>
+            ) : null}
             <div className="xs-fchips">
               {TABS.map((t) => (
                 <button
@@ -161,49 +216,52 @@ export default function TodayWork() {
               ))}
             </div>
             <span style={{ flex: 1 }} />
+            {hiddenTasks.length ? (
+              <button type="button" className="xs-fchip" onClick={showDeferred}>
+                {hiddenTasks.length} deferred · Show
+              </button>
+            ) : null}
             <span className="xs-card__sub">
               {filtered.length} task{filtered.length === 1 ? '' : 's'}
             </span>
           </div>
-
           <Card>
             {filtered.length === 0 ? (
-              <div className="xs-empty">You're all caught up here. Nice work.</div>
+              <div className="xs-empty">
+                {hiddenTasks.length
+                  ? 'All remaining tasks in this view are deferred on this browser.'
+                  : 'No tasks due in this view.'}
+              </div>
             ) : (
               filtered.map((t) => (
                 <div
                   key={t.id}
-                  className={`xs-task xs-task--click${t.priority === 'Blocker' ? ' xs-task--blocker' : ''}`}
-                  style={{ gridTemplateColumns: '116px 1fr auto' }}
-                  role="button"
-                  tabIndex={0}
-                  onClick={() => setOpen(t)}
-                  onKeyDown={(e) => {
-                    if (e.key === 'Enter' || e.key === ' ') {
-                      e.preventDefault();
-                      setOpen(t);
-                    }
-                  }}
+                  className={`xs-task care-task-row${t.priority === 'Blocker' ? ' xs-task--blocker' : ''}`}
                 >
                   <StatusChip tone={priorityTone[t.priority]}>
                     {t.priority === 'Blocker' ? 'Cannot sell yet' : t.priority}
                   </StatusChip>
-                  <div>
-                    <div className="xs-task__title">{t.title}</div>
-                    <div className="xs-task__meta">
-                      <span>{t.detail}</span>
-                    </div>
-                  </div>
-                  <div className="xs-task__right" onClick={(e) => e.stopPropagation()}>
+                  <button
+                    type="button"
+                    className="xs-fieldbtn care-task-opener"
+                    aria-label={`Open task: ${t.title}`}
+                    onClick={() => setOpenTask(t)}
+                  >
+                    <span className="xs-task__title">{t.title}</span>
+                    <span className="xs-task__meta">{t.detail}</span>
+                  </button>
+                  <div className="xs-task__right">
                     <span className="xs-task__due">{t.due}</span>
-                    <div className="xs-task__quick">
-                      <button type="button" className="xs-quickbtn" title="Mark done" onClick={() => markDone(t.id)}>
-                        <CheckCircle2 size={15} />
-                      </button>
-                      <button type="button" className="xs-quickbtn" title="Open" onClick={() => setOpen(t)}>
-                        <ArrowRight size={15} />
-                      </button>
-                    </div>
+                    <button
+                      type="button"
+                      className="xs-quickbtn"
+                      title="Dismiss today on this browser"
+                      aria-label={`Dismiss today: ${t.title}`}
+                      disabled={deferralError}
+                      onClick={() => defer(t, 1, 'dismiss')}
+                    >
+                      <EyeOff size={15} />
+                    </button>
                   </div>
                 </div>
               ))
@@ -211,32 +269,26 @@ export default function TodayWork() {
           </Card>
         </>
       )}
-
       <SlideOverDrawer
         open={Boolean(open)}
         title={open?.title ?? ''}
         subtitle={open ? `${open.category} · ${open.linkedName}` : ''}
-        onClose={() => setOpen(null)}
+        onClose={() => setOpenTask(null)}
         footer={
           open ? (
             <>
-              <ActionButton
-                onClick={() => {
-                  toast('Snoozed');
-                  setOpen(null);
-                }}
-              >
-                Snooze
+              <ActionButton disabled={deferralError} onClick={() => defer(open, 1, 'dismiss')}>
+                Dismiss today
               </ActionButton>
               <ActionButton
                 variant="primary"
-                icon={<Check size={15} />}
+                icon={<ArrowRight size={15} />}
                 onClick={() => {
-                  track(events.taskCompleted, { id: open.id, category: open.category });
-                  markDone(open.id);
+                  setOpenTask(null);
+                  navigate(open.to);
                 }}
               >
-                Mark Done
+                {open.actionLabel}
               </ActionButton>
             </>
           ) : null
@@ -250,33 +302,26 @@ export default function TodayWork() {
               </StatusChip>
               <span className="xs-chip xs-chip--neutral">Due {open.due}</span>
             </div>
-            {open.priority === 'Blocker' ? (
-              <div
-                className="xs-railcard"
-                style={{ borderColor: 'rgba(185,71,62,0.35)', background: 'var(--xbar-danger-soft)' }}
-              >
-                <div className="xs-section-label" style={{ color: 'var(--xbar-danger)' }}>
-                  Holds up a sale
-                </div>
-                <div style={{ fontWeight: 700 }}>{open.detail}</div>
-              </div>
-            ) : (
-              <p className="xs-muted" style={{ fontSize: 13 }}>
-                {open.detail}
-              </p>
-            )}
+            <p className="xs-muted">{open.detail}</p>
+            <p className="xs-muted">
+              Complete the work in its linked record to clear this task. Dismissing or snoozing only hides it on this
+              browser. A changed task returns for review.
+            </p>
             <div className="xs-field">
-              <button
-                type="button"
-                className="xs-fieldbtn"
-                onClick={() => {
-                  const to = open.to;
-                  setOpen(null);
-                  navigate(to);
-                }}
-              >
-                Open linked record
-              </button>
+              <span className="xs-section-label">Snooze until</span>
+              <div className="xs-fchips">
+                {SNOOZE_CHOICES.map((choice) => (
+                  <button
+                    key={choice.days}
+                    type="button"
+                    className="xs-fchip"
+                    disabled={deferralError}
+                    onClick={() => defer(open, choice.days, 'snooze')}
+                  >
+                    {choice.label}
+                  </button>
+                ))}
+              </div>
             </div>
           </>
         ) : null}
