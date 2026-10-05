@@ -8,13 +8,7 @@ import {
   startManagedCheckout,
   type SellablePrices,
 } from '@/lib/billingApi';
-import {
-  CHECKOUT_CONFIRMATION_POLL_INTERVAL_MS,
-  CHECKOUT_CONFIRMATION_TIMEOUT_MS,
-  isCheckoutConfirmationComplete,
-  parseCheckoutReturn,
-  stripCheckoutReturnParam,
-} from '@/lib/checkoutReturn';
+import { parseCheckoutReturn, stripCheckoutReturnParam, watchCheckoutConfirmation } from '@/lib/checkoutReturn';
 import { refreshWorkspaceSubscriptionProfile } from '@/lib/cloudWorkspace';
 import { formatCurrency } from '@/lib/format';
 import { isNativeApp } from '@/lib/nativePlatform';
@@ -49,6 +43,13 @@ import './checkoutExperience.css';
 
 const tiers: SubscriptionTier[] = ['Starter', 'Professional', 'Ranch Ops', 'Enterprise'];
 
+type CheckoutErrorContext = {
+  tier: SubscriptionTier;
+  billingPeriod: 'monthly' | 'annual';
+  workspaceId: string;
+  userId: string | undefined;
+};
+
 function planAnchor(tier: SubscriptionTier) {
   return tier.replace(/\s/g, '-').toLowerCase();
 }
@@ -70,6 +71,33 @@ export default function Subscriptions() {
   const pushToast = useUiStore((state) => state.pushToast);
   const startTrialSubscription = useXbarStore((state) => state.startTrialSubscription);
   const [checkoutTier, setCheckoutTier] = useState<SubscriptionTier | null>(null);
+  const [checkoutError, setCheckoutError] = useState<(CheckoutErrorContext & { message: string }) | null>(null);
+  const checkoutErrorAttempt = useRef<CheckoutErrorContext | null>(null);
+  const clearCheckoutError = useCallback(() => {
+    checkoutErrorAttempt.current = null;
+    setCheckoutError(null);
+  }, []);
+  useEffect(() => {
+    // Invalidate notices synchronously even when an identity/role round trip
+    // is batched into one render. This does not cancel or change the request.
+    const unsubscribeCloud = useCloudStore.subscribe((next, previous) => {
+      if (next.workspaceId !== previous.workspaceId || next.session?.user.id !== previous.session?.user.id)
+        clearCheckoutError();
+    });
+    const unsubscribeWorkspace = useXbarStore.subscribe((next, previous) => {
+      if (
+        next.currentRole !== previous.currentRole ||
+        hasActivePaidPlan(next.subscription) !== hasActivePaidPlan(previous.subscription) ||
+        isSubscriptionRecoverable(next.subscription) !== isSubscriptionRecoverable(previous.subscription)
+      )
+        clearCheckoutError();
+    });
+    return () => {
+      checkoutErrorAttempt.current = null;
+      unsubscribeCloud();
+      unsubscribeWorkspace();
+    };
+  }, [clearCheckoutError]);
   const [trialStarting, setTrialStarting] = useState(false);
   // Billing period for plan display and checkout. Annual is 10x monthly (2
   // months free). The server fails closed when an annual price id is not
@@ -196,6 +224,44 @@ export default function Subscriptions() {
   // entirely. api/stripe/checkout.js refuses these server-side; this stops the
   // screen offering a button that would be refused.
   const subscriptionActive = hasActivePaidPlan(subscription);
+  // A refusal must outlive its toast, but only for the purchase it describes.
+  // Hide mismatched errors immediately, then discard them so switching back
+  // cannot resurrect one (including a response arriving after a selection change).
+  const checkoutErrorIsCurrent = Boolean(
+    checkoutError &&
+    checkoutError.tier === decisionTier &&
+    checkoutError.billingPeriod === billingPeriod &&
+    checkoutError.workspaceId === workspaceId &&
+    checkoutError.userId === session?.user.id &&
+    canManageBilling &&
+    !subscriptionActive &&
+    !subscriptionRecoverable,
+  );
+  useEffect(() => {
+    const pending = checkoutErrorAttempt.current;
+    if (
+      (pending &&
+        (pending.tier !== decisionTier ||
+          pending.billingPeriod !== billingPeriod ||
+          pending.workspaceId !== workspaceId ||
+          pending.userId !== session?.user.id)) ||
+      (checkoutError && !checkoutErrorIsCurrent)
+    )
+      clearCheckoutError();
+  }, [
+    checkoutError,
+    checkoutErrorIsCurrent,
+    decisionTier,
+    billingPeriod,
+    workspaceId,
+    session?.user.id,
+    clearCheckoutError,
+  ]);
+
+  const selectBillingPeriod = (period: 'monthly' | 'annual') => {
+    if (period !== billingPeriod) clearCheckoutError();
+    setBillingPeriod(period);
+  };
   /*
    * Trial state: 'none' | 'active' | 'expired', computed from the profile's
    * recorded trial start. Native apps never get the trial CTA — Apple treats
@@ -350,24 +416,17 @@ export default function Subscriptions() {
     const kind = parseCheckoutReturn(window.location.search);
     if (!kind) return;
     const cleaned = stripCheckoutReturnParam(window.location.search);
-    window.history.replaceState(null, '', `${window.location.pathname}${cleaned}${window.location.hash}`);
+    // Update the router as well as the address bar. Direct replaceState leaves
+    // useSearchParams stale, so selecting a plan resurrects the old outcome.
+    void navigate({ search: cleaned, hash: window.location.hash }, { replace: true });
     if (kind === 'cancelled') {
       setCheckoutReturnState('cancelled');
       return;
     }
-    pushToast({
-      title: 'Payment completed',
-      message: 'Your payment went through. Confirming your plan now.',
-      tone: 'success',
-    });
-    /*
-     * Managed checkout always has a workspace id; without one there is no
-     * profile to poll, so the toast is the whole story.
-     */
-    if (workspaceId) {
-      setCheckoutReturnState('confirming');
-    }
-  }, [pushToast, workspaceId]);
+    // The workspace may still be loading after the full-page Stripe return.
+    // Keep the verification state so polling starts when its identity arrives.
+    setCheckoutReturnState('confirming');
+  }, [navigate]);
 
   /*
    * Confirm the completed checkout against the cloud profile.
@@ -382,15 +441,15 @@ export default function Subscriptions() {
    */
   useEffect(() => {
     if (checkoutReturnState !== 'confirming') return;
-    let cancelled = false;
-    let timer: number | undefined;
-    const startedAt = Date.now();
-    const poll = async () => {
-      if (cancelled) return;
-      const refreshed = await refreshWorkspaceSubscriptionProfile(workspaceId);
-      if (cancelled) return;
-      const profile = refreshed.ok ? refreshed.profile : null;
-      if (profile && isCheckoutConfirmationComplete(profile)) {
+    return watchCheckoutConfirmation({
+      readProfile: async (signal) => {
+        const refreshed = await refreshWorkspaceSubscriptionProfile(workspaceId, signal);
+        return refreshed.ok ? refreshed.profile : null;
+      },
+      onConfirmed: (profile) => {
+        // Recheck identity at the actual write, including the brief interval
+        // between a workspace switch and React cleaning up this effect.
+        if (useCloudStore.getState().workspaceId !== workspaceId) return;
         useXbarStore.setState({ subscription: profile });
         emit(productEventNames.checkoutConfirmed, { tier: profile.tier });
         pushToast({
@@ -399,20 +458,12 @@ export default function Subscriptions() {
           tone: 'success',
         });
         setCheckoutReturnState('confirmed');
-        return;
-      }
-      if (Date.now() - startedAt >= CHECKOUT_CONFIRMATION_TIMEOUT_MS) {
+      },
+      onTimeout: () => {
         emit(productEventNames.checkoutConfirmationStale, {}, 'warning');
         setCheckoutReturnState('stale');
-        return;
-      }
-      timer = window.setTimeout(poll, CHECKOUT_CONFIRMATION_POLL_INTERVAL_MS);
-    };
-    void poll();
-    return () => {
-      cancelled = true;
-      if (timer !== undefined) window.clearTimeout(timer);
-    };
+      },
+    });
   }, [checkoutReturnState, workspaceId, emit, pushToast]);
 
   /*
@@ -475,6 +526,7 @@ export default function Subscriptions() {
   };
 
   const selectTier = (tier: SubscriptionTier) => {
+    if (tier !== decisionTier) clearCheckoutError();
     setSelectedTier(tier);
     const nextParams = new URLSearchParams(params);
     nextParams.set('plan', tier);
@@ -482,7 +534,10 @@ export default function Subscriptions() {
   };
 
   const beginCheckout = async (tier: SubscriptionTier) => {
+    clearCheckoutError();
     selectTier(tier);
+    const errorAttempt = { tier, billingPeriod, workspaceId, userId: session?.user.id };
+    checkoutErrorAttempt.current = errorAttempt;
     setCheckoutTier(tier);
     emit(productEventNames.checkoutStarted, {
       tier,
@@ -586,9 +641,10 @@ export default function Subscriptions() {
     }
 
     emit(productEventNames.checkoutFailed, { tier, reason: managed.message }, 'warning');
+    if (checkoutErrorAttempt.current === errorAttempt) setCheckoutError({ ...errorAttempt, message: managed.message });
     pushToast({
       title: 'Checkout needs attention',
-      message: `${managed.message} Your workspace and current plan were not changed.`,
+      message: managed.message,
       tone: 'error',
     });
     setCheckoutTier(null);
@@ -770,14 +826,14 @@ export default function Subscriptions() {
 
           {checkoutReturnState === 'confirming' && (
             <div className="checkout-return-banner" role="status">
-              <span>Payment received</span>
+              <span>Checking your plan</span>
               <strong>Confirming your payment…</strong>
               <p>Your plan activates here as soon as the payment is confirmed — usually within a few seconds.</p>
             </div>
           )}
           {checkoutReturnState === 'confirmed' && (
             <div className="checkout-return-banner" role="status">
-              <span>Payment confirmed</span>
+              <span>Plan confirmed</span>
               <strong>Your plan is active.</strong>
               <button type="button" className="checkout-inline-action" onClick={() => setCheckoutReturnState(null)}>
                 Dismiss
@@ -786,12 +842,19 @@ export default function Subscriptions() {
           )}
           {checkoutReturnState === 'stale' && (
             <div className="checkout-return-banner" role="status">
-              <span>Payment received</span>
+              <span>Confirmation pending</span>
               <strong>We&apos;re still confirming your payment.</strong>
               <p>
-                Check back shortly — your plan will appear here once confirmation lands. Your receipt from the payment
-                processor is proof the payment went through.
+                We haven&apos;t verified an active plan yet. Check again in a moment. If you received a Stripe receipt,
+                keep it and avoid starting another payment while activation is pending.
               </p>
+              <button
+                type="button"
+                className="checkout-inline-action"
+                onClick={() => setCheckoutReturnState('confirming')}
+              >
+                Check again
+              </button>
               <button type="button" className="checkout-inline-action" onClick={() => setCheckoutReturnState(null)}>
                 Dismiss
               </button>
@@ -799,7 +862,7 @@ export default function Subscriptions() {
           )}
           {checkoutReturnState === 'cancelled' && (
             <div className="checkout-return-banner checkout-return-banner--quiet" role="status">
-              <p>Checkout cancelled — no charge was made.</p>
+              <p>Checkout cancelled.</p>
               <button type="button" className="checkout-inline-action" onClick={() => setCheckoutReturnState(null)}>
                 Dismiss
               </button>
@@ -860,7 +923,7 @@ export default function Subscriptions() {
                 type="button"
                 aria-pressed={billingPeriod === 'monthly'}
                 className={billingPeriod === 'monthly' ? 'checkout-billing-toggle--active' : ''}
-                onClick={() => setBillingPeriod('monthly')}
+                onClick={() => selectBillingPeriod('monthly')}
               >
                 Monthly
               </button>
@@ -868,7 +931,7 @@ export default function Subscriptions() {
                 type="button"
                 aria-pressed={billingPeriod === 'annual'}
                 className={billingPeriod === 'annual' ? 'checkout-billing-toggle--active' : ''}
-                onClick={() => setBillingPeriod('annual')}
+                onClick={() => selectBillingPeriod('annual')}
               >
                 Annual <small>2 months free</small>
               </button>
@@ -995,6 +1058,13 @@ export default function Subscriptions() {
               </>
             )}
           </div>
+
+          {checkoutErrorIsCurrent && checkoutError && (
+            <div className="checkout-return-banner checkout-return-banner--quiet" role="alert" aria-atomic="true">
+              <strong>Checkout needs attention</strong>
+              <p>{checkoutError.message}</p>
+            </div>
+          )}
 
           {billingPortalAction ? (
             <button

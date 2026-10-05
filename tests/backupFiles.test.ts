@@ -112,6 +112,52 @@ test('only the files the workspace still references are carried', async () => {
   }
 });
 
+test('staged restore never changes original bytes or metadata before records are installed', async () => {
+  const restore = installFakeIndexedDb();
+  try {
+    const key = await storeLocalFile(new Blob(['original']), 'original.pdf', undefined, TEST_WORKSPACE);
+    const before = await readLocalFile(key);
+    const context = { workspaceId: TEST_WORKSPACE, freshKeys: true };
+    const result = await importLocalFiles(
+      [{ key, name: 'replacement.pdf', type: 'text/plain', size: 7, storedAt: '', data: btoa('changed') }],
+      context,
+    );
+    assert.equal(result.restored, 1);
+    assert.notEqual(result.remapped[key], key);
+    assert.ok(result.remapped[key]);
+    const original = await readLocalFile(key);
+    assert.equal(original?.name, before?.name);
+    assert.equal(await original?.blob.text(), 'original');
+    assert.equal(await (await readLocalFile(result.remapped[key]))?.blob.text(), 'changed');
+    // A stopped restore installs no remapped records; the original stays usable.
+  } finally {
+    restore();
+  }
+});
+
+for (const failure of ['decode', 'write'] as const) {
+  test(`failed staged ${failure} keeps the original key and file usable`, async () => {
+    let rejectWrites = false;
+    const restore = installFakeIndexedDb({ failWrites: () => rejectWrites });
+    try {
+      const key = await storeLocalFile(new Blob(['original']), 'original.pdf', undefined, TEST_WORKSPACE);
+      const { files } = await exportLocalFiles([key], TEST_WORKSPACE);
+      rejectWrites = failure === 'write';
+      const result = await importLocalFiles(
+        [{ ...files[0], data: failure === 'decode' ? '!!! invalid !!!' : btoa('replacement') }],
+        { workspaceId: TEST_WORKSPACE, freshKeys: true },
+      );
+      assert.equal(result.restored, 0);
+      assert.equal(result.failed.length, 1);
+      assert.deepEqual(result.remapped, {});
+      assert.equal(await (await readLocalFile(key))?.blob.text(), 'original');
+      assert.equal((await listLocalFiles()).length, 1);
+    } finally {
+      restore();
+    }
+  });
+}
+
 test('a file too large for the budget is named, not dropped', async () => {
   const restore = installFakeIndexedDb();
   try {
@@ -1606,7 +1652,7 @@ test('a record that installs but crashes the route it lands on is refused', asyn
    */
   assert.match(
     ownershipEntry,
-    /optionalStrings: \['documentTitle', 'linkedAt', 'verifiedAt', 'verifiedBy'\]/,
+    /optionalStrings: \[\s*'documentTitle',\s*'linkedAt',\s*'verifiedAt',\s*'verifiedBy',\s*'reviewAttestedAt',\s*'reviewedSourceKey',?\s*\]/,
     "requirement.documentTitle ?? 'Linked document' is a bare React child",
   );
   assert.match(
@@ -2224,9 +2270,9 @@ test('a record that installs but crashes the route it lands on is refused', asyn
     ['src/routes/Equipment.tsx', /\{e\.category\} · \{e\.location\}/],
     ['src/routes/Documents.tsx', /\{document\.type\} · \{document\.source\} ·/],
     ['src/routes/Sales.tsx', /<p className="horse-card__summary">\{horse\.summary\}<\/p>/],
-    ['src/routes/AnimalProfile.tsx', /\{animal\.breed \|\| 'Horse'\} · \{animal\.sex\} · \{animal\.age\} yrs/],
+    ['src/routes/AnimalProfile.tsx', /\{animal\.breed \|\| 'Horse'\} · \{animal\.sex\} · \{horseAgeLabel\(animal\)\}/],
     ['src/routes/Medical.tsx', /value: formatDateLabel\(horse\.lastVetVisit\)/],
-    ['src/routes/Horses.tsx', /\{horse\.registry\} · \{horse\.sex\} · \{horse\.location\.barn\}/],
+    ['src/routes/Horses.tsx', /\{horse\.sex\} · \{horseAgeLabel\(horse\)\} · \{horse\.location\.barn\}/],
     ['src/routes/RanchAssets.tsx', /a\.assignedTo\.toLowerCase\(\)/],
     ['src/routes/Sales.tsx', /h\.segment\.toLowerCase\(\)/],
     ['src/routes/AnimalProfile.tsx', /animal\.activity\.length/],
@@ -2286,9 +2332,9 @@ test('a record that installs but crashes the route it lands on is refused', asyn
    * as dead weight if a route ever starts guarding.
    */
   assert.match(
-    await readFile('src/routes/OwnershipChain.tsx', 'utf8'),
-    /o\.pendingDocuments\.length/,
-    'OwnershipChain maps the RAW store records',
+    await readFile('src/lib/localSalePacketGenerator.ts', 'utf8'),
+    /ownershipRecord\?\.pendingDocuments\.join/,
+    'the packet generator still consumes the required pending-document list',
   );
   assert.match(
     await readFile('src/lib/xbarPhaseTwo.ts', 'utf8'),

@@ -61,8 +61,10 @@ async function readRanch(page) {
   });
 }
 
-for (const conflict of [false, true]) {
-  test(`canonical owner grant restores reports and sixth-horse entry ${conflict ? 'without overwriting local conflicts' : 'from a Starter cloud snapshot'}`, async ({
+for (const scenario of ['snapshot', 'conflict', 'missing-snapshot']) {
+  const conflict = scenario !== 'snapshot';
+  const missingSnapshot = scenario === 'missing-snapshot';
+  test(`canonical owner grant restores reports and sixth-horse entry ${missingSnapshot ? 'with no cloud snapshot' : conflict ? 'without overwriting local conflicts' : 'from a Starter cloud snapshot'}`, async ({
     page,
   }) => {
     const remote = ranch();
@@ -106,7 +108,7 @@ for (const conflict of [false, true]) {
         return route.fulfill({
           status: 200,
           json: {
-            payload: { app: 'XBAR', version: WORKSPACE_SCHEMA_VERSION, workspace: remote },
+            payload: missingSnapshot ? null : { app: 'XBAR', version: WORKSPACE_SCHEMA_VERSION, workspace: remote },
             updated_at: '2026-10-02T00:00:00Z',
           },
         });

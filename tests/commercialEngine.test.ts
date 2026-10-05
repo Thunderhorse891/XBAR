@@ -58,7 +58,13 @@ const horse = {
   sale: { askPrice: 18000 },
   alerts: [],
 } as unknown as HorseRecord;
-const receipt = { id: 'receipt-1', horseId: horse.id, category: 'Feed', amount: 2000 } as ExpenseReceipt;
+const receipt = {
+  id: 'receipt-1',
+  horseId: horse.id,
+  category: 'Feed',
+  amount: 2000,
+  receiptDate: '2026-01-01',
+} as ExpenseReceipt;
 
 test('usage pressure moves through warning, upgrade, and hard gate thresholds', () => {
   assert.equal(usagePressure(79, 100), 'clear');
@@ -237,5 +243,20 @@ test('sale hold blocks missing Coggins and ownership proof', () => {
     confidence: 96,
     pendingDocuments: [],
   } as unknown as OwnershipRecord;
-  assert.equal(buildSaleHold(horse, documents, ownership).held, false);
+  assert.equal(
+    buildSaleHold(horse, documents, ownership).held,
+    true,
+    'Clear and a ready upload cannot replace a reviewed proof checklist',
+  );
+  assert.match(buildSaleHold(horse, documents, ownership).ownershipReviewBlockers[0], /not been reviewed/);
+});
+
+test('incomplete dated costs cannot supply a counter floor or apparent profit', () => {
+  const decision = buildOfferDecision(horse, [{ ...receipt, amount: 9000, receiptDate: 'unreadable' }], 12000);
+  assert.equal(decision.status, 'missing-costs');
+  assert.equal(buildHorseProfitProfile(horse, [{ ...receipt, receiptDate: 'unreadable' }], []).costsKnown, false);
+  assert.equal(decision.breakEven, null);
+  assert.equal(decision.safeSalePrice, null);
+  assert.equal(decision.expectedProfit, null);
+  assert.equal(decision.marginPercent, null);
 });

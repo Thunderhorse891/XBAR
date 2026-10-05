@@ -1,3 +1,5 @@
+import { buildApiUrl } from './backendApi.js';
+
 // Public packet-verification client.
 //
 // Calls the anonymous /api/buyer/verify endpoint, which returns the
@@ -27,6 +29,14 @@ export interface VerifiedFacts {
   /** The sealed seller identity the PDF's "Presented By" line must match. */
   sellerBusinessName: string;
   sellerRanchName: string;
+  /** Present on v3+ sealed snapshots; absent on historical packet responses. */
+  sellerDisplayName?: string;
+  sellerName?: string;
+  sellerEmail?: string;
+  sellerPhone?: string;
+  sellerWebsite?: string;
+  sellerLogoDataUrl?: string;
+  sellerLogoDigest?: string;
   documents: Array<{ type: string; title: string }>;
   sealedAt: string;
 }
@@ -46,7 +56,7 @@ export async function verifyPacket(packetId: string): Promise<VerifyResult> {
 
   let response: Response;
   try {
-    response = await fetch(`/api/buyer/verify?packetId=${encodeURIComponent(id)}`, {
+    response = await fetch(buildApiUrl(`/api/buyer/verify?packetId=${encodeURIComponent(id)}`), {
       method: 'GET',
       headers: { accept: 'application/json' },
     });

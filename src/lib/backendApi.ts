@@ -1,4 +1,4 @@
-import { apiConfig } from '@/lib/platformConfig';
+import { apiConfig } from './platformConfig.js';
 
 /*
  * Client for the XBAR backend pipeline (Vercel serverless api/). These calls
@@ -12,14 +12,15 @@ export type TierBlock = {
   currentPlan: string;
 };
 
-export type BackendResult<T> = ({ ok: true } & T) | { ok: false; message: string; tierBlock?: TierBlock };
+export type BackendResult<T> =
+  ({ ok: true } & T) | { ok: false; message: string; tierBlock?: TierBlock; status?: number; code?: string };
 
 type AuthParams = {
   workspaceId: string;
   accessToken: string;
 };
 
-function buildApiUrl(path: string) {
+export function buildApiUrl(path: string) {
   const normalizedPath = path.startsWith('/') ? path : `/${path}`;
   if (apiConfig.baseUrl) {
     return `${apiConfig.baseUrl.replace(/\/$/, '')}${normalizedPath}`;
@@ -56,6 +57,8 @@ async function postJson<T>(path: string, auth: AuthParams, body: Record<string, 
     if (!response.ok || !payload.ok) {
       const result: BackendResult<T> = {
         ok: false,
+        status: response.status,
+        code: typeof payload.code === 'string' ? payload.code : undefined,
         message: payload.message ?? `The workspace service returned ${response.status}.`,
       };
       if (payload.code === 'tier_required' && payload.requiredPlan) {

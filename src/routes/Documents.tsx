@@ -1,6 +1,16 @@
+import { buildHorseDocumentActions } from '@/lib/horseDocumentActions';
+import './horseActionFlows.css';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import type { MouseEvent } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
+import { DocumentLibrary } from '@/components/DocumentLibrary';
+import {
+  documentWithFreshSource,
+  documentIdentityCacheNeedsReview,
+  inspectDocumentHorseIdentity,
+} from '@/lib/ownershipDocumentReview';
+import { ConfirmActionDialog } from '@/components/ConfirmActionDialog';
+import { documentDuplicateNeedsReview } from '@/lib/documentDuplicates';
 import { CommandBrief } from '@/components/CommandBrief';
 import { ContextMenu } from '@/components/ContextMenu';
 import { Panel, Pill } from '@/components/app-ui';
@@ -18,7 +28,7 @@ import { useCurrentRoleCapability, useXbarStore } from '@/store/useXbarStore';
 import { extractionProducedNothing, readableProcessingNote } from '@/lib/documentIntelligence';
 import { buildHorseEnrichmentFromEntities, normalizeOwnershipRecord } from '@/store/xbarStoreLogic';
 import type { DocumentRecord, DocumentSource, SalePacketBuild } from '@/types/xbar';
-import { documentSources } from '@/features/documents/constants';
+import { documentIntakeDisclosure, documentSources } from '@/features/documents/constants';
 import { useEffectiveSubscription } from '@/hooks/useOwnerPreview';
 import { isNavigableFileUrl } from '@/lib/navigableFileUrl';
 import { canPresentPurchaseFlow } from '@/lib/nativePlatform';
@@ -40,13 +50,34 @@ type SurfaceId = 'review' | 'buyer' | 'intake' | 'batches' | 'duplicates' | 'pro
 export default function Documents() {
   const navigate = useNavigate();
   const [searchParams, setSearchParams] = useSearchParams();
-  const documents = useXbarStore((state) => state.documents);
+  const storedDocuments = useXbarStore((state) => state.documents);
   const horses = useXbarStore((state) => state.horses);
+  // Display the same source-read identities and facts used by review actions.
+  // Keep obsolete cache values in storage, outside the current review view.
+  const documents = useMemo(
+    () =>
+      storedDocuments.map((document) => {
+        const source = documentWithFreshSource(document);
+        // An old operational warning still needs explicit approval before proof
+        // attestation; a fresh ambiguity also belongs in review.
+        return document.state === 'Ready' &&
+          (document.identityReviewRequired ||
+            source.identityReviewRequired ||
+            documentIdentityCacheNeedsReview(
+              document,
+              horses.find((horse) => horse.id === document.horseId),
+            ))
+          ? { ...source, state: 'Needs Review' as const }
+          : source;
+      }),
+    [storedDocuments, horses],
+  );
   const intakeBatches = useXbarStore((state) => state.intakeBatches);
   const subscription = useEffectiveSubscription();
   const ownershipRecords = useXbarStore((state) => state.ownershipRecords);
   const salePacketBuilds = useXbarStore((state) => state.salePacketBuilds);
   const createDocumentIntake = useXbarStore((state) => state.createDocumentIntake);
+  const intakeProgress = useXbarStore((state) => state.documentIntakeProgress);
   const reviewDocument = useXbarStore((state) => state.reviewDocument);
   const createHorseFromDocument = useXbarStore((state) => state.createHorseFromDocument);
   const discardDocument = useXbarStore((state) => state.discardDocument);
@@ -72,12 +103,52 @@ export default function Documents() {
 
   const [files, setFiles] = useState<File[]>([]);
   const [source, setSource] = useState<DocumentSource>('Bulk Intake');
-  const [horseId, setHorseId] = useState('');
+  const requestedHorseId = searchParams.get('horse') ?? '';
+  const fromHorseProfile = searchParams.get('from') === 'profile';
+  const requestedHorse = horses.find((horse) => horse.id === requestedHorseId);
+  const [horseId, setHorseId] = useState(requestedHorse?.id ?? '');
+  useEffect(() => {
+    setHorseId(requestedHorse?.id ?? '');
+  }, [requestedHorseId, requestedHorse?.id]);
+  const [duplicateReview, setDuplicateReview] = useState<{ documentId: string; horseId?: string } | null>(null);
   const [uploadedBy, setUploadedBy] = useState(currentUserName);
   const [batchLabel, setBatchLabel] = useState('Live upload batch');
   const [packetBuildingHorseId, setPacketBuildingHorseId] = useState('');
   const [createHorseFromBatch, setCreateHorseFromBatch] = useState(false);
+  const selectUploadHorse = (nextHorseId: string) => {
+    setHorseId(nextHorseId);
+    if (nextHorseId) setCreateHorseFromBatch(false);
+    // Contextual intake has one target: its banner, document scope, and saved
+    // assignment must all follow an explicit change in the horse selector.
+    if (searchParams.has('horse')) {
+      const next = new URLSearchParams(searchParams);
+      if (nextHorseId) next.set('horse', nextHorseId);
+      else {
+        next.delete('horse');
+        next.delete('requirement');
+        next.delete('from');
+      }
+      setSearchParams(next, { replace: true, preventScrollReset: true });
+    }
+  };
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const submittingRef = useRef(false);
+  const intakeScreenRef = useRef({ active: true, query: searchParams.toString() });
+  useEffect(() => {
+    const screen = { active: true, query: searchParams.toString() };
+    intakeScreenRef.current = screen;
+    return () => {
+      screen.active = false;
+    };
+  }, [searchParams]);
+  const [intakeOutcome, setIntakeOutcome] = useState<{ ok: boolean; message: string } | null>(null);
+  const requestedDocumentAction = requestedHorse
+    ? buildHorseDocumentActions(
+        requestedHorse,
+        documents,
+        ownershipRecords.find((record) => record.horseId === requestedHorse.id),
+      ).find((action) => action.key === searchParams.get('requirement'))
+    : undefined;
   const [formErrors, setFormErrors] = useState<{ uploadedBy?: string; files?: string }>({});
   const [reviewAssignments, setReviewAssignments] = useState<Record<string, string>>({});
   const [proofSelections, setProofSelections] = useState<Record<string, string>>({});
@@ -96,6 +167,13 @@ export default function Documents() {
   const [activeStage, setActiveStage] = useState<PipelineStage>(
     uploadOpen ? 'Upload' : (requestedStage ?? (documents.length === 0 && canUploadDocuments ? 'Upload' : 'Review')),
   );
+  const intakeStageRevision = useRef(0);
+  const selectStage = (stage: PipelineStage) => {
+    // Increment synchronously so an intake resolving in the next microtask
+    // cannot override a newer choice, including leaving and returning to Upload.
+    intakeStageRevision.current += 1;
+    setActiveStage(stage);
+  };
 
   useEffect(() => {
     if (uploadOpen) {
@@ -105,10 +183,17 @@ export default function Documents() {
     }
   }, [uploadOpen, requestedStage]);
 
-  // Stage buckets — each document lives in exactly one workflow stage.
+  const scopedDocuments = useMemo(
+    () =>
+      requestedHorse
+        ? documents.filter((document) => document.horseId === requestedHorse.id || !document.horseId)
+        : documents,
+    [documents, requestedHorse],
+  );
+  // Stage counts and visible rows share the same horse scope.
   const stageBuckets = useMemo(
-    () => computeStageBuckets(documents, horses, intakeBatches),
-    [documents, horses, intakeBatches],
+    () => computeStageBuckets(scopedDocuments, horses, intakeBatches),
+    [scopedDocuments, horses, intakeBatches],
   );
   const {
     queuedDocuments,
@@ -122,11 +207,11 @@ export default function Documents() {
 
   // Proof chain context: which documents already back an ownership requirement.
   const proofLinksByDocumentId = useMemo(() => buildProofLinks(ownershipRecords), [ownershipRecords]);
-  const proofLinkedCount = documents.filter((document) => proofLinksByDocumentId.has(document.id)).length;
+  const proofLinkedCount = scopedDocuments.filter((document) => proofLinksByDocumentId.has(document.id)).length;
 
-  const stageCounts: Record<PipelineStage, number> = computeStageCounts(documents, stageBuckets);
+  const stageCounts: Record<PipelineStage, number> = computeStageCounts(scopedDocuments, stageBuckets);
 
-  const heroStatus = documents.length
+  const heroStatus = scopedDocuments.length
     ? computeHeroStatus(stageBuckets)
     : { label: 'No documents yet', tone: 'blue' as const };
 
@@ -135,18 +220,21 @@ export default function Documents() {
   const applyExtractedFacts = (document: DocumentRecord) => {
     const targetId = reviewAssignments[document.id] ?? document.horseId ?? '';
     const horse = horses.find((item) => item.id === targetId);
-    if (!horse) {
+    const identityReview = horse && inspectDocumentHorseIdentity(document, horse);
+    if (!horse || !identityReview || identityReview.conflictReason || identityReview.missingIdentityReason) {
       pushToast({
-        title: 'Pick a horse first',
-        message: 'Select which horse these facts belong to, then apply.',
+        title: identityReview?.missingIdentityReason ? 'Source identity missing' : 'Facts need review',
+        message:
+          identityReview?.conflictReason ||
+          identityReview?.missingIdentityReason ||
+          'Choose a horse that matches the original document before applying its facts.',
         tone: 'warning',
       });
       return;
     }
-    // Copy every fact the paper extracted (name, reg #, registry, owner, color,
-    // breed, foaled date, sire, dam) onto the horse — filling only empty fields
-    // so verified data is never overwritten.
-    const { patch, applied } = buildHorseEnrichmentFromEntities(document.entities, horse);
+    // Re-read facts from the original. Legacy cached entities may contain fields
+    // copied from a selected profile that never appeared in this source.
+    const { patch, applied } = buildHorseEnrichmentFromEntities(identityReview.sourceEntities, horse);
     if (!applied.length) {
       pushToast({
         title: 'Nothing new to apply',
@@ -200,7 +288,7 @@ export default function Documents() {
   const menuHorseId = menuDocument ? (reviewAssignments[menuDocument.id] ?? menuDocument.horseId) : undefined;
 
   const goToStage = (stage: PipelineStage) => {
-    setActiveStage(stage);
+    selectStage(stage);
     if (typeof window !== 'undefined') {
       window.scrollTo({ top: 0, behavior: 'smooth' });
     }
@@ -236,6 +324,22 @@ export default function Documents() {
     }
   };
 
+  const approveDocument = (document: DocumentRecord, targetHorseId?: string, keepDuplicate = false) => {
+    if (documentDuplicateNeedsReview(document) && !keepDuplicate) {
+      setDuplicateReview({ documentId: document.id, horseId: targetHorseId });
+      return;
+    }
+    const result = reviewDocument(document.id, targetHorseId, keepDuplicate);
+    pushToast({
+      title: result.ok ? 'Document approved' : 'Approval blocked',
+      message: result.message,
+      tone: result.ok ? 'success' : 'error',
+    });
+    if (result.ok) setDuplicateReview(null);
+  };
+  const duplicateDocument = documents.find((document) => document.id === duplicateReview?.documentId);
+  const originalDocument = documents.find((document) => document.id === duplicateDocument?.duplicateOfId);
+
   const menuItems = menuDocument
     ? [
         ...(hasStoredFile(menuDocument)
@@ -255,21 +359,16 @@ export default function Documents() {
                 id: 'approve',
                 label: 'Approve document',
                 onSelect: () => {
-                  const result = reviewDocument(menuDocument.id, menuHorseId);
-                  pushToast({
-                    title: result.ok ? 'Document approved' : 'Approval blocked',
-                    message: result.message,
-                    tone: result.ok ? 'success' : 'error',
-                  });
+                  approveDocument(menuDocument, menuHorseId);
                 },
               },
               {
                 id: 'discard',
-                label: 'Discard document',
+                label: 'Archive document',
                 onSelect: () => {
                   const result = discardDocument(menuDocument.id);
                   pushToast({
-                    title: result.ok ? 'Document discarded' : 'Discard blocked',
+                    title: result.ok ? 'Document archived' : 'Archive blocked',
                     message: result.message,
                     tone: result.ok ? 'warning' : 'error',
                   });
@@ -337,7 +436,7 @@ export default function Documents() {
                   : []),
                 {
                   id: 'go-processing-from-intake',
-                  label: 'Go to OCR / Processing stage',
+                  label: 'Go to Text extraction stage',
                   onSelect: () => goToStage('Processing'),
                 },
                 // Neutral navigation, but gated for the same reason as the
@@ -359,7 +458,7 @@ export default function Documents() {
             ? [
                 {
                   id: 'go-processing-from-batches',
-                  label: 'Go to OCR / Processing stage',
+                  label: 'Go to Text extraction stage',
                   onSelect: () => goToStage('Processing'),
                 },
                 {
@@ -410,6 +509,7 @@ export default function Documents() {
       : [];
 
   const handleIntake = async () => {
+    if (submittingRef.current) return;
     const nextErrors: { uploadedBy?: string; files?: string } = {};
     if (!uploadedBy.trim()) {
       nextErrors.uploadedBy = 'Uploaded by is required.';
@@ -423,36 +523,62 @@ export default function Documents() {
       return;
     }
 
+    const submissionScreen = intakeScreenRef.current;
+    const submissionStageRevision = intakeStageRevision.current;
+    submittingRef.current = true;
     setIsSubmitting(true);
-    const result = await createDocumentIntake({
-      files,
-      horseId: horseId || undefined,
-      source,
-      uploadedBy,
-      label: batchLabel,
-      createHorseFromBatch,
-    });
-
-    pushToast({
-      title: result.ok ? 'Document upload updated' : 'Document upload blocked',
-      message: result.message,
-      tone: result.ok ? 'success' : 'error',
-    });
-    if (result.ok) {
-      const createdHorseIds = result.createdHorseIds ?? [];
-      setFiles([]);
-      setBatchLabel('Live upload batch');
-      setCreateHorseFromBatch(false);
-      setSearchParams({});
-      if (createdHorseIds.length === 1) {
-        navigate(`/horses/${createdHorseIds[0]}`);
+    setIntakeOutcome(null);
+    try {
+      const result = await createDocumentIntake({
+        files,
+        horseId: horseId || undefined,
+        source,
+        uploadedBy,
+        label: batchLabel,
+        createHorseFromBatch,
+      });
+      pushToast({
+        title: result.ok ? 'Document intake updated' : 'Document upload blocked',
+        message: result.message,
+        tone: result.ok ? 'success' : 'error',
+      });
+      // A completed intake must not navigate over a newer screen or horse selection.
+      if (!submissionScreen.active || intakeScreenRef.current !== submissionScreen) {
+        if (intakeScreenRef.current.active) {
+          setFiles([]);
+          if (fileInputRef.current) fileInputRef.current.value = '';
+        }
         return;
       }
-      if (createdHorseIds.length > 1) {
-        goToStage('Proof');
+      setIntakeOutcome({ ok: result.ok, message: result.message });
+      if (result.ok) {
+        const createdHorseIds = result.createdHorseIds ?? [];
+        setFiles([]);
+        if (fileInputRef.current) fileInputRef.current.value = '';
+        setBatchLabel('Live upload batch');
+        setCreateHorseFromBatch(false);
+        // Report completion and clear only successfully accepted files, but
+        // let the user's newer stage selection win over automatic routing.
+        if (intakeStageRevision.current !== submissionStageRevision) return;
+        if (!requestedHorse) setSearchParams({});
+        if (result.duplicateCount || result.heldForReviewCount) {
+          goToStage('Review');
+        } else if (createdHorseIds.length === 1) {
+          navigate(`/horses/${createdHorseIds[0]}`);
+        } else if (createdHorseIds.length > 1) {
+          goToStage('Proof');
+        }
       }
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'The document intake did not finish.';
+      if (submissionScreen.active && intakeScreenRef.current === submissionScreen) {
+        setIntakeOutcome({ ok: false, message });
+      }
+      pushToast({ title: 'Document intake interrupted', message, tone: 'error' });
+    } finally {
+      submittingRef.current = false;
+      if (intakeScreenRef.current.active) setIsSubmitting(false);
     }
-    setIsSubmitting(false);
   };
 
   const handleCreateOwnershipRecord = (targetHorseId: string) => {
@@ -508,13 +634,66 @@ export default function Documents() {
 
   return (
     <>
+      {requestedHorse ? (
+        <div className="inline-actions">
+          <span>Documents for {requestedHorse.name} and unassigned uploads</span>
+          <button
+            className="button button--ghost"
+            onClick={() =>
+              navigate(
+                fromHorseProfile
+                  ? `/horses/${encodeURIComponent(requestedHorse.id)}`
+                  : `/sale-packets?horse=${encodeURIComponent(requestedHorse.id)}&resume=1`,
+              )
+            }
+          >
+            {fromHorseProfile ? 'Back to horse' : 'Return to sale packet'}
+          </button>
+        </div>
+      ) : null}
+      {requestedDocumentAction ? (
+        <div className="hc-upload-context" role="status">
+          <strong>
+            {uploadOpen ? `Upload ${requestedDocumentAction.label}` : requestedDocumentAction.action} for{' '}
+            {requestedHorse?.name}
+          </strong>
+          <span>
+            {requestedDocumentAction.detail} This is sale-packet guidance; each original still goes through identity
+            review.
+          </span>
+          {!uploadOpen && requestedDocumentAction.intent === 'view' ? (
+            <button
+              type="button"
+              className="button button--ghost"
+              onClick={() => navigate(requestedDocumentAction.uploadPath)}
+            >
+              Upload replacement {requestedDocumentAction.label}
+            </button>
+          ) : null}
+        </div>
+      ) : null}
+      {intakeOutcome ? (
+        <div
+          className={`hc-upload-outcome${intakeOutcome.ok ? '' : ' hc-upload-outcome--error'}`}
+          role={intakeOutcome.ok ? 'status' : 'alert'}
+        >
+          <strong>{intakeOutcome.ok ? 'Intake finished' : 'Upload needs attention'}</strong>
+          <span>{intakeOutcome.message}</span>
+          {!intakeOutcome.ok ? (
+            <span>
+              Your file selection is still here. Check the message, then retry. If some files were added, review them
+              before retrying.
+            </span>
+          ) : null}
+        </div>
+      ) : null}
       <CommandBrief
         eyebrow="Documents"
         entity="Your Documents"
         status={heroStatus}
-        summary="Every file moves through one path: upload, local OCR, human review, ownership support, then watermarked sharing."
+        summary="Every file moves through one path: upload, text extraction, human review, ownership support, then watermarked sharing."
         evidence={[
-          { label: 'Uploaded total', value: String(documents.length) },
+          { label: 'Uploaded total', value: String(scopedDocuments.length) },
           { label: 'Processing', value: String(queuedDocuments.length) },
           { label: 'Needs review', value: String(reviewQueue.length) },
           { label: 'Ownership-linked', value: String(proofLinkedCount) },
@@ -544,9 +723,10 @@ export default function Documents() {
               role="tab"
               aria-selected={activeStage === stage.id}
               className={`surface-tab${activeStage === stage.id ? ' surface-tab--active' : ''}`}
-              onClick={() => setActiveStage(stage.id)}
+              onClick={() => selectStage(stage.id)}
             >
-              {index + 1}. {stage.label} ({stageCounts[stage.id]})
+              {stage.id === 'Library' ? '' : `${index + 1}. `}
+              {stage.label} ({stageCounts[stage.id]})
             </button>
           ))}
         </div>
@@ -555,11 +735,25 @@ export default function Documents() {
         </p>
       </section>
 
+      {activeStage === 'Library' ? (
+        <DocumentLibrary
+          documents={scopedDocuments}
+          horses={horses}
+          openingDocumentId={openingDocumentId}
+          onOpen={(document) => void openDocument(document)}
+          onReview={(document) => {
+            const reviewHorseId = document.horseId || requestedHorse?.id;
+            navigate(
+              `/documents?stage=${document.state === 'Ready' ? 'Proof' : document.state === 'Queued' ? 'Processing' : 'Review'}${reviewHorseId ? `&horse=${encodeURIComponent(reviewHorseId)}` : ''}${fromHorseProfile ? '&from=profile' : ''}`,
+            );
+          }}
+        />
+      ) : null}
+
       {activeStage === 'Upload' ? (
         <>
           <Panel
             title="Stage 1 · Upload"
-            description="New files enter the pipeline here, then move to local OCR automatically."
             action={
               <Pill tone={uploadOpen ? 'blue' : 'slate'}>
                 {uploadOpen
@@ -570,7 +764,8 @@ export default function Documents() {
             className="cursor-context-menu"
             onContextMenu={(event) => openSurfaceMenu('intake', event)}
           >
-            <div id="documents-intake" className="form-grid">
+            <p className="stack-item__copy">{documentIntakeDisclosure}</p>
+            <fieldset id="documents-intake" className="form-grid hc-upload-fields" disabled={isSubmitting}>
               <label className="field-stack">
                 <span className="field-label">Batch label</span>
                 <input
@@ -613,13 +808,7 @@ export default function Documents() {
                 <select
                   className="field-input"
                   value={horseId}
-                  onChange={(event) => {
-                    const nextHorseId = event.target.value;
-                    setHorseId(nextHorseId);
-                    if (nextHorseId) {
-                      setCreateHorseFromBatch(false);
-                    }
-                  }}
+                  onChange={(event) => selectUploadHorse(event.target.value)}
                   disabled={!canUploadDocuments}
                 >
                   <option value="">Try local file-name match</option>
@@ -630,7 +819,7 @@ export default function Documents() {
                   ))}
                 </select>
               </label>
-              <label className="field-stack">
+              <div className="field-stack">
                 <span className="field-label">Horse</span>
                 <button
                   type="button"
@@ -640,7 +829,7 @@ export default function Documents() {
                 >
                   {createHorseFromBatch ? 'Create horse profiles' : 'Review only'}
                 </button>
-              </label>
+              </div>
               <label className="field-stack field-stack--wide">
                 <span className="field-label">Files</span>
                 <input
@@ -651,12 +840,22 @@ export default function Documents() {
                   accept=".pdf,.txt,.csv,image/*"
                   onChange={(event) => {
                     setFiles(Array.from(event.target.files ?? []));
+                    setIntakeOutcome(null);
                     setFormErrors((current) => ({ ...current, files: undefined }));
                   }}
                   disabled={!canUploadDocuments}
                 />
                 {formErrors.files ? <span className="field-error">{formErrors.files}</span> : null}
               </label>
+            </fieldset>
+            <div className="hc-upload-progress" role="status" aria-live="polite">
+              {isSubmitting
+                ? intakeProgress
+                  ? `Reading ${intakeProgress.processed} of ${intakeProgress.total} files. Keep this screen open while XBAR reads and saves your intake.`
+                  : 'Adding files and saving your intake. Keep this screen open.'
+                : files.length
+                  ? `${files.length} file${files.length === 1 ? '' : 's'} selected. Ready to add.`
+                  : 'Choose files to begin.'}
             </div>
             <div className="inline-actions">
               <button
@@ -665,7 +864,7 @@ export default function Documents() {
                 onClick={handleIntake}
                 disabled={!canUploadDocuments || isSubmitting || !uploadedBy.trim() || !files.length}
               >
-                {isSubmitting ? 'Adding...' : 'Add docs'}
+                {isSubmitting ? 'Adding files…' : intakeOutcome && !intakeOutcome.ok ? 'Retry upload' : 'Add docs'}
               </button>
               <Pill tone={files.length ? 'blue' : 'slate'}>{files.length ? `${files.length} queued` : 'No files'}</Pill>
             </div>
@@ -717,8 +916,8 @@ export default function Documents() {
 
       {activeStage === 'Processing' ? (
         <Panel
-          title="Stage 2 · OCR / Processing"
-          description="OCR runs locally; fields below were extracted automatically."
+          title="Stage 2 · Text extraction"
+          description="Review extracted text against the original."
           className="cursor-context-menu"
           onContextMenu={(event) => openSurfaceMenu('processing', event)}
         >
@@ -798,7 +997,7 @@ export default function Documents() {
         <>
           <Panel
             title="Stage 3 · Review"
-            description="Confirm OCR matches, assign the horse, then approve or discard."
+            description="Confirm OCR matches, assign the horse, then approve or archive."
             className="cursor-context-menu"
             onContextMenu={(event) => openSurfaceMenu('review', event)}
           >
@@ -870,6 +1069,11 @@ export default function Documents() {
                                   {document.type} · {Math.round(document.confidence * 100)}% match confidence
                                 </span>
                               )}
+                              {document.batchReviewNote ? (
+                                <span role="note" className="field-error">
+                                  {document.batchReviewNote}
+                                </span>
+                              ) : null}
                               {/* Only ever present when the reader stopped
                                   short of the whole file. Silence here used to
                                   mean "read in full" and did not. */}
@@ -908,7 +1112,10 @@ export default function Documents() {
                                 {document.state}
                               </Pill>
                               <span>
-                                {document.duplicateRisk === 'Possible Duplicate' ? 'Duplicate check' : 'Manual match'}
+                                {document.duplicateReason ||
+                                  (document.duplicateRisk === 'Possible Duplicate'
+                                    ? 'Duplicate check'
+                                    : 'Manual match')}
                               </span>
                             </div>
                           </td>
@@ -977,19 +1184,11 @@ export default function Documents() {
                                 className="button button--ghost button--compact"
                                 type="button"
                                 onClick={() => {
-                                  const result = reviewDocument(
-                                    document.id,
-                                    reviewAssignments[document.id] ?? document.horseId,
-                                  );
-                                  pushToast({
-                                    title: result.ok ? 'Document approved' : 'Approval blocked',
-                                    message: result.message,
-                                    tone: result.ok ? 'success' : 'error',
-                                  });
+                                  approveDocument(document, reviewAssignments[document.id] ?? document.horseId);
                                 }}
                                 disabled={!canReviewDocuments}
                               >
-                                Approve
+                                {documentDuplicateNeedsReview(document) ? 'Review duplicate' : 'Approve'}
                               </button>
                               <button
                                 className="button button--ghost button--compact"
@@ -997,14 +1196,14 @@ export default function Documents() {
                                 onClick={() => {
                                   const result = discardDocument(document.id);
                                   pushToast({
-                                    title: result.ok ? 'Document discarded' : 'Discard blocked',
+                                    title: result.ok ? 'Document archived' : 'Archive blocked',
                                     message: result.message,
                                     tone: result.ok ? 'warning' : 'error',
                                   });
                                 }}
                                 disabled={!canReviewDocuments}
                               >
-                                Discard
+                                Archive
                               </button>
                             </div>
                           </td>
@@ -1078,7 +1277,7 @@ export default function Documents() {
               {proofDocuments.map((document) => {
                 const horse = horses.find((item) => item.id === document.horseId);
                 const record = ownershipRecords.find((item) => item.horseId === document.horseId);
-                const normalized = record ? normalizeOwnershipRecord(record) : undefined;
+                const normalized = record ? normalizeOwnershipRecord(record, storedDocuments, horse) : undefined;
                 const requirements = normalized?.proofRequirements ?? [];
                 const linkedLabels = proofLinksByDocumentId.get(document.id) ?? [];
                 return (
@@ -1373,6 +1572,35 @@ export default function Documents() {
         </>
       ) : null}
 
+      <ConfirmActionDialog
+        open={Boolean(duplicateReview && duplicateDocument)}
+        tone="legal"
+        title="Review possible duplicate"
+        consequences={[
+          duplicateDocument?.duplicateReason || 'A related document is already on file.',
+          'Keeping a copy preserves both files. You can cancel and archive the extra from the review queue.',
+        ]}
+        proofSummary={
+          <div className="inline-actions">
+            {duplicateDocument ? (
+              <button className="button button--ghost" onClick={() => void openDocument(duplicateDocument)}>
+                Open new file
+              </button>
+            ) : null}
+            {originalDocument ? (
+              <button className="button button--ghost" onClick={() => void openDocument(originalDocument)}>
+                Open existing file
+              </button>
+            ) : null}
+          </div>
+        }
+        acknowledgements={['I compared the files and want to keep this copy attached to the selected horse.']}
+        confirmLabel="Keep copy and approve"
+        onConfirm={() => {
+          if (duplicateDocument) approveDocument(duplicateDocument, duplicateReview?.horseId, true);
+        }}
+        onCancel={() => setDuplicateReview(null)}
+      />
       <SalePacketWizard
         open={Boolean(packetBuildingHorseId)}
         initialHorseId={packetBuildingHorseId || null}

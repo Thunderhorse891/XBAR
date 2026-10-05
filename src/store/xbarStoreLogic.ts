@@ -1,4 +1,10 @@
+import {
+  isOwnershipProofReviewed,
+  assessOwnershipDocument,
+  documentIdentityCacheNeedsReview,
+} from '../lib/ownershipDocumentReview.js';
 import { createId, todayStamp } from '../lib/xbarRuntime.js';
+import { normalizePedigreeValue } from '../lib/registrationExtraction.js';
 import type {
   AssetCondition,
   AssetStatus,
@@ -117,8 +123,7 @@ export function computeOwnershipConfidence(requirements: OwnershipProofRequireme
     return 0;
   }
   const score = requirements.reduce((sum, requirement) => {
-    if (requirement.status === 'verified') return sum + 1;
-    if (requirement.status === 'linked') return sum + 0.5;
+    if (isOwnershipProofReviewed(requirement)) return sum + 1;
     return sum;
   }, 0);
   return Math.round((100 * score) / requirements.length);
@@ -127,9 +132,27 @@ export function computeOwnershipConfidence(requirements: OwnershipProofRequireme
 // Backfills the structured proof chain onto records persisted before the
 // proof model existed. Idempotent: normalized records pass through unchanged
 // apart from the recomputed confidence.
-export function normalizeOwnershipRecord(record: OwnershipRecord): OwnershipRecord {
+export function normalizeOwnershipRecord(
+  record: OwnershipRecord,
+  documents?: DocumentRecord[],
+  horse?: HorseRecord,
+): OwnershipRecord {
   const proofRequirements = record.proofRequirements?.length
-    ? record.proofRequirements
+    ? record.proofRequirements.map((item) => {
+        const document = documents?.find((source) => source.id === item.documentId);
+        return item.status === 'verified' &&
+          (!isOwnershipProofReviewed(item, document) ||
+            (documents &&
+              (!document ||
+                document.state !== 'Ready' ||
+                document.horseId !== record.horseId ||
+                document.identityReviewRequired ||
+                documentIdentityCacheNeedsReview(document, horse) ||
+                (document.duplicateRisk === 'Possible Duplicate' && !document.duplicateReviewedAt))) ||
+            (horse && !assessOwnershipDocument(document, horse, item.kind).ok))
+          ? { ...item, status: 'linked' as const }
+          : item;
+      })
     : defaultOwnershipProofRequirements();
   return {
     ...record,
@@ -144,7 +167,7 @@ export function canMarkTransferClear(record: OwnershipRecord): { ok: boolean; bl
     ? record.proofRequirements
     : defaultOwnershipProofRequirements();
   const blockers = requirements
-    .filter((requirement) => requirement.status !== 'verified')
+    .filter((requirement) => !isOwnershipProofReviewed(requirement))
     .map((requirement) => `${requirement.label} — ${requirement.status}`);
   return { ok: blockers.length === 0, blockers };
 }
@@ -323,9 +346,9 @@ export function summarizeBatch(batch: IntakeBatch, documents: DocumentRecord[]):
 // Compose a parent's name with its registration number for the bloodline
 // field, e.g. "SHINING SPARK (AQHA 3038883)". Mirrors createHorseRecord.
 export function composeParentField(name?: string, registration?: string): string {
-  const trimmedName = name?.trim() ?? '';
+  const trimmedName = normalizePedigreeValue(name) ?? '';
   if (!trimmedName) return '';
-  const trimmedReg = registration?.trim();
+  const trimmedReg = normalizePedigreeValue(registration);
   return trimmedReg ? `${trimmedName} (${trimmedReg})` : trimmedName;
 }
 

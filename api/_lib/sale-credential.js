@@ -21,7 +21,54 @@
 
 import { createHash } from 'node:crypto';
 
-export const SERVER_SALE_CREDENTIAL_VERSION = 1;
+/** Seller-recorded attestations only. Never describes XBAR as the reviewer. */
+export function ownershipReviewSummary(ownershipRecord, documents = []) {
+  const requirements = Array.isArray(ownershipRecord?.payload?.proofRequirements)
+    ? ownershipRecord.payload.proofRequirements
+    : [];
+  if (!requirements.length)
+    return 'No human source review is recorded. XBAR does not independently verify legal ownership.';
+  const reviewed = requirements.filter((item) => {
+    const doc = documents.find((document) => document.document_id === item.documentId && document.state === 'Ready');
+    const source = doc?.payload;
+    if (
+      !source ||
+      source.id !== doc.document_id ||
+      source.horseId !== doc.horse_id ||
+      source.type !== doc.document_type ||
+      source.identityReviewRequired ||
+      (source.duplicateRisk === 'Possible Duplicate' && !source.duplicateReviewedAt) ||
+      source.processingNote?.trim()
+    )
+      return false;
+    // Identical ordered fields to ownershipDocumentReviewKey on the client.
+    const sourceKey = createHash('sha256')
+      .update(
+        JSON.stringify([
+          source.id,
+          source.horseId ?? '',
+          source.type,
+          source.contentSha256 ?? '',
+          source.storagePath ?? '',
+          source.localFileKey ?? '',
+          source.fileUrl ?? '',
+          source.extractedTextPreview,
+        ]),
+      )
+      .digest('hex');
+    return (
+      item.status === 'verified' &&
+      typeof item.verifiedBy === 'string' &&
+      item.verifiedBy.trim() &&
+      item.verifiedAt &&
+      item.reviewAttestedAt &&
+      item.reviewedSourceKey === sourceKey
+    );
+  }).length;
+  return `${reviewed} of ${requirements.length} ownership source reviews recorded by the seller's team. XBAR does not independently verify legal ownership.`;
+}
+
+export const SERVER_SALE_CREDENTIAL_VERSION = 3;
 
 /** Deterministic JSON: object keys sorted, arrays kept in caller order. */
 function canonicalStringify(value) {
@@ -53,9 +100,11 @@ export function buildServerCredentialPayload({
   horseId,
   context,
   ownershipRecord,
+  reviewDocuments,
   documents,
   sealedAt,
   sellerIdentity,
+  packetBranding,
 }) {
   const horse = context?.horse ?? {};
   const health = context?.health ?? {};
@@ -69,7 +118,8 @@ export function buildServerCredentialPayload({
   // sealing, so the seal never authenticates a quick-start placeholder the
   // cover omits. Without an explicit identity the raw workspace names are
   // sealed, as before.
-  const identity = sellerIdentity ?? {};
+  const identity = packetBranding ?? sellerIdentity ?? {};
+  const branding = packetBranding ?? {};
 
   const payload = {
     version: SERVER_SALE_CREDENTIAL_VERSION,
@@ -92,6 +142,7 @@ export function buildServerCredentialPayload({
     transfer: {
       status: str(ownershipRecord?.transfer_status),
       complianceDeadline: str(ownershipRecord?.compliance_deadline),
+      reviewSummary: ownershipReviewSummary(ownershipRecord, reviewDocuments ?? documents),
     },
     health: {
       lastCogginsDate: str(health.lastCogginsDate),
@@ -102,6 +153,17 @@ export function buildServerCredentialPayload({
     workspace: {
       businessName: str(identity.business ?? workspace.businessName),
       ranchName: str(identity.ranch ?? workspace.ranchName),
+    },
+    // Immutable buyer-facing snapshot. The logo bytes are covered through
+    // their canonical inline data URL, not a mutable remote URL.
+    seller: {
+      name: str(branding.name),
+      displayName: str(branding.displayName),
+      email: str(branding.email),
+      phone: str(branding.phone),
+      website: str(branding.website),
+      logoDataUrl: str(branding.logoDataUrl),
+      logoDigest: branding.logoBytes ? createHash('sha256').update(branding.logoBytes).digest('hex') : '',
     },
     sealedAt: str(sealedAt),
   };

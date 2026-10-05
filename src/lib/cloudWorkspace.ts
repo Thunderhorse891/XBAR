@@ -77,6 +77,8 @@ type RelationalMirrorResult = {
 };
 
 export type CloudSaveOptions = {
+  /** Pin an autosave to the account and ranch that supplied its snapshot. */
+  expectedContext?: { userId: string; workspaceId: string };
   /** Records a person deleted on this device; see `cloudDeletionQueue`. */
   deletions?: readonly CloudDeletion[];
   /**
@@ -349,6 +351,7 @@ export async function loadWorkspaceAccessProfile(
  */
 export async function refreshWorkspaceSubscriptionProfile(
   workspaceId: string,
+  signal?: AbortSignal,
 ): Promise<{ ok: true; profile: SubscriptionProfile | null } | { ok: false; message: string }> {
   const client = getSupabaseClient();
   if (!client) {
@@ -358,11 +361,12 @@ export async function refreshWorkspaceSubscriptionProfile(
     return { ok: false, message: 'No cloud workspace is connected for this session.' };
   }
 
-  const { data, error } = await client
+  const query = client
     .from('workspace_subscription_profiles')
     .select('tier, billing_state, monthly_rate, billing_period, payload, updated_at')
-    .eq('workspace_id', workspaceId)
-    .maybeSingle();
+    .eq('workspace_id', workspaceId);
+  if (signal) query.abortSignal(signal);
+  const { data, error } = await query.maybeSingle();
 
   if (error) {
     return { ok: false, message: error.message };
@@ -487,7 +491,11 @@ export async function recordBuyerRoomSellerResponseInCloud(input: {
   }
 }
 
-async function ensurePrimaryWorkspace(session: Session, backup: CloudWorkspaceBackup) {
+async function ensurePrimaryWorkspace(
+  session: Session,
+  backup: CloudWorkspaceBackup,
+  expectedContext?: CloudSaveOptions['expectedContext'],
+) {
   const client = getSupabaseClient();
   if (!client) {
     throw new Error('Supabase is not configured for this build.');
@@ -548,6 +556,12 @@ async function ensurePrimaryWorkspace(session: Session, backup: CloudWorkspaceBa
         'Your shared ranch access could not be verified. Refresh your access before saving.',
       );
     }
+  }
+
+  if (expectedContext && (ownedWorkspace?.id || workspaceId) !== expectedContext.workspaceId) {
+    throw new WorkspaceSaveAccessError(
+      'Your active ranch changed before the save. No snapshot was written to the new ranch.',
+    );
   }
 
   if (!workspaceId) {
@@ -744,7 +758,7 @@ async function saveWorkspaceBackupToRelationalCloud(
   let documentsPersisted = false;
 
   try {
-    const { workspaceId, role } = await ensurePrimaryWorkspace(session, normalized);
+    const { workspaceId, role } = await ensurePrimaryWorkspace(session, normalized, options.expectedContext);
     // Push cloud deletes every cloud record this device lacks. That is the
     // ranch administrator's call, never a staff save's.
     if (options.replace && role !== 'Admin') {
@@ -1113,6 +1127,10 @@ export async function saveWorkspaceBackupToCloud(
     return { ok: false, message: 'Sign in before syncing this workspace.' };
   }
 
+  if (options.expectedContext && session.user.id !== options.expectedContext.userId) {
+    return { ok: false, message: 'Your account changed before the save. Your changes remain on this device.' };
+  }
+
   const updatedAt = new Date().toISOString();
   if (isRelationalCloudEnabled()) {
     const relational = await saveWorkspaceBackupToRelationalCloud(backup, session, options);
@@ -1212,30 +1230,14 @@ export async function loadWorkspaceBackupFromCloud() {
     return { ok: false, message: 'Sign in before pulling cloud data.' } as const;
   }
 
+  let relationalError: { ok: false; message: string } | undefined;
   if (isRelationalCloudEnabled()) {
     const relational = await loadWorkspaceBackupFromRelationalCloud(session);
     if (relational.ok) {
       return relational;
     }
 
-    if (!isSnapshotFallbackEnabled()) {
-      return relational;
-    }
-  }
-
-  const { data, error } = await client
-    .from(supabaseConfig.workspaceTable)
-    .select('payload, updated_at')
-    .eq('user_id', session.user.id)
-    .eq('workspace_key', 'primary')
-    .maybeSingle();
-
-  if (error) {
-    return { ok: false, message: error.message } as const;
-  }
-
-  if (!data?.payload) {
-    return { ok: false, message: 'No cloud workspace has been saved for this account yet.' } as const;
+    relationalError = relational;
   }
 
   // A snapshot preserves ranch records, not the authority to grant a plan.
@@ -1255,6 +1257,33 @@ export async function loadWorkspaceBackupFromCloud() {
     : { ok: true as const, profile: null };
   if (!subscription.ok) return subscription;
   const authoritativeSubscription = subscription.profile ?? baselineCloudSubscription();
+
+  // Entitlement reads are independent of record availability. A missing or
+  // unreadable snapshot must not leave a stale grant or cancellation in place.
+  if (relationalError && !isSnapshotFallbackEnabled()) {
+    return { ...relationalError, authoritativeSubscription } as const;
+  }
+
+  const { data, error } = await client
+    .from(supabaseConfig.workspaceTable)
+    .select('payload, updated_at')
+    .eq('user_id', session.user.id)
+    .eq('workspace_key', 'primary')
+    .maybeSingle();
+
+  if (error) {
+    return { ok: false, message: error.message, authoritativeSubscription } as const;
+  }
+
+  if (!data?.payload) {
+    return {
+      ok: false,
+      // A failed relational read is not proof that the ranch is empty. Keep
+      // reconciliation locked rather than inviting an automatic local push.
+      message: relationalError?.message ?? 'No cloud workspace has been saved for this account yet.',
+      authoritativeSubscription,
+    } as const;
+  }
 
   return {
     ok: true,

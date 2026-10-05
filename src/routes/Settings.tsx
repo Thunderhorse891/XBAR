@@ -1,4 +1,9 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
+import { validatePacketLogo, validatePacketProfile } from '../../api/_lib/packet-branding.js';
+import { validatePacketLogoRaster } from '../../api/_lib/packet-branding-raster.js';
+import { readRanchLogo } from '@/lib/ranchLogoUpload';
+import { hasRoleCapability } from '@/lib/permissions';
+import { readRecordsOwner } from '@/lib/recordsOwner';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { PageHeader, Panel, Pill } from '@/components/app-ui';
 import { ConfirmActionDialog } from '@/components/ConfirmActionDialog';
@@ -13,7 +18,7 @@ import {
   isSnapshotFallbackEnabled,
 } from '@/lib/platformConfig';
 import { isBrowserOnline } from '@/lib/offlineRuntime';
-import { workspaceStorageDriverLabel } from '@/lib/workspaceStorage';
+import { getWorkspacePersistReceipt, workspaceStorageDriverLabel } from '@/lib/workspaceStorage';
 import { useCloudStore } from '@/store/useCloudStore';
 import { useUiStore } from '@/store/useUiStore';
 import { useCurrentRoleCapability, useXbarStore } from '@/store/useXbarStore';
@@ -31,9 +36,10 @@ import {
 import { beginVaultWrite, endVaultWrite } from '@/lib/localFileVault';
 import { vaultOwnerId } from '@/lib/vaultOwner';
 import { promoteLocalVaultFiles } from '@/lib/workspacePromotion';
-import type { UserRole } from '@/types/xbar';
+import type { UserRole, WorkspaceProfile } from '@/types/xbar';
 import { useEffectiveSubscription } from '@/hooks/useOwnerPreview';
 import { saveBlobAsFile } from '@/lib/fileDownload';
+import type { RoleCapability } from '@/types/xbar';
 
 function roleLabel(role: UserRole) {
   return role === 'Owner' ? 'Horse Owner / Client' : role;
@@ -48,6 +54,32 @@ function roleValue(role: UserRole) {
   if (role === 'Medical Lead') return 'Care, treatment, vet record, Coggins, medication, and medical timeline control.';
   if (role === 'Sales Lead') return 'Buyer follow-up, sale profiles, inquiries, listings, and shared buyer packets.';
   return 'Role-scoped access for the workspace.';
+}
+
+// Include account and role even when the workspace id is unchanged. Store
+// subscriptions below observe every transition, including A → B → A in one render.
+function profileContextKey() {
+  const cloud = useCloudStore.getState();
+  return JSON.stringify([
+    cloud.session?.user.id ?? '',
+    cloud.workspaceId,
+    cloud.workspaceRole,
+    cloud.autosaveReady,
+    cloud.autosaveUnlocked,
+    useXbarStore.getState().currentRole,
+  ]);
+}
+
+function profileContextIsEditable() {
+  const cloud = useCloudStore.getState();
+  if (!hasRoleCapability(useXbarStore.getState().currentRole, 'manageSettings')) return false;
+  if (!isSupabaseConfigured()) return true;
+  return (
+    cloud.autosaveReady &&
+    cloud.autosaveUnlocked &&
+    (!cloud.session || hasRoleCapability(cloud.workspaceRole, 'manageSettings')) &&
+    readRecordsOwner() === vaultOwnerId()
+  );
 }
 
 export default function Settings() {
@@ -83,6 +115,30 @@ export default function Settings() {
   const canSyncCloud = useCurrentRoleCapability('syncCloud');
   const importRef = useRef<HTMLInputElement | null>(null);
   const [profileDraft, setProfileDraft] = useState(workspaceProfile);
+  const [profileError, setProfileError] = useState('');
+  const [profileSaved, setProfileSaved] = useState(false);
+  const [profileSaving, setProfileSaving] = useState(false);
+  const [logoLoading, setLogoLoading] = useState(false);
+  const [, refreshProfileContext] = useState(0);
+  const profileGeneration = useRef(0);
+  const uploadGeneration = useRef(0);
+  const renderedProfileGeneration = profileGeneration.current;
+  const readingLogo = useRef(false);
+  const profileMounted = useRef(false);
+  const ownProfileUpdate = useRef(false);
+  const savingProfile = useRef(false);
+  const logoInputRef = useRef<HTMLInputElement | null>(null);
+  const profileEditable = canManageSettings && profileContextIsEditable();
+  const logoPreview = useMemo(() => {
+    try {
+      return { dataUrl: validatePacketLogo(profileDraft.packetLogoDataUrl)?.dataUrl ?? '', error: '' };
+    } catch {
+      return {
+        dataUrl: '',
+        error: 'This logo is invalid. Replace it with a PNG or JPEG, or remove it before saving or building a packet.',
+      };
+    }
+  }, [profileDraft.packetLogoDataUrl]);
   const [authEmail, setAuthEmail] = useState('');
   const [inviteEmail, setInviteEmail] = useState('');
   const [inviteRole, setInviteRole] = useState<UserRole>('Owner');
@@ -91,14 +147,141 @@ export default function Settings() {
   const [deleteConfirm, setDeleteConfirm] = useState('');
   const [deleting, setDeleting] = useState(false);
   const [exportingBackup, setExportingBackup] = useState(false);
+  const [importingBackup, setImportingBackup] = useState(false);
+  const importInFlight = useRef(false);
+  const transferGeneration = useRef(0);
+  useEffect(() => {
+    const unsubscribe = useCloudStore.subscribe((next, previous) => {
+      if (
+        next.workspaceId !== previous.workspaceId ||
+        next.session?.user.id !== previous.session?.user.id ||
+        next.workspaceRole !== previous.workspaceRole
+      ) {
+        transferGeneration.current += 1;
+      }
+    });
+    return () => {
+      transferGeneration.current += 1;
+      unsubscribe();
+    };
+  }, []);
+  const captureTransfer = () => ({
+    generation: transferGeneration.current,
+    ownerId: vaultOwnerId(),
+    accountId: useCloudStore.getState().session?.user.id,
+  });
+  const transferIsCurrent = (target: ReturnType<typeof captureTransfer>, capability: RoleCapability) => {
+    const cloud = useCloudStore.getState();
+    return (
+      target.generation === transferGeneration.current &&
+      target.ownerId === vaultOwnerId() &&
+      target.accountId === cloud.session?.user.id &&
+      hasRoleCapability(useXbarStore.getState().currentRole, capability) &&
+      (!cloud.session || (!!cloud.workspaceRole && hasRoleCapability(cloud.workspaceRole, capability)))
+    );
+  };
+  const reportTransferStopped = () =>
+    pushToast({
+      title: 'Restore stopped',
+      message:
+        'Your account, workspace, or permission changed. Reopen the original workspace to retry. Any files already restored remain in that workspace.',
+      tone: 'warning',
+    });
   const facebookConnected = cloudSession?.user?.app_metadata?.provider === 'facebook';
   const activeMembers = workspaceMembers.filter((member) => member.status === 'Active');
   const pendingInvites = workspaceInvitations.filter((invite) => invite.status === 'Pending');
   const online = isBrowserOnline();
 
   useEffect(() => {
-    setProfileDraft(workspaceProfile);
-  }, [workspaceProfile]);
+    profileMounted.current = true;
+    // StrictMode replays setup → cleanup → setup without another render.
+    // Cleanup must invalidate old work, but the second setup must also render
+    // handlers bound to that new generation or every fresh control stays stale.
+    refreshProfileContext((revision) => revision + 1);
+    let context = profileContextKey();
+    const invalidate = () => {
+      profileGeneration.current += 1;
+      uploadGeneration.current += 1;
+      savingProfile.current = false;
+      setProfileSaving(false);
+      readingLogo.current = false;
+      setLogoLoading(false);
+      setProfileError('');
+      setProfileSaved(false);
+      setProfileDraft(useXbarStore.getState().workspaceProfile);
+      refreshProfileContext((revision) => revision + 1);
+      if (logoInputRef.current) logoInputRef.current.value = '';
+    };
+    const checkContext = () => {
+      const nextContext = profileContextKey();
+      if (nextContext !== context) {
+        context = nextContext;
+        invalidate();
+      }
+    };
+    const unsubscribeCloud = useCloudStore.subscribe(checkContext);
+    const unsubscribeWorkspace = useXbarStore.subscribe((state, previous) => {
+      checkContext();
+      if (state.workspaceProfile !== previous.workspaceProfile && !ownProfileUpdate.current) invalidate();
+    });
+    return () => {
+      profileMounted.current = false;
+      profileGeneration.current += 1;
+      uploadGeneration.current += 1;
+      unsubscribeCloud();
+      unsubscribeWorkspace();
+    };
+  }, []);
+
+  const cancelLogoUpload = () => {
+    uploadGeneration.current += 1;
+    readingLogo.current = false;
+    setLogoLoading(false);
+    if (logoInputRef.current) logoInputRef.current.value = '';
+  };
+
+  const patchProfileDraft = (patch: Partial<WorkspaceProfile>) => {
+    if (renderedProfileGeneration !== profileGeneration.current || !profileContextIsEditable() || savingProfile.current)
+      return;
+    setProfileDraft((draft) => ({ ...draft, ...patch }));
+    setProfileSaved(false);
+  };
+
+  const handleLogoUpload = async (file?: File) => {
+    // Reset immediately, including invalid/cancelled picks, so selecting the
+    // same file again always fires change and can retry a transient failure.
+    if (logoInputRef.current) logoInputRef.current.value = '';
+    if (
+      !file ||
+      renderedProfileGeneration !== profileGeneration.current ||
+      !profileContextIsEditable() ||
+      savingProfile.current
+    )
+      return;
+    const generation = profileGeneration.current;
+    const request = ++uploadGeneration.current;
+    readingLogo.current = true;
+    setLogoLoading(true);
+    setProfileSaved(false);
+    setProfileError('');
+    const current = () =>
+      profileMounted.current &&
+      generation === profileGeneration.current &&
+      request === uploadGeneration.current &&
+      profileContextIsEditable();
+    try {
+      const packetLogoDataUrl = await readRanchLogo(file);
+      if (!current()) return;
+      setProfileDraft((draft) => ({ ...draft, packetLogoDataUrl }));
+    } catch (error) {
+      if (current()) setProfileError(error instanceof Error ? error.message : 'The logo could not be read. Try again.');
+    } finally {
+      if (current()) {
+        readingLogo.current = false;
+        setLogoLoading(false);
+      }
+    }
+  };
 
   /*
    * The backup carries the files, not just the records that mention them.
@@ -260,6 +443,15 @@ export default function Settings() {
 
   const handleImport = async (file?: File) => {
     if (!file) return;
+    if (importInFlight.current || cloudBusy) return;
+    const target = captureTransfer();
+    if (!transferIsCurrent(target, 'manageSettings')) {
+      reportTransferStopped();
+      if (importRef.current) importRef.current.value = '';
+      return;
+    }
+    importInFlight.current = true;
+    setImportingBackup(true);
     /*
      * `importLocalFiles` writes every blob before `importWorkspaceBackup`
      * installs the records that reference them. Until it does, those bytes are
@@ -267,9 +459,13 @@ export default function Settings() {
      * deletes — so a cloud reconciliation settling mid-import destroyed files
      * this had just restored, and left the restored records dangling.
      */
-    await beginVaultWrite();
     try {
+      await beginVaultWrite();
       const text = await file.text();
+      if (!transferIsCurrent(target, 'manageSettings')) {
+        reportTransferStopped();
+        return;
+      }
       const payload = JSON.parse(text) as { files?: PortableLocalFile[]; omittedFiles?: UnbackedUpFile[] };
 
       /*
@@ -278,11 +474,9 @@ export default function Settings() {
        * The order is load-bearing in both directions. Files must land before
        * the records that point at them, or a record briefly references a blob
        * that is not there yet. But the vault must not be touched at all until
-       * the workspace payload is known to be acceptable: restoration preserves
-       * keys and uses `put`, so writing first and rejecting after would
-       * overwrite blobs belonging to the workspace currently loaded and then
-       * report "Import blocked" — leaving real documents silently pointing at
-       * some other file's bytes.
+       * the workspace payload is known to be acceptable. Staged file writes
+       * use fresh keys, so failed or stopped restores preserve the current
+       * records and original bytes. Only successful writes return a remap.
        */
       const workspace = workspaceBackupPayload(payload);
       if (!workspace) {
@@ -311,9 +505,8 @@ export default function Settings() {
         return;
       }
 
-      // Restored under their ORIGINAL keys — a fresh key would leave every
-      // document pointing at nothing. A backup written before this shipped has
-      // no `files`, and restores exactly as it always did.
+      // Stage files under fresh keys and remap their records only after writes
+      // succeed. Older backups without `files` retain their existing references.
       /*
        * A restored file is NEVER treated as XBAR-generated.
        *
@@ -333,8 +526,12 @@ export default function Settings() {
        * verifier runs there with no CSP to satisfy.
        */
       const { restored, failed, remapped } = Array.isArray(payload.files)
-        ? await importLocalFiles(payload.files, { workspaceId: vaultOwnerId() })
+        ? await importLocalFiles(payload.files, { workspaceId: target.ownerId, freshKeys: true })
         : { restored: 0, failed: [] as UnbackedUpFile[], remapped: {} as Record<string, string> };
+      if (!transferIsCurrent(target, 'manageSettings')) {
+        reportTransferStopped();
+        return;
+      }
 
       /*
        * Follow any keys the vault had to re-mint.
@@ -462,28 +659,85 @@ export default function Settings() {
     } finally {
       // Released on every path, including the catch above.
       endVaultWrite();
+      importInFlight.current = false;
+      setImportingBackup(false);
       if (importRef.current) importRef.current.value = '';
     }
   };
 
-  const handleProfileSave = () => {
+  const handleProfileSave = async () => {
+    if (
+      renderedProfileGeneration !== profileGeneration.current ||
+      savingProfile.current ||
+      readingLogo.current ||
+      !profileContextIsEditable()
+    )
+      return;
+    setProfileSaved(false);
     if (!profileDraft.ranchName.trim() || !profileDraft.businessName.trim()) {
-      pushToast({ title: 'Profile not saved', message: 'Business name and ranch name are required.', tone: 'error' });
+      setProfileError('Business name and ranch name are required.');
       return;
     }
     if (
       profileDraft.operationsEmail.trim() &&
       !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(profileDraft.operationsEmail.trim())
     ) {
-      pushToast({ title: 'Profile not saved', message: 'Operations email must be a valid address.', tone: 'error' });
+      setProfileError('Operations email must be a valid address.');
       return;
     }
-    const result = updateWorkspaceProfile(profileDraft);
-    pushToast({
-      title: result.ok ? 'Profile saved' : 'Profile not saved',
-      message: result.message,
-      tone: result.ok ? 'success' : 'error',
-    });
+    try {
+      validatePacketProfile(profileDraft);
+    } catch (error) {
+      setProfileError(error instanceof Error ? error.message : 'Ranch branding is invalid.');
+      return;
+    }
+    const generation = profileGeneration.current;
+    const current = () =>
+      profileMounted.current && generation === profileGeneration.current && profileContextIsEditable();
+    savingProfile.current = true;
+    setProfileSaving(true);
+    setProfileError('');
+    try {
+      // Restored profiles did not pass through the browser upload decoder.
+      // Prove their actual raster before changing any stored profile fields.
+      await validatePacketLogoRaster(profileDraft.packetLogoDataUrl);
+      if (!current()) return;
+      const priorReceipt = getWorkspacePersistReceipt();
+      ownProfileUpdate.current = true;
+      const result = updateWorkspaceProfile(profileDraft);
+      ownProfileUpdate.current = false;
+      if (!result.ok) {
+        setProfileError(result.message);
+        return;
+      }
+      const receipt = getWorkspacePersistReceipt();
+      const persisted =
+        receipt && receipt !== priorReceipt && receipt.name === 'xbar-live-workspace' ? await receipt.completed : false;
+      if (!current()) return;
+      if (!persisted) {
+        setProfileError(
+          'Profile is still in this session, but could not be saved on this device. Free up browser storage or leave private browsing, then try Save profile again before reloading.',
+        );
+        return;
+      }
+      setProfileDraft(useXbarStore.getState().workspaceProfile);
+      setProfileSaved(true);
+      pushToast({
+        title: 'Profile saved',
+        message: cloudSession
+          ? 'Saved on this device. Cloud sync runs separately; check Cloud status.'
+          : 'Saved on this device.',
+        tone: 'success',
+      });
+    } catch (error) {
+      if (current()) setProfileError(error instanceof Error ? error.message : 'Profile could not be saved. Try again.');
+    } finally {
+      ownProfileUpdate.current = false;
+      if (current()) {
+        savingProfile.current = false;
+        setProfileSaving(false);
+      }
+    }
   };
 
   const handleSendMagicLink = async () => {
@@ -549,27 +803,43 @@ export default function Settings() {
   };
 
   const handlePullCloud = async () => {
+    if (importInFlight.current || cloudBusy) return;
+    const target = captureTransfer();
+    if (!transferIsCurrent(target, 'syncCloud')) return;
     setCloudBusy(true);
-    const remote = await loadWorkspaceBackupFromCloud();
-    if (!remote.ok) {
-      pushToast({ title: 'Cloud pull failed', message: remote.message, tone: 'error' });
+    try {
+      const remote = await loadWorkspaceBackupFromCloud();
+      if (!transferIsCurrent(target, 'syncCloud')) {
+        reportTransferStopped();
+        return;
+      }
+      if (!remote.ok) {
+        pushToast({ title: 'Cloud pull failed', message: remote.message, tone: 'error' });
+        setCloudBusy(false);
+        return;
+      }
+      const result = importWorkspaceBackup(remote.backup);
+      pushToast({
+        title: result.ok ? 'Cloud workspace loaded' : 'Cloud import blocked',
+        message: result.message,
+        tone: result.ok ? 'success' : 'error',
+      });
+      if (result.ok && remote.updatedAt) setLastCloudSyncAt(remote.updatedAt);
+      // The other half of the same choice: taking the cloud copy settles the
+      // conflict exactly as pushing the local one does.
+      if (result.ok) {
+        unlockAutosaveAfterManualSync();
+        setCloudSyncState('idle', 'Cloud workspace ready.');
+      }
+    } catch {
+      pushToast({
+        title: 'Cloud pull failed',
+        message: 'Cloud pull could not finish. Review the current workspace before retrying.',
+        tone: 'error',
+      });
+    } finally {
       setCloudBusy(false);
-      return;
     }
-    const result = importWorkspaceBackup(remote.backup);
-    pushToast({
-      title: result.ok ? 'Cloud workspace loaded' : 'Cloud import blocked',
-      message: result.message,
-      tone: result.ok ? 'success' : 'error',
-    });
-    if (result.ok && remote.updatedAt) setLastCloudSyncAt(remote.updatedAt);
-    // The other half of the same choice: taking the cloud copy settles the
-    // conflict exactly as pushing the local one does.
-    if (result.ok) {
-      unlockAutosaveAfterManualSync();
-      setCloudSyncState('idle', 'Cloud workspace ready.');
-    }
-    setCloudBusy(false);
   };
 
   const handleSignOutCloud = async () => {
@@ -753,56 +1023,120 @@ export default function Settings() {
         </Panel>
 
         <Panel eyebrow="Ranch profile" title="Profile">
+          <p className="stack-item__copy">
+            Your ranch name, logo, and contact details appear on newly built seller packets. Existing packets keep the
+            branding they were built with.
+          </p>
+          <div className="stack-item">
+            <label className="field-stack">
+              <span className="field-label">Ranch logo</span>
+              <input
+                ref={logoInputRef}
+                className="field-input"
+                type="file"
+                accept="image/png,image/jpeg"
+                onChange={(event) => void handleLogoUpload(event.target.files?.[0])}
+                disabled={!profileEditable || profileSaving}
+                aria-describedby="ranch-logo-help"
+              />
+            </label>
+            <p id="ranch-logo-help" className="stack-item__copy">
+              Choose a PNG or JPEG from your photo library or files. Maximum 256 KB and 2048 × 2048 pixels. Save profile
+              to apply changes.
+            </p>
+            {logoPreview.dataUrl && (
+              <img
+                src={logoPreview.dataUrl}
+                alt="Ranch logo preview"
+                style={{ width: 160, height: 96, objectFit: 'contain' }}
+              />
+            )}
+            {logoPreview.error && (
+              <p role="alert" className="stack-item__copy">
+                {logoPreview.error}
+              </p>
+            )}
+            <div className="inline-actions">
+              {logoLoading && (
+                <>
+                  <span role="status">Preparing logo…</span>
+                  <button className="button button--ghost button--compact" type="button" onClick={cancelLogoUpload}>
+                    Cancel logo upload
+                  </button>
+                </>
+              )}
+              {Boolean(profileDraft.packetLogoDataUrl) && (
+                <button
+                  className="button button--ghost button--compact"
+                  type="button"
+                  disabled={!profileEditable || profileSaving}
+                  onClick={() => {
+                    if (
+                      renderedProfileGeneration !== profileGeneration.current ||
+                      !profileContextIsEditable() ||
+                      savingProfile.current
+                    )
+                      return;
+                    cancelLogoUpload();
+                    patchProfileDraft({ packetLogoDataUrl: '' });
+                    setProfileError('');
+                    setProfileSaved(false);
+                  }}
+                >
+                  Remove logo
+                </button>
+              )}
+            </div>
+          </div>
           <div className="form-grid form-grid--tight">
             <label className="field-stack">
               <span className="field-label">Business name</span>
               <input
                 className="field-input"
+                maxLength={160}
                 value={profileDraft.businessName}
-                onChange={(event) => setProfileDraft((current) => ({ ...current, businessName: event.target.value }))}
-                disabled={!canManageSettings}
+                onChange={(event) => patchProfileDraft({ businessName: event.target.value })}
+                disabled={!profileEditable || profileSaving}
               />
             </label>
             <label className="field-stack">
               <span className="field-label">Ranch name</span>
               <input
                 className="field-input"
+                maxLength={160}
                 value={profileDraft.ranchName}
-                onChange={(event) => setProfileDraft((current) => ({ ...current, ranchName: event.target.value }))}
-                disabled={!canManageSettings}
+                onChange={(event) => patchProfileDraft({ ranchName: event.target.value })}
+                disabled={!profileEditable || profileSaving}
               />
             </label>
             <label className="field-stack">
               <span className="field-label">Default owner</span>
               <input
                 className="field-input"
+                maxLength={160}
                 value={profileDraft.defaultOwnerName}
-                onChange={(event) =>
-                  setProfileDraft((current) => ({ ...current, defaultOwnerName: event.target.value }))
-                }
-                disabled={!canManageSettings}
+                onChange={(event) => patchProfileDraft({ defaultOwnerName: event.target.value })}
+                disabled={!profileEditable || profileSaving}
               />
             </label>
             <label className="field-stack">
               <span className="field-label">Default owner entity</span>
               <input
                 className="field-input"
+                maxLength={160}
                 value={profileDraft.defaultOwnerEntity}
-                onChange={(event) =>
-                  setProfileDraft((current) => ({ ...current, defaultOwnerEntity: event.target.value }))
-                }
-                disabled={!canManageSettings}
+                onChange={(event) => patchProfileDraft({ defaultOwnerEntity: event.target.value })}
+                disabled={!profileEditable || profileSaving}
               />
             </label>
             <label className="field-stack">
               <span className="field-label">Ranch manager</span>
               <input
                 className="field-input"
+                maxLength={160}
                 value={profileDraft.ranchManagerName}
-                onChange={(event) =>
-                  setProfileDraft((current) => ({ ...current, ranchManagerName: event.target.value }))
-                }
-                disabled={!canManageSettings}
+                onChange={(event) => patchProfileDraft({ ranchManagerName: event.target.value })}
+                disabled={!profileEditable || profileSaving}
               />
             </label>
             <label className="field-stack">
@@ -810,8 +1144,8 @@ export default function Settings() {
               <input
                 className="field-input"
                 value={profileDraft.defaultBarn}
-                onChange={(event) => setProfileDraft((current) => ({ ...current, defaultBarn: event.target.value }))}
-                disabled={!canManageSettings}
+                onChange={(event) => patchProfileDraft({ defaultBarn: event.target.value })}
+                disabled={!profileEditable || profileSaving}
               />
             </label>
             <label className="field-stack">
@@ -819,30 +1153,68 @@ export default function Settings() {
               <input
                 className="field-input"
                 value={profileDraft.defaultPasture}
-                onChange={(event) => setProfileDraft((current) => ({ ...current, defaultPasture: event.target.value }))}
-                disabled={!canManageSettings}
+                onChange={(event) => patchProfileDraft({ defaultPasture: event.target.value })}
+                disabled={!profileEditable || profileSaving}
               />
             </label>
             <label className="field-stack">
               <span className="field-label">Operations email</span>
               <input
                 className="field-input"
+                maxLength={254}
                 value={profileDraft.operationsEmail}
-                onChange={(event) =>
-                  setProfileDraft((current) => ({ ...current, operationsEmail: event.target.value }))
-                }
-                disabled={!canManageSettings}
+                onChange={(event) => patchProfileDraft({ operationsEmail: event.target.value })}
+                disabled={!profileEditable || profileSaving}
+              />
+            </label>
+            <label className="field-stack">
+              <span className="field-label">Contact phone</span>
+              <input
+                className="field-input"
+                type="tel"
+                maxLength={80}
+                value={profileDraft.contactPhone ?? ''}
+                onChange={(event) => patchProfileDraft({ contactPhone: event.target.value })}
+                disabled={!profileEditable || profileSaving}
+              />
+            </label>
+            <label className="field-stack">
+              <span className="field-label">Website</span>
+              <input
+                className="field-input"
+                type="text"
+                inputMode="url"
+                maxLength={240}
+                placeholder="https://yourranch.com"
+                value={profileDraft.website ?? ''}
+                onChange={(event) => patchProfileDraft({ website: event.target.value })}
+                disabled={!profileEditable || profileSaving}
               />
             </label>
           </div>
+          {profileError && (
+            <p role="alert" className="stack-item__copy">
+              {profileError}
+            </p>
+          )}
+          {profileSaved && (
+            <p role="status" className="stack-item__copy">
+              Profile saved on this device
+            </p>
+          )}
+          {!profileEditable && canManageSettings && (
+            <p className="stack-item__copy">
+              Wait for this workspace to finish loading, or resolve its cloud sync issue before editing the profile.
+            </p>
+          )}
           <div className="inline-actions">
             <button
               className="button button--primary button--compact"
               type="button"
-              onClick={handleProfileSave}
-              disabled={!canManageSettings}
+              onClick={() => void handleProfileSave()}
+              disabled={!profileEditable || profileSaving || logoLoading}
             >
-              Save profile
+              {profileSaving ? 'Saving profile…' : 'Save profile'}
             </button>
           </div>
         </Panel>
@@ -1184,9 +1556,9 @@ export default function Settings() {
             className="button button--ghost button--compact"
             type="button"
             onClick={() => importRef.current?.click()}
-            disabled={!canManageSettings}
+            disabled={!canManageSettings || importingBackup || cloudBusy}
           >
-            Import backup
+            {importingBackup ? 'Restoring backup…' : 'Import backup'}
           </button>
         </div>
       </Panel>

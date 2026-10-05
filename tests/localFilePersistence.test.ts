@@ -88,7 +88,7 @@ test('a workspace with no cloud identity still produces a packet', async () => {
 
   assert.match(
     source,
-    /if \(hasBackendIdentity\(auth\)\) \{[\s\S]*?\} else \{[\s\S]*?localPacket = buildLocalSalePacket\(\{/,
+    /if \(hasBackendIdentity\(auth\)\) \{[\s\S]*?\} else \{[\s\S]*?localPacket = await buildValidatedLocalSalePacket\(\{/,
     'the no-cloud branch must render a packet, not record a row and tell the seller to sign in',
   );
   assert.match(
@@ -272,7 +272,7 @@ test('the reports screen refreshes when the day changes, and exports are built f
   // The exported file outlives the tab and carries a date a banker will read.
   assert.match(
     source,
-    /downloadRanchReportPdf\(buildRanchReport\(reportInput\), workspaceProfile\.ranchName\)/,
+    /downloadRanchReportPdf\(buildRanchReport\(reportInput\), workspaceProfile\.ranchName,\s*\{/,
     'the PDF export must build a report at the moment of export',
   );
   assert.match(

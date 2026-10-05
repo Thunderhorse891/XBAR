@@ -43,6 +43,9 @@ export type ActionResult = {
   message: string;
   id?: string;
   createdHorseIds?: string[];
+  duplicateCount?: number;
+  /** Unassigned sources still needing review after automatic creation and matching. */
+  heldForReviewCount?: number;
 };
 
 export type HorsePatch = Partial<
@@ -129,7 +132,7 @@ export type XbarStore = {
   removeWorkspaceMember: (memberId: string) => Promise<ActionResult>;
   addHorse: (input: NewHorseInput) => ActionResult;
   createDocumentIntake: (input: DocumentIntakeInput) => Promise<ActionResult>;
-  reviewDocument: (documentId: string, horseId?: string) => ActionResult;
+  reviewDocument: (documentId: string, horseId?: string, keepDuplicate?: boolean) => ActionResult;
   createHorseFromDocument: (documentId: string) => ActionResult;
   discardDocument: (documentId: string) => ActionResult;
   uploadHorseMedia: (input: MediaUploadInput) => Promise<ActionResult>;
@@ -179,6 +182,8 @@ export type XbarStore = {
    * push an arbitrary name through this path.
    */
   applyHorseNameRepairs: (horseIds: readonly string[]) => ActionResult;
+  archiveHorse: (horseId: string) => ActionResult & { archiveId?: string };
+  restoreHorse: (horseId: string, archiveId: string, expectedOwnerId?: string) => ActionResult;
   deleteHorse: (horseId: string) => ActionResult;
   updateMedicalEvent: (
     horseId: string,
@@ -200,7 +205,12 @@ export type XbarStore = {
     context?: Record<string, string>;
   }) => void;
   linkOwnershipProof: (recordId: string, requirementId: string, documentId: string) => ActionResult;
-  verifyOwnershipProof: (recordId: string, requirementId: string, verifiedBy: string) => ActionResult;
+  verifyOwnershipProof: (
+    recordId: string,
+    requirementId: string,
+    verifiedBy: string,
+    reviewConfirmed?: { documentId: string; sourceKey: string },
+  ) => ActionResult;
   unlinkOwnershipProof: (recordId: string, requirementId: string) => ActionResult;
   setTransferStatus: (recordId: string, status: OwnershipRecord['transferStatus'], actor: string) => ActionResult;
   createSalePacketBuild: (input: {

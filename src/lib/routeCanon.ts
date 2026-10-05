@@ -17,6 +17,9 @@ export const loginPath = '/login';
 
 export const canonicalRoutes = {
   horses: '/horses',
+  health: '/health-care',
+  breeding: '/breeding-foaling',
+  equipment: '/equipment',
   documents: '/documents',
   sales: '/sales',
   buyers: '/buyers',

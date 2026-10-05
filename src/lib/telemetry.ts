@@ -17,11 +17,10 @@ export const events = {
   createSubmitted: 'create.submitted',
 
   taskOpened: 'task.opened',
-  taskCompleted: 'task.completed',
-  taskBulkCompleted: 'task.bulk_completed',
-  // Hiding or snoozing defers a task on one device; it is not completion (audit F09).
   taskDismissed: 'task.dismissed',
   taskSnoozed: 'task.snoozed',
+  taskCompleted: 'task.completed',
+  taskBulkCompleted: 'task.bulk_completed',
 
   blockerOpened: 'sale.blocker_opened',
   blockerResolved: 'sale.blocker_resolved',

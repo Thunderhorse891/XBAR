@@ -2,6 +2,7 @@
   "extends": "./tsconfig.json",
   "compilerOptions": {
     "noEmit": false,
+    "allowJs": true,
     "outDir": ".codex-test-dist",
     "rootDir": ".",
     "module": "NodeNext",
@@ -14,6 +15,9 @@
     "allowImportingTsExtensions": false
   },
   "include": [
+    "api/_lib/packet-branding.js",
+    "api/_lib/packet-branding-raster.js",
+    "api/_lib/workspace-identity.js",
     "src/store/xbarStoreLogic.ts",
     "src/types/xbar.ts",
     "src/lib/salePacketDisclosure.ts",

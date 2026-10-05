@@ -1,10 +1,12 @@
 :root {
   --xbar-black: #0b0d0f;
-  --xbar-graphite: #121518;
-  --xbar-gunmetal: #20252a;
+  --xbar-graphite: #171b20;
+  --xbar-gunmetal: #202d3c;
   --xbar-steel: #596168;
-  --xbar-silver: #b7bcc2;
+  --xbar-silver: #d6dde5;
   --xbar-warm-white: #f5f2ec;
   --xbar-muted-sand: #c7bdaa;
   --xbar-blue: #0078d7;
+  --xbar-ice: #94d8f2;
+  --xbar-white: #ffffff;
 }

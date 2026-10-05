@@ -71,12 +71,12 @@ test('the stamped watermark and the sealed watermark are the same value', async 
 
   // Resolved once, above the seal.
   const resolveAt = code.indexOf('const watermark = resolvePacketWatermark(params.watermark);');
-  const sealAt = code.indexOf('const credential = buildPacketCredential({');
+  const sealAt = code.indexOf('const credential = buildPacketCredential(');
   assert.ok(resolveAt > -1, 'the packet must resolve its watermark once');
   assert.ok(sealAt > resolveAt, 'and do it before sealing, or the seal cannot use it');
 
   // Both bounds measured from the same anchor.
-  const seal = code.slice(sealAt, code.indexOf('});', sealAt));
+  const seal = code.slice(sealAt, code.indexOf('sealedSeller,', sealAt));
   assert.match(seal, /\r?\n\s*watermark,\r?\n/, 'the resolved value must be what is sealed');
 
   assert.doesNotMatch(
@@ -560,5 +560,179 @@ test('the wizard share caption names the ranch', async () => {
     source,
     /buildShareText\(\s*horse\?\.name \?\? '',\s*sealCode,\s*realWorkspaceName\(workspaceProfile\.businessName\) \|\| realWorkspaceName\(workspaceProfile\.ranchName\),?\s*\)/,
     'the wizard must pass the sentinel-filtered ranch name as the share text’s third argument',
+  );
+});
+
+test('blocked packets explain every release requirement and route to the horse-scoped repair screen', async () => {
+  const { buildBuyerPacketReleaseGate } = await import('../src/lib/buyerPacketReleaseGate.js');
+  const horse = {
+    id: 'needs-proof',
+    name: 'Packet Prospect',
+    status: 'Sale Prep',
+    registered: false,
+    registry: 'AQHA',
+    gallery: [],
+    alerts: [],
+    sale: { askPrice: 12000, listingState: 'Listed', socialReady: false },
+  } as unknown as import('../src/types/xbar.js').HorseRecord;
+  const gate = buildBuyerPacketReleaseGate({ horse, documents: [] });
+  assert.equal(gate.allowed, false);
+  const repairs = (gate as unknown as { remediations: { reason: string; label: string; to: string }[] }).remediations;
+  assert.ok(repairs?.length, 'a blocking reason without a repair action strands the seller');
+  for (const reason of gate.blockers) {
+    const repair = repairs.find((item) => item.reason === reason);
+    assert.ok(repair?.label && repair.to, `missing repair action for: ${reason}`);
+  }
+  assert.match(
+    repairs.find((item) => item.reason.startsWith('AQHA papers:'))!.to,
+    /^\/documents\?horse=needs-proof&stage=Upload/,
+  );
+  assert.match(
+    repairs.find((item) => item.reason.startsWith('Transfer papers:'))!.to,
+    /^\/ownership\?horse=needs-proof/,
+  );
+  assert.equal(repairs.find((item) => item.reason.startsWith('Visual packet:'))!.to, '/horses/needs-proof');
+});
+
+test('existing documents route to review instead of another upload, and inactive papers do not hide missing proof', async () => {
+  const { packetDocumentAction } = await import('../src/lib/salePacketGuidance.js');
+  const document = {
+    id: 'doc',
+    horseId: 'horse/a',
+    type: 'Coggins',
+    state: 'Needs Review',
+  } as import('../src/types/xbar.js').DocumentRecord;
+  assert.equal(
+    packetDocumentAction('horse/a', [document], ['Coggins'], 'Coggins').to,
+    '/documents?horse=horse%2Fa&stage=Review',
+  );
+  assert.equal(
+    packetDocumentAction('horse/a', [{ ...document, state: 'Archived' }], ['Coggins'], 'Coggins').to,
+    '/documents?horse=horse%2Fa&stage=Upload',
+  );
+  assert.equal(
+    packetDocumentAction('other-horse', [document], ['Coggins'], 'Coggins').to,
+    '/documents?horse=other-horse&stage=Upload',
+  );
+});
+
+test('packet draft survives repair navigation only in its owner scope and explicit close clears it', async () => {
+  const { savePacketDraft, readPacketDraft, clearPacketDraft } = await import('../src/lib/salePacketDraft.js');
+  const draft = {
+    horseId: 'horse-1',
+    step: 3,
+    selectedDocIds: ['doc-1'],
+    buyerName: 'Test Buyer',
+    buyerEmail: 'buyer@example.test',
+    watermark: 'Review copy',
+  };
+  savePacketDraft('owner-a:workspace-a', draft);
+  assert.deepEqual(readPacketDraft('owner-a:workspace-a', 'horse-1'), draft);
+  assert.equal(readPacketDraft('owner-b:workspace-a', 'horse-1'), undefined);
+  assert.equal(readPacketDraft('owner-a:workspace-b', 'horse-1'), undefined);
+  assert.equal(readPacketDraft('owner-a:workspace-a', 'other-horse'), undefined);
+  clearPacketDraft('owner-a:workspace-a', 'horse-1');
+  assert.equal(readPacketDraft('owner-a:workspace-a', 'horse-1'), undefined);
+});
+
+test('packet failures retain precise messages and offer safe billing, sign-in, or retry guidance', async () => {
+  const { packetFailureGuidance } = await import('../src/lib/salePacketGuidance.js');
+  for (const code of ['tier_required', 'sale_packet_limit_reached', 'storage_limit_reached']) {
+    const failure = packetFailureGuidance({ message: `Exact server reason: ${code}`, code }, () => true);
+    assert.equal(failure.message, `Exact server reason: ${code}`);
+    assert.equal(failure.action?.to, '/billing');
+    const native = packetFailureGuidance({ message: 'Exact limit', code }, () => false);
+    assert.equal(native.action, undefined, 'native builds must not surface a purchase invitation');
+    assert.match(native.help, /administrator/);
+  }
+  assert.equal(packetFailureGuidance({ message: 'Expired session', status: 401 }, () => true).action?.to, '/login');
+  assert.equal(packetFailureGuidance({ message: 'Permission denied', status: 403 }, () => true).action, undefined);
+  assert.equal(packetFailureGuidance({ message: 'Horse removed', status: 404 }, () => true).action?.to, '/horses');
+  for (const status of [429, 502, 503]) {
+    const failure = packetFailureGuidance({ message: 'Specific service failure', status }, () => true);
+    assert.equal(failure.message, 'Specific service failure');
+    assert.match(failure.help, /retry/);
+    assert.equal(failure.action?.to, '/settings');
+  }
+});
+
+test('packet guidance sends queued and stale approved health files to screens where they can be fixed', async () => {
+  const { packetDocumentAction } = await import('../src/lib/salePacketGuidance.js');
+  const document = {
+    id: 'doc',
+    horseId: 'horse',
+    type: 'Coggins',
+    state: 'Queued',
+  } as import('../src/types/xbar.js').DocumentRecord;
+  assert.equal(
+    packetDocumentAction('horse', [document], ['Coggins'], 'Coggins').to,
+    '/documents?horse=horse&stage=Processing',
+  );
+  const stale = packetDocumentAction('horse', [{ ...document, state: 'Ready' }], ['Coggins'], 'Coggins');
+  assert.equal(stale.to, '/documents?horse=horse&stage=Upload');
+  assert.equal(stale.label, 'Upload current Coggins');
+});
+
+test('ownership blocker actions separate unreadable files, document approval, and human source review', async () => {
+  const { packetHoldAction } = await import('../src/lib/salePacketGuidance.js');
+  const horse = { id: 'horse' } as import('../src/types/xbar.js').HorseRecord;
+  assert.equal(
+    packetHoldAction(
+      'Ownership review: Bill of sale: Source file is missing or archived. Upload the original document.',
+      horse,
+      [],
+    ).to,
+    '/documents?horse=horse&stage=Upload',
+  );
+  assert.equal(
+    packetHoldAction(
+      'Ownership review: Registration: Review and approve the document in Documents → Review first.',
+      horse,
+      [],
+    ).to,
+    '/documents?horse=horse&stage=Review',
+  );
+  assert.equal(
+    packetHoldAction('Ownership review: Registration: Human source review is still required.', horse, []).to,
+    '/ownership?horse=horse',
+  );
+});
+
+test('metadata-only approved sources request a file without hiding a pending current review', async () => {
+  const { packetDocumentAction } = await import('../src/lib/salePacketGuidance.js');
+  const document = {
+    id: 'doc',
+    horseId: 'horse',
+    type: 'Registration',
+    state: 'Ready',
+  } as import('../src/types/xbar.js').DocumentRecord;
+  assert.equal(
+    packetDocumentAction('horse', [document], ['Registration'], 'registration proof').to,
+    '/documents?horse=horse&stage=Upload',
+  );
+  assert.equal(
+    packetDocumentAction('horse', [{ ...document, localFileKey: 'source' }], ['Registration'], 'registration proof').to,
+    '/documents?horse=horse&stage=Proof',
+  );
+  assert.equal(
+    packetDocumentAction(
+      'horse',
+      [
+        { ...document, type: 'Coggins' },
+        { ...document, id: 'pending', type: 'Coggins', state: 'Needs Review' },
+      ],
+      ['Coggins'],
+      'Coggins',
+    ).to,
+    '/documents?horse=horse&stage=Review',
+  );
+});
+
+test('same-route packet repair resynchronizes the document upload horse from its route', async () => {
+  const { readFile } = await import('node:fs/promises');
+  const route = await readFile('src/routes/Documents.tsx', 'utf8');
+  assert.match(
+    route,
+    /useEffect\(\(\) => \{\s*setHorseId\(requestedHorse\?\.id \?\? ''\);\s*\}, \[requestedHorseId, requestedHorse\?\.id\]\)/,
   );
 });

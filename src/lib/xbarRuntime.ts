@@ -14,6 +14,7 @@ import type {
   SubscriptionTier,
 } from '../types/xbar.js';
 import { describeDocumentCoverage, fullCoverage, readDocumentWithCoverage } from './documentIntelligence.js';
+import { fingerprintDocument, flagDocumentDuplicates } from './documentDuplicates.js';
 import { extractRegistrationFields, normalizeDocumentIdentityText } from './registrationExtraction.js';
 
 const GIGABYTE = 1024 * 1024 * 1024;
@@ -223,6 +224,36 @@ export function guessDocumentType(fileName: string): DocumentType {
   return 'Registration';
 }
 
+/** Only a source title or registry masthead establishes the paper's purpose. */
+export function hasDocumentSourceHeading(text: string, cue: RegExp): boolean {
+  return text.split(/[\r\n]+/).some((rawLine) => {
+    const line = rawLine.trim().slice(0, 180);
+    const match = line.match(cue);
+    if (!match || match.index === undefined) return false;
+    const prefix = line.slice(0, match.index).trim();
+    return (
+      !prefix ||
+      /^(?:equine|AQHA|APHA|AMERICAN QUARTER HORSE ASSOCIATION|AMERICAN PAINT HORSE ASSOCIATION)$/i.test(prefix)
+    );
+  });
+}
+
+/** Prefer explicit source headings over camera/scanner filenames. */
+export function inferDocumentType(fileName: string, text: string): { type: DocumentType; ambiguous: boolean } {
+  const cues: Array<[DocumentType, RegExp]> = [
+    ['Bill of Sale', /\bbill\s+of\s+sale\b|\bpurchase\s+(?:and\s+sale\s+)?agreement\b/i],
+    ['Transfer Packet', /\btransfer\s+(?:of\s+ownership|report|form|application)\b|\bownership\s+transfer\b/i],
+    ['Registration', /\bcertificate\s+of\s+registration\b|\bregistration\s+certificate\b/i],
+    ['Coggins', /\bcoggins\b|\bequine\s+infectious\s+anemia\b/i],
+    [
+      'Vet Record',
+      /\bvaccination\s+record\b|\bhealth\s+certificate\b|\bveterinary\s+(?:record|examination|certificate)\b/i,
+    ],
+  ];
+  const matches = cues.filter(([, cue]) => hasDocumentSourceHeading(text, cue));
+  return { type: matches.length === 1 ? matches[0][0] : guessDocumentType(fileName), ambiguous: matches.length > 1 };
+}
+
 export function guessGalleryKind(fileName: string): GalleryAsset['kind'] {
   const lower = fileName.toLowerCase();
 
@@ -334,7 +365,10 @@ function extractTransferStatus(haystack: string, type: DocumentType) {
   return 'Pending Signatures';
 }
 
-function extractDocumentEntities(params: { fileName: string; previewText: string; inferredType: DocumentType }) {
+export const documentIdentityReviewNote =
+  'Conflicting horse identities were read from this file. Upload separate papers for each horse before approving.';
+
+export function extractDocumentEntities(params: { fileName: string; previewText: string; inferredType: DocumentType }) {
   const { fileName, previewText, inferredType } = params;
   const haystack = `${fileName} ${previewText}`;
   // Only a subject field can supply horse identity. A known name mentioned
@@ -382,7 +416,7 @@ function registrationIdentity(value: string | undefined) {
   return { number: compact, registry: '' };
 }
 
-function registrationKey(value: string | undefined) {
+export function registrationKey(value: string | undefined) {
   return registrationIdentity(value).number;
 }
 
@@ -397,7 +431,7 @@ export function conflictingDocumentIdentities(entities: DocumentEntities[]) {
   return names.size > 1 || registrations.size > 1 || registries.size > 1;
 }
 
-function horseIdentityConflicts(horse: HorseRecord, entities?: DocumentEntities) {
+export function horseIdentityConflicts(horse: HorseRecord, entities?: DocumentEntities) {
   const name = entities?.horseName && normalizeToken(entities.horseName);
   const registration = registrationKey(entities?.registrationNumber);
   const storedRegistration = registrationKey(horse.registrationNumber || horse.aqhaNumber);
@@ -507,7 +541,8 @@ export async function buildDocumentRecord(params: {
 }) {
   const { file, uploadedBy, source, selectedHorse, horses, existingDocuments } = params;
   const { text: previewText, coverage } = await readFileTextSnippet(file);
-  const inferredType = guessDocumentType(file.name);
+  const typeReview = inferDocumentType(file.name, previewText);
+  const inferredType = typeReview.type;
   const { identityReviewRequired, ...extractedEntities } = extractDocumentEntities({
     fileName: file.name,
     previewText,
@@ -520,18 +555,8 @@ export async function buildDocumentRecord(params: {
       : resolveDocumentHorseMatch(horses, `${file.name} ${previewText}`, extractedEntities).match;
   const matchedHorse = bestMatch?.horse;
   const identityConflict = matchedHorse && horseIdentityConflicts(matchedHorse, extractedEntities);
-  const exactTitleDuplicate = existingDocuments.some(
-    (document) => normalizeToken(document.title) === normalizeToken(file.name.replace(/\.[^.]+$/, '')),
-  );
-  const sameHorseDuplicate = existingDocuments.some(
-    (document) =>
-      document.horseId &&
-      document.horseId === matchedHorse?.id &&
-      document.type === inferredType &&
-      (document.entities.registrationNumber === extractedEntities.registrationNumber ||
-        normalizeToken(document.title) === normalizeToken(file.name)),
-  );
-  const duplicateRisk = exactTitleDuplicate ? 'Possible Duplicate' : sameHorseDuplicate ? 'Review' : 'Low';
+  const duplicateRisk = 'Low' as DocumentRecord['duplicateRisk'];
+  const contentSha256 = await fingerprintDocument(file);
 
   // These are facts read from this document. Copying missing fields from the
   // matched profile made review claim the scan contained facts it never read.
@@ -558,8 +583,9 @@ export async function buildDocumentRecord(params: {
   const matchReason = bestMatch?.reason?.toLowerCase() ?? 'the upload engine found a weak candidate match';
   const trustLabel = `${Math.round(confidence * 100)}% match`;
 
-  return {
+  const document: DocumentRecord = {
     id: createId('doc'),
+    contentSha256,
     title: file.name.replace(/\.[^.]+$/, ''),
     type: inferredType,
     horseId: matchedHorse?.id,
@@ -574,9 +600,8 @@ export async function buildDocumentRecord(params: {
     identityReviewRequired,
     processingNote: [
       describeDocumentCoverage(coverage),
-      identityReviewRequired
-        ? 'Conflicting horse identities were read from this file. Upload separate papers for each horse before approving.'
-        : '',
+      typeReview.ambiguous ? 'Multiple document types were read. Upload separate sources for each requirement.' : '',
+      identityReviewRequired ? documentIdentityReviewNote : '',
     ]
       .filter(Boolean)
       .join(' '),
@@ -587,4 +612,5 @@ export async function buildDocumentRecord(params: {
         : `${inferredType} added to the queue and needs manual assignment before it can be attached to a horse profile.`,
     entities,
   } satisfies DocumentRecord;
+  return flagDocumentDuplicates([document], existingDocuments)[0];
 }

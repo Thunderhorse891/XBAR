@@ -1,4 +1,6 @@
 import type { DocumentRecord, ExpenseReceipt, HorseRecord, OwnershipRecord } from '../types/xbar.js';
+import { buildHorseProfitProfile } from './profitIntelligence.js';
+import { recordedReceipts, recordedMonthlyBurn } from './receiptFacts.js';
 import { normalizeOwnershipRecord } from '../store/xbarStoreLogic.js';
 import { monthKeyForDate, monthKeyOf, trailingMonthKeys } from './receiptMonths.js';
 import {
@@ -98,15 +100,15 @@ export function assessRevenueAtRisk(
       actionLabel = `Start ownership documents for ${horse.name}`;
       actionRoute = '/ownership';
     } else {
-      const normalized = normalizeOwnershipRecord(record);
+      const normalized = normalizeOwnershipRecord(record, documents, horse);
       const unverified = (normalized.proofRequirements ?? []).filter((item) => item.status !== 'verified');
-      if (normalized.transferStatus !== 'Clear') {
+      if (normalized.transferStatus !== 'Clear' || unverified.length) {
         blockers.push(
           unverified.length
-            ? `Transfer ${normalized.transferStatus.toLowerCase()} — ${unverified.length} document${unverified.length === 1 ? '' : 's'} unverified`
+            ? `Transfer ${normalized.transferStatus.toLowerCase()} — ${unverified.length} document${unverified.length === 1 ? '' : 's'} need review`
             : `Transfer status ${normalized.transferStatus} — ready to mark Clear`,
         );
-        actionLabel = unverified.length ? `Verify documents for ${horse.name}` : `Mark ${horse.name} transfer Clear`;
+        actionLabel = unverified.length ? `Review documents for ${horse.name}` : `Mark ${horse.name} transfer Clear`;
         actionRoute = '/ownership';
       }
     }
@@ -170,7 +172,14 @@ const MINIMUM_MONTH_SPEND = 50;
 
 // Flags categories where this month's spend runs more than 25% above the
 // trailing three-month average (ignoring trivial totals).
-export function detectSpendAnomalies(receipts: ExpenseReceipt[], now: Date = new Date()): SpendAnomaly[] {
+export function detectSpendAnomalies(
+  receipts: ExpenseReceipt[],
+  now: Date = new Date(),
+  confirmedMonths: readonly string[] = [],
+): SpendAnomaly[] {
+  receipts = recordedReceipts(receipts, now);
+  // Receipt presence cannot establish complete history. No confirmation means no confident trend alert.
+  if (!trailingMonthKeys(now, 3).every((month) => confirmedMonths.includes(month))) return [];
   const currentKey = monthKeyForDate(now);
   const trailingKeys = trailingMonthKeys(now, 3);
 
@@ -211,65 +220,37 @@ export function detectSpendAnomalies(receipts: ExpenseReceipt[], now: Date = new
 export interface HorseEconomics {
   horseId: string;
   costToDate: number;
-  monthlyBurn: number;
+  monthlyBurn: number | null;
   askPrice: number;
-  projectedMargin: number;
-  breakEvenPrice: number;
-  safeDiscountFloor: number;
-  marginPercent: number;
+  projectedMargin: number | null;
+  breakEvenPrice: number | null;
+  safeDiscountFloor: number | null;
+  marginPercent: number | null;
 }
 
-const CARRY_MONTHS = 2; // expected months on market while a buyer closes
-const TRAILING_MONTHS = 3; // complete months the burn figure averages over
-const PROTECTED_MARGIN = 0.15; // never discount below cost + 15%
-
-// Margin intelligence for a sale horse: what it cost, what it burns per
-// month, where break-even sits once carry cost is included, and the lowest
-// price a seller should accept without giving the margin away.
+/** Recorded-cost pricing uses Sales' exact floor. Carry is not invented. */
 export function computeHorseEconomics(
   horse: HorseRecord,
   receipts: ExpenseReceipt[],
   now: Date = new Date(),
 ): HorseEconomics {
-  const horseReceipts = receipts.filter((receipt) => receipt.horseId === horse.id);
-
-  // What the horse has cost, which is the purchase plus everything spent since.
-  //
-  // costBasis was omitted, so a horse bought for $10,000 with no receipts yet
-  // reported $0 invested — and this figure is what `safeDiscountFloor` is built
-  // from. A seller negotiating against a floor that ignores the purchase price
-  // can accept an offer well below their actual break-even, which is real money
-  // and the reason this is fixed here rather than only in the report that
-  // surfaced it. buildHorseProfitProfile has always defined it as
-  // `costBasis + spend`; this now agrees with it.
-  const costBasis = Math.max(0, horse.costBasis ?? 0);
-  const costToDate = costBasis + horseReceipts.reduce((sum, receipt) => sum + receipt.amount, 0);
-
-  // The three COMPLETE months before this one, so the divisor matches the
-  // period. A range from three months back to today spans four calendar months
-  // and was divided by three, overstating every horse's monthly cost by a third
-  // for an operation that spends evenly.
-  const trailingWindow = new Set(trailingMonthKeys(now, TRAILING_MONTHS));
-  const trailingSpend = horseReceipts.reduce((sum, receipt) => {
-    const key = monthKeyOf(receipt.receiptDate);
-    return key !== null && trailingWindow.has(key) ? sum + receipt.amount : sum;
-  }, 0);
-  const monthlyBurn = Math.round(trailingSpend / TRAILING_MONTHS);
-
-  const askPrice = horse.sale?.askPrice ?? 0;
-  const breakEvenPrice = Math.round(costToDate + monthlyBurn * CARRY_MONTHS);
-  const safeDiscountFloor = Math.round(breakEvenPrice * (1 + PROTECTED_MARGIN));
-  const projectedMargin = askPrice > 0 ? askPrice - breakEvenPrice : 0;
-  const marginPercent = askPrice > 0 ? Math.round((projectedMargin / askPrice) * 100) : 0;
-
+  const recorded = recordedReceipts(receipts, now);
+  const profile = buildHorseProfitProfile(horse, receipts, [], now);
+  const costToDate = profile.breakEven;
+  const costsKnown = costToDate > 0 && !profile.incompleteCosts;
+  const askPrice = Number.isFinite(horse.sale?.askPrice) ? Math.max(0, horse.sale.askPrice) : 0;
+  const projectedMargin = costsKnown && askPrice > 0 ? askPrice - costToDate : null;
   return {
     horseId: horse.id,
     costToDate,
-    monthlyBurn,
+    monthlyBurn: recordedMonthlyBurn(
+      recorded.filter((receipt) => receipt.horseId === horse.id),
+      now,
+    ),
     askPrice,
     projectedMargin,
-    breakEvenPrice,
-    safeDiscountFloor,
-    marginPercent,
+    breakEvenPrice: costsKnown ? costToDate : null,
+    safeDiscountFloor: costsKnown ? profile.safeSalePrice : null,
+    marginPercent: projectedMargin !== null ? Math.round((projectedMargin / askPrice) * 100) : null,
   };
 }

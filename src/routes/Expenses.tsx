@@ -3,7 +3,7 @@ import { useNavigate, useSearchParams } from 'react-router-dom';
 import { CommandBrief } from '@/components/CommandBrief';
 import { EmptyState } from '@/components/EmptyState';
 import { MetricCard, Panel, Pill, ProgressBar } from '@/components/app-ui';
-import { billingPath } from '@/lib/billingRoutes';
+import { requestFeatureUpgrade } from '@/store/useUpgradeStore';
 import { formatCompactCurrency, formatCurrency, formatDateLabel, localIsoDate } from '@/lib/format';
 import { buildProfitPortfolio } from '@/lib/profitIntelligence';
 import { profitIntelligenceGate } from '@/lib/subscriptionGates';
@@ -315,15 +315,15 @@ export default function Expenses() {
                 />
                 <MetricCard
                   label="Break-even"
-                  value={formatCompactCurrency(profitProfile.breakEven)}
+                  value={profitProfile.costsKnown ? formatCompactCurrency(profitProfile.breakEven) : 'Unknown'}
                   detail="Cost basis plus linked spend"
                   tone="amber"
                 />
                 <MetricCard
                   label="Safe sale price"
-                  value={formatCompactCurrency(profitProfile.safeSalePrice)}
+                  value={profitProfile.costsKnown ? formatCompactCurrency(profitProfile.safeSalePrice) : 'Unknown'}
                   detail="Break-even plus a 15% operating buffer"
-                  tone={profitProfile.profitLoss >= 0 ? 'emerald' : 'rose'}
+                  tone={!profitProfile.costsKnown ? 'amber' : profitProfile.profitLoss >= 0 ? 'emerald' : 'rose'}
                 />
               </div>
               <div className="stack-list">
@@ -343,12 +343,22 @@ export default function Expenses() {
                       <div>
                         <div className="stack-item__title">{profile.horseName}</div>
                         <div className="stack-item__copy">
-                          Break-even {formatCurrency(profile.breakEven)} · sale value{' '}
+                          Break-even {profile.costsKnown ? formatCurrency(profile.breakEven) : 'Unknown'} · sale value{' '}
                           {formatCurrency(profile.salePrice)}
                         </div>
                       </div>
-                      <Pill tone={profile.profitLoss >= 0 ? 'emerald' : 'rose'}>
-                        {formatCurrency(profile.profitLoss)}
+                      <Pill
+                        tone={
+                          !profile.costsKnown || profile.salePrice <= 0
+                            ? 'amber'
+                            : profile.profitLoss >= 0
+                              ? 'emerald'
+                              : 'rose'
+                        }
+                      >
+                        {profile.costsKnown && profile.salePrice > 0
+                          ? formatCurrency(profile.profitLoss)
+                          : 'Unknown profit'}
                       </Pill>
                     </div>
                   </button>
@@ -379,7 +389,7 @@ export default function Expenses() {
                 <button
                   className="button button--primary button--compact"
                   type="button"
-                  onClick={() => navigate(billingPath)}
+                  onClick={() => requestFeatureUpgrade('profitIntelligence')}
                 >
                   Upgrade to unlock
                 </button>

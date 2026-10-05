@@ -29,7 +29,14 @@ type PacketDocumentInput = Pick<DocumentRecord, 'type' | 'state' | 'entities'>;
 
 type DocumentTrustInput = Pick<
   DocumentRecord,
-  'title' | 'extractedTextPreview' | 'entities' | 'state' | 'duplicateRisk' | 'confidence' | 'horseId'
+  | 'title'
+  | 'extractedTextPreview'
+  | 'entities'
+  | 'state'
+  | 'duplicateRisk'
+  | 'confidence'
+  | 'horseId'
+  | 'duplicateReason'
 >;
 
 type PacketOwnershipInput = Pick<OwnershipRecord, 'transferStatus'>;
@@ -56,6 +63,17 @@ export type SalePacketSlot = {
   status: PacketStatus;
   detail: string;
   tone: Tone;
+};
+
+/** Canonical source types for the document slots, also used to route their UI actions. */
+export const salePacketDocumentTypes: Record<
+  Exclude<SalePacketSlot['key'], 'aqha-photos'>,
+  DocumentRecord['type'][]
+> = {
+  'aqha-papers': ['Registration', 'Bill of Sale'],
+  'transfer-papers': ['Ownership Memo', 'Transfer Packet'],
+  coggins: ['Coggins'],
+  'health-cert': ['Vet Record'],
 };
 
 export type DocumentTrustProfile = {
@@ -159,7 +177,7 @@ function buildSalePacketSlot(params: {
 
 function describeDuplicateRisk(document: DocumentTrustInput) {
   if (document.duplicateRisk === 'Possible Duplicate') {
-    return 'Possible duplicate against an existing document record.';
+    return document.duplicateReason || 'Possible duplicate against an existing document record.';
   }
   if (document.duplicateRisk === 'Review') {
     return 'Related document already exists and needs side-by-side review.';
@@ -220,8 +238,8 @@ export function buildHorsePacketCompleteness(
   ownershipRecord?: PacketOwnershipInput,
   asOfDate: Date = new Date(),
 ): PacketCompleteness {
-  const registrationDocs = collectDocuments(documents, ['Registration', 'Bill of Sale']);
-  const ownershipDocs = collectDocuments(documents, ['Ownership Memo', 'Transfer Packet']);
+  const registrationDocs = collectDocuments(documents, salePacketDocumentTypes['aqha-papers']);
+  const ownershipDocs = collectDocuments(documents, salePacketDocumentTypes['transfer-papers']);
   const medicalDocs = collectDocuments(documents, ['Vet Record', 'Coggins']);
   const mediaDocs = collectDocuments(documents, ['Media Kit']);
   const hasApprovedHero = horse.gallery.some((asset) => asset.kind === 'Hero' && asset.status === 'Approved');
@@ -243,8 +261,8 @@ export function buildHorsePacketCompleteness(
   );
   const activeListing = hasActiveListing(horse);
 
-  const cogginsDocs = collectDocuments(documents, ['Coggins']);
-  const vetDocs = collectDocuments(documents, ['Vet Record']);
+  const cogginsDocs = collectDocuments(documents, salePacketDocumentTypes.coggins);
+  const vetDocs = collectDocuments(documents, salePacketDocumentTypes['health-cert']);
   const hasCurrentCoggins = hasCurrentReadyDocument(cogginsDocs, CURRENT_COGGINS_DAYS, asOfDate);
   const hasCurrentHealthSupport = hasCurrentReadyDocument(vetDocs, CURRENT_HEALTH_SUPPORT_DAYS, asOfDate);
   const medicalDocsCurrent = hasCurrentReadyDocument(medicalDocs, CURRENT_HEALTH_SUPPORT_DAYS, asOfDate);

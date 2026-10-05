@@ -4,35 +4,44 @@
 
 import { recordedDocumentPath } from './document-storage.js';
 
-export async function loadHorseContext(supabase, workspaceId, horseId) {
-  const [{ data: horse }, { data: profile }, { data: documents }, { data: ownership }] = await Promise.all([
-    supabase
-      .from('horses')
-      .select(
-        'horse_id, name, barn_name, status, registration_number, owner_name, breed, color, birthdate, gender, microchip, registry, payload',
-      )
-      .eq('workspace_id', workspaceId)
-      .eq('horse_id', horseId)
-      .maybeSingle(),
-    supabase
-      .from('workspace_profiles')
-      .select('ranch_name, business_name, default_owner_name, ranch_manager_name, operations_email')
-      .eq('workspace_id', workspaceId)
-      .maybeSingle(),
-    supabase
-      .from('documents')
-      .select('document_id, title, document_type, state, storage_path, mime_type, extracted_data, payload, created_at')
-      .eq('workspace_id', workspaceId)
-      .eq('horse_id', horseId)
-      .order('created_at', { ascending: false }),
-    supabase
-      .from('ownership_records')
-      .select('legal_owner, transfer_status, compliance_deadline')
-      .eq('workspace_id', workspaceId)
-      .eq('horse_id', horseId)
-      .order('updated_at', { ascending: false })
-      .limit(1),
-  ]);
+export async function loadHorseContext(supabase, workspaceId, horseId, { requireProfile = false } = {}) {
+  const [{ data: horse }, { data: profile, error: profileError }, { data: documents }, { data: ownership }] =
+    await Promise.all([
+      supabase
+        .from('horses')
+        .select(
+          'horse_id, name, barn_name, status, registration_number, owner_name, breed, color, birthdate, gender, microchip, registry, payload',
+        )
+        .eq('workspace_id', workspaceId)
+        .eq('horse_id', horseId)
+        .maybeSingle(),
+      supabase
+        .from('workspace_profiles')
+        .select('ranch_name, business_name, default_owner_name, ranch_manager_name, operations_email, payload')
+        .eq('workspace_id', workspaceId)
+        .maybeSingle(),
+      supabase
+        .from('documents')
+        .select(
+          'document_id, horse_id, title, document_type, state, storage_path, mime_type, extracted_data, payload, created_at',
+        )
+        .eq('workspace_id', workspaceId)
+        .eq('horse_id', horseId)
+        .order('created_at', { ascending: false }),
+      supabase
+        .from('ownership_records')
+        .select('legal_owner, transfer_status, compliance_deadline, payload')
+        .eq('workspace_id', workspaceId)
+        .eq('horse_id', horseId)
+        .order('updated_at', { ascending: false })
+        .limit(1),
+    ]);
+
+  // Packet branding must not silently disappear when its authoritative read
+  // fails. Template callers retain their existing optional-profile behavior.
+  if (requireProfile && profileError) {
+    throw new Error('Workspace profile could not be loaded. Try again before creating the sale packet.');
+  }
 
   if (!horse) {
     return { horse: null };
@@ -67,13 +76,19 @@ export async function loadHorseContext(supabase, workspaceId, horseId) {
       status: horse.status,
     },
     owner: {
-      name: ownershipRecord?.legal_owner || horse.owner_name || profile?.default_owner_name || '',
+      name: ownershipRecord?.legal_owner || horse.owner_name || '',
     },
     workspace: {
       businessName: profile?.business_name || '',
       ranchName: profile?.ranch_name || '',
+      defaultOwnerName: profile?.default_owner_name || '',
       ranchManagerName: profile?.ranch_manager_name || '',
       operationsEmail: profile?.operations_email || '',
+      // These optional fields live only in the existing profile payload. Do
+      // not spread it: unrelated payload fields cannot override row identity.
+      contactPhone: profile?.payload?.contactPhone,
+      website: profile?.payload?.website,
+      packetLogoDataUrl: profile?.payload?.packetLogoDataUrl,
     },
     health: {
       lastCogginsDate: latestCoggins?.extracted_data?.testDate || '',
