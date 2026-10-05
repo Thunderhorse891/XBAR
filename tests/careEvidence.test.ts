@@ -212,3 +212,77 @@ test('impossible ISO exam dates remain invalid when a timestamp or offset is att
     assert.notEqual(documentExamTime(coggins({ examDate })), null, `valid calendar date retained: ${examDate}`);
   }
 });
+
+test('exam calendar grammar preserves written days across formats, zones, leap years and expiry boundaries', async () => {
+  const { documentExamTime, isCurrentDatedDocument } = await import('../src/lib/documentCurrency.js');
+  const accepted: Array<[string, string]> = [
+    ['2026-10-02', '2026-10-02'],
+    ['2026-10-02Z', '2026-10-02'],
+    ['2026-10-02z', '2026-10-02'],
+    [' 2026-10-02 12:00:00 ', '2026-10-02'],
+    ['2026-10-02T12:00', '2026-10-02'],
+    ['2026-10-02t12:00:00z', '2026-10-02'],
+    ['2026-10-02T23:59:59.123456789-07:00', '2026-10-02'],
+    ['2026-10-02T12:00:00+1400', '2026-10-02'],
+    ['2026-10-03T00:00:00+14:00', '2026-10-03'],
+    ['2024-02-29T12:00:00Z', '2024-02-29'],
+    ['2000-02-29Z', '2000-02-29'],
+  ];
+  for (const [input, written] of accepted) {
+    assert.equal(documentExamTime(coggins({ examDate: input })), Date.parse(`${written}T00:00:00Z`), input);
+  }
+  const invalid = [
+    '',
+    '2026-02-30',
+    '2026-02-30Z',
+    '2026-02-30z',
+    '2026-02-30t12:00:00z',
+    ' 2026-02-30 12:00:00 ',
+    '2026-04-31T12:00:00Z',
+    '2026-02-29',
+    '1900-02-29',
+    '2026-00-01',
+    '2026-13-01',
+    '2026-01-00',
+    '2026-01-32',
+    '2026-1-02',
+    '2026-2-30',
+    '02/30/2026',
+    'February 30, 2026',
+    '10/02/2026',
+    'October 2, 2026',
+    '2026-10-02T24:00:00Z',
+    '2026-10-02T12:60:00Z',
+    '2026-10-02T12:00:60Z',
+    '2026-10-02T12:00:00+25:00',
+    '2026-10-02T12:00:00+01:99',
+    '2026-10-02T12:00:00+1:00',
+    '2026-10-02T12:00:00garbage',
+    '2026-10-02Tgarbage',
+    '2026-10-02  12:00:00',
+  ];
+  for (const input of invalid) assert.equal(documentExamTime(coggins({ examDate: input })), null, input);
+  const previous = process.env.TZ;
+  try {
+    for (const zone of ['UTC', 'America/Los_Angeles', 'Pacific/Auckland']) {
+      process.env.TZ = zone;
+      const now = new Date(2026, 9, 2, 12);
+      for (const input of ['2026-10-02', '2026-10-02T23:00:00-07:00', '2026-10-02T00:00:00+14:00']) {
+        const paper = coggins({ examDate: input });
+        assert.equal(isCurrentDatedDocument(paper, 365, now), true, `${zone}: ${input}`);
+        assert.notEqual(
+          buildCareBoardRows([horse()], [paper], [], now)[0].signals.find((s) => s.key === 'coggins')?.status,
+          'due',
+        );
+      }
+      for (const input of ['2026-10-03', '2026-10-03T00:00:00+14:00', '2026-10-03t12:00:00z']) {
+        assert.equal(isCurrentDatedDocument(coggins({ examDate: input }), 365, now), false, `${zone}: ${input}`);
+      }
+      assert.equal(isCurrentDatedDocument(coggins({ examDate: '2025-10-02T23:00:00-07:00' }), 365, now), true);
+      assert.equal(isCurrentDatedDocument(coggins({ examDate: '2025-10-01T23:00:00-07:00' }), 365, now), false);
+    }
+  } finally {
+    if (previous === undefined) delete process.env.TZ;
+    else process.env.TZ = previous;
+  }
+});

@@ -60,7 +60,10 @@ export interface GalleryAsset {
   kind: 'Hero' | 'Conformation' | 'Sale Still' | 'Pedigree' | 'Document Cover';
   url: string;
   storagePath?: string;
-  status: 'Approved' | 'Draft' | 'Pending';
+  status: 'Approved' | 'Draft' | 'Pending' | 'Archived';
+  /** Retained for reversible removal; storage bytes are never deleted here. */
+  previousStatus?: 'Approved' | 'Draft' | 'Pending';
+  isPrimary?: boolean;
 }
 
 export interface BloodlineProfile {
