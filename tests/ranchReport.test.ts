@@ -75,7 +75,7 @@ test('an empty workspace produces a report, not NaN', () => {
 
   assert.equal(report.horseCount, 0);
   assert.equal(report.money.investedToDate, 0);
-  assert.equal(report.money.monthlyBurn, 0);
+  assert.equal(report.money.monthlyBurn, null);
   assert.equal(report.readiness.average, 0);
   assert.deepEqual(report.categories, []);
 
@@ -83,6 +83,7 @@ test('an empty workspace produces a report, not NaN', () => {
   // "Infinity" to a banker is worse than one that renders nothing, and the
   // share calculation divides by the total spend — which is zero here.
   for (const [field, value] of Object.entries(report.money)) {
+    if (field === 'monthlyBurn') continue;
     assert.ok(Number.isFinite(value), `money.${field} is ${value}`);
   }
 });
@@ -121,7 +122,9 @@ test('receipts outside the trailing window do not inflate monthly burn', () => {
   const report = buildRanchReport(
     input({
       expenseReceipts: [
-        receipt({ id: 'r1', amount: 900, receiptDate: '2026-07-02' }),
+        receipt({ id: 'r1', amount: 300, receiptDate: '2026-07-02' }),
+        receipt({ id: 'r1may', amount: 300, receiptDate: '2026-05-02' }),
+        receipt({ id: 'r1june', amount: 300, receiptDate: '2026-06-02' }),
         // Two years old. Part of invested-to-date, but not of what the
         // operation costs to run right now.
         receipt({ id: 'r2', amount: 50_000, receiptDate: '2024-03-01' }),
@@ -280,7 +283,7 @@ test('horses are ordered by what they have cost', () => {
   assert.equal(report.horses[0].investedToDate, 5_000);
 });
 
-test('readiness buckets split at the thresholds the screen colours on', () => {
+test('readiness is recomputed rather than taking thresholds from stored scores', () => {
   const report = buildRanchReport(
     input({
       horses: [
@@ -293,9 +296,8 @@ test('readiness buckets split at the thresholds the screen colours on', () => {
     NOW,
   );
 
-  // Boundaries, not midpoints: 95 is ready and 94 is not, 75 is getting there
-  // and 74 is not.
-  assert.deepEqual(report.readiness, { average: 85, ready: 1, gettingThere: 2, notReady: 1 });
+  // All four only have a name; stale stored scores cannot supply evidence.
+  assert.deepEqual(report.readiness, { average: 2, ready: 0, gettingThere: 0, notReady: 4 });
 });
 
 test('the spreadsheet escapes what real names contain', () => {
@@ -457,7 +459,7 @@ test('monthly burn averages exactly the three complete months before this one', 
   const report = buildRanchReport(
     input({
       expenseReceipts: [
-        receipt({ id: 'r1', amount: 300, receiptDate: '2026-05-15' }),
+        receipt({ id: 'r1', amount: 300, receiptDate: '2026-05-01' }),
         receipt({ id: 'r2', amount: 300, receiptDate: '2026-06-15' }),
         receipt({ id: 'r3', amount: 300, receiptDate: '2026-07-15' }),
         receipt({ id: 'r4', amount: 300, receiptDate: '2026-08-15' }),
@@ -472,7 +474,7 @@ test('monthly burn averages exactly the three complete months before this one', 
   assert.equal(report.money.investedThisMonth, 300);
 });
 
-test('a quiet month lowers the burn rather than being dropped from the divisor', () => {
+test('a missing first month is not assumed to have been a quiet month', () => {
   // Guards the fix: averaging only "months that had receipts" would report
   // $600 here and overstate what the operation costs to run.
   const report = buildRanchReport(
@@ -485,7 +487,7 @@ test('a quiet month lowers the burn rather than being dropped from the divisor',
     NOW,
   );
 
-  assert.equal(report.money.monthlyBurn, 400, '1200 over three months, May included as a real quiet month');
+  assert.equal(report.money.monthlyBurn, null, 'May has no history: it cannot be assumed quiet');
 });
 
 test('per-horse monthly burn uses the same window as the herd figure', () => {
@@ -496,7 +498,7 @@ test('per-horse monthly burn uses the same window as the herd figure', () => {
     input({
       horses: [horse({ id: 'h1', name: 'Only Horse' })],
       expenseReceipts: [
-        receipt({ id: 'r1', amount: 300, horseId: 'h1', receiptDate: '2026-05-15' }),
+        receipt({ id: 'r1', amount: 300, horseId: 'h1', receiptDate: '2026-05-01' }),
         receipt({ id: 'r2', amount: 300, horseId: 'h1', receiptDate: '2026-06-15' }),
         receipt({ id: 'r3', amount: 300, horseId: 'h1', receiptDate: '2026-07-15' }),
         receipt({ id: 'r4', amount: 300, horseId: 'h1', receiptDate: '2026-08-15' }),
@@ -604,7 +606,10 @@ test('ordinary names and negative numbers survive the spreadsheet unchanged', ()
   assert.ok(csv.includes('"Docs Best Chex"'), 'an ordinary name is untouched');
   assert.ok(!csv.includes('"\'Docs'), 'an ordinary name is not prefixed');
 
-  assert.ok(report.horses[0].projectedMargin < 0, 'the fixture must actually produce a negative number');
+  assert.ok(
+    report.horses[0].projectedMargin !== null && report.horses[0].projectedMargin < 0,
+    'the fixture must actually produce a negative number',
+  );
   assert.ok(
     csv.includes(`"${report.horses[0].projectedMargin}"`),
     'a negative number stays a number rather than becoming text',
@@ -634,8 +639,12 @@ test('a purchase price counts as invested even with no receipts', () => {
 
   // Break-even carries it too, which is what the "do not go below" floor is
   // built from — the figure a seller negotiates against.
-  assert.ok(report.horses[0].breakEvenPrice >= 10_000);
-  assert.ok(report.horses[0].safeDiscountFloor > report.horses[0].breakEvenPrice);
+  assert.ok(report.horses[0].breakEvenPrice !== null && report.horses[0].breakEvenPrice >= 10_000);
+  assert.ok(
+    report.horses[0].safeDiscountFloor !== null &&
+      report.horses[0].breakEvenPrice !== null &&
+      report.horses[0].safeDiscountFloor > report.horses[0].breakEvenPrice,
+  );
 });
 
 test('invested to date is purchases plus spend, and says which is which', () => {
@@ -662,7 +671,7 @@ test('invested to date is purchases plus spend, and says which is which', () => 
   // A purchase has no date, so it cannot be attributed to a month. Counting it
   // would put a horse bought two years ago in whatever month the report ran.
   assert.equal(report.money.investedThisMonth, 800);
-  assert.equal(report.money.monthlyBurn, 0, 'an acquisition is not a recurring cost');
+  assert.equal(report.money.monthlyBurn, null, 'an acquisition establishes no recurring spend history');
 });
 
 test('category shares stay percentages of spend, not of invested to date', () => {
@@ -719,7 +728,7 @@ test('a horse the report counts as listed is never labelled unlisted', async () 
    */
   assert.match(
     source,
-    /horse\.saleInventory \? 'Asking price not set' : 'Not listed for sale'/,
+    /horse\.saleInventory\s*\? 'Asking price not set'\s*: 'Not listed for sale'/,
     'the row must distinguish "no price yet" from "not for sale"',
   );
 
@@ -1297,4 +1306,125 @@ test('equal spend resolves the leftover point by name, not by chance', () => {
     first.categories.reduce((total, row) => total + row.share, 0),
     100,
   );
+});
+
+test('financial truth: missing costs are unknown, never a 100% profit or a zero floor', () => {
+  const report = buildRanchReport(
+    input({ horses: [horse({ id: 'h1', name: 'Unknown', sale: sale({ askPrice: 20000 }) })] }),
+    NOW,
+  );
+  assert.equal(report.horses[0].projectedMargin, null);
+  assert.equal(report.horses[0].marginPercent, null);
+  assert.equal(report.horses[0].safeDiscountFloor, null);
+  assert.equal(reportDecisions(report).potentialMargin, null);
+  assert.equal(
+    reportDecisions(report).bands.reduce((sum, band) => sum + band.count, 0),
+    0,
+  );
+  assert.ok(!reportDecisions(report).actions.some((action) => action.includes('highest projected-profit')));
+});
+
+test('financial truth: sold loss cannot retain an old asking-price projection', () => {
+  const report = buildRanchReport(
+    input({
+      horses: [horse({ id: 'h1', name: 'Sold', costBasis: 10000, sale: sale({ askPrice: 20000 }) })],
+      expenseReceipts: [receipt({ id: 'cost', horseId: 'h1', amount: 900 })],
+      salesLeads: [lead({ id: 'won', outcome: 'Won', offerAmount: 5000 })],
+    }),
+    NOW,
+  );
+  assert.equal(report.horses[0].projectedMargin, null);
+  assert.equal(report.horses[0].askPrice, 0);
+  const csv = ranchReportToCsv(report);
+  assert.ok(csv.includes('-5900'), 'closed-sale loss is exported separately');
+  assert.ok(!csv.includes('20000'), 'old ask is not represented as current value');
+});
+
+test('financial truth: Reports and Sales use the same recorded-cost floor', async () => {
+  const { buildHorseProfitProfile } = await import('../src/lib/profitIntelligence.js');
+  const h = horse({ id: 'h1', name: 'Parity', costBasis: 10000, sale: sale({ askPrice: 20000 }) });
+  const receipts = ['2026-05-01', '2026-06-01', '2026-07-01'].map((receiptDate, i) =>
+    receipt({ id: `r${i}`, horseId: h.id, amount: 300, receiptDate }),
+  );
+  const report = buildRanchReport(input({ horses: [h], expenseReceipts: receipts }), NOW);
+  const sales = buildHorseProfitProfile(h, receipts, []);
+  assert.equal(report.horses[0].breakEvenPrice, sales.breakEven);
+  assert.equal(report.horses[0].safeDiscountFloor, sales.safeSalePrice);
+});
+
+test('financial truth: stored readiness cannot overrule current blockers', () => {
+  const report = buildRanchReport(
+    input({
+      horses: [
+        horse({
+          id: 'h1',
+          name: 'Blocked',
+          sale: sale({ askPrice: 20000 }),
+          readiness: { score: 100 } as HorseRecord['readiness'],
+        }),
+      ],
+    }),
+    NOW,
+  );
+  assert.ok(report.horses[0].blockers.length > 0);
+  assert.equal(report.readiness.ready, 0);
+  assert.ok(report.horses[0].readinessScore < 95);
+});
+
+test('financial truth: a newly recorded month is insufficient history, not three zero-filled months', () => {
+  const report = buildRanchReport(
+    input({
+      expenseReceipts: [
+        receipt({ id: 'first', amount: 600, receiptDate: '2026-07-10' }),
+        receipt({ id: 'current', amount: 300 }),
+      ],
+    }),
+    NOW,
+  );
+  assert.equal(report.money.monthlyBurn, null);
+  assert.deepEqual(report.anomalies, []);
+});
+
+test('financial truth: future and invalid receipts are excluded from spent amounts', () => {
+  const report = buildRanchReport(
+    input({
+      horses: [horse({ id: 'h1', name: 'Dates', costBasis: 10000, sale: sale({ askPrice: 20000 }) })],
+      expenseReceipts: [
+        receipt({ id: 'future', horseId: 'h1', amount: 5000, receiptDate: '2026-08-22' }),
+        receipt({ id: 'invalid', horseId: 'h1', amount: 3000, receiptDate: '2026-02-30' }),
+      ],
+    }),
+    NOW,
+  );
+  assert.equal(report.money.receiptSpend, 0);
+  assert.equal(report.money.investedThisMonth, 0);
+  assert.equal(report.horses[0].investedToDate, 10000);
+  assert.deepEqual(report.categories, []);
+});
+
+test('financial truth: an old stray receipt cannot certify missing intervening months', () => {
+  const report = buildRanchReport(
+    input({
+      expenseReceipts: [
+        receipt({ id: 'old', amount: 100, receiptDate: '2024-01-01' }),
+        receipt({ id: 'prior', amount: 900, receiptDate: '2026-07-10' }),
+        receipt({ id: 'current', amount: 400 }),
+      ],
+    }),
+    NOW,
+  );
+  assert.equal(report.money.monthlyBurn, null);
+  assert.deepEqual(report.anomalies, []);
+  assert.equal(report.spendHistory.completeness, 'unconfirmed');
+  assert.deepEqual(report.spendHistory.observedMonths, ['2026-07']);
+});
+
+test('financial truth: unusable cost dates cannot silently lower the safe sale decision', async () => {
+  const { buildOfferDecision } = await import('../src/lib/profitIntelligence.js');
+  const h = horse({ id: 'h1', name: 'Incomplete', costBasis: 10000, sale: sale({ askPrice: 20000 }) });
+  const receipts = [receipt({ id: 'broken', horseId: 'h1', amount: 9000, receiptDate: 'not a date' })];
+  const report = buildRanchReport(input({ horses: [h], expenseReceipts: receipts }), NOW);
+  assert.equal(report.horses[0].projectedMargin, null);
+  assert.equal(report.horses[0].safeDiscountFloor, null);
+  assert.equal(buildOfferDecision(h, receipts, 12000).status, 'missing-costs');
 });
