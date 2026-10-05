@@ -28,7 +28,7 @@ def resized(width):
 
 def exports():
     yield 'xbar-original-lockup-480.png', resized(480)
-    for side in (32, 64, 180, 192, 512):
+    for side in (32, 64, 180, 192, 512, 1024):
         width = side if side == 32 else round(side * .92)
         art = resized(width)
         canvas = Image.new('RGB', (side, side), silver)

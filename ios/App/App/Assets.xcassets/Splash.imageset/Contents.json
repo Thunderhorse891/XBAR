@@ -1,0 +1,7 @@
+{
+  "images" : [{ "idiom": "universal", "filename": "xbar-report-horse.png" }],
+  "info" : {
+    "version" : 1,
+    "author" : "xcode"
+  }
+}

@@ -34,8 +34,8 @@ test('the UUID used by xcode rejects out-of-bounds name-based UUID writes', () =
 test('xcode retains CommonJS UUID generation and project parse/write compatibility', async () => {
   const directory = mkdtempSync(join(tmpdir(), 'xbar xcode '));
   try {
-    // Main does not track a native app. Exercise the project shipped in the
-    // pinned official CLI, using the CLI's own portable archive dependency.
+    // Keep the official CLI template covered as well as the tracked XBAR
+    // project, using the CLI's own portable archive dependency.
     const cliPackage = require.resolve('@capacitor/cli/package.json');
     const cliRequire = createRequire(cliPackage);
     const archive = join(dirname(cliPackage), 'assets', 'ios-spm-template.tar.gz');
@@ -57,6 +57,30 @@ test('xcode retains CommonJS UUID generation and project parse/write compatibili
     writeFileSync(output, project.writeSync());
     const reparsed = xcode.project(output).parseSync();
     assert.deepEqual(reparsed.hash, project.hash);
+    assert.equal(readFileSync(source, 'utf8'), original);
+  } finally {
+    rmSync(directory, { recursive: true, force: true });
+  }
+});
+
+test('the current XBAR native project survives the pinned xcode parse/write roundtrip', () => {
+  const source = 'ios/App/App.xcodeproj/project.pbxproj';
+  const original = readFileSync(source, 'utf8');
+  const directory = mkdtempSync(join(tmpdir(), 'xbar tracked native '));
+  try {
+    const project = xcode.project(source).parseSync();
+    const existingIds = new Set(project.allUuids());
+    const generated = new Set();
+    for (let index = 0; index < 100; index += 1) {
+      const id = project.generateUuid();
+      assert.match(id, /^[A-F0-9]{24}$/);
+      assert.ok(!existingIds.has(id));
+      assert.ok(!generated.has(id));
+      generated.add(id);
+    }
+    const output = join(directory, 'roundtrip.pbxproj');
+    writeFileSync(output, project.writeSync());
+    assert.deepEqual(xcode.project(output).parseSync().hash, project.hash);
     assert.equal(readFileSync(source, 'utf8'), original);
   } finally {
     rmSync(directory, { recursive: true, force: true });

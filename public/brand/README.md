@@ -125,6 +125,14 @@ variant keeps the complete artwork within the safe area. The master hash is
 pinned by tests. A is available only inside the supplied visual reference, so
 no extracted or invented A asset is used.
 
+The native iOS App Store icon uses `xbar-original-icon-1024.png`, copied
+byte-for-byte into `ios/App/App/Assets.xcassets/AppIcon.appiconset/AppIcon-512@2x.png`.
+It uses the same complete original master and silver framing as the smaller
+original icons: a proportional 942 × 530 resize centered on an opaque 1024 × 1024
+RGB canvas. `scripts/brand/original-build.py --verify` checks its decoded pixels;
+the native branding test pins the master and the canonical/native byte equality.
+The native launch screen uses the unchanged `xbar-report-horse.png` master.
+
 The old `xbar-signature-horse*`, email/print/icon derivatives and traced paths
 are retained as historical review files and have no live logo consumers. The
 approximate outline overlay is removed rather than tracing a different horse
