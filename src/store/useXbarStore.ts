@@ -1,4 +1,4 @@
-import { changeHorsePhoto } from '@/lib/horsePhotoGallery';
+import { changeHorsePhoto, reconcileHorsePhotoReadiness } from '@/lib/horsePhotoGallery';
 import { useEffect, useState } from 'react';
 import { normalizePacketWebsite, validatePacketProfile } from '../../api/_lib/packet-branding.js';
 import { create } from 'zustand';
@@ -19,7 +19,7 @@ import { normalizeWorkspaceEmail, validateWorkspaceInvitation } from '@/lib/work
 import { apiConfig, isRelationalCloudEnabled, isSupabaseConfigured } from '@/lib/platformConfig';
 import { useCloudStore } from '@/store/useCloudStore';
 import { hasRoleCapability } from '@/lib/permissions';
-import { hasHorsePhoto, isHorsePhotoAsset } from '@/lib/animalPassport';
+import { isHorsePhotoAsset } from '@/lib/animalPassport';
 import { groupDocumentBatchCandidates } from '@/lib/documentBatchIdentity';
 import { flagDocumentDuplicates, documentDuplicateNeedsReview, fingerprintDocument } from '@/lib/documentDuplicates';
 import { extractionProducedNothing } from '@/lib/documentIntelligence';
@@ -1720,7 +1720,13 @@ export const useXbarStore = create<XbarStore>()(
         if (!result.ok) return result;
         set((state) => ({
           horses: state.horses.map((item) =>
-            item.id === horseId ? { ...item, gallery: result.gallery, profileImage: result.profileImage } : item,
+            item.id === horseId
+              ? reconcileHorsePhotoReadiness(
+                  item,
+                  { ...item, gallery: result.gallery, profileImage: result.profileImage },
+                  state,
+                )
+              : item,
           ),
         }));
         return {
@@ -1750,9 +1756,6 @@ export const useXbarStore = create<XbarStore>()(
         if (!targetHorse) {
           return { ok: false, message: 'Horse record not found for this media upload.' };
         }
-        // Whether a qualifying photo already exists decides if this upload earns
-        // the one-time photo readiness credit or is just a replacement.
-        const priorHasPhoto = hasHorsePhoto(targetHorse);
 
         // Pre-flight against the whole selection so we never start uploads that
         // clearly cannot fit; the actual charge below is only for retained files.
@@ -1845,47 +1848,33 @@ export const useXbarStore = create<XbarStore>()(
           // the avatar or satisfy the Photo requirement even when makePrimary.
           const primaryPhotoAsset = makePrimary ? uploadedAssets.find((asset) => isHorsePhotoAsset(asset)) : undefined;
 
-          // The photo readiness credit is a one-time transition (no qualifying
-          // photo -> a real one). Replacing an existing photo updates the image
-          // but must not keep inflating the completeness score or re-toggle state.
-          const projectedProfile = primaryPhotoAsset ? primaryPhotoAsset.url : targetHorse.profileImage;
-          const gainedFirstPhoto =
-            !priorHasPhoto &&
-            hasHorsePhoto({ profileImage: projectedProfile, gallery: [...uploadedAssets, ...targetHorse.gallery] });
-
+          // Reconcile a first-photo transition against the current store at commit,
+          // including records that changed while upload awaited storage.
           set((current) => ({
             horses: current.horses.map((horse) =>
               horse.id === horseId
-                ? {
-                    ...horse,
-                    profileImage: primaryPhotoAsset ? primaryPhotoAsset.url : horse.profileImage,
-                    gallery: [...uploadedAssets, ...horse.gallery].map((asset) =>
-                      primaryPhotoAsset ? { ...asset, isPrimary: asset.id === primaryPhotoAsset.id } : asset,
-                    ),
-                    readiness: gainedFirstPhoto
-                      ? {
-                          ...horse.readiness,
-                          score: Math.min(100, horse.readiness.score + 5),
-                          packetStatus:
-                            horse.readiness.packetStatus === 'Needs Photos' ? 'Ready' : horse.readiness.packetStatus,
-                          blockers: horse.readiness.blockers.filter(
-                            (blocker) => blocker !== 'Hero image missing' && blocker !== 'Sale photos missing',
-                          ),
-                        }
-                      : horse.readiness,
-                    sale: gainedFirstPhoto ? { ...horse.sale, socialReady: true } : horse.sale,
-                    activity: [
-                      {
-                        id: createId('activity'),
-                        date: todayStamp(),
-                        title: 'Media uploaded',
-                        summary: `${uploadedAssets.length} media asset${uploadedAssets.length === 1 ? '' : 's'} added to the horse profile.`,
-                        owner: 'Media Desk',
-                        category: 'Sales' as const,
-                      },
-                      ...horse.activity,
-                    ],
-                  }
+                ? reconcileHorsePhotoReadiness(
+                    horse,
+                    {
+                      ...horse,
+                      profileImage: primaryPhotoAsset ? primaryPhotoAsset.url : horse.profileImage,
+                      gallery: [...uploadedAssets, ...horse.gallery].map((asset) =>
+                        primaryPhotoAsset ? { ...asset, isPrimary: asset.id === primaryPhotoAsset.id } : asset,
+                      ),
+                      activity: [
+                        {
+                          id: createId('activity'),
+                          date: todayStamp(),
+                          title: 'Media uploaded',
+                          summary: `${uploadedAssets.length} media asset${uploadedAssets.length === 1 ? '' : 's'} added to the horse profile.`,
+                          owner: 'Media Desk',
+                          category: 'Sales' as const,
+                        },
+                        ...horse.activity,
+                      ],
+                    },
+                    current,
+                  )
                 : horse,
             ),
             subscription: {
