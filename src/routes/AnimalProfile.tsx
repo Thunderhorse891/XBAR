@@ -334,7 +334,13 @@ export default function AnimalProfile() {
           >
             Add Health
           </ActionButton>
-          <ActionButton size="sm" icon={<Upload size={14} />} onClick={() => navigate('/documents')}>
+          <ActionButton
+            size="sm"
+            icon={<Upload size={14} />}
+            onClick={() =>
+              navigate(`/documents?${new URLSearchParams({ horse: animal.id, from: 'profile', upload: '1' })}`)
+            }
+          >
             Upload Doc
           </ActionButton>
           {canUploadMedia && !photoUrl ? (
@@ -346,7 +352,7 @@ export default function AnimalProfile() {
             size="sm"
             variant="primary"
             icon={<FileText size={14} />}
-            onClick={() => navigate('/sale-packets')}
+            onClick={() => navigate(`/sale-packets?${new URLSearchParams({ horse: animal.id })}`)}
           >
             Build Sale Packet
           </ActionButton>
@@ -461,7 +467,11 @@ export default function AnimalProfile() {
                     Open Care Tasks
                   </ActionButton>
                 )}
-                <ActionButton size="sm" variant="primary" onClick={() => navigate('/sale-packets')}>
+                <ActionButton
+                  size="sm"
+                  variant="primary"
+                  onClick={() => navigate(`/sale-packets?${new URLSearchParams({ horse: animal.id })}`)}
+                >
                   Open Sale Packets
                 </ActionButton>
               </div>
