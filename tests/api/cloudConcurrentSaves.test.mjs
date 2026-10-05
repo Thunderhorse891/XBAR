@@ -32,7 +32,7 @@ const ids = {
   workspace_profiles: 'workspace_id',
   workspaces: 'id',
 };
-function fixture(remote = {}, beforeUpdate) {
+function fixture(remote = {}, beforeUpdate, controls = {}) {
   const data = new Map(
     Object.entries({
       workspaces: [{ id: 'ranch-a', owner_user_id: 'user-a', workspace_key: 'primary' }],
@@ -64,7 +64,12 @@ function fixture(remote = {}, beforeUpdate) {
       let action = 'read',
         values,
         filters = [],
-        single = false;
+        single = false,
+        columns = '*',
+        queryOptions = {},
+        first = 0,
+        last = Infinity,
+        orderColumn;
       const matches = (row) =>
         filters.every(([key, value]) =>
           key === 'payload'
@@ -76,6 +81,8 @@ function fixture(remote = {}, beforeUpdate) {
       const execute = () => {
         calls.push({ table, action, values: clone(values), filters });
         const rows = data.get(table) ?? [];
+        const injected = controls.beforeWrite?.({ table, action, values, rows, client, first, last, queryOptions });
+        if (injected) return injected;
         if (action === 'update') beforeUpdate?.(table, rows);
         let selected = rows.filter(matches);
         if (action === 'upsert' || action === 'insert') {
@@ -96,10 +103,33 @@ function fixture(remote = {}, beforeUpdate) {
             table,
             rows.filter((row) => !matches(row)),
           );
-        return { data: single ? (selected[0] ?? null) : selected, error: null };
+        const count = selected.length;
+        if (action === 'read') {
+          if (orderColumn)
+            selected = [...selected].sort((a, b) => String(a[orderColumn]).localeCompare(String(b[orderColumn])));
+          selected = selected.slice(first, Math.min(last + 1, first + (controls.readCap ?? Infinity)));
+        }
+        if (columns !== '*')
+          selected = selected.map((row) =>
+            Object.fromEntries(
+              columns
+                .split(',')
+                .map((key) => key.trim())
+                .filter((key) => Object.hasOwn(row, key))
+                .map((key) => [key, row[key]]),
+            ),
+          );
+        const result = {
+          data: single ? (selected[0] ?? null) : selected,
+          error: null,
+          ...(queryOptions.count === 'exact' ? { count } : {}),
+        };
+        return controls.afterResult?.({ table, action, values, result, client }) ?? result;
       };
       const chain = {
-        select() {
+        select(value = '*', opts = {}) {
+          columns = value;
+          queryOptions = opts;
           return chain;
         },
         eq(k, v) {
@@ -113,7 +143,13 @@ function fixture(remote = {}, beforeUpdate) {
         limit() {
           return chain;
         },
-        order() {
+        order(column) {
+          orderColumn = column;
+          return chain;
+        },
+        range(from, to) {
+          first = from;
+          last = to;
           return chain;
         },
         upsert(v) {
@@ -133,6 +169,9 @@ function fixture(remote = {}, beforeUpdate) {
         },
         delete() {
           action = 'delete';
+          return chain;
+        },
+        returns() {
           return chain;
         },
         single() {
@@ -677,4 +716,200 @@ test('verified new-owner first setup creates only the authenticated owned ranch'
   assert.equal(f.data.get('workspace_memberships')[0].user_id, 'user-a');
   assert.equal(f.data.get('workspace_memberships')[0].role, 'Admin');
   assert.equal(f.data.get('horses').length, 0, 'no prior account records ride along with creation');
+});
+
+for (const count of [5000, 20000]) {
+  test(`explicit replacement of ${count} documents uses bounded batch requests`, async () => {
+    const f = fixture({ documents: [] });
+    const current = backup();
+    current.workspace.documents = Array.from({ length: count }, (_, i) => ({
+      id: `document-${String(i).padStart(5, '0')}`,
+      title: `Document ${i}`,
+      horseId: 'horse-a',
+      type: 'Other',
+      source: 'Uploaded',
+      state: 'Ready',
+      fileSizeBytes: 1,
+    }));
+    const result = await saveWorkspaceBackupToCloud(current, { replace: true });
+    assert.equal(result.ok, true, result.message);
+    const writes = f.calls.filter((call) => call.table === 'documents' && call.action === 'upsert');
+    assert.ok(writes.length <= count / 50, `${writes.length} document HTTP writes is not bounded batching`);
+    assert.ok(f.calls.length <= count / 10, `${f.calls.length} total database requests regresses to per-record work`);
+    assert.equal(f.data.get('documents').length, count);
+    assert.equal(f.data.get('documents').at(-1).document_id, `document-${String(count - 1).padStart(5, '0')}`);
+  });
+}
+
+function replacementDocuments(count, note = '') {
+  return Array.from({ length: count }, (_, i) => ({
+    id: `document-${String(i).padStart(5, '0')}`,
+    title: `Document ${i}`,
+    horseId: 'horse-a',
+    type: 'Other',
+    source: 'Uploaded',
+    state: 'Ready',
+    notes: note,
+  }));
+}
+for (const failure of [
+  'second-batch',
+  'missing-row',
+  'duplicate-row',
+  'wrong-workspace',
+  'changed-payload',
+  'account-change',
+  'ranch-change',
+  'role-change',
+  'auth-error',
+  'auth-throw',
+  'network-throw',
+]) {
+  test(`replacement batches refuse ${failure} without reporting complete or writing a recovery fallback`, async () => {
+    let documentWrites = 0;
+    const f = fixture({ documents: [] }, undefined, {
+      beforeWrite({ table, action }) {
+        if (table !== 'documents' || action !== 'upsert') return;
+        documentWrites++;
+        if (failure === 'network-throw' && documentWrites === 2) throw new Error('Synthetic transport interrupted');
+        if (failure === 'second-batch' && documentWrites === 2)
+          return { data: null, error: { message: 'synthetic rejected batch' } };
+      },
+      afterResult({ table, action, result, client }) {
+        if (table !== 'documents' || action !== 'upsert' || documentWrites !== 1) return;
+        if (failure === 'missing-row') return { ...result, data: result.data.slice(1) };
+        if (failure === 'duplicate-row') return { ...result, data: [...result.data.slice(1), result.data[1]] };
+        if (failure === 'wrong-workspace')
+          return {
+            ...result,
+            data: result.data.map((row, i) => (i === 0 ? { ...row, workspace_id: 'other-ranch' } : row)),
+          };
+        if (failure === 'changed-payload')
+          return {
+            ...result,
+            data: result.data.map((row, i) =>
+              i === 0 ? { ...row, payload: { ...row.payload, title: 'Unrequested' } } : row,
+            ),
+          };
+        if (failure === 'auth-error')
+          client.auth.getSession = async () => ({
+            data: { session: null },
+            error: { message: 'Synthetic auth failure' },
+          });
+        if (failure === 'auth-throw')
+          client.auth.getSession = async () => {
+            throw new Error('Synthetic auth transport failure');
+          };
+        if (failure === 'account-change')
+          client.auth.getSession = async () => ({
+            data: { session: { user: { id: 'replacement-user' } } },
+            error: null,
+          });
+        if (failure === 'ranch-change')
+          f.data.set('workspaces', [{ id: 'other-ranch', owner_user_id: 'user-a', workspace_key: 'primary' }]);
+        if (failure === 'role-change') {
+          f.data.set('workspaces', []);
+          f.data.set('workspace_memberships', [
+            { workspace_id: 'ranch-a', user_id: 'user-a', status: 'active', role: 'Medical Lead' },
+          ]);
+        }
+      },
+    });
+    const current = backup();
+    current.workspace.documents = replacementDocuments(250);
+    const result = await saveWorkspaceBackupToCloud(current, { replace: true });
+    assert.equal(result.ok, false);
+    assert.match(result.message, /replacement|batch|confirmed/i);
+    assert.ok(documentWrites <= 2);
+    assert.equal(f.data.get('documents').length, 100, 'earlier committed rows remain visible as partial work');
+    assert.equal(
+      result.relationalRowsPersisted,
+      false,
+      'partial document batches do not release the whole pending reservation',
+    );
+    assert.equal(
+      f.calls.some((call) => call.table === supabaseConfig.workspaceTable && call.action === 'upsert'),
+      false,
+    );
+  });
+}
+test('replacement byte budget splits large JSON payloads into bounded requests', async () => {
+  const f = fixture({ documents: [] });
+  const current = backup();
+  current.workspace.documents = replacementDocuments(150, '🐴'.repeat(5000));
+  const result = await saveWorkspaceBackupToCloud(current, { replace: true });
+  assert.equal(result.ok, true, result.message);
+  const writes = f.calls.filter((call) => call.table === 'documents' && call.action === 'upsert');
+  assert.ok(writes.length > 2);
+  for (const write of writes) assert.ok(Buffer.byteLength(JSON.stringify(write.values)) <= 512 * 1024);
+});
+for (const failPage of [false, true]) {
+  test(`replacement existing-ID scan beyond cap ${failPage ? 'refuses a later-page failure' : 'deletes the last stale record'}`, async () => {
+    const docs = replacementDocuments(1203);
+    const f = fixture(
+      {
+        documents: docs.map((payload) => ({
+          workspace_id: 'ranch-a',
+          document_id: payload.id,
+          payload,
+          updated_at: '2026-10-01T00:00:00Z',
+        })),
+      },
+      undefined,
+      {
+        readCap: 137,
+        beforeWrite({ table, action, first, queryOptions }) {
+          if (failPage && table === 'documents' && action === 'read' && queryOptions.count === 'exact' && first > 0)
+            return { data: null, error: { message: 'later page failed' }, count: 1203 };
+        },
+      },
+    );
+    const current = backup();
+    current.workspace.documents = docs.slice(0, -1);
+    const result = await saveWorkspaceBackupToCloud(current, { replace: true });
+    assert.equal(result.ok, !failPage, result.message);
+    assert.equal(f.data.get('documents').length, failPage ? 1203 : 1202);
+    if (failPage)
+      assert.equal(
+        f.calls.some((call) => call.table === 'documents' && call.action !== 'read'),
+        false,
+      );
+    else
+      assert.equal(
+        f.data.get('documents').some((row) => row.document_id === docs.at(-1).id),
+        false,
+      );
+  });
+}
+test('replacement refuses duplicate source IDs across batch boundaries', async () => {
+  const f = fixture({ documents: [] });
+  const current = backup();
+  current.workspace.documents = replacementDocuments(101);
+  current.workspace.documents[100].id = current.workspace.documents[0].id;
+  const result = await saveWorkspaceBackupToCloud(current, { replace: true });
+  assert.equal(result.ok, false);
+  assert.equal(
+    f.calls.some((call) => call.table === 'documents' && call.action !== 'read'),
+    false,
+  );
+});
+
+test('a later collection failure still reports fully confirmed document persistence', async () => {
+  const f = fixture({ documents: [] }, undefined, {
+    beforeWrite({ table, action }) {
+      if (table === 'intake_batches' && action === 'upsert')
+        return { data: null, error: { message: 'Synthetic later collection failure' } };
+    },
+  });
+  const current = backup();
+  current.workspace.documents = replacementDocuments(150);
+  current.workspace.intakeBatches = [{ id: 'intake-a', label: 'New intake' }];
+  const result = await saveWorkspaceBackupToCloud(current, { replace: true });
+  assert.equal(result.ok, false);
+  assert.equal(result.relationalRowsPersisted, true);
+  assert.equal(f.data.get('documents').length, 150);
+  assert.equal(
+    f.calls.some((call) => call.table === supabaseConfig.workspaceTable && call.action === 'upsert'),
+    false,
+  );
 });

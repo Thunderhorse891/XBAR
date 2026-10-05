@@ -868,6 +868,61 @@ function normalizationPreservesStoredFields(stored: unknown, normalized: unknown
   return stableStringify(stored) === stableStringify(normalized);
 }
 
+const REPLACEMENT_BATCH_ROWS = 100;
+const REPLACEMENT_BATCH_BYTES = 512 * 1024;
+
+function* replacementBatches(rows: Record<string, unknown>[]) {
+  const shapes = new Map<string, Record<string, unknown>[]>();
+  for (const row of rows) {
+    // PostgREST computes array columns before JSON drops undefined values.
+    // Keep identical defined-column shapes together so omissions retain the
+    // old single-row defaults/preservation semantics; explicit null stays null.
+    const defined = Object.fromEntries(Object.entries(row).filter(([, value]) => value !== undefined));
+    const shape = Object.keys(defined).sort().join(',');
+    const group = shapes.get(shape) ?? [];
+    group.push(defined);
+    shapes.set(shape, group);
+  }
+  const encoder = new TextEncoder();
+  for (const group of shapes.values()) {
+    let batch: Record<string, unknown>[] = [];
+    let bytes = 2;
+    for (const row of group) {
+      const rowBytes = encoder.encode(JSON.stringify(row)).byteLength + 1;
+      if (batch.length && (batch.length >= REPLACEMENT_BATCH_ROWS || bytes + rowBytes > REPLACEMENT_BATCH_BYTES)) {
+        yield batch;
+        batch = [];
+        bytes = 2;
+      }
+      batch.push(row);
+      bytes += rowBytes;
+    }
+    if (batch.length) yield batch;
+  }
+}
+
+async function verifyReplacementContext(expected: CloudRecoveryContext) {
+  try {
+    const session = await getActiveSession();
+    const access =
+      session?.user.id === expected.userId
+        ? await loadWorkspaceAccessProfile(session, { forEntitlements: true })
+        : null;
+    if (
+      !access ||
+      access.lookupFailed ||
+      access.workspaceId !== expected.workspaceId ||
+      access.workspaceRole !== expected.workspaceRole
+    ) {
+      throw new Error('The account, ranch or permissions changed.');
+    }
+  } catch {
+    throw new WorkspaceSaveAccessError(
+      'Cloud replacement stopped because current account, ranch or permissions could not be verified. Earlier confirmed batches may have saved; your local copy is retained.',
+    );
+  }
+}
+
 async function replaceWorkspaceRows(params: {
   table:
     | 'horses'
@@ -884,6 +939,7 @@ async function replaceWorkspaceRows(params: {
   removal: RowRemoval;
   baselineRecords?: { id?: unknown }[];
   overwrite?: boolean;
+  overwriteContext?: CloudRecoveryContext;
   onPersisted?: (id: string, payload: unknown) => void;
   normalizeRemote?: (payload: unknown) => unknown;
 }) {
@@ -894,18 +950,38 @@ async function replaceWorkspaceRows(params: {
 
   const { table, idColumn, workspaceId, rows, removal } = params;
   const nextIds = new Set(rows.map((row) => String(row[idColumn])));
+  if (
+    params.overwrite &&
+    (nextIds.size !== rows.length ||
+      rows.some((row) => row.workspace_id !== workspaceId || typeof row[idColumn] !== 'string' || !row[idColumn]))
+  ) {
+    throw new WorkspaceSaveConflictError(
+      'Cloud replacement incomplete: invalid or repeated record identities. Earlier tables may have saved; your local copy is retained.',
+    );
+  }
 
   // Only a Push cloud (`absent`) reads what the cloud holds; an ordinary save
   // deletes the ids a person deleted and nothing else -- see RowRemoval.
   let existingIds: string[] = [];
   if (removal.mode === 'absent') {
-    const { data: existingRows, error: existingError } = await client
-      .from(table)
-      .select(idColumn)
-      .eq('workspace_id', workspaceId);
+    if (params.overwriteContext) await verifyReplacementContext(params.overwriteContext);
+    const { data: existingRows, error: existingError } = await loadCompleteCloudRows<Record<string, unknown>>({
+      table,
+      idColumn,
+      readPage: (from, to) =>
+        client
+          .from(table)
+          .select(`${idColumn},updated_at`, { count: 'exact' })
+          .eq('workspace_id', workspaceId)
+          .order(idColumn, { ascending: true })
+          .range(from, to)
+          .returns<Record<string, unknown>[]>(),
+    });
 
     if (existingError) {
-      throw new Error(existingError.message);
+      throw new WorkspaceSaveConflictError(
+        `Cloud replacement incomplete: ${existingError.message} Earlier confirmed batches may have saved; your local copy is retained.`,
+      );
     }
 
     existingIds = ((existingRows ?? []) as unknown as Array<Record<string, unknown>>).map((row) =>
@@ -914,21 +990,64 @@ async function replaceWorkspaceRows(params: {
   }
   const staleIds = idsToRemove(removal, nextIds, existingIds);
 
-  for (const row of rows) {
-    const payload = await writeConcurrentRow({
-      table,
-      idColumn,
-      workspaceId,
-      row,
-      baseline: params.baselineRecords?.find((record) => record.id === row[idColumn]),
-      normalizeRemote: params.normalizeRemote,
-      overwrite: params.overwrite === true,
-    });
-    params.onPersisted?.(String(row[idColumn]), payload);
+  if (params.overwrite && params.overwriteContext) {
+    for (const batch of replacementBatches(rows)) {
+      await verifyReplacementContext(params.overwriteContext);
+      const expected = new Map(batch.map((row) => [row[idColumn], row]));
+      if (
+        expected.size !== batch.length ||
+        batch.some((row) => row.workspace_id !== workspaceId || typeof row[idColumn] !== 'string' || !row[idColumn])
+      ) {
+        throw new WorkspaceSaveConflictError(
+          'Cloud replacement contains invalid or repeated record identities. Your local copy is retained.',
+        );
+      }
+      const { data, error } = await client
+        .from(table)
+        .upsert(batch, { onConflict: `workspace_id,${idColumn}` })
+        .select(`${idColumn},workspace_id,payload`);
+      const confirmed = new Set<string>();
+      if (!error && Array.isArray(data)) {
+        for (const saved of data) {
+          if (!isRecord(saved)) break;
+          const requested = expected.get(saved[idColumn]);
+          if (
+            !requested ||
+            saved.workspace_id !== workspaceId ||
+            typeof saved[idColumn] !== 'string' ||
+            confirmed.has(saved[idColumn]) ||
+            stableStringify(saved.payload) !== stableStringify(requested.payload)
+          )
+            break;
+          confirmed.add(saved[idColumn]);
+        }
+      }
+      if (error || !Array.isArray(data) || data.length !== batch.length || confirmed.size !== batch.length) {
+        throw new WorkspaceSaveConflictError(
+          `Cloud replacement incomplete for ${table}: ${error?.message ?? 'not every requested record was confirmed'}. Earlier confirmed batches may have saved; your local copy is retained.`,
+        );
+      }
+      // Overwrite payloads were verified unchanged. The recovery copy already
+      // contains them; per-row merge callbacks would add quadratic copying.
+    }
+  } else {
+    for (const row of rows) {
+      const payload = await writeConcurrentRow({
+        table,
+        idColumn,
+        workspaceId,
+        row,
+        baseline: params.baselineRecords?.find((record) => record.id === row[idColumn]),
+        normalizeRemote: params.normalizeRemote,
+        overwrite: params.overwrite === true,
+      });
+      params.onPersisted?.(String(row[idColumn]), payload);
+    }
   }
   // Ordinary deletes also compare the version this device actually saw.
   // An explicit administrator replacement retains its separate whole-copy contract.
   for (const id of staleIds) {
+    if (params.overwriteContext) await verifyReplacementContext(params.overwriteContext);
     const { data: remote, error: readError } = await client
       .from(table)
       .select('payload, updated_at')
@@ -1018,8 +1137,9 @@ async function saveWorkspaceBackupToRelationalCloud(
     };
   }
 
-  // Set the moment the documents upsert commits, and reported even when a LATER
-  // table fails: those rows are in the database whatever happens next.
+  // True only after every requested document write is confirmed. A partial
+  // replacement keeps reservations conservative until retry; later-table
+  // failure after complete document writes still reports their persistence.
   let documentsPersisted = false;
 
   try {
@@ -1088,6 +1208,7 @@ async function saveWorkspaceBackupToRelationalCloud(
       normalizeRemote: normalizeRemote('horses'),
       baselineRecords: baseline?.horses,
       overwrite: options.replace === true,
+      overwriteContext: options.replace ? { userId: session.user.id, workspaceId, workspaceRole: 'Admin' } : undefined,
       idColumn: 'horse_id',
       removal: removal('horses'),
       workspaceId,
@@ -1111,6 +1232,7 @@ async function saveWorkspaceBackupToRelationalCloud(
       normalizeRemote: normalizeRemote('documents'),
       baselineRecords: baseline?.documents,
       overwrite: options.replace === true,
+      overwriteContext: options.replace ? { userId: session.user.id, workspaceId, workspaceRole: 'Admin' } : undefined,
       idColumn: 'document_id',
       removal: removal('documents'),
       workspaceId,
@@ -1142,6 +1264,7 @@ async function saveWorkspaceBackupToRelationalCloud(
       normalizeRemote: normalizeRemote('intakeBatches'),
       baselineRecords: baseline?.intakeBatches,
       overwrite: options.replace === true,
+      overwriteContext: options.replace ? { userId: session.user.id, workspaceId, workspaceRole: 'Admin' } : undefined,
       idColumn: 'intake_batch_id',
       removal: removal('intake_batches'),
       workspaceId,
@@ -1163,6 +1286,7 @@ async function saveWorkspaceBackupToRelationalCloud(
       normalizeRemote: normalizeRemote('ownershipRecords'),
       baselineRecords: baseline?.ownershipRecords,
       overwrite: options.replace === true,
+      overwriteContext: options.replace ? { userId: session.user.id, workspaceId, workspaceRole: 'Admin' } : undefined,
       idColumn: 'ownership_record_id',
       removal: removal('ownership_records'),
       workspaceId,
@@ -1184,6 +1308,7 @@ async function saveWorkspaceBackupToRelationalCloud(
       normalizeRemote: normalizeRemote('expenseReceipts'),
       baselineRecords: baseline?.expenseReceipts,
       overwrite: options.replace === true,
+      overwriteContext: options.replace ? { userId: session.user.id, workspaceId, workspaceRole: 'Admin' } : undefined,
       idColumn: 'receipt_id',
       removal: removal('expense_receipts'),
       workspaceId,
@@ -1207,6 +1332,7 @@ async function saveWorkspaceBackupToRelationalCloud(
       normalizeRemote: normalizeRemote('ranchAssets'),
       baselineRecords: baseline?.ranchAssets,
       overwrite: options.replace === true,
+      overwriteContext: options.replace ? { userId: session.user.id, workspaceId, workspaceRole: 'Admin' } : undefined,
       idColumn: 'asset_id',
       removal: removal('ranch_assets'),
       workspaceId,
@@ -1229,6 +1355,7 @@ async function saveWorkspaceBackupToRelationalCloud(
       normalizeRemote: normalizeRemote('salesLeads'),
       baselineRecords: baseline?.salesLeads,
       overwrite: options.replace === true,
+      overwriteContext: options.replace ? { userId: session.user.id, workspaceId, workspaceRole: 'Admin' } : undefined,
       idColumn: 'lead_id',
       removal: removal('sales_leads'),
       workspaceId,
@@ -1252,6 +1379,7 @@ async function saveWorkspaceBackupToRelationalCloud(
       normalizeRemote: normalizeRemote('sharedListings'),
       baselineRecords: baseline?.sharedListings,
       overwrite: options.replace === true,
+      overwriteContext: options.replace ? { userId: session.user.id, workspaceId, workspaceRole: 'Admin' } : undefined,
       idColumn: 'listing_id',
       removal: removal('shared_listings'),
       workspaceId,
@@ -1281,8 +1409,13 @@ async function saveWorkspaceBackupToRelationalCloud(
   } catch (error) {
     return {
       ok: false,
-      message: error instanceof Error ? error.message : 'Unable to update the relational workspace.',
-      allowSnapshotFallback: !(error instanceof WorkspaceSaveAccessError),
+      message:
+        options.replace && !(error instanceof WorkspaceSaveAccessError)
+          ? `Cloud replacement incomplete: ${error instanceof Error ? error.message : 'The request failed.'} Earlier confirmed writes may have saved; your local copy is retained.`
+          : error instanceof Error
+            ? error.message
+            : 'Unable to update the relational workspace.',
+      allowSnapshotFallback: !options.replace && !(error instanceof WorkspaceSaveAccessError),
       documentsPersisted,
     };
   }

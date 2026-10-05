@@ -477,8 +477,8 @@ test('staged bytes are released by the save that persists them, and only that mu
 test('a snapshot-only fallback does not claim the relational rows landed', async () => {
   /*
    * With `VITE_SUPABASE_SNAPSHOT_FALLBACK` on, a rejected relational save still
-   * returns `ok` once the legacy snapshot is written — the rancher's work is
-   * safe, which is what `ok` means. But `xbar_workspace_storage_bytes` reads
+   * may also write a legacy recovery copy while still reporting failure.
+   * That copy is separate from relational persistence: `xbar_workspace_storage_bytes` reads
    * the `documents` table, and that path added nothing to it. A caller cannot
    * tell those apart from `ok`, so the distinction has to be reported.
    *
@@ -517,11 +517,11 @@ test('a snapshot-only fallback does not claim the relational rows landed', async
   assert.match(
     relationalSave,
     /documentsPersisted = true;\s*await replaceWorkspaceRows\(\{\s*table: 'intake_batches'/,
-    'the flag must be set the moment the documents upsert commits',
+    'the flag is set only after the requested document writes finish',
   );
   assert.match(
     relationalSave,
-    /catch \(error\) \{[\s\S]{0,300}?documentsPersisted,/,
+    /catch \(error\) \{\s*return \{[\s\S]*?allowSnapshotFallback: !options\.replace && !\(error instanceof WorkspaceSaveAccessError\),\s*documentsPersisted,/,
     'and reported when a later table fails, because those rows are still committed',
   );
 });

@@ -74,3 +74,30 @@ The complete-load correction and stable normalization details are documented in
 ../cloud-load-completeness/README.md. A successful focus refresh installs all
 1,203 synthetic rows beyond a 137-row cap; a failed later page retains all local
 records and never acknowledges or echo-saves a truncated result.
+
+## Bounded explicit replacement
+
+An explicit Admin Push cloud batches upserts by at most100 rows and512KiB of
+serialized payload (an individually larger row remains a single request). Every
+batch rechecks the authenticated account, resolved ranch and Admin role. Returned
+IDs, workspace IDs and payloads must match every requested row exactly; omitted,
+duplicate or unexpected results are failure. No recovery fallback masks a batch
+failure. Earlier successful batches can remain committed, and the error says so;
+this is not an atomic transaction. Document reservation completion remains
+conservative until the entire document collection is confirmed.
+
+The existing-ID scan for explicit replacement is now counted/paginated before
+that collection's writes, so capped responses cannot omit stale records. Deletion
+still uses the existing per-record raw revision/payload CAS. Ordinary field merges
+and no-baseline conflict checks remain per-record. Synthetic5,000/20,000-document
+cases bound both write and total database requests, with row-count/byte limits,
+mid-batch failures, missing confirmations, account/ranch/role changes, duplicate
+source IDs and later-page failure coverage. No production bulk data was used.
+
+Replacement batches group rows by their defined database columns and omit only
+undefined top-level values. This preserves single-row behavior for older records:
+missing canonical fields use defaults for inserts and remain unchanged on updates,
+while explicit nulls are still sent. Tests use the installed Supabase SDK with an
+intercepted synthetic transport to verify real columns/body serialization and
+mixed existing-row omission behavior. Access-check exceptions and transport errors
+also fail closed; no failed explicit replacement writes a recovery fallback.
