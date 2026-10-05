@@ -52,6 +52,7 @@ async function fixture() {
             const prefix = 'const f=globalThis.__autosaveFixture;';
             const modules = {
               react: 'export const useEffect=(fn)=>f.effects.push(fn); export const useRef=(v)=>({current:v});',
+              '@/lib/platformConfig': 'export const isRelationalCloudEnabled=()=>f.relational!==false;',
               '@/lib/authBootstrap': 'export const createLatestWriteGate=()=>({});',
               '@/lib/cloudDeletionQueue':
                 'export const pendingCloudDeletions=()=>[]; export const acknowledgeCloudDeletions=()=>{};',
@@ -398,5 +399,18 @@ test('live refresh refuses a relational response for a different ranch', async (
   await f.tick(0);
   assert.equal(f.backup.workspace.value, 1);
   stop();
+  f.dispose();
+});
+
+test('healthy snapshot-only sessions do not schedule unsupported live refresh or warnings', async () => {
+  const f = await fixture();
+  f.relational = false;
+  await f.tick(1600);
+  f.calls[0].resolve({ ok: true, message: 'Saved' });
+  await f.tick(0);
+  const stop = f.startRefresh();
+  assert.equal(f.listeners.focus, undefined);
+  assert.equal(stop, undefined);
+  assert.equal(f.loads.length, 0);
   f.dispose();
 });

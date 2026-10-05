@@ -613,13 +613,18 @@ async function ensurePrimaryWorkspace(session: Session, backup: CloudWorkspaceBa
     }
   }
 
-  // The ranch profile is the owner's and the Admins'. Anyone else's save skips
-  // it rather than failing on it -- and with it every record they did change.
+  const baselineProfile = options.replace ? undefined : normalizeBackup(options.baseline)?.workspace?.workspaceProfile;
+  // A profile edit captured before a demotion must not be acknowledged by a
+  // specialist save that is forbidden to write it. Keep the pending change local.
+  if (memberRole !== 'Admin' && baselineProfile && stableStringify(profile) !== stableStringify(baselineProfile)) {
+    throw new WorkspaceSaveAccessError(
+      'Only a ranch administrator can save this pending profile change. It remains on this device.',
+    );
+  }
+  // An unchanged profile is skipped for specialists without blocking their work.
   if (memberRole !== 'Admin') {
     return { workspaceId, role: memberRole };
   }
-
-  const baselineProfile = options.replace ? undefined : normalizeBackup(options.baseline)?.workspace?.workspaceProfile;
   if (baselineProfile && stableStringify(profile) === stableStringify(baselineProfile)) {
     return { workspaceId, role: memberRole };
   }
@@ -1214,7 +1219,8 @@ async function loadWorkspaceBackupFromRelationalCloud(session: Session, expected
     return { ok: false, message: 'Supabase is not configured for this build.' } as const;
   }
 
-  const accessProfile = await loadWorkspaceAccessProfile(session);
+  // A record read must not accept an invitation or treat failed identity lookup as absence.
+  const accessProfile = await loadWorkspaceAccessProfile(session, { forEntitlements: true });
   if (!accessProfile.workspaceId) {
     return { ok: false, message: 'No relational workspace exists for this account yet.' } as const;
   }

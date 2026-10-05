@@ -1,4 +1,5 @@
 import { useEffect, useRef } from 'react';
+import { isRelationalCloudEnabled } from '@/lib/platformConfig';
 import { createLatestWriteGate } from '@/lib/authBootstrap';
 import { acknowledgeCloudDeletions, pendingCloudDeletions } from '@/lib/cloudDeletionQueue';
 import { loadWorkspaceBackupFromCloud, saveWorkspaceBackupToCloud } from '@/lib/cloudWorkspace';
@@ -365,7 +366,14 @@ export function CloudBootstrap() {
   ]);
 
   useEffect(() => {
-    if (!workspaceHydrated || cloudStatus !== 'signed-in' || !autosaveReady || !autosaveUnlocked) return;
+    if (
+      !workspaceHydrated ||
+      cloudStatus !== 'signed-in' ||
+      !autosaveReady ||
+      !autosaveUnlocked ||
+      !isRelationalCloudEnabled()
+    )
+      return;
     let disposed = false;
     let loading = false;
     let generation = 0;

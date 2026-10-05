@@ -439,3 +439,17 @@ test('deletion cannot sanitize an unrecognized remote document state into the ba
   assert.equal(result.ok, false);
   assert.equal(f.data.get('documents').length, 1);
 });
+
+test('an Admin profile edit still pending after demotion is not silently acknowledged as saved', async () => {
+  const f = fixture({
+    workspaces: [],
+    workspace_memberships: [{ workspace_id: 'ranch-a', user_id: 'user-a', role: 'Medical Lead', status: 'active' }],
+  });
+  const baseline = backup(),
+    current = backup();
+  current.workspace.workspaceProfile.businessName = 'Pending Admin edit';
+  const result = await saveWorkspaceBackupToCloud(current, { baseline });
+  assert.equal(result.ok, false);
+  assert.match(result.message, /profile|administrator/i);
+  assert.equal(f.calls.filter((call) => call.action !== 'read').length, 0);
+});

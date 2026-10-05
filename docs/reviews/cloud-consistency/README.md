@@ -61,3 +61,10 @@ is not silently changed by this option.
 Browser fixtures now honor requested PostgREST write representations instead of
 returning an empty array for a successful single-row write. Existing-member
 binding assertions require zero rewrites when both bindings already exist.
+
+Further interrupted-flow checks preserve snapshot-only sessions (no unsupported
+refresh timers/warnings), refuse a known pending administrator profile edit after
+role demotion instead of falsely acknowledging it, and use read-only workspace
+resolution during record loading. A synthetic pending-invitation case proves a
+record refresh cannot invoke invitation acceptance as a side effect. Initial
+sign-in's explicit workspace-access initialization remains separate.

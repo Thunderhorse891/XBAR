@@ -50,6 +50,7 @@ function fixture({
   relational = false,
   snapshotFallback = true,
   snapshotError = false,
+  pendingInvitation = false,
   ownerId = 'ws-owner',
   accessError = false,
   data = snapshot(),
@@ -75,6 +76,8 @@ function fixture({
             data: ownerId ? { id: ownerId } : null,
             error: accessError ? { message: 'identity unavailable' } : null,
           };
+        if (table === 'workspace_invitations' && pendingInvitation)
+          return { data: { workspace_id: 'unrequested-ranch', invitation_id: 'unexpected-invite' }, error: null };
         if (table === 'workspace_memberships') return { data: relational ? [] : null, error: null };
         if (table === 'workspace_subscription_profiles')
           return { data: row, error: subscriptionError ? { message: 'subscription unavailable' } : null };
@@ -95,6 +98,9 @@ function fixture({
           return chain;
         },
         limit() {
+          return chain;
+        },
+        order() {
           return chain;
         },
         maybeSingle: async () => result(),
@@ -308,6 +314,19 @@ test('live refresh rejects a changed primary ranch without returning its records
   assert.equal(result.ok, false);
   assert.equal(
     calls.some((call) => call.table === 'horses' || call.table === supabaseConfig.workspaceTable),
+    false,
+  );
+});
+
+test('authoritative record refresh never accepts a pending invitation as a read side effect', async () => {
+  fixture({ relational: true, ownerId: null, pendingInvitation: true });
+  const loaded = await loadWorkspaceBackupFromCloud({
+    requireAuthoritative: true,
+    expectedContext: { userId: 'user-owner', workspaceId: 'existing-ranch' },
+  });
+  assert.equal(loaded.ok, false);
+  assert.equal(
+    calls.some((call) => call.table === 'workspace_invitations'),
     false,
   );
 });
