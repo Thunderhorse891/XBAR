@@ -32,7 +32,19 @@ for (const scenario of [
         const body = request.postDataJSON();
         for (const data of Array.isArray(body) ? body : [body]) writes.push({ table, data });
         if (table === 'workspace_profiles') profile = body.payload;
-        await route.fulfill({ status: 200, json: table === 'workspaces' ? { id: 'incorrect-personal-ranch' } : [] });
+        // PostgREST returns the requested representation, not an empty success.
+        const returned = table === 'workspaces' ? { id: 'incorrect-personal-ranch' } : body;
+        const single = request.headers().accept?.includes('application/vnd.pgrst.object+json');
+        await route.fulfill({
+          status: 200,
+          json: new URL(request.url()).searchParams.has('select')
+            ? single
+              ? returned
+              : Array.isArray(returned)
+                ? returned
+                : [returned]
+            : [],
+        });
         return;
       }
       const resolvingMember = table === 'workspace_memberships' && url.searchParams.has('user_id');

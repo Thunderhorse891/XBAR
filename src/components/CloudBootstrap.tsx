@@ -408,7 +408,10 @@ export function CloudBootstrap() {
         // Never replace a local edit, failed save, or unknown baseline.
         if (!lastPersistedBackupRef.current || signature !== lastPersistedSignatureRef.current) return;
         loading = true;
-        const remote = await loadWorkspaceBackupFromCloud();
+        const remote = await loadWorkspaceBackupFromCloud({
+          requireAuthoritative: true,
+          expectedContext: { userId: session?.user.id ?? '', workspaceId },
+        });
         if (
           !owns() ||
           ticket !== generation ||
@@ -417,7 +420,7 @@ export function CloudBootstrap() {
           serializeWorkspaceBackup(exportWorkspaceBackup()) !== signature
         )
           return;
-        if (!remote.ok) {
+        if (!remote.ok || remote.source !== 'relational' || remote.workspaceId !== workspaceId) {
           reportRefreshFailure();
           return;
         }

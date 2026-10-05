@@ -47,3 +47,17 @@ client audit/packet/buyer histories (audit 09), complete original-file recovery
 never treats empty relational history defaults as authorization to clear known
 local history. No live customer mutation, migration, paid service or permission
 change was used for local verification.
+
+## Final-head review correction
+
+Automated review identified that live refresh could accept a per-device fallback
+snapshot after a relational error. Actual-effect and real-service regressions
+failed before correction. Refresh now requests an authoritative relational read
+bound to the captured account/ranch, refuses any changed resolved identity before
+records are read, and requires the relational source/target in the response.
+Recovery snapshots never become a live-refresh baseline. Manual recovery behavior
+is not silently changed by this option.
+
+Browser fixtures now honor requested PostgREST write representations instead of
+returning an empty array for a successful single-row write. Existing-member
+binding assertions require zero rewrites when both bindings already exist.

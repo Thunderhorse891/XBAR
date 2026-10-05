@@ -275,3 +275,39 @@ test('autosave refuses a different resolved ranch before bootstrap, profile or f
     ['workspaces'],
   );
 });
+
+test('authoritative live refresh never substitutes a device recovery snapshot for failed relational reads', async () => {
+  fixture({ relational: true });
+  const result = await loadWorkspaceBackupFromCloud({
+    requireAuthoritative: true,
+    expectedContext: { userId: 'user-owner', workspaceId: 'ws-owner' },
+  });
+  assert.equal(result.ok, false);
+  assert.equal(
+    calls.some((call) => call.table === supabaseConfig.workspaceTable),
+    false,
+  );
+});
+
+test('live refresh rejects an account mismatch without querying any records', async () => {
+  fixture({ relational: true });
+  const result = await loadWorkspaceBackupFromCloud({
+    requireAuthoritative: true,
+    expectedContext: { userId: 'previous-account', workspaceId: 'ws-owner' },
+  });
+  assert.equal(result.ok, false);
+  assert.deepEqual(calls, []);
+});
+
+test('live refresh rejects a changed primary ranch without returning its records or a snapshot', async () => {
+  fixture({ relational: true, ownerId: 'different-ranch' });
+  const result = await loadWorkspaceBackupFromCloud({
+    requireAuthoritative: true,
+    expectedContext: { userId: 'user-owner', workspaceId: 'ws-owner' },
+  });
+  assert.equal(result.ok, false);
+  assert.equal(
+    calls.some((call) => call.table === 'horses' || call.table === supabaseConfig.workspaceTable),
+    false,
+  );
+});

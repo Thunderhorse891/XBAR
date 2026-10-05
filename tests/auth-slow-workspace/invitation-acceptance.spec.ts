@@ -136,6 +136,12 @@ test('pushing a workspace preserves another member account binding', async ({ pa
       await route.fulfill({ status: 200, json: members });
       return;
     }
+    if (request.method() !== 'GET' && new URL(request.url()).searchParams.has('select')) {
+      const data = request.postDataJSON();
+      const one = request.headers().accept?.includes('application/vnd.pgrst.object+json');
+      await route.fulfill({ status: 200, json: one ? data : [data] });
+      return;
+    }
     const single = table === 'workspace_profiles' || table === 'workspace_subscription_profiles';
     await route.fulfill({
       status: 200,
@@ -175,7 +181,9 @@ test('pushing a workspace preserves another member account binding', async ({ pa
   await page.getByRole('checkbox', { name: 'I want the cloud to match this device.' }).check();
   await page.getByRole('button', { name: 'Push and replace cloud', exact: true }).click();
   await expect(page.getByText('Cloud sync complete', { exact: true })).toBeVisible();
-  expect(membershipWrites.some((row) => row.email === RECOVERY_EMAIL && row.user_id === USER_ID)).toBe(true);
+  // Both bindings already exist; an unrelated ranch save must not rewrite either.
+  expect(membershipWrites).toEqual([]);
+  expect(members.find((row) => row.email === RECOVERY_EMAIL)?.user_id).toBe(USER_ID);
   // Ranch saves must leave other accounts' server-owned access bindings alone.
   expect(membershipWrites.filter((row) => row.email === memberEmail)).toEqual([]);
 });

@@ -21,7 +21,19 @@ test('pushing an old ranch snapshot cannot recreate a removed member or reopen a
         }
       }
       if (table === 'workspace_profiles') profileWrites += 1;
-      await route.fulfill({ status: 200, json: table === 'workspaces' ? { id: workspaceId } : [] });
+      // PostgREST returns the requested representation, not an empty success.
+      const returned = table === 'workspaces' ? { id: workspaceId } : data;
+      const single = request.headers().accept?.includes('application/vnd.pgrst.object+json');
+      await route.fulfill({
+        status: 200,
+        json: new URL(request.url()).searchParams.has('select')
+          ? single
+            ? returned
+            : Array.isArray(returned)
+              ? returned
+              : [returned]
+          : [],
+      });
       return;
     }
     const payload =

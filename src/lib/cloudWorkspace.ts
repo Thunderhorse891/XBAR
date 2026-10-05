@@ -1208,7 +1208,7 @@ async function saveWorkspaceBackupToRelationalCloud(
   }
 }
 
-async function loadWorkspaceBackupFromRelationalCloud(session: Session) {
+async function loadWorkspaceBackupFromRelationalCloud(session: Session, expectedWorkspaceId?: string) {
   const client = getSupabaseClient();
   if (!client) {
     return { ok: false, message: 'Supabase is not configured for this build.' } as const;
@@ -1220,6 +1220,12 @@ async function loadWorkspaceBackupFromRelationalCloud(session: Session) {
   }
 
   const workspaceId = accessProfile.workspaceId;
+  if (expectedWorkspaceId !== undefined && workspaceId !== expectedWorkspaceId) {
+    return {
+      ok: false,
+      message: 'Your active ranch changed before refresh. Local records were kept unchanged.',
+    } as const;
+  }
   const [
     membershipsResult,
     invitationsResult,
@@ -1356,6 +1362,8 @@ async function loadWorkspaceBackupFromRelationalCloud(session: Session) {
   const authoritativeSubscription = subscriptionFromCloudRow(subscriptionResult.data) ?? baselineCloudSubscription();
   return {
     ok: true,
+    source: 'relational',
+    workspaceId,
     backup: withCloudSubscription(backup, authoritativeSubscription),
     authoritativeSubscription,
     updatedAt: backup.exportedAt ?? '',
@@ -1473,7 +1481,12 @@ export async function saveWorkspaceBackupToCloud(
   return { ok: true, message: 'Cloud sync complete. Legacy snapshot updated.', updatedAt, deletionsApplied: true };
 }
 
-export async function loadWorkspaceBackupFromCloud() {
+export async function loadWorkspaceBackupFromCloud(
+  options: {
+    requireAuthoritative?: boolean;
+    expectedContext?: { userId: string; workspaceId: string };
+  } = {},
+) {
   const client = getSupabaseClient();
   if (!client) {
     return { ok: false, message: 'Supabase is not configured for this build.' } as const;
@@ -1484,9 +1497,16 @@ export async function loadWorkspaceBackupFromCloud() {
     return { ok: false, message: 'Sign in before pulling cloud data.' } as const;
   }
 
+  if (options.expectedContext && options.expectedContext.userId !== session.user.id) {
+    return { ok: false, message: 'Your account changed before refresh. Local records were kept unchanged.' } as const;
+  }
+  if (options.requireAuthoritative && !isRelationalCloudEnabled()) {
+    return { ok: false, message: 'Authoritative ranch refresh is unavailable in snapshot-only mode.' } as const;
+  }
+
   let relationalError: { ok: false; message: string } | undefined;
   if (isRelationalCloudEnabled()) {
-    const relational = await loadWorkspaceBackupFromRelationalCloud(session);
+    const relational = await loadWorkspaceBackupFromRelationalCloud(session, options.expectedContext?.workspaceId);
     if (relational.ok) {
       return relational;
     }
@@ -1504,6 +1524,12 @@ export async function loadWorkspaceBackupFromCloud() {
       message: 'The cloud workspace could not be verified. Your local records are unchanged.',
     } as const;
   }
+  if (options.expectedContext && access.workspaceId !== options.expectedContext.workspaceId) {
+    return {
+      ok: false,
+      message: 'Your active ranch changed before refresh. Local records were kept unchanged.',
+    } as const;
+  }
   // Legacy snapshot-only accounts may not own a relational workspace yet.
   // Their records still load, with baseline access rather than a snapshot grant.
   const subscription = access.workspaceId
@@ -1514,7 +1540,7 @@ export async function loadWorkspaceBackupFromCloud() {
 
   // Entitlement reads are independent of record availability. A missing or
   // unreadable snapshot must not leave a stale grant or cancellation in place.
-  if (relationalError && !isSnapshotFallbackEnabled()) {
+  if (relationalError && (options.requireAuthoritative || !isSnapshotFallbackEnabled())) {
     return { ...relationalError, authoritativeSubscription } as const;
   }
 
@@ -1541,6 +1567,7 @@ export async function loadWorkspaceBackupFromCloud() {
 
   return {
     ok: true,
+    source: 'snapshot',
     backup: withCloudSubscription(data.payload, authoritativeSubscription),
     authoritativeSubscription,
     updatedAt: typeof data.updated_at === 'string' ? data.updated_at : '',

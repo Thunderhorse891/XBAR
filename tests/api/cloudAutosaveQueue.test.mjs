@@ -255,7 +255,7 @@ test('clean focus refresh installs teammate records without echo-saving them', a
   f.listeners.focus();
   await f.tick(0);
   assert.equal(f.loads.length, 1);
-  f.loads[0]({ ok: true, backup: { workspace: { value: 2 } } });
+  f.loads[0]({ ok: true, source: 'relational', workspaceId: 'ranch-a', backup: { workspace: { value: 2 } } });
   await f.tick(0);
   await f.tick(1600);
   assert.equal(f.backup.workspace.value, 2);
@@ -273,7 +273,7 @@ test('focus refresh cannot replace an edit made while the remote read is pending
   f.listeners.focus();
   await f.tick(0);
   f.edit(3);
-  f.loads[0]({ ok: true, backup: { workspace: { value: 2 } } });
+  f.loads[0]({ ok: true, source: 'relational', workspaceId: 'ranch-a', backup: { workspace: { value: 2 } } });
   await f.tick(0);
   assert.equal(f.backup.workspace.value, 3);
   stop();
@@ -291,7 +291,9 @@ test('focus refresh is read-only on failure and refuses replaced workspace conte
     await f.tick(0);
     if (changed) f.cloud.workspaceId = 'other';
     f.loads[0](
-      changed ? { ok: true, backup: { workspace: { value: 2 } } } : { ok: false, message: 'Incomplete cloud load' },
+      changed
+        ? { ok: true, source: 'relational', workspaceId: 'ranch-a', backup: { workspace: { value: 2 } } }
+        : { ok: false, message: 'Incomplete cloud load' },
     );
     await f.tick(0);
     assert.equal(f.backup.workspace.value, 1);
@@ -315,7 +317,7 @@ test('a workspace or role round trip invalidates an in-flight refresh', async ()
     const interim = { ...f.cloud };
     f.cloud[key] = original[key];
     f.cloudChange(f.cloud, interim);
-    f.loads[0]({ ok: true, backup: { workspace: { value: 2 } } });
+    f.loads[0]({ ok: true, source: 'relational', workspaceId: 'ranch-a', backup: { workspace: { value: 2 } } });
     await f.tick(0);
     assert.equal(f.backup.workspace.value, 1);
     stop();
@@ -356,6 +358,8 @@ test('normalized empty remote histories cannot erase this workspace’s local pa
   await f.tick(0);
   f.loads[0]({
     ok: true,
+    source: 'relational',
+    workspaceId: 'ranch-a',
     backup: { workspace: { value: 2, auditEvents: [], salePacketBuilds: [], buyerRoomEvents: [] } },
   });
   await f.tick(0);
@@ -363,6 +367,36 @@ test('normalized empty remote histories cannot erase this workspace’s local pa
   assert.deepEqual(f.backup.workspace.salePacketBuilds, [{ id: 'packet-a', localFileKey: 'file-a' }]);
   assert.equal(f.backup.workspace.auditEvents.length, 1);
   assert.equal(f.backup.workspace.buyerRoomEvents.length, 1);
+  stop();
+  f.dispose();
+});
+
+test('live refresh never installs a successful but stale device recovery snapshot', async () => {
+  const f = await fixture();
+  await f.tick(1600);
+  f.calls[0].resolve({ ok: true, message: 'Saved' });
+  await f.tick(0);
+  const stop = f.startRefresh();
+  f.listeners.focus();
+  await f.tick(0);
+  f.loads[0]({ ok: true, source: 'snapshot', backup: { workspace: { value: 99 } } });
+  await f.tick(0);
+  assert.equal(f.backup.workspace.value, 1);
+  stop();
+  f.dispose();
+});
+
+test('live refresh refuses a relational response for a different ranch', async () => {
+  const f = await fixture();
+  await f.tick(1600);
+  f.calls[0].resolve({ ok: true, message: 'Saved' });
+  await f.tick(0);
+  const stop = f.startRefresh();
+  f.listeners.focus();
+  await f.tick(0);
+  f.loads[0]({ ok: true, source: 'relational', workspaceId: 'other-ranch', backup: { workspace: { value: 99 } } });
+  await f.tick(0);
+  assert.equal(f.backup.workspace.value, 1);
   stop();
   f.dispose();
 });
