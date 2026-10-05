@@ -1,0 +1,18 @@
+/* Shared confirmations remain readable on narrow screens and above drawers. */
+[data-sonner-toast].xbar-action-toast [data-content] {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+[data-sonner-toast].xbar-action-toast [data-button] {
+  min-height: 36px;
+}
+
+.xs-action-feedback-error {
+  color: var(--xbar-danger);
+  border: 1px solid currentColor;
+  border-radius: 8px;
+  padding: 12px;
+  margin: 0 0 16px;
+  overflow-wrap: anywhere;
+}
