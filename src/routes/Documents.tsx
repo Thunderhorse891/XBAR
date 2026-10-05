@@ -752,6 +752,24 @@ export default function Documents() {
 
       {activeStage === 'Upload' ? (
         <>
+          <Panel title="Bring documents from myAQHA">
+            <p>
+              Open your myAQHA account to obtain the documents available to you, then upload the files below and review
+              the horse match. XBAR does not connect to or sync your AQHA account.
+            </p>
+            <p>
+              Registration papers may include private owner details. Review them before including them in a buyer packet
+              or sharing publicly. Horses without registration papers can still be added to XBAR.
+            </p>
+            <a
+              className="button button--ghost"
+              href="https://www.myaqha.com/"
+              target="_blank"
+              rel="noopener noreferrer"
+            >
+              Open myAQHA
+            </a>
+          </Panel>
           <Panel
             title="Stage 1 · Upload"
             action={

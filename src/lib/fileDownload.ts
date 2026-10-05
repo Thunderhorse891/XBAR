@@ -21,6 +21,8 @@ import { hasNativeBridge, isNativeApp } from './nativePlatform.js';
  * Anything else returns a reason rather than throwing, because callers render
  * that text in a toast.
  */
+export type FileSaveOptions = { shouldContinue?: () => boolean };
+
 export type FileSaveResult = { ok: true; via: 'browser' | 'share-sheet' } | { ok: false; reason: string };
 
 export function canSaveFilesLocally(): boolean {
@@ -88,6 +90,7 @@ async function writeBlobInChunks(
     path: fileName,
     data: bytesToBase64(new Uint8Array(first)),
     directory: Directory.Cache,
+    recursive: true,
   });
 
   for (let offset = NATIVE_WRITE_CHUNK_BYTES; offset < blob.size; offset += NATIVE_WRITE_CHUNK_BYTES) {
@@ -102,9 +105,17 @@ async function writeBlobInChunks(
   return written.uri;
 }
 
-async function saveViaShareSheet(fileName: string, blob: Blob): Promise<FileSaveResult> {
+/** Separate concurrent handoffs without changing the filename shown by the receiving app. */
+export function nativeFileHandoffLocation(fileName: string): { directoryName: string; path: string } {
+  const directoryName = `xbar-share-${globalThis.crypto?.randomUUID?.() ?? `${Date.now()}-${Math.random().toString(36).slice(2)}`}`;
+  return { directoryName, path: `${directoryName}/${fileName.replace(/[/\\]/g, '-')}` };
+}
+
+async function saveViaShareSheet(fileName: string, blob: Blob, options?: FileSaveOptions): Promise<FileSaveResult> {
   let filesystem: typeof import('@capacitor/filesystem') | null = null;
-  let wrote = false;
+  // A closed dialog may be reopened while its old write finishes. Each handoff
+  // gets a private directory so neither write nor cleanup can touch another.
+  const { directoryName: cacheDirectory, path: cachePath } = nativeFileHandoffLocation(fileName);
 
   try {
     const [fs, { Share }] = await Promise.all([import('@capacitor/filesystem'), import('@capacitor/share')]);
@@ -113,12 +124,14 @@ async function saveViaShareSheet(fileName: string, blob: Blob): Promise<FileSave
     // Cache, not Documents: the file is a hand-off to the share sheet, not
     // something XBAR keeps. Writing to Documents would also require
     // UIFileSharingEnabled to be useful, which is a different decision.
-    const uri = await writeBlobInChunks(fs, fileName, blob);
-    wrote = true;
+    const uri = await writeBlobInChunks(fs, cachePath, blob);
 
     // The share sheet is what lets the customer put the file where they want —
     // Files, Mail, AirDrop. A plain write would leave it somewhere they cannot
     // reach, which is no better than the silent failure this replaces.
+    if (options?.shouldContinue && !options.shouldContinue()) {
+      return { ok: false, reason: 'The file or workspace changed before sharing. Review the file and try again.' };
+    }
     await Share.share({ title: fileName, files: [uri] });
     return { ok: true, via: 'share-sheet' };
   } catch (error) {
@@ -152,11 +165,16 @@ async function saveViaShareSheet(fileName: string, blob: Blob): Promise<FileSave
      * a cleanup problem into a "your backup failed" message would be a lie in
      * the more alarming direction.
      */
-    if (wrote && filesystem) {
+    if (filesystem) {
       try {
-        await filesystem.Filesystem.deleteFile({ path: fileName, directory: filesystem.Directory.Cache });
+        await filesystem.Filesystem.deleteFile({ path: cachePath, directory: filesystem.Directory.Cache });
       } catch {
         /* the file stays until iOS evicts it; the export itself is unaffected */
+      }
+      try {
+        await filesystem.Filesystem.rmdir({ path: cacheDirectory, directory: filesystem.Directory.Cache });
+      } catch {
+        /* An incomplete or failed cleanup must not change the reported handoff. */
       }
     }
   }
@@ -208,10 +226,13 @@ export async function saveTextAsFile(fileName: string, text: string, mimeType: s
   return saveViaBrowser(fileName, new Blob([text], { type: mimeType }));
 }
 
-export async function saveBlobAsFile(fileName: string, blob: Blob): Promise<FileSaveResult> {
+export async function saveBlobAsFile(fileName: string, blob: Blob, options?: FileSaveOptions): Promise<FileSaveResult> {
+  if (options?.shouldContinue && !options.shouldContinue()) {
+    return { ok: false, reason: 'The file or workspace changed before sharing. Review the file and try again.' };
+  }
   // The Blob itself, not its bytes: writeBlobInChunks slices it so a large
   // backup never has to exist in memory twice over.
-  if (hasNativeBridge()) return saveViaShareSheet(fileName, blob);
+  if (hasNativeBridge()) return saveViaShareSheet(fileName, blob, options);
 
   const unavailable = saveUnavailableReason();
   if (unavailable) return { ok: false, reason: unavailable };

@@ -1,3 +1,4 @@
+import { RANCH_SOCIAL_PLATFORMS, normalizeRanchSocialLinks } from '@/lib/ranchSocialLinks';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { validatePacketLogo, validatePacketProfile } from '../../api/_lib/packet-branding.js';
 import { validatePacketLogoRaster } from '../../api/_lib/packet-branding-raster.js';
@@ -110,6 +111,15 @@ export default function Settings() {
   const deleteAccount = useCloudStore((state) => state.deleteAccount);
   const navigate = useNavigate();
   const location = useLocation();
+  useEffect(() => {
+    if (location.hash !== '#ranch-social-profiles') return;
+    const frame = requestAnimationFrame(() => {
+      const section = document.getElementById('ranch-social-profiles');
+      section?.scrollIntoView({ block: 'center' });
+      section?.focus({ preventScroll: true });
+    });
+    return () => cancelAnimationFrame(frame);
+  }, [location.hash]);
   const pushToast = useUiStore((state) => state.pushToast);
   const canManageSettings = useCurrentRoleCapability('manageSettings');
   const canSyncCloud = useCurrentRoleCapability('syncCloud');
@@ -687,6 +697,7 @@ export default function Settings() {
     }
     try {
       validatePacketProfile(profileDraft);
+      normalizeRanchSocialLinks(profileDraft.socialLinks, true);
     } catch (error) {
       setProfileError(error instanceof Error ? error.message : 'Ranch branding is invalid.');
       return;
@@ -1192,6 +1203,37 @@ export default function Settings() {
               />
             </label>
           </div>
+          <fieldset
+            id="ranch-social-profiles"
+            tabIndex={-1}
+            disabled={!profileEditable || profileSaving}
+            style={{ border: 0, padding: 0, minWidth: 0, marginTop: 18 }}
+          >
+            <legend>Ranch social profiles</legend>
+            <p>
+              Save public profile URLs for clickable links in Sales. Saving links does not connect accounts or authorize
+              posting.
+            </p>
+            <div className="form-grid">
+              {RANCH_SOCIAL_PLATFORMS.map(({ key, label, example }) => (
+                <label className="field-stack" key={key}>
+                  <span className="field-label">{label} profile URL</span>
+                  <input
+                    className="field-input"
+                    type="url"
+                    inputMode="url"
+                    autoComplete="off"
+                    maxLength={2048}
+                    placeholder={example}
+                    value={profileDraft.socialLinks?.[key] ?? ''}
+                    onChange={(event) =>
+                      patchProfileDraft({ socialLinks: { ...profileDraft.socialLinks, [key]: event.target.value } })
+                    }
+                  />
+                </label>
+              ))}
+            </div>
+          </fieldset>
           {profileError && (
             <p role="alert" className="stack-item__copy">
               {profileError}

@@ -601,6 +601,7 @@ export interface WorkspaceProfile {
   packetLogoDataUrl?: string;
   contactPhone?: string;
   website?: string;
+  socialLinks?: import('../lib/ranchSocialLinks.js').RanchSocialLinks;
   defaultBarn: string;
   defaultPasture: string;
   workspaceShortcuts: string[];
