@@ -17,7 +17,9 @@ export type ToastTone = 'success' | 'error' | 'warning' | 'info';
  * the CreateKey labels owned by components/saas/flows.tsx; `horseId`
  * preselects a horse for horse-scoped actions.
  */
-export type QuickCreateRequest = { action: string; horseId?: string };
+// medicalType pre-selects the health record type, so a step like "Log a
+// deworming" opens on Deworming rather than Vet visit.
+export type QuickCreateRequest = { action: string; horseId?: string; medicalType?: string };
 
 export type ToastItem = {
   id: string;

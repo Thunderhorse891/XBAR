@@ -1743,7 +1743,7 @@ test('a record that installs but crashes the route it lands on is refused', asyn
    */
   assert.match(
     helperCode,
-    /optionalStrings: \['details\.followUpDue'\]/,
+    /optionalStrings: \['details\.followUpDue', 'completionState'\]/,
     'the field inside the bag whose type survives every check between the backup and the crash',
   );
   assert.doesNotMatch(
