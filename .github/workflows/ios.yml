@@ -1,0 +1,261 @@
+name: iOS native
+
+on:
+  pull_request:
+  push:
+    branches: [main, codex/apple-native-submit-prep]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ios-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  native:
+    # Standard macOS runners are free for this public repository. No signing,
+    # upload, paid runner, production secret or deployment occurs here.
+    # Validate this internal readiness branch directly even when newer main
+    # changes prevent GitHub from creating a pull_request merge ref. Skip its
+    # duplicate PR run; other branches and forks still use pull_request checks.
+    if: >-
+      github.event.repository.private == false &&
+      (github.event_name != 'pull_request' ||
+       github.event.pull_request.head.repo.full_name != github.repository ||
+       github.head_ref != 'codex/apple-native-submit-prep')
+    # The standard Intel image has 14 GB RAM; the 7 GB ARM image repeatedly
+    # stalled during simulator boot before any application test could run.
+    runs-on: macos-26-intel
+    timeout-minutes: 35
+    env:
+      VITE_SUPABASE_URL: https://native-ci.invalid
+      VITE_SUPABASE_ANON_KEY: native-ci-synthetic-key
+      VITE_API_BASE_URL: https://native-ci.invalid
+      VITE_ALLOW_LOCAL_MODE: 'false'
+      VITE_MANAGED_BILLING_ENABLED: 'true'
+      VITE_SENTRY_DSN: ''
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 24
+      - name: Require Xcode 26 and iOS 26 SDK
+        run: |
+          set -euo pipefail
+          xcode_path=$(find /Applications -maxdepth 1 -name 'Xcode_26*.app' | sort -V | tail -1)
+          test -n "$xcode_path"
+          sudo xcode-select -s "$xcode_path/Contents/Developer"
+          xcodebuild -version
+          xcrun --sdk iphoneos --show-sdk-version | grep '^26\.'
+      - run: npm ci
+      - name: Build and synchronize the bundled app
+        run: npm run mobile:sync:ios
+      - name: Compile unsigned iPhone and iPad release
+        run: |
+          xcodebuild -project ios/App/App.xcodeproj -scheme App -configuration Release \
+            -destination 'generic/platform=iOS' -derivedDataPath ios/DerivedData \
+            CODE_SIGNING_ALLOWED=NO build
+          node scripts/check-ios-project.mjs ios/DerivedData/Build/Products/Release-iphoneos/App.app
+      - name: Select the matching iOS Simulator
+        run: |
+          set -euo pipefail
+          # Match the installed SDK instead of selecting the first (oldest)
+          # iOS 26 runtime from the image. This runner is ephemeral; use its
+          # prepared device instead of triggering another first-boot migration.
+          export IOS_SIMULATOR_SDK=$(xcrun --sdk iphonesimulator --show-sdk-version)
+          device_id=$(xcrun simctl list -j | node scripts/select-ios-simulator.mjs "$IOS_SIMULATOR_SDK")
+          echo "IOS_SIMULATOR_ID=$device_id" >> "$GITHUB_ENV"
+          echo "Simulator SDK: $IOS_SIMULATOR_SDK"
+          echo "Selected simulator: $device_id"
+          xcrun simctl list devices available
+      - name: Build the simulator app and XCTest runner
+        timeout-minutes: 10
+        run: |
+          # Compile while the selected device is still shut down. Booting first
+          # makes Swift compilation compete with the simulator's system apps;
+          # run 36457704210 exhausted this build step before XCTest could start.
+          xcodebuild -project ios/App/App.xcodeproj -scheme App -configuration Debug \
+            -destination "platform=iOS Simulator,id=$IOS_SIMULATOR_ID" -derivedDataPath ios/DerivedData \
+            CODE_SIGN_IDENTITY=- build-for-testing
+      - name: Boot the matching iOS Simulator
+        timeout-minutes: 12
+        run: |
+          set -euo pipefail
+          xcrun simctl boot "$IOS_SIMULATOR_ID"
+          open -a Simulator
+          # Run 37069276314 finished first-boot OS migration at 6m20s, beyond
+          # the old five-minute process deadline. Bound infrastructure startup
+          # separately; a successful boot and the unchanged XCTest are required.
+          python3 -c 'import subprocess,sys; subprocess.run(["xcrun","simctl","bootstatus",sys.argv[1],"-b"],check=True,timeout=600)' "$IOS_SIMULATOR_ID"
+      - name: Exercise the real WKWebView in iOS Simulator
+        timeout-minutes: 7
+        run: |
+          # Bound any later guest-log query to this test attempt, excluding boot.
+          date -u '+%Y-%m-%d %H:%M:%S+0000' > "$RUNNER_TEMP/xbar-xctest-start.txt"
+          xcodebuild -project ios/App/App.xcodeproj -scheme App -configuration Debug \
+            -destination "platform=iOS Simulator,id=$IOS_SIMULATOR_ID" -derivedDataPath ios/DerivedData \
+            -parallel-testing-enabled NO -resultBundlePath ios/native-tests.xcresult \
+            -test-timeouts-enabled YES -maximum-test-execution-time-allowance 180 \
+            CODE_SIGN_IDENTITY=- test-without-building
+      - name: Native test diagnostics
+        if: failure() || cancelled()
+        timeout-minutes: 2
+        run: |
+          python3 - <<'PY'
+          from datetime import datetime
+          from pathlib import Path
+          import os, subprocess, tempfile
+
+          # Run 37081521423 spent half this step on preliminary commands, then
+          # captured widget subsystem chatter before reaching the test runner.
+          # Capture the named guest processes first, with every command bounded.
+          predicate = ('process == "AppUITests-Runner" '
+                       'OR process CONTAINS[c] "testmanager" OR process CONTAINS[c] "XCTest" '
+                       'OR process CONTAINS[c] "accessibility" OR process BEGINSWITH[c] "AX"')
+          host_predicate = ('process == "Simulator" OR process == "com.apple.CoreSimulator.CoreSimulatorService" '
+                            'OR process == "SpringBoard" OR ' + predicate)
+
+          def emit_tail(output, limit):
+              size = output.seek(0, os.SEEK_END)
+              if size > limit:
+                  print(f"Diagnostic output truncated to its final {limit // 1024} KiB.")
+              output.seek(max(0, size - limit))
+              print(output.read().decode('utf-8', errors='replace'), flush=True)
+
+          def native_process(line):
+              columns = line.decode('utf-8', errors='replace').split(None, 4)
+              if len(columns) < 5 or columns[0] == 'PID':
+                  return True  # Preserve the header and command error messages.
+              name = Path(columns[4].strip()).name.lower()
+              return (name in ('app', 'com.xbar.ranch', 'appuitests-runner')
+                      or name.startswith('ax')
+                      or any(part in name for part in ('simulator', 'xcodebuild', 'xctest',
+                                                        'testmanager', 'accessibility')))
+
+          def capture(label, command, timeout=25, line_filter=None, limit=65536):
+              print(f"--- {label}; native check remains failed ---", flush=True)
+              # Stream to a temporary file, then emit at most 64 KiB. A hung or
+              # noisy service must not exhaust the diagnostic time/memory budget.
+              with tempfile.TemporaryFile() as output:
+                  try:
+                      result = subprocess.run(command, stdout=output, stderr=subprocess.STDOUT,
+                                              timeout=timeout, check=False)
+                      print(f"Diagnostic command exit: {result.returncode}")
+                  except subprocess.TimeoutExpired:
+                      print(f"Diagnostic command timed out after {timeout}s; partial output follows.")
+                  except OSError as error:
+                      print(f"Diagnostic command unavailable: {error}")
+                  if line_filter is None:
+                      emit_tail(output, limit)
+                  else:
+                      with tempfile.TemporaryFile() as selected:
+                          output.seek(0)
+                          for line in output:
+                              if line_filter(line):
+                                  selected.write(line)
+                          emit_tail(selected, limit)
+
+          log_args = ['show', '--last', '10m', '--style', 'compact', '--info', '--predicate']
+          device = os.environ.get('IOS_SIMULATOR_ID')
+          if device:
+              try:
+                  start = (Path(os.environ['RUNNER_TEMP']) / 'xbar-xctest-start.txt').read_text().strip()
+                  datetime.strptime(start, '%Y-%m-%d %H:%M:%S%z')
+              except (OSError, KeyError, ValueError) as error:
+                  print(f'Test start timestamp unavailable; guest logs skipped: {error}. Native check remains failed.')
+              else:
+                  # Run 37090815633 exhausted its guest query on pre-test TTS
+                  # startup. Keep the same predicate/deadline, start at XCTest.
+                  guest_args = ['show', '--start', start, '--style', 'compact', '--info', '--predicate']
+                  capture('Selected simulator XCTest and AX logs', ['xcrun', 'simctl', 'spawn', device, 'log', *guest_args, predicate])
+          else:
+              print('No selected simulator; guest diagnostics unavailable. Native check remains failed.')
+          capture('Host XCTest and AX logs', ['/usr/bin/log', *log_args, host_predicate])
+          # Preserve the small probes before potentially noisy process output.
+          capture('Host memory size', ['sysctl', 'hw.memsize'], timeout=5)
+          capture('Host memory state', ['vm_stat'], timeout=5)
+          capture('Simulator devices', ['xcrun', 'simctl', 'list', 'devices'], timeout=10)
+          reports = os.path.join(os.environ['HOME'], 'Library', 'Logs', 'DiagnosticReports')
+          capture('App crash report paths', ['find', reports, '-maxdepth', '1', '-name', '*App*', '-print'], timeout=5)
+          # Process names/state only: no command arguments or environment values.
+          capture('Native host process state', ['ps', '-axo', 'pid,ppid,state,etime,comm'],
+                  timeout=10, line_filter=native_process, limit=16384)
+          PY
+      - name: Capture the failed app's startup console
+        if: failure() && env.IOS_SIMULATOR_ID != ''
+        timeout-minutes: 2
+        run: |
+          # The XCTest verdict is already recorded. Relaunch only the synthetic
+          # CI app to capture Capacitor's native load/JavaScript diagnostics.
+          # A diagnostic launch cannot make the failed test pass.
+          python3 - <<'PY'
+          import os, subprocess
+          device = os.environ['IOS_SIMULATOR_ID']
+          try:
+              subprocess.run(['xcrun', 'simctl', 'terminate', device, 'com.xbar.ranch'], timeout=15, check=False)
+              app = subprocess.Popen(['xcrun', 'simctl', 'launch', '--console-pty', device, 'com.xbar.ranch'], stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True)
+              try:
+                  output, _ = app.communicate(timeout=45)
+              except subprocess.TimeoutExpired:
+                  app.kill()
+                  output, _ = app.communicate(timeout=10)
+              print('\n'.join(output.splitlines()[-300:]))
+          except subprocess.TimeoutExpired:
+              print('Native console capture timed out; the startup test remains failed.')
+          PY
+      - name: Export native failure screenshots
+        if: failure()
+        timeout-minutes: 2
+        run: |
+          mkdir -p ios/native-diagnostics
+          xcrun xcresulttool export attachments --path ios/native-tests.xcresult --output-path ios/native-diagnostics || true
+          # Keep synthetic diagnostics within the free artifact budget. Never
+          # upload the full build directory, simulator filesystem or credentials.
+          python3 - <<'PY'
+          from pathlib import Path
+          import subprocess, tempfile
+          # Run 37081521423 exported the final sign-in attachment after the
+          # early reader found no Info.plist. Read the late summary here too;
+          # it is evidence only and cannot override the timed-out test step.
+          with tempfile.TemporaryFile() as output:
+              try:
+                  result = subprocess.run(['xcrun', 'xcresulttool', 'get', 'test-results', 'summary',
+                                           '--path', 'ios/native-tests.xcresult'], stdout=output,
+                                          stderr=subprocess.STDOUT, timeout=10, check=False)
+                  print(f'Late XCTest summary exit: {result.returncode}; native check remains failed.')
+              except (subprocess.TimeoutExpired, OSError) as error:
+                  print(f'Late XCTest summary unavailable: {error}; native check remains failed.')
+              size = output.seek(0, 2)
+              if size > 32768:
+                  print('Late XCTest summary truncated to its final 32 KiB.')
+              output.seek(max(0, size - 32768))
+              print(output.read().decode('utf-8', errors='replace'))
+          root = Path('ios/native-diagnostics')
+          for item in root.rglob('*'):
+              if item.is_file() and item.suffix.lower() != '.png':
+                  item.unlink()
+          files = [p for p in root.rglob('*.png') if p.is_file()]
+          if sum(p.stat().st_size for p in files) > 20 * 1024 * 1024:
+              for item in files:
+                  item.unlink()
+              print('Screenshot artifact exceeds the 20 MiB cap; see the accessibility tree in the failed test log.')
+          PY
+      - uses: actions/upload-artifact@v4
+        if: failure()
+        with:
+          name: native-failure-screenshots
+          path: ios/native-diagnostics/**/*.png
+          if-no-files-found: ignore
+          retention-days: 1
+      - name: Preserve the resolved Swift dependency graph
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: native-swift-resolution
+          path: |
+            ios/App/App.xcodeproj/project.xcworkspace/xcshareddata/swiftpm/Package.resolved
+            ios/App/CapApp-SPM/Package.resolved
+          if-no-files-found: warn
+          retention-days: 7

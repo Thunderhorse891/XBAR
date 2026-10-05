@@ -1,155 +1,107 @@
-# XBAR — iOS App Store submission runbook
+# XBAR iOS build and submission
 
-This folder holds the submission assets that live in source control, plus the
-exact steps to turn the web app into a signed iOS build. It is written against
-what the code in this repo actually does — no placeholder claims.
+The native project is checked in at `ios/App/App.xcodeproj`. Use Node 24, matching `.nvmrc` and CI. It uses Capacitor
+8.5.1 and Swift Package Manager, targets iOS 15+, and supports iPhone and iPad.
+The existing paid-web companion behavior is preserved: the native app has no
+checkout or upgrade flow. Apple must still review the submitted product.
 
-XBAR ships as a [Capacitor](https://capacitorjs.com) app: the same Vite/React
-bundle that runs on the web is wrapped in a native WKWebView shell. The web
-foundation is already App-Store-shaped; the remaining work is the parts that
-**require a Mac with Xcode** and an Apple Developer account, which cannot be
-done on Linux/CI.
+## Build checks
 
----
+```sh
+npm ci
+npm run mobile:sync:ios
+```
 
-## Ready in this repo (no Mac needed)
+This builds the hash-routed SPA, synchronizes Capacitor and verifies the packaged
+source resources. `CAP_SERVER_URL` is refused by the store build. The HTTPS
+backend defaults to the app origin; set `VITE_API_BASE_URL` to an HTTPS origin
+when the backend is hosted separately. Welcome, account deletion and packet
+verification use that backend too. The backend permits the exact bundled iOS origin `capacitor://localhost`;
+endpoint authentication, workspace permissions and rate limits still apply.
+Wildcards, `Origin: null` and lookalike native origins are not permitted.
+Welcome requests answer preflight before authentication or email work. A configured URL or successful
+unsigned build does not establish live native connectivity.
 
-- **App identity** — `capacitor.config.ts`: `appId: com.xbar.ranch`, `appName: XBAR`,
-  dark launch background (`#05070A`) so a cold start doesn't flash white.
-- **Mobile web build** — `npm run mobile:sync` / `mobile:copy` build the bundle
-  with the hash router (no server to rewrite `/app/*` inside the WebView) and skip
-  the marketing-site post-build. Verified: `dist/index.html` is the SPA app shell.
-- **Icons & PWA metadata** — `public/brand/` has `apple-touch-icon.png`,
-  `icon-192.png`, `icon-512.png`, `icon-512-maskable.png`; `index.html` carries the
-  viewport (`viewport-fit=cover`), `theme-color`, and `apple-mobile-web-app-*` meta;
-  `site.webmanifest` is complete (standalone display, maskable icon).
-- **Privacy manifest** — [`PrivacyInfo.xcprivacy`](./PrivacyInfo.xcprivacy),
-  required by Apple. Add it to the App target.
-- **Info.plist permission strings** —
-  [`Info.plist.additions.plist`](./Info.plist.additions.plist). Merge into the
-  generated `Info.plist`. These are **not optional**: the code uses the camera,
-  photo library, and geolocation (see mapping below), and iOS crashes / App Review
-  rejects a build that touches those without a purpose string.
+The `iOS native` workflow uses a standard macOS runner in this public repository.
+It requires Xcode 26 and the iOS 26 SDK, compiles an unsigned device Release
+build, checks resources in the actual `.app`, and runs an XCTest against the
+real WKWebView in the iOS Simulator. That test renders the sign-in screen,
+enters a synthetic email and password, and verifies the native sign-in controls. It does not
+submit a request or create a customer account. Browser smoke tests remain
+separate and do not substitute for this native test.
 
-### Capability → permission mapping (why each string is required)
+CI uses `native-ci.invalid` and a synthetic public auth key. **Never distribute
+that build.** No signing credential, Apple account, upload or deployment is used.
+A green run establishes compilation and the tested startup behavior only.
 
-| Capability             | Where in code                                                                   | iOS key                               |
-| ---------------------- | ------------------------------------------------------------------------------- | ------------------------------------- |
-| Camera capture         | `src/routes/AnimalProfile.tsx` `<input accept="image/*" capture="environment">` | `NSCameraUsageDescription`            |
-| Choose existing photo  | same picker (library fallback)                                                  | `NSPhotoLibraryUsageDescription`      |
-| Save export to library | packet/photo export (future-safe)                                               | `NSPhotoLibraryAddUsageDescription`   |
-| Local weather          | `src/routes/Weather.tsx` `navigator.geolocation.getCurrentPosition`             | `NSLocationWhenInUseUsageDescription` |
+## Release inputs and device acceptance
 
----
+1. Close the production release gates, and verify the merged native
+   routing/CORS behavior on a real device:
+   verified backup/hosted restore, authorized migrations, rate limiting,
+   monitoring, live auth-mail and payment/workflow acceptance. The native app
+   depends on that backend even when the website launch comes later.
+2. Supply the real public Supabase URL/anon key and HTTPS backend configuration
+   to the release build. Never include service-role, Stripe secret, email-provider
+   or signing keys in `VITE_*` variables or bundled files.
+3. In an owner-authorized Apple Developer team, confirm the registered bundle ID
+   `com.xbar.ranch`, signing profile and App Store Connect app. Set version/build,
+   open `ios/App/App.xcodeproj`, select the App scheme, and build for a physical
+   device with Xcode 26 or later and the iOS 26 SDK or later. Enrollment, signing and submission are owner steps;
+   no fee or upload is authorized by the CI workflow.
+4. Test password sign-in, sign-up confirmation, in-app email-code sign-in,
+   password recovery, workspace sync/reload, camera/photo/document import,
+   real document-to-horse review, Files/share-sheet export and safe account
+   deletion using disposable authorized accounts. Exercise offline and rejected
+   server responses on a real device. Do not delete an owner's real account.
+5. Validate the icon in an archive: the 1024px export is generated from the
+   owner-selected original horse artwork using the same proportional resize and
+   silver framing as the existing public icons. The supplied master is unchanged.
+   Confirm opacity/export validation and review the actual launch screen and store
+   screenshots. `python scripts/brand/original-build.py --verify` checks the exports.
+6. Only after those checks and explicit submission approval: archive, validate,
+   distribute to TestFlight, complete device acceptance and submit to App Review.
 
-## Native backend routing
+## Auth configuration
 
-The bundled WebView serves local files from `capacitor://localhost`; it cannot
-serve `/api` requests. `scripts/build-mobile.mjs` now supplies an HTTPS backend
-origin to the mobile bundle. It uses `VITE_API_BASE_URL` when set, otherwise the
-configured app origin (and the existing public-origin fallback). Use the real
-API host when the marketing site and backend have different domains. Explicit
-API URLs must contain no credentials, path, query or fragment. Store builds
-refuse `CAP_SERVER_URL`; use the development workflow for live reload.
+The Supabase Magic Link email template must include both `{{ .ConfirmationURL }}`
+for web users and `{{ .Token }}` for the native email-code flow. The native build
+hides OAuth buttons that cannot return a session to its bundled WebView. Verify
+actual email delivery, template content and the production redirect allowlist;
+a synthetic test or an existing confirmed account does not establish delivery.
 
-Account deletion, welcome email and packet verification use the same backend
-URL helper as the other API clients. Web builds still use same-origin requests
-when no API override is configured. Existing telemetry API-fallback preferences
-are preserved; supplying the native API origin does not enable that fallback.
+## Privacy and submission materials
 
-The API permits the exact bundled iOS origin `capacitor://localhost` and the
-existing configured HTTP(S) web origins. Welcome requests now answer preflight
-before authentication or email work. This is transport permission only: bearer
-tokens, endpoint authentication, workspace permissions and rate limits still
-apply. Wildcards, `Origin: null` and lookalike native origins are not permitted;
-credentialed cookie sharing is not enabled. Custom native schemes require a
-separate reviewed configuration change.
+`ios/App/App/Info.plist` and `ios/App/App/PrivacyInfo.xcprivacy` are the packaged
+sources of truth. Camera, photo-library selection and weather location have
+purpose strings. There is no speculative photo-library-write permission:
+exports use Files/share sheets. The Filesystem plugin's documented timestamp
+reason C617.1 is included; generic unused required-reason categories from the
+old draft are not included. Re-audit the manifest when SDKs or collection change.
+The imported collection inventory is incomplete and is an explicit distribution
+blocker. Production monitoring is enabled by default and can store user-linked
+page views and error/stack diagnostics (`runtimeEvents.ts`, `App.tsx`, and
+`globalErrorHandlers.ts`). Reconcile user identifiers, product interactions,
+applicable diagnostic categories, other collected profile/business data and
+third-party weather processing across the manifest, privacy policy and App Store
+Connect answers before signing a distribution build. The native URL repair
+preserves the prior telemetry API-fallback setting; it does not silently enable
+that fallback. This draft does not certify the complete collection inventory.
 
-**Synthetic transport tests are not physical-device acceptance.** Validate
-real sign-in, server requests and safe account deletion on an authorized test
-account in the actual WKWebView before distribution. The native Xcode project is
-still not checked into main; held readiness PR #265 is not part of this fix.
+Provide a reachable privacy-policy/support URL, final app description and age
+rating, screenshots in Apple's currently required device sizes, and a working
+reviewer account with backend access. Do not label CI screenshots as customer
+workflow acceptance. No App Store listing, signed archive or review approval
+is established by this repository alone.
 
-## Steps that require a Mac + Xcode
+References: [Apple SDK requirements](https://developer.apple.com/news/?id=ueeok6yw),
+[Capacitor iOS](https://capacitorjs.com/docs/ios),
+[Filesystem privacy manifest](https://capacitorjs.com/docs/apis/filesystem),
+[App Review Guidelines](https://developer.apple.com/app-store/review/guidelines/).
 
-1. **Generate the native project** (first time only):
-   ```bash
-   npm ci
-   npm run mobile:add:ios      # npx cap add ios
-   npm run mobile:sync         # build web + npx cap sync
-   ```
-2. **Add the submission assets** to `ios/App/App/`:
-   - Drag `ios-submission/PrivacyInfo.xcprivacy` into the **App** target
-     (Copy Bundle Resources).
-   - Merge the keys from `ios-submission/Info.plist.additions.plist` into
-     `ios/App/App/Info.plist`.
-3. **App icon & launch screen** — generate the icon set from `public/brand/icon-512.png`
-   (1024×1024 master required by Apple; upscale/redraw if needed — do **not** ship a
-   transparent or rounded icon, Apple requires opaque square). Set the launch screen
-   background to `#05070A` to match the config.
-4. **Signing** — open `ios/App/App.xcworkspace` in Xcode, select your Team,
-   set the bundle id to `com.xbar.ranch`, enable automatic signing.
-5. **Version/build** — set marketing version and build number.
-6. **Archive & upload** — Product ▸ Archive ▸ Distribute App ▸ App Store Connect.
+## Swift dependency lock before release
 
-## App Store Connect metadata (done in the browser, not code)
-
-- App name, subtitle, category (Business / Productivity), age rating.
-- **Privacy policy URL** (required) and support URL.
-- **Privacy "Nutrition Label"** questionnaire — must match
-  `PrivacyInfo.xcprivacy`: Email (linked, app functionality), Photos/Videos
-  (linked, app functionality), Other user content (linked), Precise Location
-  (not linked, app functionality, **not** used for tracking).
-- Screenshots for required device sizes (6.7" and 6.5" iPhone, 12.9" iPad if you
-  ship iPad). Capture from the running app.
-- Sign-in demo account for App Review (the app is behind auth).
-
-## Required Supabase configuration (before the first store build)
-
-**The Magic Link email template must contain BOTH `{{ .ConfirmationURL }}` and
-`{{ .Token }}`.** Add the token; do not remove the link.
-
-Supabase chooses what to send from the template, not from the API call:
-`{{ .ConfirmationURL }}` renders a clickable link, `{{ .Token }}` renders a
-six-digit code. The default template has only the link.
-
-Both are needed because **this template is global** — every `signInWithOtp`
-email in the deployment uses it, not only the native request. Settings exposes
-a "Send magic link" button (`Settings.tsx`, `handleSendMagicLink`) and that
-screen has no code input, so a template carrying only the token would hand web
-users a code the flow that sent it cannot consume. A template carrying both
-serves each: the app's code input accepts the token, and the Settings link keeps
-working.
-
-The store build hides Google, Apple and Facebook sign-in, because
-`signInWithOAuth` navigates the WebView to the provider and returns to
-`capacitor://localhost` — a redirect Google refuses and Supabase will not
-accept. Those buttons are the ONLY credential an account created through them
-has, so the signed-out screen offers an emailed code instead: a code is typed
-into the app and exchanged there, which is the only emailed route that puts a
-session in the app rather than in a browser.
-
-If the template still sends a link, that customer receives something the code
-input cannot accept, and is locked out of iOS entirely — with a form in front of
-them that looks like it should work. This cannot be set from code, so it is a
-submission prerequisite rather than a deployment nicety.
-
-Set it in Supabase → Authentication → Email Templates → Magic Link.
-
----
-
-## Known App Review risk areas for this app
-
-- **Account deletion** — apps with account creation must offer in-app account
-  deletion (Guideline 5.1.1(v)). Confirm this exists or add it before submitting.
-- **Purchases** — subscriptions are sold via Stripe (web checkout). Selling
-  digital subscriptions **inside** the iOS app requires Apple In-App Purchase
-  (Guideline 3.1.1). Keep the iOS build's paywall as an external/managed-on-web
-  flow, or add StoreKit IAP — this is a product decision to make before review.
-- **Purpose strings** — keep each usage description specific to the real use.
-
----
-
-_This runbook is intentionally honest about the Mac-only boundary. Nothing here
-claims the native binary is built or submitted — those steps happen on a Mac with
-the Apple Developer account and cannot be run from this environment._
+Capacitor itself is exact-pinned, but the Filesystem plugin uses a version range
+for its native filesystem dependency. After the macOS build resolves the actual
+Swift package graph, capture and review Package.resolved for reproducible release
+builds. This is not established by the Linux resource sync.
