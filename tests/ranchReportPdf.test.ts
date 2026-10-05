@@ -506,3 +506,81 @@ test('closed-sale disclaimer precedes its table below the masthead, including co
   assert.ok(items[firstHeader].y < items[disclaimer].y - 22, 'wrapped disclaimer clears the table header');
   await assertFits(bytes);
 });
+
+test('PDF separately reports agreed revenue, payments, unpaid balances and held deposits', async () => {
+  const data = fixture(1);
+  data.salesLeads = [
+    {
+      id: 'won',
+      horseId: 'h0',
+      stage: 'Closed',
+      outcome: 'Won',
+      offerAmount: 25000,
+      amountReceived: 8000,
+      amountReceivedOn: '2026-09-01',
+      depositAmount: 5000,
+      depositStatus: 'Paid',
+    },
+    { id: 'open', horseId: 'other', depositAmount: 3000, depositStatus: 'Paid' },
+  ] as RanchReportInput['salesLeads'];
+  const bytes = await renderReportPdf(buildRanchReport(data, now), 'Settlement review', await branding());
+  const text = drawn(bytes)
+    .map((item) => item.text)
+    .join(' ');
+  for (const label of [
+    'Payments & receivables',
+    'Agreed closed-sale value',
+    'Received sale payments',
+    'Sale balances still owed',
+    'Unapplied deposits held',
+    'Total recorded cash received',
+    '$25,000',
+    '$8,000',
+    '$17,000',
+    '$3,000',
+    '$11,000',
+  ])
+    assert.ok(text.includes(label), label);
+  assert.ok(text.includes('not a bank balance or profit'));
+  await assertFits(bytes);
+});
+
+test('PDF retains known cash after a paid sale is reopened without calling it profit', async () => {
+  const input = fixture(1);
+  input.salesLeads = [
+    {
+      id: 'reopened',
+      horseId: input.horses[0].id,
+      name: 'Buyer',
+      stage: 'Offer',
+      channel: 'Referral',
+      lastTouch: '2026-09-01',
+      offerAmount: 25000,
+      depositAmount: 5000,
+      depositStatus: 'Paid',
+      amountReceived: 25000,
+      amountReceivedOn: '2026-09-01',
+      savedListing: false,
+      shareReady: false,
+    },
+  ];
+  const report = buildRanchReport(input, now);
+  assert.equal(report.money.totalCashReceived, 25000);
+  assert.equal(report.money.unappliedReceipts, 20000);
+  const bytes = await renderReportPdf(report, 'Synthetic Cash Ranch', await branding());
+  const text = drawn(bytes)
+    .map((row) => row.text)
+    .join(' ');
+  assert.match(text, /Unapplied receipts \(excluding held deposits\)/);
+  assert.ok(text.includes('$20,000'));
+  assert.ok(text.includes('$25,000'));
+  const operators = drawn(bytes);
+  const total = operators.find((row) => row.text === 'Total recorded cash received');
+  const disclaimer = operators.find((row) => row.text.startsWith('Cash received is based on recorded payments'));
+  assert.ok(total && disclaimer);
+  assert.ok(
+    disclaimer.y + disclaimer.size <= total.y - 8,
+    'Payment disclaimer must begin below the final settlement row without overlap',
+  );
+  await assertFits(bytes);
+});

@@ -441,6 +441,40 @@ export async function renderReportPdf(
     540,
     7.5,
   );
+  if (
+    report.horses.some((horse) => horse.financialStatus === 'sold') ||
+    money.depositsHeld > 0 ||
+    money.unappliedReceipts > 0
+  ) {
+    newPage('Payments & receivables', 'Agreed sale value / recorded receipts / unapplied deposits');
+    const settlementEnd = table(
+      ['Settlement measure', 'Recorded amount'],
+      [380, 160],
+      [
+        [{ value: 'Agreed closed-sale value' }, { value: dollars(money.closedSaleValue) }],
+        [
+          { value: 'Received sale payments (including applied deposits)' },
+          { value: dollars(money.collectedFromSales) },
+        ],
+        [{ value: 'Sale balances still owed' }, { value: dollars(money.outstandingFromSales) }],
+        [{ value: 'Unapplied deposits held' }, { value: dollars(money.depositsHeld) }],
+        [{ value: 'Unapplied receipts (excluding held deposits)' }, { value: dollars(money.unappliedReceipts) }],
+        [{ value: 'Total recorded cash received' }, { value: dollars(money.totalCashReceived) }],
+      ],
+      130,
+      687,
+      'Payments & receivables',
+      'Continued',
+      '',
+    );
+    paragraph(
+      'Cash received is based on recorded payments, not bank verification. It is not a bank balance or profit. Closed-sale deposits are included in sale receipts only once. Unapplied deposits and other unapplied receipts remain separate from earned sale value and profit. Changing a deal stage does not record a refund.',
+      36,
+      settlementEnd + 12,
+      540,
+      8,
+    );
+  }
   const closed = report.horses.filter((horse) => horse.financialStatus === 'sold');
   if (closed.length) {
     newPage('Closed-sale results', 'Recorded deal values and costs / payment collection is separate');

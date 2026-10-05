@@ -1,3 +1,4 @@
+import { localIsoDate } from '@/lib/format';
 import { useEffect, useState } from 'react';
 import { normalizePacketWebsite, validatePacketProfile } from '../../api/_lib/packet-branding.js';
 import { create } from 'zustand';
@@ -40,6 +41,7 @@ import { featureGate } from '@/lib/commercialEngine';
 import { hasActivePaidPlan, isCurrentPaidPlan } from '@/lib/subscriptionDecision';
 import { applyTrialToProfile, parseTrialStart } from '@/lib/trialSubscription';
 import { buildOfferDecision } from '@/lib/profitIntelligence';
+import { receivedTotalBelowPaidDeposit, validateSalePayment } from '@/lib/salePayment';
 import { scheduleBuyerActivityFollowUp } from '@/lib/salesFollowUp';
 import {
   createWorkspaceInvitationInCloud,
@@ -110,6 +112,7 @@ import {
   promoteDocument,
   requireRoleCapability,
   restorePersistedState,
+  canRestoreSalePaymentDates,
   restoreWorkspaceProfile,
   selectPersistedState,
   syncDerivedValues,
@@ -2081,6 +2084,66 @@ export const useXbarStore = create<XbarStore>()(
         if (!lead) {
           return { ok: false, message: 'Lead not found.' };
         }
+        if (
+          patch.outcome === 'Won' &&
+          get().salesLeads.some((item) => item.id !== leadId && item.horseId === lead.horseId && item.outcome === 'Won')
+        ) {
+          return {
+            ok: false,
+            message:
+              'This horse already has a completed sale. Correct that sale instead of replacing its recorded receipts.',
+          };
+        }
+        // Money received on a sale feeds "collected" and "profit banked" (audit
+        // F08). The close-out form validates it fully; this is the backstop for
+        // any other caller.
+        if (
+          patch.amountReceived !== undefined &&
+          !(Number.isFinite(patch.amountReceived) && patch.amountReceived >= 0)
+        ) {
+          return { ok: false, message: 'Amount received must be $0 or more.' };
+        }
+
+        if (
+          [
+            'amountReceived',
+            'amountReceivedOn',
+            'offerAmount',
+            'counterOfferAmount',
+            'depositAmount',
+            'depositStatus',
+          ].some((key) => Object.prototype.hasOwnProperty.call(patch, key))
+        ) {
+          const next = { ...lead, ...patch };
+          const payment = validateSalePayment({
+            amount: next.amountReceived === undefined ? '' : String(next.amountReceived),
+            receivedOn: typeof next.amountReceivedOn === 'string' ? next.amountReceivedOn : '',
+            saleValue: next.counterOfferAmount || next.offerAmount || 0,
+            paidDepositAmount: next.depositStatus === 'Paid' ? next.depositAmount : 0,
+            today: localIsoDate(),
+          });
+          if (!payment.ok) return payment;
+        }
+
+        if (
+          ['amountReceived', 'depositAmount', 'depositStatus'].some((key) =>
+            Object.prototype.hasOwnProperty.call(patch, key),
+          )
+        ) {
+          const payment = { ...lead, ...patch };
+          if (
+            receivedTotalBelowPaidDeposit(
+              payment.amountReceived,
+              payment.depositStatus === 'Paid' ? (payment.depositAmount ?? 0) : 0,
+            )
+          ) {
+            return {
+              ok: false,
+              message:
+                'Amount received includes the paid deposit. Correct the total received or the deposit record first.',
+            };
+          }
+        }
 
         const nextOfferStatus = patch.offerStatus ?? lead.offerStatus;
         if (nextOfferStatus && ['Accepted', 'Deposit Due', 'Deposit Paid'].includes(nextOfferStatus)) {
@@ -3200,9 +3263,23 @@ export const useXbarStore = create<XbarStore>()(
           return { ok: false, message: 'Buyer offer event not found.' };
         }
 
+        // Financials model one completed sale per horse. Refuse a fresh offer
+        // rather than hiding that sale or reusing its settled receipt.
+        if (get().salesLeads.some((item) => item.horseId === event.horseId && item.outcome === 'Won')) {
+          return {
+            ok: false,
+            message: 'This horse is already sold. Review its existing sale before recording another offer.',
+          };
+        }
+
         const normalizedActor = event.actor.trim().toLowerCase();
+        // Keep closed, unsuccessful deals separate from a fresh unpaid lead.
         let lead = get().salesLeads.find(
-          (item) => item.horseId === event.horseId && item.name.trim().toLowerCase() === normalizedActor,
+          (item) =>
+            item.stage !== 'Closed' &&
+            !item.outcome &&
+            item.horseId === event.horseId &&
+            item.name.trim().toLowerCase() === normalizedActor,
         );
         if (!lead) {
           const created = get().createSalesLead({
@@ -3231,20 +3308,6 @@ export const useXbarStore = create<XbarStore>()(
           offerStatus: 'Submitted',
           shareReady: true,
           notes,
-          /*
-           * Reopening a closed lead clears its outcome.
-           *
-           * This reuses an existing lead matched on the buyer, and that lead
-           * may already be closed. Leaving `outcome: 'Won'` in place while
-           * moving the stage back to `Offer` produces a record that is
-           * simultaneously sold and live, which the ranch report then reads
-           * both ways at once: `soldHorseIds` counts the horse as sold while
-           * the new amount lands in open pipeline.
-           *
-           * A buyer submitting a fresh offer is the deal being live again, so
-           * the outcome no longer describes it. `undefined` rather than a
-           * delete because the patch is applied as `{ ...item, ...patch }`.
-           */
           outcome: undefined,
         });
         if (!updated.ok) {
@@ -3464,6 +3527,13 @@ export const useXbarStore = create<XbarStore>()(
           return {
             ok: false,
             message: 'Backup file is missing the XBAR workspace payload.',
+          };
+        }
+        if (!canRestoreSalePaymentDates(payload)) {
+          return {
+            ok: false,
+            message:
+              'Workspace contains an invalid or future payment receipt date. Correct the source record before importing.',
           };
         }
         const nextState = restorePersistedState(payload);

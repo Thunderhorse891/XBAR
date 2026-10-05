@@ -26,6 +26,15 @@ const wonLead = (id: string, horseId: string, offerAmount: number, counterOfferA
     offerUpdatedAt: '2026-01-01',
   }) as unknown as SalesLead;
 
+// Closing a deal records what was agreed; collected money is recorded separately
+// (audit F08). Fixtures that are about cost or price, not payment, are paid in
+// full so the payment dimension does not leak into their assertions.
+const paidInFull = (lead: SalesLead): SalesLead => ({
+  ...lead,
+  amountReceived: lead.counterOfferAmount || lead.offerAmount,
+  amountReceivedOn: '2026-01-15',
+});
+
 const activeLead = (id: string, horseId: string, offerAmount: number): SalesLead =>
   ({
     id,
@@ -52,8 +61,8 @@ const receipts: ExpenseReceipt[] = [
   receipt('r4', undefined, 'Travel', 300), // overhead — tied to no animal
 ];
 const leads: SalesLead[] = [
-  wonLead('l1', 'a', 10000, 12000), // counter (12k) must beat the raw offer (10k)
-  wonLead('l2', 'b', 6000),
+  paidInFull(wonLead('l1', 'a', 10000, 12000)), // counter (12k) must beat the raw offer (10k)
+  paidInFull(wonLead('l2', 'b', 6000)),
   activeLead('l3', 'c', 9000),
 ];
 
@@ -62,7 +71,10 @@ const fin = buildRanchFinancials(horses, receipts, leads);
 test('gross profit is on sold animals; net profit deducts operating overhead', () => {
   assert.equal(fin.soldCount, 2);
   // Ace 12,000 proceeds − 6,000 invested = 6,000; Bess 6,000 − 8,000 = −2,000.
-  assert.equal(fin.realizedProceeds, 18000);
+  assert.equal(fin.closedSaleValue, 18000);
+  assert.equal(fin.collectedFromSales, 18000); // both recorded as paid in full
+  assert.equal(fin.outstandingFromSales, 0);
+  assert.equal(fin.soldUnsettledCount, 0);
   assert.equal(fin.realizedCost, 14000);
   assert.equal(fin.grossProfitOnSales, 4000); // gross on sold animals
   assert.equal(fin.netProfit, 3700); // 4,000 gross − 300 travel overhead = the real bottom line
@@ -80,9 +92,10 @@ test('a sale with a price but no cost basis shows proceeds, never invented profi
   const solo = buildRanchFinancials(
     [horse('k', 0, 0, 'Koda')], // no cost basis, no asking price
     [], // and no linked expenses → cost is a blind spot
-    [wonLead('lk', 'k', 10000)], // sold for a known 10,000
+    [paidInFull(wonLead('lk', 'k', 10000))], // sold for a known 10,000, paid
   );
-  assert.equal(solo.realizedProceeds, 10000); // cash collected is known
+  assert.equal(solo.closedSaleValue, 10000); // the agreed amount is known
+  assert.equal(solo.collectedFromSales, 10000); // and recorded as received
   assert.equal(solo.grossProfitOnSales, 0); // but profit is NOT assumed from a zero cost
   assert.equal(solo.netProfit, 0);
   assert.equal(solo.soldMissingCostCount, 1);
@@ -191,7 +204,7 @@ test('buildBankedHeadline classifies complete, partial, and unknown consistently
 
   // Unknown: a priced sale with no cost and no overhead → net 0, nothing concrete.
   const unknown = buildBankedHeadline(
-    buildRanchFinancials([horse('k', 0, 0, 'Koda')], [], [wonLead('lk', 'k', 10000)]),
+    buildRanchFinancials([horse('k', 0, 0, 'Koda')], [], [paidInFull(wonLead('lk', 'k', 10000))]),
   );
   assert.equal(unknown.state, 'unknown');
   assert.equal(unknown.fixPhrase, 'add costs');
@@ -201,7 +214,7 @@ test('buildBankedHeadline classifies complete, partial, and unknown consistently
     buildRanchFinancials(
       [horse('k', 0, 0, 'Koda')],
       [receipt('rent', undefined, 'Other', 5000)],
-      [wonLead('lk', 'k', 10000)],
+      [paidInFull(wonLead('lk', 'k', 10000))],
     ),
   );
   assert.equal(partial.state, 'partial');
@@ -247,7 +260,7 @@ test('overhead can flip a positive gross into a net loss, and it is surfaced', (
   const solo = buildRanchFinancials(
     [horse('h', 5000, 20000, 'Halo')],
     [receipt('rent', undefined, 'Other', 20000)],
-    [wonLead('lh', 'h', 15000)], // 15,000 − 5,000 = 10,000 gross
+    [paidInFull(wonLead('lh', 'h', 15000))], // 15,000 − 5,000 = 10,000 gross, paid
   );
   assert.equal(solo.grossProfitOnSales, 10000);
   assert.equal(solo.overheadSpend, 20000);
@@ -264,7 +277,8 @@ test('a Won deal with no recorded amount is an integrity gap, never invented rev
   assert.equal(solo.soldCount, 1);
   assert.equal(solo.soldMissingPriceCount, 1);
   // The asking price is NEVER treated as proceeds collected.
-  assert.equal(solo.realizedProceeds, 0);
+  assert.equal(solo.closedSaleValue, 0);
+  assert.equal(solo.collectedFromSales, 0);
   assert.equal(solo.grossProfitOnSales, 0);
   assert.equal(solo.netProfit, 0);
   const row = solo.perAnimal.find((r) => r.horseId === 'g');

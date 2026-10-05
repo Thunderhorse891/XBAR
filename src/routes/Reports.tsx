@@ -451,7 +451,21 @@ export default function Reports() {
               className="ops-metric-card"
               label="Open offers"
               value={formatCompactCurrency(report.money.pipelineValue)}
-              detail={`${formatCurrency(report.money.depositsHeld)} in deposits held`}
+              detail={`${formatCurrency(report.money.depositsHeld)} in deposits held · ${formatCurrency(report.money.unappliedReceipts)} in other unapplied receipts`}
+              tone="blue"
+            />
+            <MetricCard
+              className="ops-metric-card"
+              label="Sale payments received"
+              value={formatCompactCurrency(report.money.collectedFromSales)}
+              detail={`${formatCurrency(report.money.closedSaleValue)} agreed · ${formatCurrency(report.money.outstandingFromSales)} still owed. Paid deposits on closed sales are included.`}
+              tone="blue"
+            />
+            <MetricCard
+              className="ops-metric-card"
+              label="Recorded cash total"
+              value={formatCompactCurrency(report.money.totalCashReceived)}
+              detail={`${formatCurrency(report.money.depositsHeld)} held deposits · ${formatCurrency(report.money.unappliedReceipts)} other unapplied receipts. Not profit or a bank balance.`}
               tone="blue"
             />
             <MetricCard

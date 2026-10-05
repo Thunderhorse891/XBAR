@@ -156,6 +156,8 @@ export type XbarStore = {
         | 'savedListing'
         | 'shareReady'
         | 'outcome'
+        | 'amountReceived'
+        | 'amountReceivedOn'
       >
     >,
   ) => ActionResult;

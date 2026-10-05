@@ -1,3 +1,5 @@
+import { localIsoDate } from '@/lib/format';
+import { isCalendarDay } from '@/lib/salePayment';
 import {
   expenseReceiptsSeed,
   ownershipSeed,
@@ -1529,8 +1531,12 @@ export function canRestorePersistedState(raw: unknown): boolean {
        * profitIntelligence.ts:28 and :268 calls a string method on whatever
        * `??` let through — during report construction, not on a screen.
        */
-      optionalStrings: ['nextFollowUp', 'notes', 'offerUpdatedAt'],
-      optionalNumbers: ['offerAmount', 'counterOfferAmount', 'depositAmount'],
+      /*
+       * `amountReceivedOn` is trimmed by the Sales close-out validator, and
+       * `amountReceived` feeds "collected" and "profit banked" (audit F08).
+       */
+      optionalStrings: ['nextFollowUp', 'notes', 'offerUpdatedAt', 'amountReceivedOn'],
+      optionalNumbers: ['offerAmount', 'counterOfferAmount', 'depositAmount', 'amountReceived'],
     },
     /*
      * `listing.channels.includes()` — SharedAccess.tsx:33 — was the container
@@ -1804,10 +1810,41 @@ export function canRestorePersistedState(raw: unknown): boolean {
     }
   }
 
+  // Do not admit a future receipt that would silently become collected as
+  // the calendar advances. Reject before files or records are installed.
+  const today = localIsoDate();
+  for (const lead of normalized.salesLeads) {
+    if (lead.amountReceivedOn && (!isCalendarDay(lead.amountReceivedOn) || lead.amountReceivedOn > today)) return false;
+    const price = lead.counterOfferAmount || lead.offerAmount || 0;
+    if (
+      price > 0 &&
+      ((lead.amountReceived ?? 0) > price || (lead.depositStatus === 'Paid' && (lead.depositAmount ?? 0) > price))
+    )
+      return false;
+  }
+
   return true;
 }
 
+/** Payment dates must be valid at ingestion, not become evidence as the clock advances. */
+export function canRestoreSalePaymentDates(raw: unknown): boolean {
+  if (!raw || typeof raw !== 'object') return true;
+  const leads = (raw as Record<string, unknown>).salesLeads;
+  if (!Array.isArray(leads)) return true;
+  const today = localIsoDate();
+  return leads.every((lead) => {
+    if (!lead || typeof lead !== 'object') return true; // Full shape validation owns this case.
+    const date = (lead as SalesLead).amountReceivedOn;
+    return date === undefined || date === null || date === '' || (isCalendarDay(date) && date <= today);
+  });
+}
+
 export function restorePersistedState(raw: unknown): PersistedXbarState {
+  if (!canRestoreSalePaymentDates(raw)) {
+    throw new Error(
+      'Workspace contains an invalid or future payment receipt date. Correct the source record before importing.',
+    );
+  }
   const state = (raw && typeof raw === 'object' ? raw : {}) as Record<string, unknown>;
   const horses = Array.isArray(state.horses)
     ? (state.horses as HorseRecord[]).map((horse) => ({

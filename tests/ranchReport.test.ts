@@ -5,6 +5,7 @@ import test from 'node:test';
 import { buildRanchReport, type RanchReportInput } from '../src/lib/ranchReport.js';
 import { ranchReportFileName, ranchReportToCsv } from '../src/lib/ranchReportExport.js';
 import { reportCount, reportDecisions, reportException } from '../src/lib/ranchReportDecisions.js';
+import { buildRanchFinancials } from '../src/lib/profitIntelligence.js';
 import { monthKeyOf, trailingMonthKeys } from '../src/lib/receiptMonths.js';
 import type { ExpenseReceipt, HorseRecord, SalesLead } from '../src/types/xbar.js';
 
@@ -231,14 +232,22 @@ test('the listed count agrees with the risk population it sits beside', () => {
 test('a deposit on a completed sale is no longer held', () => {
   const report = buildRanchReport(
     input({
+      horses: [horse({ id: 'h1', name: 'Recorded sold horse' })],
       salesLeads: [
         // Still open: the ranch is holding this money and owes it back if the
         // deal falls through.
         lead({ id: 'open', stage: 'Offer', depositAmount: 2_000, depositStatus: 'Paid' }),
         // Won: the Sales editor leaves depositStatus 'Paid' in place after the
-        // sale closes, so counting that field alone kept the deposit on the
+        // priced sale closes on a recorded horse, so counting that field alone kept the deposit on the
         // books forever — in the UI, the CSV and the banker-facing PDF.
-        lead({ id: 'won', stage: 'Closed', outcome: 'Won', depositAmount: 5_000, depositStatus: 'Paid' }),
+        lead({
+          id: 'won',
+          stage: 'Closed',
+          outcome: 'Won',
+          offerAmount: 10_000,
+          depositAmount: 5_000,
+          depositStatus: 'Paid',
+        }),
         // Lost is deliberately still counted: that money is usually sitting in
         // the ranch's account pending a refund decision.
         lead({ id: 'lost', stage: 'Offer', outcome: 'Lost', depositAmount: 750, depositStatus: 'Paid' }),
@@ -1427,4 +1436,46 @@ test('financial truth: unusable cost dates cannot silently lower the safe sale d
   assert.equal(report.horses[0].projectedMargin, null);
   assert.equal(report.horses[0].safeDiscountFloor, null);
   assert.equal(buildOfferDecision(h, receipts, 12000).status, 'missing-costs');
+});
+
+test('reports and CSV reconcile agreed sales, receipts, receivables and unapplied deposits with Money', () => {
+  const records = input({
+    horses: [horse({ id: 'h1', name: 'Paid partly', costBasis: 10000, sale: sale({ askPrice: 25000 }) })],
+    salesLeads: [
+      lead({
+        id: 'won',
+        outcome: 'Won',
+        stage: 'Closed',
+        offerAmount: 25000,
+        amountReceived: 8000,
+        amountReceivedOn: '2026-08-10',
+        depositAmount: 5000,
+        depositStatus: 'Paid',
+      }),
+      lead({ id: 'open', horseId: 'other', depositAmount: 2000, depositStatus: 'Paid' }),
+      lead({ id: 'lost', horseId: 'other', outcome: 'Lost', depositAmount: 1000, depositStatus: 'Paid' }),
+      lead({ id: 'due', horseId: 'other', depositAmount: 9000, depositStatus: 'Due' }),
+    ],
+  });
+  const report = buildRanchReport(records, NOW);
+  const fin = buildRanchFinancials(records.horses, records.expenseReceipts, records.salesLeads, NOW);
+  for (const key of [
+    'closedSaleValue',
+    'collectedFromSales',
+    'outstandingFromSales',
+    'depositsHeld',
+    'totalCashReceived',
+  ] as const)
+    assert.equal(report.money[key], fin[key]);
+  assert.equal(report.money.closedSaleValue, 25000);
+  assert.equal(report.money.collectedFromSales, 8000);
+  assert.equal(report.money.outstandingFromSales, 17000);
+  assert.equal(report.money.depositsHeld, 3000);
+  assert.equal(report.money.totalCashReceived, 11000);
+  const csv = ranchReportToCsv(report, 'Settlement test ranch');
+  assert.match(csv, /"Agreed closed-sale value","25000"/);
+  assert.match(csv, /"Received sale payments \(including applied deposits\)","8000"/);
+  assert.match(csv, /"Sale balances still owed","17000"/);
+  assert.match(csv, /"Deposits held","3000"/);
+  assert.match(csv, /"Total recorded cash received \(not bank balance or profit\)","11000"/);
 });

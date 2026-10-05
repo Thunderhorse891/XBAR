@@ -62,7 +62,12 @@ export function ranchReportToCsv(report: RanchReport, ranchName = ''): string {
   lines.push(csvRow(['Value at risk', report.money.valueAtRisk]));
   lines.push(csvRow(['Ready to close', report.money.readyValue]));
   lines.push(csvRow(['Open offers', report.money.pipelineValue]));
+  lines.push(csvRow(['Agreed closed-sale value', report.money.closedSaleValue]));
+  lines.push(csvRow(['Received sale payments (including applied deposits)', report.money.collectedFromSales]));
+  lines.push(csvRow(['Sale balances still owed', report.money.outstandingFromSales]));
   lines.push(csvRow(['Deposits held', report.money.depositsHeld]));
+  lines.push(csvRow(['Unapplied recorded receipts (excluding held deposits)', report.money.unappliedReceipts]));
+  lines.push(csvRow(['Total recorded cash received (not bank balance or profit)', report.money.totalCashReceived]));
   lines.push(csvRow(['Documents to review', report.documentsToReview]));
   lines.push('');
 

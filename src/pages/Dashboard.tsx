@@ -108,8 +108,11 @@ export default function Dashboard() {
         ? `Partial — ${banked.fixPhrase} to complete`
         : `${financials.soldCount} sold · ${banked.fixPhrase} to see profit`;
   // Cash collected is likewise unknown (not $0) when a closed sale has no amount.
+  // It is only what was recorded as received: an agreed sale that has not been
+  // paid is owed, not collected (audit F08).
   const missingPrice = financials.soldMissingPriceCount;
-  const collectedUnknown = missingPrice > 0 && financials.realizedProceeds === 0;
+  const collectedUnknown = missingPrice > 0 && financials.closedSaleValue === 0;
+  const owed = financials.outstandingFromSales;
   const moneyBand = (
     <div className="xs-money motion-stagger">
       <button
@@ -143,14 +146,18 @@ export default function Dashboard() {
         {collectedUnknown ? (
           <span className="xs-money__value">—</span>
         ) : (
-          <span className="xs-money__value">{formatCompactCurrency(financials.realizedProceeds)}</span>
+          <span className="xs-money__value">{formatCompactCurrency(financials.collectedFromSales)}</span>
         )}
         <span className="xs-money__meta">
           {collectedUnknown
             ? 'Record the sale amount on a closed deal'
-            : missingPrice > 0
-              ? `Cash in · ${missingPrice} missing a price`
-              : 'Cash in from closed deals'}
+            : owed > 0
+              ? `${formatCompactCurrency(owed)} still owed${missingPrice > 0 ? ` · ${missingPrice} missing a price` : ''}`
+              : missingPrice > 0
+                ? `Cash in · ${missingPrice} missing a price`
+                : 'Cash in from closed deals'}
+          {(financials.unappliedReceipts > 0 || financials.depositsHeld > 0) &&
+            ` · ${formatCompactCurrency(financials.totalCashReceived)} total cash recorded, including unapplied funds`}
         </span>
       </button>
       <button

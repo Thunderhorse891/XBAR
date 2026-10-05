@@ -53,6 +53,11 @@ export interface RanchReportMoney {
   /** Open offers that have not been won or lost. */
   pipelineValue: number;
   depositsHeld: number;
+  closedSaleValue: number;
+  collectedFromSales: number;
+  outstandingFromSales: number;
+  totalCashReceived: number;
+  unappliedReceipts: number;
 }
 
 export interface HorseEconomicsRow {
@@ -461,21 +466,14 @@ export function buildRanchReport(input: RanchReportInput, now: Date = new Date()
       pipelineValue: sum(
         openOffers.map((lead) => positiveMoney(lead.counterOfferAmount) || positiveMoney(lead.offerAmount)),
       ),
-      // Money the operation is holding that is not yet its own.
-      //
-      // A deposit on a deal closed as Won has been applied to the sale — the
-      // Sales editor leaves `depositStatus: 'Paid'` in place afterwards, so
-      // counting on that field alone kept the deposit on the books forever and
-      // overstated the figure in the UI, the CSV and the banker-facing PDF.
-      //
-      // `Lost` is deliberately still counted: that money is usually sitting in
-      // the ranch's account pending a refund or a forfeiture decision, so it is
-      // genuinely still held. Only a completed sale has consumed it.
-      depositsHeld: sum(
-        salesLeads
-          .filter((lead) => lead.depositStatus === 'Paid' && lead.outcome !== 'Won')
-          .map((lead) => positiveMoney(lead.depositAmount)),
-      ),
+      // Reuse Money's settlement ledger: Won deposits are already included in
+      // received sale payments; other paid deposits remain held separately.
+      depositsHeld: financials.depositsHeld,
+      closedSaleValue: financials.closedSaleValue,
+      collectedFromSales: financials.collectedFromSales,
+      outstandingFromSales: financials.outstandingFromSales,
+      totalCashReceived: financials.totalCashReceived,
+      unappliedReceipts: financials.unappliedReceipts,
     },
     readiness,
     spendHistory: { observedMonths: observedReceiptMonths(expenseReceipts, now), completeness: 'unconfirmed' },

@@ -112,14 +112,21 @@ export default function Financials() {
           )}
           <span className="fin-stat__sub">
             {banked.state === 'complete'
-              ? `${fin.soldCount} sold · ${formatCurrency(fin.realizedProceeds)} collected${
-                  fin.realizedProceeds > 0
+              ? `${fin.soldCount} sold · ${formatCurrency(fin.collectedFromSales)} collected${
+                  fin.collectedFromSales > 0
                     ? ` · ${formatPercent(Math.round(fin.realizedMarginPercent))} gross margin`
                     : ''
                 }${fin.overheadSpend > 0 ? ` · net of ${formatCurrency(fin.overheadSpend)} overhead` : ''}`
-              : banked.state === 'partial'
-                ? `Partial — ${banked.fixPhrase} to complete`
-                : `${fin.soldCount} sold · ${banked.fixPhrase} to see profit`}
+              : `${
+                  banked.state === 'partial'
+                    ? `Partial — ${banked.fixPhrase} to complete`
+                    : `${fin.soldCount} sold · ${banked.fixPhrase} to see profit`
+                }${
+                  // Agreed is not collected (audit F08): say what buyers still owe.
+                  fin.outstandingFromSales > 0
+                    ? ` · ${formatCurrency(fin.collectedFromSales)} of ${formatCurrency(fin.closedSaleValue)} received, ${formatCurrency(fin.outstandingFromSales)} still owed`
+                    : ''
+                }`}
           </span>
         </div>
 
@@ -151,6 +158,13 @@ export default function Financials() {
           </span>
         </div>
       </div>
+
+      <p className="fin-stat__sub">
+        {formatCurrency(fin.closedSaleValue)} agreed sales · {formatCurrency(fin.collectedFromSales)} received on sales
+        · {formatCurrency(fin.outstandingFromSales)} still owed · {formatCurrency(fin.depositsHeld)} in unapplied
+        deposits held · {formatCurrency(fin.unappliedReceipts)} in other unapplied receipts. Total recorded cash
+        received: {formatCurrency(fin.totalCashReceived)}. This is not a bank balance or profit.
+      </p>
 
       {locked ? (
         <Card
