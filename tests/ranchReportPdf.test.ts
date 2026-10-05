@@ -113,22 +113,22 @@ test('18-horse executive report has three deliberate pages, seven KPIs and compl
     'INVESTED',
     'LISTED VALUE',
     'POTENTIAL MARGIN',
-    'MONTHLY BURN',
+    'RECORDED MONTHLY AVG',
     'SALE-READY VALUE',
     'BLOCKED VALUE',
     'OPEN OFFERS',
     '100% OF ASKING VALUE BLOCKED',
     '$0 ready to close today',
-    'prior 3 complete months',
+    'prior 3 calendar months',
     'not free care',
-    'remaining 20 points',
-    'not itemized',
+    'computed from current records',
+    'missing evidence',
     'unallocated overhead',
   ])
     assert.ok(text.includes(label), label);
   assert.equal(report.money.valueAtRisk, 252000);
   assert.equal(report.money.unallocatedThisMonth, 0);
-  assert.equal(report.money.monthlyBurn, 0);
+  assert.equal(report.money.monthlyBurn, null);
   assert.equal(report.documentsToReview, 0);
   assert.equal(reportDecisions(report).missingCoggins.length, 18);
   for (let i = 2; i <= 18; i++)
@@ -171,9 +171,9 @@ test('burn, overhead and profit exclude different periods and preserve sale inve
   const report = buildRanchReport(input, now),
     decisions = reportDecisions(report);
   assert.equal(report.money.unallocatedThisMonth, 900);
-  assert.equal(report.money.monthlyBurn, 100);
+  assert.equal(report.money.monthlyBurn, null);
   assert.equal(report.money.investedThisMonth, 1147.9);
-  assert.equal(decisions.potentialMargin, 9377);
+  assert.equal(decisions.potentialMargin, 9576.55);
   assert.equal(
     decisions.bands.reduce((n, b) => n + b.count, 0),
     1,
