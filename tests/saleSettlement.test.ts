@@ -384,3 +384,29 @@ for (const depositAmount of ['25000', true, {}, Infinity, -100]) {
     );
   });
 }
+
+test('changing a paid lead stage does not erase recorded cash or call it banked profit', () => {
+  const paid = auditLead({ amountReceived: 25000, amountReceivedOn: '2026-05-01', depositStatus: 'Paid' });
+  const before = financials(paid);
+  const after = financials({ ...paid, stage: 'Offer', outcome: undefined });
+  assert.equal(before.totalCashReceived, 25000);
+  assert.equal(after.totalCashReceived, before.totalCashReceived);
+  assert.equal(after.collectedFromSales, 0);
+  assert.equal(after.depositsHeld, 5000);
+  assert.equal(after.unappliedReceipts, 20000);
+  assert.equal(after.grossProfitOnSales, 0);
+});
+test('unknown agreed price does not erase a known paid deposit or valid cumulative receipt', () => {
+  for (const extra of [
+    { depositStatus: 'Paid' },
+    { depositStatus: 'Paid', amountReceived: 8000, amountReceivedOn: '2026-05-01' },
+  ] as const) {
+    const fin = financials(auditLead({ ...extra, offerAmount: 0 }));
+    assert.equal(fin.depositsHeld, 5000);
+    assert.equal(fin.totalCashReceived, 'amountReceived' in extra ? 8000 : 5000);
+    assert.equal(fin.collectedFromSales, 0);
+    assert.equal(fin.closedSaleValue, 0);
+    assert.equal(fin.grossProfitOnSales, 0);
+    assert.notEqual(buildBankedHeadline(fin).state, 'complete');
+  }
+});

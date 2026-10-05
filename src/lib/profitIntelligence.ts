@@ -231,10 +231,12 @@ export type RanchFinancials = {
   outstandingFromSales: number;
   /** Priced sales not yet recorded as paid in full. */
   soldUnsettledCount: number;
-  /** Paid deposits on deals not closed Won; excluded from sale receipts to prevent double counting. */
+  /** Paid deposits not applied to the selected priced Won sale; excludes deposits already in sale receipts. */
   depositsHeld: number;
-  /** Recorded sale receipts plus unapplied deposits. Not a bank balance or profit. */
+  /** Applied receipts + held deposits + other unapplied receipts. Not a bank balance or profit. */
   totalCashReceived: number;
+  /** Valid recorded receipts not applied to the selected priced Won sale, excluding held deposits. */
+  unappliedReceipts: number;
   realizedCost: number;
   /** Gross profit on sold animals: recorded proceeds − their break-even. */
   grossProfitOnSales: number;
@@ -329,9 +331,10 @@ export const NON_LIVE_OFFER_STATUSES = new Set(['Draft', 'Rejected']);
  * Money received on a Won sale (audit F08). Closing a lead records what was
  * agreed; it does not settle it. Only a recorded amount received counts or,
  * when none has been recorded, a deposit marked Paid. Never negative, never
- * more than the sale value, and an unreadable figure is nothing received.
+ * more than a known sale value, and an unreadable figure is nothing received.
+ * A null price permits only unapplied cash evidence, never banked profit.
  */
-export function saleAmountReceived(lead: SalesLead, saleValue: number, today = localIsoDate()): number {
+export function saleAmountReceived(lead: SalesLead, saleValue: number | null, today = localIsoDate()): number {
   // Persisted/restored records can bypass the close-out form. An explicit
   // receipt must carry the same real, non-future local day before it counts.
   // Do not fall back to a deposit when an explicit receipt is invalid.
@@ -356,7 +359,7 @@ export function saleAmountReceived(lead: SalesLead, saleValue: number, today = l
   const paidDeposit = Number.isFinite(deposit) ? Math.max(0, deposit) : 0;
   const received = Number.isFinite(recorded) ? Math.max(recorded, paidDeposit) : paidDeposit;
   // Contradictory receipts are not proof of full settlement.
-  if (received > saleValue) return 0;
+  if (saleValue !== null && received > saleValue) return 0;
   return Math.max(0, received);
 }
 
@@ -368,6 +371,7 @@ export function buildRanchFinancials(
 ): RanchFinancials {
   const sourceReceipts = receipts;
   receipts = recordedReceipts(receipts, now);
+  const appliedSources = new Set<SalesLead>();
   const rows: AnimalFinancialRow[] = horses.map((horse) => {
     const profile = buildHorseProfitProfile(horse, sourceReceipts, [], now);
     const invested = profile.breakEven;
@@ -383,6 +387,7 @@ export function buildRanchFinancials(
       const saleValueUnknown = value <= 0;
       const profit = saleValueUnknown ? 0 : value - invested;
       const received = saleValueUnknown ? 0 : saleAmountReceived(wonLead, value, localIsoDate(now));
+      if (!saleValueUnknown) appliedSources.add(wonLead);
       return {
         horseId: horse.id,
         horseName: horse.name,
@@ -455,16 +460,23 @@ export function buildRanchFinancials(
   const collectedFromSales = soldWithPrice.reduce((sum, row) => sum + row.received, 0);
   const unsettled = soldWithPrice.filter((row) => row.outstanding > 0);
   const outstandingFromSales = unsettled.reduce((sum, row) => sum + row.outstanding, 0);
-  const depositsHeld = leads
-    .filter((lead) => lead.outcome !== 'Won' && lead.depositStatus === 'Paid')
-    .reduce(
-      (sum, lead) =>
-        sum +
-        (typeof lead.depositAmount === 'number' && Number.isFinite(lead.depositAmount) && lead.depositAmount > 0
-          ? lead.depositAmount
-          : 0),
-      0,
-    );
+  // Moving a deal back to the pipeline does not refund its actual receipt.
+  // Receipts outside a priced selected Won sale remain unapplied, never banked.
+  let depositsHeld = 0,
+    unappliedReceipts = 0;
+  for (const lead of leads) {
+    if (appliedSources.has(lead)) continue;
+    const rawPrice = lead.counterOfferAmount || lead.offerAmount || 0;
+    const price = typeof rawPrice === 'number' && Number.isFinite(rawPrice) && rawPrice > 0 ? rawPrice : null;
+    const received = saleAmountReceived(lead, price, localIsoDate(now));
+    const paidDeposit =
+      lead.depositStatus === 'Paid' && typeof lead.depositAmount === 'number' && Number.isFinite(lead.depositAmount)
+        ? Math.max(0, lead.depositAmount)
+        : 0;
+    const heldDeposit = Math.min(received, paidDeposit);
+    depositsHeld += heldDeposit;
+    unappliedReceipts += received - heldDeposit;
+  }
   const bankedProceeds = soldBanked.reduce((sum, row) => sum + row.value, 0);
   const realizedCost = soldBanked.reduce((sum, row) => sum + row.invested, 0);
   const grossProfitOnSales = bankedProceeds - realizedCost;
@@ -506,7 +518,8 @@ export function buildRanchFinancials(
     outstandingFromSales,
     soldUnsettledCount: unsettled.length,
     depositsHeld,
-    totalCashReceived: collectedFromSales + depositsHeld,
+    unappliedReceipts,
+    totalCashReceived: collectedFromSales + depositsHeld + unappliedReceipts,
     realizedCost,
     grossProfitOnSales,
     netProfit,
@@ -531,14 +544,27 @@ export function buildRanchFinancials(
     topCostCategories,
     // Best and worst sale read the agreed margin -- a fact of the deal whether or
     // not it has been paid; what is still owed is its own insight.
-    insights: buildFinancialInsights(soldCosted, held, topCostCategories, {
-      unsettled,
-      costBlindSpotCount,
-      unpricedHeldCount,
-      soldMissingPriceCount,
-      soldMissingCostCount,
-      overheadSpend,
-    }),
+    insights: [
+      ...(unappliedReceipts > 0
+        ? [
+            {
+              id: 'unapplied-sale-receipts',
+              tone: 'risk' as const,
+              title: 'Recorded receipts need settlement review',
+              detail: `${unappliedReceipts.toLocaleString('en-US', { style: 'currency', currency: 'USD' })} of recorded receipts is not applied to a selected priced Won sale. Review its deal stage, agreed price and payment record. This money is separate from banked profit; changing a stage does not record a refund.`,
+              amount: unappliedReceipts,
+            },
+          ]
+        : []),
+      ...buildFinancialInsights(soldCosted, held, topCostCategories, {
+        unsettled,
+        costBlindSpotCount,
+        unpricedHeldCount,
+        soldMissingPriceCount,
+        soldMissingCostCount,
+        overheadSpend,
+      }),
+    ],
   };
 }
 

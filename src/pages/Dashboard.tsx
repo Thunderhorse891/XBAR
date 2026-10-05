@@ -156,6 +156,8 @@ export default function Dashboard() {
               : missingPrice > 0
                 ? `Cash in · ${missingPrice} missing a price`
                 : 'Cash in from closed deals'}
+          {(financials.unappliedReceipts > 0 || financials.depositsHeld > 0) &&
+            ` · ${formatCompactCurrency(financials.totalCashReceived)} total cash recorded, including unapplied funds`}
         </span>
       </button>
       <button

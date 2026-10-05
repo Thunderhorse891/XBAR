@@ -57,6 +57,7 @@ export interface RanchReportMoney {
   collectedFromSales: number;
   outstandingFromSales: number;
   totalCashReceived: number;
+  unappliedReceipts: number;
 }
 
 export interface HorseEconomicsRow {
@@ -472,6 +473,7 @@ export function buildRanchReport(input: RanchReportInput, now: Date = new Date()
       collectedFromSales: financials.collectedFromSales,
       outstandingFromSales: financials.outstandingFromSales,
       totalCashReceived: financials.totalCashReceived,
+      unappliedReceipts: financials.unappliedReceipts,
     },
     readiness,
     spendHistory: { observedMonths: observedReceiptMonths(expenseReceipts, now), completeness: 'unconfirmed' },

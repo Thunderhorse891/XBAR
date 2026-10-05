@@ -183,3 +183,52 @@ test("a second direct Won update cannot replace a horse's recorded historical sa
   assert.match(result.message, /already.*sale/i);
   assert.deepEqual(useXbarStore.getState().salesLeads, before);
 });
+
+test('reopening a paid sale preserves received cash through the actual store and report exports', async () => {
+  const { createHorseRecord } = await import('../../src/store/xbarStoreHelpers.ts');
+  const { buildRanchFinancials } = await import('../../src/lib/profitIntelligence.ts');
+  const { buildRanchReport } = await import('../../src/lib/ranchReport.ts');
+  const { ranchReportToCsv } = await import('../../src/lib/ranchReportExport.ts');
+  const empty = createEmptyWorkspaceState();
+  const created = createHorseRecord(
+    {
+      name: 'Cash Conservation Horse',
+      barnName: 'Cash',
+      sex: 'Mare',
+      segment: 'Broodmare',
+      status: 'Sale Prep',
+      owner: 'Synthetic Ranch',
+      ownerEntity: 'Synthetic Ranch',
+      barn: 'A',
+      pasture: 'A',
+    },
+    empty.workspaceProfile,
+  );
+  const horse = { ...created, costBasis: 10000, sale: { ...created.sale, askPrice: 25000 } };
+  const paid = {
+    ...useXbarStore.getState().salesLeads[0],
+    horseId: horse.id,
+    amountReceived: 25000,
+    amountReceivedOn: '2026-05-01',
+  };
+  useXbarStore.setState({ horses: [horse], salesLeads: [paid] });
+  const before = buildRanchFinancials([horse], [], [paid]);
+  const result = useXbarStore.getState().updateSalesLead('sale', { stage: 'Offer', outcome: undefined });
+  assert.equal(result.ok, true, result.message);
+  const state = useXbarStore.getState();
+  assert.equal(state.salesLeads[0].amountReceived, 25000);
+  const after = buildRanchFinancials(state.horses, [], state.salesLeads);
+  assert.equal(after.totalCashReceived, before.totalCashReceived);
+  assert.equal(after.unappliedReceipts, 20000);
+  assert.equal(after.grossProfitOnSales, 0);
+  const report = buildRanchReport({
+    horses: state.horses,
+    salesLeads: state.salesLeads,
+    expenseReceipts: [],
+    documents: [],
+    ownershipRecords: [],
+  });
+  assert.equal(report.money.totalCashReceived, 25000);
+  assert.equal(report.money.unappliedReceipts, 20000);
+  assert.match(ranchReportToCsv(report), /"Unapplied recorded receipts \(excluding held deposits\)","20000"/);
+});

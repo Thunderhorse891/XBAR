@@ -232,14 +232,22 @@ test('the listed count agrees with the risk population it sits beside', () => {
 test('a deposit on a completed sale is no longer held', () => {
   const report = buildRanchReport(
     input({
+      horses: [horse({ id: 'h1', name: 'Recorded sold horse' })],
       salesLeads: [
         // Still open: the ranch is holding this money and owes it back if the
         // deal falls through.
         lead({ id: 'open', stage: 'Offer', depositAmount: 2_000, depositStatus: 'Paid' }),
         // Won: the Sales editor leaves depositStatus 'Paid' in place after the
-        // sale closes, so counting that field alone kept the deposit on the
+        // priced sale closes on a recorded horse, so counting that field alone kept the deposit on the
         // books forever — in the UI, the CSV and the banker-facing PDF.
-        lead({ id: 'won', stage: 'Closed', outcome: 'Won', depositAmount: 5_000, depositStatus: 'Paid' }),
+        lead({
+          id: 'won',
+          stage: 'Closed',
+          outcome: 'Won',
+          offerAmount: 10_000,
+          depositAmount: 5_000,
+          depositStatus: 'Paid',
+        }),
         // Lost is deliberately still counted: that money is usually sitting in
         // the ranch's account pending a refund decision.
         lead({ id: 'lost', stage: 'Offer', outcome: 'Lost', depositAmount: 750, depositStatus: 'Paid' }),
