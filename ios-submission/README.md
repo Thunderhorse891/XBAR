@@ -42,6 +42,28 @@ done on Linux/CI.
 
 ---
 
+## Native backend routing
+
+The bundled WebView serves local files from `capacitor://localhost`; it cannot
+serve `/api` requests. `scripts/build-mobile.mjs` now supplies an HTTPS backend
+origin to the mobile bundle. It uses `VITE_API_BASE_URL` when set, otherwise the
+configured app origin (and the existing public-origin fallback). Use the real
+API host when the marketing site and backend have different domains. Explicit
+API URLs must contain no credentials, path, query or fragment. Store builds
+refuse `CAP_SERVER_URL`; use the development workflow for live reload.
+
+Account deletion, welcome email and packet verification use the same backend
+URL helper as the other API clients. Web builds still use same-origin requests
+when no API override is configured. Existing telemetry API-fallback preferences
+are preserved; supplying the native API origin does not enable that fallback.
+
+**This only fixes client routing.** Current main's API CORS policy does not yet
+allow the bundled native origin, so actual WebView API calls remain a release
+blocker until separately reviewed server support is implemented and tested.
+Synthetic URL tests do not establish live connectivity, native account deletion,
+physical-device acceptance or App Store readiness. The native Xcode project is
+still not checked into main; held readiness PR #265 is not part of this fix.
+
 ## Steps that require a Mac + Xcode
 
 1. **Generate the native project** (first time only):
