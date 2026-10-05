@@ -7,13 +7,13 @@ This is a bounded correction to the live task workflow. Full workspace/cross-dev
 - Snooze writes and verifies an actual return date; Dismiss today is labelled accurately. Neither action mutates or marks its source record complete, and neither emits task-completed telemetry.
 - Independent task keys include exact workspace/member identity (or the local workspace creation identity). Unrelated tab writes/restores cannot overwrite each other. Same-task browser preferences remain last-write-wins; browser storage is not a database transaction.
 - Failed saves keep work visible. Multi-task restore reports only confirmed progress when a later write fails. Unreadable/malformed data cannot hide work indefinitely.
-- Source fingerprints reveal changed care, ownership, document or buyer work, including reassigned buyer horses. Canonical useDayKey refreshes the board at local rollover and after clock/timezone changes. A valid week-long snooze tolerates westward date-line travel.
+- Source fingerprints reveal changed care, ownership, document or buyer work, including reassigned buyer horses and same-day offer/deposit updates. Canonical useDayKey refreshes the board at local rollover and after clock/timezone changes. A valid week-long snooze tolerates westward date-line travel.
 - Today excludes future and closed buyer follow-ups. HerdGroups and /today?segment retain the selected group for all four task sources. Archived horses are omitted. Queued documents open Processing, and review routes retain their horse.
 - Native buttons provide keyboard actions without nested clickable rows. Scoped responsive CSS wraps long task text.
 
 ## Verification and recovery
 
-The current-main task derivation was reproduced with a buyer due in 2099: it appeared in Today. The original Snooze callback only toasted and closed; Mark Done emitted completion before hiding a task locally. Fifteen behavior tests cover the corrected contract, including deliberate cross-tab interleavings and partial storage failures. Browser specs cover snooze/reload/expiry, group history, refusal, keyboard navigation and long mobile content.
+The current-main task derivation was reproduced with a buyer due in 2099: it appeared in Today. The original Snooze callback only toasted and closed; Mark Done emitted completion before hiding a task locally. Sixteen behavior tests cover the corrected contract, including deliberate cross-tab interleavings, partial storage failures, and offer/deposit updates with unchanged stage and last-touch day. The latter regression failed on the reviewed candidate before all offer/deposit source fields were included in the revision. Browser specs cover snooze/reload/expiry, group history, refusal, keyboard navigation and long mobile content.
 
 This implementation was reconstructed after the execution workspace lost the previously reviewed local-only patch. It is a new candidate against main 356084b779f67654b17a2aa5fea21d6b8f0062ea, not a recovered copy of that old commit. Existing PR305 history is retained when updating the branch; its earlier device-global helper/tests are superseded by the scoped behavior suite.
 

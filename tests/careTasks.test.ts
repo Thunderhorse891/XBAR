@@ -104,6 +104,43 @@ test('changed work resurfaces before the deadline and resolved follow-ups disapp
     false,
   );
 });
+test('same-day offer and deposit changes resurface a snoozed buyer task', () => {
+  const buyer: SalesLead = {
+    ...input.salesLeads[0],
+    stage: 'Offer',
+    lastTouch: TODAY,
+    offerAmount: 10000,
+    counterOfferAmount: 11000,
+    offerStatus: 'Draft',
+    depositAmount: 1000,
+    depositStatus: 'Not Requested',
+    offerUpdatedAt: `${TODAY}T10:00:00Z`,
+  };
+  const buyerTask = (record: SalesLead) =>
+    buildCareTasks({ ...input, salesLeads: [record] }, now).find((item) => item.id === task.id)!;
+  const original = buyerTask(buyer);
+  const storage = memoryStorage();
+  assert.equal(writeTaskDeferral(storage, 'scope', original, addTaskDays(TODAY, 7), TODAY).ok, true);
+  const saved = loadTaskDeferrals(storage, 'scope', [original], TODAY);
+  assert.equal(taskIsDeferred(saved, buyerTask({ ...buyer }), TODAY), true);
+  const changes: Partial<SalesLead>[] = [
+    { offerAmount: 12000 },
+    { counterOfferAmount: 12500 },
+    { offerStatus: 'Submitted' },
+    { offerStatus: 'Countered' },
+    { offerStatus: 'Deposit Due' },
+    { depositAmount: 1500 },
+    { depositStatus: 'Due' },
+    { depositStatus: 'Paid' },
+    { offerUpdatedAt: `${TODAY}T11:00:00Z` },
+  ];
+  for (const change of changes) {
+    const updated = buyerTask({ ...buyer, ...change });
+    assert.equal(updated.id, original.id);
+    assert.equal(updated.due, original.due);
+    assert.equal(taskIsDeferred(saved, updated, TODAY), false, JSON.stringify(change));
+  }
+});
 test('malformed and oversized deadlines cannot hide work', () => {
   for (const date of ['2026-02-29', '2026-04-31', '2026-13-01', '2026-00-01', '2026-10-05T00:00:00Z', 'tomorrow'])
     assert.equal(isCalendarDay(date), false, date);

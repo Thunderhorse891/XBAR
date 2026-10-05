@@ -115,7 +115,19 @@ export function buildCareTasks(
           to: buyerFollowUpPath(lead.id),
           due: lead.nextFollowUp!,
         },
-        [lead.horseId, lead.nextFollowUp, lead.lastTouch, lead.stage, lead.notes],
+        [
+          lead.horseId,
+          lead.nextFollowUp,
+          lead.lastTouch,
+          lead.stage,
+          lead.notes,
+          lead.offerAmount,
+          lead.counterOfferAmount,
+          lead.offerStatus,
+          lead.depositAmount,
+          lead.depositStatus,
+          lead.offerUpdatedAt,
+        ],
       ),
     );
   return out;
