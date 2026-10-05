@@ -1,0 +1,41 @@
+{
+  "roots": [
+    "src/main.tsx",
+    "src/marketing/landingMotion.ts",
+    "src/marketing/signatureMotion.ts",
+    "api/account/[action].js",
+    "api/buyer/[action].js",
+    "api/documents/[action].js",
+    "api/health.js",
+    "api/horses/[action].js",
+    "api/invite.js",
+    "api/metrics.js",
+    "api/reminders/[action].js",
+    "api/sale-packets.js",
+    "api/stripe/checkout.js",
+    "api/stripe/webhook.js",
+    "api/telemetry.js"
+  ],
+  "reachableCount": 324,
+  "candidates": {
+    "src/lib/activation.ts": false,
+    "src/lib/operationalValuePulse.ts": false,
+    "src/lib/todayWork.ts": false,
+    "src/lib/xbarGrowth.ts": false,
+    "src/lib/documentTemplateLibrary.ts": false
+  },
+  "marketingPreserved": [
+    {
+      "path": "src/marketing/landingMotion.ts",
+      "reachable": true
+    },
+    {
+      "path": "src/marketing/signatureMotion.ts",
+      "reachable": true
+    },
+    {
+      "path": "src/lib/signatureMotion.ts",
+      "reachable": true
+    }
+  ]
+}
