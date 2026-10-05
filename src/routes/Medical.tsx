@@ -498,6 +498,7 @@ export default function Medical() {
                             className="button button--ghost button--compact"
                             style={{ fontSize: '11px' }}
                             type="button"
+                            disabled={!canManageMedical}
                             onClick={() => {
                               setEditForm({ title: event.title, body: event.summary, date: event.date });
                               setEditingEventId(event.id);
@@ -509,6 +510,7 @@ export default function Medical() {
                             className="button button--ghost button--compact"
                             style={{ fontSize: '11px', color: 'var(--rose)' }}
                             type="button"
+                            disabled={!canManageMedical}
                             onClick={() =>
                               setPendingDelete({
                                 horseId: event.horseId,

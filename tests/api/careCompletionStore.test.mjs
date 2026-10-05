@@ -93,3 +93,43 @@ test('completion updates check existence, permission and the resulting date', ()
   assert.equal(useXbarStore.getState().updateMedicalEvent(horse.id, result.id, { date: '2026-02-30' }).ok, false);
   assert.equal(JSON.stringify(useXbarStore.getState().horses), before);
 });
+
+test('deleting care requires medical permission and refuses missing targets', () => {
+  const result = useXbarStore.getState().addMedicalEvent(horse.id, event());
+  useXbarStore.setState({ currentRole: 'Sales Lead' });
+  const before = JSON.stringify(useXbarStore.getState().horses);
+  assert.equal(useXbarStore.getState().deleteMedicalEvent(horse.id, result.id).ok, false);
+  assert.equal(JSON.stringify(useXbarStore.getState().horses), before);
+  useXbarStore.setState({ currentRole: 'Medical Lead' });
+  assert.equal(useXbarStore.getState().deleteMedicalEvent(horse.id, result.id).ok, true);
+  assert.equal(useXbarStore.getState().deleteMedicalEvent(horse.id, result.id).ok, false);
+});
+
+test('confirming planned injury applies the same medical hold and note as completed creation', () => {
+  const result = useXbarStore
+    .getState()
+    .addMedicalEvent(
+      horse.id,
+      event({ type: 'Injury', body: 'Recorded injury requires review.', completionState: 'planned' }),
+    );
+  assert.notEqual(useXbarStore.getState().horses[0].status, 'Medical Review');
+  assert.equal(
+    useXbarStore.getState().updateMedicalEvent(horse.id, result.id, { completionState: 'completed' }).ok,
+    true,
+  );
+  const updated = useXbarStore.getState().horses[0];
+  assert.equal(updated.status, 'Medical Review');
+  assert.equal(updated.medicalNotes, 'Recorded injury requires review.');
+  assert.equal(updated.activity.find((entry) => entry.id === result.id).completionState, 'completed');
+});
+
+test('confirming a planned vet visit updates its completed visit date', () => {
+  const result = useXbarStore
+    .getState()
+    .addMedicalEvent(horse.id, event({ type: 'Vet visit', completionState: 'planned' }));
+  assert.equal(
+    useXbarStore.getState().updateMedicalEvent(horse.id, result.id, { completionState: 'completed' }).ok,
+    true,
+  );
+  assert.equal(useXbarStore.getState().horses[0].lastVetVisit, localIsoDate());
+});

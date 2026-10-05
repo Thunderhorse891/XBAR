@@ -1,4 +1,4 @@
-import type { TimelineEvent } from '../types/xbar.js';
+import type { HorseRecord, TimelineEvent } from '../types/xbar.js';
 import { localIsoDate } from './format.js';
 
 /** Calendar date recorded by the operator; reject normalized impossible dates. */
@@ -20,4 +20,18 @@ export function validateMedicalCompletion(
   if (state === 'completed' && day > localIsoDate(now))
     return 'Future care cannot be completed. Choose Planned, or enter the actual completion date.';
   return null;
+}
+
+/** Apply the same completed-care side effects on creation and confirmation. */
+export function medicalCompletionUpdates(horse: HorseRecord, event: TimelineEvent): Partial<HorseRecord> {
+  if (event.completionState !== 'completed') return {};
+  if (event.status === 'Injury' || event.details?.recordType === 'injury') {
+    return { status: 'Medical Review', medicalNotes: event.summary };
+  }
+  const day = careDay(event.date);
+  const lastVisit = careDay(horse.lastVetVisit);
+  if (event.status === 'Vet visit' && day && (!lastVisit || day >= lastVisit)) {
+    return { lastVetVisit: event.date };
+  }
+  return {};
 }

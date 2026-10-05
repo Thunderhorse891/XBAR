@@ -91,7 +91,7 @@ import type {
   WorkspaceInvitationRecord,
 } from '@/types/xbar';
 import type { BuyerRoomEvent, DocumentRecord, SalePacketBuild, SubscriptionProfile } from '@/types/xbar';
-import { validateMedicalCompletion } from '@/lib/medicalEvidence';
+import { medicalCompletionUpdates, validateMedicalCompletion } from '@/lib/medicalEvidence';
 import { proposeHorseNameRepairs } from '@/lib/horseNameRepair';
 import type { XbarStore } from '@/store/xbarStoreTypes';
 import {
@@ -2268,7 +2268,6 @@ export const useXbarStore = create<XbarStore>()(
         const completionState = event.completionState ?? 'completed';
         const completionError = validateMedicalCompletion(event.date, completionState);
         if (completionError) return { ok: false, message: completionError };
-        const shouldOpenMedicalReview = event.type === 'Injury' && completionState === 'completed';
         const nextEvent = createTimelineEvent({
           title: event.title,
           summary: event.body,
@@ -2285,10 +2284,7 @@ export const useXbarStore = create<XbarStore>()(
             horse.id === horseId
               ? {
                   ...horse,
-                  status: shouldOpenMedicalReview ? 'Medical Review' : horse.status,
-                  lastVetVisit:
-                    event.type === 'Vet visit' && completionState === 'completed' ? event.date : horse.lastVetVisit,
-                  medicalNotes: shouldOpenMedicalReview ? event.body : horse.medicalNotes,
+                  ...medicalCompletionUpdates(horse, medicalEvent),
                   medicalTimeline: [medicalEvent, ...horse.medicalTimeline],
                   activity: [medicalEvent, ...horse.activity],
                 }
@@ -2658,6 +2654,7 @@ export const useXbarStore = create<XbarStore>()(
             h.id === horseId
               ? {
                   ...h,
+                  ...medicalCompletionUpdates(h, updated),
                   medicalTimeline: h.medicalTimeline.map((ev) => (ev.id === eventId ? { ...ev, ...patch } : ev)),
                   activity: h.activity.map((ev) => (ev.id === eventId ? { ...ev, ...patch } : ev)),
                 }
@@ -2667,10 +2664,11 @@ export const useXbarStore = create<XbarStore>()(
         return { ok: true, message: 'Medical event updated.', id: eventId };
       },
       deleteMedicalEvent: (horseId, eventId) => {
-        const deniedMessage = requireRoleCapability(get().currentRole, 'editHorse');
+        const deniedMessage = requireRoleCapability(get().currentRole, 'manageMedical');
         if (deniedMessage) return { ok: false, message: deniedMessage };
         const medicalHorse = get().horses.find((h) => h.id === horseId);
         const removedMedical = medicalHorse?.medicalTimeline.find((ev) => ev.id === eventId);
+        if (!removedMedical) return { ok: false, message: 'Medical event not found.' };
         set((state) => ({
           horses: state.horses.map((h) =>
             h.id === horseId
