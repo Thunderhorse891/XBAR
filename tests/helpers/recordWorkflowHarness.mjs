@@ -67,6 +67,7 @@ export async function renderRoute(name, changes = {}, params = '', options = {})
     platform: 'node',
     format: 'cjs',
     packages: 'external',
+    define: { 'import.meta.env': JSON.stringify(options.env ?? {}) },
     plugins: [
       {
         name: 'controlled-route-boundaries',
@@ -83,6 +84,7 @@ export async function renderRoute(name, changes = {}, params = '', options = {})
             let code;
             if (path === 'react')
               code = `export const useMemo=(fn,deps)=>{const i=f.cursor++;const prev=f.slots[i];if(!prev||deps.some((v,j)=>v!==prev.deps[j]))f.slots[i]={deps,value:fn()};return f.slots[i].value};
+                export const useId=()=>useMemo(()=>"fixture-id-"+f.cursor,[]);
                 export const useLayoutEffect=(fn,deps)=>useEffect(fn,deps);
                 export const useRef=(v)=>{const i=f.cursor++;return f.slots[i]??=({current:v})};
                 export const useEffect=(fn,deps)=>{const i=f.cursor++;const prev=f.slots[i];if(!prev||deps.some((v,j)=>v!==prev[j])){f.slots[i]=deps;f.effects.push(fn)}};
@@ -95,7 +97,7 @@ export async function renderRoute(name, changes = {}, params = '', options = {})
                 'export const useXbarStore=(fn)=>fn(f.state); useXbarStore.getState=()=>f.state;useXbarStore.subscribe=()=>()=>{}; export const useHorseRecord=()=>f.state.horses.find(h=>h.id===f.horse.id);export const useCurrentRoleCapability=()=>f.state.currentRole==="Admin";';
             else if (path === '@/store/useCloudStore')
               code =
-                'export const useCloudStore=(fn)=>fn(f.cloud);useCloudStore.getState=()=>f.cloud;useCloudStore.subscribe=()=>()=>{};';
+                'export const useCloudStore=(fn)=>fn(f.cloud);useCloudStore.getState=()=>f.cloud;useCloudStore.subscribe=()=>()=>{};export const hasValidatedPasswordRecovery=()=>Boolean(f.cloud.recoveryValid);';
             else if (path === '@/store/useUiStore')
               code = 'export const useUiStore=(fn)=>fn(f.ui);useUiStore.getState=()=>f.ui;';
             else if (path === '@/lib/workspaceStorage') code = 'export const getWorkspacePersistReceipt=()=>f.receipt;';

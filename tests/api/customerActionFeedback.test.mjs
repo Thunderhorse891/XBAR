@@ -332,3 +332,50 @@ test('repeated validation updates one notification rather than stacking errors o
   assert.equal(toasts(f)[0].id, 'quick-create-feedback');
   assert.equal(toasts(f)[1].id, toasts(f)[0].id);
 });
+
+test('a newly adopted recovery grant clears only that screen’s previous failure toast', async () => {
+  const visibleToasts = new Map([['unrelated', { message: 'Unrelated work is still pending.' }]]);
+  const removed = [];
+  let nextId = 0;
+  const f = await renderRoute('ResetPassword', {}, '', {
+    env: { VITE_SUPABASE_URL: 'https://synthetic.invalid', VITE_SUPABASE_ANON_KEY: 'synthetic-test-key' },
+    cloud: {
+      authReady: true,
+      recoveryValid: true,
+      passwordRecoveryGrant: 'first-validated-grant',
+      updatePassword: async () => ({ ok: false, uncertain: true, message: 'We could not confirm that change.' }),
+    },
+    ui: {
+      pushToast: (toast) => {
+        const id = toast.id ?? `reset-result-${++nextId}`;
+        visibleToasts.set(id, toast);
+        return id;
+      },
+      removeToast: (id) => {
+        removed.push(id);
+        visibleToasts.delete(id);
+      },
+    },
+  });
+  for (const input of nodes(f.tree, (n) => n.type === 'input')) {
+    input.props.onChange({ target: { value: 'synthetic-password' } });
+  }
+  f.render();
+  await nodes(f.tree, (n) => n.type === 'form')[0].props.onSubmit({ preventDefault() {} });
+  f.cloud.passwordRecoveryGrant = '';
+  f.cloud.recoveryValid = false;
+  f.render();
+  assert.equal(nodes(f.tree, (n) => n.type === 'form').length, 0);
+  assert.equal(visibleToasts.size, 2, 'the current uncertain outcome must remain visible');
+  assert.deepEqual(removed, [], 'spending the old grant must not hide its result');
+
+  f.cloud.passwordRecoveryGrant = 'second-validated-grant';
+  f.cloud.recoveryValid = true;
+  f.render();
+  assert.equal(nodes(f.tree, (n) => n.type === 'form').length, 1);
+  assert.equal(nodes(f.tree, (n) => n.props.role === 'alert').length, 0);
+  assert.deepEqual(removed, ['reset-result-1']);
+  assert.deepEqual([...visibleToasts.keys()], ['unrelated']);
+  f.render();
+  assert.deepEqual(removed, ['reset-result-1'], 'unchanged grants do not repeatedly dismiss notifications');
+});
