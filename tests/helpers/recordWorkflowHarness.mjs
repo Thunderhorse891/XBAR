@@ -6,7 +6,7 @@ import { build } from 'esbuild';
 import { createEmptyWorkspaceState, createHorseRecord } from '../../src/store/xbarStoreHelpers.ts';
 const require = createRequire(import.meta.url);
 
-export async function renderRoute(name, changes = {}, params = '') {
+export async function renderRoute(name, changes = {}, params = '', options = {}) {
   const empty = createEmptyWorkspaceState();
   const horse = createHorseRecord(
     {
@@ -28,17 +28,28 @@ export async function renderRoute(name, changes = {}, params = '') {
     horse,
     params,
     calls: [],
-    cloud: { session: null, workspaceId: null, workspaceRole: 'Admin' },
+    cloud: { session: null, workspaceId: null, workspaceRole: 'Admin', ...options.cloud },
+    receipt: null,
+    recordsOwner: options.recordsOwner ?? '',
+    location: { key: 'initial', pathname: '/equipment' },
     slots: [],
     effects: [],
     dirty: false,
     cursor: 0,
   };
-  f.state.addRanchAsset = () => {
+  f.state.addRanchAsset ??= () => {
     f.calls.push(['unexpected-create']);
     return { ok: true };
   };
-  f.ui = { openQuickCreate: (x) => f.calls.push(['create', x]), pushToast: (x) => f.calls.push(['toast', x]) };
+  f.ui = {
+    openQuickCreate: (x) => f.calls.push(['create', x]),
+    closeQuickCreate: () => {
+      f.calls.push(['close']);
+      f.ui.quickCreate = null;
+    },
+    pushToast: (x) => f.calls.push(['toast', x]),
+    ...options.ui,
+  };
   globalThis.__recordWorkflowFixture = f;
   const sourcePath = resolve(
     process.env.RECORD_WORKFLOW_BASE ?? '.',
@@ -57,6 +68,7 @@ export async function renderRoute(name, changes = {}, params = '') {
     platform: 'node',
     format: 'cjs',
     packages: 'external',
+    define: { 'import.meta.env': JSON.stringify(options.env ?? {}) },
     plugins: [
       {
         name: 'controlled-route-boundaries',
@@ -64,7 +76,7 @@ export async function renderRoute(name, changes = {}, params = '') {
           b.onResolve(
             {
               filter:
-                /^(react$|react-router-dom$|@\/store\/useXbarStore$|@\/store\/useUiStore$|@\/store\/useCloudStore$|@\/hooks\/|@\/components\/)/,
+                /^(react$|react-router-dom$|@\/store\/useXbarStore$|@\/store\/useUiStore$|@\/store\/useCloudStore$|@\/lib\/workspaceStorage$|@\/lib\/recordsOwner$|@\/hooks\/|@\/components\/)/,
             },
             ({ path }) => ({ path, namespace: 'fixture' }),
           );
@@ -73,19 +85,24 @@ export async function renderRoute(name, changes = {}, params = '') {
             let code;
             if (path === 'react')
               code = `export const useMemo=(fn,deps)=>{const i=f.cursor++;const prev=f.slots[i];if(!prev||deps.some((v,j)=>v!==prev.deps[j]))f.slots[i]={deps,value:fn()};return f.slots[i].value};
+                export const useId=()=>useMemo(()=>"fixture-id-"+f.cursor,[]);
+                export const useLayoutEffect=(fn,deps)=>useEffect(fn,deps);
                 export const useRef=(v)=>{const i=f.cursor++;return f.slots[i]??=({current:v})};
                 export const useEffect=(fn,deps)=>{const i=f.cursor++;const prev=f.slots[i];if(!prev||deps.some((v,j)=>v!==prev[j])){f.slots[i]=deps;f.effects.push(fn)}};
                 export const useState=(initial)=>{const i=f.cursor++;if(!(i in f.slots))f.slots[i]=typeof initial==="function"?initial():initial;return [f.slots[i],(v)=>{const next=typeof v==="function"?v(f.slots[i]):v;f.dirty ||= next!==f.slots[i];f.slots[i]=next}]};`;
             else if (path === 'react-router-dom')
               code =
-                'export const useNavigate=()=>((p)=>f.calls.push(["navigate",p])); export const useParams=()=>({id:f.horse.id}); export const useSearchParams=()=>{if(f.searchText!==f.params){f.searchText=f.params;f.searchValue=new URLSearchParams(f.params)}return [f.searchValue,(p)=>{f.params=p.toString()}]};export const Link="a";';
+                'export const useNavigate=()=>((p)=>f.calls.push(["navigate",p])); export const useParams=()=>({id:f.horse.id});export const useLocation=()=>f.location; export const useSearchParams=()=>{if(f.searchText!==f.params){f.searchText=f.params;f.searchValue=new URLSearchParams(f.params)}return [f.searchValue,(p)=>{f.params=p.toString()}]};export const Link="a";';
             else if (path === '@/store/useXbarStore')
               code =
                 'export const useXbarStore=(fn)=>fn(f.state); useXbarStore.getState=()=>f.state;useXbarStore.subscribe=()=>()=>{}; export const useHorseRecord=()=>f.state.horses.find(h=>h.id===f.horse.id);export const useCurrentRoleCapability=()=>f.state.currentRole==="Admin";';
             else if (path === '@/store/useCloudStore')
               code =
-                'export const useCloudStore=(fn)=>fn(f.cloud);useCloudStore.getState=()=>f.cloud;useCloudStore.subscribe=()=>()=>{};';
-            else if (path === '@/store/useUiStore') code = 'export const useUiStore=(fn)=>fn(f.ui);';
+                'export const useCloudStore=(fn)=>fn(f.cloud);useCloudStore.getState=()=>f.cloud;useCloudStore.subscribe=()=>()=>{};export const hasValidatedPasswordRecovery=()=>Boolean(f.cloud.recoveryValid);';
+            else if (path === '@/store/useUiStore')
+              code = 'export const useUiStore=(fn)=>fn(f.ui);useUiStore.getState=()=>f.ui;';
+            else if (path === '@/lib/workspaceStorage') code = 'export const getWorkspacePersistReceipt=()=>f.receipt;';
+            else if (path === '@/lib/recordsOwner') code = 'export const readRecordsOwner=()=>f.recordsOwner;';
             else if (path.startsWith('@/hooks/'))
               code =
                 'export const useEffectiveSubscription=()=>f.state.subscription;export const useHorseMediaUrl=(_p,src)=>src;export const useHorsePhotoSelection=()=>({});export const useHorseArchiveActions=()=>({});';
@@ -108,13 +125,15 @@ export async function renderRoute(name, changes = {}, params = '') {
     for (let pass = 0; pass < 10; pass++) {
       f.cursor = 0;
       f.dirty = false;
-      f.tree = mod.exports.default
-        ? mod.exports.default()
-        : mod.exports[name.split('/').at(-1)]({
-            horse: f.state.horses[0],
-            onAdd: () => f.calls.push(['addPhotos']),
-            uploading: false,
-          });
+      f.tree = options.exportName
+        ? mod.exports[options.exportName](options.props ?? {})
+        : mod.exports.default
+          ? mod.exports.default()
+          : mod.exports[name.split('/').at(-1)]({
+              horse: f.state.horses[0],
+              onAdd: () => f.calls.push(['addPhotos']),
+              uploading: false,
+            });
       f.effects.splice(0).forEach((run) => run());
       if (!f.dirty) return f.tree;
     }

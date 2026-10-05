@@ -120,7 +120,7 @@ export default function HerdGroups() {
               <ActionButton size="sm" onClick={() => navigate(`/horses?${new URLSearchParams({ segment: g.id })}`)}>
                 Open Group
               </ActionButton>
-              <ActionButton size="sm" onClick={() => navigate('/today')}>
+              <ActionButton size="sm" onClick={() => navigate(`/today?${new URLSearchParams({ segment: g.id })}`)}>
                 Care Tasks
               </ActionButton>
             </div>
