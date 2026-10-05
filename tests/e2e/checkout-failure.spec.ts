@@ -64,8 +64,9 @@ test('checkout refusal stays visible after the toast expires and clears while re
     requests.push(route);
     if (requests.length === 1) await refused(route);
   });
-  await openBilling(page);
+  // Setup and checkout notifications must both use the clock advanced below.
   await page.clock.install();
+  await openBilling(page);
   await page.getByRole('button', { name: 'Continue to secure checkout' }).click();
   await expect(errorNotice(page)).toContainText('Professional monthly checkout is temporarily unavailable.');
   // Error confirmations now remain for ten seconds; the inline refusal must outlive them.
