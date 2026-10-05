@@ -1,3 +1,4 @@
+import { fulfillRelationalFixture } from './relationalFixture.js';
 import { expect, test, type Page, type Route } from '@playwright/test';
 import {
   blockWebfonts,
@@ -100,7 +101,7 @@ async function fulfilWorkspace(route: Route) {
   const body = url.includes('/workspaces?')
     ? JSON.stringify({ id: url.includes(SECOND_USER_ID) ? SECOND_WORKSPACE_ID : WORKSPACE_ID })
     : '[]';
-  await route.fulfill({ status: 200, contentType: 'application/json', body });
+  await fulfillRelationalFixture(route, { status: 200, contentType: 'application/json', body });
 }
 
 // `owner_user_id=eq.<uuid>` on the workspaces read; the membership reads carry
@@ -121,7 +122,7 @@ async function holdSnapshotApi(page: Page) {
   await page.route(SNAPSHOT_REST, async (route) => {
     seen.push(route.request().url());
     if (releasing) {
-      await route.fulfill({ status: 200, contentType: 'application/json', body: '[]' });
+      await fulfillRelationalFixture(route, { status: 200, contentType: 'application/json', body: '[]' });
       return;
     }
     held.push(route);
@@ -134,7 +135,9 @@ async function holdSnapshotApi(page: Page) {
       releasing = true;
       const pending = held.splice(0, held.length);
       for (const route of pending) {
-        await route.fulfill({ status: 200, contentType: 'application/json', body: '[]' }).catch(() => {});
+        await fulfillRelationalFixture(route, { status: 200, contentType: 'application/json', body: '[]' }).catch(
+          () => {},
+        );
       }
     },
   };
@@ -149,7 +152,7 @@ const heldGrant = (page: Page) => page.evaluate((key) => window.sessionStorage.g
  */
 async function stubReadableSubscription(page: Page) {
   await page.route(/\/rest\/v1\/workspace_subscription_profiles/, (route) =>
-    route.fulfill({
+    fulfillRelationalFixture(route, {
       status: 200,
       contentType: 'application/json',
       body: JSON.stringify({ tier: 'Starter', billing_state: 'Manual Billing', monthly_rate: 0, payload: {} }),
@@ -203,7 +206,7 @@ test('releasing the workspace API hydrates once, for the workspace it resolved',
   const snapshotReads: string[] = [];
   await page.route(SNAPSHOT_REST, async (route) => {
     snapshotReads.push(route.request().url());
-    await route.fulfill({ status: 200, contentType: 'application/json', body: '[]' });
+    await fulfillRelationalFixture(route, { status: 200, contentType: 'application/json', body: '[]' });
   });
   await stubGoTrueUser(page);
 
@@ -235,7 +238,7 @@ test('a session ending while the workspace API hangs authorizes nothing', async 
   const workspace = await holdWorkspaceApi(page);
   await stubGoTrueUser(page);
   await page.route('**/auth/v1/token*', (route) =>
-    route.fulfill({
+    fulfillRelationalFixture(route, {
       status: 400,
       contentType: 'application/json',
       body: JSON.stringify({ error: 'invalid_grant', error_description: 'Invalid Refresh Token' }),
@@ -270,7 +273,7 @@ test('an account switch while the workspace API hangs hydrates only the new acco
   const relationalReads: string[] = [];
   await page.route(HORSES_REST, async (route) => {
     relationalReads.push(route.request().url());
-    await route.fulfill({ status: 200, contentType: 'application/json', body: '[]' });
+    await fulfillRelationalFixture(route, { status: 200, contentType: 'application/json', body: '[]' });
   });
   await stubGoTrueUser(page);
 
@@ -348,13 +351,13 @@ test('switching accounts in a hydrated tab locks its records until the new profi
   const promotions: string[] = [];
   await page.route(HORSES_REST, async (route) => {
     relationalReads.push(route.request().url());
-    await route.fulfill({ status: 200, contentType: 'application/json', body: '[]' });
+    await fulfillRelationalFixture(route, { status: 200, contentType: 'application/json', body: '[]' });
   });
   // Reconciliation's own write. Nothing may push records anywhere while the
   // account on screen and the workspace behind it disagree.
   await page.route(SNAPSHOT_REST, async (route) => {
     if (route.request().method() !== 'GET') promotions.push(route.request().method());
-    await route.fulfill({ status: 200, contentType: 'application/json', body: '[]' });
+    await fulfillRelationalFixture(route, { status: 200, contentType: 'application/json', body: '[]' });
   });
   await stubGoTrueUser(page);
 
@@ -481,7 +484,7 @@ test('a session arriving while an obsolete one hangs resolves without waiting fo
   const relationalReads: string[] = [];
   await page.route(HORSES_REST, async (route) => {
     relationalReads.push(route.request().url());
-    await route.fulfill({ status: 200, contentType: 'application/json', body: '[]' });
+    await fulfillRelationalFixture(route, { status: 200, contentType: 'application/json', body: '[]' });
   });
   await stubGoTrueUser(page);
 

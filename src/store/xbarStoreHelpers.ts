@@ -273,14 +273,22 @@ export function looksLikeLegacyDemoWorkspace(state: PersistedXbarState) {
   );
 }
 
-export function createSharedListingRecord(horseId: string, patch?: Partial<SharedListingRecord>): SharedListingRecord {
+export function createSharedListingRecord(
+  horseId: string,
+  patch?: Partial<SharedListingRecord>,
+  options?: { generateMissingToken?: boolean },
+): SharedListingRecord {
   const timestamp = todayStamp();
   return {
     id: patch?.id ?? createId('share'),
     horseId,
     sharePath: patch?.sharePath ?? buildSharePath(horseId),
     accessMode: patch?.accessMode ?? 'Private Token',
-    shareToken: patch?.shareToken?.trim() || createShareAccessToken(),
+    shareToken:
+      patch?.shareToken?.trim() ||
+      (options?.generateMissingToken === false || patch?.accessMode === 'Public Link' || patch?.state === 'Archived'
+        ? ''
+        : createShareAccessToken()),
     tokenIssuedAt: patch?.tokenIssuedAt ?? timestamp,
     state: patch?.state ?? 'Draft',
     channels: patch?.channels?.length ? patch.channels : ['Direct Link'],
@@ -295,7 +303,7 @@ export function createSharedListingRecord(horseId: string, patch?: Partial<Share
 
 export function createInitialWorkspaceMember(profile: WorkspaceProfile): WorkspaceMemberRecord {
   return {
-    id: createId('member'),
+    id: `derived-owner:${normalizeWorkspaceEmail(profile.operationsEmail) || 'workspace-admin@xbar.local'}:${profile.setupCompleteAt || ''}`,
     email: normalizeWorkspaceEmail(profile.operationsEmail) || 'workspace-admin@xbar.local',
     role: 'Admin',
     status: 'Active',
@@ -1807,7 +1815,10 @@ export function canRestorePersistedState(raw: unknown): boolean {
   return true;
 }
 
-export function restorePersistedState(raw: unknown): PersistedXbarState {
+export function restorePersistedState(
+  raw: unknown,
+  options?: { generateMissingSharingTokens?: boolean },
+): PersistedXbarState {
   const state = (raw && typeof raw === 'object' ? raw : {}) as Record<string, unknown>;
   const horses = Array.isArray(state.horses)
     ? (state.horses as HorseRecord[]).map((horse) => ({
@@ -1893,7 +1904,16 @@ export function restorePersistedState(raw: unknown): PersistedXbarState {
   const legacySavedHorseIds = Array.isArray(state.savedHorseIds) ? (state.savedHorseIds as string[]) : [];
   const sharedListings = Array.isArray(state.sharedListings)
     ? (state.sharedListings as SharedListingRecord[]).map((listing) =>
-        createSharedListingRecord(listing.horseId, listing),
+        createSharedListingRecord(
+          listing.horseId,
+          {
+            ...listing,
+            tokenIssuedAt: listing.tokenIssuedAt ?? '',
+            createdAt: listing.createdAt ?? '',
+            updatedAt: listing.updatedAt ?? '',
+          },
+          { generateMissingToken: options?.generateMissingSharingTokens },
+        ),
       )
     : legacySavedHorseIds.length
       ? legacySavedHorseIds.map((horseId) => createSharedListingRecord(horseId, { state: 'Draft' }))

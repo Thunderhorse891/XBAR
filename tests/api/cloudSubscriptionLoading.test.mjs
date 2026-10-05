@@ -78,7 +78,7 @@ function fixture({
           };
         if (table === 'workspace_invitations' && pendingInvitation)
           return { data: { workspace_id: 'unrequested-ranch', invitation_id: 'unexpected-invite' }, error: null };
-        if (table === 'workspace_memberships') return { data: relational ? [] : null, error: null };
+        if (table === 'workspace_memberships') return { data: relational ? [] : null, error: null, count: 0 };
         if (table === 'workspace_subscription_profiles')
           return { data: row, error: subscriptionError ? { message: 'subscription unavailable' } : null };
         if (table === supabaseConfig.workspaceTable)
@@ -103,6 +103,12 @@ function fixture({
         order() {
           return chain;
         },
+        range() {
+          return chain;
+        },
+        returns() {
+          return chain;
+        },
         maybeSingle: async () => result(),
         then(resolve, reject) {
           return Promise.resolve(result()).then(resolve, reject);
@@ -120,12 +126,26 @@ function fixture({
 beforeEach(() => fixture());
 
 for (const relational of [false, true]) {
-  test(`snapshot fallback (${relational ? 'failed relational read' : 'snapshot-only mode'}) restores the $0 owner grant, six-horse capacity and reports`, async () => {
+  test(`${relational ? 'failed relational reads fail closed while preserving' : 'snapshot-only mode restores'} the $0 owner grant, six-horse capacity and reports`, async () => {
     const original = fixture({ relational });
     const before = structuredClone(original);
     assert.ok(horseCreationGate(original.workspace.subscription, 5));
     assert.ok(profitIntelligenceGate(original.workspace.subscription));
     const loaded = await loadWorkspaceBackupFromCloud();
+    if (relational) {
+      assert.equal(loaded.ok, false);
+      assert.equal(loaded.backup, undefined);
+      assert.equal(loaded.authoritativeSubscription.tier, 'Enterprise');
+      assert.equal(loaded.authoritativeSubscription.monthlyRate, 0);
+      assert.equal(horseCreationGate(loaded.authoritativeSubscription, 5), null);
+      assert.equal(profitIntelligenceGate(loaded.authoritativeSubscription), null);
+      assert.equal(
+        calls.some((c) => c.table === supabaseConfig.workspaceTable),
+        false,
+      );
+      assert.deepEqual(original, before);
+      return;
+    }
     assert.equal(loaded.ok, true);
     assert.equal(loaded.backup.workspace.subscription.tier, 'Enterprise');
     assert.equal(loaded.backup.workspace.subscription.monthlyRate, 0);

@@ -1,6 +1,7 @@
 import type { ReactNode } from 'react';
 import { useEffect, useRef, useState } from 'react';
 import { X } from 'lucide-react';
+import * as DialogPrimitive from '@radix-ui/react-dialog';
 import type { ChipTone, TaskPriority } from '@/types/saas';
 
 /* ------------------------------------------------------------------ Chips */
@@ -124,6 +125,9 @@ export function QuickCreateMenu({
               role="menuitem"
               className="xs-menu__item"
               onClick={() => {
+                // The item unmounts on selection; restore a persistent opener
+                // before a programmatically opened modal captures return focus.
+                ref.current?.querySelector<HTMLButtonElement>(':scope > button')?.focus({ preventScroll: true });
                 setOpen(false);
                 item.onSelect();
               }}
@@ -261,33 +265,54 @@ export function SlideOverDrawer({
   footer?: ReactNode;
   children: ReactNode;
 }) {
-  useEffect(() => {
-    if (!open) return;
-    const handler = (event: KeyboardEvent) => {
-      if (event.key === 'Escape') onClose();
-    };
-    window.addEventListener('keydown', handler);
-    return () => window.removeEventListener('keydown', handler);
-  }, [open, onClose]);
-
-  if (!open) return null;
+  // These drawers are also opened programmatically, without a Radix Trigger.
+  const opener = useRef<HTMLElement | null>(null);
   return (
-    <>
-      <button type="button" className="xs-overlay" aria-label="Close panel" onClick={onClose} />
-      <aside className="xs-drawer" role="dialog" aria-modal="true" aria-label={title}>
-        <div className="xs-drawer__head">
-          <div>
-            <h2 className="xs-drawer__title">{title}</h2>
-            {subtitle ? <div className="xs-drawer__sub">{subtitle}</div> : null}
-          </div>
-          <button type="button" className="xs-iconbtn" onClick={onClose} aria-label="Close">
-            <X size={16} />
-          </button>
-        </div>
-        <div className="xs-drawer__body">{children}</div>
-        {footer ? <div className="xs-drawer__foot">{footer}</div> : null}
-      </aside>
-    </>
+    <DialogPrimitive.Root
+      open={open}
+      onOpenChange={(nextOpen) => {
+        if (!nextOpen) onClose();
+      }}
+    >
+      <DialogPrimitive.Portal>
+        <DialogPrimitive.Overlay className="xs-overlay" />
+        <DialogPrimitive.Content
+          asChild
+          {...(!subtitle ? { 'aria-describedby': undefined } : {})}
+          onOpenAutoFocus={() => {
+            opener.current = document.activeElement instanceof HTMLElement ? document.activeElement : null;
+          }}
+          onCloseAutoFocus={(event) => {
+            if (opener.current?.isConnected) {
+              event.preventDefault();
+              opener.current.focus({ preventScroll: true });
+            }
+          }}
+        >
+          <aside className="xs-drawer">
+            <div className="xs-drawer__head">
+              <div>
+                <DialogPrimitive.Title asChild>
+                  <h2 className="xs-drawer__title">{title}</h2>
+                </DialogPrimitive.Title>
+                {subtitle ? (
+                  <DialogPrimitive.Description asChild>
+                    <div className="xs-drawer__sub">{subtitle}</div>
+                  </DialogPrimitive.Description>
+                ) : null}
+              </div>
+              <DialogPrimitive.Close asChild>
+                <button type="button" className="xs-iconbtn" aria-label="Close">
+                  <X size={16} />
+                </button>
+              </DialogPrimitive.Close>
+            </div>
+            <div className="xs-drawer__body">{children}</div>
+            {footer ? <div className="xs-drawer__foot">{footer}</div> : null}
+          </aside>
+        </DialogPrimitive.Content>
+      </DialogPrimitive.Portal>
+    </DialogPrimitive.Root>
   );
 }
 

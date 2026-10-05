@@ -82,9 +82,7 @@ function fixture(remote = {}, beforeUpdate) {
           selected = [];
           for (const value of Array.isArray(values) ? values : [values]) {
             const key = ids[table] ?? 'email';
-            const found = rows.find(
-              (row) => (Array.isArray(value) ? value.includes(row[key]) : row[key] === value)[key],
-            );
+            const found = rows.find((row) => row[key] === value[key]);
             if (found && action === 'insert') return { data: null, error: { message: 'duplicate' } };
             if (found) Object.assign(found, value);
             else rows.push({ ...value, id: value.id ?? 'ranch-a' });
@@ -150,7 +148,7 @@ function fixture(remote = {}, beforeUpdate) {
     },
   };
   setCloudSubscriptionClient(client);
-  return { data, calls };
+  return { data, calls, client };
 }
 
 test('a stale price-only save preserves a teammate vaccination on the same horse', async () => {
@@ -477,4 +475,99 @@ test('unserializable workspace snapshots fail before any relational or fallback 
   assert.equal(result.ok, false);
   assert.match(result.message, /serializ/i);
   assert.equal(f.calls.filter((call) => call.action !== 'read').length, 0);
+});
+
+for (const field of ['inquiryCount', 'operationsEmail']) {
+  test(`normalized legacy baseline can edit missing ${field}`, async () => {
+    const { restorePersistedState, selectPersistedState } = await import('../../src/store/xbarStoreHelpers.ts');
+    const f = fixture();
+    const baseline = { ...backup(), workspace: selectPersistedState(restorePersistedState(backup().workspace)) };
+    const current = clone(baseline);
+    if (field === 'inquiryCount') current.workspace.horses[0].sale.inquiryCount = 3;
+    else current.workspace.workspaceProfile.operationsEmail = 'barn@example.test';
+    const result = await saveWorkspaceBackupToCloud(current, { baseline });
+    assert.equal(result.ok, true, result.message);
+    if (field === 'inquiryCount')
+      assert.deepEqual(f.data.get('horses')[0].payload, { ...horse, sale: { ...horse.sale, inquiryCount: 3 } });
+    else
+      assert.deepEqual(f.data.get('workspace_profiles')[0].payload, {
+        ...profile,
+        operationsEmail: 'barn@example.test',
+      });
+  });
+}
+test('normalized comparison preserves unknown raw state and fields without unrelated defaults', async () => {
+  const { restorePersistedState, selectPersistedState } = await import('../../src/store/xbarStoreHelpers.ts');
+  const remote = { ...horse, status: 'Future status', futureField: { privateNote: 'retain' } };
+  const f = fixture({
+    horses: [{ workspace_id: 'ranch-a', horse_id: 'horse-a', payload: remote, updated_at: '2026-10-01T00:00:00Z' }],
+  });
+  const baseline = { ...backup(), workspace: selectPersistedState(restorePersistedState(backup().workspace)) };
+  const current = clone(baseline);
+  current.workspace.horses[0].medicalNotes = 'New treatment';
+  const result = await saveWorkspaceBackupToCloud(current, { baseline });
+  assert.equal(result.ok, true, result.message);
+  assert.deepEqual(f.data.get('horses')[0].payload, { ...remote, medicalNotes: 'New treatment' });
+});
+test('normalized defaults cannot conceal a teammate edit of the same field', async () => {
+  const { restorePersistedState, selectPersistedState } = await import('../../src/store/xbarStoreHelpers.ts');
+  const f = fixture({
+    horses: [
+      {
+        workspace_id: 'ranch-a',
+        horse_id: 'horse-a',
+        payload: { ...horse, sale: { ...horse.sale, inquiryCount: 7 } },
+        updated_at: '2026-10-01T00:00:00Z',
+      },
+    ],
+  });
+  const baseline = { ...backup(), workspace: selectPersistedState(restorePersistedState(backup().workspace)) };
+  const current = clone(baseline);
+  current.workspace.horses[0].sale.inquiryCount = 3;
+  const result = await saveWorkspaceBackupToCloud(current, { baseline });
+  assert.equal(result.ok, false);
+  assert.match(result.message, /inquiryCount/);
+  assert.equal(f.calls.filter((c) => c.action !== 'read').length, 0);
+});
+for (const teammate of [false, true])
+  test(`profile trimming ${teammate ? 'still detects a real conflict' : 'does not invent a conflict'}`, async () => {
+    const { restorePersistedState, selectPersistedState } = await import('../../src/store/xbarStoreHelpers.ts');
+    const original = {
+      ...backup(),
+      workspace: { ...backup().workspace, workspaceProfile: { ...profile, businessName: 'Old business ' } },
+    };
+    const f = fixture({
+      workspace_profiles: [
+        {
+          workspace_id: 'ranch-a',
+          payload: { ...profile, businessName: teammate ? 'Teammate business ' : 'Old business ' },
+          updated_at: '2026-10-01T00:00:00Z',
+        },
+      ],
+    });
+    const baseline = { ...original, workspace: selectPersistedState(restorePersistedState(original.workspace)) };
+    const current = clone(baseline);
+    current.workspace.workspaceProfile.businessName = 'New business';
+    const result = await saveWorkspaceBackupToCloud(current, { baseline });
+    assert.equal(result.ok, !teammate, result.message);
+    assert.equal(
+      f.data.get('workspace_profiles')[0].payload.businessName,
+      teammate ? 'Teammate business ' : 'New business',
+    );
+  });
+
+test('relational fixture enforces unique insert identities and replaces matching upserts', async () => {
+  const f = fixture();
+  const existing = clone(f.data.get('horses')[0]);
+  const duplicate = await f.client.from('horses').insert(existing).select('horse_id').single();
+  assert.match(duplicate.error?.message ?? '', /duplicate/);
+  assert.equal(f.data.get('horses').length, 1);
+  const replaced = await f.client
+    .from('horses')
+    .upsert({ ...existing, payload: { ...horse, name: 'Updated' } })
+    .select('horse_id')
+    .single();
+  assert.equal(replaced.error, null);
+  assert.equal(f.data.get('horses').length, 1);
+  assert.equal(f.data.get('horses')[0].payload.name, 'Updated');
 });

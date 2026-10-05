@@ -1,3 +1,4 @@
+import { loadCompleteCloudRows } from '@/lib/cloudLoadPagination';
 import { apiConfig, isRelationalCloudEnabled, isSnapshotFallbackEnabled, supabaseConfig } from '@/lib/platformConfig';
 import { publicShareEventToBuyerRoomEvent, type PublicShareEventRow } from '@/lib/buyerDealRoom';
 import {
@@ -7,7 +8,7 @@ import {
   isWorkspaceStorageKey,
 } from '@/lib/documentStoragePath';
 import { createId, todayStamp } from '@/lib/xbarRuntime';
-import { WORKSPACE_SCHEMA_VERSION, restorePersistedState } from '@/store/xbarStoreHelpers';
+import { WORKSPACE_SCHEMA_VERSION, restorePersistedState, selectPersistedState } from '@/store/xbarStoreHelpers';
 import { intakeIdentityChanged, type IntakeIdentity } from '@/store/xbarStoreLogic';
 import { getSupabaseClient } from '@/lib/supabaseClient';
 import { isNavigableFileUrl } from '@/lib/navigableFileUrl';
@@ -132,14 +133,7 @@ type WorkspaceAccessProfile = {
 };
 
 type RelationalWorkspaceRow = {
-  payload?: unknown;
-  updated_at?: string | null;
-};
-
-type RelationalMembershipRow = {
-  email?: string | null;
-  role?: string | null;
-  status?: string | null;
+  [key: string]: unknown;
   payload?: unknown;
   updated_at?: string | null;
 };
@@ -633,6 +627,9 @@ async function ensurePrimaryWorkspace(session: Session, backup: CloudWorkspaceBa
     idColumn: 'workspace_id',
     workspaceId,
     baseline: baselineProfile,
+    normalizeRemote: (payload) =>
+      restorePersistedState({ ...normalizeBackup(options.baseline)?.workspace, workspaceProfile: payload })
+        .workspaceProfile,
     overwrite: options.replace === true,
     row: {
       workspace_id: workspaceId,
@@ -717,12 +714,42 @@ const payloadColumns: Record<string, Record<string, string>> = {
   },
 };
 
+function restoreCloudState(raw: unknown) {
+  return restorePersistedState(raw, { generateMissingSharingTokens: false });
+}
+
+// Normalize comparison defaults without replacing unknown raw fields or values.
+function preserveRawFields(defaults: unknown, raw: unknown): unknown {
+  if (!isRecord(defaults) || !isRecord(raw)) return raw;
+  return Object.fromEntries(
+    [...new Set([...Object.keys(defaults), ...Object.keys(raw)])].map((key) => [
+      key,
+      Object.prototype.hasOwnProperty.call(raw, key) ? preserveRawFields(defaults[key], raw[key]) : defaults[key],
+    ]),
+  );
+}
+
+// Conflicts were checked against the normalized comparison. Persist only that
+// verified delta into the raw payload, without materializing unrelated defaults.
+function applyComparedChanges(before: unknown, after: unknown, raw: unknown): unknown {
+  if (stableStringify(before) === stableStringify(after)) return raw;
+  if (!isRecord(before) || !isRecord(after)) return after;
+  const result = isRecord(raw) ? { ...raw } : {};
+  for (const key of new Set([...Object.keys(before), ...Object.keys(after)])) {
+    const value = applyComparedChanges(before[key], after[key], isRecord(raw) ? raw[key] : undefined);
+    if (value === undefined) delete result[key];
+    else Object.defineProperty(result, key, { value, enumerable: true, writable: true, configurable: true });
+  }
+  return result;
+}
+
 async function writeConcurrentRow(params: {
   table: string;
   idColumn: string;
   workspaceId: string;
   row: Record<string, unknown>;
   baseline?: unknown;
+  normalizeRemote?: (payload: unknown) => unknown;
   overwrite: boolean;
 }) {
   const client = getSupabaseClient();
@@ -757,7 +784,28 @@ async function writeConcurrentRow(params: {
   }
   let payload: unknown;
   try {
-    payload = mergeConcurrentFields(baseline, row.payload, remote.payload);
+    const restored = baseline && params.normalizeRemote ? params.normalizeRemote(remote.payload) : remote.payload;
+    const comparison = preserveRawFields(restored, remote.payload);
+    if (table === 'workspace_profiles' && isRecord(comparison) && isRecord(restored) && isRecord(remote.payload)) {
+      for (const key of [
+        'ranchName',
+        'businessName',
+        'defaultOwnerName',
+        'defaultOwnerEntity',
+        'ranchManagerName',
+        'operationsEmail',
+        'contactPhone',
+        'website',
+        'defaultBarn',
+        'defaultPasture',
+        'setupCompleteAt',
+      ]) {
+        const raw = remote.payload[key];
+        if (typeof raw === 'string' && raw.trim() === restored[key]) comparison[key] = restored[key];
+      }
+    }
+    const merged = mergeConcurrentFields(baseline, row.payload, comparison);
+    payload = applyComparedChanges(comparison, merged, remote.payload);
   } catch (error) {
     throw new WorkspaceSaveConflictError(
       error instanceof Error ? error.message : 'Cloud conflict: the record changed.',
@@ -859,6 +907,7 @@ async function replaceWorkspaceRows(params: {
       workspaceId,
       row,
       baseline: params.baselineRecords?.find((record) => record.id === row[idColumn]),
+      normalizeRemote: params.normalizeRemote,
       overwrite: params.overwrite === true,
     });
     params.onPersisted?.(String(row[idColumn]), payload);
@@ -1001,7 +1050,7 @@ async function saveWorkspaceBackupToRelationalCloud(
       const records = Array.isArray(before)
         ? before.map((record) => (isRecord(record) && record.id === payload.id ? payload : record))
         : [payload];
-      const normalized = restorePersistedState({ ...baseline, [slice]: records }) as unknown as Record<string, unknown>;
+      const normalized = restoreCloudState({ ...baseline, [slice]: records }) as unknown as Record<string, unknown>;
       const restored = normalized[slice];
       return Array.isArray(restored)
         ? restored.find((record) => isRecord(record) && record.id === payload.id)
@@ -1233,6 +1282,12 @@ async function loadWorkspaceBackupFromRelationalCloud(session: Session, expected
 
   // A record read must not accept an invitation or treat failed identity lookup as absence.
   const accessProfile = await loadWorkspaceAccessProfile(session, { forEntitlements: true });
+  if (accessProfile.lookupFailed)
+    return {
+      ok: false,
+      incomplete: true,
+      message: 'Cloud load incomplete: workspace access could not be verified. Your local records are unchanged.',
+    } as const;
   if (!accessProfile.workspaceId) {
     return { ok: false, message: 'No relational workspace exists for this account yet.' } as const;
   }
@@ -1244,6 +1299,19 @@ async function loadWorkspaceBackupFromRelationalCloud(session: Session, expected
       message: 'Your active ranch changed before refresh. Local records were kept unchanged.',
     } as const;
   }
+  const readTable = (table: string, idColumn: string, columns = 'payload, updated_at') =>
+    loadCompleteCloudRows<RelationalWorkspaceRow>({
+      table,
+      idColumn,
+      readPage: (from, to, manifestOnly) =>
+        client
+          .from(table)
+          .select(manifestOnly ? `${idColumn}, updated_at` : `${idColumn}, ${columns}`, { count: 'exact' })
+          .eq('workspace_id', workspaceId)
+          .order(idColumn, { ascending: true })
+          .range(from, to)
+          .returns<RelationalWorkspaceRow[]>(),
+    });
   const [
     membershipsResult,
     invitationsResult,
@@ -1258,19 +1326,16 @@ async function loadWorkspaceBackupFromRelationalCloud(session: Session, expected
     subscriptionResult,
     profileResult,
   ] = await Promise.all([
-    client
-      .from('workspace_memberships')
-      .select('email, role, status, payload, updated_at')
-      .eq('workspace_id', workspaceId),
-    client.from('workspace_invitations').select('payload, updated_at').eq('workspace_id', workspaceId),
-    client.from('horses').select('payload, updated_at').eq('workspace_id', workspaceId),
-    client.from('documents').select('payload, updated_at').eq('workspace_id', workspaceId),
-    client.from('intake_batches').select('payload, updated_at').eq('workspace_id', workspaceId),
-    client.from('ownership_records').select('payload, updated_at').eq('workspace_id', workspaceId),
-    client.from('expense_receipts').select('payload, updated_at').eq('workspace_id', workspaceId),
-    client.from('ranch_assets').select('payload, updated_at').eq('workspace_id', workspaceId),
-    client.from('sales_leads').select('payload, updated_at').eq('workspace_id', workspaceId),
-    client.from('shared_listings').select('payload, updated_at').eq('workspace_id', workspaceId),
+    readTable('workspace_memberships', 'id', 'email, role, status, payload, updated_at'),
+    readTable('workspace_invitations', 'invitation_id'),
+    readTable('horses', 'horse_id'),
+    readTable('documents', 'document_id'),
+    readTable('intake_batches', 'intake_batch_id'),
+    readTable('ownership_records', 'ownership_record_id'),
+    readTable('expense_receipts', 'receipt_id'),
+    readTable('ranch_assets', 'asset_id'),
+    readTable('sales_leads', 'lead_id'),
+    readTable('shared_listings', 'listing_id'),
     client
       .from('workspace_subscription_profiles')
       .select('tier, billing_state, monthly_rate, billing_period, payload, updated_at')
@@ -1297,10 +1362,75 @@ async function loadWorkspaceBackupFromRelationalCloud(session: Session, expected
   if (errors.length) {
     return {
       ok: false,
-      message: errors[0]?.message ?? 'Unable to load relational workspace data.',
+      incomplete: true,
+      message: errors[0]?.message ?? 'Cloud load incomplete: unable to read all relational workspace data.',
     } as const;
   }
 
+  if (profileResult.data && !isRecord(profileResult.data.payload))
+    return {
+      ok: false,
+      incomplete: true,
+      message: 'Cloud load incomplete: the stored ranch profile is invalid. Your local records are unchanged.',
+    } as const;
+  if (
+    membershipsResult.data?.some(
+      (row) => !isRecord(row.payload) || typeof row.payload.joinedAt !== 'string' || !row.payload.joinedAt.trim(),
+    ) ||
+    invitationsResult.data?.some(
+      (row) => !isRecord(row.payload) || typeof row.payload.invitedAt !== 'string' || !row.payload.invitedAt.trim(),
+    )
+  )
+    return {
+      ok: false,
+      incomplete: true,
+      message:
+        'Cloud load incomplete: a stored membership or invitation is missing its original date. Your local records are unchanged.',
+    } as const;
+  if (
+    sharedListingsResult.data?.some((row) => {
+      const payload = row.payload;
+      return (
+        !isRecord(payload) ||
+        ((payload.accessMode ?? 'Private Token') === 'Private Token' &&
+          payload.state !== 'Archived' &&
+          (typeof payload.shareToken !== 'string' || !payload.shareToken.trim()))
+      );
+    })
+  )
+    return {
+      ok: false,
+      incomplete: true,
+      message:
+        'Cloud load incomplete: a private listing is missing its persisted token and needs explicit repair. Your local records are unchanged.',
+    } as const;
+  for (const [result, idColumn] of [
+    [invitationsResult, 'invitation_id'],
+    [horsesResult, 'horse_id'],
+    [documentsResult, 'document_id'],
+    [intakeBatchesResult, 'intake_batch_id'],
+    [ownershipRecordsResult, 'ownership_record_id'],
+    [expenseReceiptsResult, 'receipt_id'],
+    [ranchAssetsResult, 'asset_id'],
+    [salesLeadsResult, 'lead_id'],
+    [sharedListingsResult, 'listing_id'],
+  ] as const) {
+    if (
+      result.data?.some(
+        (row) =>
+          !isRecord(row.payload) ||
+          typeof row.payload.id !== 'string' ||
+          !row.payload.id ||
+          row.payload.id !== row[idColumn],
+      )
+    )
+      return {
+        ok: false,
+        incomplete: true,
+        message:
+          'Cloud load incomplete: a stored record payload or identity is invalid. Your local records are unchanged.',
+      } as const;
+  }
   const backup: CloudWorkspaceBackup = {
     app: 'XBAR',
     // The constant, never a literal: this was hardcoded 8 and would have gone
@@ -1323,26 +1453,13 @@ async function loadWorkspaceBackupFromRelationalCloud(session: Session, expected
       profileResult.data?.updated_at,
     ]),
     workspace: {
-      workspaceMembers: (membershipsResult.data ?? []).flatMap((row) => {
-        if (isRecord(row.payload)) {
-          return [row.payload as unknown as WorkspaceMemberRecord];
-        }
-
-        const email = normalizeWorkspaceEmail((row as RelationalMembershipRow).email);
-        if (!email) {
-          return [];
-        }
-
-        return [
-          {
-            id: `member-${email}`,
-            email,
-            role: normalizeWorkspaceRole((row as RelationalMembershipRow).role) ?? 'Owner',
-            status: (row as RelationalMembershipRow).status === 'inactive' ? 'Inactive' : 'Active',
-            joinedAt: row.updated_at ?? new Date().toISOString(),
-            source: 'Invite',
-          } satisfies WorkspaceMemberRecord,
-        ];
+      workspaceMembers: (membershipsResult.data ?? []).map((row) => {
+        // Payload and original joining date were verified before normalization.
+        const payload = row.payload as Record<string, unknown>;
+        return {
+          ...payload,
+          id: typeof payload.id === 'string' && payload.id.trim() ? payload.id : row.id,
+        } as unknown as WorkspaceMemberRecord;
       }),
       workspaceInvitations: extractPayloadList<WorkspaceInvitationRecord>(invitationsResult.data),
       horses: extractPayloadList<HorseRecord>(horsesResult.data),
@@ -1378,14 +1495,53 @@ async function loadWorkspaceBackupFromRelationalCloud(session: Session, expected
   }
 
   const authoritativeSubscription = subscriptionFromCloudRow(subscriptionResult.data) ?? baselineCloudSubscription();
-  return {
-    ok: true,
-    source: 'relational',
-    workspaceId,
-    backup: withCloudSubscription(backup, authoritativeSubscription),
-    authoritativeSubscription,
-    updatedAt: backup.exportedAt ?? '',
-  } as const;
+  const authoritative = withCloudSubscription(backup, authoritativeSubscription);
+  try {
+    const normalized = {
+      ...authoritative,
+      workspace: selectPersistedState(restoreCloudState(authoritative.workspace)),
+    };
+    for (const key of [
+      'workspaceMembers',
+      'workspaceInvitations',
+      'horses',
+      'documents',
+      'intakeBatches',
+      'ownershipRecords',
+      'expenseReceipts',
+      'ranchAssets',
+      'salesLeads',
+      'sharedListings',
+    ] as const) {
+      const sourceCount = backup.workspace?.[key]?.length ?? 0;
+      const derivedOwner =
+        key === 'workspaceMembers' &&
+        sourceCount === 0 &&
+        accessProfile.source === 'workspace-owner' &&
+        normalized.workspace.workspaceMembers.length === 1 &&
+        normalized.workspace.workspaceMembers[0].source === 'Owner';
+      if (!derivedOwner && normalized.workspace[key].length !== sourceCount)
+        return {
+          ok: false,
+          incomplete: true,
+          message: `Cloud load incomplete: ${key} could not be restored without changing its record count. Your local records are unchanged.`,
+        } as const;
+    }
+    return {
+      ok: true,
+      source: 'relational',
+      workspaceId,
+      backup: normalized,
+      authoritativeSubscription,
+      updatedAt: backup.exportedAt ?? '',
+    } as const;
+  } catch {
+    return {
+      ok: false,
+      incomplete: true,
+      message: 'Cloud load incomplete: a stored record could not be restored. Your local records are unchanged.',
+    } as const;
+  }
 }
 
 export async function saveWorkspaceBackupToCloud(
@@ -1522,7 +1678,7 @@ export async function loadWorkspaceBackupFromCloud(
     return { ok: false, message: 'Authoritative ranch refresh is unavailable in snapshot-only mode.' } as const;
   }
 
-  let relationalError: { ok: false; message: string } | undefined;
+  let relationalError: { ok: false; message: string; incomplete?: boolean } | undefined;
   if (isRelationalCloudEnabled()) {
     const relational = await loadWorkspaceBackupFromRelationalCloud(session, options.expectedContext?.workspaceId);
     if (relational.ok) {
@@ -1558,7 +1714,7 @@ export async function loadWorkspaceBackupFromCloud(
 
   // Entitlement reads are independent of record availability. A missing or
   // unreadable snapshot must not leave a stale grant or cancellation in place.
-  if (relationalError && (options.requireAuthoritative || !isSnapshotFallbackEnabled())) {
+  if (relationalError && (relationalError.incomplete || options.requireAuthoritative || !isSnapshotFallbackEnabled())) {
     return { ...relationalError, authoritativeSubscription } as const;
   }
 

@@ -1,3 +1,4 @@
+import { fulfillRelationalFixture } from './relationalFixture.js';
 import { expect, test } from '@playwright/test';
 import {
   blockWebfonts,
@@ -85,11 +86,11 @@ test('a sign-in broadcast that outruns its storage write is still applied', asyn
     const body = url.includes('/workspaces?')
       ? JSON.stringify({ id: url.includes(SECOND.id) ? secondWorkspaceId : workspaceId })
       : '[]';
-    await route.fulfill({ status: 200, contentType: 'application/json', body });
+    await fulfillRelationalFixture(route, { status: 200, contentType: 'application/json', body });
   });
   await page.route(/\/rest\/v1\/horses/, async (route) => {
     relationalReads.push(route.request().url());
-    await route.fulfill({ status: 200, contentType: 'application/json', body: '[]' });
+    await fulfillRelationalFixture(route, { status: 200, contentType: 'application/json', body: '[]' });
   });
 
   // This tab signs in as the first account and settles.
@@ -103,7 +104,7 @@ test('a sign-in broadcast that outruns its storage write is still applied', asyn
   const second = await context.newPage();
   await stubGoTrueUser(second, undefined, SECOND);
   await second.route(/\/rest\/v1\//, (route) =>
-    route.fulfill({
+    fulfillRelationalFixture(route, {
       status: 200,
       contentType: 'application/json',
       body: route.request().url().includes('/workspaces?') ? JSON.stringify({ id: secondWorkspaceId }) : '[]',
@@ -181,7 +182,7 @@ test('a sign-out broadcast that outruns its storage removal is still applied', a
   const workspaceRest = (route: import('@playwright/test').Route) => {
     const url = route.request().url();
     const single = /workspace_(profiles|subscription_profiles)/.test(url);
-    return route.fulfill({
+    return fulfillRelationalFixture(route, {
       status: 200,
       contentType: 'application/json',
       body: url.includes('/workspaces?')
@@ -199,7 +200,7 @@ test('a sign-out broadcast that outruns its storage removal is still applied', a
 
   await stubGoTrueUser(page);
   await page.route(/\/rest\/v1\//, workspaceRest);
-  await page.route('**/auth/v1/logout*', (route) => route.fulfill({ status: 204, body: '' }));
+  await page.route('**/auth/v1/logout*', (route) => fulfillRelationalFixture(route, { status: 204, body: '' }));
 
   await page.goto(sessionLink('signin'));
   await expect.poll(() => readStoredAccessToken(page), { timeout: 30_000 }).not.toBe('');
@@ -217,7 +218,7 @@ test('a sign-out broadcast that outruns its storage removal is still applied', a
   const second = await context.newPage();
   await stubGoTrueUser(second);
   await second.route(/\/rest\/v1\//, workspaceRest);
-  await second.route('**/auth/v1/logout*', (route) => route.fulfill({ status: 204, body: '' }));
+  await second.route('**/auth/v1/logout*', (route) => fulfillRelationalFixture(route, { status: 204, body: '' }));
   await second.goto('/app/settings');
   await second.getByRole('button', { name: 'Account menu', exact: true }).click();
   await second.getByRole('menuitem', { name: 'Sign out', exact: true }).click();

@@ -671,9 +671,11 @@ export const useXbarStore = create<XbarStore>()(
           return { ok: false, message: 'Shared listing not found for this horse.' };
         }
 
+        const needsToken = accessMode === 'Private Token' && !existingListing.shareToken.trim();
         const nextListing = {
           ...existingListing,
           accessMode,
+          ...(needsToken ? { shareToken: createShareAccessToken(), tokenIssuedAt: todayStamp() } : {}),
           updatedAt: todayStamp(),
         };
 

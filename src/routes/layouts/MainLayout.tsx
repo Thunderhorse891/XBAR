@@ -32,6 +32,7 @@ import { XbarMark } from '@/components/BrandMark';
 import { HorsesIcon } from '@/components/icons';
 import { Sheet, SheetContent, SheetDescription, SheetTitle, SheetTrigger } from '@/components/ui/sheet';
 import { GlobalCreateDrawer, createActions } from '@/components/saas/flows';
+import { canonicalRoutes } from '@/lib/routeCanon';
 import { billingPath } from '@/lib/billingRoutes';
 import { buyerFollowUpPath } from '@/lib/buyerRoutes';
 import { buildCareBoardRows } from '@/lib/dashboardOps';
@@ -64,8 +65,8 @@ const navGroups: NavGroup[] = [
   {
     heading: 'Care',
     items: [
-      { label: 'Health', path: '/health-care', icon: Stethoscope, badgeKey: 'care' },
-      { label: 'Breeding', path: '/breeding-foaling', icon: Sprout },
+      { label: 'Health', path: canonicalRoutes.health, icon: Stethoscope, badgeKey: 'care' },
+      { label: 'Breeding', path: canonicalRoutes.breeding, icon: Sprout },
       { label: 'Feed & Supplies', path: '/feed', icon: Wheat },
     ],
   },
@@ -85,7 +86,7 @@ const navGroups: NavGroup[] = [
     items: [
       { label: 'Documents', path: '/documents', icon: FolderOpen, badgeKey: 'docs' },
       { label: 'Expiring soon', path: '/expiring', icon: CalendarClock, badgeKey: 'expiring' },
-      { label: 'Equipment', path: '/equipment', icon: Boxes },
+      { label: 'Equipment', path: canonicalRoutes.equipment, icon: Boxes },
       { label: 'Expenses', path: '/expenses', icon: Coins },
       { label: 'Reports', path: '/reports', icon: Gauge },
     ],

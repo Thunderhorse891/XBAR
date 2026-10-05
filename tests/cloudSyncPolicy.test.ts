@@ -553,3 +553,34 @@ test('one document intake at a time, guaranteed by the store rather than by two 
     'the UI-guard justification was false and must not be restated',
   );
 });
+
+test('failed fresh-device read locks instead of being treated as empty', () => {
+  assert.equal(decideCloudReconciliation({ local: empty, remoteError: 'Cloud load incomplete' }), 'error-lock');
+  assert.equal(
+    decideCloudReconciliation({ local: empty, remoteError: 'No relational workspace records stored' }),
+    'empty-ready',
+  );
+});
+test('key and top-level record order do not conflict, nested timeline order still matters', () => {
+  const a = {
+    workspace: {
+      horses: [
+        { id: 'b', name: 'B' },
+        { id: 'a', name: 'A', events: ['one', 'two'] },
+      ],
+      workspaceProfile: { ranchName: 'Ranch', businessName: 'Business' },
+    },
+  };
+  const b = {
+    workspace: {
+      workspaceProfile: { businessName: 'Business', ranchName: 'Ranch' },
+      horses: [
+        { events: ['one', 'two'], name: 'A', id: 'a' },
+        { name: 'B', id: 'b' },
+      ],
+    },
+  };
+  assert.equal(decideCloudReconciliation({ local: a, remote: b }), 'connected');
+  b.workspace.horses[0].events = ['two', 'one'];
+  assert.equal(decideCloudReconciliation({ local: a, remote: b }), 'conflict-lock');
+});

@@ -1,3 +1,4 @@
+import { fulfillRelationalFixture } from './relationalFixture.js';
 import { expect, test } from '@playwright/test';
 import {
   blockWebfonts,
@@ -35,7 +36,7 @@ for (const scenario of [
         // PostgREST returns the requested representation, not an empty success.
         const returned = table === 'workspaces' ? { id: 'incorrect-personal-ranch' } : body;
         const single = request.headers().accept?.includes('application/vnd.pgrst.object+json');
-        await route.fulfill({
+        await fulfillRelationalFixture(route, {
           status: 200,
           json: new URL(request.url()).searchParams.has('select')
             ? single
@@ -53,7 +54,10 @@ for (const scenario of [
         ((scenario === 'owner-lookup-error' && table === 'workspaces') ||
           (scenario === 'member-lookup-error' && resolvingMember))
       ) {
-        await route.fulfill({ status: 503, json: { message: 'Workspace access temporarily unavailable' } });
+        await fulfillRelationalFixture(route, {
+          status: 503,
+          json: { message: 'Workspace access temporarily unavailable' },
+        });
         return;
       }
       const role = saving && scenario === 'read-only' ? 'Owner' : 'Admin';
@@ -92,7 +96,7 @@ for (const scenario of [
                   : table === 'workspace_subscription_profiles'
                     ? { payload: {} }
                     : [];
-      await route.fulfill({ status: 200, json });
+      await fulfillRelationalFixture(route, { status: 200, json });
     });
     await page.goto(sessionLink('signin'));
     await expect.poll(() => readStoredAccessToken(page), { timeout: 15_000 }).not.toBe('');

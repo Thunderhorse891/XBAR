@@ -1,3 +1,4 @@
+import { stableStringify } from './relationalDiff.js';
 export type CloudReconciliation =
   'import-remote' | 'push-local' | 'connected' | 'conflict-lock' | 'empty-ready' | 'error-lock';
 
@@ -37,7 +38,16 @@ export function hasMeaningfulWorkspace(backup: unknown) {
 export function serializeWorkspaceBackup(backup: unknown) {
   const workspace = getWorkspacePayload(backup);
   if (!workspace) return '';
-  return JSON.stringify(workspace);
+  return stableStringify(
+    Object.fromEntries(
+      Object.entries(workspace).map(([key, value]) => [
+        key,
+        Array.isArray(value) && value.every((item) => typeof asRecord(item)?.id === 'string')
+          ? [...value].sort((a, b) => String(a.id).localeCompare(String(b.id)))
+          : value,
+      ]),
+    ),
+  );
 }
 
 export function isMissingCloudWorkspaceMessage(message: string) {
@@ -64,6 +74,8 @@ export function decideCloudReconciliation(params: {
       ? 'connected'
       : 'conflict-lock';
   }
-  if (localMeaningful && params.remoteError && isMissingCloudWorkspaceMessage(params.remoteError)) return 'push-local';
+  if (params.remoteError && isMissingCloudWorkspaceMessage(params.remoteError))
+    return localMeaningful ? 'push-local' : 'empty-ready';
+  if (params.remoteError) return 'error-lock';
   return localMeaningful ? 'error-lock' : 'empty-ready';
 }

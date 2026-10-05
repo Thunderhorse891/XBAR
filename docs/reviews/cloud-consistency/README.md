@@ -43,7 +43,8 @@ reports the field; it does not silently pick a winner.
 
 Device-recovery snapshots are not complete shared-workspace snapshots. Shared
 client audit/packet/buyer histories (audit 09), complete original-file recovery
-(audit 11) and complete paginated reads (audit 13) have separate gates. Refresh
+(audit 11) have separate gates. Complete paginated reads (audit 13) are included
+in this candidate because safe live refresh depends on them. Refresh
 never treats empty relational history defaults as authorization to clear known
 local history. No live customer mutation, migration, paid service or permission
 change was used for local verification.
@@ -68,3 +69,8 @@ role demotion instead of falsely acknowledging it, and use read-only workspace
 resolution during record loading. A synthetic pending-invitation case proves a
 record refresh cannot invoke invitation acceptance as a side effect. Initial
 sign-in's explicit workspace-access initialization remains separate.
+
+The complete-load correction and stable normalization details are documented in
+../cloud-load-completeness/README.md. A successful focus refresh installs all
+1,203 synthetic rows beyond a 137-row cap; a failed later page retains all local
+records and never acknowledges or echo-saves a truncated result.
