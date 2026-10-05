@@ -136,6 +136,11 @@ export type XbarStore = {
   createHorseFromDocument: (documentId: string) => ActionResult;
   discardDocument: (documentId: string) => ActionResult;
   uploadHorseMedia: (input: MediaUploadInput) => Promise<ActionResult>;
+  changeHorsePhoto: (
+    horseId: string,
+    assetId: string,
+    action: import('../lib/horsePhotoGallery').HorsePhotoAction,
+  ) => ActionResult;
   addExpenseReceipt: (input: ExpenseReceiptInput) => Promise<ActionResult>;
   createSalesLead: (input: LeadInput) => ActionResult;
   updateSalesLead: (
