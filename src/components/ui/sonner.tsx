@@ -13,8 +13,15 @@ const Toaster = ({ ...props }: ToasterProps) => {
       className="toaster group"
       expand
       containerAriaLabel="Action notifications"
-      offset={{ top: 'max(24px, env(safe-area-inset-top))', right: 24 }}
-      mobileOffset={{ top: 'max(16px, env(safe-area-inset-top))', left: 16, right: 16 }}
+      offset={{
+        top: 'calc(env(safe-area-inset-top, 0px) + 24px)',
+        right: 'calc(env(safe-area-inset-right, 0px) + 24px)',
+      }}
+      mobileOffset={{
+        top: 'calc(env(safe-area-inset-top, 0px) + 16px)',
+        left: 'calc(env(safe-area-inset-left, 0px) + 16px)',
+        right: 'calc(env(safe-area-inset-right, 0px) + 16px)',
+      }}
       icons={{
         success: <CircleCheck className="h-4 w-4" />,
         info: <Info className="h-4 w-4" />,

@@ -35,7 +35,11 @@ for (const viewport of [
     expect(box!.x).toBeGreaterThanOrEqual(0);
     expect(box!.x + box!.width).toBeLessThanOrEqual(viewport.width);
     await expect(page.locator('tbody tr').filter({ hasText: 'Feedback trailer' })).toHaveCount(1);
-    await page.screenshot({ path: testInfo.outputPath(`ranch-action-feedback-${viewport.width}.png`), fullPage: true });
+    await page.screenshot({
+      path: testInfo.outputPath(`ranch-action-feedback-${viewport.width}.png`),
+      fullPage: true,
+      animations: 'disabled',
+    });
     await page.reload();
     await expect(page.locator('tbody tr').filter({ hasText: 'Feedback trailer' })).toHaveCount(1);
   });
@@ -75,4 +79,108 @@ test('an exception reports failure, keeps the draft and enables retry', async ({
   await expect(drawer.getByRole('button', { name: 'Add Equipment', exact: true })).toBeEnabled();
   await expect(drawer.getByPlaceholder('e.g. Stock trailer (24ft)')).toHaveValue('Retry trailer');
   await expect(page.locator('[data-sonner-toast][data-type="success"]')).toHaveCount(0);
+});
+
+async function delayDeviceAcknowledgment(page: Page) {
+  await page.evaluate(async () => {
+    const storePath = '/src/store/useXbarStore.ts';
+    const storagePath = '/src/lib/workspaceStorage.ts';
+    const { useXbarStore } = await import(/* @vite-ignore */ storePath);
+    const { getWorkspacePersistReceipt } = await import(/* @vite-ignore */ storagePath);
+    const original = useXbarStore.getState().addRanchAsset;
+    useXbarStore.setState({
+      addRanchAsset: (input: unknown) => {
+        const result = original(input);
+        const receipt = getWorkspacePersistReceipt();
+        if (!receipt) throw new Error('Missing synthetic device-write receipt');
+        const completed = receipt.completed;
+        receipt.completed = new Promise((resolve) => {
+          (window as unknown as { releaseFeedbackSave: () => Promise<void> }).releaseFeedbackSave = async () =>
+            resolve(await completed);
+        });
+        return result;
+      },
+    });
+  });
+}
+
+async function releaseDeviceAcknowledgment(page: Page) {
+  await page.evaluate(() => (window as unknown as { releaseFeedbackSave: () => Promise<void> }).releaseFeedbackSave());
+}
+
+test('Back navigation while saving stays on the newer route after acknowledgment', async ({ page }) => {
+  const drawer = await setup(page);
+  await drawer.getByPlaceholder('e.g. Stock trailer (24ft)').fill('History trailer');
+  await delayDeviceAcknowledgment(page);
+  await drawer.getByRole('button', { name: 'Add Equipment', exact: true }).click();
+  await expect(drawer.getByRole('status')).toContainText('Saving');
+  await page.goBack();
+  const destination = page.url();
+  await releaseDeviceAcknowledgment(page);
+  await expect(page.locator('[data-sonner-toast]').filter({ hasText: 'History trailer added' })).toBeVisible();
+  await expect(page).toHaveURL(destination);
+});
+
+test('switching account during save requires reopening before an old draft can be submitted again', async ({
+  page,
+}) => {
+  const drawer = await setup(page);
+  await drawer.getByPlaceholder('e.g. Stock trailer (24ft)').fill('Old account trailer');
+  await delayDeviceAcknowledgment(page);
+  await drawer.getByRole('button', { name: 'Add Equipment', exact: true }).click();
+  await expect(drawer.getByRole('status')).toContainText('Saving');
+  await page.evaluate(async () => {
+    const storePath = '/src/store/useXbarStore.ts';
+    const cloudPath = '/src/store/useCloudStore.ts';
+    const { useXbarStore } = await import(/* @vite-ignore */ storePath);
+    const { useCloudStore } = await import(/* @vite-ignore */ cloudPath);
+    useCloudStore.setState({
+      session: { user: { id: 'synthetic-other-account' } },
+      workspaceId: 'synthetic-other-ranch',
+    });
+    useXbarStore.setState({
+      workspaceProfile: { ...useXbarStore.getState().workspaceProfile, businessName: 'Different test ranch' },
+    });
+  });
+  await releaseDeviceAcknowledgment(page);
+  await expect(drawer.getByRole('alert')).toContainText('reopen');
+  await drawer.getByRole('button', { name: 'Add Equipment', exact: true }).click();
+  await expect(drawer.getByRole('alert')).toContainText('reopen');
+  const count = await page.evaluate(async () => {
+    const path = '/src/store/useXbarStore.ts';
+    const { useXbarStore } = await import(/* @vite-ignore */ path);
+    return useXbarStore.getState().ranchAssets.filter((asset: { name: string }) => asset.name === 'Old account trailer')
+      .length;
+  });
+  expect(count).toBe(1);
+});
+
+test('a visible confirmation does not block starting the next task underneath it', async ({ page }) => {
+  const drawer = await setup(page);
+  await drawer.getByPlaceholder('e.g. Stock trailer (24ft)').fill('Next task trailer');
+  await drawer.getByRole('button', { name: 'Add Equipment', exact: true }).click();
+  const toast = page.locator('[data-sonner-toast]').filter({ hasText: 'Next task trailer added' });
+  await expect(toast).toBeVisible();
+  await page.getByRole('button', { name: 'Create', exact: true }).click({ timeout: 2000 });
+  await expect(page.getByRole('menuitem', { name: 'Add Horse', exact: true })).toBeVisible();
+  await expect(toast).toBeVisible();
+});
+
+test('mobile validation stays readable without stacking duplicate error popups', async ({ page }, testInfo) => {
+  await page.setViewportSize({ width: 390, height: 844 });
+  const drawer = await setup(page);
+  const submit = drawer.getByRole('button', { name: 'Add Equipment', exact: true });
+  await submit.click();
+  await submit.click();
+  const errors = page.locator('[data-sonner-toast][data-type="error"]');
+  await expect(errors).toHaveCount(1);
+  await expect(drawer.getByRole('alert')).toHaveText('Enter the equipment name.');
+  await page.screenshot({
+    path: testInfo.outputPath('ranch-action-feedback-mobile-error.png'),
+    fullPage: true,
+    animations: 'disabled',
+  });
+  await errors.getByRole('button', { name: 'Close toast' }).click();
+  await expect(drawer.getByRole('alert')).toBeVisible();
+  await expect(drawer.getByPlaceholder('e.g. Stock trailer (24ft)')).toBeVisible();
 });

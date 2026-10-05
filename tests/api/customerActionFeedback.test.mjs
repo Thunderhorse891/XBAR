@@ -3,9 +3,10 @@ import test from 'node:test';
 import { renderRoute, nodes } from '../helpers/recordWorkflowHarness.mjs';
 
 const request = () => ({ action: 'Add Equipment' });
-async function drawer(actionRequest = request(), changes = {}) {
+async function drawer(actionRequest = request(), changes = {}, cloud = {}) {
   return renderRoute('components/saas/flows', changes, '', {
     exportName: 'GlobalCreateDrawer',
+    cloud,
     ui: { quickCreate: actionRequest },
   });
 }
@@ -99,8 +100,7 @@ test('a failed device write reports session-only progress without a false saved 
 });
 
 test('cloud use never labels a device acknowledgment as cloud-saved', async () => {
-  const f = await drawer();
-  f.cloud.session = { user: { id: 'member-a' } };
+  const f = await drawer(request(), {}, { session: { user: { id: 'member-a' } } });
   f.state.addRanchAsset = () => {
     f.receipt = { name: 'xbar-live-workspace', completed: Promise.resolve(true) };
     return { ok: true, id: 'trailer', message: 'Asset added.' };
@@ -133,8 +133,7 @@ test('late completion cannot close a newer create request or navigate away from 
 
 test('late completion is suppressed after the signed-in account changes', async () => {
   let resolve;
-  const f = await drawer();
-  f.cloud.session = { user: { id: 'account-a' } };
+  const f = await drawer(request(), {}, { session: { user: { id: 'account-a' } } });
   f.state.addRanchAsset = () => {
     f.receipt = {
       name: 'xbar-live-workspace',
@@ -260,4 +259,76 @@ test('shared toast defaults allow time to read and act while preserving explicit
     assert.equal(toast.getToasts().find((entry) => entry.id === id).duration, expected);
   }
   useUiStore.getState().clearToasts();
+});
+
+test('a switched account cannot retry the old draft until the create request is reopened', async () => {
+  let resolve;
+  let writes = 0;
+  const f = await drawer();
+  f.state.addRanchAsset = () => {
+    writes += 1;
+    f.receipt = {
+      name: 'xbar-live-workspace',
+      completed:
+        writes === 1
+          ? new Promise((r) => {
+              resolve = r;
+            })
+          : Promise.resolve(true),
+    };
+    return { ok: true, id: 'trailer', message: 'Asset added.' };
+  };
+  f.render();
+  field(f, 'Equipment', 'Account A draft');
+  const pending = submit(f);
+  f.cloud.session = { user: { id: 'account-b' } };
+  f.cloud.workspaceId = 'workspace-b';
+  f.state.workspaceProfile = { ...f.state.workspaceProfile, businessName: 'Ranch B' };
+  resolve(true);
+  await pending;
+  f.render();
+  await submit(f);
+  f.render();
+  assert.equal(writes, 1, 'Retry must not submit the old account draft to the new account');
+  assert.equal(toasts(f).length, 0);
+  assert.match(nodes(f.tree, (n) => n.props.role === 'alert')[0].props.children, /reopen/);
+  f.ui.quickCreate = request();
+  f.render();
+  assert.equal(nodes(f.tree, (n) => n.props.label === 'Equipment')[0].props.value, '');
+  field(f, 'Equipment', 'Account B draft');
+  await submit(f);
+  assert.equal(writes, 2);
+  assert.equal(toasts(f).at(-1).tone, 'success');
+});
+
+test('Back or Forward navigation during the device save is not replaced by the old destination', async () => {
+  let resolve;
+  const f = await drawer();
+  f.state.addRanchAsset = () => {
+    f.receipt = {
+      name: 'xbar-live-workspace',
+      completed: new Promise((r) => {
+        resolve = r;
+      }),
+    };
+    return { ok: true, id: 'trailer', message: 'Asset added.' };
+  };
+  f.render();
+  field(f, 'Equipment', 'Trailer');
+  const pending = submit(f);
+  f.location = { key: 'back-navigation', pathname: '/horses' };
+  f.render();
+  resolve(true);
+  await pending;
+  assert.ok(!f.calls.some(([kind]) => kind === 'navigate'));
+  assert.equal(toasts(f).at(-1).tone, 'success');
+});
+
+test('repeated validation updates one notification rather than stacking errors over the form', async () => {
+  const f = await drawer();
+  await submit(f);
+  await submit(f);
+  assert.equal(toasts(f).length, 2);
+  assert.equal(toasts(f)[0].id, 'quick-create-feedback');
+  assert.equal(toasts(f)[1].id, toasts(f)[0].id);
 });

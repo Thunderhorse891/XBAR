@@ -1,3 +1,15 @@
+/* Notifications must not trap clicks on the next task beneath them. Only
+   their explicit controls take pointer input, including above modal drawers. */
+[data-sonner-toaster].toaster,
+[data-sonner-toast].xbar-action-toast {
+  pointer-events: none;
+}
+
+[data-sonner-toast].xbar-action-toast[data-visible='true'] [data-button],
+[data-sonner-toast].xbar-action-toast[data-visible='true'] [data-close-button] {
+  pointer-events: auto;
+}
+
 /* Shared confirmations remain readable on narrow screens and above drawers. */
 [data-sonner-toast].xbar-action-toast [data-content] {
   min-width: 0;

@@ -1,13 +1,13 @@
 import { ASSET_CATEGORIES, HORSE_SEGMENTS } from '@/lib/recordOptions';
 import { documentIntakeDisclosure } from '@/features/documents/constants';
 import type { ReactNode } from 'react';
-import { useEffect, useRef, useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useEffect, useLayoutEffect, useRef, useState } from 'react';
+import { useLocation, useNavigate } from 'react-router-dom';
 import { FileUp } from 'lucide-react';
 import { ActionButton, SlideOverDrawer } from '@/components/saas';
 import { buyerFollowUpPath } from '@/lib/buyerRoutes';
 import { localIsoDate } from '@/lib/format';
-import { useUiStore } from '@/store/useUiStore';
+import { useUiStore, type QuickCreateRequest } from '@/store/useUiStore';
 import { useCloudStore } from '@/store/useCloudStore';
 import { getWorkspacePersistReceipt, type WorkspacePersistReceipt } from '@/lib/workspaceStorage';
 import { useXbarStore } from '@/store/useXbarStore';
@@ -194,8 +194,23 @@ function todayIso() {
   return localIsoDate();
 }
 
+function captureCreateContext(request: QuickCreateRequest | null) {
+  const cloud = useCloudStore.getState();
+  return {
+    request,
+    workspace: cloud.workspaceId,
+    user: cloud.session?.user.id,
+    profile: useXbarStore.getState().workspaceProfile,
+  };
+}
+
 export function GlobalCreateDrawer() {
   const navigate = useNavigate();
+  const location = useLocation();
+  const latestLocationKey = useRef(location.key);
+  useLayoutEffect(() => {
+    latestLocationKey.current = location.key;
+  }, [location.key]);
   const request = useUiStore((s) => s.quickCreate);
   const closeQuickCreate = useUiStore((s) => s.closeQuickCreate);
   const openQuickCreate = useUiStore((s) => s.openQuickCreate);
@@ -216,6 +231,7 @@ export function GlobalCreateDrawer() {
   const [files, setFiles] = useState<File[]>([]);
   const [busy, setBusy] = useState(false);
   const [formError, setFormError] = useState('');
+  const [context, setContext] = useState(() => captureCreateContext(request));
   const submitting = useRef(false);
   const beforeSave = useRef<WorkspacePersistReceipt | null>(null);
   const mounted = useRef(true);
@@ -228,6 +244,7 @@ export function GlobalCreateDrawer() {
   // Every new opener starts a fresh draft. A completed older request must not
   // close or clear a newer drawer, even if both have the same action label.
   useEffect(() => {
+    setContext(captureCreateContext(request));
     setF({});
     setFiles([]);
     setFormError('');
@@ -267,12 +284,11 @@ export function GlobalCreateDrawer() {
     closeQuickCreate();
   };
 
-  const cloud = useCloudStore.getState();
-  const context = { workspace: cloud.workspaceId, user: cloud.session?.user.id, profile: workspaceProfile };
   const current = () => {
     const now = useCloudStore.getState();
     return (
       mounted.current &&
+      context.request === request &&
       useUiStore.getState().quickCreate === request &&
       now.workspaceId === context.workspace &&
       now.session?.user.id === context.user &&
@@ -282,7 +298,7 @@ export function GlobalCreateDrawer() {
   const reportError = (message: string) => {
     if (!current()) return;
     setFormError(message);
-    pushToast({ title: `${action} not completed`, message, tone: 'error' });
+    pushToast({ id: 'quick-create-feedback', title: `${action} not completed`, message, tone: 'error' });
   };
   const runSubmit = async (submit: () => void | Promise<void>) => {
     if (submitting.current) return;
@@ -332,6 +348,7 @@ export function GlobalCreateDrawer() {
     if (!current()) return;
     const message = result.message.trim().replace(/\.$/, '');
     pushToast({
+      id: 'quick-create-feedback',
       title: persisted ? action : 'Device save not confirmed',
       message: persisted
         ? `${message}. ${action === 'Upload Document' ? 'Queue state saved' : 'Saved'} on this device.${context.user ? ' Cloud sync runs separately; check Cloud status.' : ''}`
@@ -342,7 +359,7 @@ export function GlobalCreateDrawer() {
     // The mutation already happened, even when durable storage failed. Do not
     // leave a create button that would duplicate the record on a retry.
     close();
-    if (go) navigate(go);
+    if (go && latestLocationKey.current === location.key) navigate(go);
   };
 
   const submitAnimal = () => {

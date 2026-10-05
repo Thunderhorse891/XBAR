@@ -30,6 +30,7 @@ export async function renderRoute(name, changes = {}, params = '', options = {})
     calls: [],
     cloud: { session: null, workspaceId: null, workspaceRole: 'Admin', ...options.cloud },
     receipt: null,
+    location: { key: 'initial', pathname: '/equipment' },
     slots: [],
     effects: [],
     dirty: false,
@@ -82,12 +83,13 @@ export async function renderRoute(name, changes = {}, params = '', options = {})
             let code;
             if (path === 'react')
               code = `export const useMemo=(fn,deps)=>{const i=f.cursor++;const prev=f.slots[i];if(!prev||deps.some((v,j)=>v!==prev.deps[j]))f.slots[i]={deps,value:fn()};return f.slots[i].value};
+                export const useLayoutEffect=(fn,deps)=>useEffect(fn,deps);
                 export const useRef=(v)=>{const i=f.cursor++;return f.slots[i]??=({current:v})};
                 export const useEffect=(fn,deps)=>{const i=f.cursor++;const prev=f.slots[i];if(!prev||deps.some((v,j)=>v!==prev[j])){f.slots[i]=deps;f.effects.push(fn)}};
                 export const useState=(initial)=>{const i=f.cursor++;if(!(i in f.slots))f.slots[i]=typeof initial==="function"?initial():initial;return [f.slots[i],(v)=>{const next=typeof v==="function"?v(f.slots[i]):v;f.dirty ||= next!==f.slots[i];f.slots[i]=next}]};`;
             else if (path === 'react-router-dom')
               code =
-                'export const useNavigate=()=>((p)=>f.calls.push(["navigate",p])); export const useParams=()=>({id:f.horse.id}); export const useSearchParams=()=>{if(f.searchText!==f.params){f.searchText=f.params;f.searchValue=new URLSearchParams(f.params)}return [f.searchValue,(p)=>{f.params=p.toString()}]};export const Link="a";';
+                'export const useNavigate=()=>((p)=>f.calls.push(["navigate",p])); export const useParams=()=>({id:f.horse.id});export const useLocation=()=>f.location; export const useSearchParams=()=>{if(f.searchText!==f.params){f.searchText=f.params;f.searchValue=new URLSearchParams(f.params)}return [f.searchValue,(p)=>{f.params=p.toString()}]};export const Link="a";';
             else if (path === '@/store/useXbarStore')
               code =
                 'export const useXbarStore=(fn)=>fn(f.state); useXbarStore.getState=()=>f.state;useXbarStore.subscribe=()=>()=>{}; export const useHorseRecord=()=>f.state.horses.find(h=>h.id===f.horse.id);export const useCurrentRoleCapability=()=>f.state.currentRole==="Admin";';
