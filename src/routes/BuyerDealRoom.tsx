@@ -266,7 +266,7 @@ export default function BuyerDealRoom() {
               <div className="xs-detailhead__meta">
                 Interested in {horseName(selected)} · last active {selected.lastTouch}
               </div>
-              <div style={{ display: 'flex', gap: 8, marginTop: 10 }}>
+              <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, marginTop: 10 }}>
                 <StatusChip tone={readinessTone[selectedReadiness]}>
                   Sharing {selectedReadiness.toLowerCase()}
                 </StatusChip>

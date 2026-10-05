@@ -77,6 +77,7 @@ for (const viewport of [
       };
     }, id);
     expect(outcome).toEqual({ ready: false, events: 1 });
+    expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(viewport.width);
     await page.screenshot({
       path: testInfo.outputPath(`ranch-buyer-readiness-${viewport.width}.png`),
       fullPage: true,
