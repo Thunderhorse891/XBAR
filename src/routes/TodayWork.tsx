@@ -80,6 +80,9 @@ function TaskBoard({ storageKey }: { storageKey: string }) {
   const [openTask, setOpenTask] = useState<CareTask | null>(null);
   // Never keep an obsolete action open after the source record changes.
   const open = allTasks.find((task) => task.id === openTask?.id && task.revision === openTask.revision) ?? null;
+  useEffect(() => {
+    if (openTask && !open) setOpenTask(null);
+  }, [openTask, open]);
   const categoryTasks = allTasks.filter((task) => tab === 'All' || task.category === tab);
   const hiddenTasks = categoryTasks.filter((task) => taskIsDeferred(deferrals, task, today));
   const filtered = categoryTasks.filter((task) => !taskIsDeferred(deferrals, task, today));
@@ -166,24 +169,24 @@ function TaskBoard({ storageKey }: { storageKey: string }) {
         </Card>
       ) : (
         <>
-          {segment ? (
-            <div className="xs-stickybar">
-              <span>Group: {segment}</span>
-              <button
-                type="button"
-                className="xs-fchip"
-                aria-label="Clear group filter"
-                onClick={() => {
-                  const next = new URLSearchParams(searchParams);
-                  next.delete('segment');
-                  setSearchParams(next);
-                }}
-              >
-                All groups
-              </button>
-            </div>
-          ) : null}
-          <div className="xs-stickybar">
+          <div className="xs-stickybar" role="group" aria-label="Task filters">
+            {segment ? (
+              <div className="care-task-group-filter">
+                <span>Group: {segment}</span>
+                <button
+                  type="button"
+                  className="xs-fchip"
+                  aria-label="Clear group filter"
+                  onClick={() => {
+                    const next = new URLSearchParams(searchParams);
+                    next.delete('segment');
+                    setSearchParams(next);
+                  }}
+                >
+                  All groups
+                </button>
+              </div>
+            ) : null}
             <div className="xs-fchips">
               {TABS.map((t) => (
                 <button

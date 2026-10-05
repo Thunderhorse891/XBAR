@@ -1,3 +1,10 @@
+.care-task-group-filter {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  flex-basis: 100%;
+  gap: 12px;
+}
 .xs-task.care-task-row {
   grid-template-columns: 116px minmax(0, 1fr) auto;
 }

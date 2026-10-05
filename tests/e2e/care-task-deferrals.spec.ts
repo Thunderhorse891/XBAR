@@ -119,6 +119,81 @@ test('storage refusal leaves the task visible and reports no saved action', asyn
   await expect(opener).toBeVisible();
 });
 
+test('changed or removed tasks stay closed when their previous source values return', async ({ page }) => {
+  await setup(page);
+  const opener = page.getByRole('button', { name: 'Open task: Follow up with Due Buyer', exact: true });
+  const drawer = page.getByRole('dialog', { name: 'Follow up with Due Buyer' });
+  const original = await page.evaluate(async () => {
+    const path = '/src/store/useXbarStore.ts';
+    const { useXbarStore } = await import(path);
+    return useXbarStore.getState().salesLeads;
+  });
+  for (const remove of [false, true]) {
+    await opener.click();
+    await expect(drawer).toBeVisible();
+    await page.evaluate(async (remove) => {
+      const path = '/src/store/useXbarStore.ts';
+      const { useXbarStore } = await import(path);
+      const leads = useXbarStore.getState().salesLeads;
+      useXbarStore.setState({
+        salesLeads: remove
+          ? leads.filter((lead: { id: string }) => lead.id !== 'due')
+          : leads.map((lead: { id: string }) =>
+              lead.id === 'due' ? { ...lead, notes: 'Source changed while drawer was open' } : lead,
+            ),
+      });
+    }, remove);
+    await expect(drawer).not.toBeVisible();
+    await page.evaluate(async (salesLeads) => {
+      const path = '/src/store/useXbarStore.ts';
+      const { useXbarStore } = await import(path);
+      useXbarStore.setState({ salesLeads });
+    }, original);
+    await expect(opener).toBeVisible();
+    await expect(opener).toContainText('Buyer follow-up');
+    await expect(drawer).not.toBeVisible();
+  }
+  await opener.click();
+  await expect(drawer).toBeVisible();
+});
+
+for (const width of [1440, 390]) {
+  test(`group and category filters remain reachable after scrolling at ${width}px`, async ({ page }, info) => {
+    await page.setViewportSize({ width, height: 844 });
+    await setup(page);
+    await page.evaluate(async () => {
+      const path = '/src/store/useXbarStore.ts';
+      const { useXbarStore } = await import(path);
+      const lead = useXbarStore.getState().salesLeads.find((item: { id: string }) => item.id === 'due');
+      useXbarStore.setState({
+        salesLeads: Array.from({ length: 40 }, (_, i) => ({ ...lead, id: `due-${i}`, name: `Due Buyer ${i}` })),
+      });
+      history.pushState({}, '', '/app/today?segment=Young+Stock');
+      dispatchEvent(new PopStateEvent('popstate'));
+    });
+    const clear = page.getByRole('button', { name: 'Clear group filter', exact: true });
+    await expect(clear).toBeVisible();
+    await page.evaluate(() => window.scrollTo(0, 800));
+    await expect.poll(() => page.evaluate(() => window.scrollY)).toBeGreaterThan(0);
+    await expect
+      .poll(() =>
+        clear.evaluate((button) => {
+          const box = button.getBoundingClientRect();
+          return document.elementFromPoint(box.x + box.width / 2, box.y + box.height / 2)?.closest('button') === button;
+        }),
+      )
+      .toBe(true);
+    await page.screenshot({ path: info.outputPath(`ranch-task-filters-scrolled-${width}.png`) });
+    await clear.click();
+    await expect(page).not.toHaveURL(/segment=/);
+    await page.getByRole('button', { name: 'Sales', exact: true }).click();
+    await expect(
+      page.getByRole('button', { name: 'Open task: Follow up with Due Buyer 0', exact: true }),
+    ).toBeVisible();
+    await expect(page.getByText(/Finish ownership documents.*Mare Horse/i)).toHaveCount(0);
+  });
+}
+
 test('long task text wraps on mobile and keyboard actions open the exact buyer', async ({ page }, info) => {
   await page.setViewportSize({ width: 390, height: 844 });
   await setup(page);
