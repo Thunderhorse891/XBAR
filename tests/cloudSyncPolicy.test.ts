@@ -90,10 +90,15 @@ test('resolving a conflict by hand unlocks autosave on both paths', async () => 
   ] as const) {
     assert.match(
       handler,
-      /if \(result\.ok\) \{\s*unlockAutosaveAfterManualSync\(\);/,
+      /if \(result\.ok\) \{\s*unlockAutosaveAfterManualSync\([^;]+\);/,
       `${name} is one of the two choices the conflict-lock message offers, so it must clear the lock`,
     );
   }
+  assert.match(push, /unlockAutosaveAfterManualSync\(result\.recoveryContext\)/);
+  assert.match(
+    pull,
+    /unlockAutosaveAfterManualSync\('recoveryContext' in remote \? remote\.recoveryContext : undefined\)/,
+  );
 });
 
 test('the unlock cannot promote a workspace that is still hydrating', async () => {
@@ -106,16 +111,16 @@ test('the unlock cannot promote a workspace that is still hydrating', async () =
    * that can promote `ready` can start autosave against a half-hydrated
    * workspace, which is the failure `vaultOwner` exists to prevent.
    */
+  const unlock = store.slice(
+    store.indexOf('unlockAutosaveAfterManualSync: (context)'),
+    store.indexOf('  sendMagicLink: async'),
+  );
   assert.match(
-    store,
-    /unlockAutosaveAfterManualSync: \(\) =>\s*set\(\(state\) => \(state\.autosaveReady \? \{ autosaveUnlocked: true \} : state\)\),/,
-    'it must be a no-op while reconciliation is still running, and must not touch autosaveReady',
+    unlock,
+    /if \(!state\.autosaveReady\) return state;/,
+    'it must be a no-op while reconciliation is still running',
   );
-  assert.doesNotMatch(
-    store.slice(store.indexOf('unlockAutosaveAfterManualSync: ()')).slice(0, 200),
-    /autosaveReady: true/,
-    "setting ready here would let autosave run against records that are not this workspace's yet",
-  );
+  assert.doesNotMatch(unlock, /autosaveReady: true/, 'unlocking must not manufacture completed hydration');
 });
 
 test('reconciliation still finishes a conflict LOCKED', async () => {
@@ -150,7 +155,10 @@ test('the first relational workspace id becomes active before billing depends on
    */
   assert.match(cloud, /type CloudSaveResult = \{[\s\S]*workspaceId\?: string;/);
   assert.match(cloud, /message: 'Relational workspace updated\.',\s*workspaceId,/);
-  assert.match(store, /setWorkspaceAccessProfile: \(workspaceId: string, workspaceRole\?: UserRole\) => void;/);
+  assert.match(
+    store,
+    /setWorkspaceAccessProfile: \(workspaceId: string, workspaceRole\?: WorkspaceAccessRole\) => void;/,
+  );
   assert.match(
     store,
     /setWorkspaceAccessProfile: \(workspaceId, workspaceRole = 'Admin'\) => set\(\{ workspaceId, workspaceRole \}\)/,
@@ -469,8 +477,8 @@ test('staged bytes are released by the save that persists them, and only that mu
 test('a snapshot-only fallback does not claim the relational rows landed', async () => {
   /*
    * With `VITE_SUPABASE_SNAPSHOT_FALLBACK` on, a rejected relational save still
-   * returns `ok` once the legacy snapshot is written — the rancher's work is
-   * safe, which is what `ok` means. But `xbar_workspace_storage_bytes` reads
+   * may also write a legacy recovery copy while still reporting failure.
+   * That copy is separate from relational persistence: `xbar_workspace_storage_bytes` reads
    * the `documents` table, and that path added nothing to it. A caller cannot
    * tell those apart from `ok`, so the distinction has to be reported.
    *
@@ -509,11 +517,11 @@ test('a snapshot-only fallback does not claim the relational rows landed', async
   assert.match(
     relationalSave,
     /documentsPersisted = true;\s*await replaceWorkspaceRows\(\{\s*table: 'intake_batches'/,
-    'the flag must be set the moment the documents upsert commits',
+    'the flag is set only after the requested document writes finish',
   );
   assert.match(
     relationalSave,
-    /catch \(error\) \{[\s\S]{0,300}?documentsPersisted,/,
+    /catch \(error\) \{\s*return \{[\s\S]*?allowSnapshotFallback: !options\.replace && !\(error instanceof WorkspaceSaveAccessError\),\s*documentsPersisted,/,
     'and reported when a later table fails, because those rows are still committed',
   );
 });
@@ -552,4 +560,35 @@ test('one document intake at a time, guaranteed by the store rather than by two 
     !/neither entry point permits/.test(store),
     'the UI-guard justification was false and must not be restated',
   );
+});
+
+test('failed fresh-device read locks instead of being treated as empty', () => {
+  assert.equal(decideCloudReconciliation({ local: empty, remoteError: 'Cloud load incomplete' }), 'error-lock');
+  assert.equal(
+    decideCloudReconciliation({ local: empty, remoteError: 'No relational workspace records stored' }),
+    'empty-ready',
+  );
+});
+test('key and top-level record order do not conflict, nested timeline order still matters', () => {
+  const a = {
+    workspace: {
+      horses: [
+        { id: 'b', name: 'B' },
+        { id: 'a', name: 'A', events: ['one', 'two'] },
+      ],
+      workspaceProfile: { ranchName: 'Ranch', businessName: 'Business' },
+    },
+  };
+  const b = {
+    workspace: {
+      workspaceProfile: { businessName: 'Business', ranchName: 'Ranch' },
+      horses: [
+        { events: ['one', 'two'], name: 'A', id: 'a' },
+        { name: 'B', id: 'b' },
+      ],
+    },
+  };
+  assert.equal(decideCloudReconciliation({ local: a, remote: b }), 'connected');
+  b.workspace.horses[0].events = ['two', 'one'];
+  assert.equal(decideCloudReconciliation({ local: a, remote: b }), 'conflict-lock');
 });

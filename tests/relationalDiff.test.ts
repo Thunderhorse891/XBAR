@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
 import test from 'node:test';
-import { changedRecords, stableStringify } from '../src/lib/relationalDiff.js';
+import { changedRecords, stableStringify, mergeConcurrentFields } from '../src/lib/relationalDiff.js';
 
 /*
  * A save writes only what changed on this device since its last saved or
@@ -97,4 +97,28 @@ test('the baseline is the copy known to match the cloud, never a re-export after
   );
   assert.match(bootstrap, /promotionMessage\(promoted\.failed, 'Cloud workspace connected\.'\),\s*local,/);
   assert.match(bootstrap, /saved\.ok \? local : null,/);
+});
+
+test('three-way merging preserves unrelated nested edits and explicit field removal', () => {
+  const before = { id: 'a', links: { instagram: 'old', facebook: 'old' }, notes: 'same' };
+  const current = { id: 'a', links: { facebook: 'old' }, notes: 'same' };
+  const remote = { id: 'a', links: { instagram: 'old', facebook: 'new' }, notes: 'remote note' };
+  assert.deepEqual(mergeConcurrentFields(before, current, remote), {
+    id: 'a',
+    links: { facebook: 'new' },
+    notes: 'remote note',
+  });
+  assert.throws(
+    () =>
+      mergeConcurrentFields(before, current, {
+        ...remote,
+        links: { instagram: 'changed elsewhere', facebook: 'new' },
+      }),
+    /conflict/,
+  );
+});
+
+test('three-way arrays cannot silently choose one simultaneous append', () => {
+  assert.throws(() => mergeConcurrentFields({ notes: [] }, { notes: ['local'] }, { notes: ['remote'] }), /conflict/);
+  assert.deepEqual(mergeConcurrentFields({ notes: [] }, { notes: ['same'] }, { notes: ['same'] }), { notes: ['same'] });
 });

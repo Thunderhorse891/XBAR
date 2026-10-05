@@ -1,3 +1,5 @@
+import { hasMeaningfulWorkspace } from '@/lib/cloudSyncPolicy';
+import { loadCompleteCloudRows } from '@/lib/cloudLoadPagination';
 import { apiConfig, isRelationalCloudEnabled, isSnapshotFallbackEnabled, supabaseConfig } from '@/lib/platformConfig';
 import { publicShareEventToBuyerRoomEvent, type PublicShareEventRow } from '@/lib/buyerDealRoom';
 import {
@@ -7,14 +9,14 @@ import {
   isWorkspaceStorageKey,
 } from '@/lib/documentStoragePath';
 import { createId, todayStamp } from '@/lib/xbarRuntime';
-import { WORKSPACE_SCHEMA_VERSION } from '@/store/xbarStoreHelpers';
+import { WORKSPACE_SCHEMA_VERSION, restorePersistedState, selectPersistedState } from '@/store/xbarStoreHelpers';
 import { intakeIdentityChanged, type IntakeIdentity } from '@/store/xbarStoreLogic';
 import { getSupabaseClient } from '@/lib/supabaseClient';
 import { isNavigableFileUrl } from '@/lib/navigableFileUrl';
 import { openLocalFile } from '@/lib/localFileVault';
 import { vaultOwnerId } from '@/lib/vaultOwner';
 import { idsToRemove, type CloudDeletion, type RowRemoval } from '@/lib/cloudDeletionQueue';
-import { changedRecords } from '@/lib/relationalDiff';
+import { changedRecords, mergeConcurrentFields, stableStringify } from '@/lib/relationalDiff';
 import { baselineCloudSubscription, subscriptionFromCloudRow, withCloudSubscription } from '@/lib/cloudSubscription';
 import type { Session } from '@supabase/supabase-js';
 import type {
@@ -30,6 +32,7 @@ import type {
   SharedListingRecord,
   SubscriptionProfile,
   UserRole,
+  WorkspaceAccessRole,
   WorkspaceInvitationRecord,
   WorkspaceMemberRecord,
   WorkspaceProfile,
@@ -56,6 +59,7 @@ type CloudWorkspaceBackup = {
 };
 
 class WorkspaceSaveAccessError extends Error {}
+class WorkspaceSaveConflictError extends WorkspaceSaveAccessError {}
 
 type RelationalMirrorResult = {
   allowSnapshotFallback?: boolean;
@@ -74,9 +78,14 @@ type RelationalMirrorResult = {
    * twice -- once in the server total and once in its own staged figure.
    */
   documentsPersisted?: boolean;
+  recoveryBackup?: CloudWorkspaceBackup;
 };
 
+export type CloudRecoveryContext = { userId: string; workspaceId: string | null; workspaceRole: WorkspaceAccessRole };
+
 export type CloudSaveOptions = {
+  /** Snapshot-only ranch pin, separate from its account-scoped UI/vault identity. */
+  expectedRecoveryContext?: CloudRecoveryContext;
   /** Pin an autosave to the account and ranch that supplied its snapshot. */
   expectedContext?: { userId: string; workspaceId: string };
   /** Records a person deleted on this device; see `cloudDeletionQueue`. */
@@ -98,6 +107,7 @@ type CloudSaveResult = {
   ok: boolean;
   message: string;
   updatedAt?: string;
+  recoveryContext?: CloudRecoveryContext;
   workspaceId?: string;
   /*
    * Whether the deletions sent with this save are now in the cloud copy every
@@ -124,20 +134,13 @@ type CloudSaveResult = {
 
 type WorkspaceAccessProfile = {
   workspaceId: string | null;
-  workspaceRole: UserRole;
+  workspaceRole: WorkspaceAccessRole;
   source: 'workspace-owner' | 'workspace-membership' | 'session';
   lookupFailed?: boolean;
 };
 
 type RelationalWorkspaceRow = {
-  payload?: unknown;
-  updated_at?: string | null;
-};
-
-type RelationalMembershipRow = {
-  email?: string | null;
-  role?: string | null;
-  status?: string | null;
+  [key: string]: unknown;
   payload?: unknown;
   updated_at?: string | null;
 };
@@ -152,13 +155,11 @@ function normalizeWorkspaceEmail(value: unknown) {
   return typeof value === 'string' ? value.trim().toLowerCase() : '';
 }
 
-function resolveSessionRole(session: Session) {
+function resolveSessionRole(session: Session): WorkspaceAccessRole {
   return (
     normalizeWorkspaceRole(session.user.app_metadata?.workspace_role) ??
     normalizeWorkspaceRole(session.user.app_metadata?.role) ??
-    normalizeWorkspaceRole(session.user.user_metadata?.workspace_role) ??
-    normalizeWorkspaceRole(session.user.user_metadata?.role) ??
-    'Owner'
+    'Pending access'
   );
 }
 
@@ -259,18 +260,23 @@ export async function loadWorkspaceAccessProfile(
   if (!session?.user) {
     return {
       workspaceId: null,
-      workspaceRole: 'Owner',
+      workspaceRole: 'Pending access',
       source: 'session',
     };
   }
 
   if (!isRelationalCloudEnabled() && !options.forEntitlements) {
+    // Refresh verified capabilities without changing the account-scoped vault
+    // namespace used by snapshot-only builds, including on token refresh.
+    const verified = await loadWorkspaceAccessProfile(session, { forEntitlements: true });
     return {
       workspaceId: null,
-      workspaceRole: resolveSessionRole(session),
+      workspaceRole: verified.workspaceRole,
       source: 'session',
+      ...(verified.lookupFailed ? { lookupFailed: true } : {}),
     };
   }
+  const readOnly = options.forEntitlements;
 
   const client = getSupabaseClient();
   if (!client) {
@@ -288,8 +294,8 @@ export async function loadWorkspaceAccessProfile(
     .eq('workspace_key', 'primary')
     .maybeSingle();
 
-  if (options.forEntitlements && ownedWorkspaceError) {
-    return { workspaceId: null, workspaceRole: resolveSessionRole(session), source: 'session', lookupFailed: true };
+  if (ownedWorkspaceError) {
+    return { workspaceId: null, workspaceRole: 'Pending access', source: 'session', lookupFailed: true };
   }
 
   if (!ownedWorkspaceError && ownedWorkspace?.id) {
@@ -302,7 +308,7 @@ export async function loadWorkspaceAccessProfile(
 
   // A billing read may resolve snapshot-only accounts, but must not accept an
   // invitation or change membership as a side effect of reading entitlements.
-  const acceptedInvitation = options.forEntitlements ? null : await acceptPendingWorkspaceInvitation(session);
+  const acceptedInvitation = readOnly ? null : await acceptPendingWorkspaceInvitation(session);
   if (acceptedInvitation?.workspaceId) {
     return {
       workspaceId: acceptedInvitation.workspaceId,
@@ -322,16 +328,20 @@ export async function loadWorkspaceAccessProfile(
   if (!membershipError && membership?.workspace_id) {
     return {
       workspaceId: membership.workspace_id as string,
-      workspaceRole: normalizeWorkspaceRole(membership.role) ?? resolveSessionRole(session),
+      workspaceRole: normalizeWorkspaceRole(membership.role) ?? 'Pending access',
       source: 'workspace-membership',
     };
   }
 
   return {
     workspaceId: null,
-    workspaceRole: 'Admin',
+    workspaceRole: membershipError
+      ? 'Pending access'
+      : isRelationalCloudEnabled()
+        ? 'Admin'
+        : resolveSessionRole(session),
     source: 'session',
-    ...(options.forEntitlements ? { lookupFailed: Boolean(membershipError) } : {}),
+    lookupFailed: Boolean(membershipError),
   };
 }
 
@@ -491,11 +501,7 @@ export async function recordBuyerRoomSellerResponseInCloud(input: {
   }
 }
 
-async function ensurePrimaryWorkspace(
-  session: Session,
-  backup: CloudWorkspaceBackup,
-  expectedContext?: CloudSaveOptions['expectedContext'],
-) {
+async function ensurePrimaryWorkspace(session: Session, backup: CloudWorkspaceBackup, options: CloudSaveOptions) {
   const client = getSupabaseClient();
   if (!client) {
     throw new Error('Supabase is not configured for this build.');
@@ -517,7 +523,7 @@ async function ensurePrimaryWorkspace(
     .maybeSingle();
   if (ownedError) throw new WorkspaceSaveAccessError(ownedError.message);
 
-  let workspaceId = '';
+  let workspaceId = typeof ownedWorkspace?.id === 'string' ? ownedWorkspace.id : '';
   // The owner holds every Admin capability; a member is whatever their row says.
   let memberRole = 'Admin';
   if (!ownedWorkspace?.id) {
@@ -558,12 +564,11 @@ async function ensurePrimaryWorkspace(
     }
   }
 
-  if (expectedContext && (ownedWorkspace?.id || workspaceId) !== expectedContext.workspaceId) {
+  if (options.expectedContext && workspaceId !== options.expectedContext.workspaceId) {
     throw new WorkspaceSaveAccessError(
       'Your active ranch changed before the save. No snapshot was written to the new ranch.',
     );
   }
-
   if (!workspaceId) {
     const { data: workspaceRow, error: workspaceError } = await client
       .from('workspaces')
@@ -616,14 +621,31 @@ async function ensurePrimaryWorkspace(
     }
   }
 
-  // The ranch profile is the owner's and the Admins'. Anyone else's save skips
-  // it rather than failing on it -- and with it every record they did change.
+  const baselineProfile = options.replace ? undefined : normalizeBackup(options.baseline)?.workspace?.workspaceProfile;
+  // A profile edit captured before a demotion must not be acknowledged by a
+  // specialist save that is forbidden to write it. Keep the pending change local.
+  if (memberRole !== 'Admin' && baselineProfile && stableStringify(profile) !== stableStringify(baselineProfile)) {
+    throw new WorkspaceSaveAccessError(
+      'Only a ranch administrator can save this pending profile change. It remains on this device.',
+    );
+  }
+  // An unchanged profile is skipped for specialists without blocking their work.
   if (memberRole !== 'Admin') {
     return { workspaceId, role: memberRole };
   }
-
-  const { error: profileError } = await client.from('workspace_profiles').upsert(
-    {
+  if (baselineProfile && stableStringify(profile) === stableStringify(baselineProfile)) {
+    return { workspaceId, role: memberRole };
+  }
+  const persistedProfile = await writeConcurrentRow({
+    table: 'workspace_profiles',
+    idColumn: 'workspace_id',
+    workspaceId,
+    baseline: baselineProfile,
+    normalizeRemote: (payload) =>
+      restorePersistedState({ ...normalizeBackup(options.baseline)?.workspace, workspaceProfile: payload })
+        .workspaceProfile,
+    overwrite: options.replace === true,
+    row: {
       workspace_id: workspaceId,
       ranch_name: workspaceName,
       business_name: businessName,
@@ -636,14 +658,269 @@ async function ensurePrimaryWorkspace(
       payload: profile ?? {},
       updated_at: updatedAt,
     },
-    { onConflict: 'workspace_id' },
+  });
+
+  return { workspaceId, role: memberRole, persistedProfile };
+}
+
+// Canonical columns and payload must describe the same merged record.
+const payloadColumns: Record<string, Record<string, string>> = {
+  horses: {
+    name: 'name',
+    barn_name: 'barnName',
+    segment: 'segment',
+    status: 'status',
+    registration_number: 'registrationNumber',
+    owner_name: 'owner',
+  },
+  documents: {
+    horse_id: 'horseId',
+    title: 'title',
+    document_type: 'type',
+    source: 'source',
+    state: 'state',
+    confidence: 'confidence',
+    duplicate_risk: 'duplicateRisk',
+    size_bytes: 'fileSizeBytes',
+  },
+  intake_batches: { label: 'label', source: 'source', state: 'state', received_at: 'receivedAt' },
+  ownership_records: {
+    horse_id: 'horseId',
+    legal_owner: 'legalOwner',
+    transfer_status: 'transferStatus',
+    compliance_deadline: 'complianceDeadline',
+  },
+  expense_receipts: {
+    horse_id: 'horseId',
+    title: 'title',
+    category: 'category',
+    vendor: 'vendor',
+    amount: 'amount',
+    receipt_date: 'receiptDate',
+  },
+  ranch_assets: { name: 'name', category: 'category', status: 'status', location: 'location', condition: 'condition' },
+  sales_leads: {
+    horse_id: 'horseId',
+    lead_name: 'name',
+    channel: 'channel',
+    stage: 'stage',
+    last_touch: 'lastTouch',
+    next_follow_up: 'nextFollowUp',
+  },
+  shared_listings: {
+    horse_id: 'horseId',
+    share_path: 'sharePath',
+    access_mode: 'accessMode',
+    share_token: 'shareToken',
+    token_issued_at: 'tokenIssuedAt',
+    state: 'state',
+    channels: 'channels',
+  },
+  workspace_profiles: {
+    ranch_name: 'ranchName',
+    business_name: 'businessName',
+    default_owner_name: 'defaultOwnerName',
+    default_owner_entity: 'defaultOwnerEntity',
+    ranch_manager_name: 'ranchManagerName',
+    operations_email: 'operationsEmail',
+    default_barn: 'defaultBarn',
+    default_pasture: 'defaultPasture',
+  },
+};
+
+function restoreCloudState(raw: unknown) {
+  return restorePersistedState(raw, { generateMissingSharingTokens: false });
+}
+
+// Normalize comparison defaults without replacing unknown raw fields or values.
+function preserveRawFields(defaults: unknown, raw: unknown): unknown {
+  if (!isRecord(defaults) || !isRecord(raw)) return raw;
+  return Object.fromEntries(
+    [...new Set([...Object.keys(defaults), ...Object.keys(raw)])].map((key) => [
+      key,
+      Object.prototype.hasOwnProperty.call(raw, key) ? preserveRawFields(defaults[key], raw[key]) : defaults[key],
+    ]),
   );
+}
 
-  if (profileError) {
-    throw new Error(profileError.message);
+// Conflicts were checked against the normalized comparison. Persist only that
+// verified delta into the raw payload, without materializing unrelated defaults.
+function applyComparedChanges(before: unknown, after: unknown, raw: unknown): unknown {
+  if (stableStringify(before) === stableStringify(after)) return raw;
+  if (!isRecord(before) || !isRecord(after)) return after;
+  const result = isRecord(raw) ? { ...raw } : {};
+  for (const key of new Set([...Object.keys(before), ...Object.keys(after)])) {
+    const value = applyComparedChanges(before[key], after[key], isRecord(raw) ? raw[key] : undefined);
+    if (value === undefined) delete result[key];
+    else Object.defineProperty(result, key, { value, enumerable: true, writable: true, configurable: true });
   }
+  return result;
+}
 
-  return { workspaceId, role: memberRole };
+async function writeConcurrentRow(params: {
+  table: string;
+  idColumn: string;
+  workspaceId: string;
+  row: Record<string, unknown>;
+  baseline?: unknown;
+  normalizeRemote?: (payload: unknown) => unknown;
+  overwrite: boolean;
+}) {
+  const client = getSupabaseClient();
+  if (!client) throw new Error('Supabase is not configured for this build.');
+  const { table, idColumn, workspaceId, row, baseline, overwrite } = params;
+  const confirmed = (data: unknown) => isRecord(data) && data[idColumn] === row[idColumn];
+  if (overwrite) {
+    const { data, error } = await client
+      .from(table)
+      .upsert(row, { onConflict: idColumn === 'workspace_id' ? 'workspace_id' : `workspace_id,${idColumn}` })
+      .select(idColumn)
+      .single();
+    if (error || !confirmed(data)) throw new Error(error?.message ?? `No ${table} row was saved.`);
+    return row.payload;
+  }
+  const { data: remote, error: readError } = await client
+    .from(table)
+    .select('*')
+    .eq('workspace_id', workspaceId)
+    .eq(idColumn, row[idColumn])
+    .maybeSingle();
+  if (readError) throw new WorkspaceSaveConflictError(`Cloud conflict check failed for ${table}: ${readError.message}`);
+  if (!remote) {
+    if (baseline)
+      throw new WorkspaceSaveConflictError(
+        `Cloud conflict: ${table} record was removed by another device. Your local change is retained.`,
+      );
+    const { data, error } = await client.from(table).insert(row).select(idColumn).single();
+    if (error || !confirmed(data))
+      throw new WorkspaceSaveConflictError(error?.message ?? `Cloud conflict: no ${table} record was inserted.`);
+    return row.payload;
+  }
+  let payload: unknown;
+  try {
+    const restored = baseline && params.normalizeRemote ? params.normalizeRemote(remote.payload) : remote.payload;
+    const comparison = preserveRawFields(restored, remote.payload);
+    if (table === 'workspace_profiles' && isRecord(comparison) && isRecord(restored) && isRecord(remote.payload)) {
+      for (const key of [
+        'ranchName',
+        'businessName',
+        'defaultOwnerName',
+        'defaultOwnerEntity',
+        'ranchManagerName',
+        'operationsEmail',
+        'contactPhone',
+        'website',
+        'defaultBarn',
+        'defaultPasture',
+        'setupCompleteAt',
+      ]) {
+        const raw = remote.payload[key];
+        if (typeof raw === 'string' && raw.trim() === restored[key]) comparison[key] = restored[key];
+      }
+    }
+    const merged = mergeConcurrentFields(baseline, row.payload, comparison);
+    payload = applyComparedChanges(comparison, merged, remote.payload);
+  } catch (error) {
+    throw new WorkspaceSaveConflictError(
+      error instanceof Error ? error.message : 'Cloud conflict: the record changed.',
+    );
+  }
+  if (!isRecord(payload) || !isRecord(remote.payload))
+    throw new WorkspaceSaveConflictError(`Cloud conflict: invalid ${table} payload.`);
+  if (stableStringify(payload) === stableStringify(remote.payload)) return remote.payload;
+  const update: Record<string, unknown> = { ...row, payload };
+  for (const [column, key] of Object.entries(payloadColumns[table] ?? {})) {
+    const editedHere =
+      !isRecord(baseline) ||
+      !isRecord(row.payload) ||
+      stableStringify(row.payload[key]) !== stableStringify(baseline[key]);
+    update[column] = editedHere
+      ? (payload[key] ?? row[column])
+      : Object.prototype.hasOwnProperty.call(remote, column)
+        ? remote[column]
+        : payload[key];
+  }
+  if (table === 'shared_listings')
+    update.published_at = payload.state === 'Live' ? (remote.published_at ?? row.updated_at) : null;
+  if (typeof remote.updated_at !== 'string')
+    throw new WorkspaceSaveConflictError(`Cloud conflict: ${table} has no revision.`);
+  // Both revision and payload are pinned: older writers may omit updated_at.
+  const { data, error } = await client
+    .from(table)
+    .update(update)
+    .eq('workspace_id', workspaceId)
+    .eq(idColumn, row[idColumn])
+    .eq('updated_at', remote.updated_at)
+    .eq('payload', JSON.stringify(remote.payload))
+    .select(idColumn)
+    .maybeSingle();
+  if (error || !confirmed(data))
+    throw new WorkspaceSaveConflictError(
+      error?.message ?? `Cloud conflict: ${table} changed while saving. Your local change is retained.`,
+    );
+  return payload;
+}
+
+function normalizationPreservesStoredFields(stored: unknown, normalized: unknown): boolean {
+  if (isRecord(stored) && isRecord(normalized)) {
+    return Object.keys(stored).every((key) => normalizationPreservesStoredFields(stored[key], normalized[key]));
+  }
+  return stableStringify(stored) === stableStringify(normalized);
+}
+
+const REPLACEMENT_BATCH_ROWS = 100;
+const REPLACEMENT_BATCH_BYTES = 512 * 1024;
+
+function* replacementBatches(rows: Record<string, unknown>[]) {
+  const shapes = new Map<string, Record<string, unknown>[]>();
+  for (const row of rows) {
+    // PostgREST computes array columns before JSON drops undefined values.
+    // Keep identical defined-column shapes together so omissions retain the
+    // old single-row defaults/preservation semantics; explicit null stays null.
+    const defined = Object.fromEntries(Object.entries(row).filter(([, value]) => value !== undefined));
+    const shape = Object.keys(defined).sort().join(',');
+    const group = shapes.get(shape) ?? [];
+    group.push(defined);
+    shapes.set(shape, group);
+  }
+  const encoder = new TextEncoder();
+  for (const group of shapes.values()) {
+    let batch: Record<string, unknown>[] = [];
+    let bytes = 2;
+    for (const row of group) {
+      const rowBytes = encoder.encode(JSON.stringify(row)).byteLength + 1;
+      if (batch.length && (batch.length >= REPLACEMENT_BATCH_ROWS || bytes + rowBytes > REPLACEMENT_BATCH_BYTES)) {
+        yield batch;
+        batch = [];
+        bytes = 2;
+      }
+      batch.push(row);
+      bytes += rowBytes;
+    }
+    if (batch.length) yield batch;
+  }
+}
+
+async function verifyReplacementContext(expected: CloudRecoveryContext) {
+  try {
+    const session = await getActiveSession();
+    const access =
+      session?.user.id === expected.userId
+        ? await loadWorkspaceAccessProfile(session, { forEntitlements: true })
+        : null;
+    if (
+      !access ||
+      access.lookupFailed ||
+      access.workspaceId !== expected.workspaceId ||
+      access.workspaceRole !== expected.workspaceRole
+    ) {
+      throw new Error('The account, ranch or permissions changed.');
+    }
+  } catch {
+    throw new WorkspaceSaveAccessError(
+      'Cloud replacement stopped because current account, ranch or permissions could not be verified. Earlier confirmed batches may have saved; your local copy is retained.',
+    );
+  }
 }
 
 async function replaceWorkspaceRows(params: {
@@ -660,6 +937,11 @@ async function replaceWorkspaceRows(params: {
   workspaceId: string;
   rows: Record<string, unknown>[];
   removal: RowRemoval;
+  baselineRecords?: { id?: unknown }[];
+  overwrite?: boolean;
+  overwriteContext?: CloudRecoveryContext;
+  onPersisted?: (id: string, payload: unknown) => void;
+  normalizeRemote?: (payload: unknown) => unknown;
 }) {
   const client = getSupabaseClient();
   if (!client) {
@@ -668,18 +950,38 @@ async function replaceWorkspaceRows(params: {
 
   const { table, idColumn, workspaceId, rows, removal } = params;
   const nextIds = new Set(rows.map((row) => String(row[idColumn])));
+  if (
+    params.overwrite &&
+    (nextIds.size !== rows.length ||
+      rows.some((row) => row.workspace_id !== workspaceId || typeof row[idColumn] !== 'string' || !row[idColumn]))
+  ) {
+    throw new WorkspaceSaveConflictError(
+      'Cloud replacement incomplete: invalid or repeated record identities. Earlier tables may have saved; your local copy is retained.',
+    );
+  }
 
   // Only a Push cloud (`absent`) reads what the cloud holds; an ordinary save
   // deletes the ids a person deleted and nothing else -- see RowRemoval.
   let existingIds: string[] = [];
   if (removal.mode === 'absent') {
-    const { data: existingRows, error: existingError } = await client
-      .from(table)
-      .select(idColumn)
-      .eq('workspace_id', workspaceId);
+    if (params.overwriteContext) await verifyReplacementContext(params.overwriteContext);
+    const { data: existingRows, error: existingError } = await loadCompleteCloudRows<Record<string, unknown>>({
+      table,
+      idColumn,
+      readPage: (from, to) =>
+        client
+          .from(table)
+          .select(`${idColumn},updated_at`, { count: 'exact' })
+          .eq('workspace_id', workspaceId)
+          .order(idColumn, { ascending: true })
+          .range(from, to)
+          .returns<Record<string, unknown>[]>(),
+    });
 
     if (existingError) {
-      throw new Error(existingError.message);
+      throw new WorkspaceSaveConflictError(
+        `Cloud replacement incomplete: ${existingError.message} Earlier confirmed batches may have saved; your local copy is retained.`,
+      );
     }
 
     existingIds = ((existingRows ?? []) as unknown as Array<Record<string, unknown>>).map((row) =>
@@ -688,32 +990,106 @@ async function replaceWorkspaceRows(params: {
   }
   const staleIds = idsToRemove(removal, nextIds, existingIds);
 
-  if (staleIds.length) {
-    const { error: deleteError } = await client
+  if (params.overwrite && params.overwriteContext) {
+    for (const batch of replacementBatches(rows)) {
+      await verifyReplacementContext(params.overwriteContext);
+      const expected = new Map(batch.map((row) => [row[idColumn], row]));
+      if (
+        expected.size !== batch.length ||
+        batch.some((row) => row.workspace_id !== workspaceId || typeof row[idColumn] !== 'string' || !row[idColumn])
+      ) {
+        throw new WorkspaceSaveConflictError(
+          'Cloud replacement contains invalid or repeated record identities. Your local copy is retained.',
+        );
+      }
+      const { data, error } = await client
+        .from(table)
+        .upsert(batch, { onConflict: `workspace_id,${idColumn}` })
+        .select(`${idColumn},workspace_id,payload`);
+      const confirmed = new Set<string>();
+      if (!error && Array.isArray(data)) {
+        for (const saved of data) {
+          if (!isRecord(saved)) break;
+          const requested = expected.get(saved[idColumn]);
+          if (
+            !requested ||
+            saved.workspace_id !== workspaceId ||
+            typeof saved[idColumn] !== 'string' ||
+            confirmed.has(saved[idColumn]) ||
+            stableStringify(saved.payload) !== stableStringify(requested.payload)
+          )
+            break;
+          confirmed.add(saved[idColumn]);
+        }
+      }
+      if (error || !Array.isArray(data) || data.length !== batch.length || confirmed.size !== batch.length) {
+        throw new WorkspaceSaveConflictError(
+          `Cloud replacement incomplete for ${table}: ${error?.message ?? 'not every requested record was confirmed'}. Earlier confirmed batches may have saved; your local copy is retained.`,
+        );
+      }
+      // Overwrite payloads were verified unchanged. The recovery copy already
+      // contains them; per-row merge callbacks would add quadratic copying.
+    }
+  } else {
+    for (const row of rows) {
+      const payload = await writeConcurrentRow({
+        table,
+        idColumn,
+        workspaceId,
+        row,
+        baseline: params.baselineRecords?.find((record) => record.id === row[idColumn]),
+        normalizeRemote: params.normalizeRemote,
+        overwrite: params.overwrite === true,
+      });
+      params.onPersisted?.(String(row[idColumn]), payload);
+    }
+  }
+  // Ordinary deletes also compare the version this device actually saw.
+  // An explicit administrator replacement retains its separate whole-copy contract.
+  for (const id of staleIds) {
+    if (params.overwriteContext) await verifyReplacementContext(params.overwriteContext);
+    const { data: remote, error: readError } = await client
+      .from(table)
+      .select('payload, updated_at')
+      .eq('workspace_id', workspaceId)
+      .eq(idColumn, id)
+      .maybeSingle();
+    if (readError)
+      throw new WorkspaceSaveConflictError(`Cloud conflict check failed for ${table}: ${readError.message}`);
+    if (!remote) continue;
+    const baseline = params.baselineRecords?.find((record) => record.id === id);
+    const normalizedRemote = params.normalizeRemote ? params.normalizeRemote(remote.payload) : remote.payload;
+    if (
+      !params.overwrite &&
+      (!baseline ||
+        !normalizationPreservesStoredFields(remote.payload, normalizedRemote) ||
+        stableStringify(params.normalizeRemote ? params.normalizeRemote(baseline) : baseline) !==
+          stableStringify(normalizedRemote))
+    ) {
+      throw new WorkspaceSaveConflictError(
+        `Cloud conflict: ${table} changed before deletion. The remote record was preserved.`,
+      );
+    }
+    const { data, error } = await client
       .from(table)
       .delete()
       .eq('workspace_id', workspaceId)
-      .in(idColumn, staleIds);
-
-    if (deleteError) {
-      throw new Error(deleteError.message);
-    }
-  }
-
-  if (!rows.length) {
-    return;
-  }
-
-  const { error: upsertError } = await client.from(table).upsert(rows, {
-    onConflict: `workspace_id,${idColumn}`,
-  });
-
-  if (upsertError) {
-    throw new Error(upsertError.message);
+      .eq(idColumn, id)
+      .eq('updated_at', remote.updated_at)
+      .eq('payload', JSON.stringify(remote.payload))
+      .select(idColumn)
+      .maybeSingle();
+    if (error || !isRecord(data) || data[idColumn] !== id)
+      throw new WorkspaceSaveConflictError(error?.message ?? `Cloud conflict: no ${table} deletion was confirmed.`);
   }
 }
 
-async function saveWorkspaceSnapshotToCloud(backup: unknown, session: Session, updatedAt: string) {
+async function saveWorkspaceSnapshotToCloud(
+  backup: unknown,
+  session: Session,
+  updatedAt: string,
+  workspaceId?: string,
+) {
   const client = getSupabaseClient();
   if (!client) {
     return { ok: false, message: 'Supabase is not configured for this build.' } as const;
@@ -723,7 +1099,15 @@ async function saveWorkspaceSnapshotToCloud(backup: unknown, session: Session, u
     {
       user_id: session.user.id,
       workspace_key: 'primary',
-      payload: backup,
+      payload:
+        isRecord(backup) && workspaceId
+          ? {
+              ...backup,
+              cloudWorkspaceId: workspaceId,
+              cloudUserId: session.user.id,
+              snapshotPurpose: 'device-recovery',
+            }
+          : backup,
       updated_at: updatedAt,
     },
     { onConflict: 'user_id,workspace_key' },
@@ -745,20 +1129,33 @@ async function saveWorkspaceBackupToRelationalCloud(
   session: Session,
   options: CloudSaveOptions,
 ): Promise<RelationalMirrorResult> {
-  const normalized = normalizeBackup(backup);
-  if (!normalized) {
+  const source = normalizeBackup(backup);
+  if (!source) {
     return {
       ok: false,
       message: 'Workspace backup payload is missing the normalized mirror data.',
     };
   }
 
-  // Set the moment the documents upsert commits, and reported even when a LATER
-  // table fails: those rows are in the database whatever happens next.
+  // True only after every requested document write is confirmed. A partial
+  // replacement keeps reservations conservative until retry; later-table
+  // failure after complete document writes still reports their persistence.
   let documentsPersisted = false;
 
   try {
-    const { workspaceId, role } = await ensurePrimaryWorkspace(session, normalized, options.expectedContext);
+    // Persisted workspace data is JSON, and Safari 13 does not expose structuredClone.
+    // Clone inside the guarded path before any write; never mutate the caller's snapshot.
+    let normalized: CloudWorkspaceBackup;
+    try {
+      const copy = normalizeBackup(JSON.parse(JSON.stringify(source)));
+      if (!copy) throw new Error('Invalid workspace shape');
+      normalized = copy;
+    } catch {
+      throw new WorkspaceSaveAccessError(
+        'The workspace snapshot could not be serialized safely. No cloud records were changed.',
+      );
+    }
+    const { workspaceId, role, persistedProfile } = await ensurePrimaryWorkspace(session, normalized, options);
     // Push cloud deletes every cloud record this device lacks. That is the
     // ranch administrator's call, never a staff save's.
     if (options.replace && role !== 'Admin') {
@@ -768,12 +1165,31 @@ async function saveWorkspaceBackupToRelationalCloud(
     }
     const updatedAt = normalized.exportedAt ?? new Date().toISOString();
     const workspace = normalized.workspace ?? {};
+    if (isRecord(persistedProfile)) workspace.workspaceProfile = persistedProfile as unknown as WorkspaceProfile;
+    const recoveryWorkspace = workspace as unknown as Record<string, unknown>;
+    const capture = (slice: string) => (id: string, payload: unknown) => {
+      const records = recoveryWorkspace[slice];
+      if (Array.isArray(records))
+        recoveryWorkspace[slice] = records.map((record) => (isRecord(record) && record.id === id ? payload : record));
+    };
     // Only what changed since this device's last saved or loaded copy is
     // written, so an older copy never rewrites rows another device has since
     // saved (see relationalDiff). A replace writes everything.
     const baseline = options.replace ? undefined : (normalizeBackup(options.baseline)?.workspace ?? undefined);
     const changed = <T extends { id?: unknown }>(current: T[] | undefined, before: T[] | undefined) =>
       changedRecords(current ?? [], baseline ? (before ?? []) : undefined);
+    const normalizeRemote = (slice: string) => (payload: unknown) => {
+      if (!baseline || !isRecord(payload)) return payload;
+      const before = (baseline as unknown as Record<string, unknown>)[slice];
+      const records = Array.isArray(before)
+        ? before.map((record) => (isRecord(record) && record.id === payload.id ? payload : record))
+        : [payload];
+      const normalized = restoreCloudState({ ...baseline, [slice]: records }) as unknown as Record<string, unknown>;
+      const restored = normalized[slice];
+      return Array.isArray(restored)
+        ? restored.find((record) => isRecord(record) && record.id === payload.id)
+        : payload;
+    };
     const deletions = options.deletions ?? [];
     const removal = (table: string): RowRemoval =>
       options.replace
@@ -788,6 +1204,11 @@ async function saveWorkspaceBackupToRelationalCloud(
 
     await replaceWorkspaceRows({
       table: 'horses',
+      onPersisted: capture('horses'),
+      normalizeRemote: normalizeRemote('horses'),
+      baselineRecords: baseline?.horses,
+      overwrite: options.replace === true,
+      overwriteContext: options.replace ? { userId: session.user.id, workspaceId, workspaceRole: 'Admin' } : undefined,
       idColumn: 'horse_id',
       removal: removal('horses'),
       workspaceId,
@@ -807,6 +1228,11 @@ async function saveWorkspaceBackupToRelationalCloud(
 
     await replaceWorkspaceRows({
       table: 'documents',
+      onPersisted: capture('documents'),
+      normalizeRemote: normalizeRemote('documents'),
+      baselineRecords: baseline?.documents,
+      overwrite: options.replace === true,
+      overwriteContext: options.replace ? { userId: session.user.id, workspaceId, workspaceRole: 'Admin' } : undefined,
       idColumn: 'document_id',
       removal: removal('documents'),
       workspaceId,
@@ -834,6 +1260,11 @@ async function saveWorkspaceBackupToRelationalCloud(
 
     await replaceWorkspaceRows({
       table: 'intake_batches',
+      onPersisted: capture('intakeBatches'),
+      normalizeRemote: normalizeRemote('intakeBatches'),
+      baselineRecords: baseline?.intakeBatches,
+      overwrite: options.replace === true,
+      overwriteContext: options.replace ? { userId: session.user.id, workspaceId, workspaceRole: 'Admin' } : undefined,
       idColumn: 'intake_batch_id',
       removal: removal('intake_batches'),
       workspaceId,
@@ -851,6 +1282,11 @@ async function saveWorkspaceBackupToRelationalCloud(
 
     await replaceWorkspaceRows({
       table: 'ownership_records',
+      onPersisted: capture('ownershipRecords'),
+      normalizeRemote: normalizeRemote('ownershipRecords'),
+      baselineRecords: baseline?.ownershipRecords,
+      overwrite: options.replace === true,
+      overwriteContext: options.replace ? { userId: session.user.id, workspaceId, workspaceRole: 'Admin' } : undefined,
       idColumn: 'ownership_record_id',
       removal: removal('ownership_records'),
       workspaceId,
@@ -868,6 +1304,11 @@ async function saveWorkspaceBackupToRelationalCloud(
 
     await replaceWorkspaceRows({
       table: 'expense_receipts',
+      onPersisted: capture('expenseReceipts'),
+      normalizeRemote: normalizeRemote('expenseReceipts'),
+      baselineRecords: baseline?.expenseReceipts,
+      overwrite: options.replace === true,
+      overwriteContext: options.replace ? { userId: session.user.id, workspaceId, workspaceRole: 'Admin' } : undefined,
       idColumn: 'receipt_id',
       removal: removal('expense_receipts'),
       workspaceId,
@@ -887,6 +1328,11 @@ async function saveWorkspaceBackupToRelationalCloud(
 
     await replaceWorkspaceRows({
       table: 'ranch_assets',
+      onPersisted: capture('ranchAssets'),
+      normalizeRemote: normalizeRemote('ranchAssets'),
+      baselineRecords: baseline?.ranchAssets,
+      overwrite: options.replace === true,
+      overwriteContext: options.replace ? { userId: session.user.id, workspaceId, workspaceRole: 'Admin' } : undefined,
       idColumn: 'asset_id',
       removal: removal('ranch_assets'),
       workspaceId,
@@ -905,6 +1351,11 @@ async function saveWorkspaceBackupToRelationalCloud(
 
     await replaceWorkspaceRows({
       table: 'sales_leads',
+      onPersisted: capture('salesLeads'),
+      normalizeRemote: normalizeRemote('salesLeads'),
+      baselineRecords: baseline?.salesLeads,
+      overwrite: options.replace === true,
+      overwriteContext: options.replace ? { userId: session.user.id, workspaceId, workspaceRole: 'Admin' } : undefined,
       idColumn: 'lead_id',
       removal: removal('sales_leads'),
       workspaceId,
@@ -924,6 +1375,11 @@ async function saveWorkspaceBackupToRelationalCloud(
 
     await replaceWorkspaceRows({
       table: 'shared_listings',
+      onPersisted: capture('sharedListings'),
+      normalizeRemote: normalizeRemote('sharedListings'),
+      baselineRecords: baseline?.sharedListings,
+      overwrite: options.replace === true,
+      overwriteContext: options.replace ? { userId: session.user.id, workspaceId, workspaceRole: 'Admin' } : undefined,
       idColumn: 'listing_id',
       removal: removal('shared_listings'),
       workspaceId,
@@ -947,30 +1403,62 @@ async function saveWorkspaceBackupToRelationalCloud(
       ok: true,
       message: 'Relational workspace updated.',
       workspaceId,
+      recoveryBackup: normalized,
       documentsPersisted,
     };
   } catch (error) {
     return {
       ok: false,
-      message: error instanceof Error ? error.message : 'Unable to update the relational workspace.',
-      allowSnapshotFallback: !(error instanceof WorkspaceSaveAccessError),
+      message:
+        options.replace && !(error instanceof WorkspaceSaveAccessError)
+          ? `Cloud replacement incomplete: ${error instanceof Error ? error.message : 'The request failed.'} Earlier confirmed writes may have saved; your local copy is retained.`
+          : error instanceof Error
+            ? error.message
+            : 'Unable to update the relational workspace.',
+      allowSnapshotFallback: !options.replace && !(error instanceof WorkspaceSaveAccessError),
       documentsPersisted,
     };
   }
 }
 
-async function loadWorkspaceBackupFromRelationalCloud(session: Session) {
+async function loadWorkspaceBackupFromRelationalCloud(session: Session, expectedWorkspaceId?: string) {
   const client = getSupabaseClient();
   if (!client) {
     return { ok: false, message: 'Supabase is not configured for this build.' } as const;
   }
 
-  const accessProfile = await loadWorkspaceAccessProfile(session);
+  // A record read must not accept an invitation or treat failed identity lookup as absence.
+  const accessProfile = await loadWorkspaceAccessProfile(session, { forEntitlements: true });
+  if (accessProfile.lookupFailed)
+    return {
+      ok: false,
+      incomplete: true,
+      message: 'Cloud load incomplete: workspace access could not be verified. Your local records are unchanged.',
+    } as const;
   if (!accessProfile.workspaceId) {
     return { ok: false, message: 'No relational workspace exists for this account yet.' } as const;
   }
 
   const workspaceId = accessProfile.workspaceId;
+  if (expectedWorkspaceId !== undefined && workspaceId !== expectedWorkspaceId) {
+    return {
+      ok: false,
+      message: 'Your active ranch changed before refresh. Local records were kept unchanged.',
+    } as const;
+  }
+  const readTable = (table: string, idColumn: string, columns = 'payload, updated_at') =>
+    loadCompleteCloudRows<RelationalWorkspaceRow>({
+      table,
+      idColumn,
+      readPage: (from, to) =>
+        client
+          .from(table)
+          .select(`${idColumn}, ${columns}`, { count: 'exact' })
+          .eq('workspace_id', workspaceId)
+          .order(idColumn, { ascending: true })
+          .range(from, to)
+          .returns<RelationalWorkspaceRow[]>(),
+    });
   const [
     membershipsResult,
     invitationsResult,
@@ -985,19 +1473,16 @@ async function loadWorkspaceBackupFromRelationalCloud(session: Session) {
     subscriptionResult,
     profileResult,
   ] = await Promise.all([
-    client
-      .from('workspace_memberships')
-      .select('email, role, status, payload, updated_at')
-      .eq('workspace_id', workspaceId),
-    client.from('workspace_invitations').select('payload, updated_at').eq('workspace_id', workspaceId),
-    client.from('horses').select('payload, updated_at').eq('workspace_id', workspaceId),
-    client.from('documents').select('payload, updated_at').eq('workspace_id', workspaceId),
-    client.from('intake_batches').select('payload, updated_at').eq('workspace_id', workspaceId),
-    client.from('ownership_records').select('payload, updated_at').eq('workspace_id', workspaceId),
-    client.from('expense_receipts').select('payload, updated_at').eq('workspace_id', workspaceId),
-    client.from('ranch_assets').select('payload, updated_at').eq('workspace_id', workspaceId),
-    client.from('sales_leads').select('payload, updated_at').eq('workspace_id', workspaceId),
-    client.from('shared_listings').select('payload, updated_at').eq('workspace_id', workspaceId),
+    readTable('workspace_memberships', 'id', 'email, role, status, payload, updated_at'),
+    readTable('workspace_invitations', 'invitation_id'),
+    readTable('horses', 'horse_id'),
+    readTable('documents', 'document_id'),
+    readTable('intake_batches', 'intake_batch_id'),
+    readTable('ownership_records', 'ownership_record_id'),
+    readTable('expense_receipts', 'receipt_id'),
+    readTable('ranch_assets', 'asset_id'),
+    readTable('sales_leads', 'lead_id'),
+    readTable('shared_listings', 'listing_id'),
     client
       .from('workspace_subscription_profiles')
       .select('tier, billing_state, monthly_rate, billing_period, payload, updated_at')
@@ -1024,10 +1509,75 @@ async function loadWorkspaceBackupFromRelationalCloud(session: Session) {
   if (errors.length) {
     return {
       ok: false,
-      message: errors[0]?.message ?? 'Unable to load relational workspace data.',
+      incomplete: true,
+      message: errors[0]?.message ?? 'Cloud load incomplete: unable to read all relational workspace data.',
     } as const;
   }
 
+  if (profileResult.data && !isRecord(profileResult.data.payload))
+    return {
+      ok: false,
+      incomplete: true,
+      message: 'Cloud load incomplete: the stored ranch profile is invalid. Your local records are unchanged.',
+    } as const;
+  if (
+    membershipsResult.data?.some(
+      (row) => !isRecord(row.payload) || typeof row.payload.joinedAt !== 'string' || !row.payload.joinedAt.trim(),
+    ) ||
+    invitationsResult.data?.some(
+      (row) => !isRecord(row.payload) || typeof row.payload.invitedAt !== 'string' || !row.payload.invitedAt.trim(),
+    )
+  )
+    return {
+      ok: false,
+      incomplete: true,
+      message:
+        'Cloud load incomplete: a stored membership or invitation is missing its original date. Your local records are unchanged.',
+    } as const;
+  if (
+    sharedListingsResult.data?.some((row) => {
+      const payload = row.payload;
+      return (
+        !isRecord(payload) ||
+        ((payload.accessMode ?? 'Private Token') === 'Private Token' &&
+          payload.state !== 'Archived' &&
+          (typeof payload.shareToken !== 'string' || !payload.shareToken.trim()))
+      );
+    })
+  )
+    return {
+      ok: false,
+      incomplete: true,
+      message:
+        'Cloud load incomplete: a private listing is missing its persisted token and needs explicit repair. Your local records are unchanged.',
+    } as const;
+  for (const [result, idColumn] of [
+    [invitationsResult, 'invitation_id'],
+    [horsesResult, 'horse_id'],
+    [documentsResult, 'document_id'],
+    [intakeBatchesResult, 'intake_batch_id'],
+    [ownershipRecordsResult, 'ownership_record_id'],
+    [expenseReceiptsResult, 'receipt_id'],
+    [ranchAssetsResult, 'asset_id'],
+    [salesLeadsResult, 'lead_id'],
+    [sharedListingsResult, 'listing_id'],
+  ] as const) {
+    if (
+      result.data?.some(
+        (row) =>
+          !isRecord(row.payload) ||
+          typeof row.payload.id !== 'string' ||
+          !row.payload.id ||
+          row.payload.id !== row[idColumn],
+      )
+    )
+      return {
+        ok: false,
+        incomplete: true,
+        message:
+          'Cloud load incomplete: a stored record payload or identity is invalid. Your local records are unchanged.',
+      } as const;
+  }
   const backup: CloudWorkspaceBackup = {
     app: 'XBAR',
     // The constant, never a literal: this was hardcoded 8 and would have gone
@@ -1050,26 +1600,13 @@ async function loadWorkspaceBackupFromRelationalCloud(session: Session) {
       profileResult.data?.updated_at,
     ]),
     workspace: {
-      workspaceMembers: (membershipsResult.data ?? []).flatMap((row) => {
-        if (isRecord(row.payload)) {
-          return [row.payload as unknown as WorkspaceMemberRecord];
-        }
-
-        const email = normalizeWorkspaceEmail((row as RelationalMembershipRow).email);
-        if (!email) {
-          return [];
-        }
-
-        return [
-          {
-            id: `member-${email}`,
-            email,
-            role: normalizeWorkspaceRole((row as RelationalMembershipRow).role) ?? 'Owner',
-            status: (row as RelationalMembershipRow).status === 'inactive' ? 'Inactive' : 'Active',
-            joinedAt: row.updated_at ?? new Date().toISOString(),
-            source: 'Invite',
-          } satisfies WorkspaceMemberRecord,
-        ];
+      workspaceMembers: (membershipsResult.data ?? []).map((row) => {
+        // Payload and original joining date were verified before normalization.
+        const payload = row.payload as Record<string, unknown>;
+        return {
+          ...payload,
+          id: typeof payload.id === 'string' && payload.id.trim() ? payload.id : row.id,
+        } as unknown as WorkspaceMemberRecord;
       }),
       workspaceInvitations: extractPayloadList<WorkspaceInvitationRecord>(invitationsResult.data),
       horses: extractPayloadList<HorseRecord>(horsesResult.data),
@@ -1085,32 +1622,58 @@ async function loadWorkspaceBackupFromRelationalCloud(session: Session) {
     },
   };
 
-  const hasWorkspaceData = Boolean(
-    backup.workspace?.horses?.length ||
-    backup.workspace?.workspaceMembers?.length ||
-    backup.workspace?.workspaceInvitations?.length ||
-    backup.workspace?.documents?.length ||
-    backup.workspace?.intakeBatches?.length ||
-    backup.workspace?.ownershipRecords?.length ||
-    backup.workspace?.expenseReceipts?.length ||
-    backup.workspace?.ranchAssets?.length ||
-    backup.workspace?.salesLeads?.length ||
-    backup.workspace?.sharedListings?.length ||
-    backup.workspace?.subscription ||
-    backup.workspace?.workspaceProfile,
-  );
-
-  if (!hasWorkspaceData) {
-    return { ok: false, message: 'No relational workspace records are stored for this account yet.' } as const;
-  }
+  // Billing metadata and a blank profile do not prove that ranch records exist.
+  const hasWorkspaceData = hasMeaningfulWorkspace(backup);
 
   const authoritativeSubscription = subscriptionFromCloudRow(subscriptionResult.data) ?? baselineCloudSubscription();
-  return {
-    ok: true,
-    backup: withCloudSubscription(backup, authoritativeSubscription),
-    authoritativeSubscription,
-    updatedAt: backup.exportedAt ?? '',
-  } as const;
+  const authoritative = withCloudSubscription(backup, authoritativeSubscription);
+  try {
+    const normalized = {
+      ...authoritative,
+      workspace: selectPersistedState(restoreCloudState(authoritative.workspace)),
+    };
+    for (const key of [
+      'workspaceMembers',
+      'workspaceInvitations',
+      'horses',
+      'documents',
+      'intakeBatches',
+      'ownershipRecords',
+      'expenseReceipts',
+      'ranchAssets',
+      'salesLeads',
+      'sharedListings',
+    ] as const) {
+      const sourceCount = backup.workspace?.[key]?.length ?? 0;
+      const derivedOwner =
+        key === 'workspaceMembers' &&
+        sourceCount === 0 &&
+        accessProfile.source === 'workspace-owner' &&
+        normalized.workspace.workspaceMembers.length === 1 &&
+        normalized.workspace.workspaceMembers[0].source === 'Owner';
+      if (!derivedOwner && normalized.workspace[key].length !== sourceCount)
+        return {
+          ok: false,
+          incomplete: true,
+          message: `Cloud load incomplete: ${key} could not be restored without changing its record count. Your local records are unchanged.`,
+        } as const;
+    }
+    return {
+      ok: true,
+      source: 'relational',
+      authoritativeEmpty: !hasWorkspaceData,
+      workspaceId,
+      backup: normalized,
+      authoritativeSubscription,
+      updatedAt: backup.exportedAt ?? '',
+    } as const;
+  } catch {
+    return {
+      ok: false,
+      incomplete: true,
+      message: 'Cloud load incomplete: a stored record could not be restored. Your local records are unchanged.',
+    } as const;
+  }
 }
 
 export async function saveWorkspaceBackupToCloud(
@@ -1136,7 +1699,12 @@ export async function saveWorkspaceBackupToCloud(
     const relational = await saveWorkspaceBackupToRelationalCloud(backup, session, options);
     if (relational.ok) {
       if (isSnapshotFallbackEnabled()) {
-        const snapshot = await saveWorkspaceSnapshotToCloud(backup, session, updatedAt);
+        const snapshot = await saveWorkspaceSnapshotToCloud(
+          relational.recoveryBackup ?? backup,
+          session,
+          updatedAt,
+          relational.workspaceId,
+        );
         return {
           ok: true,
           message: snapshot.ok
@@ -1209,17 +1777,53 @@ export async function saveWorkspaceBackupToCloud(
     };
   }
 
-  const snapshot = await saveWorkspaceSnapshotToCloud(backup, session, updatedAt);
+  const snapshotAccess = await loadWorkspaceAccessProfile(session, { forEntitlements: true });
+  if (
+    snapshotAccess.lookupFailed ||
+    (options.expectedContext && !options.expectedContext.workspaceId && !options.expectedRecoveryContext) ||
+    (options.expectedContext?.workspaceId && snapshotAccess.workspaceId !== options.expectedContext.workspaceId) ||
+    (options.expectedRecoveryContext &&
+      (options.expectedRecoveryContext.userId !== session.user.id ||
+        options.expectedRecoveryContext.workspaceId !== snapshotAccess.workspaceId ||
+        options.expectedRecoveryContext.workspaceRole !== snapshotAccess.workspaceRole)) ||
+    (await getActiveSession())?.user.id !== session.user.id
+  ) {
+    return {
+      ok: false,
+      message: 'The current account and ranch could not be verified. No recovery snapshot was written.',
+    };
+  }
+  const snapshot = await saveWorkspaceSnapshotToCloud(
+    backup,
+    session,
+    updatedAt,
+    snapshotAccess.workspaceId ?? undefined,
+  );
   if (!snapshot.ok) {
     return { ok: false, message: snapshot.message, updatedAt };
   }
 
   // Snapshot-only builds store the whole workspace as one document, so the
   // device's copy -- deletions and all -- is what was written.
-  return { ok: true, message: 'Cloud sync complete. Legacy snapshot updated.', updatedAt, deletionsApplied: true };
+  return {
+    ok: true,
+    message: 'Cloud sync complete. Legacy snapshot updated.',
+    updatedAt,
+    deletionsApplied: true,
+    recoveryContext: {
+      userId: session.user.id,
+      workspaceId: snapshotAccess.workspaceId,
+      workspaceRole: snapshotAccess.workspaceRole,
+    },
+  };
 }
 
-export async function loadWorkspaceBackupFromCloud() {
+export async function loadWorkspaceBackupFromCloud(
+  options: {
+    requireAuthoritative?: boolean;
+    expectedContext?: { userId: string; workspaceId: string };
+  } = {},
+) {
   const client = getSupabaseClient();
   if (!client) {
     return { ok: false, message: 'Supabase is not configured for this build.' } as const;
@@ -1230,9 +1834,16 @@ export async function loadWorkspaceBackupFromCloud() {
     return { ok: false, message: 'Sign in before pulling cloud data.' } as const;
   }
 
-  let relationalError: { ok: false; message: string } | undefined;
+  if (options.expectedContext && options.expectedContext.userId !== session.user.id) {
+    return { ok: false, message: 'Your account changed before refresh. Local records were kept unchanged.' } as const;
+  }
+  if (options.requireAuthoritative && !isRelationalCloudEnabled()) {
+    return { ok: false, message: 'Authoritative ranch refresh is unavailable in snapshot-only mode.' } as const;
+  }
+
+  let relationalError: { ok: false; message: string; incomplete?: boolean } | undefined;
   if (isRelationalCloudEnabled()) {
-    const relational = await loadWorkspaceBackupFromRelationalCloud(session);
+    const relational = await loadWorkspaceBackupFromRelationalCloud(session, options.expectedContext?.workspaceId);
     if (relational.ok) {
       return relational;
     }
@@ -1250,6 +1861,12 @@ export async function loadWorkspaceBackupFromCloud() {
       message: 'The cloud workspace could not be verified. Your local records are unchanged.',
     } as const;
   }
+  if (options.expectedContext && access.workspaceId !== options.expectedContext.workspaceId) {
+    return {
+      ok: false,
+      message: 'Your active ranch changed before refresh. Local records were kept unchanged.',
+    } as const;
+  }
   // Legacy snapshot-only accounts may not own a relational workspace yet.
   // Their records still load, with baseline access rather than a snapshot grant.
   const subscription = access.workspaceId
@@ -1260,7 +1877,7 @@ export async function loadWorkspaceBackupFromCloud() {
 
   // Entitlement reads are independent of record availability. A missing or
   // unreadable snapshot must not leave a stale grant or cancellation in place.
-  if (relationalError && !isSnapshotFallbackEnabled()) {
+  if (relationalError && (relationalError.incomplete || options.requireAuthoritative || !isSnapshotFallbackEnabled())) {
     return { ...relationalError, authoritativeSubscription } as const;
   }
 
@@ -1271,8 +1888,31 @@ export async function loadWorkspaceBackupFromCloud() {
     .eq('workspace_key', 'primary')
     .maybeSingle();
 
+  const currentSession = await getActiveSession();
+  const currentAccess =
+    currentSession?.user.id === session.user.id
+      ? await loadWorkspaceAccessProfile(currentSession, { forEntitlements: true })
+      : null;
+  if (
+    !currentAccess ||
+    currentAccess.lookupFailed ||
+    currentAccess.workspaceId !== access.workspaceId ||
+    currentAccess.workspaceRole !== access.workspaceRole
+  ) {
+    return {
+      ok: false,
+      message: 'Your account or ranch changed while loading the recovery snapshot. Local records were kept unchanged.',
+    } as const;
+  }
+
+  const recoveryContext: CloudRecoveryContext = {
+    userId: session.user.id,
+    workspaceId: access.workspaceId,
+    workspaceRole: access.workspaceRole,
+  };
+
   if (error) {
-    return { ok: false, message: error.message, authoritativeSubscription } as const;
+    return { ok: false, message: error.message, authoritativeSubscription, recoveryContext } as const;
   }
 
   if (!data?.payload) {
@@ -1282,11 +1922,34 @@ export async function loadWorkspaceBackupFromCloud() {
       // reconciliation locked rather than inviting an automatic local push.
       message: relationalError?.message ?? 'No cloud workspace has been saved for this account yet.',
       authoritativeSubscription,
+      recoveryContext,
     } as const;
   }
 
+  const recovery = isRecord(data.payload) ? data.payload : {};
+  const boundUser = recovery.cloudUserId;
+  const boundWorkspace = recovery.cloudWorkspaceId;
+  // An account-level recovery copy is not proof that it belongs to the ranch
+  // currently selected. Unbound legacy copies remain usable only while the
+  // account has no resolved relational ranch; never guess that association.
+  if (
+    (boundUser !== undefined && boundUser !== session.user.id) ||
+    (access.workspaceId
+      ? boundUser !== session.user.id || boundWorkspace !== access.workspaceId
+      : boundWorkspace !== undefined)
+  ) {
+    return {
+      ok: false,
+      message:
+        'This recovery snapshot cannot be verified for the current account and ranch. Local records were kept unchanged.',
+      authoritativeSubscription,
+      recoveryContext,
+    } as const;
+  }
   return {
     ok: true,
+    source: 'snapshot',
+    recoveryContext,
     backup: withCloudSubscription(data.payload, authoritativeSubscription),
     authoritativeSubscription,
     updatedAt: typeof data.updated_at === 'string' ? data.updated_at : '',

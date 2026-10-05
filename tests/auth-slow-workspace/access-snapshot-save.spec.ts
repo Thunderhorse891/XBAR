@@ -1,3 +1,4 @@
+import { fulfillRelationalFixture } from './relationalFixture.js';
 import { expect, test } from '@playwright/test';
 import { blockWebfonts, RECOVERY_EMAIL, sessionLink, stubGoTrueUser } from '../auth-smoke/support.js';
 
@@ -21,7 +22,19 @@ test('pushing an old ranch snapshot cannot recreate a removed member or reopen a
         }
       }
       if (table === 'workspace_profiles') profileWrites += 1;
-      await route.fulfill({ status: 200, json: table === 'workspaces' ? { id: workspaceId } : [] });
+      // PostgREST returns the requested representation, not an empty success.
+      const returned = table === 'workspaces' ? { id: workspaceId } : data;
+      const single = request.headers().accept?.includes('application/vnd.pgrst.object+json');
+      await fulfillRelationalFixture(route, {
+        status: 200,
+        json: new URL(request.url()).searchParams.has('select')
+          ? single
+            ? returned
+            : Array.isArray(returned)
+              ? returned
+              : [returned]
+          : [],
+      });
       return;
     }
     const payload =
@@ -60,7 +73,7 @@ test('pushing an old ranch snapshot cannot recreate a removed member or reopen a
                     },
                   ]
                 : [];
-    await route.fulfill({ status: 200, json: payload });
+    await fulfillRelationalFixture(route, { status: 200, json: payload });
   });
   await page.goto(sessionLink('signin'));
   await expect(page.getByText(/This page needs a current password-reset link/)).toBeVisible();

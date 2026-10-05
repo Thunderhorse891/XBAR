@@ -1,3 +1,4 @@
+import { hasMeaningfulWorkspace } from '@/lib/cloudSyncPolicy';
 import { changeHorsePhoto } from '@/lib/horsePhotoGallery';
 import { useEffect, useState } from 'react';
 import { normalizePacketWebsite, validatePacketProfile } from '../../api/_lib/packet-branding.js';
@@ -269,6 +270,15 @@ export const useXbarStore = create<XbarStore>()(
       ...initialState,
       setCurrentRole: (role) => set({ currentRole: role }),
       initializeWorkspace: (profile) => {
+        const setupDenied = requireRoleCapability(get().currentRole, 'manageSettings');
+        if (setupDenied)
+          return {
+            ok: false,
+            message:
+              get().currentRole === 'Pending access'
+                ? 'Ranch access must be verified before creating or changing a workspace.'
+                : setupDenied,
+          };
         const businessName = profile.businessName?.trim() ?? '';
         const ranchName = profile.ranchName?.trim() ?? '';
         if (!businessName || !ranchName) {
@@ -276,6 +286,17 @@ export const useXbarStore = create<XbarStore>()(
         }
 
         const current = get();
+        const recordsOwner = readRecordsOwner();
+        if (
+          hasMeaningfulWorkspace({ workspace: selectPersistedState(current) }) &&
+          recordsOwner !== 'local' &&
+          recordsOwner !== vaultOwnerId()
+        ) {
+          return {
+            ok: false,
+            message: 'These existing records need an explicit ownership review before creating a different ranch.',
+          };
+        }
         const nextProfile = restoreWorkspaceProfile({
           ...current.workspaceProfile,
           ...profile,
@@ -673,9 +694,11 @@ export const useXbarStore = create<XbarStore>()(
           return { ok: false, message: 'Shared listing not found for this horse.' };
         }
 
+        const needsToken = accessMode === 'Private Token' && !existingListing.shareToken.trim();
         const nextListing = {
           ...existingListing,
           accessMode,
+          ...(needsToken ? { shareToken: createShareAccessToken(), tokenIssuedAt: todayStamp() } : {}),
           updatedAt: todayStamp(),
         };
 
@@ -3627,10 +3650,18 @@ export const useXbarStore = create<XbarStore>()(
   ),
 );
 
+const pendingRoleWorkspace = {
+  role: 'Pending access' as const,
+  label: 'Access pending',
+  summary: 'Your ranch access must be verified before making changes.',
+  primaryModules: [] as string[],
+  permissions: [] as string[],
+};
+
 export function useCurrentRoleWorkspace() {
   return useXbarStore((state) => {
     const match = state.roleWorkspaces.find((workspace) => workspace.role === state.currentRole);
-    return match ?? state.roleWorkspaces[0];
+    return match ?? pendingRoleWorkspace;
   });
 }
 

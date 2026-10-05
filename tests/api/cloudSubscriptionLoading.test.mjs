@@ -16,7 +16,8 @@ registerHooks({
 });
 const { setCloudSubscriptionClient } = await import('./fixtures/cloudSubscriptionClient.mjs');
 const { supabaseConfig } = await import('../../src/lib/platformConfig.ts');
-const { loadWorkspaceBackupFromCloud, saveWorkspaceBackupToCloud } = await import('../../src/lib/cloudWorkspace.ts');
+const { loadWorkspaceBackupFromCloud, saveWorkspaceBackupToCloud, loadWorkspaceAccessProfile } =
+  await import('../../src/lib/cloudWorkspace.ts');
 const { createEmptyWorkspaceState } = await import('../../src/store/xbarStoreHelpers.ts');
 const { horseCreationGate, profitIntelligenceGate } = await import('../../src/lib/subscriptionGates.ts');
 const { decideCloudReconciliation } = await import('../../src/lib/cloudSyncPolicy.ts');
@@ -30,6 +31,8 @@ const ownerGrant = {
   payload: {},
 };
 const snapshot = () => ({
+  cloudUserId: 'user-owner',
+  cloudWorkspaceId: 'ws-owner',
   app: 'XBAR',
   version: 16,
   workspace: {
@@ -50,11 +53,18 @@ function fixture({
   relational = false,
   snapshotFallback = true,
   snapshotError = false,
+  pendingInvitation = false,
   ownerId = 'ws-owner',
   accessError = false,
   data = snapshot(),
+  sessionAppMetadata = {},
+  sessionUserMetadata = {},
+  switchUserOnSnapshot = false,
+  switchRanchOnSnapshot = false,
 } = {}) {
   calls = [];
+  let activeUserId = 'user-owner';
+  let activeOwnerId = ownerId;
   supabaseConfig.url = 'http://127.0.0.1:4179';
   supabaseConfig.anonKey = 'owner-entitlement-test-key';
   supabaseConfig.relationalSyncEnabled = relational;
@@ -62,7 +72,16 @@ function fixture({
   const client = {
     auth: {
       getSession: async () => ({
-        data: { session: { user: { id: 'user-owner', email: 'owner@example.test' } } },
+        data: {
+          session: {
+            user: {
+              id: activeUserId,
+              email: 'owner@example.test',
+              app_metadata: sessionAppMetadata,
+              user_metadata: sessionUserMetadata,
+            },
+          },
+        },
         error: null,
       }),
     },
@@ -72,17 +91,22 @@ function fixture({
         calls.push({ table, filters });
         if (table === 'workspaces')
           return {
-            data: ownerId ? { id: ownerId } : null,
+            data: activeOwnerId ? { id: activeOwnerId } : null,
             error: accessError ? { message: 'identity unavailable' } : null,
           };
-        if (table === 'workspace_memberships') return { data: relational ? [] : null, error: null };
+        if (table === 'workspace_invitations' && pendingInvitation)
+          return { data: { workspace_id: 'unrequested-ranch', invitation_id: 'unexpected-invite' }, error: null };
+        if (table === 'workspace_memberships') return { data: relational ? [] : null, error: null, count: 0 };
         if (table === 'workspace_subscription_profiles')
           return { data: row, error: subscriptionError ? { message: 'subscription unavailable' } : null };
-        if (table === supabaseConfig.workspaceTable)
+        if (table === supabaseConfig.workspaceTable) {
+          if (switchUserOnSnapshot) activeUserId = 'replacement-user';
+          if (switchRanchOnSnapshot) activeOwnerId = 'replacement-ranch';
           return {
             data: { payload: data, updated_at: '2026-10-02T21:36:00Z' },
             error: snapshotError ? { message: 'snapshot unavailable' } : null,
           };
+        }
         // Force a relational read failure while preserving the snapshot fallback.
         return { data: null, error: relational ? { message: 'relational records unavailable' } : null };
       };
@@ -95,6 +119,15 @@ function fixture({
           return chain;
         },
         limit() {
+          return chain;
+        },
+        order() {
+          return chain;
+        },
+        range() {
+          return chain;
+        },
+        returns() {
           return chain;
         },
         maybeSingle: async () => result(),
@@ -114,12 +147,26 @@ function fixture({
 beforeEach(() => fixture());
 
 for (const relational of [false, true]) {
-  test(`snapshot fallback (${relational ? 'failed relational read' : 'snapshot-only mode'}) restores the $0 owner grant, six-horse capacity and reports`, async () => {
+  test(`${relational ? 'failed relational reads fail closed while preserving' : 'snapshot-only mode restores'} the $0 owner grant, six-horse capacity and reports`, async () => {
     const original = fixture({ relational });
     const before = structuredClone(original);
     assert.ok(horseCreationGate(original.workspace.subscription, 5));
     assert.ok(profitIntelligenceGate(original.workspace.subscription));
     const loaded = await loadWorkspaceBackupFromCloud();
+    if (relational) {
+      assert.equal(loaded.ok, false);
+      assert.equal(loaded.backup, undefined);
+      assert.equal(loaded.authoritativeSubscription.tier, 'Enterprise');
+      assert.equal(loaded.authoritativeSubscription.monthlyRate, 0);
+      assert.equal(horseCreationGate(loaded.authoritativeSubscription, 5), null);
+      assert.equal(profitIntelligenceGate(loaded.authoritativeSubscription), null);
+      assert.equal(
+        calls.some((c) => c.table === supabaseConfig.workspaceTable),
+        false,
+      );
+      assert.deepEqual(original, before);
+      return;
+    }
     assert.equal(loaded.ok, true);
     assert.equal(loaded.backup.workspace.subscription.tier, 'Enterprise');
     assert.equal(loaded.backup.workspace.subscription.monthlyRate, 0);
@@ -192,7 +239,10 @@ test('an entitlement-only change does not create a record conflict, but real rec
 });
 
 test('a legacy snapshot with no relational workspace still loads its records at baseline', async () => {
-  const original = fixture({ ownerId: null });
+  const legacy = snapshot();
+  delete legacy.cloudWorkspaceId;
+  delete legacy.cloudUserId;
+  const original = fixture({ ownerId: null, data: legacy });
   const loaded = await loadWorkspaceBackupFromCloud();
   assert.equal(loaded.ok, true);
   assert.equal(loaded.authoritativeSubscription.tier, 'Starter');
@@ -275,3 +325,119 @@ test('autosave refuses a different resolved ranch before bootstrap, profile or f
     ['workspaces'],
   );
 });
+
+test('authoritative live refresh never substitutes a device recovery snapshot for failed relational reads', async () => {
+  fixture({ relational: true });
+  const result = await loadWorkspaceBackupFromCloud({
+    requireAuthoritative: true,
+    expectedContext: { userId: 'user-owner', workspaceId: 'ws-owner' },
+  });
+  assert.equal(result.ok, false);
+  assert.equal(
+    calls.some((call) => call.table === supabaseConfig.workspaceTable),
+    false,
+  );
+});
+
+test('live refresh rejects an account mismatch without querying any records', async () => {
+  fixture({ relational: true });
+  const result = await loadWorkspaceBackupFromCloud({
+    requireAuthoritative: true,
+    expectedContext: { userId: 'previous-account', workspaceId: 'ws-owner' },
+  });
+  assert.equal(result.ok, false);
+  assert.deepEqual(calls, []);
+});
+
+test('live refresh rejects a changed primary ranch without returning its records or a snapshot', async () => {
+  fixture({ relational: true, ownerId: 'different-ranch' });
+  const result = await loadWorkspaceBackupFromCloud({
+    requireAuthoritative: true,
+    expectedContext: { userId: 'user-owner', workspaceId: 'ws-owner' },
+  });
+  assert.equal(result.ok, false);
+  assert.equal(
+    calls.some((call) => call.table === 'horses' || call.table === supabaseConfig.workspaceTable),
+    false,
+  );
+});
+
+test('authoritative record refresh never accepts a pending invitation as a read side effect', async () => {
+  fixture({ relational: true, ownerId: null, pendingInvitation: true });
+  const loaded = await loadWorkspaceBackupFromCloud({
+    requireAuthoritative: true,
+    expectedContext: { userId: 'user-owner', workspaceId: 'existing-ranch' },
+  });
+  assert.equal(loaded.ok, false);
+  assert.equal(
+    calls.some((call) => call.table === 'workspace_invitations'),
+    false,
+  );
+});
+
+for (const identity of [
+  { cloudWorkspaceId: 'former-ranch', cloudUserId: 'user-owner' },
+  { cloudWorkspaceId: 'ws-owner', cloudUserId: 'former-user' },
+  { cloudWorkspaceId: undefined, cloudUserId: undefined },
+]) {
+  test(`snapshot-only load refuses wrong or unbound recovery identity ${JSON.stringify(identity)}`, async () => {
+    fixture({ data: { ...snapshot(), ...identity } });
+    const loaded = await loadWorkspaceBackupFromCloud();
+    assert.equal(loaded.ok, false);
+    assert.match(loaded.message, /cannot be verified/);
+    assert.equal(loaded.authoritativeSubscription.tier, 'Enterprise');
+  });
+}
+
+for (const change of ['switchUserOnSnapshot', 'switchRanchOnSnapshot']) {
+  test(`recovery context is rechecked after snapshot read: ${change}`, async () => {
+    fixture({ [change]: true });
+    const loaded = await loadWorkspaceBackupFromCloud();
+    assert.equal(loaded.ok, false);
+    assert.match(loaded.message, /changed while loading/);
+    assert.equal(loaded.backup, undefined);
+    assert.equal(loaded.authoritativeSubscription, undefined);
+    assert.equal(decideCloudReconciliation({ local: snapshot(), remoteError: loaded.message }), 'error-lock');
+  });
+}
+test('a bound former-ranch snapshot cannot become an unbound legacy account recovery', async () => {
+  fixture({ ownerId: null });
+  const loaded = await loadWorkspaceBackupFromCloud();
+  assert.equal(loaded.ok, false);
+  assert.match(loaded.message, /cannot be verified/);
+});
+
+test('account switch is rejected before a mismatched snapshot can return old entitlements', async () => {
+  fixture({ switchUserOnSnapshot: true, data: { ...snapshot(), cloudWorkspaceId: 'former-ranch' } });
+  const result = await loadWorkspaceBackupFromCloud();
+  assert.equal(result.ok, false);
+  assert.equal(result.authoritativeSubscription, undefined);
+  assert.match(result.message, /changed while loading/);
+});
+
+for (const unavailable of [{ data: null }, { snapshotError: true }]) {
+  test(`account switch with unavailable recovery never returns old entitlements ${JSON.stringify(unavailable)}`, async () => {
+    fixture({ switchUserOnSnapshot: true, ...unavailable });
+    const result = await loadWorkspaceBackupFromCloud();
+    assert.equal(result.ok, false);
+    assert.equal(result.authoritativeSubscription, undefined);
+    assert.match(result.message, /changed while loading/);
+  });
+}
+
+for (const metadata of [{}, { role: 'Admin', workspace_role: 'Admin' }]) {
+  test(`unverified snapshot-only identity has no local capabilities from editable metadata ${JSON.stringify(metadata)}`, async () => {
+    fixture({ ownerId: null, sessionUserMetadata: metadata });
+    const access = await loadWorkspaceAccessProfile();
+    assert.equal(access.workspaceId, null);
+    assert.equal(access.workspaceRole, 'Pending access');
+  });
+}
+for (const role of ['Owner', 'Medical Lead', 'Sales Lead']) {
+  test(`trusted application role remains compatible without a ranch: ${role}`, async () => {
+    fixture({ ownerId: null, sessionAppMetadata: { workspace_role: role }, sessionUserMetadata: { role: 'Admin' } });
+    const access = await loadWorkspaceAccessProfile();
+    assert.equal(access.workspaceId, null);
+    assert.equal(access.workspaceRole, role);
+  });
+}
