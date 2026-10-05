@@ -1,5 +1,6 @@
-import { useRef, useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { ASSET_CATEGORIES } from '@/lib/recordOptions';
+import { useEffect, useRef, useState } from 'react';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 import { CommandBrief } from '@/components/CommandBrief';
 import { ConfirmActionDialog } from '@/components/ConfirmActionDialog';
 import { ContextMenu } from '@/components/ContextMenu';
@@ -12,10 +13,12 @@ import type { AssetCategory, AssetCondition, AssetStatus, RanchAsset } from '@/t
 
 const statuses: AssetStatus[] = ['Available', 'Assigned', 'In Service'];
 const conditions: AssetCondition[] = ['Excellent', 'Service Soon', 'Attention Required'];
-const assetCategories: AssetCategory[] = ['Tack', 'Equipment', 'Medical Kit', 'Feed & Supply', 'Transport'];
+const assetCategories = ASSET_CATEGORIES;
 
 export default function RanchAssets() {
   const navigate = useNavigate();
+  const [params, setParams] = useSearchParams();
+  const requestedAssetId = params.get('asset');
   const ranchAssets = useXbarStore((state) => state.ranchAssets);
   const addRanchAsset = useXbarStore((state) => state.addRanchAsset);
   const updateAsset = useXbarStore((state) => state.updateAsset);
@@ -24,7 +27,7 @@ export default function RanchAssets() {
   const canManageAssets = useCurrentRoleCapability('manageAssets');
   const assigned = ranchAssets.filter((asset) => asset.status === 'Assigned');
   const serviceSoon = ranchAssets.filter((asset) => asset.condition !== 'Excellent');
-  const [selectedAssetId, setSelectedAssetId] = useState(ranchAssets[0]?.id ?? '');
+  const [selectedAssetId, setSelectedAssetId] = useState(requestedAssetId ?? ranchAssets[0]?.id ?? '');
   const [assetQuery, setAssetQuery] = useState('');
   const [newAsset, setNewAsset] = useState({ name: '', category: 'Equipment' as AssetCategory, location: '' });
   const [newAssetError, setNewAssetError] = useState('');
@@ -33,7 +36,7 @@ export default function RanchAssets() {
   const attentionRequired = ranchAssets.filter((asset) => asset.condition === 'Attention Required');
   const [menuState, setMenuState] = useState<{ assetId: string; x: number; y: number } | null>(null);
 
-  const selectedAsset = ranchAssets.find((asset) => asset.id === selectedAssetId) ?? ranchAssets[0];
+  const selectedAsset = ranchAssets.find((asset) => asset.id === selectedAssetId);
   const menuAsset = ranchAssets.find((asset) => asset.id === menuState?.assetId);
   const [form, setForm] = useState({
     status: selectedAsset?.status ?? 'Available',
@@ -45,8 +48,11 @@ export default function RanchAssets() {
   });
 
   const handleAssetSelection = (assetId: string) => {
+    const next = new URLSearchParams(params);
+    next.set('asset', assetId);
+    setParams(next);
     setSelectedAssetId(assetId);
-    const asset = ranchAssets.find((item) => item.id === assetId);
+    const asset = useXbarStore.getState().ranchAssets.find((item) => item.id === assetId);
     if (asset) {
       setForm({
         status: asset.status,
@@ -58,6 +64,38 @@ export default function RanchAssets() {
       });
     }
   };
+
+  const appliedRequest = useRef<string | null>(null);
+  useEffect(() => {
+    if (!requestedAssetId) {
+      appliedRequest.current = null;
+      return;
+    }
+    if (appliedRequest.current === requestedAssetId) return;
+    const asset = ranchAssets.find((item) => item.id === requestedAssetId);
+    setSelectedAssetId(requestedAssetId);
+    if (!asset) {
+      appliedRequest.current = null;
+      setForm({
+        status: 'Available',
+        condition: 'Excellent',
+        assignedTo: '',
+        location: '',
+        nextService: '',
+        notes: '',
+      });
+      return;
+    }
+    appliedRequest.current = requestedAssetId;
+    setForm({
+      status: asset.status,
+      condition: asset.condition,
+      assignedTo: asset.assignedTo,
+      location: asset.location,
+      nextService: asset.nextService,
+      notes: asset.notes,
+    });
+  }, [requestedAssetId, ranchAssets]);
 
   const handleSave = () => {
     const result = updateAsset(selectedAssetId, form);
@@ -232,6 +270,7 @@ export default function RanchAssets() {
         </Panel>
 
         <Panel eyebrow="Toolkit ops" title="Update assignment and maintenance" description="Fast edits.">
+          {!selectedAsset ? <p role="status">This asset is unavailable. Select an existing asset to edit.</p> : null}
           <div className="form-grid form-grid--tight">
             <label className="field-stack">
               <span className="field-label">Asset</span>
@@ -324,7 +363,7 @@ export default function RanchAssets() {
               className="button button--primary button--compact"
               type="button"
               onClick={handleSave}
-              disabled={!canManageAssets}
+              disabled={!canManageAssets || !selectedAsset}
             >
               Save asset changes
             </button>
@@ -405,7 +444,7 @@ export default function RanchAssets() {
                 if (result.ok) {
                   setNewAsset({ name: '', category: 'Equipment', location: '' });
                   setNewAssetError('');
-                  if (result.id) setSelectedAssetId(result.id);
+                  if (result.id) handleAssetSelection(result.id);
                 }
               }}
             >
