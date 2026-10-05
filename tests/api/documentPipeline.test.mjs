@@ -271,6 +271,28 @@ test('date helpers normalize formats and add a year', () => {
 });
 
 test('template catalog matches the tier matrix and renders placeholders', () => {
+  // The server catalog is the canonical runtime implementation. Retiring the
+  // unused client HTML catalog must preserve every exposed template choice.
+  assert.deepEqual(
+    templateCatalog.map(({ id }) => id),
+    [
+      'bill-of-sale',
+      'boarding-agreement',
+      'lease-agreement',
+      'veterinary-care-log',
+      'coggins-health-certificate',
+      'breeding-contract',
+      'training-agreement',
+      'foaling-mare-record',
+      'sales-packet',
+      'client-onboarding',
+      'professional-services-agreement',
+      'release-liability-waiver',
+      'multi-owner-transfer',
+      'branded-barn-asset-pack',
+      'vet-invoice-payment-plan',
+    ],
+  );
   assert.equal(templateCatalog.length, 15);
   assert.equal(templateCatalog.filter((t) => t.minimumPlan === 'Starter').length, 5);
   assert.equal(templateCatalog.filter((t) => t.minimumPlan === 'Professional').length, 5);

@@ -12,6 +12,13 @@ async function setupBuyer(page: Page) {
   const id = await page.evaluate(async () => {
     const path = '/src/store/useXbarStore.ts';
     const { useXbarStore } = await import(/* @vite-ignore */ path);
+    const storagePath = '/src/lib/workspaceStorage.ts';
+    const { getWorkspacePersistReceipt, workspaceStateStorage } = await import(/* @vite-ignore */ storagePath);
+    const confirmDeviceWrite = async () => {
+      const receipt = getWorkspacePersistReceipt();
+      if (!receipt || !(await receipt.completed)) throw new Error('Synthetic setup was not saved on this device');
+    };
+    await confirmDeviceWrite();
     const horse = useXbarStore.getState().addHorse({
       name: 'Feedback horse',
       barnName: 'Feedback',
@@ -24,13 +31,19 @@ async function setupBuyer(page: Page) {
       pasture: '',
     });
     if (!horse.ok || !horse.id) throw new Error('Synthetic horse creation failed');
+    await confirmDeviceWrite();
     const lead = useXbarStore
       .getState()
       .createSalesLead({ name: 'Synthetic buyer', horseId: horse.id, channel: 'Referral', shareReady: true });
     if (!lead.ok || !lead.id) throw new Error('Synthetic buyer creation failed');
+    await confirmDeviceWrite();
+    const persisted = JSON.parse((await workspaceStateStorage.getItem('xbar-live-workspace')) ?? '{}');
+    if (!persisted.state?.salesLeads?.some((saved: { id: string }) => saved.id === lead.id)) {
+      throw new Error('The synthetic buyer is missing from the acknowledged workspace');
+    }
     return lead.id as string;
   });
-  await page.goto(`/buyers/${id}`);
+  await page.goto(`/app/buyers/${id}`);
   return id;
 }
 
@@ -64,7 +77,11 @@ for (const viewport of [
       };
     }, id);
     expect(outcome).toEqual({ ready: false, events: 1 });
-    await page.screenshot({ path: testInfo.outputPath(`ranch-buyer-readiness-${viewport.width}.png`), fullPage: true });
+    await page.screenshot({
+      path: testInfo.outputPath(`ranch-buyer-readiness-${viewport.width}.png`),
+      fullPage: true,
+      animations: 'disabled',
+    });
     await page.getByRole('button', { name: 'Manage listing links' }).click();
     await expect(page).toHaveURL(/\/shared-access$/);
   });

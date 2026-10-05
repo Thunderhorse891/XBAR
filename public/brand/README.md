@@ -2,18 +2,25 @@
 
 This directory contains the artwork used by XBAR's application shell, marketing pages, and exported reports. Treat the supplied artwork as source material: preserve the originals, keep their proportions, and do not silently redraw the horse, X mark, or wordmark.
 
-## Current consumers
+## Current consumers (October 5, 2026 source check)
 
-| Asset                                                                                               | Current use                                   |
-| --------------------------------------------------------------------------------------------------- | --------------------------------------------- |
-| `apple-touch-icon.png`, `icon-192.png`, `icon-512.png`, `icon-512-maskable.png`, `xbar-favicon.png` | Browser, PWA, navigation, and dashboard icons |
-| `og-card.jpg`                                                                                       | Social preview card                           |
-| `xbar-horse-outline-safe.png`, `xbar-x-watermark-main.png`, `xbar-wordmark.png`                     | Sign-in artwork                               |
-| `xbar-report-horse.png`, `xbar-report-mark.png`, `xbar-report-watermark.png`                        | Branded PDF reports                           |
+| Asset                                                                                             | Current use                                                                                                          |
+| ------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------- |
+| `xbar-original-lockup-480.png`                                                                    | React `XbarMark`/`XbarWordmark`, public header/footer, email, sample packet and report footer                        |
+| `xbar-original-icon-32.png`, `xbar-original-icon-180.png`                                         | Declared favicon and Apple touch icon                                                                                |
+| `xbar-original-icon-192.png`, `xbar-original-icon-512.png`, `xbar-original-icon-maskable-512.png` | Web app manifest icons                                                                                               |
+| `og-card.jpg`                                                                                     | Social preview card                                                                                                  |
+| `xbar-report-horse.png`                                                                           | Supplied original B master, login artwork and report masthead; homepage has the documented lossless WebP alternative |
+| `xbar-report-watermark.png`                                                                       | Report watermark                                                                                                     |
+
+The original-artwork restoration below supersedes the signature preview. The
+older `xbar-wordmark.png`, outline aliases and legacy icon names are retained
+assets, not the current React wordmark or manifest choices. These are source
+consumer facts; they do not certify every platform's installed icon cache.
 
 Other files are retained as supplied or historical aliases. Do not infer a supported treatment from a filename alone; check this inventory and the actual pixels first.
 
-`favicon.ico` has no consumer at all. Nothing references it, and a browser's implicit request goes to `/favicon.ico` while this file sits at `/brand/favicon.ico`, so it is never fetched either. `index.html` declares `brand/xbar-favicon.png` instead.
+`favicon.ico` has no consumer at all. Nothing references it, and a browser's implicit request goes to `/favicon.ico` while this file sits at `/brand/favicon.ico`, so it is never fetched either. `index.html` declares `brand/xbar-original-icon-32.png` instead.
 
 ## Known aliases
 
@@ -57,12 +64,12 @@ The preview now animates the unchanged `xbar-report-horse.png` master (1672x941)
 
 The entrance plays once and offers pause/replay. Reduced-motion and data-saving visitors begin with static artwork. No video or external media service is loaded. Figures and horse names remain illustrative. This is a separate preview, not the production shell or a new vector logo master.
 
-## Signature refinement preview (October 3, 2026)
+## Historical signature refinement preview (October 3, 2026; superseded)
 
-The owner requested a recognizable horse-only signature, a finite 1.5-second
+This historical preview explored a recognizable horse-only signature, a finite 1.5-second
 silver/icy-blue outline highlight, graphite/charcoal navigation, and spacious
-white working surfaces. This preview is held for visual approval; it is not a
-recovered official vector master.
+white working surfaces. The October 4 original-artwork restoration below replaced its live consumers.
+It is not a recovered official vector master.
 
 - `xbar-signature-paths.json` is the single geometry source for the derivative.
   Its source SHA pins the unchanged `xbar-report-horse.png`. Detailed `paths`
@@ -73,7 +80,7 @@ recovered official vector master.
   that geometry, with compact exports using the filled profile and minimal eye/mane gaps.
 - `xbar-signature-icon.svg`, icon PNGs, and the maskable PNG use an opaque
   graphite ground so the silver horse remains visible in light and dark chrome.
-- React `XbarMark` and public header/footer/hero markup use those same real paths.
+- At the time of this preview, React `XbarMark` and public header/footer/hero markup used those paths.
   `src/lib/signatureMotion.ts` gives the entire highlight exactly 1,500 ms,
   once on entry or pointer hover. The static base is always present; reduced
   motion, data saving, a hidden tab, or the homepage pause control stop it.
