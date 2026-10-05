@@ -12,7 +12,9 @@ permissive policy: authenticated role assertions execute the real repository RLS
 
 The baseline covers owner, Admin, Ranch Manager, Medical Lead, Sales Lead,
 Owner/client, outsider, inactive member, anonymous and unknown-role writes/reads; a failed
-foreign-workspace write rolls back an earlier allowed write. Current shared-owner
+foreign-workspace write rolls back an earlier allowed write. Medical Lead updates
+use an allowed medical field and separately verify that an unrelated field is
+rejected by the real specialist trigger. Current shared-owner
 deletion refusal and private-account request fencing are tested too.
 
 This establishes an actual-PostgreSQL test path for proposed audit 09/12 changes.

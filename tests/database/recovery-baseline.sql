@@ -33,10 +33,22 @@ begin
     set local role authenticated;
     select count(*) into visible from public.horses where workspace_id='10000000-0000-4000-8000-000000000001';
     if (visible=1) is distinct from actor.can_read then raise exception 'Unexpected horse read for actor %',actor.id; end if;
-    update public.horses set payload=jsonb_set(payload,'{fixtureProbe}',to_jsonb(actor.id))
+    update public.horses set payload=jsonb_set(payload,'{medicalNotes}',to_jsonb('Synthetic medical check '||actor.id::text))
     where workspace_id='10000000-0000-4000-8000-000000000001' and horse_id='horse-a';
     get diagnostics affected=row_count;
     if (affected=1) is distinct from actor.can_edit then raise exception 'Unexpected horse update for actor %',actor.id; end if;
+    -- The real specialist trigger must also reject an unrelated business field.
+    if actor.id=4 then
+      permitted:=true;
+      begin
+        update public.horses set payload=jsonb_set(payload,'{fixtureProbe}','true'::jsonb)
+        where workspace_id='10000000-0000-4000-8000-000000000001' and horse_id='horse-a';
+      exception when raise_exception then
+        if sqlerrm <> 'This role can update a horse''s medical and document details only.' then raise; end if;
+        permitted:=false;
+      end;
+      if permitted then raise exception 'Medical Lead changed a forbidden horse field'; end if;
+    end if;
     update public.workspace_profiles set default_barn='Synthetic check'
     where workspace_id='10000000-0000-4000-8000-000000000001';
     get diagnostics affected=row_count;
