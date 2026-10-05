@@ -1,0 +1,36 @@
+.care-task-group-filter {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  flex-basis: 100%;
+  gap: 12px;
+}
+.xs-task.care-task-row {
+  grid-template-columns: 116px minmax(0, 1fr) auto;
+}
+.care-task-row .care-task-opener {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  height: auto;
+  min-height: 38px;
+  min-width: 0;
+  padding: 8px 10px;
+  text-align: left;
+  white-space: normal;
+  overflow-wrap: anywhere;
+}
+@media (max-width: 640px) {
+  .xs-task.care-task-row {
+    grid-template-columns: minmax(0, 1fr) auto;
+    gap: 8px;
+  }
+  .care-task-row > .xs-chip {
+    grid-column: 1 / -1;
+    justify-self: start;
+  }
+  .care-task-row .xs-task__right {
+    flex-direction: column;
+    align-items: flex-end;
+  }
+}

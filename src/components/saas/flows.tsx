@@ -1,13 +1,16 @@
 import { ASSET_CATEGORIES, HORSE_SEGMENTS } from '@/lib/recordOptions';
 import { documentIntakeDisclosure } from '@/features/documents/constants';
 import type { ReactNode } from 'react';
-import { useRef, useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useEffect, useLayoutEffect, useRef, useState } from 'react';
+import { useLocation, useNavigate } from 'react-router-dom';
 import { FileUp } from 'lucide-react';
 import { ActionButton, SlideOverDrawer } from '@/components/saas';
 import { buyerFollowUpPath } from '@/lib/buyerRoutes';
 import { localIsoDate } from '@/lib/format';
-import { useUiStore } from '@/store/useUiStore';
+import { useUiStore, type QuickCreateRequest } from '@/store/useUiStore';
+import { useCloudStore } from '@/store/useCloudStore';
+import { getWorkspacePersistReceipt, type WorkspacePersistReceipt } from '@/lib/workspaceStorage';
+import { readRecordsOwner } from '@/lib/recordsOwner';
 import { useXbarStore } from '@/store/useXbarStore';
 import { PRICED_BY_UNIT_CATEGORIES, parseReceiptQuantity } from '@/store/xbarStoreLogic';
 import { events, track } from '@/lib/telemetry';
@@ -192,8 +195,34 @@ function todayIso() {
   return localIsoDate();
 }
 
+function captureCreateContext(request: QuickCreateRequest | null) {
+  const cloud = useCloudStore.getState();
+  const state = useXbarStore.getState();
+  const recovery = cloud.recoveryContext?.userId === cloud.session?.user.id ? cloud.recoveryContext : undefined;
+  return {
+    request,
+    workspace: cloud.workspaceId,
+    user: cloud.session?.user.id,
+    // A clean refresh normalizes a new profile object. Pin durable context,
+    // not editable business details or the identity of that object.
+    setup: state.workspaceProfile.setupCompleteAt,
+    recordsOwner: readRecordsOwner(),
+    role: state.currentRole,
+    cloudRole: cloud.workspaceRole,
+    recoveryValid: !cloud.recoveryContext || Boolean(recovery),
+    recoveryUser: recovery?.userId,
+    recoveryWorkspace: recovery?.workspaceId,
+    recoveryRole: recovery?.workspaceRole,
+  };
+}
+
 export function GlobalCreateDrawer() {
   const navigate = useNavigate();
+  const location = useLocation();
+  const latestLocationKey = useRef(location.key);
+  useLayoutEffect(() => {
+    latestLocationKey.current = location.key;
+  }, [location.key]);
   const request = useUiStore((s) => s.quickCreate);
   const closeQuickCreate = useUiStore((s) => s.closeQuickCreate);
   const openQuickCreate = useUiStore((s) => s.openQuickCreate);
@@ -213,6 +242,27 @@ export function GlobalCreateDrawer() {
   const [f, setF] = useState<Record<string, string>>({});
   const [files, setFiles] = useState<File[]>([]);
   const [busy, setBusy] = useState(false);
+  const [formError, setFormError] = useState('');
+  const [context, setContext] = useState(() => captureCreateContext(request));
+  const submitting = useRef(false);
+  const beforeSave = useRef<WorkspacePersistReceipt | null>(null);
+  const mounted = useRef(true);
+  useEffect(() => {
+    mounted.current = true;
+    return () => {
+      mounted.current = false;
+    };
+  }, []);
+  // Every new opener starts a fresh draft. A completed older request must not
+  // close or clear a newer drawer, even if both have the same action label.
+  useEffect(() => {
+    setContext(captureCreateContext(request));
+    setF({});
+    setFiles([]);
+    setFormError('');
+    setBusy(false);
+    submitting.current = false;
+  }, [request]);
   // Registration papers can create the horse records they describe. On by
   // default so a brand-new workspace bootstraps its herd from its documents.
   const [createProfiles, setCreateProfiles] = useState(true);
@@ -246,19 +296,95 @@ export function GlobalCreateDrawer() {
     closeQuickCreate();
   };
 
-  const finish = (result: { ok: boolean; message: string }, go?: string) => {
-    track(events.createSubmitted, { action, ok: result.ok });
-    pushToast({ title: action, message: result.message, tone: result.ok ? 'success' : 'warning' });
-    if (result.ok) {
-      close();
-      if (go) navigate(go);
+  const current = () => {
+    const now = captureCreateContext(request);
+    return (
+      mounted.current &&
+      context.request === request &&
+      useUiStore.getState().quickCreate === request &&
+      now.workspace === context.workspace &&
+      now.user === context.user &&
+      now.setup === context.setup &&
+      now.recordsOwner === context.recordsOwner &&
+      now.role === context.role &&
+      now.cloudRole === context.cloudRole &&
+      now.recoveryValid &&
+      now.recoveryUser === context.recoveryUser &&
+      now.recoveryWorkspace === context.recoveryWorkspace &&
+      now.recoveryRole === context.recoveryRole
+    );
+  };
+  const reportError = (message: string) => {
+    if (!current()) return;
+    setFormError(message);
+    pushToast({ id: 'quick-create-feedback', title: `${action} not completed`, message, tone: 'error' });
+  };
+  const runSubmit = async (submit: () => void | Promise<void>) => {
+    if (submitting.current) return;
+    if (!current()) {
+      setFormError('The ranch or account changed. Close this form and reopen it before continuing.');
+      return;
     }
+    submitting.current = true;
+    setBusy(true);
+    setFormError('');
+    beforeSave.current = getWorkspacePersistReceipt();
+    try {
+      await submit();
+    } catch {
+      reportError(
+        'The action could not be confirmed. Your draft is still here. Check the records before trying again.',
+      );
+    } finally {
+      if (mounted.current && useUiStore.getState().quickCreate === request) {
+        submitting.current = false;
+        setBusy(false);
+        if (!current()) setFormError('The ranch or account changed. Close this form and reopen it before continuing.');
+      }
+    }
+  };
+  const finish = async (result: { ok: boolean; message: string }, go?: string) => {
+    if (!current()) return;
+    track(events.createSubmitted, { action, ok: result.ok });
+    if (!result.ok) {
+      reportError(result.message);
+      return;
+    }
+    // A store mutation is not proof that the device saved it. Capture the
+    // resulting write now, before awaiting it; later writes cannot replace it.
+    const receipt = getWorkspacePersistReceipt();
+    let persisted = false;
+    try {
+      persisted = Boolean(
+        receipt &&
+        receipt !== beforeSave.current &&
+        receipt.name === 'xbar-live-workspace' &&
+        (await receipt.completed),
+      );
+    } catch {
+      /* Report an unconfirmed device save below, never success. */
+    }
+    if (!current()) return;
+    const message = result.message.trim().replace(/\.$/, '');
+    pushToast({
+      id: 'quick-create-feedback',
+      title: persisted ? action : 'Device save not confirmed',
+      message: persisted
+        ? `${message}. ${action === 'Upload Document' ? 'Queue state saved' : 'Saved'} on this device.${context.user ? ' Cloud sync runs separately; check Cloud status.' : ''}`
+        : `${message}. This change may exist only in this session. Keep XBAR open and free up device storage before reloading.`,
+      tone: persisted ? (action === 'Upload Document' ? 'info' : 'success') : 'warning',
+      ...(persisted ? {} : { duration: Infinity }),
+    });
+    // The mutation already happened, even when durable storage failed. Do not
+    // leave a create button that would duplicate the record on a retry.
+    close();
+    if (go && latestLocationKey.current === location.key) navigate(go);
   };
 
   const submitAnimal = () => {
     const name = (f.name ?? '').trim();
     if (name.length < 2) {
-      pushToast({ title: 'Add Horse', message: 'Enter a name to add the horse.', tone: 'warning' });
+      reportError('Enter a name to add the horse.');
       return;
     }
     const segment = (f.segment as HorseSegment) ?? 'Sale Prospect';
@@ -276,7 +402,7 @@ export function GlobalCreateDrawer() {
       barn: (f.loc ?? '').trim() || defaultBarn,
       pasture: workspaceProfile.defaultPasture ?? '',
     });
-    finish(
+    return finish(
       result.ok ? { ok: true, message: `${name} added to the herd` } : result,
       result.ok && result.id ? `/horses/${result.id}` : '/horses',
     );
@@ -286,7 +412,7 @@ export function GlobalCreateDrawer() {
     if (!editHorse) return;
     const name = (f.name ?? editHorse.name).trim();
     if (name.length < 2) {
-      pushToast({ title: 'Edit Horse', message: 'A registered name is required.', tone: 'warning' });
+      reportError('A registered name is required.');
       return;
     }
     // Send only the identity fields the edit form controls. Empty strings are
@@ -307,21 +433,20 @@ export function GlobalCreateDrawer() {
       sire: f.sire ?? editHorse.bloodline.sire,
       dam: f.dam ?? editHorse.bloodline.dam,
     });
-    finish(result, result.ok ? `/horses/${editHorse.id}` : undefined);
+    return finish(result, result.ok ? `/horses/${editHorse.id}` : undefined);
   };
 
   const submitExpense = async () => {
     const desc = (f.desc ?? '').trim();
     const amount = Number.parseFloat((f.amt ?? '').replace(/[^0-9.]/g, ''));
     if (desc.length < 2 || !Number.isFinite(amount) || amount <= 0) {
-      pushToast({ title: 'Add Expense', message: 'Enter a description and a valid amount.', tone: 'warning' });
+      reportError('Enter a description and a valid amount.');
       return;
     }
     const category = (f.cat as ExpenseCategory) ?? 'Feed';
     // Only feed-type receipts carry a quantity; the store refuses half a pair.
     const qtyText = PRICED_BY_UNIT_CATEGORIES.has(category) ? (f.qty ?? '').trim() : '';
     const unit = PRICED_BY_UNIT_CATEGORIES.has(category) ? (f.unit ?? '').trim() : '';
-    setBusy(true);
     const result = await addExpenseReceipt({
       title: desc,
       category,
@@ -332,16 +457,14 @@ export function GlobalCreateDrawer() {
       unit: unit || undefined,
       uploadedBy: actor,
     });
-    setBusy(false);
-    finish(result.ok ? { ok: true, message: 'Expense saved to the ledger' } : result, '/expenses');
+    return finish(result.ok ? { ok: true, message: 'Expense added to the ledger' } : result, '/expenses');
   };
 
   const submitDocuments = async () => {
     if (!files.length) {
-      pushToast({ title: 'Upload Document', message: 'Choose at least one file to upload.', tone: 'warning' });
+      reportError('Choose at least one file to upload.');
       return;
     }
-    setBusy(true);
     const result = await createDocumentIntake({
       files,
       horseId: documentHorseId || undefined,
@@ -350,7 +473,6 @@ export function GlobalCreateDrawer() {
       label: (f.label ?? '').trim() || undefined,
       createHorseFromBatch: !documentHorseId && createProfiles,
     });
-    setBusy(false);
     // When exactly one horse was created, land on its new profile so the
     // extracted registration facts are immediately visible.
     const createdHorseIds = result.createdHorseIds ?? [];
@@ -360,7 +482,7 @@ export function GlobalCreateDrawer() {
         : createdHorseIds.length === 1
           ? `/horses/${createdHorseIds[0]}`
           : '/documents';
-    finish(result, destination);
+    return finish(result, destination);
   };
 
   // A preset from the opener (e.g. "Log a deworming") counts only if it is a
@@ -374,11 +496,7 @@ export function GlobalCreateDrawer() {
     const title = (f.title ?? '').trim();
     const notes = (f.notes ?? '').trim();
     if (!selectedHorseId || title.length < 2 || notes.length < 4) {
-      pushToast({
-        title: 'Add Health Record',
-        message: 'Pick a horse, then enter a title and a short note.',
-        tone: 'warning',
-      });
+      reportError('Pick a horse, then enter a title and a short note.');
       return;
     }
     const result = addMedicalEvent(selectedHorseId, {
@@ -389,18 +507,14 @@ export function GlobalCreateDrawer() {
       type: healthRecordType,
       completionState: f.completionState === 'planned' ? 'planned' : 'completed',
     });
-    finish(result.ok ? { ok: true, message: 'Health record saved to the horse timeline' } : result, '/medical');
+    return finish(result.ok ? { ok: true, message: 'Health record added to the horse timeline' } : result, '/medical');
   };
 
   const submitBreedingRecord = () => {
     const title = (f.title ?? '').trim();
     const notes = (f.notes ?? '').trim();
     if (!selectedHorseId || title.length < 2 || notes.length < 2) {
-      pushToast({
-        title: 'Add Breeding Record',
-        message: 'Pick a horse, then enter a title and a short note.',
-        tone: 'warning',
-      });
+      reportError('Pick a horse, then enter a title and a short note.');
       return;
     }
     const result = addBreedingEvent(selectedHorseId, {
@@ -409,31 +523,30 @@ export function GlobalCreateDrawer() {
       author: actor,
       date: (f.date ?? '').trim() || todayIso(),
     });
-    finish(result.ok ? { ok: true, message: 'Breeding record saved to the horse timeline' } : result, '/breeding');
+    return finish(
+      result.ok ? { ok: true, message: 'Breeding record added to the horse timeline' } : result,
+      '/breeding',
+    );
   };
 
   const submitMoveHorse = () => {
     const barn = (f.barn ?? '').trim();
     const pasture = (f.pasture ?? '').trim();
     if (!selectedHorseId || (!barn && !pasture)) {
-      pushToast({
-        title: 'Move Horse',
-        message: 'Pick a horse and enter the new barn or pasture.',
-        tone: 'warning',
-      });
+      reportError('Pick a horse and enter the new barn or pasture.');
       return;
     }
     const result = updateHorseLocation(selectedHorseId, {
       barn: barn || undefined,
       pasture: pasture || undefined,
     });
-    finish(result.ok ? { ok: true, message: 'Location updated on the horse record' } : result, '/pastures');
+    return finish(result.ok ? { ok: true, message: 'Location updated on the horse record' } : result, '/pastures');
   };
 
   const submitLead = () => {
     const name = (f.name ?? '').trim();
     if (!selectedHorseId || name.length < 2) {
-      pushToast({ title: 'Add Buyer Follow-up', message: 'Pick a horse and enter the buyer name.', tone: 'warning' });
+      reportError('Pick a horse and enter the buyer name.');
       return;
     }
     const result = createSalesLead({
@@ -441,13 +554,13 @@ export function GlobalCreateDrawer() {
       channel: (f.channel as SalesLead['channel']) ?? 'Site Inquiry',
       horseId: selectedHorseId,
     });
-    finish(result.ok ? { ok: true, message: `${name} added to buyer follow-up` } : result, buyerFollowUpPath());
+    return finish(result.ok ? { ok: true, message: `${name} added to buyer follow-up` } : result, buyerFollowUpPath());
   };
 
   const submitEquipment = () => {
     const name = (f.name ?? '').trim();
     if (name.length < 2) {
-      pushToast({ title: 'Add Equipment', message: 'Enter the equipment name.', tone: 'warning' });
+      reportError('Enter the equipment name.');
       return;
     }
     const result = addRanchAsset({
@@ -455,7 +568,7 @@ export function GlobalCreateDrawer() {
       category: (f.type as AssetCategory) ?? 'Equipment',
       location: (f.loc ?? '').trim() || defaultBarn,
     });
-    finish(
+    return finish(
       result.ok ? { ok: true, message: `${name} added to ranch assets` } : result,
       result.ok ? `/assets?asset=${encodeURIComponent(result.id ?? '')}` : undefined,
     );
@@ -471,10 +584,14 @@ export function GlobalCreateDrawer() {
         open
         title={action}
         subtitle="Quick create"
-        onClose={close}
+        onClose={() => {
+          if (!submitting.current) close();
+        }}
         footer={
           <>
-            <ActionButton onClick={close}>Cancel</ActionButton>
+            <ActionButton disabled={busy} onClick={close}>
+              Cancel
+            </ActionButton>
             <ActionButton variant="primary" onClick={() => openQuickCreate({ action: 'Add Horse' })}>
               Add a horse first
             </ActionButton>
@@ -514,7 +631,7 @@ export function GlobalCreateDrawer() {
         </div>
       );
       footer = (
-        <ActionButton variant="primary" onClick={submitAnimal}>
+        <ActionButton variant="primary" disabled={busy} onClick={() => runSubmit(submitAnimal)}>
           Add Horse
         </ActionButton>
       );
@@ -566,7 +683,7 @@ export function GlobalCreateDrawer() {
         </div>
       );
       footer = (
-        <ActionButton variant="primary" disabled={busy} onClick={() => void submitDocuments()}>
+        <ActionButton variant="primary" disabled={busy} onClick={() => runSubmit(submitDocuments)}>
           {busy
             ? intakeProgress && intakeProgress.total > 1
               ? `Reading ${intakeProgress.processed} of ${intakeProgress.total}…`
@@ -597,7 +714,7 @@ export function GlobalCreateDrawer() {
         </div>
       );
       footer = (
-        <ActionButton variant="primary" onClick={submitHealthRecord}>
+        <ActionButton variant="primary" disabled={busy} onClick={() => runSubmit(submitHealthRecord)}>
           Save Health Record
         </ActionButton>
       );
@@ -617,7 +734,7 @@ export function GlobalCreateDrawer() {
         </div>
       );
       footer = (
-        <ActionButton variant="primary" onClick={submitBreedingRecord}>
+        <ActionButton variant="primary" disabled={busy} onClick={() => runSubmit(submitBreedingRecord)}>
           Save Breeding Record
         </ActionButton>
       );
@@ -637,7 +754,7 @@ export function GlobalCreateDrawer() {
         </div>
       );
       footer = (
-        <ActionButton variant="primary" onClick={submitMoveHorse}>
+        <ActionButton variant="primary" disabled={busy} onClick={() => runSubmit(submitMoveHorse)}>
           Save Move
         </ActionButton>
       );
@@ -656,7 +773,7 @@ export function GlobalCreateDrawer() {
         </div>
       );
       footer = (
-        <ActionButton variant="primary" onClick={submitLead}>
+        <ActionButton variant="primary" disabled={busy} onClick={() => runSubmit(submitLead)}>
           Save Follow-up
         </ActionButton>
       );
@@ -684,7 +801,7 @@ export function GlobalCreateDrawer() {
         </div>
       );
       footer = (
-        <ActionButton variant="primary" disabled={busy} onClick={() => void submitExpense()}>
+        <ActionButton variant="primary" disabled={busy} onClick={() => runSubmit(submitExpense)}>
           {busy ? 'Adding…' : 'Add Expense'}
         </ActionButton>
       );
@@ -698,7 +815,7 @@ export function GlobalCreateDrawer() {
         </div>
       );
       footer = (
-        <ActionButton variant="primary" onClick={submitEquipment}>
+        <ActionButton variant="primary" disabled={busy} onClick={() => runSubmit(submitEquipment)}>
           Add Equipment
         </ActionButton>
       );
@@ -761,7 +878,7 @@ export function GlobalCreateDrawer() {
         </div>
       );
       footer = (
-        <ActionButton variant="primary" onClick={submitEditHorse}>
+        <ActionButton variant="primary" disabled={busy} onClick={() => runSubmit(submitEditHorse)}>
           Save changes
         </ActionButton>
       );
@@ -773,15 +890,25 @@ export function GlobalCreateDrawer() {
       open
       title={action}
       subtitle={action === 'Edit Horse' ? 'Update details' : 'Quick create'}
-      onClose={close}
+      onClose={() => {
+        if (!submitting.current) close();
+      }}
       footer={
         <>
-          <ActionButton onClick={close}>Cancel</ActionButton>
+          <ActionButton disabled={busy} onClick={close}>
+            Cancel
+          </ActionButton>
           {footer}
         </>
       }
     >
-      {body}
+      {busy ? <p role="status">Saving… Keep this form open until the action finishes.</p> : null}
+      {formError ? (
+        <p className="xs-action-feedback-error" role="alert">
+          {formError}
+        </p>
+      ) : null}
+      <div aria-busy={busy}>{body}</div>
     </SlideOverDrawer>
   );
 }

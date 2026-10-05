@@ -517,7 +517,7 @@ export default function Sales() {
                       </div>
                       <div className="inline-metrics">
                         <span>{lead.savedListing ? 'Saved listing' : 'Not saved yet'}</span>
-                        <span>{lead.shareReady ? 'Sale link live' : 'Sale link private'}</span>
+                        <span>{lead.shareReady ? 'Sharing ready' : 'Sharing not ready'}</span>
                         <span>Last touch {formatDateLabel(lead.lastTouch)}</span>
                       </div>
                     </button>

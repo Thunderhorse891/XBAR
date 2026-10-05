@@ -22,6 +22,8 @@ export default function ResetPassword() {
   const passwordId = useId();
   const confirmId = useId();
   const pushToast = useUiStore((state) => state.pushToast);
+  const removeToast = useUiStore((state) => state.removeToast);
+  const resultToastId = useRef<string | null>(null);
   const updatePassword = useCloudStore((state) => state.updatePassword);
   const authReady = useCloudStore((state) => state.authReady);
   const recoveryPending = useCloudStore(hasValidatedPasswordRecovery);
@@ -47,7 +49,11 @@ export default function ResetPassword() {
     actedOnGrant.current = recoveryGrant;
     setUnexpectedFailure(false);
     setMessage(null);
-  }, [recoveryGrant]);
+    // The previous link's result must not contradict the revived form. Keep
+    // unrelated notifications and the current attempt's result untouched.
+    if (resultToastId.current) removeToast(resultToastId.current);
+    resultToastId.current = null;
+  }, [recoveryGrant, removeToast]);
 
   const supabaseReady = isSupabaseConfigured();
   /*
@@ -137,7 +143,8 @@ export default function ResetPassword() {
      */
     if (result.uncertain) setUnexpectedFailure(true);
     setMessage({ tone: result.ok ? 'success' : 'error', text: result.message });
-    pushToast({
+    resultToastId.current = pushToast({
+      id: resultToastId.current ?? undefined,
       title: result.ok ? 'Password updated' : 'We could not update that',
       message: result.message,
       tone: result.ok ? 'success' : 'error',
