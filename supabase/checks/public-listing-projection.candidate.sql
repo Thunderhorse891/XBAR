@@ -90,8 +90,11 @@ begin
   select coalesce(jsonb_agg(
     coalesce((select jsonb_object_agg(key, value) from jsonb_each(case when jsonb_typeof(asset) = 'object' then asset else '{}'::jsonb end) where key in ('id', 'label', 'kind', 'url', 'storagePath', 'status') and jsonb_typeof(value) = 'string'), '{}'::jsonb)
     || jsonb_build_object('isPrimary', case when jsonb_typeof(asset -> 'isPrimary') = 'boolean' then asset -> 'isPrimary' else to_jsonb(false) end)
-    order by (asset -> 'isPrimary' = 'true'::jsonb) desc nulls last,
-      (asset -> 'url' = h.payload -> 'profileImage') desc nulls last, position), '[]'::jsonb)
+    order by coalesce(asset -> 'isPrimary' = 'true'::jsonb, false) desc,
+      coalesce(jsonb_typeof(asset -> 'url') = 'string'
+        and jsonb_typeof(h.payload -> 'profileImage') = 'string'
+        and asset ->> 'url' <> ''
+        and asset ->> 'url' = h.payload ->> 'profileImage', false) desc, position), '[]'::jsonb)
   into gallery_payload
   from public.horses h
   cross join lateral jsonb_array_elements(case when jsonb_typeof(h.payload -> 'gallery') = 'array'

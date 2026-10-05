@@ -18,7 +18,7 @@ insert into public.shared_listings(workspace_id,listing_id,horse_id,share_path,s
 );
 
 do $$
-declare result jsonb; fixed boolean := current_setting('xbar.fixture_fixed')='1';
+declare result jsonb; broken_first text; fixed boolean := current_setting('xbar.fixture_fixed')='1';
 begin
  set local role anon;
  result := public.xbar_resolve_public_listing('synthetic-projection','synthetic-token');
@@ -61,6 +61,22 @@ begin
   update public.horses set payload=payload||'{"profileImage":"https://example.invalid/selected.jpg","gallery":[{"id":"older","kind":"Hero","status":"Approved","url":"https://example.invalid/older.jpg"},{"id":"selected","kind":"Conformation","status":"Approved","url":"https://example.invalid/selected.jpg"}]}' where horse_id='horse-projection';
   result := public.xbar_resolve_public_listing('synthetic-projection',null);
   if result #>> '{horse,gallery,0,id}' <> 'selected' or result #>> '{horse,profileImage}' <> 'https://example.invalid/selected.jpg' then raise exception 'Legacy URL-based primary selection regressed'; end if;
+  -- Reproduce the pre-correction false-vs-absent ordering under real PostgreSQL.
+  select asset ->> 'id' into broken_first
+  from jsonb_array_elements('[{"id":"older","isPrimary":false},{"id":"selected"}]'::jsonb) with ordinality photo(asset, position)
+  order by (asset -> 'isPrimary' = 'true'::jsonb) desc nulls last, position limit 1;
+  if broken_first <> 'older' then raise exception 'Expected false-vs-absent ranking trigger changed'; end if;
+  update public.horses set payload=payload||'{"profileImage":"https://example.invalid/selected.jpg","gallery":[{"id":"older","kind":"Hero","status":"Approved","url":"https://example.invalid/older.jpg","isPrimary":false},{"id":"selected","kind":"Hero","status":"Approved","url":"https://example.invalid/selected.jpg"}]}' where horse_id='horse-projection';
+  result := public.xbar_resolve_public_listing('synthetic-projection',null);
+  if result #>> '{horse,gallery,0,id}' <> 'selected' then raise exception 'Explicit false incorrectly outranks missing primary flag'; end if;
+  -- Without a selection, preserve source order across absent, null and empty URLs.
+  update public.horses set payload=payload||'{"profileImage":null,"gallery":[{"id":"first-storage","kind":"Hero","status":"Approved","storagePath":"10000000-0000-4000-8000-000000000051/horses/horse-projection/media-first.jpg"},{"id":"null-url","kind":"Hero","status":"Approved","url":null,"isPrimary":false},{"id":"older-url","kind":"Hero","status":"Approved","url":"https://example.invalid/older.jpg"}]}' where horse_id='horse-projection';
+  result := public.xbar_resolve_public_listing('synthetic-projection',null);
+  if result #>> '{horse,gallery,0,id}' <> 'first-storage' then raise exception 'Null metadata reordered an unselected gallery'; end if;
+  update public.horses set payload=jsonb_set(payload,'{profileImage}','""') where horse_id='horse-projection';
+  result := public.xbar_resolve_public_listing('synthetic-projection',null);
+  if result #>> '{horse,gallery,0,id}' <> 'first-storage' then raise exception 'Empty profile selection reordered gallery'; end if;
+
 
  end if;
 end;

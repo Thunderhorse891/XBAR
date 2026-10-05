@@ -92,6 +92,6 @@ test('projected primary-first media remains compatible with the actual buyer pic
     module.exports.primaryHorseMedia({ profileImage: '', gallery: [selected, older] }).storagePath,
     selected.storagePath,
   );
-  assert.match(candidate, /order by \(asset -> 'isPrimary' = 'true'::jsonb\) desc nulls last/);
-  assert.match(candidate, /\(asset -> 'url' = h\.payload -> 'profileImage'\) desc nulls last, position/);
+  assert.match(candidate, /order by coalesce\(asset -> 'isPrimary' = 'true'::jsonb, false\) desc/);
+  assert.match(candidate, /and asset ->> 'url' <> ''/);
 });
