@@ -1,3 +1,4 @@
+import { ASSET_CATEGORIES, HORSE_SEGMENTS } from '@/lib/recordOptions';
 import { documentIntakeDisclosure } from '@/features/documents/constants';
 import type { ReactNode } from 'react';
 import { useRef, useState } from 'react';
@@ -153,7 +154,6 @@ function isCreateKey(value: string): value is CreateKey {
   return (drawerActions as string[]).includes(value);
 }
 
-const SEGMENT_OPTIONS: HorseSegment[] = ['Sale Prospect', 'Broodmare', 'Stud', 'Show String', 'Young Stock', 'Retired'];
 const SEX_OPTIONS: HorseSex[] = ['Mare', 'Stud', 'Gelding', 'Filly', 'Colt'];
 const SEGMENT_STATUS: Record<HorseSegment, HorseStatus> = {
   'Sale Prospect': 'Sale Prep',
@@ -184,7 +184,7 @@ const MEDICAL_EVENT_TYPES: MedicalEventType[] = [
   'Treatment',
   'Historical note',
 ];
-const ASSET_CATEGORIES: AssetCategory[] = ['Tack', 'Equipment', 'Medical Kit', 'Feed & Supply', 'Transport'];
+
 const LEAD_CHANNELS: SalesLead['channel'][] = ['Site Inquiry', 'Referral', 'Facebook', 'Instagram'];
 const DOCUMENT_ACCEPT = '.pdf,.png,.jpg,.jpeg,.webp,.heic';
 
@@ -455,7 +455,10 @@ export function GlobalCreateDrawer() {
       category: (f.type as AssetCategory) ?? 'Equipment',
       location: (f.loc ?? '').trim() || defaultBarn,
     });
-    finish(result.ok ? { ok: true, message: `${name} added to ranch assets` } : result, '/assets');
+    finish(
+      result.ok ? { ok: true, message: `${name} added to ranch assets` } : result,
+      result.ok ? `/assets?asset=${encodeURIComponent(result.id ?? '')}` : undefined,
+    );
   };
 
   const horsePicker = <Pick label="Horse" value={selectedHorseId} onChange={set('horseId')} options={horseOptions} />;
@@ -497,7 +500,7 @@ export function GlobalCreateDrawer() {
             label="Segment"
             value={f.segment ?? 'Sale Prospect'}
             onChange={set('segment')}
-            options={SEGMENT_OPTIONS}
+            options={HORSE_SEGMENTS}
           />
           <Pick label="Sex" value={f.sex ?? 'Mare'} onChange={set('sex')} options={SEX_OPTIONS} />
           <Text

@@ -1,8 +1,10 @@
 import { useMemo } from 'react';
+import { useNavigate, useSearchParams } from 'react-router-dom';
+import { ASSET_CATEGORIES } from '@/lib/recordOptions';
 import { Plus, Wrench } from 'lucide-react';
 import { ActionButton, Card, PageHead, StatusChip } from '@/components/saas';
 import { useUiStore } from '@/store/useUiStore';
-import { useXbarStore } from '@/store/useXbarStore';
+import { useCurrentRoleCapability, useXbarStore } from '@/store/useXbarStore';
 import type { AssetCondition } from '@/types/xbar';
 
 type Tone = 'success' | 'warning' | 'danger' | 'info' | 'neutral';
@@ -14,14 +16,22 @@ const CONDITION_TONE: Record<AssetCondition, Tone> = {
 
 export default function Equipment() {
   const pushToast = useUiStore((s) => s.pushToast);
-  const assets = useXbarStore((s) => s.ranchAssets);
-  const addRanchAsset = useXbarStore((s) => s.addRanchAsset);
+  const allAssets = useXbarStore((s) => s.ranchAssets);
+  const openQuickCreate = useUiStore((s) => s.openQuickCreate);
+  const canManage = useCurrentRoleCapability('manageAssets');
+  const navigate = useNavigate();
+  const [params, setParams] = useSearchParams();
+  const category = ASSET_CATEGORIES.find((item) => item === params.get('category')) ?? 'Equipment';
+  const assets = useMemo(() => allAssets.filter((asset) => asset.category === category), [allAssets, category]);
   const updateAsset = useXbarStore((s) => s.updateAsset);
-  const toast = (m: string) => pushToast({ title: 'Equipment', message: m, tone: 'success' });
 
   const markRepaired = (assetId: string, name: string, location: string) => {
     const result = updateAsset(assetId, { condition: 'Excellent', status: 'Available', location });
-    toast(result.ok ? `${name} marked repaired — condition set to Excellent` : result.message);
+    pushToast({
+      title: result.ok ? 'Equipment updated' : 'Update blocked',
+      message: result.ok ? `${name} marked repaired — condition set to Excellent` : result.message,
+      tone: result.ok ? 'success' : 'error',
+    });
   };
 
   const counts = useMemo(
@@ -33,10 +43,7 @@ export default function Equipment() {
     [assets],
   );
 
-  const addEquipment = () => {
-    const result = addRanchAsset({ name: 'New equipment', category: 'Equipment', location: 'Main Barn' });
-    toast(result.ok ? 'Equipment added — open it to add details' : result.message);
-  };
+  const addEquipment = () => openQuickCreate({ action: 'Add Equipment' });
 
   return (
     <>
@@ -46,24 +53,40 @@ export default function Equipment() {
         subtitle="Trucks, trailers, tractors, gates, troughs, and tools — status, service, and open work orders."
         actions={
           <>
-            <ActionButton variant="primary" icon={<Plus size={15} />} onClick={addEquipment}>
+            <ActionButton variant="primary" icon={<Plus size={15} />} onClick={addEquipment} disabled={!canManage}>
               Add Equipment
             </ActionButton>
           </>
         }
       />
 
+      <label className="field-stack" style={{ marginBottom: 16 }}>
+        <span className="field-label">Asset category</span>
+        <select
+          className="field-input"
+          value={category}
+          onChange={(event) => {
+            const next = new URLSearchParams(params);
+            next.set('category', event.target.value);
+            setParams(next);
+          }}
+        >
+          {ASSET_CATEGORIES.map((item) => (
+            <option key={item}>{item}</option>
+          ))}
+        </select>
+      </label>
       {assets.length === 0 ? (
         <Card>
           <div className="xs-empty">
             <span className="xs-empty__icon">
               <Wrench size={26} />
             </span>
-            <div className="xs-empty__title">No equipment tracked yet</div>
+            <div className="xs-empty__title">No {category.toLowerCase()} tracked yet</div>
             <div className="xs-empty__sub">
               Add trailers, trucks, tractors, tack, and tools to track condition, service schedules, and work orders.
             </div>
-            <ActionButton variant="primary" icon={<Plus size={15} />} onClick={addEquipment}>
+            <ActionButton variant="primary" icon={<Plus size={15} />} onClick={addEquipment} disabled={!canManage}>
               Add equipment
             </ActionButton>
           </div>
@@ -117,7 +140,10 @@ export default function Equipment() {
                   <StatusChip tone={CONDITION_TONE[e.condition]}>{e.condition}</StatusChip>
                 </div>
                 <div className="xs-toolbar" style={{ marginTop: 12 }}>
-                  {e.condition !== 'Excellent' ? (
+                  <ActionButton size="sm" onClick={() => navigate(`/assets?asset=${encodeURIComponent(e.id)}`)}>
+                    Open details
+                  </ActionButton>
+                  {canManage && e.condition !== 'Excellent' ? (
                     <ActionButton size="sm" onClick={() => markRepaired(e.id, e.name, e.location)}>
                       Mark Repaired
                     </ActionButton>
