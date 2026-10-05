@@ -22,7 +22,7 @@ item, so a drawer never captures a disappearing menu item as its return target.
 
 Browser tests exercise direct and quick-create openers, autofocus, both tab
 boundaries, attempted background focus, background accessibility hiding, Escape,
-Cancel, Close and repeated opening. These are synthetic local-workspace tests;
+Cancel, Close, outside dismissal and repeated opening. These are synthetic local-workspace tests;
 they do not write real customer data.
 
 ## Verification limits
@@ -39,3 +39,10 @@ the command. The existing cloud browser also blocked the local URL with
 screenshot evidence is claimed. CI must pass the added browser tests before
 release. Table-row keyboard controls belong to the coordinated Health/Breeding
 workstreams; this change alone does not close all of audit 33.
+
+The first CI browser run passed 162 tests, including quick-create focus return,
+but exposed an overly specific test assumption that `#root` itself receives
+`aria-hidden`. Radix preserves live-region ancestors and hides background
+controls beneath them. The test now checks the user-visible guarantee: the
+background opener is absent from the accessible role tree while the modal is
+open and returns after dismissal, alongside the existing focus-rejection test.

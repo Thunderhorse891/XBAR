@@ -22,7 +22,9 @@ test('drawer keeps keyboard focus inside, hides the background, and restores its
   await expect.poll(() => drawer.evaluate((el) => el.contains(document.activeElement))).toBe(true);
   await opener.focus();
   await expect.poll(() => drawer.evaluate((el) => el.contains(document.activeElement))).toBe(true);
-  await expect(page.locator('#root')).toHaveAttribute('aria-hidden', 'true');
+  // Live regions can keep #root exposed; the actual background controls
+  // must be absent from the accessibility tree.
+  await expect(page.getByRole('button', { name: 'Move Horse', exact: true })).toHaveCount(0);
   const first = drawer.getByRole('button', { name: 'Close', exact: true });
   await first.focus();
   await page.keyboard.press('Shift+Tab');
@@ -32,12 +34,18 @@ test('drawer keeps keyboard focus inside, hides the background, and restores its
   await page.keyboard.press('Escape');
   await expect(drawer).not.toBeVisible();
   await expect(opener).toBeFocused();
-  await expect(page.locator('#root')).not.toHaveAttribute('aria-hidden', 'true');
+  await expect(page.getByRole('button', { name: 'Move Horse', exact: true })).toBeVisible();
   await opener.press('Enter');
   await expect(drawer).toBeVisible();
   await drawer.getByRole('button', { name: 'Cancel', exact: true }).click();
   await expect(drawer).not.toBeVisible();
   await expect(opener).toBeFocused();
+  await opener.click();
+  await expect(drawer).toBeVisible();
+  await page.locator('.xs-overlay').click({ position: { x: 8, y: 8 } });
+  await expect(drawer).not.toBeVisible();
+  await expect(opener).toBeFocused();
+  await expect(page).toHaveURL(/\/app\/pastures$/);
 });
 
 test('quick-create drawer returns focus to the persistent Create button', async ({ page }) => {
