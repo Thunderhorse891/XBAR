@@ -57,11 +57,17 @@ URL helper as the other API clients. Web builds still use same-origin requests
 when no API override is configured. Existing telemetry API-fallback preferences
 are preserved; supplying the native API origin does not enable that fallback.
 
-**This only fixes client routing.** Current main's API CORS policy does not yet
-allow the bundled native origin, so actual WebView API calls remain a release
-blocker until separately reviewed server support is implemented and tested.
-Synthetic URL tests do not establish live connectivity, native account deletion,
-physical-device acceptance or App Store readiness. The native Xcode project is
+The API permits the exact bundled iOS origin `capacitor://localhost` and the
+existing configured HTTP(S) web origins. Welcome requests now answer preflight
+before authentication or email work. This is transport permission only: bearer
+tokens, endpoint authentication, workspace permissions and rate limits still
+apply. Wildcards, `Origin: null` and lookalike native origins are not permitted;
+credentialed cookie sharing is not enabled. Custom native schemes require a
+separate reviewed configuration change.
+
+**Synthetic transport tests are not physical-device acceptance.** Validate
+real sign-in, server requests and safe account deletion on an authorized test
+account in the actual WKWebView before distribution. The native Xcode project is
 still not checked into main; held readiness PR #265 is not part of this fix.
 
 ## Steps that require a Mac + Xcode
