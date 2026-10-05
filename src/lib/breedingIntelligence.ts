@@ -158,13 +158,15 @@ export function buildCheckpoints(bredOn: Date, now: Date): BreedingCheckpoint[] 
   });
 }
 
+function eventDay(event: TimelineEvent): number {
+  return toDate(event.date)?.getTime() ?? Number.NEGATIVE_INFINITY;
+}
+
 function latestByRecordType(
   events: TimelineEvent[],
   recordType: BreedingRecordDetails['recordType'],
 ): TimelineEvent | undefined {
-  return events
-    .filter((event) => resolveRecordType(event) === recordType)
-    .sort((a, b) => (a.date === b.date ? 0 : a.date < b.date ? 1 : -1))[0];
+  return events.filter((event) => resolveRecordType(event) === recordType).sort((a, b) => eventDay(b) - eventDay(a))[0];
 }
 
 // A date-only boundary must also respect newest-first insertion order. Earlier
@@ -172,7 +174,8 @@ function latestByRecordType(
 function eventsAfter(events: TimelineEvent[], boundary: TimelineEvent): TimelineEvent[] {
   const boundaryOrder = events.indexOf(boundary);
   return events.filter(
-    (event, order) => event.date > boundary.date || (event.date === boundary.date && order < boundaryOrder),
+    (event, order) =>
+      eventDay(event) > eventDay(boundary) || (eventDay(event) === eventDay(boundary) && order < boundaryOrder),
   );
 }
 
@@ -205,7 +208,7 @@ const POSITIVE_WORDING =
 const CLAUSE_NEGATION = /\b(?:no|not|without|never|isn'?t|wasn'?t|yet to be)\b/;
 // Free-text questions and uncertainty cannot establish a pregnancy outcome.
 const UNCERTAIN_WORDING =
-  /\?|\b(?:possibly|possible|maybe|uncertain|unclear|unconfirmed|inconclusive|equivocal|suspected|suspect|cannot|can't|could not|unable to|indeterminate)\b/;
+  /\?|\b(?:possibly|possible|maybe|likely|probably|probable|presumed|apparently|apparent|tentative|anticipated|anticipating|may be|might|could|should|would|not sure|uncertain|unclear|unconfirmed|inconclusive|equivocal|suspected|suspect|cannot|can't|could not|unable to|indeterminate)\b/;
 const CLAUSE_BREAK = /[.;,:!?\n\u2013\u2014]|\s-\s/;
 
 export function pregnancyCheckOutcome(event: TimelineEvent): PregnancyCheckOutcome {
@@ -219,7 +222,12 @@ export function pregnancyCheckOutcome(event: TimelineEvent): PregnancyCheckOutco
   // An OCR or imported result is still the most specific text there is.
   const text = (structured || `${event.status ?? ''} ${event.title} ${event.summary}`).toLowerCase();
   if (UNCERTAIN_WORDING.test(text)) return 'unknown';
-  const negative = NEGATIVE_WORDING.test(text);
+  // Negating an open/negative description does not prove the opposite either.
+  const negative = [...text.matchAll(new RegExp(NEGATIVE_WORDING.source, 'g'))].some((match) => {
+    if (/^not/.test(match[0])) return true;
+    const before = text.slice(0, match.index).split(CLAUSE_BREAK).pop() ?? '';
+    return !CLAUSE_NEGATION.test(before);
+  });
   let positive = false;
   for (const match of text.matchAll(POSITIVE_WORDING)) {
     const before = text.slice(0, match.index).split(CLAUSE_BREAK).pop() ?? '';
@@ -248,8 +256,13 @@ export function pregnancyCheckOutcome(event: TimelineEvent): PregnancyCheckOutco
 export function currentPregnancyOutcome(events: TimelineEvent[], afterISO: string): PregnancyCheckOutcome {
   const checks = events
     .map((event, order) => ({ event, order }))
-    .filter(({ event }) => resolveRecordType(event) === 'pregnancy-check' && event.date >= afterISO)
-    .sort((a, b) => (a.event.date === b.event.date ? a.order - b.order : a.event.date < b.event.date ? 1 : -1));
+    .filter(
+      ({ event }) =>
+        resolveRecordType(event) === 'pregnancy-check' &&
+        Number.isFinite(eventDay(event)) &&
+        eventDay(event) >= (toDate(afterISO)?.getTime() ?? Number.NEGATIVE_INFINITY),
+    )
+    .sort((a, b) => eventDay(b.event) - eventDay(a.event) || a.order - b.order);
   for (const { event } of checks) {
     const result: unknown = breedingDetails(event)?.result;
     if (typeof result === 'string' && result.trim().toLowerCase() === 'pending') continue;
@@ -264,13 +277,19 @@ export function foalingOutcome(event: TimelineEvent): 'live' | 'loss' | 'unknown
   const structured = typeof raw === 'string' ? raw.trim().toLowerCase() : '';
   if (structured === 'live' || structured === 'loss' || structured === 'unknown') return structured;
   const text = outcomeText(event);
-  if (/\bunknown\b|unconfirmed|not recorded|pending|scheduled|planned|expected|\?/.test(text)) return 'unknown';
-  if (/\b(?:foal|colt|filly)\s+(?:is\s+|was\s+)?not alive\b|\bno live (?:foal|colt|filly)\b/.test(text)) return 'loss';
+  if (
+    UNCERTAIN_WORDING.test(text) ||
+    /\bunknown\b|unconfirmed|not recorded|pending|scheduled|planned|expected/.test(text)
+  )
+    return 'unknown';
+  let loss = false;
+  let live = false;
+  if (/\b(?:foal|colt|filly)\s+(?:is\s+|was\s+)?not alive\b|\bno live (?:foal|colt|filly)\b/.test(text)) loss = true;
   for (const match of text.matchAll(/\bloss\b|stillborn|still.?birth|\bdead\b|\bdied\b|abort|slipped/g)) {
     const before = text.slice(0, match.index);
     if (/\b(?:no(?: signs of| evidence of)?(?: foaling)?|not(?: a)?(?: foaling)?|without(?: any)?)\s+$/.test(before))
       continue;
-    return 'loss';
+    loss = true;
   }
   // A healthy mare is not evidence about the foal; negated statements are not positive outcomes.
   const liveWording =
@@ -278,9 +297,9 @@ export function foalingOutcome(event: TimelineEvent): 'live' | 'loss' | 'unknown
   for (const match of text.matchAll(liveWording)) {
     const before = text.slice(0, match.index).split(CLAUSE_BREAK).pop() ?? '';
     const after = text.slice((match.index ?? 0) + match[0].length).split(CLAUSE_BREAK)[0] ?? '';
-    if (!CLAUSE_NEGATION.test(before) && !CLAUSE_NEGATION.test(after)) return 'live';
+    if (!CLAUSE_NEGATION.test(before) && !CLAUSE_NEGATION.test(after)) live = true;
   }
-  return 'unknown';
+  return live && loss ? 'unknown' : loss ? 'loss' : live ? 'live' : 'unknown';
 }
 
 export function chronologicalBreedingEvents(events: TimelineEvent[], now = new Date()): TimelineEvent[] {
@@ -338,7 +357,7 @@ export function buildMareBreedingState(horse: HorseRecord, now: Date = new Date(
     horseName: horse.name,
     mateName: breedingDetail?.mateName,
     method: breedingDetail?.method,
-    bredOn: breeding?.date,
+    bredOn: bredOn ? isoDate(bredOn) : undefined,
     projectedFoalValue,
     projectedFoalMargin,
     overdueCheckpoints: [] as BreedingCheckpoint[],
@@ -362,8 +381,8 @@ export function buildMareBreedingState(horse: HorseRecord, now: Date = new Date(
   const completedCycle =
     foaling &&
     (!breeding ||
-      foaling.date > breeding.date ||
-      (foaling.date === breeding.date && events.indexOf(foaling) < events.indexOf(breeding)));
+      eventDay(foaling) > eventDay(breeding) ||
+      (eventDay(foaling) === eventDay(breeding) && events.indexOf(foaling) < events.indexOf(breeding)));
 
   if (!breeding || !bredOn || completedCycle) {
     // A mare can arrive already in foal: a positive check with no cover on file
@@ -452,7 +471,7 @@ export function buildMareBreedingState(horse: HorseRecord, now: Date = new Date(
   // day-15 ultrasound — so those should not be surfaced as overdue.
   const latestCheckDay = currentCycleEvents.reduce((latest, event) => {
     if (resolveRecordType(event) !== 'pregnancy-check') return latest;
-    const day = Math.floor((new Date(event.date).getTime() - bredOn.getTime()) / DAY_MS);
+    const day = Math.floor((eventDay(event) - bredOn.getTime()) / DAY_MS);
     return day >= 0 ? Math.max(latest, day) : latest;
   }, -1);
   const overdueCheckpoints = checkpoints.filter((checkpoint) => {

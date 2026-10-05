@@ -67,3 +67,103 @@ test('legacy foaling wording describes the foal, not the mare or a negated outco
     assert.equal(foalingOutcome(record), expected, summary);
   }
 });
+
+test('same written-day cycles use insertion order across date representations', () => {
+  for (const coverDate of ['2026-05-01', '2026-05-01T23:00:00-07:00']) {
+    for (const checkDate of ['2026-05-01', '2026-05-01T00:00:00Z']) {
+      const cover = event('cover', coverDate, 'breeding');
+      const check = event('old-check', checkDate, 'pregnancy-check', 'in-foal');
+      assert.equal(buildMareBreedingState(mare([cover, check]), now).status, 'bred-awaiting-check');
+      assert.equal(buildMareBreedingState(mare([check, cover]), now).status, 'in-foal');
+      const birth = event('birth', checkDate, 'foaling', 'live');
+      assert.equal(buildMareBreedingState(mare([cover, birth]), now).status, 'bred-awaiting-check');
+      assert.equal(buildMareBreedingState(mare([birth, cover]), now).status, 'foaled-live');
+    }
+  }
+});
+
+test('uncertain and contradictory legacy outcomes cannot establish guarantees or pregnancy', async () => {
+  const { foalingOutcome, pregnancyCheckOutcome } = await import('../src/lib/breedingIntelligence.js');
+  for (const summary of [
+    'Possible live foal',
+    'Foal alive or dead unclear',
+    'Live foal; stillborn',
+    'Suspected loss',
+    'Maybe healthy colt',
+    'Foal alive; foal died',
+  ]) {
+    const record = { ...event('birth', '2026-04-01', 'foaling'), summary };
+    assert.equal(foalingOutcome(record), 'unknown', summary);
+    assert.equal(buildMareBreedingState(mare([record]), now).guarantee, 'none', summary);
+  }
+  for (const summary of ['Not open', 'Not negative', 'Not barren', 'Never empty']) {
+    assert.equal(
+      pregnancyCheckOutcome({ ...event('check', '2026-05-01', 'pregnancy-check'), summary }),
+      'unknown',
+      summary,
+    );
+  }
+});
+
+test('checkpoint days and latest checks share the normalized written calendar day', async () => {
+  const { currentPregnancyOutcome } = await import('../src/lib/breedingIntelligence.js');
+  assert.equal(
+    currentPregnancyOutcome(
+      [
+        event('new-open', '2026-05-16', 'pregnancy-check', 'open'),
+        event('older-positive', '2026-05-16T23:00:00-07:00', 'pregnancy-check', 'in-foal'),
+      ],
+      '2026-05-01',
+    ),
+    'negative',
+  );
+  for (const date of ['2026-05-16', '2026-05-16T00:00:00+14:00', '2026-05-16T23:00:00-07:00']) {
+    const state = buildMareBreedingState(
+      mare([
+        event('check', date, 'pregnancy-check', 'in-foal'),
+        event('cover', '2026-05-01T23:00:00-07:00', 'breeding'),
+      ]),
+      new Date('2026-05-20T12:00:00Z'),
+    );
+    assert.equal(state.bredOn, '2026-05-01');
+    assert.equal(
+      state.overdueCheckpoints.some((check) => check.dayOffset === 15),
+      false,
+      date,
+    );
+  }
+});
+
+test('modal and anticipated wording stays uncertain across both outcome classifiers', async () => {
+  const { foalingOutcome, pregnancyCheckOutcome } = await import('../src/lib/breedingIntelligence.js');
+  for (const prefix of ['Likely', 'Probably', 'Possibly', 'Suspected', 'Presumed', 'Apparently', 'Tentative']) {
+    assert.equal(
+      foalingOutcome({ ...event('birth', '2026-04-01', 'foaling'), summary: `${prefix} live foal` }),
+      'unknown',
+      prefix,
+    );
+    assert.equal(
+      pregnancyCheckOutcome({ ...event('check', '2026-04-01', 'pregnancy-check'), summary: `${prefix} in foal` }),
+      'unknown',
+      prefix,
+    );
+  }
+  for (const summary of [
+    'Might be pregnant',
+    'May be open',
+    'Could be pregnant',
+    'Should be pregnant',
+    'Would be pregnant',
+    'Not sure she is open',
+  ]) {
+    assert.equal(
+      pregnancyCheckOutcome({ ...event('check', '2026-04-01', 'pregnancy-check'), summary }),
+      'unknown',
+      summary,
+    );
+  }
+  assert.equal(
+    foalingOutcome({ ...event('birth', '2026-04-01', 'foaling'), summary: 'Live foal anticipated' }),
+    'unknown',
+  );
+});
