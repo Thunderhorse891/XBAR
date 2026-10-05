@@ -236,6 +236,8 @@ export interface BreedingRecordDetails {
 }
 
 export interface TimelineEvent {
+  /** Absent on legacy records: completion is unconfirmed. */
+  completionState?: 'planned' | 'completed';
   id: string;
   date: string;
   title: string;

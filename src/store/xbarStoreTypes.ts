@@ -170,7 +170,11 @@ export type XbarStore = {
   addHorseNote: (horseId: string, note: Pick<HorseNote, 'title' | 'body' | 'author' | 'tone'>) => ActionResult;
   addMedicalEvent: (
     horseId: string,
-    event: Pick<HorseNote, 'title' | 'body' | 'author'> & { date: string; type: MedicalEventType },
+    event: Pick<HorseNote, 'title' | 'body' | 'author'> & {
+      date: string;
+      type: MedicalEventType;
+      completionState?: 'planned' | 'completed';
+    },
   ) => ActionResult;
   addBreedingEvent: (
     horseId: string,
@@ -193,7 +197,7 @@ export type XbarStore = {
   updateMedicalEvent: (
     horseId: string,
     eventId: string,
-    patch: Partial<Pick<TimelineEvent, 'title' | 'summary' | 'date' | 'status'>>,
+    patch: Partial<Pick<TimelineEvent, 'title' | 'summary' | 'date' | 'status' | 'completionState'>>,
   ) => ActionResult;
   deleteMedicalEvent: (horseId: string, eventId: string) => ActionResult;
   updateOwnershipRecord: (
