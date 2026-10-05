@@ -48,3 +48,50 @@ test('runtime harness is isolated and executes the historical trigger, correctio
   assert.match(fixture, /PRIVATE_SENTINEL/);
   assert.match(fixture, /rollback;/);
 });
+
+test('projected primary-first media remains compatible with the actual buyer picker', async () => {
+  const { build } = await import('esbuild');
+  const { createRequire } = await import('node:module');
+  const compiled = await build({
+    entryPoints: ['src/lib/horseMedia.ts'],
+    bundle: true,
+    write: false,
+    format: 'cjs',
+    platform: 'node',
+    plugins: [
+      {
+        name: 'config',
+        setup(b) {
+          b.onResolve({ filter: /platformConfig\.js$/ }, () => ({ path: 'config', namespace: 'fixture' }));
+          b.onLoad({ filter: /.*/, namespace: 'fixture' }, () => ({
+            contents: 'export const apiConfig={baseUrl:""};',
+          }));
+        },
+      },
+    ],
+  });
+  const module = { exports: {} };
+  new Function('require', 'module', 'exports', compiled.outputFiles[0].text)(
+    createRequire(import.meta.url),
+    module,
+    module.exports,
+  );
+  const selected = {
+    id: 'selected',
+    status: 'Approved',
+    kind: 'Conformation',
+    storagePath: 'synthetic/media-selected.jpg',
+    isPrimary: true,
+  };
+  const older = { id: 'older', status: 'Approved', kind: 'Hero', url: 'https://example.invalid/older.jpg' };
+  assert.notEqual(
+    module.exports.primaryHorseMedia({ profileImage: '', gallery: [older, selected] }).storagePath,
+    selected.storagePath,
+  );
+  assert.equal(
+    module.exports.primaryHorseMedia({ profileImage: '', gallery: [selected, older] }).storagePath,
+    selected.storagePath,
+  );
+  assert.match(candidate, /order by \(asset -> 'isPrimary' = 'true'::jsonb\) desc nulls last/);
+  assert.match(candidate, /\(asset -> 'url' = h\.payload -> 'profileImage'\) desc nulls last, position/);
+});

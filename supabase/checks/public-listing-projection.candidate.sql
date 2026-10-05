@@ -89,18 +89,20 @@ begin
   -- Approval and real-photo kind are both required, including storage-only photos.
   select coalesce(jsonb_agg(
     coalesce((select jsonb_object_agg(key, value) from jsonb_each(case when jsonb_typeof(asset) = 'object' then asset else '{}'::jsonb end) where key in ('id', 'label', 'kind', 'url', 'storagePath', 'status') and jsonb_typeof(value) = 'string'), '{}'::jsonb)
-    || jsonb_build_object('isPrimary', case when jsonb_typeof(asset -> 'isPrimary') = 'boolean' then asset -> 'isPrimary' else to_jsonb(false) end), '[]'::jsonb)
+    || jsonb_build_object('isPrimary', case when jsonb_typeof(asset -> 'isPrimary') = 'boolean' then asset -> 'isPrimary' else to_jsonb(false) end)
+    order by (asset -> 'isPrimary' = 'true'::jsonb) desc nulls last,
+      (asset -> 'url' = h.payload -> 'profileImage') desc nulls last, position), '[]'::jsonb)
   into gallery_payload
   from public.horses h
   cross join lateral jsonb_array_elements(case when jsonb_typeof(h.payload -> 'gallery') = 'array'
-    then h.payload -> 'gallery' else '[]'::jsonb end) asset
+    then h.payload -> 'gallery' else '[]'::jsonb end) with ordinality photo(asset, position)
   where h.workspace_id = listing_row.workspace_id and h.horse_id = listing_row.horse_id
     and asset ->> 'status' = 'Approved'
     and asset ->> 'kind' in ('Hero', 'Conformation', 'Sale Still');
 
   horse_payload := horse_payload || jsonb_build_object('gallery', gallery_payload, 'profileImage',
     coalesce((select asset ->> 'url' from jsonb_array_elements(gallery_payload) with ordinality photo(asset, position)
-      order by (asset ->> 'isPrimary' = 'true') desc, position limit 1), ''));
+      order by position limit 1), ''));
 
   select jsonb_build_object(
     'id', ownership_record_id, 'horseId', horse_id,

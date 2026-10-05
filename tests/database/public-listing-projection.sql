@@ -55,6 +55,13 @@ begin
   update public.horses set payload=jsonb_set(payload,'{gallery}','[{"id":"storage-only","kind":"Conformation","status":"Approved","storagePath":"10000000-0000-4000-8000-000000000051/horses/horse-projection/media-only.jpg"}]') where horse_id='horse-projection';
   result := public.xbar_resolve_public_listing('synthetic-projection',null);
   if result #>> '{horse,gallery,0,storagePath}' not like '%/media-only.jpg' then raise exception 'Storage-only photo lost'; end if;
+  update public.horses set payload=jsonb_set(payload,'{gallery}','[{"id":"older","kind":"Hero","status":"Approved","url":"https://example.invalid/older.jpg"},{"id":"selected","kind":"Conformation","status":"Approved","storagePath":"10000000-0000-4000-8000-000000000051/horses/horse-projection/media-selected.jpg","isPrimary":true}]') where horse_id='horse-projection';
+  result := public.xbar_resolve_public_listing('synthetic-projection',null);
+  if result #>> '{horse,gallery,0,id}' <> 'selected' or result #>> '{horse,profileImage}' <> '' then raise exception 'Selected storage-only primary is hidden behind older URL photo'; end if;
+  update public.horses set payload=payload||'{"profileImage":"https://example.invalid/selected.jpg","gallery":[{"id":"older","kind":"Hero","status":"Approved","url":"https://example.invalid/older.jpg"},{"id":"selected","kind":"Conformation","status":"Approved","url":"https://example.invalid/selected.jpg"}]}' where horse_id='horse-projection';
+  result := public.xbar_resolve_public_listing('synthetic-projection',null);
+  if result #>> '{horse,gallery,0,id}' <> 'selected' or result #>> '{horse,profileImage}' <> 'https://example.invalid/selected.jpg' then raise exception 'Legacy URL-based primary selection regressed'; end if;
+
  end if;
 end;
 $$;
