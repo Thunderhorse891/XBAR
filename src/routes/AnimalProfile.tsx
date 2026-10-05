@@ -1,3 +1,5 @@
+import { HorseDocuments } from '@/components/HorseDocuments';
+import { HorsePhotoGallery } from '@/components/HorsePhotoGallery';
 import { horseAgeLabel } from '@/lib/horseDocumentActions';
 import { useMemo, useRef, useState } from 'react';
 import type { CSSProperties } from 'react';
@@ -359,6 +361,8 @@ export default function AnimalProfile() {
         </div>
       </div>
 
+      <HorsePhotoGallery key={animal.id} horse={animal} onAdd={openPhotoSource} uploading={uploadingPhoto} />
+
       <div className="xs-tabbar">
         {TABS.map((t) => (
           <button
@@ -608,33 +612,38 @@ export default function AnimalProfile() {
       ) : null}
 
       {tab === 'Documents' ? (
-        <Card
-          title="Documents"
-          link="Open documents"
-          onLink={() => navigate(`/documents?stage=Library&horse=${encodeURIComponent(animal.id)}&from=profile`)}
-        >
+        <>
+          <HorseDocuments key={animal.id} horse={animal} />
           {activeDocumentFacts.length ? (
-            <div className="xs-mlist">
-              {activeDocumentFacts.slice(0, 10).map((f) => (
-                <div key={f.id} className="xs-mrow">
-                  <span className="xs-mrow__main">
-                    <span className="xs-mrow__title">{f.label}</span>
-                    <span className="xs-mrow__detail">{f.value}</span>
-                  </span>
-                  <StatusChip
-                    tone={f.decision === 'Accepted' ? 'success' : f.decision === 'Rejected' ? 'danger' : 'warning'}
-                  >
-                    {f.decision ?? 'Review'}
-                  </StatusChip>
+            <Card
+              title="Extracted document facts"
+              link="Open documents"
+              onLink={() => navigate(`/documents?stage=Library&horse=${encodeURIComponent(animal.id)}&from=profile`)}
+            >
+              {activeDocumentFacts.length ? (
+                <div className="xs-mlist">
+                  {activeDocumentFacts.slice(0, 10).map((f) => (
+                    <div key={f.id} className="xs-mrow">
+                      <span className="xs-mrow__main">
+                        <span className="xs-mrow__title">{f.label}</span>
+                        <span className="xs-mrow__detail">{f.value}</span>
+                      </span>
+                      <StatusChip
+                        tone={f.decision === 'Accepted' ? 'success' : f.decision === 'Rejected' ? 'danger' : 'warning'}
+                      >
+                        {f.decision ?? 'Review'}
+                      </StatusChip>
+                    </div>
+                  ))}
                 </div>
-              ))}
-            </div>
-          ) : (
-            <p className="xs-muted" style={{ fontSize: 13, marginTop: 0 }}>
-              No documents linked to this horse yet.
-            </p>
-          )}
-        </Card>
+              ) : (
+                <p className="xs-muted" style={{ fontSize: 13, marginTop: 0 }}>
+                  No documents linked to this horse yet.
+                </p>
+              )}
+            </Card>
+          ) : null}
+        </>
       ) : null}
 
       {tab === 'Ownership' ? (

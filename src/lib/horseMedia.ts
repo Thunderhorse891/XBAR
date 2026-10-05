@@ -25,7 +25,9 @@ export function primaryHorseMedia(
   },
   fallbackPicker?: (gallery: GalleryAsset[]) => GalleryAsset | undefined,
 ): PrimaryHorseMedia {
-  const gallery = horse.gallery ?? [];
+  const gallery = (horse.gallery ?? []).filter((asset) => asset.status !== 'Archived');
+  const primary = gallery.find((asset) => asset.isPrimary === true);
+  if (primary) return { src: primary.url || null, storagePath: primary.storagePath ?? null };
   if (horse.profileImage) {
     const match = gallery.find((asset) => asset.url === horse.profileImage);
     return { src: horse.profileImage, storagePath: match?.storagePath ?? null };

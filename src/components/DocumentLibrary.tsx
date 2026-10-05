@@ -10,12 +10,14 @@ export function DocumentLibrary({
   horses,
   openingDocumentId,
   onOpen,
+  onDownload,
   onReview,
 }: {
   documents: DocumentRecord[];
   horses: HorseRecord[];
   openingDocumentId: string;
   onOpen: (document: DocumentRecord) => void;
+  onDownload?: (document: DocumentRecord) => void;
   onReview: (document: DocumentRecord) => void;
 }) {
   const [archived, setArchived] = useState(false);
@@ -71,7 +73,7 @@ export function DocumentLibrary({
                       {hasStoredFile(document) ? (
                         <button
                           className="button button--ghost button--compact"
-                          disabled={openingDocumentId === document.id}
+                          disabled={Boolean(openingDocumentId)}
                           onClick={() => onOpen(document)}
                         >
                           {openingDocumentId === document.id ? 'Opening...' : 'Open file'}
@@ -79,6 +81,15 @@ export function DocumentLibrary({
                       ) : (
                         <span>No original file attached</span>
                       )}
+                      {onDownload && hasStoredFile(document) ? (
+                        <button
+                          className="button button--ghost button--compact"
+                          disabled={Boolean(openingDocumentId)}
+                          onClick={() => onDownload(document)}
+                        >
+                          Download original
+                        </button>
+                      ) : null}
                       {!archived ? (
                         <button className="button button--ghost button--compact" onClick={() => onReview(document)}>
                           Review

@@ -65,8 +65,12 @@ const HORSE_PHOTO_KINDS: ReadonlySet<GalleryAsset['kind']> = new Set(['Hero', 'C
  * becomes the primary.
  */
 /** A gallery asset that is a real horse photograph (not a pedigree/doc scan) with a resolvable location: a durable URL or a private-bucket storagePath that renders resolve through signed URLs. */
-export function isHorsePhotoAsset(asset: Pick<GalleryAsset, 'kind' | 'url' | 'storagePath'>): boolean {
-  return HORSE_PHOTO_KINDS.has(asset.kind) && (filled(asset.url) || filled(asset.storagePath));
+export function isHorsePhotoAsset(
+  asset: Pick<GalleryAsset, 'kind' | 'url' | 'storagePath'> & Partial<Pick<GalleryAsset, 'status'>>,
+): boolean {
+  return (
+    asset.status !== 'Archived' && HORSE_PHOTO_KINDS.has(asset.kind) && (filled(asset.url) || filled(asset.storagePath))
+  );
 }
 
 export function hasHorsePhoto(horse: Pick<HorseRecord, 'profileImage' | 'gallery'>): boolean {
