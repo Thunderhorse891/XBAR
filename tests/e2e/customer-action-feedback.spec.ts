@@ -110,11 +110,20 @@ async function releaseDeviceAcknowledgment(page: Page) {
 
 test('Back navigation while saving stays on the newer route after acknowledgment', async ({ page }) => {
   const drawer = await setup(page);
+  // Exercise SPA Back/Forward while MainLayout stays mounted. Going back
+  // across setup's page.goto would unload this document and its test controls.
+  await drawer.getByRole('button', { name: 'Cancel', exact: true }).click();
+  await page.getByRole('link', { name: 'Horses', exact: true }).first().click();
+  await expect(page).toHaveURL(/\/horses$/);
+  await page.getByRole('link', { name: 'Equipment', exact: true }).click();
+  await page.getByRole('button', { name: 'Add Equipment', exact: true }).first().click();
   await drawer.getByPlaceholder('e.g. Stock trailer (24ft)').fill('History trailer');
   await delayDeviceAcknowledgment(page);
   await drawer.getByRole('button', { name: 'Add Equipment', exact: true }).click();
   await expect(drawer.getByRole('status')).toContainText('Saving');
   await page.goBack();
+  await expect(page).toHaveURL(/\/horses$/);
+  await expect(drawer).toBeVisible();
   const destination = page.url();
   await releaseDeviceAcknowledgment(page);
   await expect(page.locator('[data-sonner-toast]').filter({ hasText: 'History trailer added' })).toBeVisible();
