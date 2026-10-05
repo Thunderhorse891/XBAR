@@ -38,7 +38,7 @@ begin
  reset role;
  update public.shared_listings set access_mode='Public Link' where listing_id='listing-projection';
  if public.xbar_resolve_public_listing('synthetic-projection',null) is null then raise exception 'Public link requires token'; end if;
- update public.shared_listings set payload=payload-'releaseConfirmedAt' where listing_id='listing-projection';
+ update public.shared_listings set state='Draft', payload=payload-'releaseConfirmedAt' where listing_id='listing-projection';
  if public.xbar_resolve_public_listing('synthetic-projection',null) is not null then raise exception 'Missing release accepted'; end if;
  update public.shared_listings set payload=payload||'{"releaseConfirmedAt":"2026-10-05"}', state='Archived' where listing_id='listing-projection';
  if public.xbar_resolve_public_listing('synthetic-projection',null) is not null then raise exception 'Archived listing accepted'; end if;
