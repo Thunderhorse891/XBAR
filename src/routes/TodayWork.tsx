@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { ArrowRight, CheckCircle2, EyeOff, Plus } from 'lucide-react';
 import { ActionButton, Card, PageHead, SlideOverDrawer, StatusChip } from '@/components/saas';
@@ -17,6 +17,7 @@ import {
   taskIsDeferred,
   writeTaskDeferral,
   restoreTaskDeferrals,
+  type TaskDeferrals,
 } from '@/lib/taskDeferrals';
 import './TodayWork.css';
 
@@ -51,19 +52,20 @@ function TaskBoard({ storageKey }: { storageKey: string }) {
       ),
     [horses, documents, ownershipRecords, expenseReceipts, salesLeads, segment, today],
   );
-  const [deferrals, setDeferrals] = useState(() => {
-    try {
-      return loadTaskDeferrals(window.localStorage, storageKey, allTasks, localIsoDate());
-    } catch {
-      return {};
-    }
-  });
+  const [deferrals, setDeferrals] = useState<TaskDeferrals>({});
+  const [deferralError, setDeferralError] = useState(false);
+  const observedTasks = useRef<{ segment: string | undefined; tasks: CareTask[] }>({ segment, tasks: [] });
   useEffect(() => {
+    const previous = observedTasks.current;
+    // Changing the group is navigation, not evidence that the other group's work ended.
+    const previouslyObserved = previous.segment === segment ? previous.tasks : [];
+    observedTasks.current = { segment, tasks: allTasks };
     const refresh = () => {
       try {
-        setDeferrals(loadTaskDeferrals(window.localStorage, storageKey, allTasks, localIsoDate()));
+        setDeferrals(loadTaskDeferrals(window.localStorage, storageKey, allTasks, localIsoDate(), previouslyObserved));
       } catch {
         setDeferrals({});
+        setDeferralError(true);
       }
     };
     const changed = (event: StorageEvent) => {
@@ -76,7 +78,7 @@ function TaskBoard({ storageKey }: { storageKey: string }) {
       window.removeEventListener('storage', changed);
       window.removeEventListener('focus', refresh);
     };
-  }, [storageKey, allTasks]);
+  }, [storageKey, allTasks, segment]);
   const [openTask, setOpenTask] = useState<CareTask | null>(null);
   // Never keep an obsolete action open after the source record changes.
   const open = allTasks.find((task) => task.id === openTask?.id && task.revision === openTask.revision) ?? null;
@@ -84,8 +86,9 @@ function TaskBoard({ storageKey }: { storageKey: string }) {
     if (openTask && !open) setOpenTask(null);
   }, [openTask, open]);
   const categoryTasks = allTasks.filter((task) => tab === 'All' || task.category === tab);
-  const hiddenTasks = categoryTasks.filter((task) => taskIsDeferred(deferrals, task, today));
-  const filtered = categoryTasks.filter((task) => !taskIsDeferred(deferrals, task, today));
+  const activeDeferrals = deferralError ? {} : deferrals;
+  const hiddenTasks = categoryTasks.filter((task) => taskIsDeferred(activeDeferrals, task, today));
+  const filtered = categoryTasks.filter((task) => !taskIsDeferred(activeDeferrals, task, today));
   const failure = () =>
     pushToast({
       title: 'Task not deferred',
@@ -94,6 +97,10 @@ function TaskBoard({ storageKey }: { storageKey: string }) {
       tone: 'error',
     });
   const defer = (task: CareTask, days: number, kind: 'dismiss' | 'snooze') => {
+    if (deferralError) {
+      failure();
+      return;
+    }
     const currentDay = localIsoDate();
     const until = addTaskDays(currentDay, days);
     let result;
@@ -151,6 +158,14 @@ function TaskBoard({ storageKey }: { storageKey: string }) {
           </ActionButton>
         }
       />
+      {deferralError ? (
+        <Card>
+          <p role="status">
+            Task preferences could not be verified. Due tasks are shown without deferrals in this tab. Check site
+            storage before reloading; older saved deferrals may return if cleanup was not saved.
+          </p>
+        </Card>
+      ) : null}
       {horses.length === 0 && allTasks.length === 0 ? (
         <Card>
           <div className="xs-empty">
@@ -241,6 +256,7 @@ function TaskBoard({ storageKey }: { storageKey: string }) {
                       className="xs-quickbtn"
                       title="Dismiss today on this browser"
                       aria-label={`Dismiss today: ${t.title}`}
+                      disabled={deferralError}
                       onClick={() => defer(t, 1, 'dismiss')}
                     >
                       <EyeOff size={15} />
@@ -260,7 +276,9 @@ function TaskBoard({ storageKey }: { storageKey: string }) {
         footer={
           open ? (
             <>
-              <ActionButton onClick={() => defer(open, 1, 'dismiss')}>Dismiss today</ActionButton>
+              <ActionButton disabled={deferralError} onClick={() => defer(open, 1, 'dismiss')}>
+                Dismiss today
+              </ActionButton>
               <ActionButton
                 variant="primary"
                 icon={<ArrowRight size={15} />}
@@ -296,6 +314,7 @@ function TaskBoard({ storageKey }: { storageKey: string }) {
                     key={choice.days}
                     type="button"
                     className="xs-fchip"
+                    disabled={deferralError}
                     onClick={() => defer(open, choice.days, 'snooze')}
                   >
                     {choice.label}

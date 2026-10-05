@@ -104,6 +104,86 @@ test('changed work resurfaces before the deadline and resolved follow-ups disapp
     false,
   );
 });
+test('a source revision change permanently cancels its saved snooze without clearing other tasks', () => {
+  const storage = memoryStorage();
+  writeTaskDeferral(storage, 'scope', task, addTaskDays(TODAY, 7), TODAY);
+  writeTaskDeferral(storage, 'scope', other, addTaskDays(TODAY, 7), TODAY);
+  const changed = buildCareTasks(
+    { ...input, salesLeads: [{ ...input.salesLeads[0], notes: 'Changed source' }] },
+    now,
+  ).find((item) => item.id === task.id)!;
+  assert.equal(taskIsDeferred(loadTaskDeferrals(storage, 'scope', [changed, other], TODAY), changed, TODAY), false);
+  const reverted = loadTaskDeferrals(storage, 'scope', [task, other], TODAY);
+  assert.equal(taskIsDeferred(reverted, task, TODAY), false);
+  assert.equal(taskIsDeferred(reverted, other, TODAY), true);
+});
+test('unconfirmed invalidation stays fail-open through reversion and refuses false saved actions', () => {
+  for (const failure of ['throw', 'silent', 'readback']) {
+    const base = memoryStorage();
+    let clearing = false;
+    let blocked = true;
+    const storage = {
+      getItem: (key: string) => {
+        if (blocked && clearing && failure === 'readback') throw Error('Readback refused');
+        return base.getItem(key);
+      },
+      setItem: (key: string, value: string) => {
+        clearing = true;
+        if (blocked && failure === 'throw') throw Error('Write refused');
+        if (blocked && failure === 'silent') return;
+        base.setItem(key, value);
+      },
+    };
+    writeTaskDeferral(base, 'scope', task, '2026-10-12', TODAY);
+    writeTaskDeferral(base, 'scope', other, '2026-10-12', TODAY);
+    const changed = { ...task, revision: other.revision };
+    assert.throws(() => loadTaskDeferrals(storage, 'scope', [changed, other], TODAY), failure);
+    blocked = false;
+    assert.throws(() => loadTaskDeferrals(storage, 'scope', [task, other], TODAY), /reload/);
+    assert.equal(writeTaskDeferral(storage, 'scope', task, '2026-10-06', TODAY).ok, false);
+    assert.deepEqual(restoreTaskDeferrals(storage, 'scope', [task], TODAY), { ok: false, restoredIds: [] });
+    assert.equal(
+      taskIsDeferred(readTaskDeferrals(base.getItem(taskDeferralEntryKey('scope', other.id)), TODAY), other, TODAY),
+      true,
+    );
+    assert.equal(writeTaskDeferral(storage, 'another-scope', task, '2026-10-06', TODAY).ok, true);
+    // A reload loses the in-memory latch; failed writes really are still on disk.
+    // The UI warns about this rather than claiming cleanup persisted.
+    assert.equal(taskIsDeferred(loadTaskDeferrals(base, 'scope', [task], TODAY), task, TODAY), failure !== 'readback');
+  }
+});
+test('an observed disappearing task loses its snooze without treating another group as removed', () => {
+  const storage = memoryStorage();
+  writeTaskDeferral(storage, 'scope', task, '2026-10-12', TODAY);
+  writeTaskDeferral(storage, 'scope', other, '2026-10-12', TODAY);
+  loadTaskDeferrals(storage, 'scope', [], TODAY, [task]);
+  assert.equal(taskIsDeferred(loadTaskDeferrals(storage, 'scope', [task], TODAY), task, TODAY), false);
+  // A group change does not pass the previous group's identities as removed work.
+  assert.equal(taskIsDeferred(loadTaskDeferrals(storage, 'scope', [other], TODAY), other, TODAY), true);
+});
+test('invalidation is conservative for same-task races and never clears a concurrent different task', () => {
+  for (const timing of ['before-clear', 'after-clear']) {
+    const base = memoryStorage();
+    writeTaskDeferral(base, 'scope', task, '2026-10-12', TODAY);
+    const changed = { ...task, revision: other.revision };
+    const storage = {
+      getItem: base.getItem,
+      setItem: (key: string, value: string) => {
+        writeTaskDeferral(base, 'scope', other, '2026-10-12', TODAY);
+        if (timing === 'before-clear') writeTaskDeferral(base, 'scope', changed, '2026-10-12', TODAY);
+        base.setItem(key, value);
+        if (timing === 'after-clear') writeTaskDeferral(base, 'scope', changed, '2026-10-12', TODAY);
+      },
+    };
+    if (timing === 'after-clear') assert.throws(() => loadTaskDeferrals(storage, 'scope', [changed], TODAY));
+    else assert.deepEqual(loadTaskDeferrals(storage, 'scope', [changed], TODAY), {});
+    assert.equal(taskIsDeferred(loadTaskDeferrals(base, 'scope', [other], TODAY), other, TODAY), true);
+    assert.equal(
+      taskIsDeferred(loadTaskDeferrals(base, 'scope', [changed], TODAY), changed, TODAY),
+      timing === 'after-clear',
+    );
+  }
+});
 test('same-day offer and deposit changes resurface a snoozed buyer task', () => {
   const buyer: SalesLead = {
     ...input.salesLeads[0],

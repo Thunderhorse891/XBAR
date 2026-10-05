@@ -4,6 +4,9 @@ import { sha256 } from './sha256.js';
 export type TaskDeferral = { revision: string; until: string };
 export type TaskDeferrals = Record<string, TaskDeferral>;
 export type DeferrableTask = { id: string; revision: string };
+// A failed invalidation must not hide work again after navigation or source reversion.
+// This latch lasts for this tab's module lifetime, not a reload or another device.
+const failedScopes = new WeakMap<object, Set<string>>();
 export const SNOOZE_CHOICES = [
   { days: 1, label: 'Tomorrow' },
   { days: 3, label: '3 days' },
@@ -65,15 +68,33 @@ export function taskDeferralEntryKey(scopeKey: string, taskId: string): string {
 }
 
 export function loadTaskDeferrals(
-  storage: Pick<Storage, 'getItem'>,
+  storage: Pick<Storage, 'getItem' | 'setItem'>,
   scopeKey: string,
   tasks: DeferrableTask[],
   today: string,
+  previouslyObservedTasks: DeferrableTask[] = [],
 ): TaskDeferrals {
+  if (failedScopes.get(storage)?.has(scopeKey)) throw new Error('Task preferences require a page reload.');
   const deferrals: TaskDeferrals = {};
-  for (const task of tasks) {
-    const stored = readTaskDeferrals(storage.getItem(taskDeferralEntryKey(scopeKey, task.id)), today)[task.id];
-    if (stored) deferrals[task.id] = stored;
+  const currentIds = new Set(tasks.map((task) => task.id));
+  const observedMissing = previouslyObservedTasks.filter((task) => !currentIds.has(task.id));
+  try {
+    for (const task of [...tasks, ...observedMissing]) {
+      const key = taskDeferralEntryKey(scopeKey, task.id);
+      const stored = readTaskDeferrals(storage.getItem(key), today)[task.id];
+      if (!stored) continue;
+      if (!currentIds.has(task.id) || stored.revision !== task.revision) {
+        // Invalidate only this task. A stale tab may conservatively resurface a newer
+        // same-task snooze; it must never hide changed work or clear unrelated keys.
+        storage.setItem(key, '{}');
+        if (storage.getItem(key) !== '{}') throw new Error('Task preference cleanup was not confirmed.');
+      } else deferrals[task.id] = stored;
+    }
+  } catch (error) {
+    const scopes = failedScopes.get(storage) ?? new Set<string>();
+    scopes.add(scopeKey);
+    failedScopes.set(storage, scopes);
+    throw error;
   }
   return deferrals;
 }
@@ -86,6 +107,7 @@ export function writeTaskDeferral(
   until: string,
   today: string,
 ): { ok: true; deferrals: TaskDeferrals } | { ok: false } {
+  if (failedScopes.get(storage)?.has(scopeKey)) return { ok: false };
   if (!isCalendarDay(until) || until <= today || until > addTaskDays(today, 7)) return { ok: false };
   try {
     const deferrals = { [task.id]: { revision: task.revision, until } };
@@ -106,6 +128,7 @@ export function restoreTaskDeferrals(
   tasks: DeferrableTask[],
   today: string,
 ): { ok: boolean; restoredIds: string[] } {
+  if (failedScopes.get(storage)?.has(scopeKey)) return { ok: false, restoredIds: [] };
   const restoredIds: string[] = [];
   try {
     for (const task of tasks) {

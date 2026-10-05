@@ -157,6 +157,93 @@ test('changed or removed tasks stay closed when their previous source values ret
   await expect(drawer).toBeVisible();
 });
 
+for (const { refuseCleanup, removeTask } of [
+  { refuseCleanup: false, removeTask: false },
+  { refuseCleanup: true, removeTask: false },
+  { refuseCleanup: false, removeTask: true },
+]) {
+  test(`changed task snooze stays cancelled: cleanup refused=${refuseCleanup}, removed=${removeTask}`, async ({
+    page,
+  }) => {
+    await setup(page);
+    const opener = page.getByRole('button', { name: 'Open task: Follow up with Due Buyer', exact: true });
+    await opener.click();
+    await page
+      .getByRole('dialog', { name: 'Follow up with Due Buyer' })
+      .getByRole('button', { name: '1 week', exact: true })
+      .click();
+    await expect(opener).toHaveCount(0);
+    const savedKey = await page.evaluate(() =>
+      Object.keys(localStorage).find(
+        (key) => key.startsWith('xbar-task-deferrals-v2:') && localStorage.getItem(key)?.includes('lead-due'),
+      )!,
+    );
+    const original = await page.evaluate(
+      async ({ refuse, remove }) => {
+        if (refuse) {
+          const setItem = Storage.prototype.setItem;
+          Storage.prototype.setItem = function (key: string, value: string) {
+            if (key.startsWith('xbar-task-deferrals-v2:') && value === '{}') throw Error('Synthetic cleanup refusal');
+            return setItem.call(this, key, value);
+          };
+        }
+        const path = '/src/store/useXbarStore.ts';
+        const { useXbarStore } = await import(path);
+        const original = useXbarStore.getState().salesLeads;
+        useXbarStore.setState({
+          salesLeads: original.map((lead: { id: string }) =>
+            lead.id === 'due'
+              ? remove
+                ? { ...lead, nextFollowUp: '2099-01-01' }
+                : { ...lead, notes: 'Source changed after snooze' }
+              : lead,
+          ),
+        });
+        return original;
+      },
+      { refuse: refuseCleanup, remove: removeTask },
+    );
+    if (removeTask) await expect.poll(() => page.evaluate((key) => localStorage.getItem(key), savedKey)).toBe('{}');
+    else await expect(opener).toContainText('Source changed after snooze');
+    if (refuseCleanup) {
+      const notice = page.getByRole('status').filter({ hasText: 'Task preferences could not be verified.' });
+      await expect(notice).toHaveCount(1);
+      await expect(notice).toContainText('older saved deferrals may return');
+    }
+    await page.evaluate(async (salesLeads) => {
+      const path = '/src/store/useXbarStore.ts';
+      const { useXbarStore } = await import(path);
+      useXbarStore.setState({ salesLeads });
+      dispatchEvent(new Event('focus'));
+    }, original);
+    await expect(opener).toContainText('Buyer follow-up');
+    await expect(opener).toBeVisible();
+    if (refuseCleanup) {
+      await page.evaluate(() => {
+        history.pushState({}, '', '/app/herd-groups');
+        dispatchEvent(new PopStateEvent('popstate'));
+      });
+      await expect(page.getByRole('heading', { name: 'Care Tasks', exact: true })).toHaveCount(0);
+      await page.evaluate(() => {
+        history.pushState({}, '', '/app/today');
+        dispatchEvent(new PopStateEvent('popstate'));
+      });
+      await expect(page.getByRole('status').filter({ hasText: 'Task preferences could not be verified.' })).toHaveCount(
+        1,
+      );
+      await expect(opener).toBeVisible();
+      await opener.click();
+      const drawer = page.getByRole('dialog', { name: 'Follow up with Due Buyer' });
+      await expect(drawer.getByRole('button', { name: 'Tomorrow', exact: true })).toBeDisabled();
+      await expect(drawer.getByRole('button', { name: 'Dismiss today', exact: true })).toBeDisabled();
+      await expect(drawer.getByRole('button', { name: 'Open buyer follow-up', exact: true })).toBeEnabled();
+    } else {
+      await page.reload();
+      await expect(opener).toBeVisible();
+    }
+  });
+}
+
 for (const width of [1440, 390]) {
   test(`group and category filters remain reachable after scrolling at ${width}px`, async ({ page }, info) => {
     await page.setViewportSize({ width, height: 844 });
