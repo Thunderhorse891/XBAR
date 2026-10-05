@@ -442,3 +442,43 @@ test('every report footer preserves the original metallic horse artwork aspect r
   assert.equal(marks, (await PDFDocument.load(bytes)).getPageCount(), 'every non-white-label page has the original');
   await assertFits(bytes);
 });
+
+test('unknown costs and sold losses remain distinct in the actual PDF registers', async () => {
+  const data = fixture(2);
+  data.horses[0].name = 'Unknown Cost Horse';
+  data.horses[0].costBasis = 0;
+  data.horses[0].sale.askPrice = 20000;
+  data.horses[1].name = 'Sold Loss Horse';
+  data.horses[1].costBasis = 10000;
+  data.horses[1].sale.askPrice = 20000;
+  data.expenseReceipts = [
+    {
+      id: 'sold-cost',
+      horseId: data.horses[1].id,
+      amount: 900,
+      category: 'Feed',
+      receiptDate: '2026-09-01',
+    } as RanchReportInput['expenseReceipts'][number],
+  ];
+  data.salesLeads = [
+    {
+      id: 'won',
+      horseId: data.horses[1].id,
+      outcome: 'Won',
+      stage: 'Closed',
+      offerAmount: 5000,
+    } as RanchReportInput['salesLeads'][number],
+  ];
+  const report = buildRanchReport(data, now);
+  const bytes = await renderReportPdf(report, 'Synthetic Financial Review', await branding());
+  const text = drawn(bytes)
+    .map((item) => item.text)
+    .join(' ');
+  assert.ok(text.includes('Closed-sale results'));
+  assert.ok(text.includes('-$5,900'));
+  assert.ok(text.includes('Sold Loss Horse - Sold'));
+  assert.ok(text.includes('Unknown'));
+  assert.ok(text.includes('They do not establish cash received'));
+  assert.ok(!text.includes('100% High'));
+  await assertFits(bytes);
+});
