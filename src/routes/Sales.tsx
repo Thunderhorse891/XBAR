@@ -1,3 +1,4 @@
+import { RanchSocialLinksPanel } from '@/components/RanchSocialLinksPanel';
 import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { buyerFollowUpPath } from '@/lib/buyerRoutes';
@@ -279,6 +280,8 @@ export default function Sales() {
         ].slice(0, 5)}
         nextAction={{ label: 'Open follow-up queue', to: buyerFollowUpPath() }}
       />
+
+      <RanchSocialLinksPanel />
 
       <BuyerDealRoomPanel />
       <BuyerResponseQueue />

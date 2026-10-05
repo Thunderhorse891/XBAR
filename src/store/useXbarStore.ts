@@ -1,3 +1,4 @@
+import { normalizeRanchSocialLinks } from '@/lib/ranchSocialLinks';
 import { useEffect, useState } from 'react';
 import { normalizePacketWebsite, validatePacketProfile } from '../../api/_lib/packet-branding.js';
 import { create } from 'zustand';
@@ -344,6 +345,8 @@ export const useXbarStore = create<XbarStore>()(
         const merged = { ...current.workspaceProfile, ...patch };
         try {
           validatePacketProfile(merged);
+          if (merged.socialLinks !== undefined)
+            merged.socialLinks = normalizeRanchSocialLinks(merged.socialLinks, true);
         } catch (error) {
           return { ok: false, message: error instanceof Error ? error.message : 'Ranch branding is invalid.' };
         }

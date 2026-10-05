@@ -2,6 +2,8 @@ import { useMemo, useState } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { FileText, Plus } from 'lucide-react';
 import { ActionButton, Card, PageHead, StatusChip } from '@/components/saas';
+import { SalePacketShareDialog } from '@/components/SalePacketShareDialog';
+import { hasRoleCapability } from '@/lib/permissions';
 import { SalePacketWizard } from '@/components/SalePacketWizard';
 import { useXbarStore } from '@/store/useXbarStore';
 import { useUiStore } from '@/store/useUiStore';
@@ -24,6 +26,8 @@ export default function SalePacketStudio() {
   const [params] = useSearchParams();
   const horses = useXbarStore((s) => s.horses);
   const documents = useXbarStore((s) => s.documents);
+  const currentRole = useXbarStore((s) => s.currentRole);
+  const [sharingPacket, setSharingPacket] = useState<SalePacketBuild | null>(null);
   const salePacketBuilds = useXbarStore((s) => s.salePacketBuilds);
   const expenseReceipts = useXbarStore((s) => s.expenseReceipts);
   const ownershipRecords = useXbarStore((s) => s.ownershipRecords);
@@ -182,6 +186,11 @@ export default function SalePacketStudio() {
                   <StatusChip tone={packet.status === 'shared' ? 'info' : 'success'}>
                     {packet.status === 'shared' ? 'Shared' : 'Generated'}
                   </StatusChip>
+                  {hasRoleCapability(currentRole, 'manageSharedAccess') ? (
+                    <button className="xs-btn xs-btn--sm" type="button" onClick={() => setSharingPacket(packet)}>
+                      Share document…
+                    </button>
+                  ) : null}
                   {/* Scheme-checked: an imported packet's downloadUrl is untrusted, and
                       `download` does not stop a browser running a `javascript:` href. */}
                   {isNavigableFileUrl(packet.downloadUrl) ? (
@@ -213,6 +222,10 @@ export default function SalePacketStudio() {
           </p>
         )}
       </Card>
+
+      {sharingPacket ? (
+        <SalePacketShareDialog key={sharingPacket.id} packet={sharingPacket} onClose={() => setSharingPacket(null)} />
+      ) : null}
 
       <SalePacketWizard
         open={wizardOpen}

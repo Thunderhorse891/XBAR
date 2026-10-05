@@ -1,3 +1,4 @@
+import { normalizeRanchSocialLinks } from '../lib/ranchSocialLinks.js';
 import {
   expenseReceiptsSeed,
   ownershipSeed,
@@ -249,6 +250,7 @@ export function restoreWorkspaceProfile(raw: unknown): WorkspaceProfile {
       ? { contactPhone: typeof value.contactPhone === 'string' ? value.contactPhone.trim() : '' }
       : {}),
     ...(value.website !== undefined ? { website: typeof value.website === 'string' ? value.website.trim() : '' } : {}),
+    ...(value.socialLinks !== undefined ? { socialLinks: normalizeRanchSocialLinks(value.socialLinks) } : {}),
     defaultBarn: value.defaultBarn?.trim() || '',
     defaultPasture: value.defaultPasture?.trim() || '',
     workspaceShortcuts,

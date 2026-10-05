@@ -164,6 +164,7 @@ for (const switchKind of ['workspace', 'account', 'role'] as const) {
   test(`a ${switchKind} A→B→A transition discards both the draft and delayed logo`, async ({ page }) => {
     await openSettings(page);
     await page.getByLabel('Contact phone').fill('A private draft');
+    await page.getByLabel('Instagram profile URL').fill('https://instagram.com/unsaveddraft');
     const file = await logoFile(page);
     await pauseLogoReads(page);
     await page.getByLabel('Ranch logo').setInputFiles(file);
@@ -188,6 +189,7 @@ for (const switchKind of ['workspace', 'account', 'role'] as const) {
     await releaseLogoReads(page);
     await expect(page.getByRole('img', { name: 'Ranch logo preview' })).toHaveCount(0);
     await expect(page.getByLabel('Contact phone')).toHaveValue('');
+    await expect(page.getByLabel('Instagram profile URL')).toHaveValue('');
     await page.getByRole('button', { name: 'Save profile', exact: true }).click();
     await expect(page.getByText('Profile saved on this device', { exact: true })).toBeVisible();
     expect((await savedProfile(page)).packetLogoDataUrl).toBeFalsy();
@@ -200,6 +202,7 @@ test('an actual persistence failure keeps edits visible and allows a durable ret
   await page.getByLabel('Ranch logo').setInputFiles(await logoFile(page));
   await expect(page.getByRole('img', { name: 'Ranch logo preview' })).toBeVisible();
   await page.getByLabel('Contact phone').fill('555-0199');
+  await page.getByLabel('X profile URL', { exact: true }).fill('https://x.com/cedarranch');
   await page.evaluate(() => {
     const put = IDBObjectStore.prototype.put;
     const setItem = Storage.prototype.setItem;
@@ -220,6 +223,7 @@ test('an actual persistence failure keeps edits visible and allows a durable ret
   await expect(page.getByRole('alert').filter({ hasText: /could not be saved on this device/ })).toBeVisible();
   await expect(page.getByText('Profile saved on this device', { exact: true })).toHaveCount(0);
   await expect(page.getByLabel('Contact phone')).toHaveValue('555-0199');
+  await expect(page.getByLabel('X profile URL', { exact: true })).toHaveValue('https://x.com/cedarranch');
   await expect(page.getByRole('img', { name: 'Ranch logo preview' })).toBeVisible();
   await page.evaluate(() =>
     (window as typeof window & { restoreProfileStorage?: () => void }).restoreProfileStorage?.(),
@@ -228,6 +232,7 @@ test('an actual persistence failure keeps edits visible and allows a durable ret
   await expect(page.getByText('Profile saved on this device', { exact: true })).toBeVisible();
   await page.reload();
   await expect(page.getByLabel('Contact phone')).toHaveValue('555-0199');
+  await expect(page.getByLabel('X profile URL', { exact: true })).toHaveValue('https://x.com/cedarranch');
   await expect(page.getByRole('img', { name: 'Ranch logo preview' })).toBeVisible();
 });
 

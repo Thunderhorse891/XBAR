@@ -245,3 +245,43 @@ test('the native export deletes its temporary file on every path', async () => {
   const finallyBlock = shareFn.slice(shareFn.indexOf('} finally {'));
   assert.match(finallyBlock, /deleteFile\(/, 'cleanup is not in finally, so a cancelled share leaves the file behind');
 });
+
+test('a stale caller guard refuses before starting any file delivery', async () => {
+  const { saveBlobAsFile } = await import('../src/lib/fileDownload.js');
+  await withWindow(nativeBridge, async () => {
+    const result = await saveBlobAsFile('packet.pdf', new Blob(['%PDF-1.7']), { shouldContinue: () => false });
+    assert.equal(result.ok, false);
+    if (!result.ok) assert.match(result.reason, /changed/);
+  });
+});
+
+test('native delivery rechecks the caller after writing bytes and before opening share sheet', async () => {
+  const { readFile } = await import('node:fs/promises');
+  const source = await readFile('src/lib/fileDownload.ts', 'utf8');
+  const native = source.slice(
+    source.indexOf('async function saveViaShareSheet'),
+    source.indexOf('function saveViaBrowser'),
+  );
+  const write = native.indexOf('await writeBlobInChunks');
+  const guard = native.indexOf('!options.shouldContinue()', write);
+  const share = native.indexOf('await Share.share');
+  assert.ok(
+    write > 0 && guard > write && share > guard,
+    'workspace guard must protect the actual native handoff after async file writes',
+  );
+  assert.match(
+    native.slice(guard),
+    /finally[\s\S]*deleteFile/,
+    'refused stale handoffs must still clean up the cache file',
+  );
+});
+
+test('same-named native handoffs use separate cache paths and retain their visible filename', async () => {
+  const { nativeFileHandoffLocation } = await import('../src/lib/fileDownload.js');
+  const first = nativeFileHandoffLocation('Bella.pdf');
+  const second = nativeFileHandoffLocation('Bella.pdf');
+  assert.notEqual(first.path, second.path);
+  assert.equal(first.path.split('/').pop(), 'Bella.pdf');
+  assert.notEqual(first.directoryName, second.directoryName);
+  assert.equal(nativeFileHandoffLocation('../Bella\\file.pdf').path.split('/').length, 2);
+});
