@@ -1,3 +1,4 @@
+import { ASSET_CATEGORIES, HORSE_SEGMENTS } from '@/lib/recordOptions';
 import { documentIntakeDisclosure } from '@/features/documents/constants';
 import type { ReactNode } from 'react';
 import { useRef, useState } from 'react';
@@ -153,7 +154,6 @@ function isCreateKey(value: string): value is CreateKey {
   return (drawerActions as string[]).includes(value);
 }
 
-const SEGMENT_OPTIONS: HorseSegment[] = ['Sale Prospect', 'Broodmare', 'Stud', 'Show String', 'Young Stock', 'Retired'];
 const SEX_OPTIONS: HorseSex[] = ['Mare', 'Stud', 'Gelding', 'Filly', 'Colt'];
 const SEGMENT_STATUS: Record<HorseSegment, HorseStatus> = {
   'Sale Prospect': 'Sale Prep',
@@ -184,7 +184,7 @@ const MEDICAL_EVENT_TYPES: MedicalEventType[] = [
   'Treatment',
   'Historical note',
 ];
-const ASSET_CATEGORIES: AssetCategory[] = ['Tack', 'Equipment', 'Medical Kit', 'Feed & Supply', 'Transport'];
+
 const LEAD_CHANNELS: SalesLead['channel'][] = ['Site Inquiry', 'Referral', 'Facebook', 'Instagram'];
 const DOCUMENT_ACCEPT = '.pdf,.png,.jpg,.jpeg,.webp,.heic';
 
@@ -363,6 +363,13 @@ export function GlobalCreateDrawer() {
     finish(result, destination);
   };
 
+  // A preset from the opener (e.g. "Log a deworming") counts only if it is a
+  // real record type; the person's own choice in the form always wins.
+  const presetMedicalType = MEDICAL_EVENT_TYPES.find((type) => type === request.medicalType);
+  const healthRecordType = ((f.type as MedicalEventType | undefined) ??
+    presetMedicalType ??
+    'Vet visit') as MedicalEventType;
+
   const submitHealthRecord = () => {
     const title = (f.title ?? '').trim();
     const notes = (f.notes ?? '').trim();
@@ -379,7 +386,8 @@ export function GlobalCreateDrawer() {
       body: notes,
       author: actor,
       date: (f.date ?? '').trim() || todayIso(),
-      type: (f.type as MedicalEventType) ?? 'Vet visit',
+      type: healthRecordType,
+      completionState: f.completionState === 'planned' ? 'planned' : 'completed',
     });
     finish(result.ok ? { ok: true, message: 'Health record saved to the horse timeline' } : result, '/medical');
   };
@@ -447,7 +455,10 @@ export function GlobalCreateDrawer() {
       category: (f.type as AssetCategory) ?? 'Equipment',
       location: (f.loc ?? '').trim() || defaultBarn,
     });
-    finish(result.ok ? { ok: true, message: `${name} added to ranch assets` } : result, '/assets');
+    finish(
+      result.ok ? { ok: true, message: `${name} added to ranch assets` } : result,
+      result.ok ? `/assets?asset=${encodeURIComponent(result.id ?? '')}` : undefined,
+    );
   };
 
   const horsePicker = <Pick label="Horse" value={selectedHorseId} onChange={set('horseId')} options={horseOptions} />;
@@ -489,7 +500,7 @@ export function GlobalCreateDrawer() {
             label="Segment"
             value={f.segment ?? 'Sale Prospect'}
             onChange={set('segment')}
-            options={SEGMENT_OPTIONS}
+            options={HORSE_SEGMENTS}
           />
           <Pick label="Sex" value={f.sex ?? 'Mare'} onChange={set('sex')} options={SEX_OPTIONS} />
           <Text
@@ -568,11 +579,12 @@ export function GlobalCreateDrawer() {
       body = (
         <div className="xs-form">
           {horsePicker}
+          <Pick label="Record type" value={healthRecordType} onChange={set('type')} options={MEDICAL_EVENT_TYPES} />
           <Pick
-            label="Record type"
-            value={f.type ?? 'Vet visit'}
-            onChange={set('type')}
-            options={MEDICAL_EVENT_TYPES}
+            label="Care status"
+            value={f.completionState ?? 'completed'}
+            onChange={set('completionState')}
+            options={['completed', 'planned']}
           />
           <Text label="Title" placeholder="e.g. Spring vaccines" value={f.title ?? ''} onChange={set('title')} />
           <Text label="Date" type="date" value={f.date ?? todayIso()} onChange={set('date')} />

@@ -1,3 +1,4 @@
+import { resolveStoredFileAccess, FILE_CONTEXT_CHANGED } from './resolveStoredFileAccess.js';
 import { getDocumentAccessUrl } from '@/lib/cloudWorkspace';
 import { isNavigableFileUrl } from '@/lib/navigableFileUrl';
 import { SavedPacketCompatibilityError } from '@/lib/savedPacketCompatibility';
@@ -34,7 +35,11 @@ const OBJECT_URL_LIFETIME_MS = 60_000;
  */
 export type OpenStoredFileResult = { ok: true; delivery: 'tab' | 'download' } | { ok: false; message: string };
 
-export async function openStoredFileInTab(record: StoredFileRef): Promise<OpenStoredFileResult> {
+export async function openStoredFileInTab(
+  record: StoredFileRef,
+  isCurrent: () => boolean = () => true,
+): Promise<OpenStoredFileResult> {
+  if (!isCurrent()) return { ok: false, message: FILE_CONTEXT_CHANGED };
   // Opened synchronously, before any await: a `window.open` that happens after
   // one is no longer attributable to the click and is blocked by default.
   const previewWindow = typeof window !== 'undefined' ? window.open('', '_blank') : null;
@@ -54,7 +59,7 @@ export async function openStoredFileInTab(record: StoredFileRef): Promise<OpenSt
    */
   let access: Awaited<ReturnType<typeof getDocumentAccessUrl>>;
   try {
-    access = await getDocumentAccessUrl(record);
+    access = await resolveStoredFileAccess(record, isCurrent);
   } catch (error) {
     previewWindow?.close();
     if (error instanceof SavedPacketCompatibilityError) {
@@ -67,6 +72,12 @@ export async function openStoredFileInTab(record: StoredFileRef): Promise<OpenSt
   if (!access.ok) {
     previewWindow?.close();
     return { ok: false, message: access.message };
+  }
+
+  if (!isCurrent()) {
+    previewWindow?.close();
+    access.release?.();
+    return { ok: false, message: FILE_CONTEXT_CHANGED };
   }
 
   /*

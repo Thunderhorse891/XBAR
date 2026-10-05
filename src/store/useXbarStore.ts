@@ -1,3 +1,4 @@
+import { changeHorsePhoto } from '@/lib/horsePhotoGallery';
 import { useEffect, useState } from 'react';
 import { normalizePacketWebsite, validatePacketProfile } from '../../api/_lib/packet-branding.js';
 import { create } from 'zustand';
@@ -91,6 +92,7 @@ import type {
   WorkspaceInvitationRecord,
 } from '@/types/xbar';
 import type { BuyerRoomEvent, DocumentRecord, SalePacketBuild, SubscriptionProfile } from '@/types/xbar';
+import { medicalCompletionUpdates, validateMedicalCompletion } from '@/lib/medicalEvidence';
 import { proposeHorseNameRepairs } from '@/lib/horseNameRepair';
 import type { XbarStore } from '@/store/xbarStoreTypes';
 import {
@@ -237,7 +239,7 @@ function serializeDocumentIntake<T>(run: () => Promise<T>): Promise<T> {
   return result;
 }
 
-function horseArchiveContextError(): string | null {
+function horseArchiveContextError(capability: RoleCapability = 'editHorse'): string | null {
   const cloud = useCloudStore.getState();
   const owner = vaultOwnerId();
   const recordedOwner = readRecordsOwner();
@@ -256,7 +258,7 @@ function horseArchiveContextError(): string | null {
     ) {
       return 'Wait for this workspace to finish loading, or resolve its sync warning, before changing the roster.';
     }
-    return requireRoleCapability(cloud.workspaceRole, 'editHorse') ?? null;
+    return requireRoleCapability(cloud.workspaceRole, capability) ?? null;
   }
   return null;
 }
@@ -1707,6 +1709,32 @@ export const useXbarStore = create<XbarStore>()(
 
         return { ok: true, message: `${document.title} was removed from active review.`, id: document.id };
       },
+      changeHorsePhoto: (horseId, assetId, action) => {
+        const contextError = horseArchiveContextError('uploadMedia');
+        if (contextError) return { ok: false, message: contextError };
+        const denied = requireRoleCapability(get().currentRole, 'uploadMedia');
+        if (denied) return { ok: false, message: denied };
+        const matches = get().horses.filter((item) => item.id === horseId);
+        if (matches.length !== 1) return { ok: false, message: 'A unique horse record could not be found.' };
+        const horse = matches[0];
+        const result = changeHorsePhoto(horse, assetId, action);
+        if (!result.ok) return result;
+        set((state) => ({
+          horses: state.horses.map((item) =>
+            item.id === horseId ? { ...item, gallery: result.gallery, profileImage: result.profileImage } : item,
+          ),
+        }));
+        return {
+          ok: true,
+          message:
+            action === 'primary'
+              ? 'Primary photo updated.'
+              : action === 'restore'
+                ? 'Photo restored to the gallery.'
+                : 'Photo removed from the gallery. The original is retained and can be restored.',
+          id: assetId,
+        };
+      },
       uploadHorseMedia: async ({ horseId, files, kind, makePrimary }) => {
         const deniedMessage = requireRoleCapability(get().currentRole, 'uploadMedia');
         if (deniedMessage) {
@@ -1832,7 +1860,9 @@ export const useXbarStore = create<XbarStore>()(
                 ? {
                     ...horse,
                     profileImage: primaryPhotoAsset ? primaryPhotoAsset.url : horse.profileImage,
-                    gallery: [...uploadedAssets, ...horse.gallery],
+                    gallery: [...uploadedAssets, ...horse.gallery].map((asset) =>
+                      primaryPhotoAsset ? { ...asset, isPrimary: asset.id === primaryPhotoAsset.id } : asset,
+                    ),
                     readiness: gainedFirstPhoto
                       ? {
                           ...horse.readiness,
@@ -2264,7 +2294,9 @@ export const useXbarStore = create<XbarStore>()(
           return { ok: false, message: 'Horse record not found for this medical event.' };
         }
 
-        const shouldOpenMedicalReview = event.type === 'Injury';
+        const completionState = event.completionState ?? 'completed';
+        const completionError = validateMedicalCompletion(event.date, completionState);
+        if (completionError) return { ok: false, message: completionError };
         const nextEvent = createTimelineEvent({
           title: event.title,
           summary: event.body,
@@ -2275,16 +2307,15 @@ export const useXbarStore = create<XbarStore>()(
           severity: event.type === 'Injury' ? 'high' : event.type === 'Treatment' ? 'medium' : undefined,
         });
 
+        const medicalEvent = { ...nextEvent, completionState };
         set((state) => ({
           horses: state.horses.map((horse) =>
             horse.id === horseId
               ? {
                   ...horse,
-                  status: shouldOpenMedicalReview ? 'Medical Review' : horse.status,
-                  lastVetVisit: event.type === 'Vet visit' ? event.date : horse.lastVetVisit,
-                  medicalNotes: shouldOpenMedicalReview ? event.body : horse.medicalNotes,
-                  medicalTimeline: [nextEvent, ...horse.medicalTimeline],
-                  activity: [nextEvent, ...horse.activity],
+                  ...medicalCompletionUpdates(horse, medicalEvent),
+                  medicalTimeline: [medicalEvent, ...horse.medicalTimeline],
+                  activity: [medicalEvent, ...horse.activity],
                 }
               : horse,
           ),
@@ -2638,13 +2669,21 @@ export const useXbarStore = create<XbarStore>()(
         return { ok: true, message: 'Horse removed from records.', id: horseId };
       },
       updateMedicalEvent: (horseId, eventId, patch) => {
-        const deniedMessage = requireRoleCapability(get().currentRole, 'editHorse');
+        const deniedMessage = requireRoleCapability(get().currentRole, 'manageMedical');
         if (deniedMessage) return { ok: false, message: deniedMessage };
+        const existing = get()
+          .horses.find((horse) => horse.id === horseId)
+          ?.medicalTimeline.find((event) => event.id === eventId);
+        if (!existing) return { ok: false, message: 'Medical event not found.' };
+        const updated = { ...existing, ...patch };
+        const completionError = validateMedicalCompletion(updated.date, updated.completionState);
+        if (completionError) return { ok: false, message: completionError };
         set((state) => ({
           horses: state.horses.map((h) =>
             h.id === horseId
               ? {
                   ...h,
+                  ...medicalCompletionUpdates(h, updated),
                   medicalTimeline: h.medicalTimeline.map((ev) => (ev.id === eventId ? { ...ev, ...patch } : ev)),
                   activity: h.activity.map((ev) => (ev.id === eventId ? { ...ev, ...patch } : ev)),
                 }
@@ -2654,10 +2693,11 @@ export const useXbarStore = create<XbarStore>()(
         return { ok: true, message: 'Medical event updated.', id: eventId };
       },
       deleteMedicalEvent: (horseId, eventId) => {
-        const deniedMessage = requireRoleCapability(get().currentRole, 'editHorse');
+        const deniedMessage = requireRoleCapability(get().currentRole, 'manageMedical');
         if (deniedMessage) return { ok: false, message: deniedMessage };
         const medicalHorse = get().horses.find((h) => h.id === horseId);
         const removedMedical = medicalHorse?.medicalTimeline.find((ev) => ev.id === eventId);
+        if (!removedMedical) return { ok: false, message: 'Medical event not found.' };
         set((state) => ({
           horses: state.horses.map((h) =>
             h.id === horseId

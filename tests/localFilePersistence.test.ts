@@ -400,7 +400,7 @@ test('a throwing file lookup becomes a result, not an escaping rejection', async
    */
   assert.match(
     source,
-    /try \{\s*access = await getDocumentAccessUrl\(record\);\s*\} catch \(error\) \{/,
+    /try \{\s*access = await resolveStoredFileAccess\(record, isCurrent\);\s*\} catch \(error\) \{/,
     'resolution must be guarded',
   );
   assert.match(

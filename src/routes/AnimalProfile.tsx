@@ -1,3 +1,5 @@
+import { HorseDocuments } from '@/components/HorseDocuments';
+import { HorsePhotoGallery } from '@/components/HorsePhotoGallery';
 import { horseAgeLabel } from '@/lib/horseDocumentActions';
 import { useMemo, useRef, useState } from 'react';
 import type { CSSProperties } from 'react';
@@ -334,7 +336,13 @@ export default function AnimalProfile() {
           >
             Add Health
           </ActionButton>
-          <ActionButton size="sm" icon={<Upload size={14} />} onClick={() => navigate('/documents')}>
+          <ActionButton
+            size="sm"
+            icon={<Upload size={14} />}
+            onClick={() =>
+              navigate(`/documents?${new URLSearchParams({ horse: animal.id, from: 'profile', upload: '1' })}`)
+            }
+          >
             Upload Doc
           </ActionButton>
           {canUploadMedia && !photoUrl ? (
@@ -346,12 +354,14 @@ export default function AnimalProfile() {
             size="sm"
             variant="primary"
             icon={<FileText size={14} />}
-            onClick={() => navigate('/sale-packets')}
+            onClick={() => navigate(`/sale-packets?${new URLSearchParams({ horse: animal.id })}`)}
           >
             Build Sale Packet
           </ActionButton>
         </div>
       </div>
+
+      <HorsePhotoGallery key={animal.id} horse={animal} onAdd={openPhotoSource} uploading={uploadingPhoto} />
 
       <div className="xs-tabbar">
         {TABS.map((t) => (
@@ -461,7 +471,11 @@ export default function AnimalProfile() {
                     Open Care Tasks
                   </ActionButton>
                 )}
-                <ActionButton size="sm" variant="primary" onClick={() => navigate('/sale-packets')}>
+                <ActionButton
+                  size="sm"
+                  variant="primary"
+                  onClick={() => navigate(`/sale-packets?${new URLSearchParams({ horse: animal.id })}`)}
+                >
                   Open Sale Packets
                 </ActionButton>
               </div>
@@ -598,33 +612,38 @@ export default function AnimalProfile() {
       ) : null}
 
       {tab === 'Documents' ? (
-        <Card
-          title="Documents"
-          link="Open documents"
-          onLink={() => navigate(`/documents?stage=Library&horse=${encodeURIComponent(animal.id)}&from=profile`)}
-        >
+        <>
+          <HorseDocuments key={animal.id} horse={animal} />
           {activeDocumentFacts.length ? (
-            <div className="xs-mlist">
-              {activeDocumentFacts.slice(0, 10).map((f) => (
-                <div key={f.id} className="xs-mrow">
-                  <span className="xs-mrow__main">
-                    <span className="xs-mrow__title">{f.label}</span>
-                    <span className="xs-mrow__detail">{f.value}</span>
-                  </span>
-                  <StatusChip
-                    tone={f.decision === 'Accepted' ? 'success' : f.decision === 'Rejected' ? 'danger' : 'warning'}
-                  >
-                    {f.decision ?? 'Review'}
-                  </StatusChip>
+            <Card
+              title="Extracted document facts"
+              link="Open documents"
+              onLink={() => navigate(`/documents?stage=Library&horse=${encodeURIComponent(animal.id)}&from=profile`)}
+            >
+              {activeDocumentFacts.length ? (
+                <div className="xs-mlist">
+                  {activeDocumentFacts.slice(0, 10).map((f) => (
+                    <div key={f.id} className="xs-mrow">
+                      <span className="xs-mrow__main">
+                        <span className="xs-mrow__title">{f.label}</span>
+                        <span className="xs-mrow__detail">{f.value}</span>
+                      </span>
+                      <StatusChip
+                        tone={f.decision === 'Accepted' ? 'success' : f.decision === 'Rejected' ? 'danger' : 'warning'}
+                      >
+                        {f.decision ?? 'Review'}
+                      </StatusChip>
+                    </div>
+                  ))}
                 </div>
-              ))}
-            </div>
-          ) : (
-            <p className="xs-muted" style={{ fontSize: 13, marginTop: 0 }}>
-              No documents linked to this horse yet.
-            </p>
-          )}
-        </Card>
+              ) : (
+                <p className="xs-muted" style={{ fontSize: 13, marginTop: 0 }}>
+                  No documents linked to this horse yet.
+                </p>
+              )}
+            </Card>
+          ) : null}
+        </>
       ) : null}
 
       {tab === 'Ownership' ? (
