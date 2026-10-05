@@ -1,3 +1,4 @@
+import { buildApiUrl } from '@/lib/backendApi';
 import { create } from 'zustand';
 import type { AuthChangeEvent, Session } from '@supabase/supabase-js';
 import { loadWorkspaceAccessProfile } from '@/lib/cloudWorkspace';
@@ -1788,7 +1789,7 @@ export const useCloudStore = create<CloudStore>((set, get) => ({
     try {
       const token = get().session?.access_token;
       if (!token) return false;
-      const response = await fetch('/api/account/send-welcome', {
+      const response = await fetch(buildApiUrl('/api/account/send-welcome'), {
         method: 'POST',
         headers: { Authorization: `Bearer ${token}` },
       });
@@ -2159,7 +2160,7 @@ export const useCloudStore = create<CloudStore>((set, get) => ({
 
     let response: Response;
     try {
-      response = await fetch('/api/account/delete', {
+      response = await fetch(buildApiUrl('/api/account/delete'), {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
         body: JSON.stringify({ confirmation }),

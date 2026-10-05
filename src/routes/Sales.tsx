@@ -575,6 +575,7 @@ export default function Sales() {
           canManageSales={canManageSales}
           onOverrideApproved={setAcceptMarginOverride}
           onCounterAtFloor={() => {
+            if (offerDecision.safeSalePrice === null) return;
             setLeadCounterOfferAmount(String(offerDecision.safeSalePrice));
             setLeadOfferStatus('Countered');
             setLeadStage('Offer');
@@ -759,7 +760,7 @@ export default function Sales() {
                         type="button"
                         onClick={() => {
                           setLeadAmountReceived(String(agreedSaleValue));
-                          if (!leadAmountReceivedOn) setLeadAmountReceivedOn(localIsoDate());
+                          setLeadAmountReceivedOn(localIsoDate());
                         }}
                         disabled={!canManageSales || !(agreedSaleValue > 0)}
                       >

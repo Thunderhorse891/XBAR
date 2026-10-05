@@ -1826,7 +1826,25 @@ export function canRestorePersistedState(raw: unknown): boolean {
   return true;
 }
 
+/** Payment dates must be valid at ingestion, not become evidence as the clock advances. */
+export function canRestoreSalePaymentDates(raw: unknown): boolean {
+  if (!raw || typeof raw !== 'object') return true;
+  const leads = (raw as Record<string, unknown>).salesLeads;
+  if (!Array.isArray(leads)) return true;
+  const today = localIsoDate();
+  return leads.every((lead) => {
+    if (!lead || typeof lead !== 'object') return true; // Full shape validation owns this case.
+    const date = (lead as SalesLead).amountReceivedOn;
+    return date === undefined || date === null || date === '' || (isCalendarDay(date) && date <= today);
+  });
+}
+
 export function restorePersistedState(raw: unknown): PersistedXbarState {
+  if (!canRestoreSalePaymentDates(raw)) {
+    throw new Error(
+      'Workspace contains an invalid or future payment receipt date. Correct the source record before importing.',
+    );
+  }
   const state = (raw && typeof raw === 'object' ? raw : {}) as Record<string, unknown>;
   const horses = Array.isArray(state.horses)
     ? (state.horses as HorseRecord[]).map((horse) => ({

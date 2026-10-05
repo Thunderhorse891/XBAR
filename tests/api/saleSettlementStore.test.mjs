@@ -1,6 +1,10 @@
 import assert from 'node:assert/strict';
 import { beforeEach, test } from 'node:test';
-import { canRestorePersistedState, createEmptyWorkspaceState } from '../../src/store/xbarStoreHelpers.ts';
+import {
+  canRestorePersistedState,
+  createEmptyWorkspaceState,
+  restorePersistedState,
+} from '../../src/store/xbarStoreHelpers.ts';
 import { useXbarStore } from '../../src/store/useXbarStore.ts';
 import { buildSubscriptionForTier } from '../../src/lib/xbarRuntime.ts';
 
@@ -121,5 +125,61 @@ test('restore refuses a future receipt before installing it; the actual store re
     .getState()
     .updateSalesLead('sale', { amountReceived: 25000, amountReceivedOn: '9999-12-31' });
   assert.equal(result.ok, false);
+  assert.deepEqual(useXbarStore.getState().salesLeads, before);
+});
+
+test('direct cloud import refuses future receipts without replacing current records', () => {
+  const before = useXbarStore.getState().exportWorkspaceBackup();
+  const incoming = {
+    ...before,
+    workspace: {
+      ...before.workspace,
+      salesLeads: [{ ...before.workspace.salesLeads[0], amountReceived: 25000, amountReceivedOn: '9999-12-31' }],
+    },
+  };
+  const result = useXbarStore.getState().importWorkspaceBackup(incoming);
+  assert.equal(result.ok, false, 'a future receipt cannot enter through cloud import');
+  assert.deepEqual(useXbarStore.getState().exportWorkspaceBackup().workspace, before.workspace);
+});
+
+test('local migration also refuses future receipt dates before they can age into valid payments', () => {
+  const workspace = useXbarStore.getState().exportWorkspaceBackup().workspace;
+  workspace.salesLeads = [{ ...workspace.salesLeads[0], amountReceived: 25000, amountReceivedOn: '9999-12-31' }];
+  assert.throws(() => restorePersistedState(workspace), /future payment receipt/);
+});
+
+test('actual store records partial and full payments that survive export and import', () => {
+  for (const amountReceived of [8000, 25000]) {
+    const result = useXbarStore.getState().updateSalesLead('sale', { amountReceived, amountReceivedOn: '2026-05-01' });
+    assert.equal(result.ok, true, result.message);
+    const backup = useXbarStore.getState().exportWorkspaceBackup();
+    useXbarStore.setState({ salesLeads: [] });
+    assert.equal(useXbarStore.getState().importWorkspaceBackup(backup).ok, true);
+    assert.equal(useXbarStore.getState().salesLeads[0].amountReceived, amountReceived);
+    assert.equal(useXbarStore.getState().salesLeads[0].amountReceivedOn, '2026-05-01');
+  }
+});
+
+test("a second direct Won update cannot replace a horse's recorded historical sale", () => {
+  const first = {
+    ...useXbarStore.getState().salesLeads[0],
+    horseId: 'horse',
+    amountReceived: 25000,
+    amountReceivedOn: '2026-05-01',
+  };
+  const second = {
+    ...first,
+    id: 'other',
+    outcome: undefined,
+    stage: 'Offer',
+    amountReceived: undefined,
+    amountReceivedOn: undefined,
+    depositStatus: 'Due',
+  };
+  useXbarStore.setState({ salesLeads: [first, second] });
+  const before = useXbarStore.getState().salesLeads;
+  const result = useXbarStore.getState().updateSalesLead('other', { stage: 'Closed', outcome: 'Won' });
+  assert.equal(result.ok, false);
+  assert.match(result.message, /already.*sale/i);
   assert.deepEqual(useXbarStore.getState().salesLeads, before);
 });

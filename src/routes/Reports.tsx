@@ -229,7 +229,7 @@ export default function Reports() {
   );
 
   const readinessSegments = [
-    { label: 'Ready to sell', value: report.readiness.ready, tone: 'var(--xbar-success)' },
+    { label: '95%+ complete, no recorded blockers', value: report.readiness.ready, tone: 'var(--xbar-success)' },
     { label: 'Getting there', value: report.readiness.gettingThere, tone: 'var(--xbar-warning)' },
     { label: 'Not ready', value: report.readiness.notReady, tone: 'var(--xbar-danger)' },
   ];
@@ -378,8 +378,9 @@ export default function Reports() {
                 reconciled against the receipts a rancher has on file. */}
             <small>
               {formatCompactCurrency(report.money.acquisitionCost)} in purchases ·{' '}
-              {formatCompactCurrency(report.money.receiptSpend)} in spend · {formatCurrency(report.money.monthlyBurn)}
-              /mo
+              {formatCompactCurrency(report.money.receiptSpend)} in spend ·{' '}
+              {report.money.monthlyBurn === null ? 'Unknown' : formatCurrency(report.money.monthlyBurn)}
+              /mo recorded average (history unconfirmed)
             </small>
             <div className="ops-hero__mini-grid">
               <div>
@@ -455,6 +456,13 @@ export default function Reports() {
             />
             <MetricCard
               className="ops-metric-card"
+              label="Sale payments received"
+              value={formatCompactCurrency(report.money.collectedFromSales)}
+              detail={`${formatCurrency(report.money.closedSaleValue)} agreed · ${formatCurrency(report.money.outstandingFromSales)} still owed. Paid deposits on closed sales are included.`}
+              tone="blue"
+            />
+            <MetricCard
+              className="ops-metric-card"
               label="Spent this month"
               value={formatCompactCurrency(report.money.investedThisMonth)}
               // Not "of that": buildRanchReport deliberately excludes purchase
@@ -497,7 +505,7 @@ export default function Reports() {
           <Panel
             className="ops-panel"
             title="Cost and margin by horse"
-            description="What each horse has cost, what it burns per month, and the lowest price worth taking."
+            description="Recorded costs and monthly averages, with the same recorded-cost sale floor as Sales. Missing history or costs remain unknown."
           >
             <div className="report-table-scroll">
               <table className="report-table">
@@ -508,7 +516,7 @@ export default function Reports() {
                       Invested
                     </th>
                     <th scope="col" className="report-table__num">
-                      Per month
+                      Recorded monthly avg
                     </th>
                     <th scope="col" className="report-table__num">
                       Asking
@@ -544,7 +552,9 @@ export default function Reports() {
                         <span className="report-table__meta">{horse.status}</span>
                       </th>
                       <td className="report-table__num">{formatCurrency(horse.investedToDate)}</td>
-                      <td className="report-table__num">{formatCurrency(horse.monthlyBurn)}</td>
+                      <td className="report-table__num">
+                        {horse.monthlyBurn === null ? 'Unknown' : formatCurrency(horse.monthlyBurn)}
+                      </td>
                       {/* Showing $0 would read as "worth nothing" rather than
                       "no price yet", and the three derived columns are
                       meaningless without an asking price. But "not listed" is a
@@ -555,17 +565,34 @@ export default function Reports() {
                       {horse.askPrice > 0 ? (
                         <>
                           <td className="report-table__num">{formatCurrency(horse.askPrice)}</td>
-                          <td className="report-table__num">{formatCurrency(horse.breakEvenPrice)}</td>
                           <td className="report-table__num">
-                            <Pill tone={horse.projectedMargin >= 0 ? 'emerald' : 'rose'}>
-                              {formatCurrency(horse.projectedMargin)} · {horse.marginPercent}%
+                            {horse.breakEvenPrice === null ? 'Unknown' : formatCurrency(horse.breakEvenPrice)}
+                          </td>
+                          <td className="report-table__num">
+                            <Pill
+                              tone={
+                                horse.projectedMargin === null
+                                  ? 'slate'
+                                  : horse.projectedMargin >= 0
+                                    ? 'emerald'
+                                    : 'rose'
+                              }
+                            >
+                              {horse.projectedMargin === null ? 'Unknown' : formatCurrency(horse.projectedMargin)} ·{' '}
+                              {horse.marginPercent === null ? 'Cost records missing' : `${horse.marginPercent}%`}
                             </Pill>
                           </td>
-                          <td className="report-table__num">{formatCurrency(horse.safeDiscountFloor)}</td>
+                          <td className="report-table__num">
+                            {horse.safeDiscountFloor === null ? 'Unknown' : formatCurrency(horse.safeDiscountFloor)}
+                          </td>
                         </>
                       ) : (
                         <td className="report-table__num report-table__muted" colSpan={4}>
-                          {horse.saleInventory ? 'Asking price not set' : 'Not listed for sale'}
+                          {horse.financialStatus === 'sold'
+                            ? `Sold: ${horse.closedSaleValue === null ? 'sale price unknown' : formatCurrency(horse.closedSaleValue)} · gross result ${horse.closedSaleProfit === null ? 'unknown' : formatCurrency(horse.closedSaleProfit)} before overhead, not cash received`
+                            : horse.saleInventory
+                              ? 'Asking price not set'
+                              : 'Not listed for sale'}
                         </td>
                       )}
                     </tr>
@@ -617,8 +644,8 @@ export default function Reports() {
 
         <Panel
           className="ops-panel"
-          title="Sale readiness"
-          description={`${report.readiness.average}% average across ${report.horseCount} horse${report.horseCount === 1 ? '' : 's'}.`}
+          title="Record readiness"
+          description={`${report.readiness.average}% average across ${report.horses.filter((horse) => horse.financialStatus !== 'sold').length} unsold horse${report.horses.filter((horse) => horse.financialStatus !== 'sold').length === 1 ? '' : 's'}.`}
         >
           <div className="report-readiness">
             <ReadinessChart

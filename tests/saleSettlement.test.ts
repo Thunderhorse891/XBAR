@@ -65,7 +65,7 @@ test('a paid deposit counts as received, and only the deposit', () => {
 test('an unpaid sale adds nothing to banked profit, so overhead shows as the true floor', () => {
   const fin = buildRanchFinancials(
     [horse('h1', 10000, 'Dun It Again')],
-    [{ id: 'rent', category: 'Other', amount: 300 } as unknown as ExpenseReceipt],
+    [{ id: 'rent', category: 'Other', amount: 300, receiptDate: '2026-05-01' } as unknown as ExpenseReceipt],
     [auditLead()],
   );
   assert.equal(fin.netProfit, -300, 'not +$14,700 from money nobody has paid');
@@ -75,7 +75,7 @@ test('an unpaid sale adds nothing to banked profit, so overhead shows as the tru
   // Paid in full, the same sale is banked.
   const paid = buildRanchFinancials(
     [horse('h1', 10000, 'Dun It Again')],
-    [{ id: 'rent', category: 'Other', amount: 300 } as unknown as ExpenseReceipt],
+    [{ id: 'rent', category: 'Other', amount: 300, receiptDate: '2026-05-01' } as unknown as ExpenseReceipt],
     [auditLead({ amountReceived: 25000, amountReceivedOn: '2026-05-20' })],
   );
   assert.equal(paid.netProfit, 14700);
@@ -305,7 +305,7 @@ for (const saleValue of [5000, 25000]) {
 test('overhead insight describes agreed margins without inventing banked cash', () => {
   const fin = buildRanchFinancials(
     [horse('h1', 10000)],
-    [{ amount: 20000, category: 'Other' } as unknown as ExpenseReceipt],
+    [{ amount: 20000, category: 'Other', receiptDate: '2026-05-01' } as unknown as ExpenseReceipt],
     [auditLead()],
   );
   assert.equal(fin.netProfit, -20000);
@@ -356,3 +356,31 @@ test('a paid deposit exceeding the sale is refused even with a blank total', () 
     false,
   );
 });
+
+test('Paid in full stamps the latest receipt day even after a partial payment', async () => {
+  const sales = await readFile('src/routes/Sales.tsx', 'utf8');
+  assert.match(
+    sales,
+    /setLeadAmountReceived\(String\(agreedSaleValue\)\);\s*setLeadAmountReceivedOn\(localIsoDate\(\)\)/,
+  );
+});
+
+test('financial report date controls which payments have been received', () => {
+  const fin = buildRanchFinancials(
+    [horse('h1', 10000)],
+    [],
+    [auditLead({ amountReceived: 25000, amountReceivedOn: '2026-06-01' })],
+    new Date('2026-05-01T12:00:00Z'),
+  );
+  assert.equal(fin.collectedFromSales, 0);
+  assert.equal(fin.outstandingFromSales, 25000);
+});
+
+for (const depositAmount of ['25000', true, {}, Infinity, -100]) {
+  test(`malformed paid deposit ${String(depositAmount)} cannot establish received cash`, () => {
+    assert.equal(
+      saleAmountReceived(auditLead({ depositStatus: 'Paid', depositAmount: depositAmount as number }), 25000),
+      0,
+    );
+  });
+}

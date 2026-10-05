@@ -256,7 +256,7 @@ const pricing = {
 
 <section class="section section--flush">
   <div class="wrap">
-    <p class="intro">Monthly billing is available. Annual billing is not currently offered. Prices below are in USD; review the total and recurring billing details in Stripe before subscribing.</p>
+    <p class="intro">Compare monthly and annual plan rates below. Annual prices are the total billed each year. Review the billing options available to your workspace inside XBAR. Prices are in USD; confirm the total and recurring billing details in Stripe before subscribing.</p>
     <div class="plans">
       ${marketingPlans
         .map(
@@ -265,6 +265,7 @@ const pricing = {
         <h2 style="font-family:var(--font-ui);font-size:20px">${esc(plan.tier)}</h2>
         <p class="plan__fit">${esc(plan.fit)}</p>
         <p class="plan__price">$${plan.monthlyRate}<small>/month</small></p>
+        <p class="plan__fit">or $${plan.annualRate.toLocaleString('en-US')}/year, billed annually</p>
         <ul>${plan.features.map((feature) => `<li>${esc(feature)}</li>`).join('')}</ul>
         <a class="btn${plan.featured ? ' btn--primary' : ''}" href="${signup(plan.tier)}" rel="nofollow">Choose ${esc(plan.tier)}</a>
       </article>`,
@@ -283,6 +284,7 @@ const pricing = {
         <thead><tr><th scope="col">Capacity</th>${marketingPlans.map((plan) => `<th scope="col">${esc(plan.tier)}</th>`).join('')}</tr></thead>
         <tbody>
           <tr><th scope="row">Monthly price</th>${marketingPlans.map((plan) => `<td>$${plan.monthlyRate}</td>`).join('')}</tr>
+          <tr><th scope="row">Annual price (billed yearly)</th>${marketingPlans.map((plan) => `<td>$${plan.annualRate.toLocaleString('en-US')}/year</td>`).join('')}</tr>
           <tr><th scope="row">Horses</th>${marketingPlans.map((plan) => `<td>${plan.limits.horseLimit.toLocaleString('en-US')}</td>`).join('')}</tr>
           <tr><th scope="row">Team seats</th>${marketingPlans.map((plan) => `<td>${plan.limits.seatLimit}</td>`).join('')}</tr>
           <tr><th scope="row">Client seats</th>${marketingPlans.map((plan) => `<td>${plan.limits.sharedAccessSeatLimit}</td>`).join('')}</tr>

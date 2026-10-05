@@ -19,6 +19,8 @@ import { buildBudgetSummary, buildCareBoardRows, buildTransferGapRows } from '@/
 import { buildBankedHeadline, buildRanchFinancials } from '@/lib/profitIntelligence';
 import { formatCompactCurrency } from '@/lib/format';
 import { events, track } from '@/lib/telemetry';
+import { buildRanchReport } from '@/lib/ranchReport';
+import { useDayKey } from '@/hooks/useDayKey';
 import { useXbarStore } from '@/store/useXbarStore';
 
 // Stagger index for the motion system; the CSS var drives each child's delay.
@@ -38,6 +40,7 @@ type Signal = {
 
 export default function Dashboard() {
   const navigate = useNavigate();
+  const dayKey = useDayKey();
   const horses = useXbarStore((s) => s.horses);
   const documents = useXbarStore((s) => s.documents);
   const ownershipRecords = useXbarStore((s) => s.ownershipRecords);
@@ -63,9 +66,10 @@ export default function Dashboard() {
     const careDue = careBoard.filter((row) => row.signals.some((sig) => sig.status === 'due'));
     const budget = buildBudgetSummary(expenseReceipts);
     const activeSales = salesLeads.filter((l) => l.stage !== 'Closed');
-    const readiness = horses.length
-      ? Math.round(horses.reduce((sum, h) => sum + (h.readiness?.score ?? 0), 0) / horses.length)
-      : 0;
+    const readiness = buildRanchReport(
+      { horses, documents, ownershipRecords, expenseReceipts, salesLeads },
+      new Date(`${dayKey}T12:00:00`),
+    ).readiness.average;
     const openItems = transferGaps.length + careDue.length + reviewQueue.length;
     return {
       reviewQueue,
@@ -78,7 +82,7 @@ export default function Dashboard() {
       documentActions,
       documentGapHorseCount,
     };
-  }, [horses, documents, ownershipRecords, expenseReceipts, salesLeads]);
+  }, [horses, documents, ownershipRecords, expenseReceipts, salesLeads, dayKey]);
 
   // The money story on the front door — same honest engine as the Money view, so
   // the Dashboard and /financials never disagree. These are all ungated figures
@@ -398,7 +402,7 @@ export default function Dashboard() {
       to: '/horses?documents=missing',
       danger: documentGapHorseCount > 0,
     },
-    { v: `${readiness}%`, l: 'Ready to sell', to: '/reports' },
+    { v: `${readiness}%`, l: 'Record readiness', to: '/reports' },
   ];
 
   return (

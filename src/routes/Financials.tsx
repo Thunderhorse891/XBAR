@@ -159,6 +159,13 @@ export default function Financials() {
         </div>
       </div>
 
+      <p className="fin-stat__sub">
+        {formatCurrency(fin.closedSaleValue)} agreed sales · {formatCurrency(fin.collectedFromSales)} received on sales
+        · {formatCurrency(fin.outstandingFromSales)} still owed · {formatCurrency(fin.depositsHeld)} in unapplied
+        deposits held. Total recorded cash received: {formatCurrency(fin.totalCashReceived)}. This is not a bank balance
+        or profit.
+      </p>
+
       {locked ? (
         <Card
           title="Unlock full financial intelligence"

@@ -112,6 +112,7 @@ import {
   promoteDocument,
   requireRoleCapability,
   restorePersistedState,
+  canRestoreSalePaymentDates,
   restoreWorkspaceProfile,
   selectPersistedState,
   syncDerivedValues,
@@ -2083,6 +2084,16 @@ export const useXbarStore = create<XbarStore>()(
         if (!lead) {
           return { ok: false, message: 'Lead not found.' };
         }
+        if (
+          patch.outcome === 'Won' &&
+          get().salesLeads.some((item) => item.id !== leadId && item.horseId === lead.horseId && item.outcome === 'Won')
+        ) {
+          return {
+            ok: false,
+            message:
+              'This horse already has a completed sale. Correct that sale instead of replacing its recorded receipts.',
+          };
+        }
         // Money received on a sale feeds "collected" and "profit banked" (audit
         // F08). The close-out form validates it fully; this is the backstop for
         // any other caller.
@@ -3516,6 +3527,13 @@ export const useXbarStore = create<XbarStore>()(
           return {
             ok: false,
             message: 'Backup file is missing the XBAR workspace payload.',
+          };
+        }
+        if (!canRestoreSalePaymentDates(payload)) {
+          return {
+            ok: false,
+            message:
+              'Workspace contains an invalid or future payment receipt date. Correct the source record before importing.',
           };
         }
         const nextState = restorePersistedState(payload);
