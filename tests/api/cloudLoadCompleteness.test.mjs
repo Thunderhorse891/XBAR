@@ -600,3 +600,84 @@ for (const recordsOwner of ['', 'account:former-user', 'former-ranch']) {
     f.dispose();
   });
 }
+
+for (const scenario of [
+  'auditEvents',
+  'salePacketBuilds',
+  'buyerRoomEvents',
+  'all-history',
+  'different-records-owner',
+  'unknown-records-owner',
+  'different-remote-ranch',
+  'different-remote-account',
+  'remote-history-present',
+  'snapshot',
+  'operational-change',
+  'old-owner-id',
+  'old-proof-id',
+]) {
+  test(`initial relational reconnect preserves local history: ${scenario}`, async () => {
+    fixture({ completeProfile: true, legacyOwnership: true });
+    const remote = await loadWorkspaceBackupFromCloud();
+    assert.equal(remote.ok, true, remote.message);
+    const local = { workspace: selectPersistedState(restorePersistedState(structuredClone(remote.backup.workspace))) };
+    const histories = ['auditEvents', 'salePacketBuilds', 'buyerRoomEvents'];
+    for (const key of histories) {
+      if (scenario === key || !histories.includes(scenario))
+        local.workspace[key] = [{ id: `local-${key}`, at: stamp, actor: 'Owner', summary: 'Device history' }];
+    }
+    if (scenario === 'operational-change') local.workspace.horses[0].name = 'Unsaved local horse name';
+    if (scenario === 'old-owner-id') local.workspace.workspaceMembers[0].id = 'member-old-arbitrary-id';
+    if (scenario === 'old-proof-id')
+      local.workspace.ownershipRecords[0].proofRequirements[0].id = 'proof-old-arbitrary-id';
+    const before = structuredClone(local);
+    const returned = structuredClone(remote);
+    if (scenario === 'different-remote-ranch') returned.workspaceId = 'other-ranch';
+    if (scenario === 'snapshot') returned.source = 'snapshot';
+    if (scenario === 'remote-history-present')
+      returned.backup.workspace.auditEvents = [{ id: 'remote-audit', summary: 'Remote event' }];
+    const f = await cloudBootstrapFixture((setup) => {
+      setup.hydrateFirst = true;
+      Object.assign(setup, {
+        decideCloudReconciliation,
+        hasMeaningfulWorkspace,
+        mergeCloudSubscription,
+        withCloudSubscription,
+      });
+      setup.cloud.session.user.id = 'user-owner';
+      setup.cloud.workspaceId = 'ws-owner';
+      setup.vaultOwner = 'ws-owner';
+      setup.recordsOwner =
+        scenario === 'different-records-owner' ? 'other-ranch' : scenario === 'unknown-records-owner' ? '' : 'ws-owner';
+      setup.backup = structuredClone(local);
+      setup.load = async () => {
+        if (scenario === 'different-remote-account') setup.cloud.session = { user: { id: 'other-user' } };
+        return returned;
+      };
+    });
+    f.startHydration();
+    await f.tick(0);
+    const shouldConnect = histories.includes(scenario) || scenario === 'all-history';
+    assert.equal(f.cloud.autosaveReady, scenario !== 'different-remote-account');
+    assert.equal(f.cloud.autosaveUnlocked, shouldConnect);
+    assert.equal(f.imports ?? 0, 0);
+    assert.equal(f.calls.length, 0);
+    assert.deepEqual(f.backup, before, 'reconnect must retain every local history and operational value');
+    for (const key of histories)
+      if (scenario !== 'remote-history-present' || key !== 'auditEvents')
+        assert.deepEqual(returned.backup.workspace[key], [], 'must not fabricate remote history');
+    f.dispose = f.startAutosave();
+    await f.tick(1600);
+    assert.equal(f.calls.length, 0, 'reconnect must not echo-save history');
+    if (shouldConnect) {
+      f.backup.workspace.horses[0].name = 'Next intended edit';
+      f.change();
+      await f.tick(1600);
+      assert.equal(f.calls.length, 1);
+      for (const key of histories) assert.deepEqual(f.calls[0].backup.workspace[key], before.workspace[key]);
+      f.calls[0].resolve({ ok: true, message: 'Saved' });
+      await f.tick(0);
+    }
+    f.dispose();
+  });
+}

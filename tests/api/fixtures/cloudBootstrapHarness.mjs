@@ -80,7 +80,7 @@ export async function cloudBootstrapFixture(configure) {
               '@/store/xbarStoreHelpers': 'export const restorePersistedState=(value)=>value;',
               '@/lib/cloudSyncPolicy':
                 'export const serializeWorkspaceBackup=(v)=>JSON.stringify(v);export const decideCloudReconciliation=(...args)=>f.decideCloudReconciliation(...args);export const getWorkspacePayload=(v)=>v.workspace;export const hasMeaningfulWorkspace=(...args)=>f.hasMeaningfulWorkspace(...args);',
-              '@/lib/workspacePromotion': 'export const promoteLocalVaultFiles=()=>{};',
+              '@/lib/workspacePromotion': 'export const promoteLocalVaultFiles=()=>({failed:[]});',
               '@/lib/vaultOwner': 'export const vaultOwnerId=()=>f.vaultOwner??"local";',
               '@/lib/recordsOwner': 'export const readRecordsOwner=()=>f.recordsOwner??"local";',
               '@/store/useCloudStore':
