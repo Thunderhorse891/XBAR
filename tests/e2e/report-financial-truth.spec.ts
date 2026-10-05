@@ -56,11 +56,11 @@ for (const width of [1440, 390]) {
       history.pushState({}, '', '/app/reports');
       dispatchEvent(new PopStateEvent('popstate'));
     });
-    const unknown = page.getByRole('row', { name: /Unknown Cost Horse/ });
+    const unknown = page.getByRole('link', { name: 'Unknown Cost Horse, open profile', exact: true });
     await expect(unknown).toContainText('Unknown');
     await expect(unknown).toContainText('Cost records missing');
     await expect(unknown).not.toContainText('100%');
-    const sold = page.getByRole('row', { name: /Sold Loss Horse/ });
+    const sold = page.getByRole('link', { name: 'Sold Loss Horse, open profile', exact: true });
     await expect(sold).toContainText('-$5,900');
     await expect(sold).toContainText('not cash received');
     await expect(sold).not.toContainText('$20,000');
