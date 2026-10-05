@@ -1,6 +1,6 @@
 # Ranch social profiles and sale-document handoff
 
-Scope requested by the owner: clickable ranch social profiles and an option to hand a generated selling document to a social app. Starts from main `076b03c8e1deae56011d962d8a904c4b8ef38d80` (tree `20e063cb43acb3be71538a22cb137a8bf320f729`). No database migration, OAuth connection, automatic posting, native-project change, or production release is part of this work.
+Scope requested by the owner: clickable ranch social profiles and an option to hand a generated selling document to a social app. Starts from main `076b03c8e1deae56011d962d8a904c4b8ef38d80` (tree `20e063cb43acb3be71538a22cb137a8bf320f729`). Main restore/pull-scope correction `de684de5c6526f66d26ac4108ed50378236a67dd` was subsequently integrated without changing that correction. No database migration, OAuth connection, automatic posting, native-project change, or production release is part of this work.
 
 ## Ranch profiles
 
