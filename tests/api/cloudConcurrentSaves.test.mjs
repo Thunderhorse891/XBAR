@@ -12,12 +12,13 @@ const { setCloudSubscriptionClient } = await import('./fixtures/cloudSubscriptio
 const { supabaseConfig } = await import('../../src/lib/platformConfig.ts');
 const { saveWorkspaceBackupToCloud } = await import('../../src/lib/cloudWorkspace.ts');
 
+const clone = (value) => (value === undefined ? undefined : JSON.parse(JSON.stringify(value)));
 const horse = { id: 'horse-a', name: 'Blue', sale: { askPrice: 10000 }, medicalTimeline: [] };
 const profile = { ranchName: 'Ranch', businessName: 'Old business' };
 const backup = () => ({
   app: 'XBAR',
   version: 16,
-  workspace: { horses: [structuredClone(horse)], workspaceProfile: structuredClone(profile) },
+  workspace: { horses: [clone(horse)], workspaceProfile: clone(profile) },
 });
 const ids = {
   horses: 'horse_id',
@@ -39,13 +40,11 @@ function fixture(remote = {}, beforeUpdate) {
         {
           workspace_id: 'ranch-a',
           horse_id: 'horse-a',
-          payload: structuredClone(horse),
+          payload: clone(horse),
           updated_at: '2026-10-01T00:00:00Z',
         },
       ],
-      workspace_profiles: [
-        { workspace_id: 'ranch-a', payload: structuredClone(profile), updated_at: '2026-10-01T00:00:00Z' },
-      ],
+      workspace_profiles: [{ workspace_id: 'ranch-a', payload: clone(profile), updated_at: '2026-10-01T00:00:00Z' }],
       ...remote,
     }),
   );
@@ -75,7 +74,7 @@ function fixture(remote = {}, beforeUpdate) {
               : row[key] === value,
         );
       const execute = () => {
-        calls.push({ table, action, values: structuredClone(values), filters });
+        calls.push({ table, action, values: clone(values), filters });
         const rows = data.get(table) ?? [];
         if (action === 'update') beforeUpdate?.(table, rows);
         let selected = rows.filter(matches);
@@ -385,7 +384,7 @@ test('deleting an unchanged legacy row remains possible after real restore norma
   const { restorePersistedState, selectPersistedState } = await import('../../src/store/xbarStoreHelpers.ts');
   const f = fixture();
   const baseline = { ...backup(), workspace: selectPersistedState(restorePersistedState(backup().workspace)) };
-  const current = structuredClone(baseline);
+  const current = clone(baseline);
   current.workspace.horses = [];
   const result = await saveWorkspaceBackupToCloud(current, {
     baseline,
@@ -430,7 +429,7 @@ test('deletion cannot sanitize an unrecognized remote document state into the ba
   });
   const baseline = backup();
   baseline.workspace.documents = [{ id: 'doc-a', state: 'Needs Review' }];
-  const current = structuredClone(baseline);
+  const current = clone(baseline);
   current.workspace.documents = [];
   const result = await saveWorkspaceBackupToCloud(current, {
     baseline,
@@ -451,5 +450,31 @@ test('an Admin profile edit still pending after demotion is not silently acknowl
   const result = await saveWorkspaceBackupToCloud(current, { baseline });
   assert.equal(result.ok, false);
   assert.match(result.message, /profile|administrator/i);
+  assert.equal(f.calls.filter((call) => call.action !== 'read').length, 0);
+});
+
+test('relational saves work without structuredClone on supported older Safari/WebViews', async () => {
+  const f = fixture();
+  const baseline = backup(),
+    current = backup();
+  current.workspace.horses[0].sale.askPrice = 15000;
+  const native = globalThis.structuredClone;
+  try {
+    globalThis.structuredClone = undefined;
+    const result = await saveWorkspaceBackupToCloud(current, { baseline });
+    assert.equal(result.ok, true, result.message);
+    assert.equal(f.data.get('horses')[0].payload.sale.askPrice, 15000);
+  } finally {
+    globalThis.structuredClone = native;
+  }
+});
+
+test('unserializable workspace snapshots fail before any relational or fallback write', async () => {
+  const f = fixture();
+  const current = backup();
+  current.workspace.circular = current.workspace;
+  const result = await saveWorkspaceBackupToCloud(current, { baseline: backup() });
+  assert.equal(result.ok, false);
+  assert.match(result.message, /serializ/i);
   assert.equal(f.calls.filter((call) => call.action !== 'read').length, 0);
 });

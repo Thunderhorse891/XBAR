@@ -947,8 +947,8 @@ async function saveWorkspaceBackupToRelationalCloud(
   session: Session,
   options: CloudSaveOptions,
 ): Promise<RelationalMirrorResult> {
-  const normalized = normalizeBackup(structuredClone(backup));
-  if (!normalized) {
+  const source = normalizeBackup(backup);
+  if (!source) {
     return {
       ok: false,
       message: 'Workspace backup payload is missing the normalized mirror data.',
@@ -960,6 +960,18 @@ async function saveWorkspaceBackupToRelationalCloud(
   let documentsPersisted = false;
 
   try {
+    // Persisted workspace data is JSON, and Safari 13 does not expose structuredClone.
+    // Clone inside the guarded path before any write; never mutate the caller's snapshot.
+    let normalized: CloudWorkspaceBackup;
+    try {
+      const copy = normalizeBackup(JSON.parse(JSON.stringify(source)));
+      if (!copy) throw new Error('Invalid workspace shape');
+      normalized = copy;
+    } catch {
+      throw new WorkspaceSaveAccessError(
+        'The workspace snapshot could not be serialized safely. No cloud records were changed.',
+      );
+    }
     const { workspaceId, role, persistedProfile } = await ensurePrimaryWorkspace(session, normalized, options);
     // Push cloud deletes every cloud record this device lacks. That is the
     // ranch administrator's call, never a staff save's.

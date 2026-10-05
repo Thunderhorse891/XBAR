@@ -13,7 +13,7 @@ const horse = (id: string, costBasis: number, askPrice: number, name = id): Hors
   ({ id, name, costBasis, sale: { askPrice } }) as unknown as HorseRecord;
 
 const receipt = (id: string, horseId: string | undefined, category: string, amount: number): ExpenseReceipt =>
-  ({ id, horseId, category, amount }) as unknown as ExpenseReceipt;
+  ({ id, horseId, category, amount, receiptDate: '2026-01-01' }) as unknown as ExpenseReceipt;
 
 const wonLead = (id: string, horseId: string, offerAmount: number, counterOfferAmount?: number): SalesLead =>
   ({

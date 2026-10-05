@@ -7,8 +7,10 @@ import {
   type RevenueRiskAssessment,
   type SpendAnomaly,
 } from './businessIntelligence.js';
-import { NON_LIVE_OFFER_STATUSES } from './profitIntelligence.js';
-import { monthKeyForDate, monthKeyOf, trailingMonthKeys } from './receiptMonths.js';
+import { buildRanchFinancials, NON_LIVE_OFFER_STATUSES } from './profitIntelligence.js';
+import { monthKeyForDate, monthKeyOf } from './receiptMonths.js';
+import { recordedReceipts, recordedMonthlyBurn, observedReceiptMonths } from './receiptFacts.js';
+import { buildSaleReadinessScore } from './saleReadinessScore.js';
 import { dayKeyFor } from '../hooks/useDayKey.js';
 
 /*
@@ -34,15 +36,15 @@ export interface RanchReportMoney {
   investedToDate: number;
   /** Purchase prices of the horses on the roster. */
   acquisitionCost: number;
-  /** Every receipt ever recorded, whether or not it is tied to a horse. */
+  /** Valid dated receipts on or before the report date, linked or ranch-wide. */
   receiptSpend: number;
   /** Acquisitions plus the receipts tied to a horse. The rest is ranch overhead. */
   investedInHorses: number;
   investedThisMonth: number;
   /** Current-month receipts with no horse assignment. */
   unallocatedThisMonth: number;
-  /** Trailing three-month average spend across the whole operation. */
-  monthlyBurn: number;
+  /** Recorded three-month average; null if any month has no records. Completeness is unconfirmed. */
+  monthlyBurn: number | null;
   /** Asking prices of everything listed for sale. */
   listedValue: number;
   /** Listed dollars a buyer cannot close on today. */
@@ -68,12 +70,15 @@ export interface HorseEconomicsRow {
    */
   saleInventory: boolean;
   investedToDate: number;
-  monthlyBurn: number;
+  monthlyBurn: number | null;
   askPrice: number;
-  breakEvenPrice: number;
-  projectedMargin: number;
-  marginPercent: number;
-  safeDiscountFloor: number;
+  breakEvenPrice: number | null;
+  projectedMargin: number | null;
+  marginPercent: number | null;
+  safeDiscountFloor: number | null;
+  financialStatus: 'sold' | 'pipeline' | 'held';
+  closedSaleValue: number | null;
+  closedSaleProfit: number | null;
   readinessScore: number;
   /** Why this horse cannot be sold today. Empty when nothing is blocking it. */
   blockers: string[];
@@ -110,6 +115,7 @@ export interface RanchReport {
   documentsToReview: number;
   money: RanchReportMoney;
   readiness: RanchReportReadiness;
+  spendHistory: { observedMonths: string[]; completeness: 'unconfirmed' };
   /** Sorted so the horse costing the most money sits at the top. */
   horses: HorseEconomicsRow[];
   /** Sorted by total spend, largest first. */
@@ -125,9 +131,6 @@ export interface RanchReportInput {
   salesLeads: SalesLead[];
   ownershipRecords: OwnershipRecord[];
 }
-
-/** How many complete months the burn figure averages over. */
-const TRAILING_MONTHS = 3;
 
 /** Offer stages that represent money still in play. */
 const OPEN_OFFER_STAGES = new Set(['New', 'Qualified', 'Offer']);
@@ -177,29 +180,6 @@ function positiveMoney(value: number | undefined): number {
 
 function sum(values: number[]): number {
   return values.reduce((total, value) => (Number.isFinite(value) ? total + value : total), 0);
-}
-
-/**
- * Average spend over the three complete months before this one.
- *
- * Averaged over three whole months rather than over "months that had
- * receipts": a quiet month is a real month of low burn, and dropping it would
- * overstate what the operation actually costs to run. The current month is
- * excluded for the same reason in reverse — it is partial, and averaging it
- * against whole months would make the figure fall every 1st and climb back
- * over the following weeks.
- */
-function trailingMonthlyBurn(receipts: ExpenseReceipt[], now: Date): number {
-  // Exactly the three complete months before this one, so the divisor matches
-  // the period. A range from three months back to today spans FOUR calendar
-  // months and was divided by three: an operation spending $300 a month
-  // reported $400, in the UI, the CSV and the banker-facing PDF alike.
-  const window = new Set(trailingMonthKeys(now, TRAILING_MONTHS));
-  const trailing = receipts.filter((receipt) => {
-    const key = monthKeyOf(receipt.receiptDate);
-    return key !== null && window.has(key);
-  });
-  return Math.round(sum(trailing.map((receipt) => receipt.amount)) / TRAILING_MONTHS);
 }
 
 /*
@@ -271,7 +251,9 @@ function apportionCategoryShares(rows: { category: string; total: number; thisMo
 }
 
 export function buildRanchReport(input: RanchReportInput, now: Date = new Date()): RanchReport {
-  const { horses, documents, expenseReceipts, salesLeads, ownershipRecords } = input;
+  const { horses, documents, salesLeads, ownershipRecords } = input;
+  const expenseReceipts = recordedReceipts(input.expenseReceipts, now);
+  const financials = buildRanchFinancials(horses, input.expenseReceipts, salesLeads, now);
 
   /*
    * A horse with a Won lead has been SOLD, and the sale fields do not say so.
@@ -307,7 +289,17 @@ export function buildRanchReport(input: RanchReportInput, now: Date = new Date()
   const blockersByHorse = new Map(risk.items.map((item) => [item.horseId, item.blockers]));
 
   const horseRows: HorseEconomicsRow[] = horses.map((horse) => {
-    const economics = computeHorseEconomics(horse, expenseReceipts, now);
+    const economics = computeHorseEconomics(horse, input.expenseReceipts, now);
+    const financial = financials.perAnimal.find((row) => row.horseId === horse.id)!;
+    const blockers = blockersByHorse.get(horse.id) ?? [];
+    const readiness = buildSaleReadinessScore({
+      horse,
+      documents,
+      receipts: expenseReceipts,
+      ownershipRecord: ownershipRecords.find((record) => record.horseId === horse.id),
+      releaseGate: { allowed: blockers.length === 0, nextAction: blockers[0] ?? '' },
+      now,
+    });
     return {
       horseId: horse.id,
       horseName: horse.name,
@@ -315,12 +307,19 @@ export function buildRanchReport(input: RanchReportInput, now: Date = new Date()
       saleInventory: isSaleInventory(horse) && !isSold(horse),
       investedToDate: economics.costToDate,
       monthlyBurn: economics.monthlyBurn,
-      askPrice: economics.askPrice,
+      askPrice: isSold(horse) ? 0 : economics.askPrice,
       breakEvenPrice: economics.breakEvenPrice,
-      projectedMargin: economics.projectedMargin,
-      marginPercent: economics.marginPercent,
-      safeDiscountFloor: economics.safeDiscountFloor,
-      readinessScore: horse.readiness?.score ?? 0,
+      projectedMargin: isSold(horse) ? null : economics.projectedMargin,
+      marginPercent: isSold(horse) ? null : economics.marginPercent,
+      safeDiscountFloor: isSold(horse) ? null : economics.safeDiscountFloor,
+      financialStatus: financial.status,
+      closedSaleValue:
+        isSold(horse) && Number.isFinite(financial.value) && financial.value > 0 ? financial.value : null,
+      closedSaleProfit:
+        isSold(horse) && Number.isFinite(financial.value) && financial.value > 0 && !financial.costBlindSpot
+          ? financial.profit
+          : null,
+      readinessScore: readiness.score,
       blockers: blockersByHorse.get(horse.id) ?? [],
     };
   });
@@ -354,11 +353,14 @@ export function buildRanchReport(input: RanchReportInput, now: Date = new Date()
   // reported $0 invested in the UI, the CSV and the banker-facing PDF alike.
   const acquisitionCost = sum(horses.map((horse) => Math.max(0, horse.costBasis ?? 0)));
 
-  const scores = horses.map((horse) => horse.readiness?.score ?? 0);
+  const activeRows = horseRows.filter((horse) => horse.financialStatus !== 'sold');
+  const scores = activeRows.map((horse) => horse.readinessScore);
   const readiness: RanchReportReadiness = {
     average: scores.length ? Math.round(sum(scores) / scores.length) : 0,
-    ready: scores.filter((score) => score >= 95).length,
-    gettingThere: scores.filter((score) => score >= 75 && score < 95).length,
+    ready: activeRows.filter((horse) => horse.readinessScore >= 95 && !horse.blockers.length).length,
+    gettingThere: activeRows.filter(
+      (horse) => horse.readinessScore >= 75 && (horse.readinessScore < 95 || horse.blockers.length > 0),
+    ).length,
     notReady: scores.filter((score) => score < 75).length,
   };
 
@@ -449,7 +451,7 @@ export function buildRanchReport(input: RanchReportInput, now: Date = new Date()
           .filter((receipt) => !receipt.horseId && sameMonth(receipt.receiptDate, now))
           .map((receipt) => receipt.amount),
       ),
-      monthlyBurn: trailingMonthlyBurn(expenseReceipts, now),
+      monthlyBurn: recordedMonthlyBurn(expenseReceipts, now),
       listedValue: risk.totalListedValue,
       valueAtRisk: risk.valueAtRisk,
       readyValue: risk.readyValue,
@@ -476,6 +478,7 @@ export function buildRanchReport(input: RanchReportInput, now: Date = new Date()
       ),
     },
     readiness,
+    spendHistory: { observedMonths: observedReceiptMonths(expenseReceipts, now), completeness: 'unconfirmed' },
     horses: horseRows,
     categories,
     anomalies: detectSpendAnomalies(expenseReceipts, now),

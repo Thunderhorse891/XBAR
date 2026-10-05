@@ -1,4 +1,5 @@
 import type { ExpenseCategory, ExpenseReceipt, HorseRecord, SalesLead } from '../types/xbar.js';
+import { receiptDay, recordedReceipts } from './receiptFacts.js';
 import { compareTimestampDesc } from './format.js';
 
 export type OfferDecisionStatus = 'no-offer' | 'missing-costs' | 'loss' | 'thin-margin' | 'protected-margin';
@@ -6,20 +7,32 @@ export type OfferDecisionStatus = 'no-offer' | 'missing-costs' | 'loss' | 'thin-
 export type OfferDecision = {
   status: OfferDecisionStatus;
   effectiveOffer: number;
-  breakEven: number;
-  safeSalePrice: number;
-  expectedProfit: number;
-  marginPercent: number;
+  breakEven: number | null;
+  safeSalePrice: number | null;
+  expectedProfit: number | null;
+  marginPercent: number | null;
   acceptanceBlocked: boolean;
   overrideRequired: boolean;
   label: string;
   recommendation: string;
 };
 
-export function buildHorseProfitProfile(horse: HorseRecord, receipts: ExpenseReceipt[], leads: SalesLead[]) {
-  const horseReceipts = receipts.filter((receipt) => receipt.horseId === horse.id);
+export function buildHorseProfitProfile(
+  horse: HorseRecord,
+  receipts: ExpenseReceipt[],
+  leads: SalesLead[],
+  now: Date = new Date(),
+) {
+  const linkedReceipts = receipts.filter((receipt) => receipt.horseId === horse.id);
+  const incompleteCosts =
+    linkedReceipts.some(
+      (receipt) => receiptDay(receipt.receiptDate) === null || !Number.isFinite(receipt.amount) || receipt.amount < 0,
+    ) ||
+    (horse.costBasis !== undefined && (!Number.isFinite(horse.costBasis) || horse.costBasis < 0));
+  const horseReceipts = recordedReceipts(linkedReceipts, now);
   const spend = horseReceipts.reduce((sum, receipt) => sum + receipt.amount, 0);
-  const costBasis = Math.max(0, horse.costBasis ?? 0);
+  const costBasis =
+    typeof horse.costBasis === 'number' && Number.isFinite(horse.costBasis) ? Math.max(0, horse.costBasis) : 0;
   const breakEven = costBasis + spend;
   const acceptedOffer = leads
     .filter(
@@ -27,7 +40,7 @@ export function buildHorseProfitProfile(horse: HorseRecord, receipts: ExpenseRec
         lead.horseId === horse.id && ['Accepted', 'Deposit Due', 'Deposit Paid'].includes(lead.offerStatus ?? ''),
     )
     .sort((left, right) => compareTimestampDesc(left.offerUpdatedAt, right.offerUpdatedAt))[0];
-  const salePrice = acceptedOffer?.counterOfferAmount ?? acceptedOffer?.offerAmount ?? horse.sale.askPrice;
+  const salePrice = acceptedOffer?.counterOfferAmount ?? acceptedOffer?.offerAmount ?? horse.sale?.askPrice ?? 0;
   const profitLoss = salePrice - breakEven;
   const categorySpend = Array.from(
     horseReceipts.reduce<Map<ExpenseCategory, number>>((totals, receipt) => {
@@ -42,6 +55,8 @@ export function buildHorseProfitProfile(horse: HorseRecord, receipts: ExpenseRec
     horseId: horse.id,
     horseName: horse.name,
     costBasis,
+    incompleteCosts,
+    costsKnown: breakEven > 0 && !incompleteCosts,
     spend,
     breakEven,
     safeSalePrice: Math.ceil((breakEven * 1.15) / 100) * 100,
@@ -60,15 +75,16 @@ export function buildOfferDecision(
 ): OfferDecision {
   const profile = buildHorseProfitProfile(horse, receipts, []);
   const effectiveOffer = Math.max(0, counterOfferAmount || offerAmount);
-  const expectedProfit = effectiveOffer - profile.breakEven;
-  const marginPercent = effectiveOffer > 0 ? (expectedProfit / effectiveOffer) * 100 : 0;
+  const knownCosts = profile.costsKnown;
+  const expectedProfit = knownCosts ? effectiveOffer - profile.breakEven : null;
+  const marginPercent = expectedProfit !== null && effectiveOffer > 0 ? (expectedProfit / effectiveOffer) * 100 : null;
 
   if (effectiveOffer <= 0) {
     return {
       status: 'no-offer',
       effectiveOffer,
-      breakEven: profile.breakEven,
-      safeSalePrice: profile.safeSalePrice,
+      breakEven: knownCosts ? profile.breakEven : null,
+      safeSalePrice: knownCosts ? profile.safeSalePrice : null,
       expectedProfit,
       marginPercent,
       acceptanceBlocked: true,
@@ -78,12 +94,12 @@ export function buildOfferDecision(
     };
   }
 
-  if (profile.breakEven <= 0) {
+  if (profile.breakEven <= 0 || profile.incompleteCosts) {
     return {
       status: 'missing-costs',
       effectiveOffer,
-      breakEven: profile.breakEven,
-      safeSalePrice: profile.safeSalePrice,
+      breakEven: knownCosts ? profile.breakEven : null,
+      safeSalePrice: knownCosts ? profile.safeSalePrice : null,
       expectedProfit,
       marginPercent,
       acceptanceBlocked: false,
@@ -98,8 +114,8 @@ export function buildOfferDecision(
     return {
       status: 'loss',
       effectiveOffer,
-      breakEven: profile.breakEven,
-      safeSalePrice: profile.safeSalePrice,
+      breakEven: knownCosts ? profile.breakEven : null,
+      safeSalePrice: knownCosts ? profile.safeSalePrice : null,
       expectedProfit,
       marginPercent,
       acceptanceBlocked: true,
@@ -113,8 +129,8 @@ export function buildOfferDecision(
     return {
       status: 'thin-margin',
       effectiveOffer,
-      breakEven: profile.breakEven,
-      safeSalePrice: profile.safeSalePrice,
+      breakEven: knownCosts ? profile.breakEven : null,
+      safeSalePrice: knownCosts ? profile.safeSalePrice : null,
       expectedProfit,
       marginPercent,
       acceptanceBlocked: false,
@@ -127,8 +143,8 @@ export function buildOfferDecision(
   return {
     status: 'protected-margin',
     effectiveOffer,
-    breakEven: profile.breakEven,
-    safeSalePrice: profile.safeSalePrice,
+    breakEven: knownCosts ? profile.breakEven : null,
+    safeSalePrice: knownCosts ? profile.safeSalePrice : null,
     expectedProfit,
     marginPercent,
     acceptanceBlocked: false,
@@ -141,7 +157,7 @@ export function buildOfferDecision(
 export function buildProfitPortfolio(horses: HorseRecord[], receipts: ExpenseReceipt[], leads: SalesLead[]) {
   return horses
     .map((horse) => buildHorseProfitProfile(horse, receipts, leads))
-    .sort((left, right) => right.profitLoss - left.profitLoss);
+    .sort((left, right) => Number(right.costsKnown) - Number(left.costsKnown) || right.profitLoss - left.profitLoss);
 }
 
 // ---------------------------------------------------------------------------
@@ -279,11 +295,14 @@ export function buildRanchFinancials(
   horses: HorseRecord[],
   receipts: ExpenseReceipt[],
   leads: SalesLead[],
+  now: Date = new Date(),
 ): RanchFinancials {
+  const sourceReceipts = receipts;
+  receipts = recordedReceipts(receipts, now);
   const rows: AnimalFinancialRow[] = horses.map((horse) => {
-    const profile = buildHorseProfitProfile(horse, receipts, []);
+    const profile = buildHorseProfitProfile(horse, sourceReceipts, [], now);
     const invested = profile.breakEven;
-    const costBlindSpot = profile.costBasis <= 0 && profile.spend <= 0;
+    const costBlindSpot = profile.incompleteCosts || (profile.costBasis <= 0 && profile.spend <= 0);
     const horseLeads = leads.filter((lead) => lead.horseId === horse.id);
 
     const wonLead = latestByOfferDate(horseLeads.filter((lead) => lead.outcome === 'Won'));
@@ -322,7 +341,7 @@ export function buildRanchFinancials(
     );
     const liveOffer = activeLead ? activeLead.counterOfferAmount || activeLead.offerAmount || 0 : 0;
     const isPipeline = liveOffer > 0;
-    const value = isPipeline ? liveOffer : Math.max(0, horse.sale.askPrice || 0);
+    const value = isPipeline ? liveOffer : Math.max(0, horse.sale?.askPrice || 0);
     const profit = value - invested;
 
     return {
