@@ -54,3 +54,28 @@ export function changedRecords<T extends Identified>(current: readonly T[], base
     return previous === undefined || previous !== stableStringify(record);
   });
 }
+
+/** Merge only fields edited here; refuse overlapping edits instead of choosing a winner. */
+export function mergeConcurrentFields(baseline: unknown, current: unknown, remote: unknown, path = ''): unknown {
+  if (stableStringify(current) === stableStringify(baseline)) return remote;
+  if (stableStringify(remote) === stableStringify(baseline) || stableStringify(remote) === stableStringify(current)) {
+    return current;
+  }
+  const record = (value: unknown): value is Record<string, unknown> =>
+    value !== null && typeof value === 'object' && !Array.isArray(value);
+  if (record(baseline) && record(current) && record(remote)) {
+    const merged = { ...remote };
+    for (const key of new Set([...Object.keys(baseline), ...Object.keys(current)])) {
+      if (key === '__proto__' || key === 'constructor' || key === 'prototype') {
+        throw new Error('Cloud conflict: unsupported record field.');
+      }
+      const value = mergeConcurrentFields(baseline[key], current[key], remote[key], path ? `${path}.${key}` : key);
+      if (value === undefined) delete merged[key];
+      else merged[key] = value;
+    }
+    return merged;
+  }
+  throw new Error(
+    `Cloud conflict in ${path || 'record'}: another device changed this field. Your local change is retained.`,
+  );
+}

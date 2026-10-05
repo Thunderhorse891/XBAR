@@ -3,9 +3,10 @@ import { createLatestWriteGate } from '@/lib/authBootstrap';
 import { acknowledgeCloudDeletions, pendingCloudDeletions } from '@/lib/cloudDeletionQueue';
 import { loadWorkspaceBackupFromCloud, saveWorkspaceBackupToCloud } from '@/lib/cloudWorkspace';
 import { mergeCloudSubscription, withCloudSubscription } from '@/lib/cloudSubscription';
-import { decideCloudReconciliation, serializeWorkspaceBackup } from '@/lib/cloudSyncPolicy';
+import { decideCloudReconciliation, getWorkspacePayload, serializeWorkspaceBackup } from '@/lib/cloudSyncPolicy';
 import { promoteLocalVaultFiles } from '@/lib/workspacePromotion';
 import { vaultOwnerId } from '@/lib/vaultOwner';
+import { restorePersistedState } from '@/store/xbarStoreHelpers';
 import { useCloudStore } from '@/store/useCloudStore';
 import { useUiStore } from '@/store/useUiStore';
 import { useWorkspaceHydrated, useXbarStore } from '@/store/useXbarStore';
@@ -361,6 +362,110 @@ export function CloudBootstrap() {
     workspaceHydrated,
     workspaceId,
     workspaceReady,
+  ]);
+
+  useEffect(() => {
+    if (!workspaceHydrated || cloudStatus !== 'signed-in' || !autosaveReady || !autosaveUnlocked) return;
+    let disposed = false;
+    let loading = false;
+    let generation = 0;
+    const unsubscribe = useCloudStore.subscribe((next, previous) => {
+      if (
+        next.workspaceId !== previous.workspaceId ||
+        next.session?.user.id !== previous.session?.user.id ||
+        next.workspaceRole !== previous.workspaceRole
+      )
+        generation += 1;
+    });
+    const reportRefreshFailure = () =>
+      pushToast({
+        id: 'cloud-refresh-failed',
+        title: 'Teammate updates unavailable',
+        message:
+          'The latest cloud records could not be loaded completely. This device’s records were kept unchanged; refresh will retry.',
+        tone: 'warning',
+        duration: 10000,
+      });
+    const owns = () => {
+      const cloud = useCloudStore.getState();
+      return (
+        !disposed &&
+        cloud.status === 'signed-in' &&
+        cloud.session?.user.id === session?.user.id &&
+        cloud.workspaceId === workspaceId &&
+        cloud.autosaveReady &&
+        cloud.autosaveUnlocked
+      );
+    };
+    const refresh = async () => {
+      if (typeof navigator !== 'undefined' && !navigator.onLine) return;
+      if (typeof document !== 'undefined' && document.visibilityState !== 'visible') return;
+      if (loading || !owns() || useCloudStore.getState().syncState !== 'idle' || pendingCloudDeletions().length) return;
+      const ticket = generation;
+      try {
+        const local = exportWorkspaceBackup();
+        const signature = serializeWorkspaceBackup(local);
+        // Never replace a local edit, failed save, or unknown baseline.
+        if (!lastPersistedBackupRef.current || signature !== lastPersistedSignatureRef.current) return;
+        loading = true;
+        const remote = await loadWorkspaceBackupFromCloud();
+        if (
+          !owns() ||
+          ticket !== generation ||
+          useCloudStore.getState().syncState !== 'idle' ||
+          pendingCloudDeletions().length ||
+          serializeWorkspaceBackup(exportWorkspaceBackup()) !== signature
+        )
+          return;
+        if (!remote.ok) {
+          reportRefreshFailure();
+          return;
+        }
+        const payload = getWorkspacePayload(remote.backup);
+        if (!payload) return;
+        // Auxiliary local-only collections are preserved when the relational
+        // source does not supply them. A partial/failed cloud load is never installed.
+        const next = restorePersistedState({
+          ...local.workspace,
+          ...payload,
+          // Relational history persistence is a separate migration. Default
+          // empty arrays from normalization must not erase this device's history.
+          auditEvents: local.workspace.auditEvents,
+          salePacketBuilds: local.workspace.salePacketBuilds,
+          buyerRoomEvents: local.workspace.buyerRoomEvents,
+        });
+        useXbarStore.setState(next);
+        const installed = exportWorkspaceBackup();
+        lastPersistedBackupRef.current = installed;
+        lastPersistedSignatureRef.current = serializeWorkspaceBackup(installed);
+        if (remote.updatedAt) setLastSyncAt(remote.updatedAt);
+      } catch {
+        if (owns() && ticket === generation) reportRefreshFailure();
+      } finally {
+        loading = false;
+      }
+    };
+    const onFocus = () => {
+      void refresh();
+    };
+    const interval = window.setInterval(onFocus, 300000);
+    window.addEventListener('focus', onFocus);
+    return () => {
+      disposed = true;
+      window.clearInterval(interval);
+      unsubscribe();
+      window.removeEventListener('focus', onFocus);
+    };
+  }, [
+    workspaceHydrated,
+    cloudStatus,
+    autosaveReady,
+    autosaveUnlocked,
+    session?.user.id,
+    workspaceId,
+    exportWorkspaceBackup,
+    setLastSyncAt,
+    pushToast,
   ]);
 
   useEffect(() => {
