@@ -9,7 +9,8 @@ import { MetricCard, Panel, Pill } from '@/components/app-ui';
 import { requestFeatureUpgrade } from '@/store/useUpgradeStore';
 import { buildBreedingRevenueProfile, emptyBreedingEconomics } from '@/lib/breedingRevenue';
 import { buildBreedingProgram, type MareStatus } from '@/lib/breedingIntelligence';
-import { formatCompactCurrency, formatDateLabel } from '@/lib/format';
+import { BREEDING_ENTRY_KINDS, FOALING_RESULTS, PREGNANCY_RESULTS } from '@/lib/breedingEntry';
+import { formatCompactCurrency, formatDateLabel, localIsoDate } from '@/lib/format';
 import { breedingRevenueGate } from '@/lib/subscriptionGates';
 import { useCloudStore } from '@/store/useCloudStore';
 import { useUiStore } from '@/store/useUiStore';
@@ -52,7 +53,13 @@ export default function Breeding() {
   });
   const [eventTitle, setEventTitle] = useState('Breeding milestone');
   const [eventBody, setEventBody] = useState('');
-  const [eventDate, setEventDate] = useState(new Date().toISOString().slice(0, 10));
+  // The person's own calendar day, not UTC's: an evening entry in Chicago
+  // otherwise defaulted to tomorrow.
+  const [eventDate, setEventDate] = useState(localIsoDate());
+  // What the entry is, and a check's result, are chosen -- never read out of
+  // the note (audit F07). No default: a guessed type is the defect.
+  const [eventKind, setEventKind] = useState('');
+  const [eventResult, setEventResult] = useState('');
   const [eventError, setEventError] = useState('');
   const [milestoneQuery, setMilestoneQuery] = useState('');
   const [pendingDelete, setPendingDelete] = useState<{ horseId: string; eventId: string; horseName: string } | null>(
@@ -165,6 +172,8 @@ export default function Breeding() {
                   'near-term': 'amber',
                   'foaled-live': 'blue',
                   'foaled-loss': 'rose',
+                  'foaling-unknown': 'amber',
+                  'pregnancy-unknown': 'amber',
                   'not-breeding': 'slate',
                 };
                 return (
@@ -498,6 +507,47 @@ export default function Breeding() {
                 disabled={!canManageBreeding}
               />
             </label>
+            <label className="field-stack">
+              <span className="field-label">Entry type</span>
+              <select
+                className="field-input"
+                value={eventKind}
+                onChange={(event) => {
+                  setEventKind(event.target.value);
+                  setEventResult('');
+                  setEventError('');
+                }}
+                disabled={!canManageBreeding}
+              >
+                <option value="">Choose…</option>
+                {BREEDING_ENTRY_KINDS.map((kind) => (
+                  <option key={kind.value} value={kind.value}>
+                    {kind.label}
+                  </option>
+                ))}
+              </select>
+            </label>
+            {eventKind === 'pregnancy-check' || eventKind === 'foaling' ? (
+              <label className="field-stack">
+                <span className="field-label">{eventKind === 'foaling' ? 'Foaling outcome' : 'Check result'}</span>
+                <select
+                  className="field-input"
+                  value={eventResult}
+                  onChange={(event) => {
+                    setEventResult(event.target.value);
+                    setEventError('');
+                  }}
+                  disabled={!canManageBreeding}
+                >
+                  <option value="">Choose…</option>
+                  {(eventKind === 'foaling' ? FOALING_RESULTS : PREGNANCY_RESULTS).map((result) => (
+                    <option key={result.value} value={result.value}>
+                      {result.label}
+                    </option>
+                  ))}
+                </select>
+              </label>
+            ) : null}
             <label className="field-stack field-stack--wide">
               <span className="field-label">Milestone</span>
               <input
@@ -540,6 +590,8 @@ export default function Breeding() {
                   body: eventBody,
                   author: currentUserName,
                   date: eventDate,
+                  kind: eventKind,
+                  result: eventResult,
                 });
 
                 pushToast({
@@ -550,7 +602,10 @@ export default function Breeding() {
 
                 if (result.ok) {
                   setEventBody('');
+                  setEventResult('');
                   setEventError('');
+                } else {
+                  setEventError(result.message);
                 }
               }}
               disabled={!canManageBreeding}
