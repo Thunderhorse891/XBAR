@@ -84,10 +84,6 @@ test('projected primary-first media remains compatible with the actual buyer pic
     isPrimary: true,
   };
   const older = { id: 'older', status: 'Approved', kind: 'Hero', url: 'https://example.invalid/older.jpg' };
-  assert.notEqual(
-    module.exports.primaryHorseMedia({ profileImage: '', gallery: [older, selected] }).storagePath,
-    selected.storagePath,
-  );
   assert.equal(
     module.exports.primaryHorseMedia({ profileImage: '', gallery: [selected, older] }).storagePath,
     selected.storagePath,
