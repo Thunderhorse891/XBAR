@@ -39,9 +39,15 @@ historical comments, rather than dynamic runtime dispatch.
   template rendering logic or document capability is removed. Shared file-saving
   tests continue to cover shipping exports.
 
-`todayWork.ts` is not removed in this patch while the active care-task
-workstream decides whether to integrate or retire its adapter. Audit 34 remains
-partially open until that explicit disposition is delivered.
+The follow-on task-adapter retirement removes `todayWork.ts` after the active
+care-task workstream confirmed it is not used by the intended task correction.
+The shipping `TodayWork.tsx` route and `operationsPriority.ts` remain unchanged;
+only the orphan adapter, its unused WorkTask/WorkCategory/WorkLinkedType shapes,
+its dedicated test case and its obsolete path in the route-source inventory are
+removed. Shared ChipTone and TaskPriority types remain. Active priority
+ranking/follow-up tests stay. This completes the five explicitly identified
+dead-module retirement decisions, not a claim that every unused export in the
+entire repository has been removed.
 
 These removals are recoverable from Git history. This is not permission to delete
 other source just because the SPA does not import it: `landingMotion.ts`,
@@ -84,3 +90,22 @@ supported Node import-loader adapter. Canonical `npm test` reaches the sandbox's
 adapter. Typecheck, ESLint (four existing Fast Refresh warnings), full Prettier,
 production SPA build and marketing build pass. Browser screenshot equality,
 exact-head review and deployment remain release gates.
+
+## Task-adapter follow-on verification
+
+The follow-on retirement was rebased onto delivered main
+`5b12ed4bce77e7bd8c7d615da963f09707557da0` (tree
+`764bcd0db994f8ad38ae4acd516b609daae5ac0b`). A fresh whole-source reference
+search found no runtime consumer of `buildTodayWork`, `WorkTask`, `WorkCategory`
+or `WorkLinkedType`; only the retired module and its dedicated tests referred
+to them. The shipping `TodayWork.tsx`, active priority/care logic, shared
+`ChipTone`/`TaskPriority` and both marketing entry points are unchanged.
+
+All 166 currently registered test steps pass using the same supported Node
+import-loader adapter described above. Both no-emit typechecks, ESLint (the
+same four Fast Refresh warnings), full Prettier, application and marketing
+builds pass. Separate before/after builds on that exact main have identical
+SHA-256 hashes and paths for all 137 JavaScript, module and CSS assets,
+including both marketing bundles. This is source retirement without a shipped
+runtime or style change; it does not complete the separate task workflow audit.
+Hosted exact-head checks and authorized release remain required.

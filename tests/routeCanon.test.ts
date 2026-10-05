@@ -67,7 +67,6 @@ test('active user-facing surfaces use plain product language', () => {
     'src/lib/buyerDealRoom.ts',
     'src/lib/commercialEngine.ts',
     'src/lib/revenuePlanMatrix.ts',
-    'src/lib/todayWork.ts',
     'src/lib/xbarPhaseTwo.ts',
     'src/lib/xbarRuntime.ts',
     'src/pages/Dashboard.tsx',
