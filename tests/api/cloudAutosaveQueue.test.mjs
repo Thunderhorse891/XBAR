@@ -1,0 +1,236 @@
+import assert from 'node:assert/strict';
+import { createRequire } from 'node:module';
+import test from 'node:test';
+import { build } from 'esbuild';
+
+const require = createRequire(import.meta.url);
+async function fixture() {
+  const f = {
+    effects: [],
+    timers: new Map(),
+    listeners: {},
+    now: 0,
+    id: 0,
+    calls: [],
+    states: [],
+    backup: { workspace: { value: 1 } },
+  };
+  f.cloud = {
+    status: 'signed-in',
+    session: { user: { id: 'user-a' } },
+    workspaceId: 'ranch-a',
+    workspaceReady: true,
+    autosaveReady: true,
+    autosaveUnlocked: true,
+    stagedStorageBytes: 0,
+    setSyncState: (...args) => f.states.push(args),
+    setLastSyncAt() {},
+    setWorkspaceAccessProfile() {},
+    settleStagedStorageBytes() {},
+  };
+  f.store = { exportWorkspaceBackup: () => structuredClone(f.backup) };
+  f.save = (backup, options) => new Promise((resolve, reject) => f.calls.push({ backup, options, resolve, reject }));
+  globalThis.__autosaveFixture = f;
+  const result = await build({
+    entryPoints: ['src/components/CloudBootstrap.tsx'],
+    bundle: true,
+    write: false,
+    platform: 'node',
+    format: 'cjs',
+    packages: 'external',
+    plugins: [
+      {
+        name: 'controlled-autosave',
+        setup(b) {
+          b.onResolve({ filter: /^(react|@\/)/ }, ({ path }) => ({ path, namespace: 'fixture' }));
+          b.onLoad({ filter: /.*/, namespace: 'fixture' }, ({ path }) => {
+            const prefix = 'const f=globalThis.__autosaveFixture;';
+            const modules = {
+              react: 'export const useEffect=(fn)=>f.effects.push(fn); export const useRef=(v)=>({current:v});',
+              '@/lib/authBootstrap': 'export const createLatestWriteGate=()=>({});',
+              '@/lib/cloudDeletionQueue':
+                'export const pendingCloudDeletions=()=>[]; export const acknowledgeCloudDeletions=()=>{};',
+              '@/lib/cloudWorkspace':
+                'export const saveWorkspaceBackupToCloud=(...args)=>f.save(...args); export const loadWorkspaceBackupFromCloud=()=>{};',
+              '@/lib/cloudSubscription':
+                'export const mergeCloudSubscription=()=>{};export const withCloudSubscription=()=>{};',
+              '@/lib/cloudSyncPolicy':
+                'export const serializeWorkspaceBackup=(v)=>JSON.stringify(v);export const decideCloudReconciliation=()=>{};',
+              '@/lib/workspacePromotion': 'export const promoteLocalVaultFiles=()=>{};',
+              '@/lib/vaultOwner': 'export const vaultOwnerId=()=>"local";',
+              '@/store/useCloudStore':
+                'export const useCloudStore=(fn)=>fn(f.cloud);useCloudStore.getState=()=>f.cloud;',
+              '@/store/useUiStore': 'export const useUiStore=(fn)=>fn({pushToast:()=>{}});',
+              '@/store/useXbarStore':
+                'export const useXbarStore=(fn)=>fn(f.store);useXbarStore.subscribe=(fn)=>{f.change=fn;return ()=>{f.change=()=>{}}};export const useWorkspaceHydrated=()=>true;',
+            };
+            return { contents: prefix + modules[path] };
+          });
+        },
+      },
+    ],
+  });
+  const mod = { exports: {} };
+  new Function('require', 'module', 'exports', result.outputFiles[0].text)(require, mod, mod.exports);
+  globalThis.window = {
+    setTimeout(fn, delay) {
+      const id = ++f.id;
+      f.timers.set(id, { fn, at: f.now + delay });
+      return id;
+    },
+    clearTimeout(id) {
+      f.timers.delete(id);
+    },
+    addEventListener(name, fn) {
+      f.listeners[name] = fn;
+    },
+    removeEventListener(name) {
+      delete f.listeners[name];
+    },
+  };
+  Object.defineProperty(globalThis, 'navigator', { configurable: true, value: { onLine: true } });
+  f.tick = async (ms) => {
+    f.now += ms;
+    for (const [id, t] of [...f.timers])
+      if (t.at <= f.now) {
+        f.timers.delete(id);
+        t.fn();
+      }
+    await new Promise((resolve) => setImmediate(resolve));
+  };
+  mod.exports.CloudBootstrap();
+  f.dispose = f.effects.at(-1)();
+  f.edit = (value) => {
+    f.backup.workspace.value = value;
+    f.change();
+  };
+  return f;
+}
+
+test('an edit whose debounce expires during a save is sent afterwards without another edit', async () => {
+  const f = await fixture();
+  await f.tick(1600);
+  assert.equal(f.calls.length, 1);
+  f.edit(2);
+  await f.tick(1600);
+  assert.equal(f.calls.length, 1);
+  f.calls[0].resolve({ ok: true, message: 'Saved' });
+  await f.tick(0);
+  await f.tick(1600);
+  assert.equal(f.calls.length, 2);
+  assert.equal(f.calls[1].backup.workspace.value, 2);
+  assert.notEqual(f.states.at(-1)[0], 'idle');
+  f.dispose();
+});
+
+test('a returned failure retries without requiring an edit or online event', async () => {
+  const f = await fixture();
+  await f.tick(1600);
+  f.calls[0].resolve({ ok: false, message: 'Unavailable' });
+  await f.tick(0);
+  await f.tick(30000);
+  assert.equal(f.calls.length, 2);
+  f.dispose();
+});
+
+test('a rejected save releases the queue and retries', async () => {
+  const f = await fixture();
+  await f.tick(1600);
+  f.calls[0].reject(new Error('Transport failed'));
+  await f.tick(0);
+  await f.tick(30000);
+  assert.equal(f.calls.length, 2);
+  f.dispose();
+});
+
+test('success reports Saved only after the newest version is acknowledged', async () => {
+  const f = await fixture();
+  await f.tick(1600);
+  f.edit(2);
+  f.calls[0].resolve({ ok: true, message: 'Saved' });
+  await f.tick(0);
+  assert.equal(f.states.at(-1)[0], 'syncing');
+  await f.tick(1600);
+  f.calls[1].resolve({ ok: true, message: 'Saved' });
+  await f.tick(0);
+  assert.equal(f.states.at(-1)[0], 'idle');
+  await f.tick(30000);
+  assert.equal(f.calls.length, 2);
+  f.dispose();
+});
+
+test('offline edits retry and online notification resumes without changing data', async () => {
+  const f = await fixture();
+  navigator.onLine = false;
+  await f.tick(1600);
+  assert.equal(f.calls.length, 0);
+  navigator.onLine = true;
+  f.listeners.online();
+  await f.tick(1600);
+  assert.equal(f.calls.length, 1);
+  f.dispose();
+});
+
+test('a replaced workspace or account cannot receive late save status or another retry', async () => {
+  for (const replacement of [
+    { workspaceId: 'ranch-b' },
+    { session: { user: { id: 'user-b' } } },
+    { autosaveUnlocked: false },
+  ]) {
+    const f = await fixture();
+    await f.tick(1600);
+    Object.assign(f.cloud, replacement);
+    const previous = f.states.length;
+    f.calls[0].resolve({ ok: true, message: 'Wrong context saved' });
+    await f.tick(0);
+    await f.tick(30000);
+    assert.equal(f.states.length, previous);
+    assert.equal(f.calls.length, 1);
+    f.dispose();
+  }
+});
+
+test('disposal clears queued retries and ignores an in-flight completion', async () => {
+  const f = await fixture();
+  await f.tick(1600);
+  f.edit(2);
+  f.dispose();
+  const previous = f.states.length;
+  f.calls[0].resolve({ ok: false, message: 'Unavailable' });
+  await f.tick(30000);
+  assert.equal(f.calls.length, 1);
+  assert.equal(f.states.length, previous);
+});
+
+test('snapshot exceptions do not escape the retry queue', async () => {
+  const f = await fixture();
+  const value = {};
+  value.self = value;
+  f.backup = value;
+  await f.tick(1600);
+  assert.equal(f.calls.length, 0);
+  assert.equal(f.states.at(-1)[0], 'error');
+  f.backup = { workspace: { value: 2 } };
+  await f.tick(30000);
+  assert.equal(f.calls.length, 1);
+  f.dispose();
+});
+
+test('a failed post-save snapshot inspection remains retryable rather than stranding error status', async () => {
+  const f = await fixture();
+  await f.tick(1600);
+  assert.deepEqual(f.calls[0].options.expectedContext, { userId: 'user-a', workspaceId: 'ranch-a' });
+  const value = {};
+  value.self = value;
+  f.backup = value;
+  f.calls[0].resolve({ ok: true, message: 'Saved' });
+  await f.tick(0);
+  assert.equal(f.states.at(-1)[0], 'error');
+  f.backup = { workspace: { value: 1 } };
+  await f.tick(30000);
+  assert.equal(f.calls.length, 2);
+  f.calls[1].resolve({ ok: true, message: 'Saved' });
+  await f.tick(0);
+  assert.equal(f.states.at(-1)[0], 'idle');
+  f.dispose();
+});

@@ -16,7 +16,7 @@ registerHooks({
 });
 const { setCloudSubscriptionClient } = await import('./fixtures/cloudSubscriptionClient.mjs');
 const { supabaseConfig } = await import('../../src/lib/platformConfig.ts');
-const { loadWorkspaceBackupFromCloud } = await import('../../src/lib/cloudWorkspace.ts');
+const { loadWorkspaceBackupFromCloud, saveWorkspaceBackupToCloud } = await import('../../src/lib/cloudWorkspace.ts');
 const { createEmptyWorkspaceState } = await import('../../src/store/xbarStoreHelpers.ts');
 const { horseCreationGate, profitIntelligenceGate } = await import('../../src/lib/subscriptionGates.ts');
 const { decideCloudReconciliation } = await import('../../src/lib/cloudSyncPolicy.ts');
@@ -251,4 +251,27 @@ test('cancellation is authoritative even when no fallback snapshot exists', asyn
   assert.equal(loaded.ok, false);
   assert.equal(loaded.authoritativeSubscription?.tier, 'Starter');
   assert.ok(profitIntelligenceGate(loaded.authoritativeSubscription));
+});
+
+test('autosave refuses a session resolved for a different account before any cloud write', async () => {
+  const data = fixture({ relational: true });
+  const result = await saveWorkspaceBackupToCloud(data, {
+    expectedContext: { userId: 'previous-account', workspaceId: 'ws-owner' },
+  });
+  assert.equal(result.ok, false);
+  assert.match(result.message, /account changed/);
+  assert.deepEqual(calls, []);
+});
+
+test('autosave refuses a different resolved ranch before bootstrap, profile or fallback writes', async () => {
+  const data = fixture({ relational: true, ownerId: 'new-ranch' });
+  const result = await saveWorkspaceBackupToCloud(data, {
+    expectedContext: { userId: 'user-owner', workspaceId: 'previous-ranch' },
+  });
+  assert.equal(result.ok, false);
+  assert.match(result.message, /active ranch changed/);
+  assert.deepEqual(
+    calls.map((call) => call.table),
+    ['workspaces'],
+  );
 });
