@@ -1,5 +1,7 @@
-import { isHorsePhotoAsset } from './animalPassport.js';
-import type { GalleryAsset, HorseRecord } from '../types/xbar.js';
+import { hasHorsePhoto, isHorsePhotoAsset } from './animalPassport.js';
+import { buildSaleReadinessScore } from './saleReadinessScore.js';
+import { isDocumentReady } from './documentCurrency.js';
+import type { DocumentRecord, ExpenseReceipt, GalleryAsset, HorseRecord, OwnershipRecord } from '../types/xbar.js';
 
 export type HorsePhotoAction = 'primary' | 'remove' | 'restore';
 
@@ -52,5 +54,46 @@ export function changeHorsePhoto(
       isPrimary: item.id === assetId ? false : removingPrimary ? item.id === replacement?.id : item.isPrimary,
     })),
     profileImage,
+  };
+}
+
+/** Recompute photo transitions from current evidence, never guess a capped historical bonus. */
+export function reconcileHorsePhotoReadiness(
+  previous: HorseRecord,
+  next: HorseRecord,
+  context: { documents: DocumentRecord[]; expenseReceipts: ExpenseReceipt[]; ownershipRecords: OwnershipRecord[] },
+): HorseRecord {
+  const hasPhoto = hasHorsePhoto(next);
+  if (hasHorsePhoto(previous) === hasPhoto) return next;
+  const hasReadyMediaKit = context.documents.some(
+    (document) => document.horseId === next.id && document.type === 'Media Kit' && isDocumentReady(document),
+  );
+  const blockers = next.readiness.blockers.filter(
+    (blocker) => blocker !== 'Hero image missing' && blocker !== 'Sale photos missing',
+  );
+  if (!hasPhoto) blockers.push('Sale photos missing');
+  const score = buildSaleReadinessScore({
+    horse: next,
+    documents: context.documents,
+    receipts: context.expenseReceipts,
+    ownershipRecord: context.ownershipRecords.find((record) => record.horseId === next.id),
+    // This helper consumes only the evidence score. It never grants sale release.
+    releaseGate: { allowed: false, nextAction: '' },
+  }).score;
+  return {
+    ...next,
+    readiness: {
+      ...next.readiness,
+      score,
+      blockers,
+      packetStatus: hasPhoto
+        ? next.readiness.packetStatus === 'Needs Photos'
+          ? 'Ready'
+          : next.readiness.packetStatus
+        : !hasReadyMediaKit && next.readiness.packetStatus === 'Ready'
+          ? 'Needs Photos'
+          : next.readiness.packetStatus,
+    },
+    sale: { ...next.sale, socialReady: hasPhoto || hasReadyMediaKit },
   };
 }

@@ -2277,7 +2277,7 @@ test('a record that installs but crashes the route it lands on is refused', asyn
     ['src/routes/Sales.tsx', /h\.segment\.toLowerCase\(\)/],
     ['src/routes/AnimalProfile.tsx', /animal\.activity\.length/],
     ['src/routes/Ownership.tsx', /selectedRecord\.auditTrail\.length/],
-    ['src/store/useXbarStore.ts', /horse\.readiness\.blockers\.filter\(/],
+    ['src/lib/horsePhotoGallery.ts', /next\.readiness\.blockers\.filter\(/],
     ['src/routes/Breeding.tsx', /event\.title\.toLowerCase\(\)/],
     ['src/lib/xbarPhaseTwo.ts', /asset\.kind === 'Hero' && asset\.status === 'Approved'/],
     ['src/features/ownership/selectors.ts', /stake\.role === 'Legal Owner'/],

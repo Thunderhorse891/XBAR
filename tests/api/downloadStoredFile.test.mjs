@@ -159,3 +159,26 @@ test('original-file fetch preserves the browser global receiver', async () => {
   assert.equal((await downloadStoredFile({}, () => true, f.deps)).ok, true);
   assert.equal(f.saves.length, 1);
 });
+
+test('download copies only stream chunk view bytes, including offset and reused backing buffers', async () => {
+  const f = fixture();
+  const backing = new Uint8Array([91, 1, 2, 92]);
+  let reads = 0;
+  f.deps.fetch = async () => ({
+    ok: true,
+    headers: new Headers(),
+    body: {
+      getReader: () => ({
+        read: async () => {
+          if (reads++ === 0) return { done: false, value: backing.subarray(1, 3) };
+          backing[1] = 99;
+          return reads === 2 ? { done: false, value: new Uint8Array([93, 3, 94]).subarray(1, 2) } : { done: true };
+        },
+        cancel: async () => {},
+        releaseLock() {},
+      }),
+    },
+  });
+  assert.equal((await downloadStoredFile({}, () => true, f.deps)).ok, true);
+  assert.deepEqual([...new Uint8Array(await f.saves[0].blob.arrayBuffer())], [1, 2, 3]);
+});

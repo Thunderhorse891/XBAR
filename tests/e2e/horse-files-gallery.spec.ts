@@ -123,3 +123,66 @@ test('horse Documents shows linked files without extracted facts and downloads t
   await page.getByRole('button', { name: /Upload document for/i }).click();
   await expect(page).toHaveURL(/horse=.*upload=1/);
 });
+
+test('last-photo removal clears unsupported readiness and restore remains stable after reload', async ({
+  page,
+}, testInfo) => {
+  await openHorse(page);
+  await seedPhotos(page);
+  await page.evaluate(async () => {
+    const path = '/src/store/useXbarStore.ts';
+    const { useXbarStore } = await import(/* @vite-ignore */ path);
+    const horse = useXbarStore.getState().horses[0];
+    useXbarStore.setState({
+      horses: [
+        {
+          ...horse,
+          gallery: [horse.gallery[0]],
+          readiness: { score: 100, packetStatus: 'Ready', blockers: ['Ownership review'] },
+          sale: { ...horse.sale, socialReady: true },
+        },
+      ],
+    });
+  });
+  await page.getByRole('button', { name: 'Remove photo', exact: true }).click();
+  await page.getByRole('alertdialog').getByRole('button', { name: 'Remove photo', exact: true }).click();
+  await expect(page.getByText('No gallery photos yet.', { exact: true })).toBeVisible();
+  const readiness = () =>
+    page.evaluate(async () => {
+      const path = '/src/store/useXbarStore.ts';
+      const { useXbarStore } = await import(/* @vite-ignore */ path);
+      const horse = useXbarStore.getState().horses[0];
+      return {
+        score: horse.readiness.score,
+        packet: horse.readiness.packetStatus,
+        blockers: horse.readiness.blockers,
+        social: horse.sale.socialReady,
+      };
+    });
+  const missing = await readiness();
+  expect(missing.score).toBeLessThan(100);
+  expect(missing.packet).toBe('Needs Photos');
+  expect(missing.social).toBe(false);
+  expect(missing.blockers).toEqual(['Ownership review', 'Sale photos missing']);
+  await page.reload();
+  await expect(page.getByText('No gallery photos yet.', { exact: true })).toBeVisible();
+  expect(await readiness()).toEqual(missing);
+  await page.getByText('Removed photos (1)', { exact: true }).click();
+  await page.getByRole('button', { name: 'Restore photo', exact: true }).click();
+  await expect(page.getByRole('button', { name: 'View Left side', exact: true })).toBeVisible();
+  expect(await readiness()).toEqual({
+    score: missing.score + 15,
+    packet: 'Ready',
+    blockers: ['Ownership review'],
+    social: true,
+  });
+  await page.reload();
+  await expect(page.getByRole('button', { name: 'View Left side', exact: true })).toBeVisible();
+  expect((await readiness()).score).toBe(missing.score + 15);
+  await page.evaluate(() => window.scrollTo(0, 0));
+  await page.screenshot({
+    path: testInfo.outputPath('ranch-photo-readiness-restored.png'),
+    fullPage: true,
+    animations: 'disabled',
+  });
+});

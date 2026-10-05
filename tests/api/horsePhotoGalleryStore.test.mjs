@@ -155,3 +155,65 @@ test('a horse with no approved active photos has no buyer-facing primary image',
   assert.equal(primaryHorseMedia(publicHorse).src, null);
   assert.equal(publicHorse.profileImage, '');
 });
+
+test('removing the final photo clears unsupported readiness and restores it from remaining evidence', () => {
+  useXbarStore.setState({
+    horses: [
+      {
+        ...horse(),
+        gallery: [photo('a')],
+        readiness: { score: 100, packetStatus: 'Ready', blockers: ['Ownership review'] },
+        sale: { ...horse().sale, socialReady: true },
+      },
+    ],
+  });
+  assert.equal(change('a', 'remove').ok, true);
+  assert.equal(hasHorsePhoto(horse()), false);
+  assert.equal(horse().sale.socialReady, false);
+  assert.equal(horse().readiness.packetStatus, 'Needs Photos');
+  assert.ok(horse().readiness.blockers.includes('Sale photos missing'));
+  assert.ok(horse().readiness.blockers.includes('Ownership review'));
+  assert.ok(horse().readiness.score < 100);
+  const missingScore = horse().readiness.score;
+  assert.equal(change('a', 'restore').ok, true);
+  assert.equal(horse().sale.socialReady, true);
+  assert.equal(horse().readiness.packetStatus, 'Ready');
+  assert.equal(horse().readiness.score, missingScore + 15);
+  assert.deepEqual(horse().readiness.blockers, ['Ownership review']);
+  change('a', 'remove');
+  change('a', 'restore');
+  assert.equal(horse().readiness.score, missingScore + 15);
+  const restored = restorePersistedState(persisted.state);
+  assert.equal(restored.horses[0].readiness.score, horse().readiness.score);
+});
+for (const [state, linked, keepsReady] of [
+  ['Ready', true, true],
+  ['Review', true, false],
+  ['Archived', true, false],
+  ['Ready', false, false],
+])
+  test(`last-photo removal retains only independently ready linked Media Kit evidence: ${state}/${linked}`, () => {
+    const document = { id: 'media-kit', horseId: linked ? 'horse' : 'other', type: 'Media Kit', state };
+    useXbarStore.setState({
+      documents: [document],
+      horses: [
+        {
+          ...horse(),
+          gallery: [photo('a')],
+          readiness: { score: 100, packetStatus: 'Ready', blockers: [] },
+          sale: { ...horse().sale, socialReady: true },
+        },
+      ],
+    });
+    change('a', 'remove');
+    assert.equal(horse().sale.socialReady, keepsReady);
+    assert.equal(horse().readiness.packetStatus, keepsReady ? 'Ready' : 'Needs Photos');
+  });
+test('removing one of several photos and changing the primary preserve existing readiness evidence', () => {
+  const before = structuredClone(horse().readiness);
+  const sale = structuredClone(horse().sale);
+  change('b', 'primary');
+  change('a', 'remove');
+  assert.deepEqual(horse().readiness, before);
+  assert.deepEqual(horse().sale, sale);
+});
