@@ -1,4 +1,4 @@
-import { localIsoDate } from './format.js';
+import { addLocalCalendarDays, localIsoDate } from './format.js';
 import { sha256 } from './sha256.js';
 
 export type TaskDeferral = { revision: string; until: string };
@@ -18,9 +18,7 @@ export function isCalendarDay(value: string): boolean {
 
 export function addTaskDays(today: string, days: number): string {
   if (!isCalendarDay(today) || !Number.isInteger(days)) throw new Error('A valid calendar day is required.');
-  const date = new Date(`${today}T12:00:00`);
-  date.setDate(date.getDate() + days);
-  return localIsoDate(date);
+  return localIsoDate(addLocalCalendarDays(new Date(`${today}T12:00:00`), days));
 }
 
 /** Scope is this browser plus exact member/workspace; no names or task details are stored in keys. */

@@ -1,11 +1,4 @@
-import type {
-  DocumentRecord,
-  ExpenseCategory,
-  ExpenseReceipt,
-  HorseRecord,
-  OwnershipRecord,
-  RoleCapability,
-} from '../types/xbar.js';
+import type { DocumentRecord, ExpenseReceipt, HorseRecord, OwnershipRecord, RoleCapability } from '../types/xbar.js';
 import { hasHorsePhoto, identityCompleteness } from './animalPassport.js';
 import { buildCareBoardRows } from './dashboardOps.js';
 import {
@@ -48,8 +41,9 @@ export type ReadinessActionTarget =
  * The capability each action's destination enforces, so a step the current
  * role cannot finish is shown as such instead of leading to a read-only form:
  * edits check editHorse, uploads uploadDocuments, approvals reviewDocuments,
- * photos uploadMedia, a care receipt is addExpenseReceipt (manageAssets), and
- * ownership proofs manageOwnership.
+ * photos uploadMedia, care is a health record (addMedicalEvent, manageMedical),
+ * and ownership proofs manageOwnership. Care used to be an expense receipt;
+ * a purchase is not care (audit F06), so logging one could never close the gap.
  */
 export const READINESS_ACTION_CAPABILITY: Record<ReadinessActionTarget, RoleCapability> = {
   'edit-horse': 'editHorse',
@@ -58,7 +52,7 @@ export const READINESS_ACTION_CAPABILITY: Record<ReadinessActionTarget, RoleCapa
   // A file still being read is shown under Processing; the step ends in approving it.
   'processing-documents': 'reviewDocuments',
   'add-photo': 'uploadMedia',
-  care: 'manageAssets',
+  care: 'manageMedical',
   ownership: 'manageOwnership',
 };
 
@@ -75,8 +69,8 @@ export type ReadinessAction = {
   /** What to do, in the rancher's words: "Add a current Coggins". */
   label: string;
   target: ReadinessActionTarget;
-  /** For a care action: the receipt category that clears it on the care board. */
-  logCategory?: Extract<ExpenseCategory, 'Wormer' | 'Dental Float'>;
+  /** The health record type the care step opens pre-selected. */
+  careType?: 'Deworming' | 'Dental';
   /** Points this action recovers. */
   gain: number;
   /** The score once it is done. */
@@ -315,7 +309,7 @@ export function buildSaleReadinessScore(params: {
           ? 'Log a deworming and a dental float'
           : `Log a ${careDue[0]!.key === 'wormer' ? 'deworming' : 'dental float'}`,
       target: 'care',
-      logCategory: careDue[0]!.key === 'wormer' ? 'Wormer' : 'Dental Float',
+      careType: careDue[0]!.key === 'wormer' ? 'Deworming' : 'Dental',
       gain: WEIGHTS.care - careEarned,
     });
   }

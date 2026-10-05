@@ -615,7 +615,7 @@ export function canRestorePersistedState(raw: unknown): boolean {
    */
   const TIMELINE_EVENT_SHAPE = {
     strings: ['id', 'date', 'title', 'summary', 'owner', 'category'],
-    optionalStrings: ['details.followUpDue'],
+    optionalStrings: ['details.followUpDue', 'completionState'],
     optionalObjects: ['details'],
   };
 

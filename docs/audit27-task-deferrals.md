@@ -18,3 +18,5 @@ The current-main task derivation was reproduced with a buyer due in 2099: it app
 This implementation was reconstructed after the execution workspace lost the previously reviewed local-only patch. It is a new candidate against main 356084b779f67654b17a2aa5fea21d6b8f0062ea, not a recovered copy of that old commit. Existing PR305 history is retained when updating the branch; its earlier device-global helper/tests are superseded by the scoped behavior suite.
 
 Local Chromium currently aborts before any page is created with process-singleton socket EPERM. No local rendered/browser pass is claimed. Exact-head remote CI and final-head independent review remain release gates; passing build/Node checks alone is not workflow verification.
+
+The final integration includes main a17aaf93 (the reviewed care-evidence fix). Task date arithmetic now delegates to its canonical addLocalCalendarDays helper; the board retains the shared buildCareBoardRows source of care verdicts. The complete main test chain is preserved with the task regression suite added once.

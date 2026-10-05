@@ -53,7 +53,8 @@ export function SaleReadinessCard({
         onAddPhoto?.();
         return;
       case 'care':
-        navigate(`/expenses?log=${encodeURIComponent(action.logCategory ?? 'Wormer')}&horse=${horseId}`);
+        // A health record, not an expense: only care given clears the gap (audit F06).
+        openQuickCreate({ action: 'Add Health Record', horseId, medicalType: action.careType ?? 'Deworming' });
         return;
       case 'ownership':
         navigate('/ownership');
