@@ -115,7 +115,11 @@ test('Back navigation while saving stays on the newer route after acknowledgment
   await drawer.getByRole('button', { name: 'Cancel', exact: true }).click();
   await page.getByRole('link', { name: 'Horses', exact: true }).first().click();
   await expect(page).toHaveURL(/\/horses$/);
+  // The address changes before a lazy route commits. Wait for its content so
+  // the next link creates a new entry instead of replacing a pending route.
+  await expect(page.getByRole('heading', { name: 'Horses', exact: true })).toBeVisible();
   await page.getByRole('link', { name: 'Equipment', exact: true }).click();
+  await expect(page.getByRole('heading', { name: 'Equipment & Maintenance', exact: true })).toBeVisible();
   await page.getByRole('button', { name: 'Add Equipment', exact: true }).first().click();
   await drawer.getByPlaceholder('e.g. Stock trailer (24ft)').fill('History trailer');
   await delayDeviceAcknowledgment(page);
@@ -124,6 +128,7 @@ test('Back navigation while saving stays on the newer route after acknowledgment
   await page.goBack();
   await expect(page).toHaveURL(/\/horses$/);
   await expect(drawer).toBeVisible();
+  await expect(drawer.getByPlaceholder('e.g. Stock trailer (24ft)')).toHaveValue('History trailer');
   const destination = page.url();
   await releaseDeviceAcknowledgment(page);
   await expect(page.locator('[data-sonner-toast]').filter({ hasText: 'History trailer added' })).toBeVisible();
