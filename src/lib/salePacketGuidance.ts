@@ -167,8 +167,8 @@ export function packetReadinessAction(action: ReadinessAction, horseId: string):
       return { label: 'Review ownership requirements', to: `/ownership?horse=${id}` };
     case 'care':
       return {
-        label: 'Log care receipt',
-        to: `/expenses?log=${encodeURIComponent(action.logCategory ?? 'Wormer')}&horse=${id}`,
+        label: 'Log health record',
+        to: `/medical?horse=${id}&type=${encodeURIComponent(action.careType ?? 'Deworming')}`,
       };
     case 'add-photo':
       return { label: 'Add horse photos', to: `/horses/${id}` };
