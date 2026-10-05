@@ -322,8 +322,22 @@ async function listAllObjects(supabase, bucket, prefix, out) {
   const pageSize = 100;
   for (;;) {
     const { data: entries, error } = await supabase.storage.from(bucket).list(prefix, { limit: pageSize, offset });
-    if (error) return false;
-    if (!entries?.length) return true;
+    if (error || !Array.isArray(entries)) return false;
+    if (
+      entries.some(
+        (entry) =>
+          !entry ||
+          typeof entry.name !== 'string' ||
+          !entry.name ||
+          entry.name === '.' ||
+          entry.name === '..' ||
+          entry.name.includes('/') ||
+          entry.name.includes('\\') ||
+          (entry.id !== null && (typeof entry.id !== 'string' || !entry.id)),
+      )
+    )
+      return false;
+    if (!entries.length) return true;
     for (const entry of entries) {
       const path = `${prefix}/${entry.name}`;
       if (entry.id) out.push(path);
@@ -335,7 +349,7 @@ async function listAllObjects(supabase, bucket, prefix, out) {
 }
 
 // Removes every object under each prefix; returns the prefixes it could not
-// fully clear (a listing or a removal failed).
+// fully clear or verify (a listing/removal failed, or eligible objects remain).
 export async function removeStoragePrefixes(supabase, bucket, prefixes, keep = new Set()) {
   const failed = [];
   for (const prefix of prefixes) {
@@ -346,6 +360,13 @@ export async function removeStoragePrefixes(supabase, bucket, prefixes, keep = n
     for (let i = 0; i < paths.length; i += 100) {
       const { error } = await supabase.storage.from(bucket).remove(paths.slice(i, i + 100));
       if (error) complete = false;
+    }
+    if (complete) {
+      // A successful removal response does not prove every object disappeared.
+      // Verify once without retrying deletion; retained shared files are allowed.
+      const remaining = [];
+      complete = await listAllObjects(supabase, bucket, prefix, remaining);
+      if (remaining.some((path) => !keep.has(path))) complete = false;
     }
     if (!complete) failed.push(prefix);
   }
