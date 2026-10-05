@@ -6,6 +6,8 @@ import type {
   SubscriptionProfile,
   SubscriptionTier,
 } from '../types/xbar.js';
+import { receiptDay, localDay } from './receiptFacts.js';
+export { receiptDay } from './receiptFacts.js';
 import { hasActivePaidPlan } from './subscriptionDecision.js';
 import { compareTimestampDesc } from './format.js';
 import { subscriptionTierConfig } from './xbarRuntime.js';
@@ -147,31 +149,6 @@ export type CostPerHorseSummary = {
   /** Feed, supplement and bedding receipts in the window logged without a quantity and unit. */
   unpricedFeedPurchases: number;
 };
-
-/** The calendar day a receipt was written for, as a day number, or null when unreadable. */
-export function receiptDay(value: string | undefined): number | null {
-  const raw = String(value ?? '').trim();
-  if (!raw) return null;
-  const dateOnly = /^(\d{4})-(\d{2})-(\d{2})$/.exec(raw);
-  if (dateOnly) {
-    const year = Number(dateOnly[1]);
-    const month = Number(dateOnly[2]);
-    const day = Number(dateOnly[3]);
-    const time = Date.UTC(year, month - 1, day);
-    const check = new Date(time);
-    // Date.UTC rolls February 30 into March; a date that does not exist is unreadable.
-    if (check.getUTCMonth() !== month - 1 || check.getUTCDate() !== day) return null;
-    return time / DAY_MS;
-  }
-  const parsed = new Date(raw);
-  if (Number.isNaN(parsed.getTime())) return null;
-  return Date.UTC(parsed.getFullYear(), parsed.getMonth(), parsed.getDate()) / DAY_MS;
-}
-
-/** Today in the viewer's zone, as a day number. */
-function localDay(now: Date): number {
-  return Date.UTC(now.getFullYear(), now.getMonth(), now.getDate()) / DAY_MS;
-}
 
 function isoDay(day: number): string {
   return new Date(day * DAY_MS).toISOString().slice(0, 10);
