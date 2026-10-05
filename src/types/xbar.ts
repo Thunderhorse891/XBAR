@@ -1,4 +1,6 @@
 export type UserRole = 'Admin' | 'Ranch Manager' | 'Owner' | 'Medical Lead' | 'Sales Lead';
+/** UI-only unresolved access; never a persisted membership/invitation role. */
+export type WorkspaceAccessRole = UserRole | 'Pending access';
 export type RoleCapability =
   | 'createHorse'
   | 'editHorse'

@@ -46,7 +46,7 @@ import type {
   SharedAccessSnapshot,
   SharedListingRecord,
   SubscriptionProfile,
-  UserRole,
+  WorkspaceAccessRole,
   WorkspaceInvitationRecord,
   WorkspaceMemberRecord,
   WorkspaceProfile,
@@ -106,7 +106,7 @@ export function createEmptyWorkspaceState(): PersistedXbarState {
 }
 
 export const initialState = {
-  currentRole: (isSupabaseConfigured() ? 'Owner' : 'Admin') as UserRole,
+  currentRole: (isSupabaseConfigured() ? 'Pending access' : 'Admin') as WorkspaceAccessRole,
   ...createEmptyWorkspaceState(),
   // Transient (never persisted): live progress of an in-flight OCR batch.
   documentIntakeProgress: null,
@@ -2305,7 +2305,7 @@ export function createTimelineEvent(params: {
   } as const;
 }
 
-export function requireRoleCapability(role: UserRole, capability: RoleCapability) {
+export function requireRoleCapability(role: WorkspaceAccessRole, capability: RoleCapability) {
   return hasRoleCapability(role, capability) ? null : getCapabilityDeniedMessage(capability);
 }
 

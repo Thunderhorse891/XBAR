@@ -10,7 +10,7 @@ registerHooks({
 });
 const { setCloudSubscriptionClient } = await import('./fixtures/cloudSubscriptionClient.mjs');
 const { supabaseConfig } = await import('../../src/lib/platformConfig.ts');
-const { saveWorkspaceBackupToCloud } = await import('../../src/lib/cloudWorkspace.ts');
+const { saveWorkspaceBackupToCloud, loadWorkspaceAccessProfile } = await import('../../src/lib/cloudWorkspace.ts');
 
 const clone = (value) => (value === undefined ? undefined : JSON.parse(JSON.stringify(value)));
 const horse = { id: 'horse-a', name: 'Blue', sale: { askPrice: 10000 }, medicalTimeline: [] };
@@ -111,6 +111,9 @@ function fixture(remote = {}, beforeUpdate) {
           return chain;
         },
         limit() {
+          return chain;
+        },
+        order() {
           return chain;
         },
         upsert(v) {
@@ -570,4 +573,108 @@ test('relational fixture enforces unique insert identities and replaces matching
   assert.equal(replaced.error, null);
   assert.equal(f.data.get('horses').length, 1);
   assert.equal(f.data.get('horses')[0].payload.name, 'Updated');
+});
+
+test('snapshot-only saves bind recovery records to verified account and ranch', async () => {
+  const f = fixture();
+  supabaseConfig.relationalSyncEnabled = false;
+  const access = await loadWorkspaceAccessProfile();
+  assert.equal(access.workspaceId, null, 'snapshot-only UI and vault stay account-scoped');
+  const resolved = await loadWorkspaceAccessProfile(undefined, { forEntitlements: true });
+  const result = await saveWorkspaceBackupToCloud(backup(), {
+    expectedContext: { userId: 'user-a', workspaceId: access.workspaceId ?? '' },
+    expectedRecoveryContext: {
+      userId: 'user-a',
+      workspaceId: resolved.workspaceId,
+      workspaceRole: resolved.workspaceRole,
+    },
+  });
+  assert.equal(result.ok, true, result.message);
+  const saved = f.data.get(supabaseConfig.workspaceTable)[0].payload;
+  assert.equal(saved.cloudUserId, 'user-a');
+  assert.equal(saved.cloudWorkspaceId, 'ranch-a');
+});
+test('snapshot-only saves refuse a different expected ranch before mutation', async () => {
+  const f = fixture();
+  supabaseConfig.relationalSyncEnabled = false;
+  const result = await saveWorkspaceBackupToCloud(backup(), {
+    expectedContext: { userId: 'user-a', workspaceId: 'former-ranch' },
+  });
+  assert.equal(result.ok, false);
+  assert.equal(
+    f.calls.some((call) => call.action !== 'read'),
+    false,
+  );
+});
+
+test('snapshot-only legacy accounts without a ranch can save using the real empty store context', async () => {
+  const f = fixture({ workspaces: [] });
+  supabaseConfig.relationalSyncEnabled = false;
+  const access = await loadWorkspaceAccessProfile();
+  assert.equal(access.workspaceId, null);
+  const resolved = await loadWorkspaceAccessProfile(undefined, { forEntitlements: true });
+  const result = await saveWorkspaceBackupToCloud(backup(), {
+    expectedContext: { userId: 'user-a', workspaceId: access.workspaceId ?? '' },
+    expectedRecoveryContext: {
+      userId: 'user-a',
+      workspaceId: resolved.workspaceId,
+      workspaceRole: resolved.workspaceRole,
+    },
+  });
+  assert.equal(result.ok, true, result.message);
+  assert.equal(f.calls.filter((call) => call.action === 'upsert').length, 1);
+});
+
+for (const expectedRecoveryContext of [
+  { userId: 'user-a', workspaceId: 'former-ranch', workspaceRole: 'Admin' },
+  { userId: 'user-a', workspaceId: 'ranch-a', workspaceRole: 'Owner' },
+  { userId: 'former-user', workspaceId: 'ranch-a', workspaceRole: 'Admin' },
+]) {
+  test(`snapshot-only save refuses changed recovery identity ${JSON.stringify(expectedRecoveryContext)}`, async () => {
+    const f = fixture();
+    supabaseConfig.relationalSyncEnabled = false;
+    const result = await saveWorkspaceBackupToCloud(backup(), {
+      expectedContext: { userId: 'user-a', workspaceId: '' },
+      expectedRecoveryContext,
+    });
+    assert.equal(result.ok, false);
+    assert.equal(
+      f.calls.some((call) => call.action !== 'read'),
+      false,
+    );
+  });
+}
+
+test('snapshot-only autosave with no verified recovery context refuses before mutation', async () => {
+  const f = fixture();
+  supabaseConfig.relationalSyncEnabled = false;
+  const result = await saveWorkspaceBackupToCloud(backup(), { expectedContext: { userId: 'user-a', workspaceId: '' } });
+  assert.equal(result.ok, false);
+  assert.equal(
+    f.calls.some((call) => call.action !== 'read'),
+    false,
+  );
+});
+
+test('verified new-owner first setup creates only the authenticated owned ranch', async () => {
+  const f = fixture({ workspaces: [], horses: [], workspace_profiles: [] });
+  const { useXbarStore } = await import('../../src/store/useXbarStore.ts');
+  const { createEmptyWorkspaceState } = await import('../../src/store/xbarStoreHelpers.ts');
+  await new Promise((resolve) => setImmediate(resolve));
+  useXbarStore.persist.setOptions({ storage: { getItem: () => null, setItem: () => {}, removeItem: () => {} } });
+  const access = await loadWorkspaceAccessProfile();
+  assert.equal(access.workspaceId, null);
+  assert.equal(access.workspaceRole, 'Admin', 'verified absence permits the explicit new-owner setup path');
+  useXbarStore.setState({ ...createEmptyWorkspaceState(), currentRole: access.workspaceRole });
+  assert.equal(
+    useXbarStore.getState().initializeWorkspace({ ranchName: 'New owned ranch', businessName: 'New owned business' })
+      .ok,
+    true,
+  );
+  const result = await saveWorkspaceBackupToCloud(useXbarStore.getState().exportWorkspaceBackup());
+  assert.equal(result.ok, true, result.message);
+  assert.equal(f.data.get('workspaces')[0].owner_user_id, 'user-a');
+  assert.equal(f.data.get('workspace_memberships')[0].user_id, 'user-a');
+  assert.equal(f.data.get('workspace_memberships')[0].role, 'Admin');
+  assert.equal(f.data.get('horses').length, 0, 'no prior account records ride along with creation');
 });

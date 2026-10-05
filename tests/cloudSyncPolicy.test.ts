@@ -90,10 +90,15 @@ test('resolving a conflict by hand unlocks autosave on both paths', async () => 
   ] as const) {
     assert.match(
       handler,
-      /if \(result\.ok\) \{\s*unlockAutosaveAfterManualSync\(\);/,
+      /if \(result\.ok\) \{\s*unlockAutosaveAfterManualSync\([^;]+\);/,
       `${name} is one of the two choices the conflict-lock message offers, so it must clear the lock`,
     );
   }
+  assert.match(push, /unlockAutosaveAfterManualSync\(result\.recoveryContext\)/);
+  assert.match(
+    pull,
+    /unlockAutosaveAfterManualSync\('recoveryContext' in remote \? remote\.recoveryContext : undefined\)/,
+  );
 });
 
 test('the unlock cannot promote a workspace that is still hydrating', async () => {
@@ -106,16 +111,16 @@ test('the unlock cannot promote a workspace that is still hydrating', async () =
    * that can promote `ready` can start autosave against a half-hydrated
    * workspace, which is the failure `vaultOwner` exists to prevent.
    */
+  const unlock = store.slice(
+    store.indexOf('unlockAutosaveAfterManualSync: (context)'),
+    store.indexOf('  sendMagicLink: async'),
+  );
   assert.match(
-    store,
-    /unlockAutosaveAfterManualSync: \(\) =>\s*set\(\(state\) => \(state\.autosaveReady \? \{ autosaveUnlocked: true \} : state\)\),/,
-    'it must be a no-op while reconciliation is still running, and must not touch autosaveReady',
+    unlock,
+    /if \(!state\.autosaveReady\) return state;/,
+    'it must be a no-op while reconciliation is still running',
   );
-  assert.doesNotMatch(
-    store.slice(store.indexOf('unlockAutosaveAfterManualSync: ()')).slice(0, 200),
-    /autosaveReady: true/,
-    "setting ready here would let autosave run against records that are not this workspace's yet",
-  );
+  assert.doesNotMatch(unlock, /autosaveReady: true/, 'unlocking must not manufacture completed hydration');
 });
 
 test('reconciliation still finishes a conflict LOCKED', async () => {
@@ -150,7 +155,10 @@ test('the first relational workspace id becomes active before billing depends on
    */
   assert.match(cloud, /type CloudSaveResult = \{[\s\S]*workspaceId\?: string;/);
   assert.match(cloud, /message: 'Relational workspace updated\.',\s*workspaceId,/);
-  assert.match(store, /setWorkspaceAccessProfile: \(workspaceId: string, workspaceRole\?: UserRole\) => void;/);
+  assert.match(
+    store,
+    /setWorkspaceAccessProfile: \(workspaceId: string, workspaceRole\?: WorkspaceAccessRole\) => void;/,
+  );
   assert.match(
     store,
     /setWorkspaceAccessProfile: \(workspaceId, workspaceRole = 'Admin'\) => set\(\{ workspaceId, workspaceRole \}\)/,

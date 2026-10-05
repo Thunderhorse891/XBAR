@@ -1,3 +1,4 @@
+import { hasMeaningfulWorkspace } from '@/lib/cloudSyncPolicy';
 import { loadCompleteCloudRows } from '@/lib/cloudLoadPagination';
 import { apiConfig, isRelationalCloudEnabled, isSnapshotFallbackEnabled, supabaseConfig } from '@/lib/platformConfig';
 import { publicShareEventToBuyerRoomEvent, type PublicShareEventRow } from '@/lib/buyerDealRoom';
@@ -31,6 +32,7 @@ import type {
   SharedListingRecord,
   SubscriptionProfile,
   UserRole,
+  WorkspaceAccessRole,
   WorkspaceInvitationRecord,
   WorkspaceMemberRecord,
   WorkspaceProfile,
@@ -79,7 +81,11 @@ type RelationalMirrorResult = {
   recoveryBackup?: CloudWorkspaceBackup;
 };
 
+export type CloudRecoveryContext = { userId: string; workspaceId: string | null; workspaceRole: WorkspaceAccessRole };
+
 export type CloudSaveOptions = {
+  /** Snapshot-only ranch pin, separate from its account-scoped UI/vault identity. */
+  expectedRecoveryContext?: CloudRecoveryContext;
   /** Pin an autosave to the account and ranch that supplied its snapshot. */
   expectedContext?: { userId: string; workspaceId: string };
   /** Records a person deleted on this device; see `cloudDeletionQueue`. */
@@ -101,6 +107,7 @@ type CloudSaveResult = {
   ok: boolean;
   message: string;
   updatedAt?: string;
+  recoveryContext?: CloudRecoveryContext;
   workspaceId?: string;
   /*
    * Whether the deletions sent with this save are now in the cloud copy every
@@ -127,7 +134,7 @@ type CloudSaveResult = {
 
 type WorkspaceAccessProfile = {
   workspaceId: string | null;
-  workspaceRole: UserRole;
+  workspaceRole: WorkspaceAccessRole;
   source: 'workspace-owner' | 'workspace-membership' | 'session';
   lookupFailed?: boolean;
 };
@@ -148,13 +155,11 @@ function normalizeWorkspaceEmail(value: unknown) {
   return typeof value === 'string' ? value.trim().toLowerCase() : '';
 }
 
-function resolveSessionRole(session: Session) {
+function resolveSessionRole(session: Session): WorkspaceAccessRole {
   return (
     normalizeWorkspaceRole(session.user.app_metadata?.workspace_role) ??
     normalizeWorkspaceRole(session.user.app_metadata?.role) ??
-    normalizeWorkspaceRole(session.user.user_metadata?.workspace_role) ??
-    normalizeWorkspaceRole(session.user.user_metadata?.role) ??
-    'Owner'
+    'Pending access'
   );
 }
 
@@ -255,18 +260,23 @@ export async function loadWorkspaceAccessProfile(
   if (!session?.user) {
     return {
       workspaceId: null,
-      workspaceRole: 'Owner',
+      workspaceRole: 'Pending access',
       source: 'session',
     };
   }
 
   if (!isRelationalCloudEnabled() && !options.forEntitlements) {
+    // Refresh verified capabilities without changing the account-scoped vault
+    // namespace used by snapshot-only builds, including on token refresh.
+    const verified = await loadWorkspaceAccessProfile(session, { forEntitlements: true });
     return {
       workspaceId: null,
-      workspaceRole: resolveSessionRole(session),
+      workspaceRole: verified.workspaceRole,
       source: 'session',
+      ...(verified.lookupFailed ? { lookupFailed: true } : {}),
     };
   }
+  const readOnly = options.forEntitlements;
 
   const client = getSupabaseClient();
   if (!client) {
@@ -284,8 +294,8 @@ export async function loadWorkspaceAccessProfile(
     .eq('workspace_key', 'primary')
     .maybeSingle();
 
-  if (options.forEntitlements && ownedWorkspaceError) {
-    return { workspaceId: null, workspaceRole: resolveSessionRole(session), source: 'session', lookupFailed: true };
+  if (ownedWorkspaceError) {
+    return { workspaceId: null, workspaceRole: 'Pending access', source: 'session', lookupFailed: true };
   }
 
   if (!ownedWorkspaceError && ownedWorkspace?.id) {
@@ -298,7 +308,7 @@ export async function loadWorkspaceAccessProfile(
 
   // A billing read may resolve snapshot-only accounts, but must not accept an
   // invitation or change membership as a side effect of reading entitlements.
-  const acceptedInvitation = options.forEntitlements ? null : await acceptPendingWorkspaceInvitation(session);
+  const acceptedInvitation = readOnly ? null : await acceptPendingWorkspaceInvitation(session);
   if (acceptedInvitation?.workspaceId) {
     return {
       workspaceId: acceptedInvitation.workspaceId,
@@ -318,16 +328,20 @@ export async function loadWorkspaceAccessProfile(
   if (!membershipError && membership?.workspace_id) {
     return {
       workspaceId: membership.workspace_id as string,
-      workspaceRole: normalizeWorkspaceRole(membership.role) ?? resolveSessionRole(session),
+      workspaceRole: normalizeWorkspaceRole(membership.role) ?? 'Pending access',
       source: 'workspace-membership',
     };
   }
 
   return {
     workspaceId: null,
-    workspaceRole: 'Admin',
+    workspaceRole: membershipError
+      ? 'Pending access'
+      : isRelationalCloudEnabled()
+        ? 'Admin'
+        : resolveSessionRole(session),
     source: 'session',
-    ...(options.forEntitlements ? { lookupFailed: Boolean(membershipError) } : {}),
+    lookupFailed: Boolean(membershipError),
   };
 }
 
@@ -1475,24 +1489,8 @@ async function loadWorkspaceBackupFromRelationalCloud(session: Session, expected
     },
   };
 
-  const hasWorkspaceData = Boolean(
-    backup.workspace?.horses?.length ||
-    backup.workspace?.workspaceMembers?.length ||
-    backup.workspace?.workspaceInvitations?.length ||
-    backup.workspace?.documents?.length ||
-    backup.workspace?.intakeBatches?.length ||
-    backup.workspace?.ownershipRecords?.length ||
-    backup.workspace?.expenseReceipts?.length ||
-    backup.workspace?.ranchAssets?.length ||
-    backup.workspace?.salesLeads?.length ||
-    backup.workspace?.sharedListings?.length ||
-    backup.workspace?.subscription ||
-    backup.workspace?.workspaceProfile,
-  );
-
-  if (!hasWorkspaceData) {
-    return { ok: false, message: 'No relational workspace records are stored for this account yet.' } as const;
-  }
+  // Billing metadata and a blank profile do not prove that ranch records exist.
+  const hasWorkspaceData = hasMeaningfulWorkspace(backup);
 
   const authoritativeSubscription = subscriptionFromCloudRow(subscriptionResult.data) ?? baselineCloudSubscription();
   const authoritative = withCloudSubscription(backup, authoritativeSubscription);
@@ -1530,6 +1528,7 @@ async function loadWorkspaceBackupFromRelationalCloud(session: Session, expected
     return {
       ok: true,
       source: 'relational',
+      authoritativeEmpty: !hasWorkspaceData,
       workspaceId,
       backup: normalized,
       authoritativeSubscription,
@@ -1645,14 +1644,45 @@ export async function saveWorkspaceBackupToCloud(
     };
   }
 
-  const snapshot = await saveWorkspaceSnapshotToCloud(backup, session, updatedAt);
+  const snapshotAccess = await loadWorkspaceAccessProfile(session, { forEntitlements: true });
+  if (
+    snapshotAccess.lookupFailed ||
+    (options.expectedContext && !options.expectedContext.workspaceId && !options.expectedRecoveryContext) ||
+    (options.expectedContext?.workspaceId && snapshotAccess.workspaceId !== options.expectedContext.workspaceId) ||
+    (options.expectedRecoveryContext &&
+      (options.expectedRecoveryContext.userId !== session.user.id ||
+        options.expectedRecoveryContext.workspaceId !== snapshotAccess.workspaceId ||
+        options.expectedRecoveryContext.workspaceRole !== snapshotAccess.workspaceRole)) ||
+    (await getActiveSession())?.user.id !== session.user.id
+  ) {
+    return {
+      ok: false,
+      message: 'The current account and ranch could not be verified. No recovery snapshot was written.',
+    };
+  }
+  const snapshot = await saveWorkspaceSnapshotToCloud(
+    backup,
+    session,
+    updatedAt,
+    snapshotAccess.workspaceId ?? undefined,
+  );
   if (!snapshot.ok) {
     return { ok: false, message: snapshot.message, updatedAt };
   }
 
   // Snapshot-only builds store the whole workspace as one document, so the
   // device's copy -- deletions and all -- is what was written.
-  return { ok: true, message: 'Cloud sync complete. Legacy snapshot updated.', updatedAt, deletionsApplied: true };
+  return {
+    ok: true,
+    message: 'Cloud sync complete. Legacy snapshot updated.',
+    updatedAt,
+    deletionsApplied: true,
+    recoveryContext: {
+      userId: session.user.id,
+      workspaceId: snapshotAccess.workspaceId,
+      workspaceRole: snapshotAccess.workspaceRole,
+    },
+  };
 }
 
 export async function loadWorkspaceBackupFromCloud(
@@ -1725,8 +1755,31 @@ export async function loadWorkspaceBackupFromCloud(
     .eq('workspace_key', 'primary')
     .maybeSingle();
 
+  const currentSession = await getActiveSession();
+  const currentAccess =
+    currentSession?.user.id === session.user.id
+      ? await loadWorkspaceAccessProfile(currentSession, { forEntitlements: true })
+      : null;
+  if (
+    !currentAccess ||
+    currentAccess.lookupFailed ||
+    currentAccess.workspaceId !== access.workspaceId ||
+    currentAccess.workspaceRole !== access.workspaceRole
+  ) {
+    return {
+      ok: false,
+      message: 'Your account or ranch changed while loading the recovery snapshot. Local records were kept unchanged.',
+    } as const;
+  }
+
+  const recoveryContext: CloudRecoveryContext = {
+    userId: session.user.id,
+    workspaceId: access.workspaceId,
+    workspaceRole: access.workspaceRole,
+  };
+
   if (error) {
-    return { ok: false, message: error.message, authoritativeSubscription } as const;
+    return { ok: false, message: error.message, authoritativeSubscription, recoveryContext } as const;
   }
 
   if (!data?.payload) {
@@ -1736,12 +1789,34 @@ export async function loadWorkspaceBackupFromCloud(
       // reconciliation locked rather than inviting an automatic local push.
       message: relationalError?.message ?? 'No cloud workspace has been saved for this account yet.',
       authoritativeSubscription,
+      recoveryContext,
     } as const;
   }
 
+  const recovery = isRecord(data.payload) ? data.payload : {};
+  const boundUser = recovery.cloudUserId;
+  const boundWorkspace = recovery.cloudWorkspaceId;
+  // An account-level recovery copy is not proof that it belongs to the ranch
+  // currently selected. Unbound legacy copies remain usable only while the
+  // account has no resolved relational ranch; never guess that association.
+  if (
+    (boundUser !== undefined && boundUser !== session.user.id) ||
+    (access.workspaceId
+      ? boundUser !== session.user.id || boundWorkspace !== access.workspaceId
+      : boundWorkspace !== undefined)
+  ) {
+    return {
+      ok: false,
+      message:
+        'This recovery snapshot cannot be verified for the current account and ranch. Local records were kept unchanged.',
+      authoritativeSubscription,
+      recoveryContext,
+    } as const;
+  }
   return {
     ok: true,
     source: 'snapshot',
+    recoveryContext,
     backup: withCloudSubscription(data.payload, authoritativeSubscription),
     authoritativeSubscription,
     updatedAt: typeof data.updated_at === 'string' ? data.updated_at : '',

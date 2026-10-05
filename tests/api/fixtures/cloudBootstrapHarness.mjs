@@ -4,6 +4,10 @@ const require = createRequire(import.meta.url);
 export async function cloudBootstrapFixture(configure) {
   const f = {
     effects: [],
+    decideCloudReconciliation: () => undefined,
+    hasMeaningfulWorkspace: () => true,
+    mergeCloudSubscription: () => undefined,
+    withCloudSubscription: () => undefined,
     loads: [],
     timers: new Map(),
     listeners: {},
@@ -27,10 +31,25 @@ export async function cloudBootstrapFixture(configure) {
       f.states.push(args);
     },
     setLastSyncAt() {},
+    setRecoveryContext(context) {
+      f.cloud.recoveryContext = context;
+    },
+    setAutosaveReady(ready, unlocked) {
+      f.cloud.autosaveReady = ready;
+      f.cloud.autosaveUnlocked = unlocked;
+    },
     setWorkspaceAccessProfile() {},
     settleStagedStorageBytes() {},
   };
-  f.store = { exportWorkspaceBackup: () => structuredClone(f.backup) };
+  f.store = {
+    exportWorkspaceBackup: () => structuredClone(f.backup),
+    setCurrentRole() {},
+    importWorkspaceBackup(backup) {
+      f.imports = (f.imports ?? 0) + 1;
+      f.backup = backup;
+      return { ok: true };
+    },
+  };
   f.save = (backup, options) => new Promise((resolve, reject) => f.calls.push({ backup, options, resolve, reject }));
   globalThis.__autosaveFixture = f;
   const result = await build({
@@ -50,23 +69,26 @@ export async function cloudBootstrapFixture(configure) {
             const modules = {
               react: 'export const useEffect=(fn)=>f.effects.push(fn); export const useRef=(v)=>({current:v});',
               '@/lib/platformConfig': 'export const isRelationalCloudEnabled=()=>f.relational!==false;',
-              '@/lib/authBootstrap': 'export const createLatestWriteGate=()=>({});',
+              '@/lib/authBootstrap':
+                'export const createLatestWriteGate=()=>({begin:()=>()=>true,retireInFlight:()=>{}});',
               '@/lib/cloudDeletionQueue':
                 'export const pendingCloudDeletions=()=>[]; export const acknowledgeCloudDeletions=()=>{};',
               '@/lib/cloudWorkspace':
                 'export const saveWorkspaceBackupToCloud=(...args)=>f.save(...args); export const loadWorkspaceBackupFromCloud=(...args)=>f.load ? f.load(...args) : new Promise(resolve=>f.loads.push(resolve));',
               '@/lib/cloudSubscription':
-                'export const mergeCloudSubscription=()=>{};export const withCloudSubscription=()=>{};',
+                'export const mergeCloudSubscription=(...args)=>f.mergeCloudSubscription(...args);export const withCloudSubscription=(...args)=>f.withCloudSubscription(...args);',
               '@/store/xbarStoreHelpers': 'export const restorePersistedState=(value)=>value;',
               '@/lib/cloudSyncPolicy':
-                'export const serializeWorkspaceBackup=(v)=>JSON.stringify(v);export const decideCloudReconciliation=()=>{};export const getWorkspacePayload=(v)=>v.workspace;',
+                'export const serializeWorkspaceBackup=(v)=>JSON.stringify(v);export const decideCloudReconciliation=(...args)=>f.decideCloudReconciliation(...args);export const getWorkspacePayload=(v)=>v.workspace;export const hasMeaningfulWorkspace=(...args)=>f.hasMeaningfulWorkspace(...args);',
               '@/lib/workspacePromotion': 'export const promoteLocalVaultFiles=()=>{};',
-              '@/lib/vaultOwner': 'export const vaultOwnerId=()=>"local";',
+              '@/lib/vaultOwner': 'export const vaultOwnerId=()=>f.vaultOwner??"local";',
+              '@/lib/recordsOwner': 'export const readRecordsOwner=()=>f.recordsOwner??"local";',
               '@/store/useCloudStore':
                 'export const useCloudStore=(fn)=>fn(f.cloud);useCloudStore.getState=()=>f.cloud;useCloudStore.subscribe=(fn)=>{f.cloudChange=fn;return ()=>{f.cloudChange=()=>{}}};',
-              '@/store/useUiStore': 'export const useUiStore=(fn)=>fn({pushToast:()=>{}});',
+              '@/store/useUiStore':
+                'export const useUiStore=(fn)=>fn({pushToast:(toast)=>{(f.toasts??=[]).push(toast)}});',
               '@/store/useXbarStore':
-                'export const useXbarStore=(fn)=>fn(f.store);useXbarStore.setState=(v)=>{f.backup={workspace:v};f.change();};useXbarStore.subscribe=(fn)=>{f.change=fn;return ()=>{f.change=()=>{}}};export const useWorkspaceHydrated=()=>true;',
+                'export const useXbarStore=(fn)=>fn(f.store);useXbarStore.setState=(v)=>{const next=typeof v === "function"?v(f.backup.workspace):v;f.backup={workspace:{...f.backup.workspace,...next}};f.change?.();};useXbarStore.subscribe=(fn)=>{f.change=fn;return ()=>{f.change=()=>{}}};export const useWorkspaceHydrated=()=>true;',
             };
             return { contents: prefix + modules[path] };
           });
@@ -108,7 +130,9 @@ export async function cloudBootstrapFixture(configure) {
   };
   configure?.(f);
   mod.exports.CloudBootstrap();
-  f.dispose = f.effects.at(-1)();
+  f.startAutosave = () => f.effects.at(-1)();
+  f.startHydration = () => f.effects[2]();
+  f.dispose = f.hydrateFirst ? () => {} : f.startAutosave();
   f.startRefresh = () => f.effects.at(-2)();
   f.edit = (value) => {
     f.backup.workspace.value = value;

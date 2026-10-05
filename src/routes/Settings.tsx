@@ -796,7 +796,7 @@ export default function Settings() {
      * and staying locked over a retry is the failure this fixes.
      */
     if (result.ok) {
-      unlockAutosaveAfterManualSync();
+      unlockAutosaveAfterManualSync(result.recoveryContext);
       setCloudSyncState('idle', 'Cloud workspace ready.');
     }
     setCloudBusy(false);
@@ -828,7 +828,7 @@ export default function Settings() {
       // The other half of the same choice: taking the cloud copy settles the
       // conflict exactly as pushing the local one does.
       if (result.ok) {
-        unlockAutosaveAfterManualSync();
+        unlockAutosaveAfterManualSync('recoveryContext' in remote ? remote.recoveryContext : undefined);
         setCloudSyncState('idle', 'Cloud workspace ready.');
       }
     } catch {

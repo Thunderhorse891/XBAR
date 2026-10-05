@@ -169,7 +169,9 @@ for (const scenario of ['relational', 'conflict', 'missing-snapshot']) {
     if (conflict) {
       await page.waitForTimeout(2000); // beyond autosave debounce
       expect(cloudWrites, 'failed record reads cannot authorize autosave after a local edit').toBe(0);
-      expect((await readRanch(page)).horses[0].notes).toContainEqual(local.horses[0].notes.at(-1));
+      const originalHorse = (await readRanch(page)).horses.find((horse) => horse.id === local.horses[0].id);
+      expect(originalHorse, 'the original horse remains after prepending the newly created horse').toBeDefined();
+      expect(originalHorse.notes).toContainEqual(local.horses[0].notes.at(-1));
     }
   });
 }

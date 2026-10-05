@@ -183,7 +183,7 @@ test('an account change retires the previous account workspace with it', () => {
   const patch = identityPublication('user-a', 'user-b');
   assert.equal(patch.status, 'loading', 'the app must not stay signed-in through an account change');
   assert.equal(patch.workspaceId, '', 'the previous workspace must not survive the account that owned it');
-  assert.equal(patch.workspaceRole, 'Owner', 'nor may its role');
+  assert.equal(patch.workspaceRole, 'Pending access', 'the new identity has no capabilities until verified');
   assert.equal(patch.workspaceReady, false);
 });
 

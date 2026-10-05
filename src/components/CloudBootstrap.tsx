@@ -1,10 +1,16 @@
+import { readRecordsOwner } from '@/lib/recordsOwner';
 import { useEffect, useRef } from 'react';
 import { isRelationalCloudEnabled } from '@/lib/platformConfig';
 import { createLatestWriteGate } from '@/lib/authBootstrap';
 import { acknowledgeCloudDeletions, pendingCloudDeletions } from '@/lib/cloudDeletionQueue';
 import { loadWorkspaceBackupFromCloud, saveWorkspaceBackupToCloud } from '@/lib/cloudWorkspace';
 import { mergeCloudSubscription, withCloudSubscription } from '@/lib/cloudSubscription';
-import { decideCloudReconciliation, getWorkspacePayload, serializeWorkspaceBackup } from '@/lib/cloudSyncPolicy';
+import {
+  decideCloudReconciliation,
+  getWorkspacePayload,
+  hasMeaningfulWorkspace,
+  serializeWorkspaceBackup,
+} from '@/lib/cloudSyncPolicy';
 import { promoteLocalVaultFiles } from '@/lib/workspacePromotion';
 import { vaultOwnerId } from '@/lib/vaultOwner';
 import { restorePersistedState } from '@/store/xbarStoreHelpers';
@@ -88,6 +94,7 @@ export function CloudBootstrap() {
 
     if (cloudStatus !== 'signed-in' || !session?.user.id) {
       hydrationKeyRef.current = '';
+      useCloudStore.getState().setRecoveryContext(undefined);
       // Whatever was loading was loading for somebody else.
       hydrationGateRef.current.retireInFlight();
       lastPersistedSignatureRef.current = serializeWorkspaceBackup(exportWorkspaceBackup());
@@ -149,6 +156,7 @@ export function CloudBootstrap() {
     const hydrationKey = `${session.user.id}:${workspaceId || 'primary'}`;
     if (hydrationKeyRef.current === hydrationKey) return;
     hydrationKeyRef.current = hydrationKey;
+    useCloudStore.getState().setRecoveryContext(undefined);
     setAutosaveReady(false, false);
     const ticketOwns = hydrationGateRef.current.begin();
     const owns = () => {
@@ -209,6 +217,7 @@ export function CloudBootstrap() {
       setSyncState('syncing', 'Reconciling this ranch with cloud records...');
       const remote = await loadWorkspaceBackupFromCloud();
       if (!owns()) return;
+      useCloudStore.getState().setRecoveryContext('recoveryContext' in remote ? remote.recoveryContext : undefined);
       if ('authoritativeSubscription' in remote && remote.authoritativeSubscription) {
         // Entitlements are server-owned, independent of any ranch-data conflict.
         // Updating only this field preserves local horses/documents and prevents
@@ -220,6 +229,7 @@ export function CloudBootstrap() {
       }
       const decision = decideCloudReconciliation({
         local,
+        remoteAuthoritativeEmpty: remote.ok && 'authoritativeEmpty' in remote && remote.authoritativeEmpty,
         ...(remote.ok ? { remote: remote.backup } : { remoteError: remote.message }),
       });
 
@@ -238,7 +248,19 @@ export function CloudBootstrap() {
       }
 
       if (decision === 'push-local') {
-        const saved = await saveWorkspaceBackupToCloud(local, { deletions });
+        const recordsOwner = readRecordsOwner();
+        if (recordsOwner !== 'local' && recordsOwner !== vaultOwnerId()) {
+          finish(
+            false,
+            'error',
+            'These local records cannot be verified for this account. Autosave is locked until you review an explicit Push or restore in Settings.',
+          );
+          return;
+        }
+        const saved = await saveWorkspaceBackupToCloud(local, {
+          deletions,
+          expectedRecoveryContext: useCloudStore.getState().recoveryContext,
+        });
         if (saved.ok && saved.deletionsApplied) acknowledgeCloudDeletions(deletions);
         if (!owns()) return;
         if (saved.ok && saved.updatedAt) setLastSyncAt(saved.updatedAt);
@@ -432,6 +454,10 @@ export function CloudBootstrap() {
           reportRefreshFailure();
           return;
         }
+        if (remote.authoritativeEmpty) {
+          if (hasMeaningfulWorkspace(local)) reportRefreshFailure();
+          return;
+        }
         const payload = getWorkspacePayload(remote.backup);
         if (!payload) return;
         // Auxiliary local-only collections are preserved when the relational
@@ -544,6 +570,7 @@ export function CloudBootstrap() {
         const result = await saveWorkspaceBackupToCloud(backup, {
           deletions,
           baseline: lastPersistedBackupRef.current ?? undefined,
+          expectedRecoveryContext: useCloudStore.getState().recoveryContext,
           expectedContext: { userId: userId ?? '', workspaceId },
         });
         if (!owns()) return;

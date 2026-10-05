@@ -25,6 +25,7 @@ export function hasMeaningfulWorkspace(backup: unknown) {
       'horses',
       'documents',
       'intakeBatches',
+      'ownershipRecords',
       'expenseReceipts',
       'ranchAssets',
       'salesLeads',
@@ -63,8 +64,10 @@ export function decideCloudReconciliation(params: {
   local: unknown;
   remote?: unknown;
   remoteError?: string;
+  remoteAuthoritativeEmpty?: boolean;
 }): CloudReconciliation {
   const localMeaningful = hasMeaningfulWorkspace(params.local);
+  if (params.remoteAuthoritativeEmpty) return localMeaningful ? 'conflict-lock' : 'empty-ready';
   if (params.remote !== undefined) {
     const remoteMeaningful = hasMeaningfulWorkspace(params.remote);
     if (remoteMeaningful && !localMeaningful) return 'import-remote';

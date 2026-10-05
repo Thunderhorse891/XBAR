@@ -14,7 +14,8 @@ const { supabaseConfig } = await import('../../src/lib/platformConfig.ts');
 const { loadWorkspaceBackupFromCloud } = await import('../../src/lib/cloudWorkspace.ts');
 const { createEmptyWorkspaceState, restorePersistedState, selectPersistedState } =
   await import('../../src/store/xbarStoreHelpers.ts');
-const { decideCloudReconciliation } = await import('../../src/lib/cloudSyncPolicy.ts');
+const { decideCloudReconciliation, hasMeaningfulWorkspace } = await import('../../src/lib/cloudSyncPolicy.ts');
+const { mergeCloudSubscription, withCloudSubscription } = await import('../../src/lib/cloudSubscription.ts');
 const ids = {
   workspace_memberships: 'id',
   workspace_invitations: 'invitation_id',
@@ -140,12 +141,17 @@ function fixture(o = {}) {
             : { data: { id: 'ws-owner' }, error: null };
         if (table === 'workspace_subscription_profiles')
           return {
-            data: { tier: 'Enterprise', billing_state: 'Manual Billing', monthly_rate: 0, payload: {} },
+            data: o.emptyRelational
+              ? null
+              : { tier: 'Enterprise', billing_state: 'Manual Billing', monthly_rate: 0, payload: {} },
             error: null,
           };
         if (table === 'workspace_profiles')
           return {
-            data: { payload: o.malformedProfile ? null : workspace.workspaceProfile, updated_at: stamp },
+            data:
+              o.emptyRelational || o.absentProfile
+                ? null
+                : { payload: o.malformedProfile ? null : workspace.workspaceProfile, updated_at: stamp },
             error: null,
           };
         if (table === supabaseConfig.workspaceTable)
@@ -154,6 +160,7 @@ function fixture(o = {}) {
               payload: {
                 app: 'XBAR',
                 version: 16,
+                ...o.snapshotIdentity,
                 workspace: { ...workspace, horses: [{ id: 'stale-horse', name: 'Stale snapshot' }] },
               },
               updated_at: stamp,
@@ -409,3 +416,187 @@ test('verification tolerates equivalent object-key order but keeps array order m
   assert.equal(result.error, null);
   assert.deepEqual(result.data, [first]);
 });
+
+for (const identity of [
+  { cloudWorkspaceId: 'former-ranch', cloudUserId: 'user-owner' },
+  { cloudWorkspaceId: 'ws-owner', cloudUserId: 'former-user' },
+  {},
+]) {
+  test(`empty resolved ranch ignores mismatched or unbound recovery identity ${JSON.stringify(identity)}`, async () => {
+    fixture({ count: 0, emptyRelational: true, snapshotIdentity: identity });
+    const loaded = await loadWorkspaceBackupFromCloud();
+    assert.equal(loaded.ok, true, loaded.message);
+    assert.equal(loaded.source, 'relational');
+    assert.equal(loaded.authoritativeEmpty, true);
+    assert.equal(loaded.backup.workspace.horses.length, 0);
+    assert.equal(
+      calls.some((call) => call.table === supabaseConfig.workspaceTable),
+      false,
+    );
+    assert.equal(loaded.authoritativeSubscription.tier, 'Starter');
+  });
+}
+test('empty authoritative ranch never resurrects a same-ranch recovery snapshot', async () => {
+  fixture({
+    count: 0,
+    emptyRelational: true,
+    snapshotIdentity: { cloudWorkspaceId: 'ws-owner', cloudUserId: 'user-owner' },
+  });
+  const loaded = await loadWorkspaceBackupFromCloud();
+  assert.equal(loaded.ok, true, loaded.message);
+  assert.equal(loaded.authoritativeEmpty, true);
+  assert.equal(loaded.backup.workspace.horses.length, 0);
+  assert.equal(
+    calls.some((call) => call.table === supabaseConfig.workspaceTable),
+    false,
+  );
+});
+
+test('empty authoritative refresh retains local records without importing or echo-saving a recovery copy', async () => {
+  fixture({
+    count: 0,
+    emptyRelational: true,
+    snapshotIdentity: { cloudWorkspaceId: 'ws-owner', cloudUserId: 'user-owner' },
+  });
+  const local = {
+    workspace: { ...createEmptyWorkspaceState(), horses: [{ id: 'local-horse', name: 'Keep locally' }] },
+  };
+  const f = await cloudBootstrapFixture((setup) => {
+    setup.cloud.session.user.id = 'user-owner';
+    setup.cloud.workspaceId = 'ws-owner';
+    setup.backup = structuredClone(local);
+    setup.load = (options) => loadWorkspaceBackupFromCloud(options);
+  });
+  await f.tick(1600);
+  f.calls[0].resolve({ ok: true, message: 'Saved' });
+  await f.tick(0);
+  const stop = f.startRefresh();
+  f.listeners.focus();
+  await f.tick(0);
+  await f.tick(1600);
+  assert.deepEqual(f.backup, local);
+  assert.equal(f.calls.length, 1);
+  assert.equal(
+    calls.some((call) => call.table === supabaseConfig.workspaceTable),
+    false,
+  );
+  const loaded = await loadWorkspaceBackupFromCloud();
+  assert.equal(
+    decideCloudReconciliation({ local, remote: loaded.backup, remoteAuthoritativeEmpty: loaded.authoritativeEmpty }),
+    'conflict-lock',
+  );
+  stop();
+  f.dispose();
+});
+
+for (const emptyMode of ['no-metadata', 'subscription-only', 'blank-profile'])
+  for (const hasLocalWork of [false, true]) {
+    test(`actual initial hydration (${emptyMode}) of an authoritative empty ranch ${hasLocalWork ? 'locks old local work without saving' : 'allows the first new horse to autosave'}`, async () => {
+      fixture({
+        count: 0,
+        emptyRelational: emptyMode === 'no-metadata',
+        absentProfile: emptyMode === 'subscription-only',
+      });
+      const local = { workspace: createEmptyWorkspaceState() };
+      if (hasLocalWork) local.workspace.horses = [{ id: 'old-horse', name: 'Do not resurrect' }];
+      const f = await cloudBootstrapFixture((setup) => {
+        setup.hydrateFirst = true;
+        Object.assign(setup, {
+          decideCloudReconciliation,
+          hasMeaningfulWorkspace,
+          mergeCloudSubscription,
+          withCloudSubscription,
+        });
+        setup.cloud.session.user.id = 'user-owner';
+        setup.cloud.workspaceId = 'ws-owner';
+        setup.backup = structuredClone(local);
+        setup.load = (options) => loadWorkspaceBackupFromCloud(options);
+      });
+      f.startHydration();
+      await f.tick(0);
+      assert.equal(f.cloud.autosaveReady, true);
+      assert.equal(f.cloud.autosaveUnlocked, !hasLocalWork);
+      assert.equal(f.imports ?? 0, 0);
+      assert.equal(f.calls.length, 0);
+      assert.deepEqual(f.backup.workspace.horses, local.workspace.horses);
+      if (!hasLocalWork) {
+        const stopRefresh = f.startRefresh();
+        f.listeners.focus();
+        await f.tick(0);
+        assert.equal(f.toasts?.length ?? 0, 0, 'a genuinely empty ranch refresh is healthy');
+        stopRefresh();
+      }
+      f.dispose = f.startAutosave();
+      f.backup.workspace.horses.push({ id: 'first-new-horse', name: 'First new horse' });
+      f.change?.();
+      await f.tick(1600);
+      assert.equal(f.calls.length, hasLocalWork ? 0 : 1);
+      if (!hasLocalWork) {
+        assert.equal(f.calls[0].backup.workspace.horses[0].id, 'first-new-horse');
+        f.calls[0].resolve({ ok: true, message: 'Saved' });
+        await f.tick(0);
+      }
+      f.dispose();
+    });
+  }
+
+test('manual recovery selection reaches the next actual autosave context', async () => {
+  const { useCloudStore } = await import('../../src/store/useCloudStore.ts');
+  fixture();
+  supabaseConfig.relationalSyncEnabled = false;
+  const old = { userId: 'user-owner', workspaceId: 'former-ranch', workspaceRole: 'Admin' };
+  const chosen = { userId: 'user-owner', workspaceId: 'chosen-ranch', workspaceRole: 'Owner' };
+  useCloudStore.setState({
+    session: { user: { id: 'user-owner' } },
+    autosaveReady: true,
+    autosaveUnlocked: true,
+    recoveryContext: old,
+  });
+  const f = await cloudBootstrapFixture((setup) => {
+    setup.relational = false;
+    setup.cloud.session.user.id = 'user-owner';
+    setup.cloud.workspaceId = '';
+    Object.defineProperty(setup.cloud, 'recoveryContext', { get: () => useCloudStore.getState().recoveryContext });
+  });
+  await f.tick(1600);
+  assert.deepEqual(f.calls[0].options.expectedRecoveryContext, old);
+  f.calls[0].resolve({ ok: true, message: 'Saved' });
+  await f.tick(0);
+  useCloudStore.setState({ autosaveUnlocked: false });
+  useCloudStore.getState().unlockAutosaveAfterManualSync(chosen);
+  assert.equal(useCloudStore.getState().autosaveUnlocked, true);
+  f.edit(2);
+  await f.tick(1600);
+  assert.deepEqual(f.calls[1].options.expectedRecoveryContext, chosen);
+  f.calls[1].resolve({ ok: true, message: 'Saved' });
+  await f.tick(0);
+  f.dispose();
+});
+
+for (const recordsOwner of ['', 'account:former-user', 'former-ranch']) {
+  test(`initial promotion refuses unknown or other-account local records: ${recordsOwner || 'unknown'}`, async () => {
+    const f = await cloudBootstrapFixture((setup) => {
+      setup.hydrateFirst = true;
+      Object.assign(setup, {
+        decideCloudReconciliation,
+        hasMeaningfulWorkspace,
+        mergeCloudSubscription,
+        withCloudSubscription,
+      });
+      setup.recordsOwner = recordsOwner;
+      setup.vaultOwner = 'account:new-user';
+      setup.cloud.session.user.id = 'new-user';
+      setup.cloud.workspaceId = '';
+      setup.backup = {
+        workspace: { ...createEmptyWorkspaceState(), horses: [{ id: 'old-horse', name: 'Prior account horse' }] },
+      };
+      setup.load = async () => ({ ok: false, message: 'No cloud workspace has been saved for this account yet.' });
+    });
+    f.startHydration();
+    await f.tick(0);
+    assert.equal(f.cloud.autosaveUnlocked, false);
+    assert.equal(f.calls.length, 0);
+    assert.equal(f.backup.workspace.horses[0].id, 'old-horse');
+    f.dispose();
+  });
+}

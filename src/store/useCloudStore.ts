@@ -1,7 +1,7 @@
 import { buildApiUrl } from '@/lib/backendApi';
 import { create } from 'zustand';
 import type { AuthChangeEvent, Session } from '@supabase/supabase-js';
-import { loadWorkspaceAccessProfile } from '@/lib/cloudWorkspace';
+import { loadWorkspaceAccessProfile, type CloudRecoveryContext } from '@/lib/cloudWorkspace';
 import { authStorageKey, getSupabaseClient } from '@/lib/supabaseClient';
 import { mayRejoinDurableStore, readAuthStorage } from '@/lib/authStorage';
 import {
@@ -10,8 +10,8 @@ import {
   runPasswordUpdateWithLock,
 } from '@/lib/passwordUpdateRequest';
 import { supabaseConfig } from '@/lib/platformConfig';
-import { isSupabaseConfigured } from '@/lib/platformConfig';
-import type { UserRole } from '@/types/xbar';
+import { isSupabaseConfigured, isRelationalCloudEnabled } from '@/lib/platformConfig';
+import type { WorkspaceAccessRole } from '@/types/xbar';
 import { authCallbackOrigin, isNativeApp } from '../lib/nativePlatform.js';
 import { describeAuthError } from '@/lib/authErrors';
 import {
@@ -96,7 +96,9 @@ type CloudStore = {
   workspaceReady: boolean;
   session: Session | null;
   workspaceId: string;
-  workspaceRole: UserRole;
+  workspaceRole: WorkspaceAccessRole;
+  recoveryContext?: CloudRecoveryContext;
+  setRecoveryContext: (context?: CloudRecoveryContext) => void;
   lastSyncAt: string;
   syncState: CloudSyncState;
   syncMessage: string;
@@ -128,7 +130,7 @@ type CloudStore = {
   initialize: () => Promise<(() => void) | void>;
   setLastSyncAt: (value: string) => void;
   setSyncState: (state: CloudSyncState, message?: string) => void;
-  setWorkspaceAccessProfile: (workspaceId: string, workspaceRole?: UserRole) => void;
+  setWorkspaceAccessProfile: (workspaceId: string, workspaceRole?: WorkspaceAccessRole) => void;
   // Both arguments are required so a new call site cannot quietly inherit the
   // permissive half of this pair.
   setAutosaveReady: (ready: boolean, unlocked: boolean) => void;
@@ -150,7 +152,7 @@ type CloudStore = {
    * refuses while hydration is still running, because `finish` is authoritative
    * about which copy won and would overwrite this a moment later anyway.
    */
-  unlockAutosaveAfterManualSync: () => void;
+  unlockAutosaveAfterManualSync: (context?: CloudRecoveryContext) => void;
   signInWithPassword: (email: string, password: string) => Promise<CloudActionResult>;
   sendMagicLink: (email: string) => Promise<CloudActionResult>;
   /**
@@ -1008,7 +1010,8 @@ export const useCloudStore = create<CloudStore>((set, get) => ({
   status: isSupabaseConfigured() ? 'loading' : 'unavailable',
   session: null,
   workspaceId: '',
-  workspaceRole: isSupabaseConfigured() ? 'Owner' : 'Admin',
+  recoveryContext: undefined,
+  workspaceRole: isSupabaseConfigured() ? 'Pending access' : 'Admin',
   lastSyncAt: '',
   syncState: 'idle',
   syncMessage: '',
@@ -1025,7 +1028,14 @@ export const useCloudStore = create<CloudStore>((set, get) => ({
 
     const client = getSupabaseClient();
     if (!client) {
-      set({ initialized: true, status: 'unavailable', session: null, workspaceId: '', workspaceRole: 'Admin' });
+      set({
+        initialized: true,
+        status: 'unavailable',
+        session: null,
+        workspaceId: '',
+        recoveryContext: undefined,
+        workspaceRole: 'Admin',
+      });
       return;
     }
 
@@ -1069,7 +1079,8 @@ export const useCloudStore = create<CloudStore>((set, get) => ({
           workspaceReady: true,
           session: null,
           workspaceId: '',
-          workspaceRole: 'Owner',
+          recoveryContext: undefined,
+          workspaceRole: 'Pending access',
           stagedStorageBytes: 0,
         });
         return;
@@ -1114,7 +1125,8 @@ export const useCloudStore = create<CloudStore>((set, get) => ({
           workspaceReady: true,
           session: null,
           workspaceId: '',
-          workspaceRole: 'Owner',
+          recoveryContext: undefined,
+          workspaceRole: 'Pending access',
         });
         return;
       }
@@ -1514,7 +1526,8 @@ export const useCloudStore = create<CloudStore>((set, get) => ({
           workspaceReady: true,
           session: null,
           workspaceId: '',
-          workspaceRole: 'Owner',
+          recoveryContext: undefined,
+          workspaceRole: 'Pending access',
         });
       } else {
         set({ initialized: true });
@@ -1576,7 +1589,22 @@ export const useCloudStore = create<CloudStore>((set, get) => ({
     set((state) => ({
       stagedStorageBytes: Math.max(0, state.stagedStorageBytes - (Number.isFinite(bytes) ? Math.max(0, bytes) : 0)),
     })),
-  unlockAutosaveAfterManualSync: () => set((state) => (state.autosaveReady ? { autosaveUnlocked: true } : state)),
+  setRecoveryContext: (context) =>
+    set((state) => ({
+      recoveryContext: context?.userId === state.session?.user.id ? context : undefined,
+      ...(!isRelationalCloudEnabled() && context && context.userId === state.session?.user.id
+        ? { workspaceRole: context.workspaceRole }
+        : {}),
+    })),
+  unlockAutosaveAfterManualSync: (context) =>
+    set((state) => {
+      if (!state.autosaveReady) return state;
+      if (isSupabaseConfigured() && !isRelationalCloudEnabled()) {
+        if (!context || context.userId !== state.session?.user.id) return state;
+        return { autosaveUnlocked: true, recoveryContext: context, workspaceRole: context.workspaceRole };
+      }
+      return { autosaveUnlocked: true, recoveryContext: undefined };
+    }),
   sendMagicLink: async (email) => {
     const client = getSupabaseClient();
     if (!client) {
@@ -2139,7 +2167,8 @@ export const useCloudStore = create<CloudStore>((set, get) => ({
       passwordRecoveryFor: '',
       passwordRecoveryGrant: '',
       workspaceId: '',
-      workspaceRole: 'Owner',
+      recoveryContext: undefined,
+      workspaceRole: 'Pending access',
       syncState: 'idle',
       syncMessage: '',
       autosaveReady: false,
@@ -2191,7 +2220,8 @@ export const useCloudStore = create<CloudStore>((set, get) => ({
       passwordRecoveryFor: '',
       passwordRecoveryGrant: '',
       workspaceId: '',
-      workspaceRole: 'Owner',
+      recoveryContext: undefined,
+      workspaceRole: 'Pending access',
       syncState: 'idle',
       syncMessage: '',
       autosaveReady: false,

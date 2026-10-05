@@ -57,3 +57,50 @@ not recovery fallback. Cold-owner success uses complete relational data; failed
 record reads retain local notes and authoritative entitlements without autosaving
 or installing recovery snapshots. CI's prior failures and new regression logs
 are preserved separately from the repository.
+
+## Recovery identity and authoritative empty ranches
+
+An entirely read empty relational ranch is returned as authoritative empty data,
+never replaced with an older per-account recovery snapshot. Initial reconciliation
+keeps a genuinely empty new device ready for its first horse and autosave. A device
+with existing local work instead requires the existing explicit Push/Pull choice;
+a clean refresh retains those records and reports the empty-source discrepancy.
+This avoids resurrecting deleted data without blocking first-day onboarding.
+
+Snapshot-only reads require account/ranch binding whenever a ranch resolves and
+recheck account, ranch and role after fetching the copy. Unbound legacy snapshots
+remain compatible only when no relational ranch exists; bound former-ranch copies
+cannot downgrade into that path. New snapshot-only saves verify and stamp their
+account/ranch. A context change also withholds the old ranch's subscription result.
+These checks do not establish snapshot completeness or shared-history authority.
+
+Synthetic regressions cover same-ranch stale copies after authoritative deletion,
+wrong/missing identity, account/ranch changes during the read, snapshot-only write
+binding, and actual CloudBootstrap initial hydration plus first-horse autosave.
+The same component fixture confirms old local work remains locked and clean refresh
+never imports or echo-saves the recovery copy.
+
+The empty-record decision excludes canonical billing rows and blank profile
+payloads; neither is evidence of ranch work. Snapshot-only UI and vault identity remain account-scoped. A separate verified
+recovery context pins the actual ranch and role through hydration, autosave and
+explicit Push/Pull choices, without accepting invitations. A no-ranch null
+identifier is distinct from a stale prior ranch; unpinned automatic saves refuse. Post-fetch identity checks also precede missing
+or erroneous snapshot handling, so a switched account receives no old entitlement.
+
+## Pending local access
+
+Pending access is a UI-only capability state, not a database membership role.
+Before a canonical owner/member or trusted application-metadata role resolves,
+configured clients expose no local mutation capability. Editable user metadata
+cannot grant a role. Account changes clear the recovery context and enter pending
+access; first workspace setup cannot promote this state into Admin. Verified new
+owners still initialize and add their first horse, and cloud-disabled local use
+retains its existing Admin behavior. Role presentation no longer substitutes the
+Admin workspace when no role matches. Membership/invitation roles remain the same
+five supported values; no database grant or schema change is included.
+
+Same-account token refresh revalidates snapshot-only capabilities through the
+read-only canonical lookup while retaining the blank UI workspace ID/account
+vault namespace. The actual auth-store regression exercises TOKEN_REFRESHED and
+auth storage, observes new role queries, and confirms a verified owner stays
+usable without releasing record reconciliation or changing file ownership.
