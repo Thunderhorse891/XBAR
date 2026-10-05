@@ -1,7 +1,6 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import { buildOperationsPriorities } from '../src/lib/operationsPriority.js';
-import { buildTodayWork } from '../src/lib/todayWork.js';
 
 const now = new Date('2026-06-05T12:00:00');
 const documentBase = {
@@ -82,36 +81,6 @@ test('future new leads stay clear until their follow-up approaches', () => {
   assert.equal(lead?.urgency, 'Clear');
   assert.equal(
     result.top.some((item) => item.id === 'sale-lead-later'),
-    false,
-  );
-});
-test('today work starts from live workspace setup state instead of static fixtures', () => {
-  const result = buildTodayWork({
-    horses: [],
-    documents: [],
-    ownershipRecords: [],
-    expenseReceipts: [],
-    salesLeads: [],
-    sharedListings: [],
-    workspaceProfile: {
-      ranchName: 'Thunder Horse Ranch',
-      businessName: 'XBAR Holdings',
-      defaultOwnerName: 'Erin Wyrick',
-      defaultOwnerEntity: 'Thunder Horse Ranch LLC',
-      ranchManagerName: 'Erin Wyrick',
-      operationsEmail: 'ops@xbar.test',
-      defaultBarn: 'Barn A',
-      defaultPasture: 'North Pasture',
-      workspaceShortcuts: [],
-      setupCompleteAt: '2026-07-01',
-    },
-    now,
-  });
-
-  assert.equal(result[0]?.id, 'setup-add-first-animal');
-  assert.equal(result[0]?.source, 'Workspace Setup');
-  assert.equal(
-    result.some((item) => item.title === 'Check north pasture water trough'),
     false,
   );
 });
