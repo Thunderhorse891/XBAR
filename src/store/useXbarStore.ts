@@ -1,3 +1,4 @@
+import { changeHorsePhoto } from '@/lib/horsePhotoGallery';
 import { useEffect, useState } from 'react';
 import { normalizePacketWebsite, validatePacketProfile } from '../../api/_lib/packet-branding.js';
 import { create } from 'zustand';
@@ -237,7 +238,7 @@ function serializeDocumentIntake<T>(run: () => Promise<T>): Promise<T> {
   return result;
 }
 
-function horseArchiveContextError(): string | null {
+function horseArchiveContextError(capability: RoleCapability = 'editHorse'): string | null {
   const cloud = useCloudStore.getState();
   const owner = vaultOwnerId();
   const recordedOwner = readRecordsOwner();
@@ -256,7 +257,7 @@ function horseArchiveContextError(): string | null {
     ) {
       return 'Wait for this workspace to finish loading, or resolve its sync warning, before changing the roster.';
     }
-    return requireRoleCapability(cloud.workspaceRole, 'editHorse') ?? null;
+    return requireRoleCapability(cloud.workspaceRole, capability) ?? null;
   }
   return null;
 }
@@ -1707,6 +1708,32 @@ export const useXbarStore = create<XbarStore>()(
 
         return { ok: true, message: `${document.title} was removed from active review.`, id: document.id };
       },
+      changeHorsePhoto: (horseId, assetId, action) => {
+        const contextError = horseArchiveContextError('uploadMedia');
+        if (contextError) return { ok: false, message: contextError };
+        const denied = requireRoleCapability(get().currentRole, 'uploadMedia');
+        if (denied) return { ok: false, message: denied };
+        const matches = get().horses.filter((item) => item.id === horseId);
+        if (matches.length !== 1) return { ok: false, message: 'A unique horse record could not be found.' };
+        const horse = matches[0];
+        const result = changeHorsePhoto(horse, assetId, action);
+        if (!result.ok) return result;
+        set((state) => ({
+          horses: state.horses.map((item) =>
+            item.id === horseId ? { ...item, gallery: result.gallery, profileImage: result.profileImage } : item,
+          ),
+        }));
+        return {
+          ok: true,
+          message:
+            action === 'primary'
+              ? 'Primary photo updated.'
+              : action === 'restore'
+                ? 'Photo restored to the gallery.'
+                : 'Photo removed from the gallery. The original is retained and can be restored.',
+          id: assetId,
+        };
+      },
       uploadHorseMedia: async ({ horseId, files, kind, makePrimary }) => {
         const deniedMessage = requireRoleCapability(get().currentRole, 'uploadMedia');
         if (deniedMessage) {
@@ -1832,7 +1859,9 @@ export const useXbarStore = create<XbarStore>()(
                 ? {
                     ...horse,
                     profileImage: primaryPhotoAsset ? primaryPhotoAsset.url : horse.profileImage,
-                    gallery: [...uploadedAssets, ...horse.gallery],
+                    gallery: [...uploadedAssets, ...horse.gallery].map((asset) =>
+                      primaryPhotoAsset ? { ...asset, isPrimary: asset.id === primaryPhotoAsset.id } : asset,
+                    ),
                     readiness: gainedFirstPhoto
                       ? {
                           ...horse.readiness,

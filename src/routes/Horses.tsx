@@ -977,7 +977,9 @@ export default function Horses() {
                               <strong>{horse.status === 'Sale Prep' ? 'Buyer Prep' : horse.status}</strong>
                             </div>
                             <div className="inline-metrics">
-                              <span>{horse.gallery.length} media assets</span>
+                              <span>
+                                {horse.gallery.filter((asset) => asset.status !== 'Archived').length} media assets
+                              </span>
                               <span>{packet.readyCount} documents ready</span>
                               <span>{horse.location.barn}</span>
                             </div>
