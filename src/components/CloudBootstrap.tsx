@@ -227,10 +227,37 @@ export function CloudBootstrap() {
         }));
         local = withCloudSubscription(local, remote.authoritativeSubscription);
       }
+      // Relational storage does not contain these three device histories yet.
+      // Its normalized empty arrays cannot establish a history conflict. Only
+      // compare them as local data after the record set and returned authority
+      // are pinned to this same account/ranch. Snapshot comparisons stay exact.
+      const sameRanchRelationalHistory =
+        remote.ok &&
+        remote.source === 'relational' &&
+        Boolean(workspaceId) &&
+        remote.workspaceId === workspaceId &&
+        readRecordsOwner() === workspaceId &&
+        remote.backup.workspace.auditEvents.length === 0 &&
+        remote.backup.workspace.salePacketBuilds.length === 0 &&
+        remote.backup.workspace.buyerRoomEvents.length === 0;
+      const comparisonBackup =
+        remote.ok && sameRanchRelationalHistory
+          ? {
+              ...remote.backup,
+              workspace: {
+                ...remote.backup.workspace,
+                auditEvents: local.workspace.auditEvents,
+                salePacketBuilds: local.workspace.salePacketBuilds,
+                buyerRoomEvents: local.workspace.buyerRoomEvents,
+              },
+            }
+          : remote.ok
+            ? remote.backup
+            : undefined;
       const decision = decideCloudReconciliation({
         local,
         remoteAuthoritativeEmpty: remote.ok && 'authoritativeEmpty' in remote && remote.authoritativeEmpty,
-        ...(remote.ok ? { remote: remote.backup } : { remoteError: remote.message }),
+        ...(remote.ok ? { remote: comparisonBackup } : { remoteError: remote.message }),
       });
 
       if (decision === 'import-remote' && remote.ok) {
