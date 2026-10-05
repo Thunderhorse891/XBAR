@@ -70,8 +70,11 @@ export function documentExamTime(document: DatedDocument): number | null {
   if (!examDate) return null;
   const parsed = Date.parse(examDate);
   if (Number.isNaN(parsed)) return null;
-  // Date.parse normalizes impossible dates such as February 30 into March.
-  if (/^\d{4}-\d{2}-\d{2}$/.test(examDate) && new Date(parsed).toISOString().slice(0, 10) !== examDate) return null;
+  // Date.parse also normalizes impossible days inside timestamps. Validate
+  // the calendar prefix separately from the instant so an offset crossing
+  // midnight cannot make a valid written exam day look invalid.
+  const calendarDate = /^\d{4}-\d{2}-\d{2}(?=$|[T\s])/.exec(examDate)?.[0];
+  if (calendarDate && new Date(`${calendarDate}T00:00:00Z`).toISOString().slice(0, 10) !== calendarDate) return null;
   return parsed;
 }
 

@@ -199,3 +199,16 @@ test('Coggins care status and canonical readiness agree at the expiration bounda
     else process.env.TZ = previous;
   }
 });
+
+test('impossible ISO exam dates remain invalid when a timestamp or offset is attached', async () => {
+  const { documentExamTime, isCurrentDatedDocument } = await import('../src/lib/documentCurrency.js');
+  for (const examDate of ['2026-02-30', '2026-02-30T12:00:00Z', '2026-02-30T23:00:00-07:00', '2026-02-30 12:00:00']) {
+    const paper = coggins({ examDate });
+    assert.equal(documentExamTime(paper), null, examDate);
+    assert.equal(isCurrentDatedDocument(paper, 365, NOW), false, examDate);
+    assert.equal(signal([horse()], 'coggins', [paper]).status, 'due', examDate);
+  }
+  for (const examDate of ['2024-02-29T12:00:00Z', '2026-03-01T23:00:00-07:00', '2026-03-01 12:00:00']) {
+    assert.notEqual(documentExamTime(coggins({ examDate })), null, `valid calendar date retained: ${examDate}`);
+  }
+});
