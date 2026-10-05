@@ -1,96 +1,4 @@
-/* Homepage pilot only. All colours derive from the supplied brand tokens.
-   The original artwork is rendered proportionally, never redrawn. */
-.landing-page {
-  --bg: var(--xbar-warm-white);
-  --bg-raised: var(--xbar-warm-white);
-  --ink: var(--xbar-black);
-  --ink-soft: var(--xbar-steel);
-  --ink-faint: var(--xbar-steel);
-  --accent: var(--xbar-gunmetal);
-  --accent-strong: var(--xbar-blue);
-  --accent-ink: var(--xbar-black);
-  --max: 1240px;
-  --landing-edge: var(--xbar-silver);
-  --landing-glint: var(--xbar-blue);
-  --font-display: var(--font-ui);
-  background: var(--bg);
-}
-.landing-page .bg-fx {
-  display: none;
-}
-.landing-page h1,
-.landing-page h2,
-.landing-page h3 {
-  font-family: var(--font-ui);
-}
-.landing-page h2 {
-  font-size: clamp(30px, 3.6vw, 48px);
-  font-weight: 500;
-  line-height: 1.13;
-  letter-spacing: -0.04em;
-}
-.landing-page h3 {
-  font-weight: 500;
-  letter-spacing: -0.015em;
-}
-.landing-page .site-header {
-  background: var(--bg);
-  backdrop-filter: blur(12px);
-}
-/* Custom properties accept unsupported colour syntax as raw tokens. Gate
-   enhancements so older browsers retain usable backgrounds and borders. */
-@supports (color: color-mix(in srgb, white, black)) {
-  .landing-page {
-    --bg-raised: color-mix(in srgb, var(--xbar-warm-white) 94%, var(--xbar-silver));
-    --landing-edge: color-mix(in srgb, var(--xbar-steel) 24%, transparent);
-    --landing-glint: color-mix(in srgb, var(--xbar-blue) 18%, transparent);
-  }
-  .landing-page .site-header {
-    background: color-mix(in srgb, var(--xbar-warm-white) 96%, transparent);
-  }
-}
-.landing-page .site-header::after {
-  background: linear-gradient(90deg, transparent, var(--landing-edge), var(--landing-glint), transparent);
-}
-.landing-mobile-nav {
-  display: none;
-}
-.landing-page .brand small {
-  text-transform: none;
-  letter-spacing: 0.025em;
-  font-size: 11px;
-}
-.landing-page .site-nav a,
-.landing-page .nav-dd > summary {
-  font-size: 14px;
-  padding-inline: 10px;
-}
-.landing-page .nav-menu {
-  background: var(--bg);
-  border-color: var(--landing-edge);
-}
-.landing-page .btn {
-  border: 1px solid var(--landing-edge);
-  border-radius: 6px;
-  background: transparent;
-  color: var(--ink);
-  min-height: 48px;
-  box-shadow: none;
-}
-.landing-page .btn--primary {
-  background: var(--xbar-gunmetal);
-  color: var(--xbar-warm-white);
-  border-color: var(--xbar-gunmetal);
-  box-shadow: 0 5px 16px color-mix(in srgb, var(--xbar-black) 8%, transparent);
-}
-.landing-page .btn:hover {
-  transform: none;
-  text-decoration: none;
-}
-.landing-page :focus-visible {
-  outline: 2px solid var(--xbar-blue);
-  outline-offset: 5px;
-}
+/* Homepage composition and original-art motion. Shared identity lives in site.css. */
 .landing-page .landing-primary > span {
   display: inline-block;
 }
@@ -210,40 +118,6 @@
   display: block;
   width: 100%;
   height: auto;
-}
-.landing-light-sweep {
-  position: absolute;
-  inset: 0;
-  opacity: 0;
-  pointer-events: none;
-  background: linear-gradient(
-    115deg,
-    transparent 35%,
-    color-mix(in srgb, var(--xbar-silver) 12%, transparent) 48%,
-    transparent 60%
-  );
-}
-/* Light falls over the original artwork; no traced or replacement logo.
-   Fixed gradients paint once, with only their opacity animated. */
-.landing-horse-light {
-  position: absolute;
-  inset: 0;
-  pointer-events: none;
-  mix-blend-mode: screen;
-  opacity: 0.3;
-}
-.landing-horse-light--mane {
-  background:
-    radial-gradient(ellipse 2.4% 0.8% at 61% 18%, var(--xbar-silver), transparent),
-    radial-gradient(ellipse 11% 6% at 61% 19%, var(--xbar-blue), transparent),
-    radial-gradient(ellipse 12% 5% at 45% 28%, color-mix(in srgb, var(--xbar-blue) 65%, transparent), transparent);
-}
-.landing-horse-light--face {
-  background:
-    radial-gradient(ellipse 1% 1.8% at 79% 14%, var(--xbar-silver), transparent),
-    radial-gradient(ellipse 6% 9% at 79% 17%, color-mix(in srgb, var(--xbar-blue) 75%, transparent), transparent),
-    radial-gradient(ellipse 5% 15% at 85% 57%, color-mix(in srgb, var(--xbar-blue) 60%, transparent), transparent),
-    radial-gradient(ellipse 2% 1% at 86% 73%, var(--xbar-blue), transparent);
 }
 .landing-art-caption {
   display: grid;
@@ -566,13 +440,6 @@
   gap: 12px;
   justify-items: center;
 }
-.landing-page .site-footer {
-  background: var(--bg);
-  border-color: var(--landing-edge);
-}
-.landing-page .site-footer h3 {
-  color: var(--ink);
-}
 .landing-sr-only {
   position: absolute;
   width: 1px;
@@ -583,31 +450,6 @@
   clip-path: inset(50%);
   white-space: nowrap;
   border: 0;
-}
-@media (prefers-reduced-motion: no-preference) {
-  .landing-page[data-landing-motion='running'][data-landing-ambient='running'] .landing-glow {
-    animation: landing-drift 24s ease-in-out infinite alternate;
-  }
-  .landing-page[data-landing-motion='running'][data-landing-ambient='running'] .landing-grain {
-    animation: landing-grain 8s ease-in-out infinite alternate;
-  }
-  .landing-page[data-landing-motion='running'][data-landing-ambient='running'] .landing-horse-light--mane {
-    animation: landing-mane-light 10s ease-in-out infinite;
-  }
-  .landing-page[data-landing-motion='running'][data-landing-ambient='running'] .landing-horse-light--face {
-    animation: landing-face-light 12s ease-in-out infinite;
-  }
-  .landing-page .btn {
-    transition:
-      box-shadow 0.25s,
-      border-color 0.25s;
-  }
-  .landing-page .btn:hover {
-    border-color: var(--xbar-blue);
-    box-shadow:
-      inset 0 1px 0 var(--landing-edge),
-      0 0 28px var(--landing-glint);
-  }
 }
 @media (hover: hover) and (pointer: fine) and (prefers-reduced-motion: no-preference) {
   .landing-page[data-landing-motion='running'] .landing-plan {
@@ -621,109 +463,7 @@
     box-shadow: inset 0 2px var(--xbar-blue);
   }
 }
-@keyframes landing-drift {
-  to {
-    transform: translate3d(-7%, 6%, 0);
-  }
-}
-@keyframes landing-grain {
-  to {
-    opacity: 0.06;
-    transform: translate3d(1%, -1%, 0);
-  }
-}
-/* Slow, uneven light pulses rather than a rapid, full-image flash. */
-@keyframes landing-mane-light {
-  0%,
-  100% {
-    opacity: 0.3;
-  }
-  18%,
-  55% {
-    opacity: 0.65;
-  }
-  30%,
-  72% {
-    opacity: 0.2;
-  }
-  40% {
-    opacity: 0.45;
-  }
-}
-@keyframes landing-face-light {
-  0%,
-  100% {
-    opacity: 0.3;
-  }
-  20%,
-  65% {
-    opacity: 0.15;
-  }
-  38% {
-    opacity: 0.6;
-  }
-  80% {
-    opacity: 0.5;
-  }
-}
 @media (max-width: 1050px) {
-  .landing-page .site-header .wrap {
-    flex-wrap: nowrap;
-    min-height: 72px;
-    padding-block: 10px;
-  }
-  .landing-page .site-header .site-nav,
-  .landing-page .site-header > .wrap > .btn {
-    display: none;
-  }
-  .landing-mobile-nav {
-    display: block;
-    position: relative;
-    margin-left: auto;
-  }
-  .landing-mobile-nav > summary {
-    list-style: none;
-    display: grid;
-    grid-auto-flow: column;
-    align-items: center;
-    gap: 14px;
-    padding: 10px 14px;
-    min-height: 44px;
-    border: 1px solid var(--landing-edge);
-    border-radius: 5px;
-    cursor: pointer;
-    font-size: 14px;
-  }
-  .landing-mobile-nav > summary::-webkit-details-marker {
-    display: none;
-  }
-  .landing-mobile-nav[open] .nav-caret {
-    transform: rotate(225deg);
-  }
-  .landing-mobile-nav nav {
-    position: absolute;
-    right: 0;
-    top: calc(100% + 12px);
-    width: min(330px, calc(100vw - 40px));
-    max-height: calc(100vh - 100px);
-    max-height: calc(100dvh - 100px);
-    overflow-y: auto;
-    padding: 8px;
-    border: 1px solid var(--landing-edge);
-    border-radius: 8px;
-    background: var(--bg);
-    box-shadow: 0 16px 36px color-mix(in srgb, var(--xbar-black) 12%, transparent);
-  }
-  .landing-mobile-nav nav a {
-    display: block;
-    padding: 12px 14px;
-    min-height: 44px;
-    border-radius: 4px;
-    font-size: 15px;
-  }
-  .landing-mobile-nav nav a:hover {
-    background: var(--bg-raised);
-  }
   .landing-hero-grid {
     min-height: 560px;
     grid-template-columns: 1fr 1fr;

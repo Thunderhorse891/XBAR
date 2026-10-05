@@ -8,6 +8,8 @@ import type {
   TimelineEvent,
 } from '../types/xbar.js';
 import { documentExamTime } from './documentCurrency.js';
+import { addLocalCalendarDays, localCalendarDay, localIsoDate } from './format.js';
+import { careDay } from './medicalEvidence.js';
 
 export type CareSignalStatus = 'due' | 'watch' | 'clear';
 
@@ -62,7 +64,7 @@ function parseDate(value?: string) {
 }
 
 function diffDays(from: Date, to: Date) {
-  return Math.floor((to.getTime() - from.getTime()) / dayMs);
+  return Math.round((localCalendarDay(to) - localCalendarDay(from)) / dayMs);
 }
 
 function buildMonthKey(date: Date) {
@@ -85,7 +87,7 @@ const CARE_EVENT: Record<'wormer' | 'dental', { status: string; recordType: Medi
 
 function latestCompletedCare(horse: HorseRecord, kind: 'wormer' | 'dental', now: Date): TimelineEvent | undefined {
   const match = CARE_EVENT[kind];
-  const today = localDayKey(now);
+  const today = localIsoDate(now);
   return (horse.medicalTimeline ?? [])
     .filter((event) => {
       const details = event.details as MedicalRecordDetails | undefined;
@@ -93,27 +95,9 @@ function latestCompletedCare(horse: HorseRecord, kind: 'wormer' | 'dental', now:
       // A date still ahead is a plan, not care given; one that is not a real
       // calendar day is no date at all.
       const day = careDay(event.date);
-      return isKind && day !== null && day <= today;
+      return isKind && event.completionState === 'completed' && day !== null && day <= today;
     })
     .sort((left, right) => (left.date < right.date ? 1 : left.date > right.date ? -1 : 0))[0];
-}
-
-/*
- * The calendar day a care entry was given, or null when it is not a real day.
- * Restored or synced timelines can carry a well-formed impossible date such as
- * 2026-09-31, which Date would quietly turn into 1 October and score as care.
- * Same refusal documentExamTime makes for a Coggins exam date.
- */
-function careDay(value: string | undefined): string | null {
-  const match = /^(\d{4})-(\d{2})-(\d{2})/.exec(value ?? '');
-  if (!match || !parseDate(value)) return null;
-  const [year, month, day] = [Number(match[1]), Number(match[2]), Number(match[3])];
-  const date = new Date(year, month - 1, day);
-  return date.getFullYear() === year && date.getMonth() === month - 1 && date.getDate() === day ? match[0] : null;
-}
-
-function localDayKey(now: Date): string {
-  return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
 }
 
 /*
@@ -124,7 +108,7 @@ function localDayKey(now: Date): string {
  * tested, and the canonical helper already refused it.
  */
 function latestCogginsExam(documents: DocumentRecord[], horseId: string, now: Date) {
-  const today = localDayKey(now);
+  const today = localIsoDate(now);
   const ready = documents.filter(
     (document) => document.horseId === horseId && document.type === 'Coggins' && document.state === 'Ready',
   );
@@ -161,9 +145,9 @@ function createTimedSignal(params: {
   }
 
   const ageDays = diffDays(parsed, params.now);
-  const dueDate = new Date(parsed.getTime() + params.dueDays * dayMs).toISOString().slice(0, 10);
+  const dueDate = localIsoDate(addLocalCalendarDays(parsed, params.dueDays));
 
-  if (ageDays >= params.dueDays) {
+  if (params.key === 'coggins' ? ageDays > params.dueDays : ageDays >= params.dueDays) {
     return {
       key: params.key,
       label: params.label,
@@ -254,7 +238,7 @@ export function buildCareBoardRows(
         createTimedSignal({
           key: 'wormer',
           label: 'Wormer',
-          referenceDate: wormer?.date,
+          referenceDate: careDay(wormer?.date) ?? undefined,
           now,
           dueDays: 90,
           watchDays: 75,
@@ -264,7 +248,7 @@ export function buildCareBoardRows(
         createTimedSignal({
           key: 'dental',
           label: 'Dental Float',
-          referenceDate: dental?.date,
+          referenceDate: careDay(dental?.date) ?? undefined,
           now,
           dueDays: 365,
           watchDays: 320,

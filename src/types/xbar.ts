@@ -233,6 +233,8 @@ export interface BreedingRecordDetails {
 }
 
 export interface TimelineEvent {
+  /** Absent on legacy records: completion is unconfirmed. */
+  completionState?: 'planned' | 'completed';
   id: string;
   date: string;
   title: string;
@@ -287,6 +289,8 @@ export interface HorseAlert {
 
 export interface HorseRecord {
   id: string;
+  /** Roster visibility only; related records, care, listings and usage are retained. */
+  archive?: { id: string; archivedAt: string };
   name: string;
   barnName: string;
   summary: string;
@@ -595,6 +599,10 @@ export interface WorkspaceProfile {
   defaultOwnerEntity: string;
   ranchManagerName: string;
   operationsEmail: string;
+  /** Buyer-facing ranch branding, stored with the existing workspace profile. */
+  packetLogoDataUrl?: string;
+  contactPhone?: string;
+  website?: string;
   defaultBarn: string;
   defaultPasture: string;
   workspaceShortcuts: string[];

@@ -7,7 +7,7 @@ import { EmptyState } from '@/components/EmptyState';
 import { ActionMenuButton } from '@/components/InteractionSystem';
 import { MetricCard, Panel, Pill } from '@/components/app-ui';
 import { DotsIcon } from '@/components/icons';
-import { formatDateLabel, localIsoDate } from '@/lib/format';
+import { addLocalCalendarDays, formatDateLabel, localIsoDate } from '@/lib/format';
 import { useUiStore } from '@/store/useUiStore';
 import { useCloudStore } from '@/store/useCloudStore';
 import { useCurrentRoleCapability, useXbarStore } from '@/store/useXbarStore';
@@ -47,8 +47,8 @@ export default function Medical() {
   const vetDocCount = documents.filter(
     (document) => document.type === 'Vet Record' || document.type === 'Coggins',
   ).length;
-  const today = new Date().toISOString().slice(0, 10);
-  const soonCutoff = new Date(Date.now() + 14 * 86400000).toISOString().slice(0, 10);
+  const today = localIsoDate();
+  const soonCutoff = localIsoDate(addLocalCalendarDays(new Date(), 14));
   const followUps = medicalEvents.flatMap((event) => {
     const due = event.details && 'followUpDue' in event.details ? event.details.followUpDue : undefined;
     return due ? [{ ...event, followUpDue: due }] : [];
@@ -70,6 +70,7 @@ export default function Medical() {
   const [eventType, setEventType] = useState<MedicalEventType>(
     () => medicalEventTypes.find((type) => type === searchParams.get('type')) ?? 'Vet visit',
   );
+  const [completionState, setCompletionState] = useState<'completed' | 'planned'>('completed');
   const [eventError, setEventError] = useState('');
   const [timelineQuery, setTimelineQuery] = useState('');
   const [editingEventId, setEditingEventId] = useState<string | null>(null);
@@ -106,6 +107,7 @@ export default function Medical() {
       description: event.summary,
       facts: [
         { label: 'Date', value: formatDateLabel(event.date) },
+        { label: 'Care status', value: event.completionState ?? 'Completion unconfirmed' },
         { label: 'Horse', value: event.horseName },
         { label: 'Veterinarian', value: event.veterinarian },
         { label: 'Owner', value: event.owner },
@@ -357,6 +359,18 @@ export default function Medical() {
                 ))}
               </select>
             </label>
+            <label className="field-stack">
+              <span className="field-label">Care status</span>
+              <select
+                className="field-select"
+                value={completionState}
+                onChange={(event) => setCompletionState(event.target.value as 'planned' | 'completed')}
+                disabled={!canManageMedical}
+              >
+                <option value="completed">Completed</option>
+                <option value="planned">Planned</option>
+              </select>
+            </label>
             <label className="field-stack field-stack--wide">
               <span className="field-label">Event title</span>
               <input
@@ -400,6 +414,7 @@ export default function Medical() {
                   author: currentUserName,
                   date: eventDate,
                   type: eventType,
+                  completionState,
                 });
 
                 pushToast({
@@ -450,12 +465,13 @@ export default function Medical() {
                           className="button button--primary button--compact"
                           type="button"
                           onClick={() => {
-                            updateMedicalEvent(event.horseId, event.id, {
+                            const result = updateMedicalEvent(event.horseId, event.id, {
                               title: editForm.title,
                               summary: editForm.body,
                               date: editForm.date,
                             });
-                            setEditingEventId(null);
+                            if (result.ok) setEditingEventId(null);
+                            else pushToast({ title: 'Update blocked', message: result.message, tone: 'error' });
                           }}
                         >
                           Save
@@ -547,6 +563,7 @@ export default function Medical() {
                       <th>Event</th>
                       <th>Vet</th>
                       <th>Date</th>
+                      <th>Care status</th>
                     </tr>
                   </thead>
                   <tbody>
@@ -574,6 +591,29 @@ export default function Medical() {
                         <td>{event.title}</td>
                         <td>{event.veterinarian}</td>
                         <td>{formatDateLabel(event.date)}</td>
+                        <td>
+                          {event.completionState ?? 'Completion unconfirmed'}
+                          {canManageMedical && event.completionState !== 'completed' ? (
+                            <button
+                              className="button button--ghost button--compact"
+                              type="button"
+                              onClick={(click) => {
+                                click.stopPropagation();
+                                const result = updateMedicalEvent(event.horseId, event.id, {
+                                  completionState: 'completed',
+                                });
+                                pushToast({
+                                  title: result.ok ? 'Care confirmed completed' : 'Completion blocked',
+                                  message: result.message,
+                                  tone: result.ok ? 'success' : 'error',
+                                });
+                              }}
+                              onKeyDown={(key) => key.stopPropagation()}
+                            >
+                              Confirm care completed
+                            </button>
+                          ) : null}
+                        </td>
                       </tr>
                     ))}
                   </tbody>

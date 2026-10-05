@@ -221,3 +221,10 @@ test('per-group result caps are honored', () => {
   const horseGroup = groups.find((group) => group.group === 'Horses');
   assert.equal(horseGroup?.items.length, 5);
 });
+
+test('care and equipment search open the same module summaries as sidebar navigation', () => {
+  const pathFor = (id: string) => ROUTE_COMMANDS.find((entry) => entry.id === id)?.path;
+  assert.equal(pathFor('medical'), '/health-care');
+  assert.equal(pathFor('breeding'), '/breeding-foaling');
+  assert.equal(pathFor('assets'), '/equipment');
+});

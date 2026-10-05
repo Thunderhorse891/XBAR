@@ -1,11 +1,13 @@
 import type { HorseEconomicsRow, RanchReport } from './ranchReport.js';
 
-export const reportDollars = (value: number) =>
-  new Intl.NumberFormat('en-US', {
-    style: 'currency',
-    currency: 'USD',
-    maximumFractionDigits: 0,
-  }).format(value);
+export const reportDollars = (value: number | null) =>
+  value === null
+    ? 'Unknown'
+    : new Intl.NumberFormat('en-US', {
+        style: 'currency',
+        currency: 'USD',
+        maximumFractionDigits: 0,
+      }).format(value);
 
 /**
  * "1 horse" / "2 horses" — the singular case is the common case on a small
@@ -62,18 +64,28 @@ export function reportDecisions(report: RanchReport) {
     (a, b) =>
       Number(b.saleInventory) - Number(a.saleInventory) ||
       Number(b.saleInventory && b.askPrice > 0) - Number(a.saleInventory && a.askPrice > 0) ||
-      b.projectedMargin - a.projectedMargin ||
+      (b.projectedMargin ?? -Infinity) - (a.projectedMargin ?? -Infinity) ||
       b.investedToDate - a.investedToDate ||
       a.horseName.localeCompare(b.horseName),
   );
-  const priced = listed.filter((h) => h.askPrice > 0);
-  const potentialMargin = priced.reduce((n, h) => n + h.projectedMargin, 0);
+  const priced = listed.filter((h) => h.askPrice > 0 && h.projectedMargin !== null);
+  const missingCosts = listed.filter((h) => h.askPrice > 0 && h.projectedMargin === null);
+  const potentialMargin = missingCosts.length ? null : priced.reduce((n, h) => n + (h.projectedMargin ?? 0), 0);
   const bands = [
-    { label: 'High >=30%', count: priced.filter((h) => h.marginPercent >= 30).length },
-    { label: 'Medium 15-29%', count: priced.filter((h) => h.marginPercent >= 15 && h.marginPercent < 30).length },
-    { label: 'Low <15%', count: priced.filter((h) => h.marginPercent < 15).length },
+    { label: 'High >=30%', count: priced.filter((h) => h.marginPercent !== null && h.marginPercent >= 30).length },
+    {
+      label: 'Medium 15-29%',
+      count: priced.filter(
+        (h) => h.marginPercent !== null && h.marginPercent >= 15 && h.marginPercent !== null && h.marginPercent < 30,
+      ).length,
+    },
+    { label: 'Low <15%', count: priced.filter((h) => h.marginPercent !== null && h.marginPercent < 15).length },
   ];
   const actions: string[] = [];
+  if (missingCosts.length)
+    actions.push(
+      `Record costs for ${reportCount(missingCosts.length, 'priced horse')} before relying on profit or sale floors.`,
+    );
   if (missingOwnership.length)
     actions.push(
       `Start ownership records for ${reportCount(missingOwnership.length, 'horse')} covering ${reportDollars(missingOwnership.reduce((n, h) => n + h.askPrice, 0))} in asking value. Other sale gates must also clear.`,
@@ -96,7 +108,9 @@ export function reportDecisions(report: RanchReport) {
     actions.push(
       `Review ${reportDollars(report.money.unallocatedThisMonth)} of current-month unallocated overhead before assessing horse profitability.`,
     );
-  const best = ranked.find((h) => h.saleInventory && h.askPrice > 0 && h.projectedMargin > 0);
+  const best = ranked.find(
+    (h) => h.saleInventory && h.askPrice > 0 && h.projectedMargin !== null && h.projectedMargin > 0,
+  );
   if (best)
     actions.push(
       `Review the highest projected-profit horse first: ${best.horseName} (${reportDollars(best.projectedMargin)} before unallocated overhead).`,

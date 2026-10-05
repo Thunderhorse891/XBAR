@@ -1040,37 +1040,363 @@ test('complementary source papers create one durable horse record without copyin
   await restored.close();
 });
 
-test.describe('local-evening packet care repairs', () => {
-  test.use({ timezoneId: 'America/Los_Angeles' });
-  for (const careType of ['Deworming', 'Dental'] as const) {
-    test(`packet care link records the requested ${careType} type`, async ({ page }) => {
-      await page.clock.setFixedTime(new Date('2026-10-03T02:00:00Z'));
+test('archived library keeps the actual original readable after archive and reload without exposing unsafe recovery controls', async ({
+  page,
+  context,
+}) => {
+  await bootstrapWorkspace(page);
+  await seedHorse(page, 'Library Horse');
+  const libraryHorseId = new URL(page.url()).pathname.split('/').at(-1)!;
+  await page.getByRole('button', { name: 'Create', exact: true }).click();
+  await page.getByRole('menuitem', { name: 'Upload Document' }).click();
+  const upload = page.getByRole('dialog', { name: 'Upload Document' });
+  const disclosure =
+    'When cloud storage is available, original files are uploaded to your workspace. Text is extracted on this device.';
+  await expect(upload.getByText(disclosure, { exact: true })).toBeVisible();
+  const original = 'Care notes for manual review. Original scan retained.';
+  await upload
+    .locator('input[type="file"]')
+    .setInputFiles({ name: 'library-original.txt', mimeType: 'text/plain', buffer: Buffer.from(original) });
+  await upload.getByRole('checkbox').uncheck();
+  await upload.getByRole('button', { name: 'Upload for review' }).click();
+  await expect(page).toHaveURL(/\/documents/);
+  const review = page.getByRole('group', { name: 'library-original review actions' });
+  await expect(review).toBeVisible();
+  await review.getByRole('button', { name: 'Archive', exact: true }).click();
+  await expect(review).not.toBeVisible();
+  await page.getByRole('tab', { name: /Upload/ }).click();
+  await expect(page.getByText(disclosure, { exact: true })).toBeVisible();
+  await page.getByRole('tab', { name: /^Library/ }).click();
+  await expect(page.getByRole('button', { name: /^Active \(0\)/ })).toBeVisible();
+  await page.getByRole('button', { name: /^Archived \(1\)/ }).click();
+  const row = page.getByRole('row', { name: 'library-original library actions' });
+  await expect(row).toContainText('Archived');
+  await expect(row.getByRole('button', { name: 'Restore', exact: true })).toHaveCount(0);
+  await expect(row.getByRole('button', { name: 'Move', exact: true })).toHaveCount(0);
+  await expect(
+    page.getByText('Archived originals stay here. Restore and move controls aren’t available yet.'),
+  ).toBeVisible();
+  const opened = context.waitForEvent('page');
+  await row.getByRole('button', { name: 'Open file', exact: true }).click();
+  const originalTab = await opened;
+  await expect(originalTab).toHaveURL(/^blob:/);
+  await expect(originalTab.locator('body')).toHaveText(original);
+  await originalTab.close();
+
+  const reloaded = await context.newPage();
+  await reloaded.goto(`/app/documents?stage=Library&horse=${libraryHorseId}&from=profile`);
+  await expect(reloaded.getByRole('tab', { name: 'Library (1)', exact: true })).toBeVisible();
+  await expect(reloaded.getByRole('button', { name: 'Back to horse', exact: true })).toBeVisible();
+  await reloaded.getByRole('button', { name: /^Archived \(1\)/ }).click();
+  const retained = reloaded.getByRole('row', { name: 'library-original library actions' });
+  await expect(retained).toContainText('On this device');
+  const reopened = context.waitForEvent('page');
+  await retained.getByRole('button', { name: 'Open file', exact: true }).click();
+  const retainedTab = await reopened;
+  await expect(retainedTab).toHaveURL(/^blob:/);
+  await expect(retainedTab.locator('body')).toHaveText(original);
+  await retainedTab.close();
+  await reloaded.getByRole('button', { name: 'Back to horse', exact: true }).click();
+  await expect(reloaded).toHaveURL(new RegExp(`/horses/${libraryHorseId}$`));
+  await reloaded.close();
+});
+
+for (const conflict of ['cross-file', 'single-file'] as const) {
+  for (const surface of ['drawer', 'documents'] as const) {
+    test(`mixed valid and ${conflict} identity conflicts prioritize review from the ${surface}`, async ({ page }) => {
       await bootstrapWorkspace(page);
-      await seedHorse(page, 'Care Link Horse');
-      const horseId = new URL(page.url()).pathname.split('/').at(-1)!;
-      await page.evaluate(
-        async ({ horseId, careType }) => {
-          const modulePath = '/src/lib/salePacketGuidance.ts';
-          const { packetReadinessAction } = await import(/* @vite-ignore */ modulePath);
-          const repair = packetReadinessAction({ target: 'care', careType }, horseId);
-          window.history.pushState({}, '', `/app${repair.to}`);
+      const sourceText = (name: string, registration: string) =>
+        `CERTIFICATE OF REGISTRATION\nRegistered Name: ${name}\nRegistration Number: ${registration}`;
+      const sources =
+        conflict === 'cross-file'
+          ? [
+              ['good-source.txt', sourceText('GOOD HORSE', '9990001')],
+              ['conflict-one.txt', sourceText('CONFLICT HORSE', '9990002')],
+              ['conflict-two.txt', sourceText('CONFLICT HORSE', '9990003')],
+            ]
+          : [
+              ['good-source.txt', sourceText('GOOD HORSE', '9990001')],
+              [
+                'conflicting-subjects.txt',
+                `${sourceText('BLUE MOON', '1234567')}\nRegistered Name: RED SUN\nRegistration Number: 7654321`,
+              ],
+            ];
+      const files = sources.map(([name, text]) => ({ name, mimeType: 'text/plain', buffer: Buffer.from(text) }));
+      if (surface === 'drawer') {
+        await page.getByRole('button', { name: 'Create', exact: true }).click();
+        await page.getByRole('menuitem', { name: 'Upload Document' }).click();
+        const upload = page.getByRole('dialog', { name: 'Upload Document' });
+        await upload.locator('input[type="file"]').setInputFiles(files);
+        await upload.getByRole('checkbox').check();
+        await upload.getByRole('button', { name: 'Upload for review' }).click();
+      } else {
+        await page.evaluate(() => {
+          window.history.pushState({}, '', '/app/documents?stage=Upload');
           window.dispatchEvent(new PopStateEvent('popstate'));
-        },
-        { horseId, careType },
-      );
-      await expect(page.getByLabel('Event date', { exact: true })).toHaveValue('2026-10-02');
-      await expect(page.getByRole('combobox', { name: 'Event type', exact: true })).toHaveValue(careType);
-      await expect(page.getByRole('combobox', { name: 'Horse', exact: true })).toHaveValue(horseId);
-      await page.getByLabel('Event title', { exact: true }).fill(`${careType} completed`);
-      await page.getByLabel('Care note', { exact: true }).fill('Completed care recorded for this test horse.');
-      await page.getByRole('button', { name: 'Save care event', exact: true }).click();
-      const recorded = await page.evaluate(async (horseId) => {
+        });
+        await page.locator('#documents-intake input[type="file"]').setInputFiles(files);
+        await page.getByRole('button', { name: 'Review only', exact: true }).click();
+        await expect(page.getByRole('button', { name: 'Create horse profiles', exact: true })).toBeVisible();
+        await page.getByRole('button', { name: 'Add docs', exact: true }).click();
+      }
+      await expect(page).toHaveURL(/\/app\/documents(?:\?|$)/);
+      await expect(page.getByRole('tab', { name: /^3\. Review/ })).toHaveAttribute('aria-selected', 'true');
+      const heldNames = conflict === 'cross-file' ? ['conflict-one', 'conflict-two'] : ['conflicting-subjects'];
+      for (const name of heldNames) {
+        await expect(page.getByRole('group', { name: `${name} review actions` })).toBeVisible();
+      }
+      const saved = await page.evaluate(async () => {
         const modulePath = '/src/store/useXbarStore.ts';
         const { useXbarStore } = await import(/* @vite-ignore */ modulePath);
-        return useXbarStore.getState().horses.find((horse: { id: string }) => horse.id === horseId)?.medicalTimeline[0]
-          ?.status;
-      }, horseId);
-      expect(recorded).toBe(careType);
+        const state = useXbarStore.getState();
+        return {
+          horseNames: state.horses.map((horse: { name: string }) => horse.name),
+          documentCount: state.documents.length,
+          held: state.documents
+            .filter(
+              (document: { horseId?: string; state: string }) => !document.horseId && document.state === 'Needs Review',
+            )
+            .map((document: { horseId?: string; state: string }) => ({
+              horseId: document.horseId ?? '',
+              state: document.state,
+            })),
+          originalsRetained: state.documents.every((document: { localFileKey?: string }) =>
+            Boolean(document.localFileKey),
+          ),
+        };
+      });
+      expect(saved).toEqual({
+        horseNames: ['GOOD HORSE'],
+        documentCount: files.length,
+        held: heldNames.map(() => ({ horseId: '', state: 'Needs Review' })),
+        originalsRetained: true,
+      });
     });
   }
+}
+
+test('unknown microchip text allows facts and approval while preserving the recorded identifier', async ({ page }) => {
+  await bootstrapWorkspace(page);
+  await seedHorse(page, 'Chip Review Horse');
+  const horseId = await page.evaluate(async () => {
+    const modulePath = '/src/store/useXbarStore.ts';
+    const { useXbarStore } = await import(/* @vite-ignore */ modulePath);
+    const horse = useXbarStore.getState().horses[0];
+    useXbarStore.setState({ horses: [{ ...horse, color: '', microchipId: '982000123456789' }] });
+    return horse.id as string;
+  });
+  await page.getByRole('button', { name: 'Create', exact: true }).click();
+  await page.getByRole('menuitem', { name: 'Upload Document' }).click();
+  const drawer = page.getByRole('dialog', { name: 'Upload Document' });
+  await drawer.locator('input[type="file"]').setInputFiles({
+    name: 'unknown-chip-source.txt',
+    mimeType: 'text/plain',
+    buffer: Buffer.from(
+      'CERTIFICATE OF REGISTRATION\nRegistered Name: CHIP REVIEW HORSE\nColor: Bay\nMicrochip: UNKNOWN\nSire: UNKNOWN\nDam: Pending',
+    ),
+  });
+  await drawer.locator('select').first().selectOption(horseId);
+  await drawer.getByRole('button', { name: 'Upload for review' }).click();
+  await expect(page).toHaveURL(/\/app\/documents(?:\?|$)/);
+  await expect(page.getByRole('tab', { name: /^3\. Review/ })).toHaveAttribute('aria-selected', 'true');
+  const actions = page.getByRole('group', { name: 'unknown-chip-source review actions' });
+  await actions.getByRole('button', { name: 'Apply facts', exact: true }).click();
+  await expect(page.getByText('Facts applied to record', { exact: true })).toBeVisible();
+  await actions.getByRole('button', { name: 'Approve', exact: true }).click();
+  const saved = await page.evaluate(async () => {
+    const modulePath = '/src/store/useXbarStore.ts';
+    const { useXbarStore } = await import(/* @vite-ignore */ modulePath);
+    const state = useXbarStore.getState();
+    return {
+      color: state.horses[0].color,
+      chip: state.horses[0].microchipId,
+      sire: state.horses[0].bloodline.sire,
+      dam: state.horses[0].bloodline.dam,
+      documentState: state.documents[0].state,
+      sourceRetained: Boolean(state.documents[0].localFileKey),
+    };
+  });
+  expect(saved).toEqual({
+    color: 'Bay',
+    chip: '982000123456789',
+    sire: '',
+    dam: '',
+    documentState: 'Ready',
+    sourceRetained: true,
+  });
+});
+
+test('a second chip in a source list blocks facts and approval without altering the horse', async ({ page }) => {
+  await bootstrapWorkspace(page);
+  await seedHorse(page, 'Chip List Horse');
+  const horseId = await page.evaluate(async () => {
+    const modulePath = '/src/store/useXbarStore.ts';
+    const { useXbarStore } = await import(/* @vite-ignore */ modulePath);
+    const horse = useXbarStore.getState().horses[0];
+    useXbarStore.setState({ horses: [{ ...horse, color: '', microchipId: '900123456789012' }] });
+    return horse.id as string;
+  });
+  await page.getByRole('button', { name: 'Create', exact: true }).click();
+  await page.getByRole('menuitem', { name: 'Upload Document' }).click();
+  const drawer = page.getByRole('dialog', { name: 'Upload Document' });
+  await drawer.locator('input[type="file"]').setInputFiles({
+    name: 'chip-list-source.txt',
+    mimeType: 'text/plain',
+    buffer: Buffer.from(
+      'CERTIFICATE OF REGISTRATION\nRegistered Name: CHIP LIST HORSE\nColor: Bay\nMicrochip scanned: 900123456789012, 900123456789099',
+    ),
+  });
+  await drawer.locator('select').first().selectOption(horseId);
+  await drawer.getByRole('button', { name: 'Upload for review' }).click();
+  const actions = page.getByRole('group', { name: 'chip-list-source review actions' });
+  await expect(actions).toBeVisible();
+  const initialState = await page.evaluate(async () => {
+    const modulePath = '/src/store/useXbarStore.ts';
+    const { useXbarStore } = await import(/* @vite-ignore */ modulePath);
+    return useXbarStore.getState().documents[0].state;
+  });
+  // Matched is a tentative horse assignment in the Review queue, not approval.
+  expect(initialState).toBe('Matched');
+  await actions.getByRole('button', { name: 'Apply facts', exact: true }).click();
+  await expect(
+    page.getByText('The source microchip conflicts with this horse. Review the original and correct the record.', {
+      exact: true,
+    }),
+  ).toBeVisible();
+  await actions.getByRole('button', { name: 'Approve', exact: true }).click();
+  await expect(page.getByText('Approval blocked', { exact: true })).toBeVisible();
+  await expect(actions).toBeVisible();
+  const saved = await page.evaluate(async () => {
+    const modulePath = '/src/store/useXbarStore.ts';
+    const { useXbarStore } = await import(/* @vite-ignore */ modulePath);
+    const state = useXbarStore.getState();
+    return { color: state.horses[0].color, chip: state.horses[0].microchipId, documentState: state.documents[0].state };
+  });
+  expect(saved).toEqual({ color: '', chip: '900123456789012', documentState: initialState });
+});
+
+async function readyLocalPacketWizard(page: Page, logo = '') {
+  await bootstrapWorkspace(page);
+  await seedHorse(page, 'Branded Packet Horse');
+  await page.evaluate(async (logo) => {
+    const modulePath = '/src/store/useXbarStore.ts';
+    const { useXbarStore } = await import(/* @vite-ignore */ modulePath);
+    const reviewPath = '/src/lib/ownershipDocumentReview.ts';
+    const { ownershipDocumentReviewKey } = await import(/* @vite-ignore */ reviewPath);
+    const state = useXbarStore.getState();
+    const horse = state.horses[0];
+    const now = new Date().toISOString();
+    const specs = [
+      ['bill_of_sale', 'Bill of sale', 'Bill of Sale', 'Bill of sale. Buyer signature.'],
+      ['registration_certificate', 'Registration certificate', 'Registration', 'Certificate of registration.'],
+      ['transfer_form', 'Signed transfer form', 'Transfer Packet', 'Transfer of ownership. Buyer signature.'],
+      ['signature_page', 'Signature page', 'Ownership Memo', 'Ownership memo. Seller signature.'],
+    ];
+    const documents = specs.map(([kind, label, type, text]) => ({
+      id: `packet-proof-${kind}`,
+      horseId: horse.id,
+      title: label,
+      type,
+      state: 'Ready',
+      source: 'Manual Upload',
+      uploadedAt: now,
+      uploadedBy: 'Synthetic reviewer',
+      confidence: 1,
+      duplicateRisk: 'Low',
+      entities: { horseName: horse.name },
+      extractedTextPreview: `${text}\nRegistered Name: ${horse.name}`,
+      tags: [],
+      localFileKey: `synthetic-${kind}`,
+    }));
+    useXbarStore.setState({
+      workspaceProfile: { ...state.workspaceProfile, packetLogoDataUrl: logo },
+      horses: [{ ...horse, sale: { ...horse.sale, askPrice: 12000 } }],
+      documents,
+      ownershipRecords: [
+        {
+          id: 'packet-ownership',
+          horseId: horse.id,
+          legalOwner: 'Synthetic Ranch',
+          transferStatus: 'Clear',
+          pendingDocuments: [],
+          confidence: 100,
+          complianceDeadline: '',
+          auditTrail: [],
+          proofRequirements: specs.map(([kind, label]) => ({
+            id: `proof-${kind}`,
+            kind,
+            label,
+            status: 'verified',
+            documentId: `packet-proof-${kind}`,
+            verifiedBy: 'Synthetic reviewer',
+            verifiedAt: now,
+            reviewAttestedAt: now,
+            reviewedSourceKey: ownershipDocumentReviewKey(
+              documents.find((document) => document.id === `packet-proof-${kind}`),
+            ),
+          })),
+        },
+      ],
+    });
+    useXbarStore.getState().applySubscriptionTier('Professional');
+  }, logo);
+  await page.getByRole('link', { name: 'Sale Packets', exact: true }).click();
+  await page
+    .locator('.xs-mrow')
+    .filter({ hasText: 'Branded Packet Horse' })
+    .getByRole('button', { name: 'Build packet' })
+    .click();
+  const wizard = page.getByRole('dialog', { name: 'Sale packet generator' });
+  await wizard.getByRole('button', { name: 'Continue' }).click();
+  await wizard.getByRole('checkbox', { name: /No current Coggins/ }).check();
+  await wizard.getByRole('button', { name: 'Continue' }).click();
+  await wizard.getByRole('button', { name: 'Continue' }).click();
+  await wizard.getByRole('button', { name: 'Continue' }).click();
+  return wizard;
+}
+async function packetPersistenceCounts(page: Page) {
+  return page.evaluate(async () => {
+    const storePath = '/src/store/useXbarStore.ts';
+    const vaultPath = '/src/lib/localFileVault.ts';
+    const { useXbarStore } = await import(/* @vite-ignore */ storePath);
+    const { listLocalFiles } = await import(/* @vite-ignore */ vaultPath);
+    return { builds: useXbarStore.getState().salePacketBuilds.length, files: (await listLocalFiles()).length };
+  });
+}
+
+test('invalid restored ranch raster fails before any local packet record or file is saved', async ({ page }) => {
+  const logo =
+    'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAACgAAAAUCAIAAABwJOjsAAAACElEQVR4nAMAAAAAAUgGidIAAAAASUVORK5CYII=';
+  const wizard = await readyLocalPacketWizard(page, logo);
+  const before = await packetPersistenceCounts(page);
+  await wizard.getByRole('button', { name: 'Generate sale packet' }).click();
+  await expect(wizard.getByRole('alert')).toContainText('logo could not be decoded');
+  expect(await packetPersistenceCounts(page)).toEqual(before);
+});
+
+test('a workspace round trip during raster validation cannot persist an old packet', async ({ page }) => {
+  await page.route('**/api/_lib/packet-branding-raster.js*', (route) =>
+    route.fulfill({
+      contentType: 'application/javascript',
+      body: 'export async function validatePacketLogoRaster() { await new Promise(resolve => { window.releasePacketLogo = resolve; }); return null; }',
+    }),
+  );
+  const wizard = await readyLocalPacketWizard(page);
+  const before = await packetPersistenceCounts(page);
+  await wizard.getByRole('button', { name: 'Generate sale packet' }).click();
+  await expect
+    .poll(() =>
+      page.evaluate(() => typeof (window as typeof window & { releasePacketLogo?: () => void }).releasePacketLogo),
+    )
+    .toBe('function');
+  await page.evaluate(async () => {
+    const cloudPath = '/src/store/useCloudStore.ts';
+    const { useCloudStore } = await import(/* @vite-ignore */ cloudPath);
+    useCloudStore.setState({ workspaceId: 'other-ranch' });
+    useCloudStore.setState({ workspaceId: null });
+    (window as typeof window & { releasePacketLogo?: () => void }).releasePacketLogo?.();
+  });
+  await expect(wizard.getByRole('alert')).toContainText('changed');
+  await expect(wizard.getByRole('button', { name: 'Retry sale packet' })).toBeEnabled();
+  expect(await packetPersistenceCounts(page)).toEqual(before);
 });

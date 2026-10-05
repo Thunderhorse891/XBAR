@@ -72,6 +72,7 @@ async function fixture(options = {}) {
         return {
           id,
           active: true,
+          livemode: false,
           type: 'recurring',
           currency: 'usd',
           billing_scheme: 'per_unit',

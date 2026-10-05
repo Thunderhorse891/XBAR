@@ -128,6 +128,7 @@ const careEvent = (status: 'Deworming' | 'Dental', date: string) =>
     owner: 'Vet',
     category: 'Medical',
     status,
+    completionState: 'completed',
   }) as TimelineEvent;
 const careTimeline = () => [careEvent('Deworming', '2026-06-01'), careEvent('Dental', '2026-02-01')];
 const cared = (medicalTimeline: TimelineEvent[] = careTimeline()) => makeHorse({ medicalTimeline });

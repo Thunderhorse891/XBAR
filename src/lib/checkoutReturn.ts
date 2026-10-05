@@ -11,9 +11,8 @@ import { hasActivePaidPlan } from './subscriptionDecision.js';
  * with the plan buttons still enabled, and did the obvious thing: concluded
  * the payment had failed.
  *
- * The success case cannot trust the parameter alone. A redirect back to
- * ?checkout=success proves Stripe finished the hosted page; it does not prove
- * the deployment recorded anything. The profile the screen polls for is the
+ * The success case cannot trust the parameter alone. Anyone can edit the URL;
+ * it proves neither payment nor activation. The profile the screen polls for is the
  * one the webhook writes on `checkout.session.completed`, so confirmation is
  * withheld until that row says the workspace pays.
  */
@@ -38,8 +37,8 @@ export const CHECKOUT_CONFIRMATION_TIMEOUT_MS = 75_000;
 /**
  * Read the checkout return from a URL query string. Anything that is not one
  * of the two values the checkout endpoint writes is not a checkout return —
- * `?checkout=` arrives only from Stripe's return URL, and an unexpected value
- * must not arm either flow.
+ * an unexpected value must not arm either flow. Even a recognized value is
+ * only a request to verify, never proof that payment happened.
  */
 export function parseCheckoutReturn(search: string): CheckoutReturnKind | null {
   const params = new URLSearchParams(search.startsWith('?') ? search.slice(1) : search);
@@ -79,4 +78,50 @@ export function stripCheckoutReturnParam(search: string): string {
  */
 export function isCheckoutConfirmationComplete(profile: SubscriptionProfile | null | undefined): boolean {
   return !!profile && hasActivePaidPlan(profile);
+}
+
+/** Poll one workspace, with a deadline independent of the network request.
+ * Cleanup aborts the read and ignores late results after timeout or navigation.
+ */
+export function watchCheckoutConfirmation({
+  readProfile,
+  onConfirmed,
+  onTimeout,
+}: {
+  readProfile: (signal: AbortSignal) => Promise<SubscriptionProfile | null>;
+  onConfirmed: (profile: SubscriptionProfile) => void;
+  onTimeout: () => void;
+}): () => void {
+  let stopped = false;
+  let pollTimer: ReturnType<typeof setTimeout> | undefined;
+  const controller = new AbortController();
+  const stop = () => {
+    stopped = true;
+    clearTimeout(deadline);
+    clearTimeout(pollTimer);
+    controller.abort();
+  };
+  const deadline = setTimeout(() => {
+    stop();
+    onTimeout();
+  }, CHECKOUT_CONFIRMATION_TIMEOUT_MS);
+
+  const poll = async () => {
+    let profile: SubscriptionProfile | null = null;
+    try {
+      profile = await readProfile(controller.signal);
+    } catch {
+      // A transport exception is unknown. Keep checking until the independent
+      // deadline presents recovery; never interpret it as success or failure.
+    }
+    if (stopped) return;
+    if (profile && isCheckoutConfirmationComplete(profile)) {
+      stop();
+      onConfirmed(profile);
+      return;
+    }
+    pollTimer = setTimeout(() => void poll(), CHECKOUT_CONFIRMATION_POLL_INTERVAL_MS);
+  };
+  void poll();
+  return stop;
 }

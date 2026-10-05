@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
 import { inflateSync } from 'node:zlib';
 import test from 'node:test';
-import { PDFDocument, StandardFonts } from 'pdf-lib';
+import { PDFDocument, PDFName, PDFDict, StandardFonts } from 'pdf-lib';
 import { buildRanchReport, type RanchReportInput } from '../src/lib/ranchReport.js';
 import { reportDecisions, reportException } from '../src/lib/ranchReportDecisions.js';
 import { ownershipDocumentReviewKey } from '../src/lib/ownershipDocumentReview.js';
@@ -34,7 +34,7 @@ function fixture(count = 18): RanchReportInput {
 }
 const branding = async () => ({
   logo: await readFile('public/brand/xbar-report-horse.png'),
-  mark: await readFile('public/brand/xbar-report-mark.png'),
+  mark: await readFile('public/brand/xbar-original-lockup-480.png'),
   watermark: await readFile('public/brand/xbar-report-watermark.png'),
 });
 
@@ -113,22 +113,22 @@ test('18-horse executive report has three deliberate pages, seven KPIs and compl
     'INVESTED',
     'LISTED VALUE',
     'POTENTIAL MARGIN',
-    'MONTHLY BURN',
+    'RECORDED MONTHLY AVG',
     'SALE-READY VALUE',
     'BLOCKED VALUE',
     'OPEN OFFERS',
     '100% OF ASKING VALUE BLOCKED',
     '$0 ready to close today',
-    'prior 3 complete months',
+    'prior 3 calendar months',
     'not free care',
-    'remaining 20 points',
-    'not itemized',
+    'computed from current records',
+    'missing evidence',
     'unallocated overhead',
   ])
     assert.ok(text.includes(label), label);
   assert.equal(report.money.valueAtRisk, 252000);
   assert.equal(report.money.unallocatedThisMonth, 0);
-  assert.equal(report.money.monthlyBurn, 0);
+  assert.equal(report.money.monthlyBurn, null);
   assert.equal(report.documentsToReview, 0);
   assert.equal(reportDecisions(report).missingCoggins.length, 18);
   for (let i = 2; i <= 18; i++)
@@ -171,9 +171,9 @@ test('burn, overhead and profit exclude different periods and preserve sale inve
   const report = buildRanchReport(input, now),
     decisions = reportDecisions(report);
   assert.equal(report.money.unallocatedThisMonth, 900);
-  assert.equal(report.money.monthlyBurn, 100);
+  assert.equal(report.money.monthlyBurn, null);
   assert.equal(report.money.investedThisMonth, 1147.9);
-  assert.equal(decisions.potentialMargin, 9377);
+  assert.equal(decisions.potentialMargin, 9576.55);
   assert.equal(
     decisions.bands.reduce((n, b) => n + b.count, 0),
     1,
@@ -292,7 +292,7 @@ test('report artwork honors the deployment base and survives offline after cachi
   const { reportBrandAssetPaths, loadReportBranding } = await import('../src/lib/reportBranding.js');
   assert.deepEqual(reportBrandAssetPaths('/XBAR/'), [
     '/XBAR/brand/xbar-report-horse.png',
-    '/XBAR/brand/xbar-report-mark.png',
+    '/XBAR/brand/xbar-original-lockup-480.png',
     '/XBAR/brand/xbar-report-watermark.png',
   ]);
   const originals = await branding();
@@ -324,4 +324,185 @@ test('report artwork honors the deployment base and survives offline after cachi
     new Uint8Array(await cacheValues.get(paths[0])!.clone().arrayBuffer()),
     new Uint8Array(originals.logo),
   );
+});
+
+test('premium report cover retains every original register and source attribution', async () => {
+  const report = buildRanchReport(fixture(18), now);
+  const ordinary = await renderReportPdf(report, 'Cedar Ridge Ranch', await branding());
+  const premium = await renderReportPdf(report, 'Cedar Ridge Ranch', await branding(), {
+    tier: 'Ranch Ops',
+    options: { accent: '#171b20', layout: 'cover' },
+  });
+  assert.equal((await PDFDocument.load(premium)).getPageCount(), (await PDFDocument.load(ordinary)).getPageCount() + 1);
+  const originalText = drawn(ordinary)
+    .filter((item) => item.y > 48)
+    .map((item) => item.text);
+  const upgradedText = drawn(premium).map((item) => item.text);
+  for (const text of originalText) assert.ok(upgradedText.includes(text), `Lost report content: ${text}`);
+  assert.ok(upgradedText.includes('Ranch management report'));
+  assert.ok(upgradedText.some((text) => text.includes('Prepared with XBAR')));
+  await assertFits(premium);
+});
+
+test('Enterprise removes decorative images, never source notes or report records', async () => {
+  const report = buildRanchReport(fixture(18), now);
+  const bytes = await renderReportPdf(report, 'Cedar Ridge Ranch', await branding(), {
+    tier: 'Enterprise',
+    options: { whiteLabel: true, layout: 'cover' },
+  });
+  const text = drawn(bytes)
+    .map((item) => item.text)
+    .join(' ');
+  assert.ok(text.includes('Prepared with XBAR'));
+  assert.ok(text.includes('Unaudited management estimates'));
+  assert.ok(text.includes('Synthetic Ranch Horse 18 - Blocked'));
+  const doc = await PDFDocument.load(bytes);
+  for (const page of doc.getPages())
+    assert.equal(page.node.Resources()?.lookupMaybe(PDFName.of('XObject'), PDFDict)?.keys().length ?? 0, 0);
+  await assertFits(bytes);
+});
+
+test('report cover contains an exceptionally long ranch name without pushing data into the footer', async () => {
+  const bytes = await renderReportPdf(buildRanchReport(fixture(2), now), 'Cedar Ridge '.repeat(40), await branding(), {
+    tier: 'Ranch Ops',
+    options: { layout: 'cover' },
+  });
+  await assertFits(bytes);
+});
+
+test('customer logo and contact details stay in ranch-first report styling', async () => {
+  const logoBytes = await readFile('public/brand/xbar-signature-horse-32.png');
+  const bytes = await renderReportPdf(buildRanchReport(fixture(2), now), 'Fallback Ranch', await branding(), {
+    tier: 'Enterprise',
+    options: { whiteLabel: true },
+    profile: {
+      ranchName: 'Customer Ranch',
+      operationsEmail: 'records@example.test',
+      contactPhone: '555-0100',
+      website: 'https://example.test',
+      packetLogoDataUrl: `data:image/png;base64,${logoBytes.toString('base64')}`,
+    },
+  });
+  const text = drawn(bytes)
+    .map((item) => item.text)
+    .join(' ');
+  assert.ok(text.includes('Customer Ranch'));
+  assert.ok(text.includes('records@example.test'));
+  assert.ok(text.includes('555-0100'));
+  assert.ok(text.split(/\s+/).some((word) => word === 'https://example.test/'));
+  assert.ok(text.includes('Prepared with XBAR'));
+  assert.ok(!text.includes('Fallback Ranch'));
+  const document = await PDFDocument.load(bytes);
+  for (const page of document.getPages())
+    assert.equal(
+      page.node.Resources()?.lookupMaybe(PDFName.of('XObject'), PDFDict)?.keys().length,
+      1,
+      'Customer artwork remains; decorative platform art is absent',
+    );
+  await assertFits(bytes);
+});
+
+test('report generation refuses a corrupt restored logo instead of exporting a blank image', async () => {
+  const report = buildRanchReport(fixture(2), now);
+  const packetLogoDataUrl =
+    'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAACgAAAAUCAIAAABwJOjsAAAACElEQVR4nAMAAAAAAUgGidIAAAAASUVORK5CYII=';
+  const assets = await branding();
+  await assert.rejects(
+    renderReportPdf(report, 'Customer Ranch', assets, {
+      tier: 'Ranch Ops',
+      profile: { ranchName: 'Customer Ranch', packetLogoDataUrl },
+    }),
+    /logo could not be decoded/,
+  );
+});
+
+test('every report footer preserves the original metallic horse artwork aspect ratio', async () => {
+  const assets = await branding();
+  const expectedRatio = assets.mark.readUInt32BE(16) / assets.mark.readUInt32BE(20);
+  const bytes = await renderReportPdf(buildRanchReport(fixture(1), now), 'Example ranch', assets);
+  const raw = Buffer.from(bytes).toString('latin1');
+  let marks = 0;
+  for (const match of raw.matchAll(/stream\r?\n/g)) {
+    const start = match.index! + match[0].length;
+    let ops: string;
+    try {
+      ops = inflateSync(Buffer.from(raw.slice(start, raw.indexOf('endstream', start)), 'latin1')).toString('latin1');
+    } catch {
+      continue;
+    }
+    for (const mark of ops.matchAll(/1 0 0 1 36 29 cm\s+1 0 0 1 0 0 cm\s+([\d.]+) 0 0 ([\d.]+) 0 0 cm/g)) {
+      marks += 1;
+      assert.ok(
+        Math.abs(Number(mark[1]) / Number(mark[2]) - expectedRatio) < 0.0001,
+        'B must never stretch into a square',
+      );
+      assert.ok(Number(mark[1]) <= 24 && Number(mark[2]) <= 14, 'artwork stays inside its reserved footer slot');
+    }
+  }
+  assert.equal(marks, (await PDFDocument.load(bytes)).getPageCount(), 'every non-white-label page has the original');
+  await assertFits(bytes);
+});
+
+test('unknown costs and sold losses remain distinct in the actual PDF registers', async () => {
+  const data = fixture(2);
+  data.horses[0].name = 'Unknown Cost Horse';
+  data.horses[0].costBasis = 0;
+  data.horses[0].sale.askPrice = 20000;
+  data.horses[1].name = 'Sold Loss Horse';
+  data.horses[1].costBasis = 10000;
+  data.horses[1].sale.askPrice = 20000;
+  data.expenseReceipts = [
+    {
+      id: 'sold-cost',
+      horseId: data.horses[1].id,
+      amount: 900,
+      category: 'Feed',
+      receiptDate: '2026-09-01',
+    } as RanchReportInput['expenseReceipts'][number],
+  ];
+  data.salesLeads = [
+    {
+      id: 'won',
+      horseId: data.horses[1].id,
+      outcome: 'Won',
+      stage: 'Closed',
+      offerAmount: 5000,
+    } as RanchReportInput['salesLeads'][number],
+  ];
+  const report = buildRanchReport(data, now);
+  const bytes = await renderReportPdf(report, 'Synthetic Financial Review', await branding());
+  const text = drawn(bytes)
+    .map((item) => item.text)
+    .join(' ');
+  assert.ok(text.includes('Closed-sale results'));
+  assert.ok(text.includes('-$5,900'));
+  assert.ok(text.includes('Sold Loss Horse - Sold'));
+  assert.ok(text.includes('Unknown'));
+  assert.ok(text.includes('They do not establish cash received'));
+  assert.ok(!text.includes('100% High'));
+  await assertFits(bytes);
+});
+
+test('closed-sale disclaimer precedes its table below the masthead, including continued registers', async () => {
+  const data = fixture(65);
+  data.salesLeads = data.horses.map(
+    (horse) =>
+      ({
+        id: `won-${horse.id}`,
+        horseId: horse.id,
+        stage: 'Closed',
+        outcome: 'Won',
+        offerAmount: 5000,
+      }) as RanchReportInput['salesLeads'][number],
+  );
+  const bytes = await renderReportPdf(buildRanchReport(data, now), 'Synthetic Long Sold Register', await branding());
+  const items = drawn(bytes);
+  const disclaimer = items.findIndex((item) => item.text.startsWith('These are agreed sale amounts'));
+  const firstHeader = items.findIndex((item) => item.text === 'Recorded sale');
+  assert.ok(disclaimer >= 0 && firstHeader >= 0);
+  assert.ok(disclaimer < firstHeader, 'disclaimer must be on the first closed-sale page, before pagination');
+  const top = 792 - items[disclaimer].y - items[disclaimer].size;
+  assert.ok(top >= 125, 'masthead rule at 115 must not strike through the disclaimer');
+  assert.ok(items[firstHeader].y < items[disclaimer].y - 22, 'wrapped disclaimer clears the table header');
+  await assertFits(bytes);
 });

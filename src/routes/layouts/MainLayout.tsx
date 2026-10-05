@@ -28,9 +28,11 @@ import {
   Wheat,
 } from 'lucide-react';
 import { ProgressRing, QuickCreateMenu } from '@/components/saas';
+import { XbarMark } from '@/components/BrandMark';
 import { HorsesIcon } from '@/components/icons';
 import { Sheet, SheetContent, SheetDescription, SheetTitle, SheetTrigger } from '@/components/ui/sheet';
 import { GlobalCreateDrawer, createActions } from '@/components/saas/flows';
+import { canonicalRoutes } from '@/lib/routeCanon';
 import { billingPath } from '@/lib/billingRoutes';
 import { buyerFollowUpPath } from '@/lib/buyerRoutes';
 import { buildCareBoardRows } from '@/lib/dashboardOps';
@@ -40,12 +42,6 @@ import { useCloudStore } from '@/store/useCloudStore';
 import { useUiStore } from '@/store/useUiStore';
 import { useXbarStore } from '@/store/useXbarStore';
 import { useEffectiveSubscription } from '@/hooks/useOwnerPreview';
-
-// 40KB touch icon for the 38px brand tile; the faded sidebar watermark
-// renders at 250px, so it uses the 512px source to avoid upscaling. Both
-// beat the 1.53MB app icon this replaced.
-const XBAR_ICON = '/brand/apple-touch-icon.png';
-const XBAR_WORDMARK = '/brand/xbar-wordmark.png';
 
 type NavItem = {
   label: string;
@@ -60,8 +56,8 @@ const navGroups: NavGroup[] = [
     heading: 'Ranch',
     items: [
       { label: 'Dashboard', path: '/', icon: LayoutDashboard },
-      { label: 'Care Tasks', path: '/today', icon: ClipboardList },
       { label: 'Horses', path: '/horses', icon: HorsesIcon },
+      { label: 'Care Tasks', path: '/today', icon: ClipboardList },
       { label: 'Groups', path: '/herd-groups', icon: Users },
       { label: 'Pastures', path: '/pastures', icon: Map },
     ],
@@ -69,8 +65,8 @@ const navGroups: NavGroup[] = [
   {
     heading: 'Care',
     items: [
-      { label: 'Health', path: '/health-care', icon: Stethoscope, badgeKey: 'care' },
-      { label: 'Breeding', path: '/breeding-foaling', icon: Sprout },
+      { label: 'Health', path: canonicalRoutes.health, icon: Stethoscope, badgeKey: 'care' },
+      { label: 'Breeding', path: canonicalRoutes.breeding, icon: Sprout },
       { label: 'Feed & Supplies', path: '/feed', icon: Wheat },
     ],
   },
@@ -90,7 +86,7 @@ const navGroups: NavGroup[] = [
     items: [
       { label: 'Documents', path: '/documents', icon: FolderOpen, badgeKey: 'docs' },
       { label: 'Expiring soon', path: '/expiring', icon: CalendarClock, badgeKey: 'expiring' },
-      { label: 'Equipment', path: '/equipment', icon: Boxes },
+      { label: 'Equipment', path: canonicalRoutes.equipment, icon: Boxes },
       { label: 'Expenses', path: '/expenses', icon: Coins },
       { label: 'Reports', path: '/reports', icon: Gauge },
     ],
@@ -219,7 +215,7 @@ export default function MainLayout() {
       {/* ---------------------------------------------------------- Sidebar */}
       <div className="xs-sidebar" role="complementary" aria-label="Workspace sidebar">
         <NavLink to="/" className="xs-brand" aria-label="XBAR dashboard">
-          <img className="xs-brand__wordmark" src={XBAR_WORDMARK} width="550" height="170" alt="XBAR" />
+          <XbarMark title="XBAR" className="xs-brand__signature" width={96} height={54} />
           <span className="xs-brand__sub">Ranch workspace</span>
         </NavLink>
 
@@ -271,12 +267,12 @@ export default function MainLayout() {
               <SheetContent side="left" className="xs-navigation-sheet">
                 <SheetTitle className="sr-only">Ranch navigation</SheetTitle>
                 <SheetDescription className="sr-only">Open any area of your ranch workspace.</SheetDescription>
-                <img className="xs-brand__wordmark" src={XBAR_WORDMARK} width="550" height="170" alt="XBAR" />
+                <XbarMark title="XBAR" className="xs-brand__signature" width={96} height={54} />
                 {renderNavigation('All sections')}
               </SheetContent>
             </Sheet>
             <NavLink className="xs-mobile-brand" to="/" aria-label="XBAR dashboard">
-              <img src={XBAR_ICON} width="38" height="38" alt="" />
+              <XbarMark width={64} height={36} />
             </NavLink>
             <span className="xs-topbar__ranch">{ranchName}</span>
           </div>

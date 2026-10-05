@@ -242,6 +242,13 @@ export function restoreWorkspaceProfile(raw: unknown): WorkspaceProfile {
     defaultOwnerEntity: value.defaultOwnerEntity?.trim() || '',
     ranchManagerName: value.ranchManagerName?.trim() || '',
     operationsEmail: value.operationsEmail?.trim() || '',
+    // Preserve explicit blanks (logo removal) and absent legacy fields. The UI
+    // validates before preview, and packet generation rejects corrupt branding.
+    ...(value.packetLogoDataUrl !== undefined ? { packetLogoDataUrl: value.packetLogoDataUrl } : {}),
+    ...(value.contactPhone !== undefined
+      ? { contactPhone: typeof value.contactPhone === 'string' ? value.contactPhone.trim() : '' }
+      : {}),
+    ...(value.website !== undefined ? { website: typeof value.website === 'string' ? value.website.trim() : '' } : {}),
     defaultBarn: value.defaultBarn?.trim() || '',
     defaultPasture: value.defaultPasture?.trim() || '',
     workspaceShortcuts,
@@ -490,6 +497,15 @@ export function canRestorePersistedState(raw: unknown): boolean {
       if (typeof id !== 'string' || id.trim() === '') return false;
       if (seen.has(id)) return false;
       seen.add(id);
+      if (collection === 'horses') {
+        const archive = (entry as { archive?: unknown }).archive;
+        if (archive !== undefined) {
+          if (!archive || typeof archive !== 'object' || Array.isArray(archive)) return false;
+          const { id: archiveId, archivedAt } = archive as Record<string, unknown>;
+          if (typeof archiveId !== 'string' || !archiveId.trim()) return false;
+          if (typeof archivedAt !== 'string' || !Number.isFinite(Date.parse(archivedAt))) return false;
+        }
+      }
     }
   }
 
@@ -599,7 +615,7 @@ export function canRestorePersistedState(raw: unknown): boolean {
    */
   const TIMELINE_EVENT_SHAPE = {
     strings: ['id', 'date', 'title', 'summary', 'owner', 'category'],
-    optionalStrings: ['details.followUpDue'],
+    optionalStrings: ['details.followUpDue', 'completionState'],
     optionalObjects: ['details'],
   };
 
@@ -2185,7 +2201,11 @@ export function createHorseFromDocuments(documents: DocumentRecord[], workspaceP
   };
 }
 
-export function promoteDocument(horse: HorseRecord, document: DocumentRecord): HorseRecord {
+export function promoteDocument(
+  horse: HorseRecord,
+  document: DocumentRecord,
+  { factsOnly = false }: { factsOnly?: boolean } = {},
+): HorseRecord {
   const nextDocumentIds = horse.documents.includes(document.id) ? horse.documents : [...horse.documents, document.id];
   const nextFacts = [...horse.documentFacts];
   Object.entries(document.entities)
@@ -2202,6 +2222,10 @@ export function promoteDocument(horse: HorseRecord, document: DocumentRecord): H
         });
       }
     });
+
+  // Re-reading an attached source refreshes its claims, not its one-time
+  // readiness contribution, sale flags, or attachment activity.
+  if (factsOnly) return { ...horse, documents: nextDocumentIds, documentFacts: nextFacts };
 
   const nextReadiness = { ...horse.readiness };
   if (document.type === 'Media Kit') {

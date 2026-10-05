@@ -28,6 +28,7 @@ const care = (type: string, date: string, details?: object): TimelineEvent =>
     owner: 'Vet',
     category: 'Medical',
     status: type,
+    completionState: 'completed',
     ...(details ? { details } : {}),
   }) as TimelineEvent;
 
@@ -155,5 +156,46 @@ test('Medical initializes logged care on the local calendar day', async () => {
   } finally {
     if (previousTz === undefined) delete process.env.TZ;
     else process.env.TZ = previousTz;
+  }
+});
+
+test('planned care never becomes completed merely because its date arrives', () => {
+  const planned = { ...care('Deworming', day(-1)), completionState: 'planned' } as TimelineEvent;
+  assert.equal(signal([horse([planned])], 'wormer').status, 'due');
+});
+
+test('legacy care without completion evidence remains due until confirmed', () => {
+  assert.equal(
+    signal([horse([{ ...care('Deworming', day(-1)), completionState: undefined }])], 'wormer').status,
+    'due',
+  );
+});
+
+test('Coggins care status and canonical readiness agree at the expiration boundary in each timezone', async () => {
+  const { isCurrentDatedDocument, CURRENT_COGGINS_DAYS } = await import('../src/lib/documentCurrency.js');
+  const previous = process.env.TZ;
+  try {
+    for (const zone of ['America/Los_Angeles', 'Pacific/Auckland', 'UTC']) {
+      process.env.TZ = zone;
+      for (const hour of [0, 12, 23]) {
+        const now = new Date(2026, 9, 2, hour);
+        for (const age of [364, 365, 366]) {
+          const exam = new Date(2026, 9, 2 - age);
+          const examDate = `${exam.getFullYear()}-${String(exam.getMonth() + 1).padStart(2, '0')}-${String(exam.getDate()).padStart(2, '0')}`;
+          const paper = coggins({ examDate });
+          const careSignal = buildCareBoardRows([horse()], [paper], [], now)[0].signals.find(
+            (s) => s.key === 'coggins',
+          )!;
+          assert.equal(
+            careSignal.status !== 'due',
+            isCurrentDatedDocument(paper, CURRENT_COGGINS_DAYS, now),
+            `${zone} ${hour}:00 age=${age}`,
+          );
+        }
+      }
+    }
+  } finally {
+    if (previous === undefined) delete process.env.TZ;
+    else process.env.TZ = previous;
   }
 });

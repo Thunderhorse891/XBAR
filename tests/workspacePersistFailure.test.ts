@@ -5,6 +5,7 @@ import { readFile } from 'node:fs/promises';
 import {
   MEANINGFUL_WORKSPACE_COLLECTIONS,
   didWorkspaceReadFail,
+  getWorkspacePersistReceipt,
   hasMeaningfulPersistedWorkspace,
   onWorkspacePersistFailure,
   shouldDeferUnhydratedWorkspaceWrite,
@@ -953,5 +954,67 @@ test('a fallback whose marker lands is still reported as saved', async () => {
     restoreDb();
     if (previous === undefined) delete (globalThis as { window?: unknown }).window;
     else (globalThis as { window?: unknown }).window = previous;
+  }
+});
+
+test('a receipt belongs to its exact write and reports a committed save', async () => {
+  const restoreDb = installFakeIndexedDb();
+  try {
+    const pending = workspaceStateStorage.setItem('branding-save-one', JSON.stringify({ profile: 'first' }));
+    const first = getWorkspacePersistReceipt();
+    const later = workspaceStateStorage.setItem('branding-save-two', JSON.stringify({ profile: 'second' }));
+    const second = getWorkspacePersistReceipt();
+    assert.ok(first);
+    assert.ok(second);
+    assert.notEqual(first, second);
+    assert.equal(first.name, 'branding-save-one');
+    assert.equal(second.name, 'branding-save-two');
+    assert.equal(await first.completed, true);
+    assert.equal(await second.completed, true);
+    await Promise.all([pending, later]);
+  } finally {
+    restoreDb();
+  }
+});
+
+test('a failed receipt stays failed after retry succeeds', async () => {
+  const restoreBrokenDb = installFakeIndexedDb({ abortOnCommit: true });
+  const restoreWindow = installBrokenLocalStorage();
+  let failed;
+  try {
+    const pending = workspaceStateStorage.setItem('branding-save-failure', '{}');
+    failed = getWorkspacePersistReceipt();
+    assert.ok(failed);
+    assert.equal(await failed.completed, false);
+    await pending;
+  } finally {
+    restoreWindow();
+    restoreBrokenDb();
+  }
+  const restoreDb = installFakeIndexedDb();
+  try {
+    const pending = workspaceStateStorage.setItem('branding-save-failure', '{}');
+    const retry = getWorkspacePersistReceipt();
+    assert.ok(retry);
+    assert.notEqual(retry, failed);
+    assert.equal(await retry.completed, true);
+    assert.equal(await failed.completed, false);
+    await pending;
+  } finally {
+    restoreDb();
+  }
+});
+
+test('the meaningful-workspace guard reports an unsaved receipt', async () => {
+  const restoreDb = installFakeIndexedDb();
+  try {
+    await workspaceStateStorage.setItem('xbar-live-workspace', JSON.stringify({ state: { horses: [{ id: 'h1' }] } }));
+    const pending = workspaceStateStorage.setItem('xbar-live-workspace', JSON.stringify({ state: { horses: [] } }));
+    const blocked = getWorkspacePersistReceipt();
+    assert.ok(blocked);
+    assert.equal(await blocked.completed, false);
+    await pending;
+  } finally {
+    restoreDb();
   }
 });

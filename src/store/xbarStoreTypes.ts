@@ -44,6 +44,8 @@ export type ActionResult = {
   id?: string;
   createdHorseIds?: string[];
   duplicateCount?: number;
+  /** Unassigned sources still needing review after automatic creation and matching. */
+  heldForReviewCount?: number;
 };
 
 export type HorsePatch = Partial<
@@ -163,7 +165,11 @@ export type XbarStore = {
   addHorseNote: (horseId: string, note: Pick<HorseNote, 'title' | 'body' | 'author' | 'tone'>) => ActionResult;
   addMedicalEvent: (
     horseId: string,
-    event: Pick<HorseNote, 'title' | 'body' | 'author'> & { date: string; type: MedicalEventType },
+    event: Pick<HorseNote, 'title' | 'body' | 'author'> & {
+      date: string;
+      type: MedicalEventType;
+      completionState?: 'planned' | 'completed';
+    },
   ) => ActionResult;
   addBreedingEvent: (
     horseId: string,
@@ -180,11 +186,13 @@ export type XbarStore = {
    * push an arbitrary name through this path.
    */
   applyHorseNameRepairs: (horseIds: readonly string[]) => ActionResult;
+  archiveHorse: (horseId: string) => ActionResult & { archiveId?: string };
+  restoreHorse: (horseId: string, archiveId: string, expectedOwnerId?: string) => ActionResult;
   deleteHorse: (horseId: string) => ActionResult;
   updateMedicalEvent: (
     horseId: string,
     eventId: string,
-    patch: Partial<Pick<TimelineEvent, 'title' | 'summary' | 'date' | 'status'>>,
+    patch: Partial<Pick<TimelineEvent, 'title' | 'summary' | 'date' | 'status' | 'completionState'>>,
   ) => ActionResult;
   deleteMedicalEvent: (horseId: string, eventId: string) => ActionResult;
   updateOwnershipRecord: (
