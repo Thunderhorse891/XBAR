@@ -60,7 +60,12 @@ test('gallery previews extra photos, changes primary, removes recoverably and re
   await page.getByText('Removed photos (1)', { exact: true }).click();
   await page.getByRole('button', { name: 'Restore photo', exact: true }).click();
   await expect(page.getByRole('button', { name: 'View Right side', exact: true })).toBeVisible();
-  await page.screenshot({ path: testInfo.outputPath('ranch-horse-gallery.png'), fullPage: true });
+  await page.evaluate(() => window.scrollTo(0, 0));
+  await page.screenshot({
+    path: testInfo.outputPath('ranch-horse-gallery.png'),
+    fullPage: true,
+    animations: 'disabled',
+  });
 });
 
 test('horse Documents shows linked files without extracted facts and downloads their actual bytes', async ({
@@ -109,7 +114,12 @@ test('horse Documents shows linked files without extracted facts and downloads t
   ]);
   expect(download.suggestedFilename()).toBe('horse-original.txt');
   expect(await readFile((await download.path())!, 'utf8')).toBe('Original horse record bytes');
-  await page.screenshot({ path: testInfo.outputPath('ranch-horse-document-library.png'), fullPage: true });
+  await page.evaluate(() => window.scrollTo(0, 0));
+  await page.screenshot({
+    path: testInfo.outputPath('ranch-horse-document-library.png'),
+    fullPage: true,
+    animations: 'disabled',
+  });
   await page.getByRole('button', { name: /Upload document for/i }).click();
   await expect(page).toHaveURL(/horse=.*upload=1/);
 });

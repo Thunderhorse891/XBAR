@@ -26,7 +26,7 @@ export async function downloadStoredFile(
     release = access.release;
     check();
     if (!isNavigableFileUrl(access.url)) throw new Error('The original has an unsupported file address.');
-    const response = await dependencies.fetch(access.url, {
+    const response = await dependencies.fetch.call(globalThis, access.url, {
       credentials: 'omit',
       referrerPolicy: 'no-referrer',
       redirect: 'error',

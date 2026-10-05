@@ -149,3 +149,13 @@ for (const failure of ['context', 'lookup rejection'])
       delete globalThis.__filePreviewAccess;
     }
   });
+
+test('original-file fetch preserves the browser global receiver', async () => {
+  const f = fixture();
+  f.deps.fetch = async function () {
+    assert.equal(this, globalThis, 'browser fetch requires its Window receiver');
+    return new Response('original bytes');
+  };
+  assert.equal((await downloadStoredFile({}, () => true, f.deps)).ok, true);
+  assert.equal(f.saves.length, 1);
+});

@@ -156,7 +156,8 @@ test('a seeded horse opens a full profile object page with tabs', async ({ page 
   await expect(page).toHaveURL(/\/horses\//);
   await expect(page.locator('.xs-objhead__name')).toHaveText(/roster prospect/i);
   await page.getByRole('button', { name: 'Documents', exact: true }).click();
-  await expect(page.getByText('No documents linked to this horse yet.')).toBeVisible();
+  await expect(page.getByText('No active documents', { exact: true })).toBeVisible();
+  await expect(page.getByRole('heading', { name: 'Document library', exact: true })).toBeVisible();
 });
 
 test('sales renders the buyer follow-up sales surface', async ({ page }) => {
