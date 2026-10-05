@@ -35,9 +35,8 @@ const DAY_MS = 86_400_000;
  * and anything less rejects a same-day exam recorded east of UTC. Normalizing
  * both sides to a day removes the choice.
  *
- * `Date.parse` reads a bare 'YYYY-MM-DD' as UTC midnight, and a stored record
- * may instead carry a full timestamp, so the exam side is reduced by its UTC
- * components — the day it was written down as.
+ * documentExamTime validates the written date and represents it as UTC midnight.
+ * A stored timestamp's clock or offset must not shift that examination day.
  */
 function examCalendarDay(examTime: number): number {
   const exam = new Date(examTime);
@@ -63,16 +62,40 @@ export function isDocumentResolved(document: Pick<DocumentRecord, 'state'>): boo
   return document.state === 'Ready' || document.state === 'Matched' || document.state === 'Archived';
 }
 
+/**
+ * A valid written examination day, represented as UTC midnight (not an instant).
+ * Accept padded ISO dates, legacy date+Z, and ISO/space timestamps. Optional
+ * clock/offset syntax is validated but cannot move the written calendar day.
+ * Unsupported formats remain unknown rather than being guessed by Date.parse.
+ */
 export function documentExamTime(document: DatedDocument): number | null {
-  // Optional at runtime whatever the type says: these records come back from
-  // browser storage, and one restored without entities must not throw here.
-  const examDate = document.entities?.examDate;
-  if (!examDate) return null;
-  const parsed = Date.parse(examDate);
-  if (Number.isNaN(parsed)) return null;
-  // Date.parse normalizes impossible dates such as February 30 into March.
-  if (/^\d{4}-\d{2}-\d{2}$/.test(examDate) && new Date(parsed).toISOString().slice(0, 10) !== examDate) return null;
-  return parsed;
+  const value = document.entities?.examDate;
+  if (typeof value !== 'string') return null;
+  const match =
+    /^(?<year>\d{4})-(?<month>\d{2})-(?<day>\d{2})(?:[Zz]|[Tt ](?<hour>\d{2}):(?<minute>\d{2})(?::(?<second>\d{2})(?:\.\d{1,9})?)?(?:[Zz]|[+-](?<offsetHour>\d{2}):?(?<offsetMinute>\d{2}))?)?$/.exec(
+      value.trim(),
+    );
+  if (!match?.groups) return null;
+  const { year, month, day, hour, minute, second, offsetHour, offsetMinute } = match.groups;
+  if (
+    (hour !== undefined && Number(hour) > 23) ||
+    (minute !== undefined && Number(minute) > 59) ||
+    (second !== undefined && Number(second) > 59) ||
+    (offsetHour !== undefined && Number(offsetHour) > 23) ||
+    (offsetMinute !== undefined && Number(offsetMinute) > 59)
+  )
+    return null;
+  const date = new Date(0);
+  // setUTCFullYear preserves years 0000–0099; Date.UTC would add 1900.
+  date.setUTCFullYear(Number(year), Number(month) - 1, Number(day));
+  date.setUTCHours(0, 0, 0, 0);
+  if (
+    date.getUTCFullYear() !== Number(year) ||
+    date.getUTCMonth() !== Number(month) - 1 ||
+    date.getUTCDate() !== Number(day)
+  )
+    return null;
+  return date.getTime();
 }
 
 export function isCurrentDatedDocument(document: DatedDocument, maxAgeDays: number, now: Date = new Date()): boolean {

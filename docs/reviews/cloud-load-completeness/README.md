@@ -3,8 +3,8 @@
 The real loader and CloudBootstrap focus effect reproduced a 1,203-row ranch
 shrinking to a 137-row server cap. Every operational collection now uses exact
 counts, deterministic ID ordering, pages advanced by actual returned rows, and
-a second ID/revision manifest. Missing counts, failed/truncated pages, duplicate
-IDs and changed revisions/counts refuse installation and recovery fallback.
+a second full selected-row content verification pass. Missing counts, failed/truncated pages, duplicate
+IDs and changed content/revisions/counts refuse installation and recovery fallback.
 
 The loader uses the common store restore/export contract before reconciliation.
 Object keys and identified top-level collection ordering are not edits; nested
@@ -42,3 +42,18 @@ already persisted by older clients and local-only histories can still require
 explicit conflict/recovery review; they are never silently discarded. Shared
 history (09), original-byte recovery (11) and atomic writes (12) remain separate.
 No schema, permissions, customer records or paid services are changed here.
+
+## Same-revision changes
+
+A legacy writer can change listing state, token, channels, or other payload data
+without advancing its day-level timestamp. Both passes therefore select the same
+full row projection, including canonical membership fields, and compare semantic
+JSON content. Object-key reordering is ignored; ordered arrays remain meaningful.
+This adds a second payload read and does not claim a database snapshot transaction.
+
+Browser fixtures now pin one complete logical hydration as exactly two successful
+counted horse reads for the same ranch. Held reads target the relational source,
+not recovery fallback. Cold-owner success uses complete relational data; failed
+record reads retain local notes and authoritative entitlements without autosaving
+or installing recovery snapshots. CI's prior failures and new regression logs
+are preserved separately from the repository.

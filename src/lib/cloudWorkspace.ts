@@ -1303,10 +1303,10 @@ async function loadWorkspaceBackupFromRelationalCloud(session: Session, expected
     loadCompleteCloudRows<RelationalWorkspaceRow>({
       table,
       idColumn,
-      readPage: (from, to, manifestOnly) =>
+      readPage: (from, to) =>
         client
           .from(table)
-          .select(manifestOnly ? `${idColumn}, updated_at` : `${idColumn}, ${columns}`, { count: 'exact' })
+          .select(`${idColumn}, ${columns}`, { count: 'exact' })
           .eq('workspace_id', workspaceId)
           .order(idColumn, { ascending: true })
           .range(from, to)

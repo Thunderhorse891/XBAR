@@ -98,6 +98,23 @@ function fixture(o = {}) {
         updated_at: stamp,
       },
     ];
+  if (o.sameDayListing)
+    tables.shared_listings = [
+      {
+        listing_id: 'listing-a',
+        updated_at: '2026-10-05',
+        payload: {
+          id: 'listing-a',
+          horseId: 'horse-00000',
+          accessMode: 'Private Token',
+          state: 'Live',
+          shareToken: 'before-token',
+          tokenIssuedAt: '2026-10-05',
+          createdAt: '2026-10-05',
+          updatedAt: '2026-10-05',
+        },
+      },
+    ];
   if (o.corruptRow) tables.horses[0].payload = null;
   if (o.mismatchedPayloadId) tables.horses[0].payload.id = 'wrong-horse';
   let accessCalls = 0;
@@ -150,12 +167,19 @@ function fixture(o = {}) {
         const offset = table === 'horses' && o.duplicatePage && start > 0 ? 0 : start;
         const data = structuredClone(all.slice(offset, Math.min(offset + (o.cap ?? 1000), offset + end - start + 1)));
         if (table === 'horses' && o.emptyPage && start > 0) data.length = 0;
-        if (table === 'horses' && !columns.includes('payload') && data.length) {
+        const verification =
+          calls.filter((call) => call.table === table && call.start === 0 && call.options.count === 'exact').length > 1;
+        if (table === 'horses' && verification && data.length) {
           if (o.revisionDrift) data[0].updated_at = '2026-10-05T01:00:00Z';
           if (o.identityDrift) data[0].horse_id = 'replacement-horse';
         }
+        if (table === 'shared_listings' && o.sameDayListing && verification && data.length)
+          data[0].payload = { ...data[0].payload, state: 'Archived', shareToken: 'rotated-token' };
+        const selected = columns.split(',').map((column) => column.trim());
         return {
-          data,
+          data: data.map((row) =>
+            Object.fromEntries(selected.filter((key) => Object.hasOwn(row, key)).map((key) => [key, row[key]])),
+          ),
           error: null,
           count: o.noCount ? null : all.length + (table === 'horses' && o.countDrift && start > 0 ? 1 : 0),
         };
@@ -318,3 +342,70 @@ for (const variant of ['completeProfile', 'legacyOwnership'])
     local.workspace.subscription = r.backup.workspace.subscription;
     assert.equal(decideCloudReconciliation({ local, remote: r.backup }), 'connected');
   });
+
+test('same-day listing payload changes fail the actual authoritative load without fallback', async () => {
+  fixture({ sameDayListing: true });
+  const loaded = await loadWorkspaceBackupFromCloud({
+    requireAuthoritative: true,
+    expectedContext: { userId: 'user-owner', workspaceId: 'ws-owner' },
+  });
+  assert.equal(loaded.ok, false);
+  assert.equal(loaded.backup, undefined);
+  assert.match(loaded.message, /changed during loading/);
+  assert.equal(
+    calls.some((call) => call.table === supabaseConfig.workspaceTable),
+    false,
+  );
+});
+
+const { loadCompleteCloudRows } = await import('../../src/lib/cloudLoadPagination.ts');
+for (const [label, changed] of Object.entries({
+  state: { payload: { state: 'Archived', shareToken: 'before', channels: ['A', 'B'], unknown: { x: 1 } } },
+  token: { payload: { state: 'Live', shareToken: 'rotated', channels: ['A', 'B'], unknown: { x: 1 } } },
+  unknownNested: { payload: { state: 'Live', shareToken: 'before', channels: ['A', 'B'], unknown: { x: 2 } } },
+  arrayOrder: { payload: { state: 'Live', shareToken: 'before', channels: ['B', 'A'], unknown: { x: 1 } } },
+  canonicalRole: { role: 'Owner' },
+  canonicalStatus: { status: 'inactive' },
+  canonicalEmail: { email: 'changed@example.test' },
+})) {
+  test(`verification catches ${label} drift despite an unchanged revision`, async () => {
+    const row = {
+      id: 'row-a',
+      updated_at: '2026-10-05',
+      role: 'Admin',
+      status: 'active',
+      email: 'owner@example.test',
+      payload: { state: 'Live', shareToken: 'before', channels: ['A', 'B'], unknown: { x: 1 } },
+    };
+    const result = await loadCompleteCloudRows({
+      table: 'fixture',
+      idColumn: 'id',
+      readPage: async (_from, _to, verify) => ({
+        data: [verify ? { ...row, ...changed } : row],
+        count: 1,
+        error: null,
+      }),
+    });
+    assert.equal(result.data, null);
+    assert.match(result.error.message, /changed during loading/);
+  });
+}
+test('verification tolerates equivalent object-key order but keeps array order meaningful', async () => {
+  const first = {
+    id: 'row-a',
+    updated_at: '2026-10-05',
+    payload: { name: 'Blue', nested: { a: 1, b: 2 }, array: ['A', 'B'] },
+  };
+  const second = {
+    payload: { array: ['A', 'B'], nested: { b: 2, a: 1 }, name: 'Blue' },
+    updated_at: '2026-10-05',
+    id: 'row-a',
+  };
+  const result = await loadCompleteCloudRows({
+    table: 'fixture',
+    idColumn: 'id',
+    readPage: async (_from, _to, verify) => ({ data: [verify ? second : first], count: 1, error: null }),
+  });
+  assert.equal(result.error, null);
+  assert.deepEqual(result.data, [first]);
+});
