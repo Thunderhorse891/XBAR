@@ -10,6 +10,7 @@ import { formatDateLabel } from '@/lib/format';
 import { useUiStore } from '@/store/useUiStore';
 import { useCurrentRoleCapability, useXbarStore } from '@/store/useXbarStore';
 import type { AssetCategory, AssetCondition, AssetStatus, RanchAsset } from '@/types/xbar';
+import './RanchAssets.css';
 
 const statuses: AssetStatus[] = ['Available', 'Assigned', 'In Service'];
 const conditions: AssetCondition[] = ['Excellent', 'Service Soon', 'Attention Required'];
@@ -180,7 +181,7 @@ export default function RanchAssets() {
         }}
       />
 
-      <div className="dashboard-grid dashboard-grid--primary">
+      <div className="dashboard-grid dashboard-grid--primary ranch-assets-layout">
         <Panel eyebrow="Inventory" title="Register">
           {ranchAssets.length > 0 && (
             <div style={{ marginBottom: '14px' }}>
@@ -194,7 +195,7 @@ export default function RanchAssets() {
             </div>
           )}
           {ranchAssets.length ? (
-            <div className="table-shell">
+            <div className="table-shell" role="region" aria-label="Asset register" tabIndex={0}>
               <table className="data-table">
                 <thead>
                   <tr>
