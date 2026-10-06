@@ -2198,11 +2198,22 @@ export const useCloudStore = create<CloudStore>((set, get) => ({
       return { ok: false, message: 'Could not reach the server. Check your connection and try again.' };
     }
 
-    const payload = await response
-      .json()
-      .catch(() => ({}) as { ok?: boolean; message?: string; storageCleanupComplete?: boolean });
-    if (!response.ok || !payload.ok) {
-      return { ok: false, message: payload.message || 'Account deletion failed. Please try again.' };
+    const payload = await response.json().catch(
+      () =>
+        ({}) as {
+          ok?: boolean;
+          message?: string;
+          storageCleanupComplete?: boolean;
+          accountDeleted?: boolean | null;
+          operationId?: string;
+        },
+    );
+    const deletedWithIncompleteOutcome = payload.accountDeleted === true && (!response.ok || !payload.ok);
+    if ((!response.ok || !payload.ok) && !deletedWithIncompleteOutcome) {
+      return {
+        ok: false,
+        message: `${payload.message || 'Account deletion failed. Please try again.'}${typeof payload.operationId === 'string' && payload.operationId ? ` Operation ID: ${payload.operationId}` : ''}`,
+      };
     }
 
     // The server has already deleted the auth user; clear the local session so
@@ -2229,13 +2240,19 @@ export const useCloudStore = create<CloudStore>((set, get) => ({
       stagedStorageBytes: 0,
     });
     // The account is gone either way; say so when stored files are not.
-    return payload.storageCleanupComplete === false
+    return deletedWithIncompleteOutcome
       ? {
           ok: true,
           incomplete: true,
-          message:
-            'Your account has been deleted, but some cloud files could not be erased yet. Email Xbarje@gmail.com and we will finish removing them.',
+          message: `Your account was deleted, but cloud cleanup or its confirmation is incomplete. Email Xbarje@gmail.com${typeof payload.operationId === 'string' ? ` with operation ID ${payload.operationId}` : ''}.`,
         }
-      : { ok: true, message: 'Your account and data have been deleted.' };
+      : payload.storageCleanupComplete === false
+        ? {
+            ok: true,
+            incomplete: true,
+            message:
+              'Your account has been deleted, but some cloud files could not be erased yet. Email Xbarje@gmail.com and we will finish removing them.',
+          }
+        : { ok: true, message: 'Your account and data have been deleted.' };
   },
 }));

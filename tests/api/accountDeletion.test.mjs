@@ -202,7 +202,11 @@ function deletionFixture(t) {
       return scenario === 'receipt' ? failure() : reply({ id: 'receipt-1' }, 201);
     if (url.pathname === '/rest/v1/account_deletion_receipts' && method === 'PATCH') {
       state.receiptUpdates.push(JSON.parse(init.body));
-      return reply(null, 204);
+      if (scenario === 'outcome-error') return failure();
+      if (scenario === 'outcome-empty') return reply(null);
+      if (scenario === 'outcome-wrong') return reply({ id: 'other-receipt' });
+      if (scenario === 'outcome-throws') throw new Error('Private fixture failure');
+      return url.searchParams.get('select') === 'id' ? reply({ id: 'receipt-1' }) : reply(null, 204);
     }
     if (url.pathname === '/rest/v1/rpc/xbar_claim_checkout_lock') {
       state.claimToken = JSON.parse(init.body).p_token;
@@ -238,8 +242,10 @@ function deletionFixture(t) {
             { workspace_id: 'ws-other', storage_path: `${FIXTURE_USER}/documents/shared.pdf` },
             { workspace_id: 'ws1', storage_path: `${FIXTURE_USER}/documents/mine.pdf` },
           ]);
-    if (url.pathname === `/auth/v1/admin/users/${FIXTURE_USER}` && method === 'DELETE')
+    if (url.pathname === `/auth/v1/admin/users/${FIXTURE_USER}` && method === 'DELETE') {
+      if (scenario === 'auth-response-lost') throw new Error('Fixture response lost after deletion');
       return scenario === 'auth' ? reply({ message: 'Fixture auth failure' }, 500) : reply({});
+    }
     if (url.pathname === '/rest/v1/workspaces' && method === 'DELETE') return reply(null, 204);
     if (url.pathname.startsWith('/storage/v1/object/list/')) {
       const { prefix } = JSON.parse(init.body);
@@ -332,7 +338,7 @@ test('every refusal before the auth delete changes nothing irreversible', async 
   }
 });
 
-test('a failed auth delete removes nothing, releases the holds and records the failure', async (t) => {
+test('an ambiguous auth error reports an unknown outcome and retains deletion holds', async (t) => {
   const state = deletionFixture(t);
   const { default: handler } = await import('../../api/_lib/account-delete.js');
   state.scenario = 'auth';
@@ -340,7 +346,8 @@ test('a failed auth delete removes nothing, releases the holds and records the f
   state.receiptUpdates = [];
   const response = await deleteAccount(handler, 'fixture-auth');
   assert.equal(response.status, 502);
-  assert.match(response.body.message, /Nothing was removed/);
+  assert.equal(response.body.accountDeleted, null);
+  assert.match(response.body.message, /could not be confirmed/);
   // The old handler deleted every membership first, so this left the person
   // signed up but locked out of every other owner's ranch.
   assert.ok(!state.calls.some((call) => call.includes('workspace_memberships') && call.startsWith('DELETE')));
@@ -348,7 +355,7 @@ test('a failed auth delete removes nothing, releases the holds and records the f
     !state.calls.some((call) => call.includes('/storage/')),
     'no file was swept for an account that still exists',
   );
-  assert.ok(state.calls.includes('POST /rest/v1/rpc/xbar_release_account_deletion_request'));
+  assert.ok(!state.calls.includes('POST /rest/v1/rpc/xbar_release_account_deletion_request'));
   assert.equal(state.receiptUpdates.at(-1)?.status, 'failed');
   assert.doesNotMatch(JSON.stringify(response.body), /Fixture auth failure/, 'provider text stays in the log');
 });
@@ -375,6 +382,23 @@ test('a completed deletion keeps files another ranch still uses and records the 
   assert.ok(claimAt > -1 && holdAt > claimAt && billingAt > holdAt && renewAt > billingAt && deleteAt > renewAt);
   assert.ok(state.calls.indexOf('billing-lease-release') > deleteAt);
 });
+
+for (const scenario of ['outcome-error', 'outcome-empty', 'outcome-wrong', 'outcome-throws']) {
+  test(`unacknowledged ${scenario} reports deleted account but unconfirmed completion`, async (t) => {
+    const state = deletionFixture(t);
+    state.scenario = scenario;
+    const { default: handler } = await import('../../api/_lib/account-delete.js');
+    const response = await deleteAccount(handler, `fixture-${scenario}`);
+    assert.equal(response.status, 503);
+    assert.equal(response.body.ok, false);
+    assert.equal(response.body.accountDeleted, true);
+    assert.equal(response.body.operationId, 'receipt-1');
+    assert.match(response.body.message, /deleted.*confirmation.*incomplete/i);
+    assert.doesNotMatch(response.body.message, /Private fixture|XX000/);
+    assert.ok(state.calls.includes(`DELETE /auth/v1/admin/users/${FIXTURE_USER}`));
+    assert.ok(!state.calls.includes('POST /rest/v1/rpc/xbar_release_account_deletion_request'));
+  });
+}
 
 test('a purged private workspace has its documents erased, not orphaned', () => {
   // Documents are keyed to the workspace now, so sweeping only the departing
@@ -954,4 +978,44 @@ test('expired deletion A cannot clear replacement B’s membership fence', async
   const { default: handler } = await import('../../api/_lib/account-delete.js');
   const { assertDeletionRace } = await import('./fixtures/accountDeletionRace.mjs');
   await assertDeletionRace(t, handler);
+});
+
+test('lost auth response never claims the account survived or sweeps unconfirmed storage', async (t) => {
+  const state = deletionFixture(t);
+  const { default: handler } = await import('../../api/_lib/account-delete.js');
+  state.scenario = 'auth-response-lost';
+  const response = await deleteAccount(handler, 'fixture-auth-response-lost');
+  assert.equal(response.body.ok, false);
+  assert.equal(response.body.accountDeleted, null);
+  assert.equal(response.body.operationId, 'receipt-1');
+  assert.match(response.body.message, /could not be confirmed/);
+  assert.ok(!state.calls.some((call) => call.includes('/storage/')));
+  assert.ok(!state.calls.includes('POST /rest/v1/rpc/xbar_release_account_deletion_request'));
+});
+
+test('client preserves the recovery operation ID for an unknown deletion outcome', async () => {
+  const { spawnSync } = await import('node:child_process');
+  const result = spawnSync(
+    process.execPath,
+    [
+      '--import=tsx',
+      '--input-type=module',
+      '-e',
+      `
+    import assert from 'node:assert/strict';
+    import {supabaseConfig} from './src/lib/platformConfig.ts';
+    import {useCloudStore} from './src/store/useCloudStore.ts';
+    supabaseConfig.url='https://synthetic.invalid';supabaseConfig.anonKey='fixture';
+    const session={access_token:'synthetic',user:{id:'synthetic-user'}};
+    useCloudStore.setState({session});
+    globalThis.fetch=async()=>new Response(JSON.stringify({ok:false,accountDeleted:null,operationId:'receipt-1',message:'Deletion could not be confirmed.'}),{status:502});
+    const response=await useCloudStore.getState().deleteAccount('synthetic@example.invalid');
+    assert.equal(response.ok,false);
+    assert.match(response.message,/receipt-1/);
+    assert.equal(useCloudStore.getState().session,session);
+  `,
+    ],
+    { encoding: 'utf8' },
+  );
+  assert.equal(result.status, 0, result.stderr);
 });
