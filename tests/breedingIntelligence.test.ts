@@ -86,7 +86,7 @@ test('a confirmed mare inside 30 days of foaling is near-term with kit prep acti
   const state = buildMareBreedingState(
     mare('m1', 'Glory', [
       breedingEvent(320, 'breeding', { mateName: 'Thunder' }),
-      breedingEvent(290, 'pregnancy-check', { result: 'confirmed' }),
+      breedingEvent(290, 'pregnancy-check', { result: 'in-foal' }),
     ]),
     now,
   );
@@ -254,12 +254,13 @@ test('program rollup aggregates carriers, value, and overdue checks', () => {
         [breedingEvent(320, 'breeding'), breedingEvent(290, 'pregnancy-check', { result: 'in foal' })],
         { studFee: 3000, bookedMares: 1, breedingCosts: 4000, mareProductionValue: 0, foalProjectedValue: 18000 },
       ),
-      mare(
-        'm2',
-        'Star',
-        [breedingEvent(60, 'breeding'), breedingEvent(30, 'pregnancy-check', { result: 'confirmed' })],
-        { studFee: 3000, bookedMares: 1, breedingCosts: 4000, mareProductionValue: 0, foalProjectedValue: 12000 },
-      ),
+      mare('m2', 'Star', [breedingEvent(60, 'breeding'), breedingEvent(30, 'pregnancy-check', { result: 'in-foal' })], {
+        studFee: 3000,
+        bookedMares: 1,
+        breedingCosts: 4000,
+        mareProductionValue: 0,
+        foalProjectedValue: 12000,
+      }),
       mare('m3', 'Dusty', [breedingEvent(35, 'breeding')]), // no checks → overdue criticals
       { id: 'g1', name: 'Comet', sex: 'Gelding', breedingTimeline: [] } as unknown as HorseRecord,
     ],

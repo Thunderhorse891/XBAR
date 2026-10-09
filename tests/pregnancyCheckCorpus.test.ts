@@ -55,7 +55,7 @@ const corpus: Array<[string, TimelineEvent, PregnancyCheckOutcome]> = [
   ['confirmed not pregnant', check('Recheck', 'Confirmed not pregnant'), 'negative'],
   ['confirmed not in foal', check('Recheck', 'Confirmed not in foal'), 'negative'],
   ['confirmed she is not pregnant', check('Recheck', 'Confirmed she is not pregnant'), 'negative'],
-  ['bare confirmed is in foal', check('Pregnancy check', 'Confirmed'), 'positive'],
+  ['bare confirmed does not state a pregnancy outcome', check('Pregnancy check', 'Confirmed'), 'unknown'],
   ['confirmed, single pregnancy', check('Ultrasound', 'Confirmed single pregnancy, negative for twins'), 'positive'],
   ['single pregnancy, negative for twins', check('Ultrasound', 'Single pregnancy, negative for twins'), 'positive'],
   // Plain results.

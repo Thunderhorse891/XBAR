@@ -538,3 +538,119 @@ for (const summary of [
     assert.equal(buildBreedingProgram([mare([event(10, 'Pregnancy check', summary), cover()])], now).inFoal, 0);
   });
 }
+
+for (const result of [
+  'Confirmed pregnancy loss',
+  'Confirmed miscarriage',
+  'Confirmed abortion',
+  'Confirmed fetal demise',
+]) {
+  test(`PR350 review: a confirmed reproductive loss is not a positive pregnancy: ${result}`, () => {
+    const loss = event(10, 'Pregnancy check', result, { recordType: 'pregnancy-check' });
+    const program = buildBreedingProgram([mare([loss, check(290, 'in-foal'), cover()])], now);
+    assert.equal(program.mares[0]!.status, 'open');
+    assert.equal(program.inFoal, 0);
+    assert.equal(program.projectedProgramValue, 0);
+  });
+}
+
+for (const prior of ['in-foal', 'open']) {
+  test(`PR350 review: an appointment confirmation cannot erase an observed ${prior} result`, () => {
+    const appointment = event(1, 'Pregnancy check', 'Appointment confirmed');
+    const program = buildBreedingProgram([mare([appointment, check(290, prior), cover()])], now);
+    assert.equal(program.mares[0]!.status, prior === 'in-foal' ? 'near-term' : 'open');
+  });
+}
+
+test('PR350 review: bare confirmation does not assert a pregnancy result or value', () => {
+  for (const actual of [
+    event(10, 'Pregnancy check', 'Confirmed'),
+    event(10, 'Pregnancy check', '', { recordType: 'pregnancy-check', result: 'confirmed' }),
+  ]) {
+    const program = buildBreedingProgram([mare([actual, cover()])], now);
+    assert.equal(program.mares[0]!.status, 'bred-awaiting-check');
+    assert.equal(program.inFoal, 0);
+    assert.equal(program.projectedProgramValue, 0);
+  }
+});
+
+for (const summary of [
+  'Miscarriage not confirmed',
+  'No miscarriage confirmed',
+  'Possible pregnancy loss confirmed',
+  'Pregnancy loss may have occurred',
+  'Fetal demise suspected',
+]) {
+  test(`PR350 review: uncertain or negated loss is not a definite result: ${summary}`, () => {
+    assert.equal(
+      buildMareBreedingState(mare([event(10, 'Pregnancy check', summary), cover()]), now).status,
+      'bred-awaiting-check',
+    );
+  });
+}
+
+for (const summary of [
+  'Confirmed in foal; no evidence of pregnancy loss',
+  'Confirmed in foal; no miscarriage',
+  'Confirmed in foal; no abortion',
+  'Confirmed pregnant; no evidence of fetal demise',
+]) {
+  test(`PR350 review: explicitly excluded loss does not negate a positive result: ${summary}`, () => {
+    assert.equal(
+      buildMareBreedingState(mare([event(10, 'Pregnancy check', summary), cover()]), now).status,
+      'near-term',
+    );
+  });
+}
+
+for (const [summary, expected] of [
+  ['Confirmed in foal. Follow-up appointment confirmed', 'near-term'],
+  ['Open today. Next appointment confirmed', 'open'],
+  ['Appointment confirmed; ultrasound completed, mare open', 'open'],
+  ['Appointment confirmed and scan positive', 'near-term'],
+] as const) {
+  test(`PR350 review: a real clinical result is not hidden by appointment context: ${summary}`, () => {
+    assert.equal(buildMareBreedingState(mare([event(10, 'Pregnancy check', summary), cover()]), now).status, expected);
+  });
+}
+
+test('PR350 review: an aborted scan is not an aborted pregnancy or birth', () => {
+  const administrative = event(1, 'Ultrasound aborted', 'Appointment ended before the scan.');
+  assert.equal(buildMareBreedingState(mare([administrative, check(290, 'in-foal'), cover()]), now).status, 'near-term');
+});
+
+for (const summary of ['Confirmed in foal. Mare weight loss noted', 'Confirmed in foal. Mare weight loss confirmed']) {
+  test(`PR350 review: unrelated weight loss is not a recorded reproductive loss: ${summary}`, () => {
+    assert.equal(
+      buildMareBreedingState(mare([event(10, 'Pregnancy check', summary), cover()]), now).status,
+      'near-term',
+    );
+  });
+}
+
+for (const summary of [
+  'Appointment confirmed. Scan inconclusive',
+  'Appointment confirmed. Recheck unclear',
+  'Appointment confirmed. Unable to interpret scan',
+]) {
+  test(`PR350 review: administrative context does not hide an uncertain clinical result: ${summary}`, () => {
+    assert.equal(
+      buildBreedingProgram([mare([event(1, 'Pregnancy check', summary), check(290, 'in-foal'), cover()])], now).inFoal,
+      0,
+    );
+  });
+}
+
+for (const summary of [
+  'Discussed miscarriage risk',
+  'Monitor for fetal demise',
+  'Risk of pregnancy loss',
+  'Miscarriage',
+]) {
+  test(`PR350 review: loss discussion without an observed diagnosis remains unknown: ${summary}`, () => {
+    assert.equal(
+      buildMareBreedingState(mare([event(10, 'Pregnancy check', summary), cover()]), now).status,
+      'bred-awaiting-check',
+    );
+  });
+}

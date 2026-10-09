@@ -103,10 +103,12 @@ function isOccurredBreedingEvent(event: TimelineEvent): boolean {
   const eventTitleClause = title.split(OUTCOME_CLAUSE_BREAK)[0] ?? '';
   // Explicit occurrence/cancellation controls outrank outcomes. Otherwise a
   // chosen legacy outcome outranks contextual due dates and follow-up plans.
-  if (/\b(?:cancelled|canceled)\b/.test(eventTitleClause)) return false;
+  if (/\b(?:cancelled|canceled)\b|\b(?:procedure|scan|check|ultrasound)\s+(?:was\s+)?aborted\b/.test(eventTitleClause))
+    return false;
   const result = breedingDetails(event)?.result;
   if (typeof result === 'string' && /^(?:in-foal|open|pending|live|loss|unknown)$/.test(result.trim().toLowerCase()))
     return true;
+  if (isAdministrativeOnlyBreedingNote(event)) return false;
   const planning =
     /\b(?:cancelled|canceled|scheduled|planned|planning|booking|booked|expecting|expected|due|prepare|preparation|prep)\b|\b(?:buy|purchase|order)\b.*\bfoaling kit\b/;
   if (
@@ -135,7 +137,7 @@ function resolveRecordType(event: TimelineEvent): BreedingRecordDetails['recordT
 
   // A birth event wins outright ("in foal" is deliberately NOT a birth).
   const birthWording =
-    /\bfoaled\b|\bgave birth\b|\b(?:foal|colt|filly)\s+(?:was\s+)?(?:born|delivered)\b|\b(?:delivered|delivery of)\s+(?:(?:a|the|live|healthy|dead|stillborn)\s+)*(?:foal|colt|filly)\b|\bstillborn\b|\b(?:mare\s+)?aborted\b/;
+    /\bfoaled\b|\bgave birth\b|\b(?:foal|colt|filly)\s+(?:was\s+)?(?:born|delivered)\b|\b(?:delivered|delivery of)\s+(?:(?:a|the|live|healthy|dead|stillborn)\s+)*(?:foal|colt|filly)\b|\bstillborn\b|\b(?:mare|pregnancy|foal|fetus|foetus)\s+(?:was\s+)?aborted\b|\baborted\s+(?:pregnancy|foal|fetus|foetus)\b/;
   const birthClauses = text.split(OUTCOME_CLAUSE_BREAK).filter((clause) => birthWording.test(clause));
   if (
     birthClauses.length &&
@@ -250,7 +252,7 @@ function eventsAfter(events: TimelineEvent[], boundary: TimelineEvent): Timeline
  *   - a positive word that is negated in its own clause does not count:
  *     "no heartbeat", "not yet confirmed", "mare is not pregnant";
  *   - "confirmed" asserts whatever follows it in its clause: "confirmed open"
- *     and "confirmed not pregnant" are open; bare "confirmed" is in foal;
+ *     and "confirmed not pregnant" are open; bare "confirmed" stays unknown;
  *   - "negative for twins" is not a negative;
  *   - positive and negative wording in the same entry is unknown.
  *
@@ -261,9 +263,9 @@ function eventsAfter(events: TimelineEvent[], boundary: TimelineEvent): Timeline
 export type PregnancyCheckOutcome = 'positive' | 'negative' | 'unknown';
 
 const NEGATIVE_WORDING =
-  /\bopen\b|\bnegative\b(?!\s+for\s+twins?)|not.?in.?foal|not.?pregnant|\bbarren\b|\bempty\b|\bslipped\b|\blost\b|\bresorb/;
+  /\bopen\b|\bnegative\b(?!\s+for\s+twins?)|not.?in.?foal|not.?pregnant|\bbarren\b|\bempty\b|\b(?:pregnancy|foaling|embryonic|fetal) loss\b|\bmiscarri(?:age|ed)\b|\babortion\b|\b(?:pregnancy|foal|fetus|foetus)\s+(?:was\s+)?aborted\b|\baborted\s+(?:pregnancy|foal|fetus|foetus)\b|\bfetal (?:demise|death)\b|\bslipped\b|\blost\b|\bresorbed\b/;
 const POSITIVE_WORDING =
-  /in.?foal|\bpositive\b|\bconfirmed\b|\bpregnant\b|\bheartbeat\s+(?:seen|detected|present|confirmed)\b|\b(?:strong|present|detected)\s+heartbeat\b|\bsingle(?:ton)?\s+(?:pregnancy|embryo|vesicle)/g;
+  /in.?foal|\bpositive\b|\bpregnant\b|\bheartbeat\s+(?:seen|detected|present|confirmed)\b|\b(?:strong|present|detected)\s+heartbeat\b|\bsingle(?:ton)?\s+(?:pregnancy|embryo|vesicle)/g;
 const CLAUSE_NEGATION = /\b(?:no|not|without|never|isn'?t|wasn'?t|yet to be)\b/;
 // Free-text questions and uncertainty cannot establish a pregnancy outcome.
 const UNCERTAIN_WORDING =
@@ -276,6 +278,30 @@ const PREGNANCY_EVIDENCE_WORDING =
   /in.?foal|\b(?:open|barren|empty|pregnant|positive|negative|confirmed|heartbeat|embryo|vesicle|fetus|foetus|viability|nonviable|miscarriage|miscarried|abortion|abort|aborted|fetal|demise|death|dead|loss|slipped|lost|resorb\w*)\b|\bsingle(?:ton)?\s+pregnancy\b|\bpregnancy\s+(?:loss|viability|outcome|status)\b|\b(?:outcome|result|status)\b/;
 const FOALING_EVIDENCE_WORDING =
   /\b(?:foaled|born|stillborn|aborted|abort|slipped|loss|dead|died|alive|live|living|delivered|delivery|outcome|result|status)\b|gave birth|healthy\s+(?:foal|colt|filly)|(?:foal|colt|filly).*\b(?:healthy|doing well)\b/;
+
+function isAdministrativeOnlyBreedingNote(event: TimelineEvent): boolean {
+  const rawResult = breedingDetails(event)?.result;
+  if (typeof rawResult === 'string' && rawResult.trim()) return false;
+  const text = `${event.title}. ${event.summary}`.toLowerCase();
+  const appointment = /\b(?:appointment|booking)\b/;
+  if (!appointment.test(text)) return false;
+  // An administrative confirmation is not a newly observed check. Actual
+  // clinical results in the same entry must still participate in chronology.
+  const explicitClinical =
+    /in.?foal|\bpregnant\b|\b(?:mare|uterus|scan|check|result)\s+(?:(?:is|was)\s+)?(?:open|positive|negative)\b|\b(?:pregnancy loss|miscarriage|abortion|fetal demise|fetal death)\b/;
+  const uncertainClinical = (clause: string) =>
+    /\b(?:scan|check|recheck|ultrasound|pregnancy|result)\b/.test(clause) &&
+    /\b(?:inconclusive|unclear|unknown|unconfirmed|unreadable|uninterpretable|indeterminate|equivocal|unable|performed|completed|conducted)\b/.test(
+      clause,
+    );
+  return !text
+    .split(OUTCOME_CLAUSE_BREAK)
+    .some((clause) =>
+      appointment.test(clause)
+        ? explicitClinical.test(clause) || uncertainClinical(clause)
+        : PREGNANCY_EVIDENCE_WORDING.test(clause) || FOALING_EVIDENCE_WORDING.test(clause) || uncertainClinical(clause),
+    );
+}
 
 function outcomeClauses(text: string, kind: 'pregnancy-check' | 'foaling'): string {
   const relevant = kind === 'foaling' ? FOALING_EVIDENCE_WORDING : PREGNANCY_EVIDENCE_WORDING;
@@ -317,6 +343,18 @@ export function pregnancyCheckOutcome(event: TimelineEvent): PregnancyCheckOutco
     )
   )
     return 'unknown';
+  const reproductiveLoss =
+    /\b(?:pregnancy|foaling|embryonic|fetal) loss\b|\bmiscarriage\b|\babortion\b|\bfetal (?:demise|death)\b/;
+  const ambiguousLoss = text.split(OUTCOME_CLAUSE_BREAK).some((clause) => {
+    const loss = clause.match(reproductiveLoss);
+    if (!loss || CLAUSE_NEGATION.test(clause.slice(0, loss.index))) return false;
+    // A risk discussion or a bare topic is not an observed diagnosis.
+    return (
+      !/\b(?:confirmed|diagnosed|observed|documented|recorded|occurred|suffered|experienced)\b/.test(clause) ||
+      /\b(?:risk|discussed|discuss|monitor|watch|prevent|prevention|if)\b/.test(clause)
+    );
+  });
+  if (ambiguousLoss) return 'unknown';
   // Negating an open/negative description does not prove the opposite either.
   const negative = [...text.matchAll(new RegExp(NEGATIVE_WORDING.source, 'g'))].some((match) => {
     if (/^not/.test(match[0])) return true;
@@ -328,15 +366,6 @@ export function pregnancyCheckOutcome(event: TimelineEvent): PregnancyCheckOutco
     const before = text.slice(0, match.index).split(CLAUSE_BREAK).pop() ?? '';
     const after = text.slice((match.index ?? 0) + match[0].length).split(CLAUSE_BREAK)[0] ?? '';
     if (CLAUSE_NEGATION.test(before) || CLAUSE_NEGATION.test(after)) continue;
-    // "Confirmed" is not a result on its own; it confirms what follows it. Only
-    // with nothing negating or negative after it in its clause is it in foal.
-    if (match[0] === 'confirmed') {
-      if (
-        NEGATIVE_WORDING.test(after) ||
-        /\b(?:appointment|booking|visit|schedule|time|date)\b/.test(`${before} ${after}`)
-      )
-        continue;
-    }
     positive = true;
   }
   if (negative && positive) return 'unknown';
