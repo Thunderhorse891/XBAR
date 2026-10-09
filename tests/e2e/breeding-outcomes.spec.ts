@@ -38,8 +38,16 @@ async function seedHorse(page: Page, name = 'Test Prospect') {
   const drawer = page.getByRole('dialog', { name: 'Add Horse' });
   await expect(drawer).toBeVisible();
   await drawer.getByPlaceholder('e.g. THR Copper Canyon').fill(name);
-  await drawer.getByLabel('Sex', { exact: true }).selectOption('Mare');
-  await drawer.getByLabel('Segment', { exact: true }).selectOption('Broodmare');
+  // Pick wraps its select and option text in a label; match the stable label
+  // prefix like the existing record-workflows fixture, then verify each value.
+  const sex = drawer.getByLabel('Sex');
+  const segment = drawer.getByLabel('Segment');
+  await expect(sex).toHaveCount(1);
+  await expect(segment).toHaveCount(1);
+  await sex.selectOption('Mare');
+  await segment.selectOption('Broodmare');
+  await expect(sex).toHaveValue('Mare');
+  await expect(segment).toHaveValue('Broodmare');
   await drawer.getByRole('button', { name: 'Add Horse' }).click();
   await expect(page).toHaveURL(/\/horses\//, { timeout: 15_000 });
 }
