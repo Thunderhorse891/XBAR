@@ -97,7 +97,9 @@ test('foaling requires an outcome and displays explicit unknown honestly', async
   await drawer.getByLabel('Title', { exact: true }).fill('Foaling recorded');
   await drawer.getByLabel('Notes', { exact: true }).fill('Outcome remains unconfirmed.');
   await drawer.getByRole('button', { name: 'Save Breeding Record', exact: true }).click();
-  await expect(page.getByText(/Choose the foaling outcome/)).toBeVisible();
+  const outcomeError = drawer.getByRole('alert');
+  await expect(outcomeError).toBeVisible();
+  await expect(outcomeError).toContainText('Choose the foaling outcome');
   await drawer.getByRole('combobox', { name: 'Foaling outcome', exact: true }).selectOption('unknown');
   await drawer.getByRole('button', { name: 'Save Breeding Record', exact: true }).click();
   await expect(drawer).not.toBeVisible();
