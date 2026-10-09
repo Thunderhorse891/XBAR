@@ -813,3 +813,33 @@ for (const title of ['Foal born alive', 'Confirmed pregnancy']) {
     });
   }
 }
+
+for (const summary of [
+  'Routine visit; ultrasound scheduled next week',
+  'Not performed',
+  'Not performed due to weather',
+  'Routine visit; pregnancy check cancelled',
+  'Routine visit; scan did not occur',
+]) {
+  for (const result of ['in-foal', 'open']) {
+    test(`Legacy check occurrence: ${summary} preserves prior ${result}`, () => {
+      assert.equal(
+        buildMareBreedingState(mare([event(1, 'Pregnancy check', summary), check(290, result), cover()]), now).status,
+        result === 'in-foal' ? 'near-term' : 'open',
+      );
+    });
+  }
+}
+for (const [summary, expected] of [
+  ['Confirmed in foal; ultrasound scheduled next week', 'near-term'],
+  ['Scan negative; ultrasound scheduled next week', 'open'],
+  ['Ultrasound performed; result inconclusive; recheck scheduled next week', 'bred-awaiting-check'],
+  ['Scan inconclusive; repeat scheduled next week', 'bred-awaiting-check'],
+]) {
+  test(`Legacy check occurrence: actual result remains evidence: ${summary}`, () => {
+    assert.equal(
+      buildMareBreedingState(mare([event(1, 'Pregnancy check', summary), check(290, 'in-foal'), cover()]), now).status,
+      expected,
+    );
+  });
+}

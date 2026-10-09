@@ -125,8 +125,21 @@ function isOccurredBreedingEvent(event: TimelineEvent): boolean {
   if (/\b(?:foaled|bred|covered|inseminated|mated)\b|\bgave birth\b/.test(eventTitleClause)) return true;
   if (pregnancyCheckOutcome({ ...event, summary: '', status: undefined, details: undefined }) !== 'unknown')
     return true;
-  const firstClause = `${event.summary ?? ''}`.toLowerCase().split(/[.;\n]/)[0] ?? '';
-  return !planning.test(firstClause);
+  const summaryClauses = `${event.summary ?? ''}`.toLowerCase().split(OUTCOME_CLAUSE_BREAK);
+  const unobserved = (clause: string) => planning.test(clause) || NON_OCCURRENCE_WORDING.test(clause);
+  // A generic check label supplies no outcome itself. Inspect every summary
+  // clause for a plan/non-occurrence, but keep a separate observed result.
+  const observedResult = summaryClauses.some(
+    (clause) =>
+      !unobserved(clause) &&
+      (pregnancyCheckOutcome({ ...event, title: '', summary: clause, status: undefined, details: undefined }) !==
+        'unknown' ||
+        (/\b(?:scan|check|recheck|ultrasound|result)\b/.test(clause) &&
+          /\b(?:performed|completed|conducted|inconclusive|unclear|unknown|unconfirmed|unreadable|uninterpretable|indeterminate|equivocal|unable)\b/.test(
+            clause,
+          ))),
+  );
+  return observedResult || !summaryClauses.some(unobserved);
 }
 
 // Pre-structured records used these concise event labels. Match whole titles,
@@ -145,16 +158,14 @@ function legacyBreedingLabel(event: TimelineEvent): string {
   return typeof event.title === 'string' ? event.title.trim().toLowerCase().replace(/\s+/g, ' ') : '';
 }
 
+const NON_OCCURRENCE_WORDING =
+  /\bnot (?:performed|completed|complete|done|occurred)|\b(?:did not|didn't) (?:occur|happen)|\bno (?:birth|foaling|cover|breeding|insemination|scan|check|ultrasound) (?:occurred|happened|was performed)\b/;
+
 function deniesLegacyOccurrence(event: TimelineEvent): boolean {
   const label = legacyBreedingLabel(event);
   if (!LEGACY_COVER_LABELS.has(label) && !LEGACY_FOALING_LABELS.has(label)) return false;
   const summary = `${event.summary ?? ''}`.toLowerCase();
-  if (
-    /\bnot (?:performed|completed|complete|done|occurred)|\b(?:did not|didn't) (?:occur|happen)|\bno (?:birth|foaling|cover|breeding|insemination) (?:occurred|happened|was performed)\b/.test(
-      summary,
-    )
-  )
-    return true;
+  if (NON_OCCURRENCE_WORDING.test(summary)) return true;
   // A legacy "Aborted" label can describe a stopped procedure, not a loss.
   const firstClause = summary.split(OUTCOME_CLAUSE_BREAK)[0] ?? '';
   return label === 'aborted' && /\b(?:procedure|scan|ultrasound)\b.*\baborted\b/.test(firstClause);
