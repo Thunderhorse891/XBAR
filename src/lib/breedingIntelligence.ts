@@ -100,18 +100,23 @@ function isOccurredBreedingEvent(event: TimelineEvent): boolean {
   const status = `${event.status ?? ''}`.toLowerCase();
   if (/\b(?:planned|scheduled|cancelled|canceled|pending|booked)\b/.test(status)) return false;
   const title = `${event.title ?? ''}`.toLowerCase();
-  const planning =
-    /\b(?:cancelled|canceled|scheduled|planned|planning|booking|booked|expecting|expected|due|prepare|preparation|prep)\b|\b(?:buy|purchase|order)\b.*\bfoaling kit\b/;
-  if (
-    planning.test(title) ||
-    /\b(?:will|to be|going to)\s+(?:be\s+)?(?:bred|covered|served|inseminated|mated|foaled)\b/.test(title)
-  )
-    return false;
-  // A specific recorded outcome outranks future follow-up instructions in notes.
+  const eventTitleClause = title.split(OUTCOME_CLAUSE_BREAK)[0] ?? '';
+  // Explicit occurrence/cancellation controls outrank outcomes. Otherwise a
+  // chosen legacy outcome outranks contextual due dates and follow-up plans.
+  if (/\b(?:cancelled|canceled)\b/.test(eventTitleClause)) return false;
   const result = breedingDetails(event)?.result;
   if (typeof result === 'string' && /^(?:in-foal|open|pending|live|loss|unknown)$/.test(result.trim().toLowerCase()))
     return true;
-  if (/\b(?:foaled|bred|covered|inseminated|mated)\b|\bgave birth\b/.test(title)) return true;
+  const planning =
+    /\b(?:cancelled|canceled|scheduled|planned|planning|booking|booked|expecting|expected|due|prepare|preparation|prep)\b|\b(?:buy|purchase|order)\b.*\bfoaling kit\b/;
+  if (
+    planning.test(eventTitleClause) ||
+    /\b(?:will|to be|going to)\s+(?:be\s+)?(?:bred|covered|served|inseminated|mated|foaled)\b/.test(eventTitleClause)
+  )
+    return false;
+  if (/\b(?:foaled|bred|covered|inseminated|mated)\b|\bgave birth\b/.test(eventTitleClause)) return true;
+  if (pregnancyCheckOutcome({ ...event, summary: '', status: undefined, details: undefined }) !== 'unknown')
+    return true;
   const firstClause = `${event.summary ?? ''}`.toLowerCase().split(/[.;\n]/)[0] ?? '';
   return !planning.test(firstClause);
 }
@@ -126,17 +131,19 @@ function resolveRecordType(event: TimelineEvent): BreedingRecordDetails['recordT
   if (event.category !== 'Breeding' || !isOccurredBreedingEvent(event)) return undefined;
   const explicit = breedingDetails(event)?.recordType;
   if (explicit) return explicit;
-  const text = `${event.title} ${event.summary}`.toLowerCase();
+  const text = `${event.title}. ${event.summary}`.toLowerCase();
 
   // A birth event wins outright ("in foal" is deliberately NOT a birth).
-  const hasBirth =
-    /\bfoaled\b|\bgave birth\b|\b(?:foal|colt|filly)\s+(?:was\s+)?(?:born|delivered)\b|\b(?:delivered|delivery of)\s+(?:(?:a|the|live|healthy|dead|stillborn)\s+)*(?:foal|colt|filly)\b|\bstillborn\b|\b(?:mare\s+)?aborted\b/.test(
-      text,
-    );
+  const birthWording =
+    /\bfoaled\b|\bgave birth\b|\b(?:foal|colt|filly)\s+(?:was\s+)?(?:born|delivered)\b|\b(?:delivered|delivery of)\s+(?:(?:a|the|live|healthy|dead|stillborn)\s+)*(?:foal|colt|filly)\b|\bstillborn\b|\b(?:mare\s+)?aborted\b/;
+  const birthClauses = text.split(OUTCOME_CLAUSE_BREAK).filter((clause) => birthWording.test(clause));
   if (
-    hasBirth &&
-    !/\b(?:not|never|hasn't|hadn't)\s+(?:yet\s+)?(?:foaled|given birth|born)|\bno birth\b/.test(text) &&
-    !UNCERTAIN_WORDING.test(text)
+    birthClauses.length &&
+    birthClauses.every(
+      (clause) =>
+        !/\b(?:not|never|hasn't|hadn't)\s+(?:yet\s+)?(?:foaled|given birth|born)|\bno birth\b/.test(clause) &&
+        !UNCERTAIN_WORDING.test(clause),
+    )
   )
     return 'foaling';
 
@@ -160,7 +167,7 @@ function resolveRecordType(event: TimelineEvent): BreedingRecordDetails['recordT
 // event status, and the free-text title/summary of an in-app entry.
 function outcomeText(event: TimelineEvent): string {
   const details = breedingDetails(event);
-  return `${details?.result ?? ''} ${event.status ?? ''} ${event.title} ${event.summary}`.toLowerCase();
+  return `${details?.result ?? ''}. ${event.status ?? ''}. ${event.title}. ${event.summary}`.toLowerCase();
 }
 
 // Standard equine prenatal cadence (days after cover/insemination). EHV-1
@@ -256,12 +263,34 @@ export type PregnancyCheckOutcome = 'positive' | 'negative' | 'unknown';
 const NEGATIVE_WORDING =
   /\bopen\b|\bnegative\b(?!\s+for\s+twins?)|not.?in.?foal|not.?pregnant|\bbarren\b|\bempty\b|\bslipped\b|\blost\b|\bresorb/;
 const POSITIVE_WORDING =
-  /in.?foal|\bpositive\b|\bconfirmed\b|\bpregnant\b|heartbeat|\bsingle(?:ton)?\s+(?:pregnancy|embryo|vesicle)/g;
+  /in.?foal|\bpositive\b|\bconfirmed\b|\bpregnant\b|\bheartbeat\s+(?:seen|detected|present|confirmed)\b|\b(?:strong|present|detected)\s+heartbeat\b|\bsingle(?:ton)?\s+(?:pregnancy|embryo|vesicle)/g;
 const CLAUSE_NEGATION = /\b(?:no|not|without|never|isn'?t|wasn'?t|yet to be)\b/;
 // Free-text questions and uncertainty cannot establish a pregnancy outcome.
 const UNCERTAIN_WORDING =
-  /\?|\b(?:possibly|possible|maybe|likely|probably|probable|presumed|apparently|apparent|tentative|anticipated|anticipating|may be|might|could|should|would|not sure|uncertain|unclear|unconfirmed|inconclusive|equivocal|suspected|suspect|cannot|can't|could not|unable to|indeterminate)\b/;
+  /\?|\b(?:possibly|possible|maybe|likely|probably|probable|presumed|apparently|apparent|tentative|anticipated|anticipating|may be|may have|may not|might|could|should|would|not sure|not yet confirmed|not confirmed|unknown|uncertain|unclear|unconfirmed|inconclusive|unreadable|uninterpretable|equivocal|suspected|suspects|suspect|cannot|can't|could not|unable to|indeterminate)\b/;
 const CLAUSE_BREAK = /[.;,:!?\n\u2013\u2014]|\s-\s/;
+
+// Keep questions inside their clause so uncertainty is not lost when splitting.
+const OUTCOME_CLAUSE_BREAK = /[.;,:\n\u2013\u2014]|\s-\s/;
+const PREGNANCY_EVIDENCE_WORDING =
+  /in.?foal|\b(?:open|barren|empty|pregnant|positive|negative|confirmed|heartbeat|embryo|vesicle|fetus|foetus|viability|nonviable|miscarriage|miscarried|abortion|abort|aborted|fetal|demise|death|dead|loss|slipped|lost|resorb\w*)\b|\bsingle(?:ton)?\s+pregnancy\b|\bpregnancy\s+(?:loss|viability|outcome|status)\b|\b(?:outcome|result|status)\b/;
+const FOALING_EVIDENCE_WORDING =
+  /\b(?:foaled|born|stillborn|aborted|abort|slipped|loss|dead|died|alive|live|living|delivered|delivery|outcome|result|status)\b|gave birth|healthy\s+(?:foal|colt|filly)|(?:foal|colt|filly).*\b(?:healthy|doing well)\b/;
+
+function outcomeClauses(text: string, kind: 'pregnancy-check' | 'foaling'): string {
+  const relevant = kind === 'foaling' ? FOALING_EVIDENCE_WORDING : PREGNANCY_EVIDENCE_WORDING;
+  // Keep uncertain/contradictory prose by default, including standalone
+  // qualifiers. Discard only clearly contextual follow-up advice that says
+  // nothing about the reproductive outcome or viability.
+  const followUpAdvice =
+    /\b(?:recheck|rebreed|rebreeding|repeat|monitor|monitored|monitoring|treatment|treatments|veterinary care|vet care|extra feed|feeding|review cycle|review the cycle|follow[- ]?up|vaccination|vaccines?)\b/;
+  const uncertainResult =
+    /\b(?:inconclusive|equivocal|indeterminate|unclear|unconfirmed|unknown|uncertain|unreadable|uninterpretable)\b/;
+  return text
+    .split(OUTCOME_CLAUSE_BREAK)
+    .filter((clause) => relevant.test(clause) || uncertainResult.test(clause) || !followUpAdvice.test(clause))
+    .join('. ');
+}
 
 export function pregnancyCheckOutcome(event: TimelineEvent): PregnancyCheckOutcome {
   // Restored backups can carry any JSON here; only a string is a result.
@@ -272,7 +301,10 @@ export function pregnancyCheckOutcome(event: TimelineEvent): PregnancyCheckOutco
   if (structured === 'pending') return 'unknown';
 
   // An OCR or imported result is still the most specific text there is.
-  const text = (structured || `${event.status ?? ''} ${event.title} ${event.summary}`).toLowerCase();
+  const text = outcomeClauses(
+    (structured || `${event.status ?? ''}. ${event.title}. ${event.summary}`).toLowerCase(),
+    'pregnancy-check',
+  );
   if (
     UNCERTAIN_WORDING.test(text) ||
     /\b(?:result|positive|negative|pregnancy|foal)\b[^.;]*\b(?:expected|anticipated)\b/.test(text)
@@ -358,7 +390,7 @@ export function foalingOutcome(event: TimelineEvent): 'live' | 'loss' | 'unknown
   const raw = breedingDetails(event)?.result;
   const structured = typeof raw === 'string' ? raw.trim().toLowerCase() : '';
   if (structured === 'live' || structured === 'loss' || structured === 'unknown') return structured;
-  const text = structured || outcomeText(event);
+  const text = outcomeClauses(structured || outcomeText(event), 'foaling');
   if (UNCERTAIN_WORDING.test(text) || /\bunknown\b|unconfirmed|not recorded|pending/.test(text)) return 'unknown';
   let loss = false;
   let live = false;

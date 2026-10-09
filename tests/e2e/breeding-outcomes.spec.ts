@@ -194,6 +194,10 @@ test('completed future events are refused and a missing check result cannot be i
   await page.getByRole('combobox', { name: 'Check result', exact: true }).selectOption('in-foal');
   await page.getByRole('button', { name: 'Save breeding event', exact: true }).click();
   await expect(page.getByText(/cannot be future-dated/).first()).toBeVisible();
+  await page.getByRole('combobox', { name: 'Entry type', exact: true }).selectOption('note');
+  await page.getByRole('button', { name: 'Save breeding event', exact: true }).click();
+  await expect(page.getByText(/completed note cannot be future-dated/).first()).toBeVisible();
+  await expect(page.getByLabel('Breeding note', { exact: true })).toHaveValue('Confirmed in foal.');
   await page.goto('/app/breeding-foaling');
   const row = page.getByRole('row').filter({ hasText: 'Validation Mare' });
   await expect(row).toContainText('No occurred records');

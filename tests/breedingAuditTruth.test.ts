@@ -401,3 +401,140 @@ test('RP03: precisely timed birth outcomes remain ordered rather than becoming a
     assert.equal(buildMareBreedingState(mare([...births, cover()]), now).status, 'foaled-loss');
   }
 });
+
+for (const title of [
+  'Confirmed in foal — expected June',
+  'Positive check; foaling due June',
+  'Confirmed in foal; recheck planned',
+]) {
+  test(`PR350 review: structured outcome outranks contextual title ${title}`, () => {
+    const positive = event(10, title, '', { recordType: 'pregnancy-check', result: 'in-foal' });
+    assert.equal(buildMareBreedingState(mare([positive, cover()]), now).status, 'near-term');
+  });
+}
+
+for (const summary of ['Mare should be monitored', 'Possibly needs treatment.', 'Foal may need veterinary care.']) {
+  test(`PR350 review: a definite birth survives unrelated follow-up ${summary}`, () => {
+    const birth = event(1, 'Foaled a live filly', summary);
+    assert.equal(buildMareBreedingState(mare([birth, check(290, 'in-foal'), cover()]), now).status, 'foaled-live');
+  });
+}
+
+for (const summary of [
+  'Confirmed in foal. Recheck may be needed in 30 days',
+  'Confirmed in foal. Repeat pregnancy check may be needed.',
+  'Confirmed open. Mare should be monitored.',
+  'Confirmed not pregnant. Rebreeding could be scheduled',
+]) {
+  test(`PR350 review: definite free-text check survives follow-up ${summary}`, () => {
+    const actual = event(10, 'Pregnancy check', summary);
+    assert.equal(
+      buildMareBreedingState(mare([actual, cover()]), now).status,
+      summary.startsWith('Confirmed open') || summary.startsWith('Confirmed not pregnant') ? 'open' : 'near-term',
+    );
+  });
+}
+
+test('PR350 review: a future completed note is rejected while planned notes remain supported', async () => {
+  const { validateBreedingDate } = await import('../src/lib/breedingEntry.js');
+  assert.match(validateBreedingDate('2026-10-10', 'note', now, 'completed') ?? '', /future-dated/);
+  assert.equal(validateBreedingDate('2026-10-10', 'note', now, 'planned'), null);
+});
+
+for (const summary of [
+  'Confirmed in foal. Possible pregnancy loss',
+  'Confirmed pregnant. Vet suspects pregnancy loss',
+  'Confirmed pregnant; viability unknown',
+  'Confirmed in foal. Cannot confirm viability',
+  'Confirmed in foal. No viable embryo',
+  'Confirmed pregnant, but possibly open',
+]) {
+  test(`PR350 review: relevant uncertain outcomes still remove confirmation: ${summary}`, () => {
+    const program = buildBreedingProgram(
+      [mare([event(10, 'Pregnancy check', summary), check(290, 'in-foal'), cover()])],
+      now,
+    );
+    assert.equal(program.inFoal, 0);
+    assert.equal(program.projectedProgramValue, 0);
+  });
+}
+
+for (const summary of [
+  'Foaled. Foal may be alive',
+  'Foaled a filly. Outcome unknown',
+  'Foaled a live filly. Foal might have died',
+  'Live foal seen; stillborn also reported',
+]) {
+  test(`PR350 review: uncertain foal outcome stays unconfirmed: ${summary}`, () => {
+    const birth = event(1, 'Foaling record', summary, { recordType: 'foaling' });
+    assert.equal(buildMareBreedingState(mare([birth, cover()]), now).status, 'foaling-unknown');
+  });
+}
+
+test('PR350 review: a heartbeat check without a heartbeat result cannot establish pregnancy', () => {
+  const plannedCheck = event(1, 'Pregnancy check', 'Heartbeat check completed; awaiting result');
+  assert.equal(buildBreedingProgram([mare([plannedCheck, cover()])], now).inFoal, 0);
+});
+
+for (const summary of ['Confirmed in foal on May 5', 'Confirmed in foal May 5']) {
+  test(`PR350 review: the month May is not modal uncertainty: ${summary}`, () => {
+    assert.equal(
+      buildMareBreedingState(mare([event(10, 'Pregnancy check', summary), cover()]), now).status,
+      'near-term',
+    );
+  });
+}
+
+test('PR350 review: a recorded birth in May remains a birth', () => {
+  assert.equal(
+    buildMareBreedingState(mare([event(1, 'Foaled a live filly in May'), cover()]), now).status,
+    'foaled-live',
+  );
+});
+
+for (const summary of ['May be pregnant', 'May have lost pregnancy', 'May not be pregnant']) {
+  test(`PR350 review: modal May remains uncertain: ${summary}`, () => {
+    assert.equal(buildBreedingProgram([mare([event(10, 'Pregnancy check', summary), cover()])], now).inFoal, 0);
+  });
+}
+
+for (const summary of [
+  'Confirmed positive. Possible miscarriage',
+  'Confirmed in foal. Possible abortion',
+  'Confirmed in foal. Suspected fetal demise',
+  'In foal, possibly',
+  'Pregnant, probably',
+  'Possibly: in foal',
+  'Confirmed in foal. Not yet confirmed',
+  'Confirmed positive. Recheck for possible miscarriage',
+]) {
+  test(`PR350 review: outcome qualifiers and loss concerns stay relevant: ${summary}`, () => {
+    assert.equal(buildBreedingProgram([mare([event(10, 'Pregnancy check', summary), cover()])], now).inFoal, 0);
+  });
+}
+
+for (const [title, summary, result] of [
+  ['Confirmed in foal — expected June', '', undefined],
+  ['Confirmed in foal', 'Recheck planned tomorrow', undefined],
+  ['Confirmed in foal; recheck cancelled', '', 'in-foal'],
+] as const) {
+  test(`PR350 review: observed title and contextual plans remain distinct: ${title} ${summary}`, () => {
+    const actual = event(10, title, summary, result ? { recordType: 'pregnancy-check', result } : undefined);
+    assert.equal(buildMareBreedingState(mare([actual, cover()]), now).status, 'near-term');
+  });
+}
+
+test('PR350 review: a birth title can also contain a scheduled follow-up clause', () => {
+  const actual = event(1, 'Foaled a live filly; vet check scheduled');
+  assert.equal(buildMareBreedingState(mare([actual, cover()]), now).status, 'foaled-live');
+});
+
+for (const summary of [
+  'Confirmed in foal. Recheck inconclusive',
+  'Confirmed positive. Repeat scan was indeterminate',
+  'Confirmed in foal. Follow-up unclear',
+]) {
+  test(`PR350 review: an uncertain follow-up result is still outcome evidence: ${summary}`, () => {
+    assert.equal(buildBreedingProgram([mare([event(10, 'Pregnancy check', summary), cover()])], now).inFoal, 0);
+  });
+}

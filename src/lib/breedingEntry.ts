@@ -90,7 +90,7 @@ export function validateBreedingDate(
   if (!date) return 'Enter a valid breeding record date.';
   const instant = breedingInstant(value);
   const future = instant !== undefined ? instant > now.getTime() : date.toISOString().slice(0, 10) > localIsoDate(now);
-  if (kind !== 'note' && completionState !== 'planned' && completionState !== 'cancelled' && future)
-    return 'An occurred breeding, check, or foaling cannot be future-dated. Mark future events as planned.';
+  if (completionState !== 'planned' && completionState !== 'cancelled' && future)
+    return `A completed ${kind === 'note' ? 'note' : 'breeding event'} cannot be future-dated. Mark future events as planned.`;
   return null;
 }

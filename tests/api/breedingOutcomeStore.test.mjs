@@ -97,6 +97,7 @@ test('invalid kind, occurrence, date, outcome and missing target are rejected be
     event({ date: '2062-01-01' }),
     event({ kind: 'foaling', result: 'live', date: '2062-01-01' }),
     event({ kind: 'breeding', result: undefined, date: '2062-01-01' }),
+    event({ kind: 'note', result: undefined, date: '2062-01-01' }),
     event({ completionState: 'planned', date: '2026-02-30' }),
     event({ title: '' }),
     event({ body: '' }),
