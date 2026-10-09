@@ -50,14 +50,20 @@ async function seedHorse(page: Page, name = 'Test Prospect') {
   await expect(segment).toHaveValue('Broodmare');
   await drawer.getByRole('button', { name: 'Add Horse' }).click();
   await expect(page).toHaveURL(/\/horses\//, { timeout: 15_000 });
+  const horseId = new URL(page.url()).pathname.split('/').at(-1)!;
+  expect(horseId).toBeTruthy();
+  return horseId;
 }
 
 test('entry, overview and reload share chronological breeding outcomes', async ({ page }) => {
   await page.clock.setFixedTime(new Date('2026-10-05T12:00:00Z'));
   await bootstrapWorkspace(page);
-  await seedHorse(page, 'Chronology Mare');
+  const horseId = await seedHorse(page, 'Chronology Mare');
   await page.goto('/app/breeding');
-  await page.getByRole('combobox', { name: 'Horse', exact: true }).selectOption({ label: 'Chronology Mare' });
+  // The store normalizes registered-name casing; select the created record ID.
+  const horseSelect = page.getByRole('combobox', { name: 'Horse', exact: true });
+  await horseSelect.selectOption(horseId);
+  await expect(horseSelect).toHaveValue(horseId);
   const save = async (kind: string, result: string, date: string, title: string) => {
     await page.getByRole('combobox', { name: 'Entry type', exact: true }).selectOption(kind);
     await page.getByRole('combobox', { name: 'Occurrence', exact: true }).selectOption('completed');
