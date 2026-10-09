@@ -31,6 +31,7 @@ import { createOwnershipRecord, normalizeOwnershipRecord } from '@/store/xbarSto
 import { getCapabilityDeniedMessage, hasRoleCapability } from '@/lib/permissions';
 import type {
   AuditEvent,
+  BreedingRecordDetails,
   BuyerRoomEvent,
   DocumentFact,
   DocumentRecord,
@@ -46,6 +47,7 @@ import type {
   SharedAccessSnapshot,
   SharedListingRecord,
   SubscriptionProfile,
+  TimelineEvent,
   WorkspaceAccessRole,
   WorkspaceInvitationRecord,
   WorkspaceMemberRecord,
@@ -2292,6 +2294,8 @@ export function createTimelineEvent(params: {
   category: 'Medical' | 'Breeding' | 'Ownership' | 'Sales' | 'Operations';
   status?: string;
   severity?: 'low' | 'medium' | 'high';
+  details?: BreedingRecordDetails;
+  completionState?: TimelineEvent['completionState'];
 }) {
   return {
     id: createId('event'),
@@ -2302,6 +2306,8 @@ export function createTimelineEvent(params: {
     category: params.category,
     status: params.status,
     severity: params.severity,
+    ...(params.details ? { details: params.details } : {}),
+    ...(params.completionState ? { completionState: params.completionState } : {}),
   } as const;
 }
 

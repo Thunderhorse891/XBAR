@@ -229,17 +229,30 @@ export interface MedicalRecordDetails {
 }
 
 export interface BreedingRecordDetails {
-  recordType: 'breeding' | 'pregnancy-check' | 'foaling' | 'weaning' | 'contract';
+  // 'note' is a breeding note the person said is not a cover, check or
+  // foaling, so its wording is never read as one.
+  recordType: 'breeding' | 'pregnancy-check' | 'foaling' | 'weaning' | 'contract' | 'note';
   mateName?: string;
   method?: 'live-cover' | 'ai-fresh' | 'ai-frozen' | 'embryo-transfer';
   result?: string;
   dueDate?: string;
   documentId?: string;
+  /** Explicitly reviewed contract evidence, linked to one cover, never inferred from a birth. */
+  liveFoalGuarantee?: {
+    breedingEventId: string;
+    counterparty: string;
+    terms: string;
+    coverage: 'included' | 'conditional' | 'excluded';
+    conditionsReview: 'unreviewed' | 'satisfied' | 'not-satisfied';
+    reviewedBy?: string;
+    reviewedOn?: string;
+    claimDeadline?: string;
+  };
 }
 
 export interface TimelineEvent {
   /** Absent on legacy records: completion is unconfirmed. */
-  completionState?: 'planned' | 'completed';
+  completionState?: 'planned' | 'completed' | 'cancelled';
   id: string;
   date: string;
   title: string;

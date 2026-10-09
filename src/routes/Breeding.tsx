@@ -9,11 +9,18 @@ import { MetricCard, Panel, Pill } from '@/components/app-ui';
 import { requestFeatureUpgrade } from '@/store/useUpgradeStore';
 import { buildBreedingRevenueProfile, emptyBreedingEconomics } from '@/lib/breedingRevenue';
 import { buildBreedingProgram, type MareStatus } from '@/lib/breedingIntelligence';
-import { formatCompactCurrency, formatDateLabel } from '@/lib/format';
+import {
+  BREEDING_COMPLETION_STATES,
+  BREEDING_ENTRY_KINDS,
+  FOALING_RESULTS,
+  PREGNANCY_RESULTS,
+} from '@/lib/breedingEntry';
+import { formatCompactCurrency, formatDateLabel, localIsoDate } from '@/lib/format';
 import { breedingRevenueGate } from '@/lib/subscriptionGates';
 import { useCloudStore } from '@/store/useCloudStore';
 import { useUiStore } from '@/store/useUiStore';
 import { useCurrentRoleCapability, useXbarStore } from '@/store/useXbarStore';
+import { useDayKey } from '@/hooks/useDayKey';
 import { useEffectiveSubscription } from '@/hooks/useOwnerPreview';
 import { canPresentPurchaseFlow } from '@/lib/nativePlatform';
 
@@ -52,7 +59,14 @@ export default function Breeding() {
   });
   const [eventTitle, setEventTitle] = useState('Breeding milestone');
   const [eventBody, setEventBody] = useState('');
-  const [eventDate, setEventDate] = useState(new Date().toISOString().slice(0, 10));
+  // The person's own calendar day, not UTC's: an evening entry in Chicago
+  // otherwise defaulted to tomorrow.
+  const [eventDate, setEventDate] = useState(localIsoDate());
+  // What the entry is, and a check's result, are chosen -- never read out of
+  // the note (audit F07). No default: a guessed type is the defect.
+  const [eventKind, setEventKind] = useState('');
+  const [eventResult, setEventResult] = useState('');
+  const [eventCompletionState, setEventCompletionState] = useState('');
   const [eventError, setEventError] = useState('');
   const [milestoneQuery, setMilestoneQuery] = useState('');
   const [pendingDelete, setPendingDelete] = useState<{ horseId: string; eventId: string; horseName: string } | null>(
@@ -61,7 +75,13 @@ export default function Breeding() {
   const addEventFormRef = useRef<HTMLDivElement | null>(null);
   const milestoneCount = breedingHorses.reduce((sum, horse) => sum + horse.breedingTimeline.length, 0);
   const blockedHorses = breedingHorses.filter((horse) => horse.readiness.packetStatus !== 'Ready');
-  const program = useMemo(() => buildBreedingProgram(horses), [horses]);
+  const dayKey = useDayKey();
+  const program = useMemo(
+    () => buildBreedingProgram(horses),
+    // Refresh forecasts and recorded contract dates when the local day changes.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [horses, dayKey],
+  );
   const programEdge = program.overdueCheckCount > 0 ? 'rose' : program.nearTerm > 0 ? 'amber' : 'blue';
   const [menuState, setMenuState] = useState<{ horseId: string; x: number; y: number } | null>(null);
   const menuHorse = breedingHorses.find((horse) => horse.id === menuState?.horseId);
@@ -128,9 +148,9 @@ export default function Breeding() {
           tone="blue"
         />
         <MetricCard
-          label="Live milestones"
+          label="Breeding entries"
           value={`${milestoneCount}`}
-          detail="Timeline entries currently supporting the program"
+          detail="Recorded events, plans and notes in the program"
           tone="blue"
         />
         <MetricCard
@@ -144,7 +164,7 @@ export default function Breeding() {
       <Panel
         eyebrow="Breeding intelligence"
         title="Foaling forecast & program value"
-        description="Gestation, pregnancy checks, and live-foal guarantees computed from each mare's breeding timeline. Every mare carries her next action."
+        description="Gestation estimates and pregnancy-check timing from recorded breeding evidence. Guarantee labels reflect recorded terms and review needs; they do not establish coverage or entitlement."
         edge={programEdge}
       >
         {program.maresTracked ? (
@@ -165,6 +185,8 @@ export default function Breeding() {
                   'near-term': 'amber',
                   'foaled-live': 'blue',
                   'foaled-loss': 'rose',
+                  'foaling-unknown': 'amber',
+                  'pregnancy-unknown': 'amber',
                   'not-breeding': 'slate',
                 };
                 return (
@@ -193,30 +215,27 @@ export default function Breeding() {
                         {mareState.overdueCheckpoints.length ? (
                           <Pill tone="rose">{mareState.overdueCheckpoints.length} overdue</Pill>
                         ) : null}
-                        {mareState.guarantee === 'rebreed-owed' ? (
-                          <Pill tone="rose">rebreed owed</Pill>
-                        ) : mareState.guarantee === 'covered' ? (
-                          <Pill tone="blue">LFG covered</Pill>
-                        ) : null}
+                        <Pill tone="slate">{mareState.guaranteeLabel}</Pill>
                         <Pill tone={tone[mareState.status]}>{mareState.statusLabel}</Pill>
                       </div>
                     </div>
                     <div className="inline-metrics">
                       {mareState.expectedFoalingDate ? (
                         <span>
-                          Due {formatDateLabel(mareState.expectedFoalingDate)}
+                          Estimated foaling {formatDateLabel(mareState.expectedFoalingDate)}
+                          {mareState.status === 'bred-awaiting-check' ? ' if pregnant' : ''}
                           {typeof mareState.daysToFoaling === 'number' ? ` (${mareState.daysToFoaling}d)` : ''}
                         </span>
                       ) : null}
                       {mareState.foalingWindowStart && mareState.foalingWindowEnd ? (
                         <span>
-                          Window {formatDateLabel(mareState.foalingWindowStart)} –{' '}
+                          Estimated window {formatDateLabel(mareState.foalingWindowStart)} –{' '}
                           {formatDateLabel(mareState.foalingWindowEnd)}
                         </span>
                       ) : null}
                       {mareState.nextCheckpoint ? <span>Next: {mareState.nextCheckpoint.label}</span> : null}
                       {mareState.projectedFoalValue ? (
-                        <span>Foal value {formatCompactCurrency(mareState.projectedFoalValue)}</span>
+                        <span>Entered foal projection {formatCompactCurrency(mareState.projectedFoalValue)}</span>
                       ) : null}
                     </div>
                   </div>
@@ -228,7 +247,7 @@ export default function Breeding() {
           <EmptyState
             compact
             title="No mares in the breeding cycle yet"
-            description="Log a breeding event on a mare and XBAR forecasts her foaling window, schedules the pregnancy checks, and tracks the live-foal guarantee."
+            description="Record a completed breeding on a mare to estimate her foaling window and pregnancy-check timing. Plans and cancelled events stay on file without confirming pregnancy."
           />
         )}
       </Panel>
@@ -312,7 +331,9 @@ export default function Breeding() {
                         id: event.id,
                         date: formatDateLabel(event.date),
                         title: `${horse.name} | ${event.title}`,
-                        description: event.summary,
+                        description: event.completionState
+                          ? `${BREEDING_COMPLETION_STATES.find((option) => option.value === event.completionState)?.label ?? 'Occurrence unconfirmed'}: ${event.summary}`
+                          : event.summary,
                         onActivate: () => navigate(`/horses/${horse.id}`),
                         action: (
                           <div className="inline-actions">
@@ -498,6 +519,67 @@ export default function Breeding() {
                 disabled={!canManageBreeding}
               />
             </label>
+            <label className="field-stack">
+              <span className="field-label">Entry type</span>
+              <select
+                className="field-input"
+                value={eventKind}
+                onChange={(event) => {
+                  setEventKind(event.target.value);
+                  setEventResult('');
+                  setEventError('');
+                }}
+                disabled={!canManageBreeding}
+              >
+                <option value="">Choose…</option>
+                {BREEDING_ENTRY_KINDS.map((kind) => (
+                  <option key={kind.value} value={kind.value}>
+                    {kind.label}
+                  </option>
+                ))}
+              </select>
+            </label>
+            <label className="field-stack">
+              <span className="field-label">Occurrence</span>
+              <select
+                className="field-input"
+                value={eventCompletionState}
+                onChange={(event) => {
+                  setEventCompletionState(event.target.value);
+                  setEventResult('');
+                  setEventError('');
+                }}
+                disabled={!canManageBreeding}
+              >
+                <option value="">Choose…</option>
+                {BREEDING_COMPLETION_STATES.map((option) => (
+                  <option key={option.value} value={option.value}>
+                    {option.label}
+                  </option>
+                ))}
+              </select>
+            </label>
+            {eventCompletionState === 'completed' && (eventKind === 'pregnancy-check' || eventKind === 'foaling') ? (
+              <label className="field-stack">
+                <span className="field-label">{eventKind === 'foaling' ? 'Foaling outcome' : 'Check result'}</span>
+                <select
+                  className="field-input"
+                  value={eventResult}
+                  onChange={(event) => {
+                    setEventResult(event.target.value);
+                    setEventError('');
+                  }}
+                  disabled={!canManageBreeding}
+                >
+                  <option value="">Choose…</option>
+                  {(eventKind === 'foaling' ? FOALING_RESULTS : PREGNANCY_RESULTS).map((result) => (
+                    <option key={result.value} value={result.value}>
+                      {result.label}
+                    </option>
+                  ))}
+                </select>
+              </label>
+            ) : null}
             <label className="field-stack field-stack--wide">
               <span className="field-label">Milestone</span>
               <input
@@ -540,6 +622,9 @@ export default function Breeding() {
                   body: eventBody,
                   author: currentUserName,
                   date: eventDate,
+                  kind: eventKind,
+                  result: eventResult,
+                  completionState: eventCompletionState,
                 });
 
                 pushToast({
@@ -550,7 +635,10 @@ export default function Breeding() {
 
                 if (result.ok) {
                   setEventBody('');
+                  setEventResult('');
                   setEventError('');
+                } else {
+                  setEventError(result.message);
                 }
               }}
               disabled={!canManageBreeding}

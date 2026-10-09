@@ -61,7 +61,7 @@ test('a freshly bred mare awaits confirmation', () => {
     now,
   );
   assert.equal(state.status, 'bred-awaiting-check');
-  assert.equal(state.guarantee, 'covered');
+  assert.equal(state.guarantee, 'not-recorded');
   assert.equal(state.mateName, 'Thunder');
   assert.match(state.actionLabel, /Confirm pregnancy/);
 });
@@ -86,7 +86,7 @@ test('a confirmed mare inside 30 days of foaling is near-term with kit prep acti
   const state = buildMareBreedingState(
     mare('m1', 'Glory', [
       breedingEvent(320, 'breeding', { mateName: 'Thunder' }),
-      breedingEvent(290, 'pregnancy-check', { result: 'confirmed' }),
+      breedingEvent(290, 'pregnancy-check', { result: 'in-foal' }),
     ]),
     now,
   );
@@ -105,21 +105,22 @@ test('overdue critical checkpoints take action priority', () => {
   assert.match(state.actionLabel, /overdue/);
 });
 
-test('live foaling fulfils the guarantee; a loss owes a rebreed', () => {
+test('foaling outcomes cannot fulfil a guarantee or create a rebreed obligation without a contract', () => {
   const live = buildMareBreedingState(
     mare('m1', 'Glory', [breedingEvent(345, 'breeding'), breedingEvent(2, 'foaling', { result: 'live filly' })]),
     now,
   );
   assert.equal(live.status, 'foaled-live');
-  assert.equal(live.guarantee, 'fulfilled');
+  assert.equal(live.guarantee, 'not-recorded');
 
   const loss = buildMareBreedingState(
     mare('m2', 'Star', [breedingEvent(345, 'breeding'), breedingEvent(2, 'foaling', { result: 'foaling loss' })]),
     now,
   );
   assert.equal(loss.status, 'foaled-loss');
-  assert.equal(loss.guarantee, 'rebreed-owed');
-  assert.match(loss.actionLabel, /rebreed/i);
+  assert.equal(loss.guarantee, 'not-recorded');
+  assert.doesNotMatch(loss.actionLabel, /rebreed/i);
+  assert.match(loss.actionLabel, /Review the recorded loss/);
 });
 
 test('a negative pregnancy check returns the mare to open', () => {
@@ -128,7 +129,7 @@ test('a negative pregnancy check returns the mare to open', () => {
     now,
   );
   assert.equal(state.status, 'open');
-  assert.equal(state.guarantee, 'none');
+  assert.equal(state.guarantee, 'not-recorded');
 });
 
 test('geldings and stallions are excluded as carriers', () => {
@@ -175,7 +176,7 @@ test('a live foaling note that mentions "still" is not read as a loss', () => {
     now,
   );
   assert.equal(state.status, 'foaled-live');
-  assert.equal(state.guarantee, 'fulfilled');
+  assert.equal(state.guarantee, 'not-recorded');
 });
 
 test('a free-text positive pregnancy check confirms the mare in foal', () => {
@@ -253,12 +254,13 @@ test('program rollup aggregates carriers, value, and overdue checks', () => {
         [breedingEvent(320, 'breeding'), breedingEvent(290, 'pregnancy-check', { result: 'in foal' })],
         { studFee: 3000, bookedMares: 1, breedingCosts: 4000, mareProductionValue: 0, foalProjectedValue: 18000 },
       ),
-      mare(
-        'm2',
-        'Star',
-        [breedingEvent(60, 'breeding'), breedingEvent(30, 'pregnancy-check', { result: 'confirmed' })],
-        { studFee: 3000, bookedMares: 1, breedingCosts: 4000, mareProductionValue: 0, foalProjectedValue: 12000 },
-      ),
+      mare('m2', 'Star', [breedingEvent(60, 'breeding'), breedingEvent(30, 'pregnancy-check', { result: 'in-foal' })], {
+        studFee: 3000,
+        bookedMares: 1,
+        breedingCosts: 4000,
+        mareProductionValue: 0,
+        foalProjectedValue: 12000,
+      }),
       mare('m3', 'Dusty', [breedingEvent(35, 'breeding')]), // no checks → overdue criticals
       { id: 'g1', name: 'Comet', sex: 'Gelding', breedingTimeline: [] } as unknown as HorseRecord,
     ],

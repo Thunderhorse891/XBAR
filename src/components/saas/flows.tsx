@@ -5,6 +5,12 @@ import { useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { FileUp } from 'lucide-react';
 import { ActionButton, SlideOverDrawer } from '@/components/saas';
+import {
+  BREEDING_COMPLETION_STATES,
+  BREEDING_ENTRY_KINDS,
+  FOALING_RESULTS,
+  PREGNANCY_RESULTS,
+} from '@/lib/breedingEntry';
 import { buyerFollowUpPath } from '@/lib/buyerRoutes';
 import { localIsoDate } from '@/lib/format';
 import { useUiStore, type QuickCreateRequest } from '@/store/useUiStore';
@@ -522,6 +528,9 @@ export function GlobalCreateDrawer() {
       body: notes,
       author: actor,
       date: (f.date ?? '').trim() || todayIso(),
+      kind: f.kind ?? '',
+      result: f.result ?? '',
+      completionState: f.completionState ?? '',
     });
     return finish(
       result.ok ? { ok: true, message: 'Breeding record added to the horse timeline' } : result,
@@ -723,6 +732,29 @@ export function GlobalCreateDrawer() {
       body = (
         <div className="xs-form">
           {horsePicker}
+          <Pick
+            label="Entry type"
+            value={f.kind ?? ''}
+            onChange={(kind) => setF((cur) => ({ ...cur, kind, result: '' }))}
+            options={[{ value: '', label: 'Choose…' }, ...BREEDING_ENTRY_KINDS]}
+          />
+          <Pick
+            label="Occurrence"
+            value={f.completionState ?? ''}
+            onChange={(completionState) => setF((cur) => ({ ...cur, completionState, result: '' }))}
+            options={[{ value: '', label: 'Choose…' }, ...BREEDING_COMPLETION_STATES]}
+          />
+          {f.completionState === 'completed' && (f.kind === 'pregnancy-check' || f.kind === 'foaling') ? (
+            <Pick
+              label={f.kind === 'foaling' ? 'Foaling outcome' : 'Check result'}
+              value={f.result ?? ''}
+              onChange={set('result')}
+              options={[
+                { value: '', label: 'Choose…' },
+                ...(f.kind === 'foaling' ? FOALING_RESULTS : PREGNANCY_RESULTS),
+              ]}
+            />
+          ) : null}
           <Text label="Title" placeholder="e.g. Preg check — 45 days" value={f.title ?? ''} onChange={set('title')} />
           <Text label="Date" type="date" value={f.date ?? todayIso()} onChange={set('date')} />
           <Area
