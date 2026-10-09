@@ -654,3 +654,86 @@ for (const summary of [
     );
   });
 }
+
+for (const [title, summary, expected] of [
+  ['Foaling loss', 'Loss recorded', 'foaled-loss'],
+  ['Parturition complete', 'Live filly', 'foaled-live'],
+  ['Aborted', 'Mare recheck recommended', 'foaled-loss'],
+  ['Foaling', 'Live filly', 'foaled-live'],
+  ['Parturition', '', 'foaling-unknown'],
+  ['Born', 'Live foal', 'foaled-live'],
+] as const) {
+  test(`Legacy label corpus: observed ${title} remains a birth record without a default-live outcome`, () => {
+    const program = buildBreedingProgram([mare([event(1, title, summary), check(290, 'in-foal'), cover()])], now);
+    assert.equal(program.mares[0]!.status, expected);
+    assert.equal(program.inFoal, 0);
+    assert.equal(program.projectedProgramValue, 0);
+    assert.equal(program.mares[0]!.guarantee, 'not-recorded');
+  });
+}
+
+for (const title of ['AI', 'Cover', 'Stud service', 'Insemination', 'Artificial insemination']) {
+  test(`Legacy label corpus: completed ${title} retains its cover date and forecast`, () => {
+    const actualCover = event(320, title, 'Completed');
+    const state = buildMareBreedingState(mare([check(290, 'in-foal'), actualCover]), now);
+    assert.equal(state.status, 'near-term');
+    assert.equal(state.bredOn, actualCover.date);
+    assert.ok(state.expectedFoalingDate);
+  });
+}
+
+for (const title of ['AI', 'Cover', 'Stud service', 'Foaling', 'Foaling loss', 'Aborted']) {
+  for (const completionState of ['planned', 'cancelled']) {
+    test(`Legacy label corpus: explicit ${completionState} ${title} cannot change a recorded pregnancy`, () => {
+      const plan = event(1, title, '', undefined, completionState);
+      assert.equal(buildMareBreedingState(mare([plan, check(290, 'in-foal'), cover()]), now).status, 'near-term');
+    });
+  }
+}
+
+for (const [title, summary] of [
+  ['Foaling prep', 'Buy a kit'],
+  ['Foaling plan', 'Prepare for birth'],
+  ['Foaling kit delivered', 'Supplies received'],
+  ['Semen delivered', 'AI supplies received'],
+  ['AI supplies', 'Inventory complete'],
+  ['AI planned', 'Next month'],
+  ['Stud service booking', 'Appointment confirmed'],
+  ['Ultrasound aborted', 'Procedure stopped'],
+  ['Possible parturition', 'Outcome not recorded'],
+]) {
+  test(`Legacy label corpus: ${title} is not an exact occurred-event label`, () => {
+    assert.equal(
+      buildMareBreedingState(mare([event(1, title, summary), check(290, 'in-foal'), cover()]), now).status,
+      'near-term',
+    );
+  });
+}
+
+test('Legacy label corpus: missing imported title cannot crash clear summary evidence', () => {
+  const actual = { ...event(10, '', 'Confirmed in foal'), title: undefined } as unknown as TimelineEvent;
+  assert.equal(buildMareBreedingState(mare([actual, cover()]), now).status, 'near-term');
+});
+
+for (const [title, summary] of [
+  ['AI', 'Not performed'],
+  ['Cover', 'Did not occur'],
+  ['Foaling', 'No birth occurred'],
+  ['Aborted', 'Ultrasound procedure aborted, no pregnancy loss'],
+]) {
+  test(`Legacy label corpus: explicit occurrence denial blocks ${title}: ${summary}`, () => {
+    assert.equal(
+      buildMareBreedingState(mare([event(1, title, summary), check(290, 'in-foal'), cover()]), now).status,
+      'near-term',
+    );
+  });
+}
+
+for (const title of ['Live cover — cancelled', 'Foaled a live filly; cancelled']) {
+  test(`Legacy label corpus: a standalone cancellation marker excludes ${title}`, () => {
+    assert.equal(
+      buildMareBreedingState(mare([event(1, title), check(290, 'in-foal'), cover()]), now).status,
+      'near-term',
+    );
+  });
+}

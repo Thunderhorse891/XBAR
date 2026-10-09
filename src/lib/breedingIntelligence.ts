@@ -101,6 +101,12 @@ function isOccurredBreedingEvent(event: TimelineEvent): boolean {
   if (/\b(?:planned|scheduled|cancelled|canceled|pending|booked)\b/.test(status)) return false;
   const title = `${event.title ?? ''}`.toLowerCase();
   const eventTitleClause = title.split(OUTCOME_CLAUSE_BREAK)[0] ?? '';
+  if (
+    title
+      .split(OUTCOME_CLAUSE_BREAK)
+      .some((clause) => /^\s*(?:cancelled|canceled|not performed|did not occur)\s*$/.test(clause))
+  )
+    return false;
   // Explicit occurrence/cancellation controls outrank outcomes. Otherwise a
   // chosen legacy outcome outranks contextual due dates and follow-up plans.
   if (/\b(?:cancelled|canceled)\b|\b(?:procedure|scan|check|ultrasound)\s+(?:was\s+)?aborted\b/.test(eventTitleClause))
@@ -108,7 +114,7 @@ function isOccurredBreedingEvent(event: TimelineEvent): boolean {
   const result = breedingDetails(event)?.result;
   if (typeof result === 'string' && /^(?:in-foal|open|pending|live|loss|unknown)$/.test(result.trim().toLowerCase()))
     return true;
-  if (isAdministrativeOnlyBreedingNote(event)) return false;
+  if (isAdministrativeOnlyBreedingNote(event) || deniesLegacyOccurrence(event)) return false;
   const planning =
     /\b(?:cancelled|canceled|scheduled|planned|planning|booking|booked|expecting|expected|due|prepare|preparation|prep)\b|\b(?:buy|purchase|order)\b.*\bfoaling kit\b/;
   if (
@@ -123,6 +129,37 @@ function isOccurredBreedingEvent(event: TimelineEvent): boolean {
   return !planning.test(firstClause);
 }
 
+// Pre-structured records used these concise event labels. Match whole titles,
+// never mentions in preparation, supply, appointment or procedure notes.
+const LEGACY_COVER_LABELS = new Set(['ai', 'cover', 'stud service', 'insemination', 'artificial insemination']);
+const LEGACY_FOALING_LABELS = new Set([
+  'foaling',
+  'foaling loss',
+  'parturition',
+  'parturition complete',
+  'born',
+  'aborted',
+]);
+
+function legacyBreedingLabel(event: TimelineEvent): string {
+  return typeof event.title === 'string' ? event.title.trim().toLowerCase().replace(/\s+/g, ' ') : '';
+}
+
+function deniesLegacyOccurrence(event: TimelineEvent): boolean {
+  const label = legacyBreedingLabel(event);
+  if (!LEGACY_COVER_LABELS.has(label) && !LEGACY_FOALING_LABELS.has(label)) return false;
+  const summary = `${event.summary ?? ''}`.toLowerCase();
+  if (
+    /\bnot (?:performed|completed|complete|done|occurred)|\b(?:did not|didn't) (?:occur|happen)|\bno (?:birth|foaling|cover|breeding|insemination) (?:occurred|happened|was performed)\b/.test(
+      summary,
+    )
+  )
+    return true;
+  // A legacy "Aborted" label can describe a stopped procedure, not a loss.
+  const firstClause = summary.split(OUTCOME_CLAUSE_BREAK)[0] ?? '';
+  return label === 'aborted' && /\b(?:procedure|scan|ultrasound)\b.*\baborted\b/.test(firstClause);
+}
+
 // Events logged through the in-app "Add breeding event" flow carry no
 // structured details payload — only a free-text title/summary. Infer the
 // record type from that text so user-entered milestones are first-class
@@ -133,6 +170,9 @@ function resolveRecordType(event: TimelineEvent): BreedingRecordDetails['recordT
   if (event.category !== 'Breeding' || !isOccurredBreedingEvent(event)) return undefined;
   const explicit = breedingDetails(event)?.recordType;
   if (explicit) return explicit;
+  const label = legacyBreedingLabel(event);
+  if (LEGACY_COVER_LABELS.has(label)) return 'breeding';
+  if (LEGACY_FOALING_LABELS.has(label)) return 'foaling';
   const text = `${event.title}. ${event.summary}`.toLowerCase();
 
   // A birth event wins outright ("in foal" is deliberately NOT a birth).
