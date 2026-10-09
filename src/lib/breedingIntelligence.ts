@@ -305,7 +305,7 @@ export type PregnancyCheckOutcome = 'positive' | 'negative' | 'unknown';
 const NEGATIVE_WORDING =
   /\bopen\b|\bnegative\b(?!\s+for\s+twins?)|not.?in.?foal|not.?pregnant|\bbarren\b|\bempty\b|\b(?:pregnancy|foaling|embryonic|fetal) loss\b|\bmiscarri(?:age|ed)\b|\babortion\b|\b(?:pregnancy|foal|fetus|foetus)\s+(?:was\s+)?aborted\b|\baborted\s+(?:pregnancy|foal|fetus|foetus)\b|\bfetal (?:demise|death)\b|\bslipped\b|\blost\b|\bresorbed\b/;
 const POSITIVE_WORDING =
-  /in.?foal|\bpositive\b|\bpregnant\b|\bheartbeat\s+(?:seen|detected|present|confirmed)\b|\b(?:strong|present|detected)\s+heartbeat\b|\bsingle(?:ton)?\s+(?:pregnancy|embryo|vesicle)/g;
+  /in.?foal|\bpositive\b|\bpregnant\b|\bpregnancy\s+(?:(?:is|was)\s+)?confirmed\b|\bconfirmed\s+(?:a\s+)?pregnancy\b|\b(?:ultrasound|scan|sonogram)\s+confirms\s+pregnancy\b|\bheartbeat\s+(?:seen|detected|present|confirmed)\b|\b(?:strong|present|detected)\s+heartbeat\b|\bsingle(?:ton)?\s+(?:pregnancy|embryo|vesicle)/g;
 const CLAUSE_NEGATION = /\b(?:no|not|without|never|isn'?t|wasn'?t|yet to be)\b/;
 // Free-text questions and uncertainty cannot establish a pregnancy outcome.
 const UNCERTAIN_WORDING =
@@ -406,6 +406,8 @@ export function pregnancyCheckOutcome(event: TimelineEvent): PregnancyCheckOutco
     const before = text.slice(0, match.index).split(CLAUSE_BREAK).pop() ?? '';
     const after = text.slice((match.index ?? 0) + match[0].length).split(CLAUSE_BREAK)[0] ?? '';
     if (CLAUSE_NEGATION.test(before) || CLAUSE_NEGATION.test(after)) continue;
+    // Confirming pregnancy loss is not confirming a carrying pregnancy.
+    if (/\bpregnancy\b/.test(match[0]) && NEGATIVE_WORDING.test(`${match[0]}${after}`)) continue;
     positive = true;
   }
   if (negative && positive) return 'unknown';
@@ -472,7 +474,7 @@ export function foalingOutcome(event: TimelineEvent): 'live' | 'loss' | 'unknown
   }
   // A healthy mare is not evidence about the foal; negated statements are not positive outcomes.
   const liveWording =
-    /\b(?:live|living|healthy)\s+(?:foal|colt|filly)\b|\b(?:foal|colt|filly)\s+(?:is\s+|was\s+|still\s+)?(?:alive|healthy|doing well)\b/g;
+    /\b(?:live|living|healthy)\s+(?:foal|colt|filly)\b|\b(?:foal|colt|filly)\s+(?:(?:is|was|still)\s+)?(?:(?:born|delivered)\s+)?(?:alive|healthy|doing well)\b/g;
   for (const match of text.matchAll(liveWording)) {
     const before = text.slice(0, match.index).split(CLAUSE_BREAK).pop() ?? '';
     const after = text.slice((match.index ?? 0) + match[0].length).split(CLAUSE_BREAK)[0] ?? '';

@@ -737,3 +737,79 @@ for (const title of ['Live cover — cancelled', 'Foaled a live filly; cancelled
     );
   });
 }
+
+for (const summary of [
+  'Pregnancy confirmed by ultrasound',
+  'Confirmed pregnancy',
+  'Ultrasound confirms pregnancy',
+  'Pregnancy was confirmed by scan',
+]) {
+  test(`Explicit clinical phrase corpus: ${summary}`, () => {
+    assert.equal(
+      buildMareBreedingState(mare([event(10, 'Pregnancy check', summary), cover()]), now).status,
+      'near-term',
+    );
+  });
+}
+
+for (const summary of [
+  'Pregnancy not confirmed',
+  'Pregnancy may be confirmed',
+  'Possible pregnancy confirmed',
+  'Pregnancy confirmation pending',
+  'No confirmed pregnancy',
+  'Pregnancy confirmed?',
+]) {
+  test(`Explicit clinical phrase corpus: uncertainty still blocks ${summary}`, () => {
+    assert.equal(
+      buildBreedingProgram([mare([event(10, 'Pregnancy check', summary), check(290, 'in-foal'), cover()])], now).inFoal,
+      0,
+    );
+  });
+}
+
+for (const summary of ['Confirmed pregnancy loss', 'Pregnancy loss confirmed', 'Miscarriage confirmed']) {
+  test(`Explicit clinical phrase corpus: confirmation of loss remains negative: ${summary}`, () => {
+    assert.equal(buildMareBreedingState(mare([event(10, 'Pregnancy check', summary), cover()]), now).status, 'open');
+  });
+}
+
+for (const title of [
+  'Foal born alive',
+  'Colt born healthy',
+  'Filly delivered alive',
+  'Foal was born alive',
+  'Filly was delivered healthy',
+]) {
+  test(`Explicit clinical phrase corpus: ${title} records a live birth`, () => {
+    const program = buildBreedingProgram([mare([event(1, title), check(290, 'in-foal'), cover()])], now);
+    assert.equal(program.mares[0]!.status, 'foaled-live');
+    assert.equal(program.inFoal, 0);
+    assert.equal(program.projectedProgramValue, 0);
+  });
+}
+
+for (const title of [
+  'Foal possibly born alive',
+  'Foal born not alive',
+  'Foal was not born alive',
+  'Filly delivered alive?',
+]) {
+  test(`Explicit clinical phrase corpus: ${title} cannot establish a live outcome`, () => {
+    assert.notEqual(buildMareBreedingState(mare([event(1, title), cover()]), now).status, 'foaled-live');
+  });
+}
+
+for (const title of ['Foal born alive', 'Confirmed pregnancy']) {
+  for (const completionState of ['planned', 'cancelled']) {
+    test(`Explicit clinical phrase corpus: ${completionState} ${title} is not occurred evidence`, () => {
+      assert.equal(
+        buildMareBreedingState(
+          mare([event(1, title, '', undefined, completionState), check(290, 'in-foal'), cover()]),
+          now,
+        ).status,
+        'near-term',
+      );
+    });
+  }
+}

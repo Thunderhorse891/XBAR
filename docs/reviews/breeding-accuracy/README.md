@@ -4,7 +4,7 @@
 
 - Current remote main was read on 2026-10-09: `68cc074a32ff5b9197036ba89ba78c8e0afea7b9`.
 - The read-only production audit identified the same SHA on READY deployment `dpl_6uSZSUFXvSf8haMBXEehkBrmppMm` (checked around 14:21 UTC).
-- Work is isolated from the audit snapshot and other checkouts. This is **fixed locally**, not pushed, merged, deployed, or production-verified.
+- Work is isolated from the audit snapshot and other checkouts. The implementation is submitted in [PR 350](https://github.com/Thunderhorse891/XBAR/pull/350). Release status is established by exact-head checks, review and the accompanying deployment verification report; a local result alone is not a release.
 - The existing breeding work in open PR [302](https://github.com/Thunderhorse891/XBAR/pull/302), head `fc9c350d0e0bed2463d3a0a88dfa9295204b6c51`, was inspected and its bounded implementation/corpus reused. Newer main's care and quick-create changes were preserved. PR 302 itself was not altered or merged.
 - No production/customer records, schema, migrations, billing rules, credential controls, document identity/storage controls or backup implementation were changed. Tests use synthetic in-memory records.
 
@@ -38,9 +38,9 @@ The registered suites cover observed/planned/cancelled entry persistence, all de
 
 ## Verification boundaries
 
-- Focused domain/store and adjacent regression commands are recorded in the accompanying local evidence report; no full `npm test` or held credential/document/byte-backup suite was run.
+- Local focused domain/store and adjacent regression commands are recorded in the accompanying evidence report. Local testing did not run the held credential/document/byte-backup suites. Hosted CI uses the repository's unchanged required workflow and full test command; no held repair was revived or gate disabled.
 - Production `tsc --noEmit`, whole-tree ESLint and whole-tree Prettier checks passed. ESLint reports four existing react-refresh warnings and no errors.
 - Production Vite compiled 2,496 modules. The exact `npm run build` stopped in its existing postbuild tsx IPC startup with `listen EPERM`; the marketing/sample-packet generator was not rerouted.
 - Whole test compilation is blocked by the audit materialization's absent existing `tests/helpers/fakeIndexedDb.ts` referenced by four held suites. That helper and those suites were not changed or run. The breeding browser-test type error found during compilation was corrected.
 - The normal browser configuration could not enumerate sandbox network interfaces. A temporary loopback-only server started successfully, but installed Chromium aborted before any page opened with `socket() failed: Operation not permitted`. A narrowly reviewed escalation produced the same failure. Therefore **none of the seven browser scenarios has a passing local workflow result**.
-- Final-head remote CI, browser verification, authorized publication/merge, production deployment and affected live-flow verification remain release gates. Local results do not establish those stages or veterinary/contractual correctness of entered source data.
+- Hosted CI executed all 206 main browser scenarios, including the seven new breeding scenarios, on an earlier PR head. Every subsequent code change requires its own full CI and independent exact-head review before merge. Production deployment and read-only live-release verification are separate gates, recorded in the release report. Local results do not establish those stages or veterinary/contractual correctness of entered source data.
