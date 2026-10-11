@@ -136,7 +136,14 @@ export default function Login() {
       if (authMode === 'signup') {
         const userId = cloud.session.user?.id || '';
         const guardKey = `xbar-welcome-sent:${userId}`;
-        if (userId && !sessionStorage.getItem(guardKey)) {
+        let welcomeAlreadySent = false;
+        try {
+          welcomeAlreadySent = Boolean(userId && sessionStorage.getItem(guardKey));
+        } catch {
+          // This marker only avoids a redundant request; the server owns
+          // deduplication. Blocked storage must not prevent signup arrival.
+        }
+        if (userId && !welcomeAlreadySent) {
           void cloud.requestWelcomeEmail().then((sent) => {
             if (sent) {
               try {
