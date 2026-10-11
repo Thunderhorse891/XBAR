@@ -88,7 +88,7 @@ export function reportDecisions(report: RanchReport) {
     );
   if (missingOwnership.length)
     actions.push(
-      `Start ownership records for ${reportCount(missingOwnership.length, 'horse')} covering ${reportDollars(missingOwnership.reduce((n, h) => n + h.askPrice, 0))} in asking value. Other sale gates must also clear.`,
+      `Start ownership records for ${reportCount(missingOwnership.length, 'horse')} covering ${reportDollars(missingOwnership.reduce((n, h) => n + h.askPrice, 0))} in ${missingOwnership.some((horse) => horse.askPrice <= 0) ? 'known asking value (partial subtotal)' : 'asking value'}. Other sale gates must also clear.`,
     );
   const transferCount = blocked.filter((h) => h.blockers.some((s) => s.startsWith('Transfer'))).length;
   if (transferCount > 0)
