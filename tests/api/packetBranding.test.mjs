@@ -12,6 +12,7 @@ process.env.SUPABASE_SERVICE_ROLE_KEY = 'synthetic-key';
 register(new URL('./fixtures/billingLoader.mjs', import.meta.url));
 const { __setBillingSupabase } = await import('./fixtures/billingSupabaseStub.mjs');
 const { default: handler } = await import('../../api/sale-packets.js');
+const { default: templateHandler } = await import('../../api/_lib/documents-generate-template.js');
 const { loadHorseContext } = await import('../../api/_lib/horse-context.js');
 const { createSectionedPdf } = await import('../../api/_lib/pdf.js');
 const { buildServerSaleCredential, serverSealCode } = await import('../../api/_lib/sale-credential.js');
@@ -60,7 +61,7 @@ const PROFILE = {
   payload: { packetLogoDataUrl: LOGO, contactPhone: '+1 555 010 0200', website: 'https://silverspur.example' },
 };
 
-function install({ profile = PROFILE, profileError = null, allow = true } = {}) {
+function install({ profile = PROFILE, profileError = null, allow = true, documents = [], readErrors = {} } = {}) {
   const reads = [],
     writes = [],
     uploads = [];
@@ -72,7 +73,8 @@ function install({ profile = PROFILE, profileError = null, allow = true } = {}) 
     workspace_profiles: [profile, { ...PROFILE, workspace_id: OTHER_WORKSPACE, ranch_name: 'Foreign Ranch' }].filter(
       Boolean,
     ),
-    documents: [],
+    documents,
+    document_templates: [],
     ownership_records: [],
     sale_packets: [],
     audit_logs: [],
@@ -120,7 +122,7 @@ function install({ profile = PROFILE, profileError = null, allow = true } = {}) 
         },
         then(resolve, reject) {
           const rows = tables[table].filter((row) => filters.every(([key, value]) => row[key] === value));
-          const error = table === 'workspace_profiles' ? profileError : null;
+          const error = readErrors[table] || (table === 'workspace_profiles' ? profileError : null);
           return Promise.resolve({
             data: values ? null : error ? null : single ? (rows[0] ?? null) : rows,
             error,
@@ -148,7 +150,7 @@ function install({ profile = PROFILE, profileError = null, allow = true } = {}) 
   return { client, reads, writes, uploads };
 }
 let counter = 0;
-async function call(body = {}) {
+async function call(body = {}, endpoint = handler) {
   const req = Readable.from([JSON.stringify({ workspaceId: WORKSPACE, horseId: 'horse-1', ...body })]);
   req.method = 'POST';
   req.url = '/api/sale-packets';
@@ -161,7 +163,7 @@ async function call(body = {}) {
         resolve({ status: this.statusCode, body: JSON.parse(payload) });
       },
     };
-    Promise.resolve(handler(req, res)).catch(reject);
+    Promise.resolve(endpoint(req, res)).catch(reject);
   });
 }
 
@@ -562,4 +564,212 @@ test('an early JPEG end marker cannot evade strict decoding by adding another fi
     }),
     /logo/i,
   );
+});
+
+function healthDocument(id, type, date, overrides = {}) {
+  return {
+    workspace_id: WORKSPACE,
+    horse_id: 'horse-1',
+    document_id: id,
+    document_type: type,
+    title: id,
+    state: 'Ready',
+    extracted_data: type === 'Coggins' ? { testDate: date } : { examDate: date },
+    ...overrides,
+  };
+}
+
+for (const table of ['horses', 'documents', 'ownership_records']) {
+  test(`${table} read errors refuse packets and both template formats before output or persistence`, async () => {
+    for (const [endpoint, body] of [
+      [handler, {}],
+      [templateHandler, { templateId: 'sales-packet', output: 'html' }],
+      [templateHandler, { templateId: 'sales-packet', output: 'pdf' }],
+    ]) {
+      const fixture = install({ readErrors: { [table]: { message: 'synthetic database detail' } } });
+      const result = await call(body, endpoint);
+      assert.equal(result.status, 500, JSON.stringify(result.body));
+      assert.match(result.body.message, /could not be loaded/i);
+      assert.ok(!result.body.message.includes('synthetic database detail'));
+      assert.equal(result.body.html, undefined);
+      assert.equal(result.body.seal, undefined);
+      assert.equal(fixture.uploads.length, 0);
+      assert.equal(fixture.writes.length, 0);
+    }
+  });
+}
+
+test('successful empty source reads remain empty evidence, not a generation failure', async () => {
+  const fixture = install();
+  const loaded = await loadHorseContext(fixture.client, WORKSPACE, 'horse-1');
+  assert.deepEqual(loaded.documents, []);
+  assert.equal(loaded.ownershipRecord, null);
+  assert.deepEqual(loaded.context.health, { lastCogginsDate: '', nextCogginsDue: '', lastExamDate: '' });
+  const result = await call({ templateId: 'sales-packet', output: 'html' }, templateHandler);
+  assert.equal(result.status, 200);
+  assert.match(result.body.html, /No documents attached yet/);
+});
+
+test('latest report health evidence follows valid examination days, never upload order', async () => {
+  const fixture = install({
+    documents: [
+      healthDocument('uploaded-last', 'Coggins', '2025-01-02', {
+        created_at: '2026-10-11',
+        extracted_data: { testDate: '2025-01-02', nextDueDate: '2026-01-02' },
+      }),
+      healthDocument('latest-test', 'Coggins', '2026-09-01', {
+        created_at: '2026-09-02',
+        extracted_data: { testDate: '2026-09-01', nextDueDate: '2027-09-01' },
+      }),
+      healthDocument('older-vet', 'Vet Record', '2026-01-01'),
+      healthDocument('latest-vet', 'Vet Record', '2026-08-01'),
+    ],
+  });
+  const loaded = await loadHorseContext(fixture.client, WORKSPACE, 'horse-1');
+  assert.deepEqual(loaded.context.health, {
+    lastCogginsDate: '2026-09-01',
+    nextCogginsDue: '2027-09-01',
+    lastExamDate: '2026-08-01',
+  });
+  assert.equal(loaded.documents.length, 4, 'Source filtering must not silently drop packet attachments');
+});
+
+test('review blockers cannot supply report health facts even when dates are newer', async () => {
+  const blockers = [
+    { state: 'Needs Review' },
+    { state: 'Archived' },
+    { state: 'Queued' },
+    { state: 'Matched' },
+    { needs_review: true },
+    { payload: { state: 'Needs Review' } },
+    { payload: { identityReviewRequired: true } },
+    { payload: { duplicateRisk: 'Possible Duplicate' } },
+    { duplicate_risk: 'Possible Duplicate' },
+    { payload: { processingNote: 'OCR incomplete' } },
+  ];
+  for (const blocker of blockers) {
+    const fixture = install({
+      documents: [
+        healthDocument('blocked-coggins', 'Coggins', '2026-10-01', blocker),
+        healthDocument('blocked-vet', 'Vet Record', '2026-10-01', blocker),
+        healthDocument('ready-coggins', 'Coggins', '2026-09-01'),
+        healthDocument('ready-vet', 'Vet Record', '2026-08-01'),
+      ],
+    });
+    const { context } = await loadHorseContext(fixture.client, WORKSPACE, 'horse-1');
+    assert.equal(context.health.lastCogginsDate, '2026-09-01', JSON.stringify(blocker));
+    assert.equal(context.health.lastExamDate, '2026-08-01', JSON.stringify(blocker));
+  }
+});
+
+test('browser-mirror examination dates and reviewed duplicates remain usable evidence', async () => {
+  const fixture = install({
+    documents: [
+      healthDocument('browser-coggins', 'Coggins', '', {
+        extracted_data: {},
+        duplicate_risk: 'Possible Duplicate',
+        payload: {
+          state: 'Ready',
+          entities: { examDate: '2026-08-01' },
+          duplicateRisk: 'Possible Duplicate',
+          duplicateReviewedAt: '2026-08-03',
+        },
+      }),
+    ],
+  });
+  const { context } = await loadHorseContext(fixture.client, WORKSPACE, 'horse-1');
+  assert.equal(context.health.lastCogginsDate, '2026-08-01');
+  assert.equal(context.health.nextCogginsDue, '', 'Do not invent a due date or medical validity');
+});
+
+test('missing, malformed, impossible or conflicting dates remain unknown without upload fallback', async () => {
+  for (const extracted_data of [
+    {},
+    { testDate: 'not a date' },
+    { testDate: '2026-02-30' },
+    { testDate: '01/02/2026' },
+    { testDate: { value: '2026-09-01' } },
+    { testDate: '2026-09-01', examDate: '2026-09-02' },
+  ]) {
+    const fixture = install({
+      documents: [healthDocument('unknown', 'Coggins', '', { extracted_data, created_at: '2026-10-11' })],
+    });
+    const { context } = await loadHorseContext(fixture.client, WORKSPACE, 'horse-1');
+    assert.equal(context.health.lastCogginsDate, '', JSON.stringify(extracted_data));
+    assert.equal(context.health.nextCogginsDue, '');
+  }
+});
+
+test('written calendar dates keep their day; invalid clocks and conflicting due dates stay unknown', async () => {
+  const fixture = install({
+    documents: [
+      healthDocument('one', 'Coggins', '', {
+        extracted_data: { testDate: '2026-09-01T00:00:00+14:00', nextDueDate: '2027-09-01' },
+      }),
+      healthDocument('two', 'Coggins', '', { extracted_data: { testDate: '2026-09-01', nextDueDate: '2027-03-01' } }),
+      healthDocument('invalid-clock', 'Coggins', '2026-09-02T25:00:00Z'),
+    ],
+  });
+  const { context } = await loadHorseContext(fixture.client, WORKSPACE, 'horse-1');
+  assert.equal(context.health.lastCogginsDate, '2026-09-01');
+  assert.equal(context.health.nextCogginsDue, '', 'Tied conflicting source dates do not establish one due date');
+});
+
+test('the sealed packet health summary uses the same reviewed facts as the PDF', async () => {
+  const fixture = install({
+    documents: [
+      healthDocument('pending', 'Coggins', '2026-10-01', { state: 'Needs Review' }),
+      healthDocument('reviewed', 'Coggins', '2026-09-01'),
+    ],
+  });
+  const result = await call();
+  assert.equal(result.status, 200);
+  const sealed = JSON.parse(result.body.seal.payload);
+  assert.equal(sealed.health.lastCogginsDate, '2026-09-01');
+  const parsed = await inspectPdf(fixture.uploads[0].bytes);
+  assert.match(parsed.text, /Latest Coggins test\s+2026-09-01/);
+  assert.ok(!parsed.text.includes('2026-10-01'));
+});
+
+test('future evidence refuses impossible days without rejecting same-day ranches across time zones', async (t) => {
+  t.mock.timers.enable({ apis: ['Date'], now: new Date('2026-09-01T12:00:00Z') });
+  for (const [date, expected] of [
+    ['2026-09-02', '2026-09-02'], // Already today in UTC+14.
+    ['2026-09-01', '2026-09-01'], // Still today in UTC-12.
+    ['2026-09-03', ''], // Not today anywhere yet.
+    ['2099-01-01', ''],
+  ]) {
+    const fixture = install({
+      documents: [healthDocument('coggins', 'Coggins', date), healthDocument('exam', 'Vet Record', date)],
+    });
+    const { context } = await loadHorseContext(fixture.client, WORKSPACE, 'horse-1');
+    assert.equal(context.health.lastCogginsDate, expected, date);
+    assert.equal(context.health.lastExamDate, expected, date);
+    assert.equal(context.today_date, '2026-09-01');
+  }
+});
+
+test('contradictory mirror identities cannot supply health facts while matching and legacy mirrors can', async () => {
+  for (const [field, matching, conflicting] of [
+    ['id', 'mirror', 'other-document'],
+    ['horseId', 'horse-1', 'other-horse'],
+    ['type', 'Coggins', 'Vet Record'],
+  ]) {
+    for (const [value, expected] of [
+      [matching, '2026-09-01'],
+      [conflicting, '2026-08-01'],
+    ]) {
+      const fixture = install({
+        documents: [
+          healthDocument('mirror', 'Coggins', '', {
+            extracted_data: {},
+            payload: { [field]: value, entities: { examDate: '2026-09-01' } },
+          }),
+          healthDocument('legacy', 'Coggins', '2026-08-01'),
+        ],
+      });
+      const { context } = await loadHorseContext(fixture.client, WORKSPACE, 'horse-1');
+      assert.equal(context.health.lastCogginsDate, expected, `${field}=${value}`);
+    }
+  }
 });
