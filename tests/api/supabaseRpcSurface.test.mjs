@@ -2,10 +2,124 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 import { readFileSync, readdirSync } from 'node:fs';
 import path from 'node:path';
+import { spawnSync } from 'node:child_process';
+import { pathToFileURL } from 'node:url';
 
 const repoRoot = process.cwd();
 const migrationsDir = path.join(repoRoot, 'supabase', 'migrations');
 const SECURITY_MIGRATION = '20260822_restrict_anon_rpc_surface.sql';
+
+// Exercise the actual CLI and its exit status, with only psql's catalog output
+// substituted. No database connection is made. Source assertions alone missed
+// the request-token deletion RPCs while the verifier still announced success.
+const CURRENT_DELETION_RPCS = [
+  'xbar_hold_account_deletion_request(uuid, uuid)',
+  'xbar_release_account_deletion_request(uuid, uuid)',
+  'xbar_confirm_account_deletion_request(uuid, uuid, uuid[])',
+];
+const LEGACY_DELETION_RPCS = [
+  'xbar_hold_owned_workspaces_for_deletion(uuid)',
+  'xbar_release_account_deletion_holds(uuid)',
+];
+const VALID_RPC_GRANTS = [
+  ...['xbar_resolve_public_listing(text, text)', 'xbar_track_public_share_view(text, text)'].map(
+    (signature) => `anon\t${signature}`,
+  ),
+  ...[
+    'xbar_has_workspace_access(uuid)',
+    'xbar_can_manage_workspace(uuid)',
+    'xbar_commercial_limits(uuid)',
+    'xbar_subscription_limits(uuid)',
+    'xbar_accept_workspace_invitation(uuid, text)',
+    'xbar_has_workspace_capability(uuid, text)',
+    'xbar_record_exists(text, uuid, text)',
+  ].map((signature) => `authenticated\t${signature}`),
+  ...['xbar_workspace_storage_bytes(uuid)', ...CURRENT_DELETION_RPCS, ...LEGACY_DELETION_RPCS].map(
+    (signature) => `service_role\t${signature}`,
+  ),
+];
+
+function runRpcVerifier(grants) {
+  const scriptUrl = pathToFileURL(path.join(repoRoot, 'scripts', 'verify-rpc-surface.mjs')).href;
+  const runner = `
+    import assert from 'node:assert/strict';
+    import childProcess from 'node:child_process';
+    import { syncBuiltinESMExports } from 'node:module';
+    childProcess.spawnSync = (command, args) => {
+      assert.equal(command, 'psql');
+      assert.equal(args[0], 'postgres://synthetic.invalid/rpc_catalog_fixture');
+      assert.match(args.at(-1), /has_function_privilege/);
+      return { status: 0, stdout: ${JSON.stringify(grants.join('\n') + '\n')}, stderr: '' };
+    };
+    syncBuiltinESMExports();
+    process.argv = [process.execPath, ${JSON.stringify(scriptUrl)}, 'postgres://synthetic.invalid/rpc_catalog_fixture'];
+    await import(${JSON.stringify(scriptUrl)});
+  `;
+  const result = spawnSync(process.execPath, ['--input-type=module', '-e', runner], { encoding: 'utf8' });
+  assert.ifError(result.error);
+  assert.equal(result.signal, null, result.stderr);
+  return result;
+}
+
+test('the verifier accepts all required current grants', () => {
+  const result = runRpcVerifier(VALID_RPC_GRANTS);
+  assert.equal(result.status, 0, result.stdout + result.stderr);
+  assert.match(result.stdout, /every required grant is present/);
+});
+
+for (const missing of [...CURRENT_DELETION_RPCS.map((signature) => [signature]), CURRENT_DELETION_RPCS]) {
+  test(`the verifier fails when current account-deletion grants are missing: ${missing.join(', ')}`, () => {
+    const result = runRpcVerifier(
+      VALID_RPC_GRANTS.filter((line) => !missing.some((signature) => line === `service_role\t${signature}`)),
+    );
+    assert.equal(result.status, 1, `A missing current RPC must fail the gate:\n${result.stdout}${result.stderr}`);
+    assert.match(result.stdout, /service_role is MISSING/);
+    for (const signature of missing) assert.ok(result.stdout.includes(`  ${signature}`));
+    assert.doesNotMatch(result.stdout, /every required grant is present/);
+  });
+}
+
+test('legacy deletion RPCs cannot substitute for a differently signed or wrong-role current RPC', () => {
+  const signature = CURRENT_DELETION_RPCS[2];
+  for (const substitute of [
+    'service_role\txbar_confirm_account_deletion_request(uuid, uuid, text[])',
+    `authenticated\t${signature}`,
+  ]) {
+    const result = runRpcVerifier([
+      ...VALID_RPC_GRANTS.filter((line) => line !== `service_role\t${signature}`),
+      substitute,
+    ]);
+    assert.equal(result.status, 1, result.stdout + result.stderr);
+    assert.match(result.stdout, /service_role is MISSING/);
+  }
+});
+
+test('the verifier does not require obsolete deletion RPCs when the current protocol is present', () => {
+  const result = runRpcVerifier(
+    VALID_RPC_GRANTS.filter((line) => !LEGACY_DELETION_RPCS.some((signature) => line.endsWith(`\t${signature}`))),
+  );
+  assert.equal(result.status, 0, result.stdout + result.stderr);
+});
+
+test('current deletion grants do not hide other role drift or extra anonymous access', () => {
+  const drifted = [
+    VALID_RPC_GRANTS.filter((line) => line !== 'anon\txbar_track_public_share_view(text, text)'),
+    VALID_RPC_GRANTS.filter((line) => line !== 'authenticated\txbar_has_workspace_access(uuid)'),
+    VALID_RPC_GRANTS.filter((line) => line !== 'service_role\txbar_workspace_storage_bytes(uuid)'),
+    [...VALID_RPC_GRANTS, `anon\t${CURRENT_DELETION_RPCS[0]}`],
+  ];
+  for (const grants of drifted) {
+    const result = runRpcVerifier(grants);
+    assert.equal(result.status, 1, result.stdout + result.stderr);
+    assert.doesNotMatch(result.stdout, /every required grant is present/);
+  }
+});
+
+test('current deletion RPC fixtures cover every deletion RPC the handler directly calls', () => {
+  const handler = readFileSync(path.join(repoRoot, 'api', '_lib', 'account-delete.js'), 'utf8');
+  const called = [...handler.matchAll(/\.rpc\('(xbar_[a-z_]+)'/g)].map((match) => match[1]).sort();
+  assert.deepEqual(called, CURRENT_DELETION_RPCS.map((signature) => signature.split('(')[0]).sort());
+});
 
 /*
  * The anon RPC surface.
