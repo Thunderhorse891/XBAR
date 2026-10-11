@@ -498,11 +498,46 @@ test('closed-sale disclaimer precedes its table below the masthead, including co
   const bytes = await renderReportPdf(buildRanchReport(data, now), 'Synthetic Long Sold Register', await branding());
   const items = drawn(bytes);
   const disclaimer = items.findIndex((item) => item.text.startsWith('These are agreed sale amounts'));
-  const firstHeader = items.findIndex((item) => item.text === 'Recorded sale');
+  const firstHeader = items.findIndex((item) => item.text === 'Agreed sale');
   assert.ok(disclaimer >= 0 && firstHeader >= 0);
   assert.ok(disclaimer < firstHeader, 'disclaimer must be on the first closed-sale page, before pagination');
   const top = 792 - items[disclaimer].y - items[disclaimer].size;
   assert.ok(top >= 125, 'masthead rule at 115 must not strike through the disclaimer');
   assert.ok(items[firstHeader].y < items[disclaimer].y - 22, 'wrapped disclaimer clears the table header');
+  await assertFits(bytes);
+});
+
+test('PDF headline subtotals disclose malformed prices beside their values', async () => {
+  const data = fixture(2);
+  data.horses[0].sale.askPrice = '25000' as unknown as number;
+  data.salesLeads = [
+    {
+      id: 'invalid-offer',
+      horseId: data.horses[0].id,
+      stage: 'Offer',
+      offerStatus: 'Accepted',
+      counterOfferAmount: '25000',
+      offerAmount: 20000,
+    } as unknown as RanchReportInput['salesLeads'][number],
+  ];
+  const report = buildRanchReport(data, now);
+  assert.equal(report.money.listedValue, 14000);
+  assert.equal(report.money.pipelineValue, 0);
+  assert.equal(report.money.unpricedListedCount, 1);
+  assert.equal(report.money.unpricedOfferCount, 1);
+  const bytes = await renderReportPdf(report, 'Synthetic Unknown Prices', await branding());
+  const items = drawn(bytes);
+  const headlineStart = items.findIndex((item) => item.text === 'Executive dashboard');
+  const headlineEnd = items.findIndex((item) => item.text === 'Sale readiness & blockers');
+  const headline = items
+    .slice(headlineStart, headlineEnd)
+    .map((item) => item.text)
+    .join(' ');
+  assert.ok(headlineStart >= 0 && headlineEnd > headlineStart);
+  assert.ok(headline.includes('Partial / 1 prices unknown'));
+  assert.ok(headline.includes('Known-price subtotal only'));
+  assert.ok(headline.includes('Partial / unknown prices excluded'));
+  assert.ok(headline.includes('$14,000'));
+  assert.ok(!headline.includes('$25,000'));
   await assertFits(bytes);
 });
