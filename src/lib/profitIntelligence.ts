@@ -1,3 +1,4 @@
+import { positiveRecordedPrice, recordedOfferPrice } from './financialPrices.js';
 import type { ExpenseCategory, ExpenseReceipt, HorseRecord, SalesLead } from '../types/xbar.js';
 import { receiptDay, recordedReceipts } from './receiptFacts.js';
 import { compareTimestampDesc } from './format.js';
@@ -40,7 +41,9 @@ export function buildHorseProfitProfile(
         lead.horseId === horse.id && ['Accepted', 'Deposit Due', 'Deposit Paid'].includes(lead.offerStatus ?? ''),
     )
     .sort((left, right) => compareTimestampDesc(left.offerUpdatedAt, right.offerUpdatedAt))[0];
-  const salePrice = acceptedOffer?.counterOfferAmount ?? acceptedOffer?.offerAmount ?? horse.sale?.askPrice ?? 0;
+  const salePrice = acceptedOffer
+    ? recordedOfferPrice(acceptedOffer.counterOfferAmount, acceptedOffer.offerAmount)
+    : positiveRecordedPrice(horse.sale?.askPrice);
   const profitLoss = salePrice - breakEven;
   const categorySpend = Array.from(
     horseReceipts.reduce<Map<ExpenseCategory, number>>((totals, receipt) => {
@@ -166,14 +169,13 @@ export function buildProfitPortfolio(horses: HorseRecord[], receipts: ExpenseRec
 // Everything below is derived deterministically from records the rancher
 // already keeps — cost basis, logged expense receipts, and real buyer offers.
 // Nothing is invented or projected by a model. The point is to turn "clean
-// records" into a money answer: what have I actually made, what is at stake in
+// records" into a money answer: what are the agreed sale margins, what is at stake in
 // the herd right now, and what one move protects the most margin.
 //
 // The one distinction the per-horse profile does not make, and this does, is
-// REALIZED vs. UNREALIZED. A horse is realized only when a buyer lead for it is
-// marked Won — that is money in. Everything else is capital still tied up, valued
-// at the live offer (pipeline) or the asking price (held), never counted as
-// profit until the deal actually closes.
+// CLOSED vs. OPEN. A Won lead records an agreed sale, not a payment. Closed
+// sale margins use agreed prices less recorded costs; open horses use live
+// offers or asking prices. This read model does not track payment collection.
 // ---------------------------------------------------------------------------
 
 export type AnimalFinancialStatus = 'sold' | 'pipeline' | 'held';
@@ -184,9 +186,9 @@ export type AnimalFinancialRow = {
   status: AnimalFinancialStatus;
   /** Capital in the animal: cost basis + linked expenses (its break-even). */
   invested: number;
-  /** Realized proceeds (sold), live offer (pipeline), or asking price (held). 0 means unpriced. */
+  /** Agreed sale price (sold), live offer (pipeline), or asking price (held). 0 means unknown. */
   value: number;
-  /** value − invested. Realized for sold animals; projected otherwise. */
+  /** value − invested. Estimated agreed margin for sold animals; projected otherwise. */
   profit: number;
   marginPercent: number;
   /** Held/listed below break-even — selling now would lock in a loss. */
@@ -211,18 +213,18 @@ export type FinancialInsight = {
 };
 
 export type RanchFinancials = {
-  // Realized — money already made on closed (Won) deals with a RECORDED sale amount.
-  // A Won deal with no amount is never assumed; it is an integrity gap (see below).
+  // Legacy API field names retained for compatibility. These are agreed sale
+  // values and recorded costs, never proof of receipts or settled profit.
   realizedProceeds: number;
   realizedCost: number;
-  /** Gross profit on sold animals: recorded proceeds − their break-even. */
+  /** Estimated gross margin on sold animals: agreed value − their break-even. */
   grossProfitOnSales: number;
-  /** Bottom line: gross profit on sales − operating overhead. What's actually banked. */
+  /** Estimated closed-sale margin less recorded overhead; not cash or settled profit. */
   netProfit: number;
   realizedMarginPercent: number;
   soldCount: number;
 
-  // Unrealized — capital still working in the herd, valued but not yet banked.
+  // Open herd — capital still held, with estimated offer/asking values.
   investedInHerd: number;
   /** Capital that was in the animals now sold — completes the totalInvested breakdown. */
   investedInSold: number;
@@ -239,7 +241,9 @@ export type RanchFinancials = {
   underwaterCount: number;
   costBlindSpotCount: number;
   unpricedHeldCount: number;
-  /** Sold horses whose sale price was never recorded — excluded from banked profit. */
+  /** Live offer rows whose selected price is missing or malformed. */
+  unpricedPipelineCount: number;
+  /** Sold horses whose sale price was never recorded — excluded from estimated sale margin. */
   soldMissingPriceCount: number;
   /** Sold horses with a price but no cost basis — proceeds shown, profit not assumed. */
   soldMissingCostCount: number;
@@ -249,7 +253,7 @@ export type RanchFinancials = {
   insights: FinancialInsight[];
 };
 
-// How to present the "Profit banked" headline, honestly. A sold horse missing its
+// Legacy helper name retained for callers; presents estimated agreed-sale margin, not banked profit. A sold horse missing its
 // sale price or cost leaves the net incomplete: `complete` is a real verdict,
 // `partial` is a concrete floor (overhead / fully-costed sales) that isn't the
 // whole story, and `unknown` has no trustworthy figure at all. Both the Dashboard
@@ -310,7 +314,7 @@ export function buildRanchFinancials(
       // The recorded deal amount only — NEVER the asking price. A Won deal with no
       // amount means the sale price was never captured, so proceeds are unknown and
       // must not be invented; the horse becomes an integrity gap, not banked revenue.
-      const value = wonLead.counterOfferAmount || wonLead.offerAmount || 0;
+      const value = recordedOfferPrice(wonLead.counterOfferAmount, wonLead.offerAmount);
       const saleValueUnknown = value <= 0;
       const profit = saleValueUnknown ? 0 : value - invested;
       return {
@@ -336,12 +340,17 @@ export function buildRanchFinancials(
           // pipeline value just because the lead still sits in the Offer stage.
           !NON_LIVE_OFFER_STATUSES.has(lead.offerStatus ?? '') &&
           (ACTIVE_OFFER_STATUSES.has(lead.offerStatus ?? '') ||
-            (lead.stage === 'Offer' && (lead.offerAmount ?? 0) > 0)),
+            (lead.stage === 'Offer' &&
+              ((lead.offerAmount !== undefined && lead.offerAmount !== null && lead.offerAmount !== 0) ||
+                (lead.counterOfferAmount !== undefined &&
+                  lead.counterOfferAmount !== null &&
+                  lead.counterOfferAmount !== 0)))),
       ),
     );
-    const liveOffer = activeLead ? activeLead.counterOfferAmount || activeLead.offerAmount || 0 : 0;
-    const isPipeline = liveOffer > 0;
-    const value = isPipeline ? liveOffer : Math.max(0, horse.sale?.askPrice || 0);
+    const liveOffer = activeLead ? recordedOfferPrice(activeLead.counterOfferAmount, activeLead.offerAmount) : 0;
+    // An unreadable live offer stays an unknown pipeline value, never an ask-price fallback.
+    const isPipeline = Boolean(activeLead);
+    const value = isPipeline ? liveOffer : positiveRecordedPrice(horse.sale?.askPrice);
     const profit = value - invested;
 
     return {
@@ -360,18 +369,18 @@ export function buildRanchFinancials(
   });
 
   const sold = rows.filter((row) => row.status === 'sold');
-  // Profit — realized or projected — is only computed for animals whose economics
+  // Margin — agreed or projected — is only computed for animals whose economics
   // are fully known: a recorded sale/asking price AND a recorded cost. A profit
   // figure derived from a missing cost basis (invested = 0) would overstate the
   // gain, so those rows are proceeds we can show but profit we won't invent.
   const hasKnownProfit = (row: AnimalFinancialRow) => row.value > 0 && !row.costBlindSpot;
-  const soldWithPrice = sold.filter((row) => !row.saleValueUnknown); // cash collected is known
+  const soldWithPrice = sold.filter((row) => !row.saleValueUnknown); // agreed price is known
   const soldBanked = soldWithPrice.filter((row) => !row.costBlindSpot); // profit is knowable
   const pipeline = rows.filter((row) => row.status === 'pipeline');
   const held = rows.filter((row) => row.status === 'held');
   const unrealized = [...pipeline, ...held];
 
-  // "Collected" is every known sale price; profit is only the fully-costed subset.
+  // Agreed value uses known sale prices; estimated margin uses the fully-costed subset.
   const realizedProceeds = soldWithPrice.reduce((sum, row) => sum + row.value, 0);
   const bankedProceeds = soldBanked.reduce((sum, row) => sum + row.value, 0);
   const realizedCost = soldBanked.reduce((sum, row) => sum + row.invested, 0);
@@ -391,7 +400,7 @@ export function buildRanchFinancials(
   const totalInvested = investedInHerd + investedInSold + overheadSpend;
 
   // The bottom line: gross profit on sold animals, less operating overhead. This is
-  // what the operation actually banked — a real P&L nets overhead out.
+  // an estimate from recorded prices and costs, not evidence of payment collection.
   const netProfit = grossProfitOnSales - overheadSpend;
 
   const categoryTotals = receipts.reduce<Map<ExpenseCategory, number>>((totals, receipt) => {
@@ -429,6 +438,7 @@ export function buildRanchFinancials(
     costBlindSpotCount,
     soldMissingCostCount,
     unpricedHeldCount,
+    unpricedPipelineCount: pipeline.filter((row) => row.value <= 0).length,
     soldMissingPriceCount,
     perAnimal: sortAnimalRows(rows),
     topCostCategories,
@@ -442,7 +452,7 @@ export function buildRanchFinancials(
   };
 }
 
-// Sold first (by realized profit), then active pipeline, then held — the order a
+// Sold first (by estimated agreed margin), then active pipeline, then held — the order a
 // rancher reads them: what closed, what's in play, what's still sitting.
 function sortAnimalRows(rows: AnimalFinancialRow[]): AnimalFinancialRow[] {
   const rank: Record<AnimalFinancialStatus, number> = { sold: 0, pipeline: 1, held: 2 };
@@ -469,8 +479,8 @@ function buildFinancialInsights(
     insights.push({
       id: `win-${bestSale.horseId}`,
       tone: 'win',
-      title: `${bestSale.horseName} was your best sale`,
-      detail: `Sold for ${money(bestSale.value)} — ${money(bestSale.profit)} profit at ${bestSale.marginPercent.toFixed(0)}% margin.`,
+      title: `${bestSale.horseName} has your best agreed sale margin`,
+      detail: `Agreed sale value ${money(bestSale.value)} less recorded costs gives an estimated ${money(bestSale.profit)} margin before overhead (${bestSale.marginPercent.toFixed(0)}%). Payment collection is not tracked.`,
       horseId: bestSale.horseId,
       amount: bestSale.profit,
     });
@@ -482,7 +492,7 @@ function buildFinancialInsights(
       id: `loss-${worstSale.horseId}`,
       tone: 'risk',
       title: `${worstSale.horseName} sold below break-even`,
-      detail: `Proceeds of ${money(worstSale.value)} came in ${money(-worstSale.profit)} under the ${money(worstSale.invested)} it cost to get there.`,
+      detail: `Agreed sale value ${money(worstSale.value)} is ${money(-worstSale.profit)} below recorded costs of ${money(worstSale.invested)}, before overhead. Payment collection is not tracked.`,
       horseId: worstSale.horseId,
       amount: worstSale.profit,
     });
@@ -534,8 +544,8 @@ function buildFinancialInsights(
     insights.push({
       id: 'overhead-drag',
       tone: 'risk',
-      title: 'Overhead is outrunning your sales profit',
-      detail: `${money(grossFromSales)} gross on sold horses, but ${money(integrity.overheadSpend)} of operating overhead puts the operation ${money(integrity.overheadSpend - grossFromSales)} in the red. Sell more margin or cut overhead.`,
+      title: 'Recorded overhead exceeds agreed sale margin',
+      detail: `Estimated agreed sale margin is ${money(grossFromSales)} before ${money(integrity.overheadSpend)} of recorded overhead, leaving an estimated loss of ${money(integrity.overheadSpend - grossFromSales)}. Payment collection is not tracked.`,
       amount: grossFromSales - integrity.overheadSpend,
     });
   }
@@ -546,7 +556,7 @@ function buildFinancialInsights(
       id: 'blindspot-sale-price',
       tone: 'info',
       title: `${n} sold ${n === 1 ? 'horse has' : 'horses have'} no recorded sale price`,
-      detail: `Record what ${n === 1 ? 'it' : 'they'} sold for so your banked profit is accurate — until then ${n === 1 ? "it's" : "they're"} left out of the total.`,
+      detail: `Record what ${n === 1 ? 'it' : 'they'} sold for to estimate the agreed sale margin — until then ${n === 1 ? "it's" : "they're"} left out of the total. Payment collection is not tracked.`,
     });
   }
 
@@ -556,7 +566,7 @@ function buildFinancialInsights(
       id: 'blindspot-sold-cost',
       tone: 'info',
       title: `${n} sold ${n === 1 ? 'horse has' : 'horses have'} a price but no recorded cost`,
-      detail: `The sale amount counts as collected, but without a cost basis the profit is unknown — add ${n === 1 ? 'its' : 'their'} cost so the sale lands in banked profit.`,
+      detail: `The agreed sale value is recorded, but without a cost basis the estimated margin is unknown — add ${n === 1 ? 'its' : 'their'} cost to complete the estimate. Payment collection is not tracked.`,
     });
   }
 
@@ -566,7 +576,7 @@ function buildFinancialInsights(
       id: 'blindspot-cost',
       tone: 'info',
       title: `${n} ${n === 1 ? 'horse has' : 'horses have'} no recorded cost`,
-      detail: `Add a cost basis or log expenses so XBAR can show ${n === 1 ? 'its' : 'their'} real profit instead of guessing.`,
+      detail: `Add a cost basis or log expenses so XBAR can show ${n === 1 ? 'its' : 'their'} estimated margin instead of guessing.`,
     });
   }
 

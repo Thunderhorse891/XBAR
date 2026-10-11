@@ -207,11 +207,16 @@ export async function renderReportPdf(
   );
   const firstCards = [
     ['Invested', dollars(money.investedToDate), 'Acquisition + all receipts', ink],
-    ['Listed value', dollars(money.listedValue), 'Asking, not appraisal', blue],
+    [
+      'Listed value',
+      dollars(money.listedValue),
+      money.unpricedListedCount ? `Partial / ${money.unpricedListedCount} prices unknown` : 'Asking, not appraisal',
+      blue,
+    ],
     [
       'Potential margin',
       dollars(decision.potentialMargin),
-      'Unknown if any priced horse lacks costs',
+      money.unpricedListedCount ? 'Partial / unknown prices excluded' : 'Unknown if any priced horse lacks costs',
       decision.potentialMargin !== null && decision.potentialMargin < 0 ? red : green,
     ],
     [
@@ -225,7 +230,7 @@ export async function renderReportPdf(
   card(
     'Sale-ready value',
     dollars(money.readyValue),
-    'No recorded sale blockers',
+    money.unpricedListedCount ? 'Known-price subtotal only' : 'No recorded sale blockers',
     36,
     209,
     172,
@@ -234,13 +239,23 @@ export async function renderReportPdf(
   card(
     'Blocked value',
     dollars(money.valueAtRisk),
-    `${decision.blocked.length} ${decision.blocked.length === 1 ? 'horse needs' : 'horses need'} action`,
+    money.unpricedListedCount
+      ? 'Known-price subtotal only'
+      : `${decision.blocked.length} ${decision.blocked.length === 1 ? 'horse needs' : 'horses need'} action`,
     220,
     209,
     172,
     money.valueAtRisk > 0 ? red : ink,
   );
-  card('Open offers', dollars(money.pipelineValue), 'Offers may overlap per horse', 404, 209, 172, blue);
+  card(
+    'Open offers',
+    dollars(money.pipelineValue),
+    money.unpricedOfferCount ? `Partial / ${money.unpricedOfferCount} prices unknown` : 'Offers may overlap per horse',
+    404,
+    209,
+    172,
+    blue,
+  );
   const blockedShare = money.listedValue > 0 ? Math.round((money.valueAtRisk / money.listedValue) * 100) : 0;
   rect(36, 292, 540, 62, decision.blocked.length ? rgb(0.99, 0.94, 0.92) : pale);
   text(
@@ -375,7 +390,10 @@ export async function renderReportPdf(
     });
     return y;
   }
-  newPage('Sale readiness & blockers', 'Exception management / blocked first, then asking value');
+  newPage(
+    'Sale readiness & blockers',
+    `Known-value subtotals / ${money.unpricedListedCount} listed prices unknown / ${money.unpricedOfferCount} offer prices unknown`,
+  );
   rect(36, 130, 540, 42, pale);
   text(
     `${reportCount(decision.blocked.length, 'horse')} blocked  /  ${dollars(money.valueAtRisk)} blocked asking value`,
@@ -445,14 +463,14 @@ export async function renderReportPdf(
   if (closed.length) {
     newPage('Closed-sale results', 'Recorded deal values and costs / payment collection is separate');
     const disclaimerHeight = paragraph(
-      'These are agreed sale amounts less recorded costs, before overhead. They do not establish cash received or profit banked. Unknown costs or sale prices remain unknown.',
+      'These are agreed sale amounts less recorded costs, before overhead. Payment collection is not tracked. They do not establish cash received or settled profit. Unknown costs or sale prices remain unknown.',
       36,
       130,
       540,
       8,
     );
     table(
-      ['Horse', 'Recorded sale', 'Recorded costs', 'Gross result'],
+      ['Horse', 'Agreed sale', 'Recorded costs', 'Est. margin'],
       [180, 120, 120, 120],
       closed.map((horse) => [
         { value: horse.horseName },

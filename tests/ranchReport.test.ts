@@ -1108,12 +1108,12 @@ test('a negative lead amount cannot understate the money figures', () => {
   assert.equal(report.money.depositsHeld, 0, 'nor a negative deposit from what is held');
 });
 
-test('clamping a negative offer does not discard the real one beside it', () => {
+test('a damaged selected counter remains unknown instead of restoring a superseded offer', () => {
   /*
-   * The over-rejection direction. A counteroffer supersedes the offer, so a
-   * damaged counteroffer must fall back to the offer rather than zeroing the
-   * lead — otherwise one bad field silently removes a live deal from the
-   * pipeline, which is the same understatement from the other side.
+   * A counteroffer supersedes the offer. A damaged selected counter cannot
+   * silently restore the old amount: the known-value subtotal excludes it,
+   * and an explicit unknown count keeps the live deal visible for correction.
+   * The neighboring valid-offer sum test still proves other leads survive.
    */
   const report = buildRanchReport(
     input({
@@ -1123,7 +1123,8 @@ test('clamping a negative offer does not discard the real one beside it', () => 
     NOW,
   );
 
-  assert.equal(report.money.pipelineValue, 20000, 'the real offer still counts');
+  assert.equal(report.money.pipelineValue, 0, 'the superseded original offer is not substituted');
+  assert.equal(report.money.unpricedOfferCount, 1, 'the live deal is explicitly incomplete');
 });
 
 test('category shares always add up to exactly 100', () => {

@@ -35,6 +35,12 @@ export function ranchReportToCsv(report: RanchReport, ranchName = ''): string {
   lines.push(csvRow(['Data source', 'Ranch records']));
   lines.push(csvRow(['Rounding', 'Figures keep cents here; the PDF report rounds money to whole dollars.']));
   lines.push(csvRow(['Note', 'Unaudited management estimates based on recorded data. Not an appraisal or an audit.']));
+  lines.push(
+    csvRow([
+      'Payment collection',
+      'Payment collection is not tracked. Closed-sale values and margins use agreed prices, not cash received.',
+    ]),
+  );
   lines.push('');
 
   lines.push(csvRow(['Summary']));
@@ -62,6 +68,10 @@ export function ranchReportToCsv(report: RanchReport, ranchName = ''): string {
   lines.push(csvRow(['Value at risk', report.money.valueAtRisk]));
   lines.push(csvRow(['Ready to close', report.money.readyValue]));
   lines.push(csvRow(['Open offers', report.money.pipelineValue]));
+  lines.push(csvRow(['Open offers with unknown prices (excluded from subtotal)', report.money.unpricedOfferCount]));
+  lines.push(
+    csvRow(['Listed horses with unknown prices (excluded from value subtotals)', report.money.unpricedListedCount]),
+  );
   lines.push(csvRow(['Deposits held', report.money.depositsHeld]));
   lines.push(csvRow(['Documents to review', report.documentsToReview]));
   lines.push('');
@@ -81,8 +91,8 @@ export function ranchReportToCsv(report: RanchReport, ranchName = ''): string {
       'Readiness %',
       'Blockers',
       'Financial status',
-      'Closed sale value (not cash received)',
-      'Closed sale profit (before overhead)',
+      'Agreed closed sale value (not cash received)',
+      'Estimated closed sale margin (before overhead)',
     ]),
   );
   for (const horse of report.horses) {
@@ -92,7 +102,7 @@ export function ranchReportToCsv(report: RanchReport, ranchName = ''): string {
         horse.status,
         horse.investedToDate,
         horse.monthlyBurn ?? 'Unknown',
-        horse.askPrice,
+        horse.askPrice > 0 ? horse.askPrice : horse.saleInventory ? 'Unknown' : 'N/A',
         horse.breakEvenPrice ?? 'Unknown',
         horse.projectedMargin ?? 'Unknown',
         horse.marginPercent ?? 'Unknown',
@@ -100,7 +110,7 @@ export function ranchReportToCsv(report: RanchReport, ranchName = ''): string {
         horse.readinessScore,
         horse.blockers.join('; '),
         horse.financialStatus,
-        horse.closedSaleValue ?? 'N/A',
+        horse.closedSaleValue ?? (horse.financialStatus === 'sold' ? 'Unknown' : 'N/A'),
         horse.closedSaleProfit ?? 'Unknown',
       ]),
     );

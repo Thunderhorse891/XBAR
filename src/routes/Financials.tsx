@@ -71,14 +71,14 @@ export default function Financials() {
         <PageHead
           eyebrow="Money"
           title="Ranch financials"
-          subtitle="See what you've made and what's still at stake — the moment you start tracking horses, costs, and offers."
+          subtitle="See agreed sale margins and capital at stake from recorded horses, costs, and offers. Payment collection is not tracked."
         />
         <Card>
           <div className="xs-empty">
             <div className="xs-empty__title">No numbers yet</div>
             <div className="xs-empty__sub">
               Add a horse with a cost basis, log a few expenses, and record buyer offers. XBAR turns them into a live
-              profit-and-loss picture here.
+              estimated margin picture here. Payment collection is not tracked.
             </div>
           </div>
         </Card>
@@ -91,14 +91,14 @@ export default function Financials() {
       <PageHead
         eyebrow="Money"
         title="Ranch financials"
-        subtitle="What you've actually banked, what's still working in the herd, and the one move that protects the most margin — all from the costs and offers you already track."
+        subtitle="Agreed sale values less recorded costs and overhead, plus projected herd margins. Payment collection is not tracked."
       />
 
-      {/* P&L hero — realized profit and total invested are sums of the rancher's
+      {/* Estimate hero — agreed sale margin and total invested are sums of the rancher's
           own records, so they show on every plan. */}
       <div className="fin-hero motion-stagger">
         <div className="fin-stat fin-stat--hero" style={motionIndex(0)}>
-          <span className="fin-stat__label">Profit banked</span>
+          <span className="fin-stat__label">Estimated sale margin</span>
           {banked.state === 'unknown' ? (
             <span className="fin-stat__value">—</span>
           ) : banked.state === 'complete' ? (
@@ -112,14 +112,14 @@ export default function Financials() {
           )}
           <span className="fin-stat__sub">
             {banked.state === 'complete'
-              ? `${fin.soldCount} sold · ${formatCurrency(fin.realizedProceeds)} collected${
+              ? `${fin.soldCount} sold · ${formatCurrency(fin.realizedProceeds)} agreed sale value${
                   fin.realizedProceeds > 0
-                    ? ` · ${formatPercent(Math.round(fin.realizedMarginPercent))} gross margin`
+                    ? ` · ${formatPercent(Math.round(fin.realizedMarginPercent))} estimated gross margin`
                     : ''
                 }${fin.overheadSpend > 0 ? ` · net of ${formatCurrency(fin.overheadSpend)} overhead` : ''}`
               : banked.state === 'partial'
                 ? `Partial — ${banked.fixPhrase} to complete`
-                : `${fin.soldCount} sold · ${banked.fixPhrase} to see profit`}
+                : `${fin.soldCount} sold · ${banked.fixPhrase} to estimate margin`}
           </span>
         </div>
 
@@ -137,6 +137,8 @@ export default function Financials() {
             <ProfitValue value={fin.projectedProfit} />
             <span className="fin-stat__sub">
               {fin.pipelineCount} in play · {fin.heldCount} held · {formatCurrency(fin.projectedValue)} projected value
+              {fin.unpricedPipelineCount + fin.unpricedHeldCount > 0 &&
+                ` · Partial: ${fin.unpricedPipelineCount + fin.unpricedHeldCount} prices unknown`}
             </span>
           </div>
         )}
@@ -157,8 +159,8 @@ export default function Financials() {
           title="Unlock full financial intelligence"
           subtitle={
             banked.state === 'complete'
-              ? 'Your banked profit above is real. Ranch Ops turns it into a forward-looking playbook.'
-              : 'Complete the missing sale details above to finalize your banked profit — then Ranch Ops turns it into a forward-looking playbook.'
+              ? 'The estimate above uses agreed prices and recorded costs. Ranch Ops adds forward-looking analysis.'
+              : 'Add the missing sale details to complete the estimate. Payment collection remains untracked.'
           }
         >
           <div className="fin-lock">
@@ -222,13 +224,16 @@ export default function Financials() {
           ) : null}
 
           {fin.perAnimal.length > 0 ? (
-            <Card title="Profit per animal" subtitle="Every horse, most profitable first. Tap one to open its record.">
+            <Card
+              title="Estimated margin per animal"
+              subtitle="Closed sales use agreed prices; open horses use offers or asks. Before overhead; payment collection is not tracked."
+            >
               <div className="fin-ledger">
                 <div className="fin-animal fin-animal__head">
                   <span>Horse</span>
                   <span className="fin-animal__cell--hide">Invested</span>
                   <span className="fin-animal__cell--hide">Value</span>
-                  <span>Profit</span>
+                  <span>Est. margin</span>
                   <span className="fin-animal__cell--hide">Margin</span>
                 </div>
                 {fin.perAnimal.map((row) => {
@@ -249,7 +254,11 @@ export default function Financials() {
                         <span className="fin-animal__title">{row.horseName}</span>
                         <span>
                           <StatusChip tone={chip.tone}>{chip.label}</StatusChip>
-                          {row.saleValueUnknown ? <StatusChip tone="warning">Sale price?</StatusChip> : null}
+                          {row.saleValueUnknown ? (
+                            <StatusChip tone="warning">Sale price?</StatusChip>
+                          ) : !priced ? (
+                            <StatusChip tone="warning">Price unknown</StatusChip>
+                          ) : null}
                           {row.underwater ? <StatusChip tone="danger">Priced to lose</StatusChip> : null}
                           {row.costBlindSpot ? <StatusChip tone="warning">No cost</StatusChip> : null}
                         </span>
