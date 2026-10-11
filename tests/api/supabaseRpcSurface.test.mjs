@@ -17,6 +17,10 @@ const CURRENT_DELETION_RPCS = [
   'xbar_release_account_deletion_request(uuid, uuid)',
   'xbar_confirm_account_deletion_request(uuid, uuid, uuid[])',
 ];
+const CURRENT_BILLING_RPCS = [
+  'xbar_claim_checkout_lock(uuid, timestamp with time zone, text)',
+  'xbar_apply_subscription_event(uuid, text, text, timestamp with time zone, jsonb, text, text, double precision, jsonb, text, text, text, integer, boolean, text)',
+];
 const LEGACY_DELETION_RPCS = [
   'xbar_hold_owned_workspaces_for_deletion(uuid)',
   'xbar_release_account_deletion_holds(uuid)',
@@ -34,9 +38,12 @@ const VALID_RPC_GRANTS = [
     'xbar_has_workspace_capability(uuid, text)',
     'xbar_record_exists(text, uuid, text)',
   ].map((signature) => `authenticated\t${signature}`),
-  ...['xbar_workspace_storage_bytes(uuid)', ...CURRENT_DELETION_RPCS, ...LEGACY_DELETION_RPCS].map(
-    (signature) => `service_role\t${signature}`,
-  ),
+  ...[
+    'xbar_workspace_storage_bytes(uuid)',
+    ...CURRENT_DELETION_RPCS,
+    ...CURRENT_BILLING_RPCS,
+    ...LEGACY_DELETION_RPCS,
+  ].map((signature) => `service_role\t${signature}`),
 ];
 
 function runRpcVerifier(grants) {
@@ -78,6 +85,64 @@ for (const missing of [...CURRENT_DELETION_RPCS.map((signature) => [signature]),
     assert.doesNotMatch(result.stdout, /every required grant is present/);
   });
 }
+
+for (const missing of [...CURRENT_BILLING_RPCS.map((signature) => [signature]), CURRENT_BILLING_RPCS]) {
+  test(`the verifier fails when active billing grants are missing: ${missing.join(', ')}`, () => {
+    const result = runRpcVerifier(
+      VALID_RPC_GRANTS.filter((line) => !missing.some((signature) => line === `service_role\t${signature}`)),
+    );
+    assert.equal(result.status, 1, `Missing billing grants must fail the gate:\n${result.stdout}${result.stderr}`);
+    assert.match(result.stdout, /service_role is MISSING/);
+    for (const signature of missing) assert.ok(result.stdout.includes(`  ${signature}`));
+    assert.doesNotMatch(result.stdout, /every required grant is present/);
+  });
+}
+
+test('wrong roles or obsolete billing overloads cannot satisfy active service-role grants', () => {
+  for (const [signature, oldSignature] of [
+    [CURRENT_BILLING_RPCS[0], 'xbar_claim_checkout_lock(uuid, timestamp without time zone, text)'],
+    [CURRENT_BILLING_RPCS[1], CURRENT_BILLING_RPCS[1].replace(/, text\)$/, ')')],
+  ]) {
+    for (const substitute of [`authenticated\t${signature}`, `service_role\t${oldSignature}`]) {
+      const result = runRpcVerifier([
+        ...VALID_RPC_GRANTS.filter((line) => line !== `service_role\t${signature}`),
+        substitute,
+      ]);
+      assert.equal(result.status, 1, result.stdout + result.stderr);
+      assert.ok(result.stdout.includes(`  ${signature}`));
+    }
+  }
+});
+
+test('billing grant fixtures match current migration signatures and named API arguments', () => {
+  const calls = [
+    ['api/_lib/checkout-session.js', '20261002182226_account_deletion_request_fence.sql'],
+    ['api/stripe/webhook.js', '20260926003000_atomic_trial_event_merge.sql'],
+  ];
+  for (const [index, [file, migration]] of calls.entries()) {
+    const signature = CURRENT_BILLING_RPCS[index];
+    const name = signature.split('(')[0];
+    const sql = readFileSync(path.join(migrationsDir, migration), 'utf8').replace(/--[^\n]*/g, '');
+    const declaration = sql.match(new RegExp(`function public\\.${name}\\(([\\s\\S]*?)\\)\\s*returns`, 'i'));
+    assert.ok(declaration, `${name}: current SQL declaration missing`);
+    const parameters = declaration[1].split(',').map((part) => part.trim().split(/\s+default\s+/i)[0]);
+    const types = parameters.map((parameter) =>
+      parameter.replace(/^p_\w+\s+/, '').replace(/^timestamptz$/, 'timestamp with time zone'),
+    );
+    assert.equal(`${name}(${types.join(', ')})`, signature);
+    const source = readFileSync(path.join(repoRoot, file), 'utf8');
+    const call = source.match(new RegExp(`\\.rpc\\('(${name})', \\{([\\s\\S]*?)\\n\\s*\\}\\);`));
+    assert.ok(call, `${file}: expected RPC call missing`);
+    const keys = [...call[2].matchAll(/^\s*(p_\w+):/gm)].map((match) => match[1]).sort();
+    assert.deepEqual(keys, parameters.map((parameter) => parameter.split(/\s+/)[0]).sort());
+  }
+});
+
+test('active billing checks do not require the disabled optional upgrade-offer RPC', () => {
+  assert.ok(VALID_RPC_GRANTS.every((line) => !line.includes('xbar_upgrade_offer_action')));
+  const result = runRpcVerifier(VALID_RPC_GRANTS);
+  assert.equal(result.status, 0, result.stdout + result.stderr);
+});
 
 test('legacy deletion RPCs cannot substitute for a differently signed or wrong-role current RPC', () => {
   const signature = CURRENT_DELETION_RPCS[2];
