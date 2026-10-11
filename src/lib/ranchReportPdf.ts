@@ -205,6 +205,7 @@ export async function renderReportPdf(
     'Executive dashboard',
     `${reportCount(report.horseCount, 'horse')} · ${reportCount(report.listedCount, 'horse')} in sale inventory`,
   );
+  const hasMissingListedCosts = decision.listed.some((horse) => horse.breakEvenPrice === null);
   const firstCards = [
     ['Invested', dollars(money.investedToDate), 'Acquisition + all receipts', ink],
     [
@@ -217,8 +218,10 @@ export async function renderReportPdf(
       'Potential margin',
       dollars(decision.potentialMargin),
       money.unpricedListedCount
-        ? decision.potentialMargin === null
-          ? 'Prices and costs unknown'
+        ? hasMissingListedCosts
+          ? decision.potentialMargin === null
+            ? 'Prices and costs unknown'
+            : 'Partial / prices + costs unknown'
           : 'Partial / unknown prices excluded'
         : 'Unknown if any priced horse lacks costs',
       decision.potentialMargin !== null && decision.potentialMargin < 0 ? red : green,

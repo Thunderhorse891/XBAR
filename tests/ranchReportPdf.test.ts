@@ -627,3 +627,28 @@ test('PDF potential-margin card preserves both missing-price and missing-cost pr
   assert.match(card, /Prices and costs unknown/);
   await assertFits(bytes);
 });
+
+for (const pricedSibling of [false, true]) {
+  test(`PDF margin disclosure includes missing costs on the same unpriced horse, priced sibling ${pricedSibling}`, async () => {
+    const data = fixture(pricedSibling ? 2 : 1);
+    data.horses[0].sale.askPrice = 0;
+    data.horses[0].costBasis = 0;
+    data.expenseReceipts = [];
+    const report = buildRanchReport(data, now);
+    assert.equal(report.horses.find((horse) => horse.horseId === data.horses[0].id)?.breakEvenPrice, null);
+    assert.equal(report.money.unpricedListedCount, 1);
+    const expectedSubtotal = pricedSibling ? 9775 : 0;
+    assert.equal(reportDecisions(report).potentialMargin, expectedSubtotal, 'the known-row subtotal remains unchanged');
+    const bytes = await renderReportPdf(report, 'Synthetic Same-Horse Financial Gaps', await branding());
+    const items = drawn(bytes);
+    const start = items.findIndex((item) => item.text === 'POTENTIAL MARGIN');
+    const end = items.findIndex((item, index) => index > start && item.text === 'RECORDED MONTHLY AVG');
+    const card = items
+      .slice(start, end)
+      .map((item) => item.text)
+      .join(' ');
+    assert.match(card, /prices \+ costs unknown/i);
+    assert.match(card, /Partial/);
+    await assertFits(bytes);
+  });
+}
