@@ -205,6 +205,7 @@ export async function renderReportPdf(
     'Executive dashboard',
     `${reportCount(report.horseCount, 'horse')} · ${reportCount(report.listedCount, 'horse')} in sale inventory`,
   );
+  const hasMissingListedCosts = decision.listed.some((horse) => horse.breakEvenPrice === null);
   const firstCards = [
     ['Invested', dollars(money.investedToDate), 'Acquisition + all receipts', ink],
     [
@@ -216,7 +217,13 @@ export async function renderReportPdf(
     [
       'Potential margin',
       dollars(decision.potentialMargin),
-      money.unpricedListedCount ? 'Partial / unknown prices excluded' : 'Unknown if any priced horse lacks costs',
+      money.unpricedListedCount
+        ? hasMissingListedCosts
+          ? decision.potentialMargin === null
+            ? 'Prices and costs unknown'
+            : 'Partial / prices + costs unknown'
+          : 'Partial / unknown prices excluded'
+        : 'Unknown if any priced horse lacks costs',
       decision.potentialMargin !== null && decision.potentialMargin < 0 ? red : green,
     ],
     [
@@ -256,13 +263,18 @@ export async function renderReportPdf(
     172,
     blue,
   );
-  const blockedShare = money.listedValue > 0 ? Math.round((money.valueAtRisk / money.listedValue) * 100) : 0;
+  const askingValuesComplete = money.unpricedListedCount === 0;
+  const blockedShare =
+    askingValuesComplete && money.listedValue > 0 ? Math.round((money.valueAtRisk / money.listedValue) * 100) : null;
+  const readyHeadline = `${dollars(money.readyValue)} ${askingValuesComplete ? 'ready to close today*' : 'known-price ready subtotal*'}`;
   rect(36, 292, 540, 62, decision.blocked.length ? rgb(0.99, 0.94, 0.92) : pale);
   text(
     decision.blocked.length
-      ? money.listedValue > 0
-        ? `${blockedShare}% OF ASKING VALUE BLOCKED`
-        : 'BLOCKED HORSES / ASKING VALUES NOT SET'
+      ? !askingValuesComplete
+        ? 'BLOCKED SHARE UNKNOWN / ASKING PRICES MISSING'
+        : blockedShare !== null
+          ? `${blockedShare}% OF ASKING VALUE BLOCKED`
+          : 'BLOCKED HORSES / ASKING VALUES NOT SET'
       : 'SALE PIPELINE SNAPSHOT',
     49,
     303,
@@ -271,10 +283,10 @@ export async function renderReportPdf(
     true,
   );
   text(
-    `${dollars(money.readyValue)} ready to close today*`,
+    readyHeadline,
     49,
     321,
-    Math.min(19, (19 * 290) / Math.max(290, measure(`${dollars(money.readyValue)} ready to close today*`, 19, true))),
+    Math.min(19, (19 * 290) / Math.max(290, measure(readyHeadline, 19, true))),
     money.readyValue === 0 && report.listedCount ? red : ink,
     true,
   );
@@ -288,13 +300,37 @@ export async function renderReportPdf(
   heading('Capital vs. asking value', 36, 371);
   const maxCapital = Math.max(money.investedToDate, money.listedValue, 1);
   bar('Invested - whole roster + receipts', money.investedToDate, maxCapital, 36, 394, 252);
-  bar('Listed - sale inventory only', money.listedValue, maxCapital, 36, 426, 252, blue);
+  bar(
+    askingValuesComplete ? 'Listed - sale inventory only' : 'Listed - known prices only',
+    money.listedValue,
+    maxCapital,
+    36,
+    426,
+    252,
+    blue,
+  );
   heading('Sale pipeline / asking value', 318, 371);
-  bar('Blocked', money.valueAtRisk, Math.max(1, money.listedValue), 318, 394, 258, red);
-  bar('Sale-ready*', money.readyValue, Math.max(1, money.listedValue), 318, 426, 258, green);
+  bar(
+    askingValuesComplete ? 'Blocked' : 'Blocked - known prices',
+    money.valueAtRisk,
+    Math.max(1, money.listedValue),
+    318,
+    394,
+    258,
+    red,
+  );
+  bar(
+    askingValuesComplete ? 'Sale-ready*' : 'Sale-ready* - known prices',
+    money.readyValue,
+    Math.max(1, money.listedValue),
+    318,
+    426,
+    258,
+    green,
+  );
   heading('What matters now', 36, 464);
   paragraph(
-    `${dollars(money.valueAtRisk)} of listed asking value is held behind recorded sale requirements. Current-month receipts total ${dollars(money.investedThisMonth)}; ${dollars(money.unallocatedThisMonth)} is unallocated overhead. No comparison baseline is on file, so period-over-period change is not shown.`,
+    `${dollars(money.valueAtRisk)} of ${askingValuesComplete ? 'listed asking value' : 'known listed asking value (partial subtotal)'} is held behind recorded sale requirements. Current-month receipts total ${dollars(money.investedThisMonth)}; ${dollars(money.unallocatedThisMonth)} is unallocated overhead. No comparison baseline is on file, so period-over-period change is not shown.`,
     36,
     484,
     540,
@@ -396,7 +432,7 @@ export async function renderReportPdf(
   );
   rect(36, 130, 540, 42, pale);
   text(
-    `${reportCount(decision.blocked.length, 'horse')} blocked  /  ${dollars(money.valueAtRisk)} blocked asking value`,
+    `${reportCount(decision.blocked.length, 'horse')} blocked  /  ${dollars(money.valueAtRisk)} ${askingValuesComplete ? 'blocked asking value' : 'known blocked asking value'}`,
     47,
     138,
     11,
