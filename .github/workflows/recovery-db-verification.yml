@@ -1,0 +1,58 @@
+name: recovery-db-verification
+
+on:
+  pull_request:
+    paths:
+      - 'supabase/**'
+      - 'tests/database/**'
+      - '.github/workflows/recovery-db-verification.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  postgres-fixture:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    services:
+      postgres:
+        image: postgres:17.6
+        env:
+          POSTGRES_PASSWORD: synthetic-ci-only
+          POSTGRES_DB: recovery_fixture
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres -d recovery_fixture"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    env:
+      PGHOST: localhost
+      PGPORT: 5432
+      PGUSER: postgres
+      PGPASSWORD: synthetic-ci-only
+      PGDATABASE: recovery_fixture
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 24
+      - name: Prepare the repository's current schema
+        run: node scripts/prepare-supabase-schema.mjs
+      - name: Run isolated real-PostgreSQL role and rollback checks
+        run: |
+          set -o pipefail
+          {
+            psql -X -v ON_ERROR_STOP=1 -f tests/database/bootstrap.sql
+            psql -X -v ON_ERROR_STOP=1 -f supabase/production-schema.generated.sql
+            psql -X -v ON_ERROR_STOP=1 -f tests/database/recovery-baseline.sql
+          } 2>&1 | tee recovery-postgres.log
+      - name: Retain synthetic database evidence
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: recovery-postgres-evidence
+          path: recovery-postgres.log
+          retention-days: 7
