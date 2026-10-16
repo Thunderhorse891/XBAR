@@ -83,6 +83,9 @@ export default async function handler(req, res) {
   const deletionToken = randomUUID();
   let releaseHolds = null;
   let accountDeleted = false;
+  let authOutcomeUnknown = false;
+  let receiptId;
+  let receiptOutcomeFailed = false;
   try {
     // Build the plan: for every owned workspace, look up its OTHER active members
     // so a shared workspace cannot be mistaken for private data to purge.
@@ -189,17 +192,21 @@ export default async function handler(req, res) {
     if (receiptError || !receipt?.id) {
       return sendJson(res, 502, { ok: false, message: 'Unable to start account deletion. Nothing was changed.' });
     }
-    const finishReceipt = (fields) =>
-      supabase
-        .from('account_deletion_receipts')
-        .update({ ...fields, finished_at: new Date().toISOString() })
-        .eq('id', receipt.id)
-        .then(
-          ({ error }) => {
-            if (error) console.error('account deletion: receipt not updated', { receiptId: receipt.id, fields });
-          },
-          () => console.error('account deletion: receipt not updated', { receiptId: receipt.id, fields }),
-        );
+    receiptId = receipt.id;
+    const finishReceipt = async (fields) => {
+      try {
+        const { data, error } = await supabase
+          .from('account_deletion_receipts')
+          .update({ ...fields, finished_at: new Date().toISOString() })
+          .eq('id', receipt.id)
+          .select('id')
+          .single();
+        if (error || data?.id !== receipt.id) throw new Error('receipt_outcome_unconfirmed');
+      } catch {
+        receiptOutcomeFailed = true;
+        throw new Error('receipt_outcome_unconfirmed');
+      }
+    };
 
     /*
      * Files under the account's own legacy prefix that another workspace still
@@ -225,7 +232,7 @@ export default async function handler(req, res) {
      * Delete the account. Its memberships go with it (the user_id foreign key
      * cascades), so nothing is removed beforehand: a failure here used to
      * leave the person still signed up but already locked out of every other
-     * owner's ranch. Now a failure releases the holds and changes nothing.
+     * owner's ranch. An unacknowledged delete keeps the outcome unknown.
      */
     // Slow reads must not outlive the checkout fence. A lost lease preserves
     // the account instead of deleting it beside a newly admitted purchase.
@@ -244,17 +251,23 @@ export default async function handler(req, res) {
       await finishReceipt({ status: 'refused', failure: 'deletion request fence lost' });
       return sendJson(res, BILLING_UNVERIFIED.status, BILLING_UNVERIFIED);
     }
+    // A rejected/lost response does not prove the destructive operation failed.
+    // Retain the deletion fence until its lease expires if acknowledgment is lost.
+    authOutcomeUnknown = true;
     const { error: deleteUserError } = await supabase.auth.admin.deleteUser(user.id);
     if (deleteUserError) {
       console.error('account deletion: auth delete failed', { userId: user.id, message: deleteUserError.message });
-      await finishReceipt({ status: 'failed', failure: 'auth delete failed' });
+      await finishReceipt({ status: 'failed', failure: 'auth deletion outcome unconfirmed' });
       return sendJson(res, 502, {
         ok: false,
-        message: 'Your account could not be deleted. Nothing was removed; try again.',
+        accountDeleted: null,
+        operationId: receipt.id,
+        message: 'Account deletion could not be confirmed. Contact support with this operation ID before retrying.',
       });
     }
 
     accountDeleted = true;
+    authOutcomeUnknown = false;
 
     /*
      * Account is gone -- now purge the workspaces that were held.
@@ -302,10 +315,19 @@ export default async function handler(req, res) {
       transferredWorkspaces: plan.workspacesToTransfer.length,
       storageCleanupComplete: leftovers.length === 0,
     });
-  } catch (error) {
-    return sendJson(res, 500, { ok: false, message: `Account deletion failed: ${error.message}` });
+  } catch {
+    return sendJson(res, receiptOutcomeFailed ? 503 : 500, {
+      ok: false,
+      accountDeleted: authOutcomeUnknown ? null : accountDeleted,
+      ...(receiptId ? { operationId: receiptId } : {}),
+      message: authOutcomeUnknown
+        ? 'Account deletion could not be confirmed. Contact support with this operation ID before retrying.'
+        : accountDeleted
+          ? 'Your account was deleted, but cleanup or its confirmation is incomplete. Contact support with this operation ID.'
+          : 'Account deletion could not finish. Your account was not deleted. Contact support before retrying.',
+    });
   } finally {
-    if (!accountDeleted && releaseHolds) await releaseHolds();
+    if (!accountDeleted && !authOutcomeUnknown && releaseHolds) await releaseHolds();
     for (const { workspaceId, token } of billingClaims) {
       await releaseCheckoutLock(supabase, workspaceId, token);
     }
