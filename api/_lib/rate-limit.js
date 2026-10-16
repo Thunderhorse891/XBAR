@@ -7,9 +7,8 @@ import { sendJson } from './http.js';
  *  - If Upstash Redis REST credentials are configured
  *    (UPSTASH_REDIS_REST_URL + UPSTASH_REDIS_REST_TOKEN), use a fixed-window
  *    counter that is shared across every serverless instance and region.
- *  - Otherwise fall back to a per-instance in-memory window. This is best
- *    effort (each cold serverless instance keeps its own counter) but still
- *    blunts naive floods and keeps local/dev working with zero configuration.
+ *  - Local development/tests may use a per-instance memory window. Production
+ *    and Vercel deployments refuse requests if shared protection is unavailable.
  */
 
 const memoryBuckets = new Map();
@@ -57,19 +56,25 @@ async function checkUpstash(key, limit, windowSeconds) {
   const url = process.env.UPSTASH_REDIS_REST_URL;
   const token = process.env.UPSTASH_REDIS_REST_TOKEN;
   if (!url && !token) {
+    if (process.env.NODE_ENV === 'production' || process.env.VERCEL || process.env.VERCEL_ENV === 'production') {
+      throw new Error('Production requires a shared rate limiter.');
+    }
     return null;
   }
   if (!url || !token) throw new Error('Shared rate limiter configuration is incomplete.');
 
-  const response = await fetch(`${url.replace(/\/$/, '')}/pipeline`, {
+  const response = await fetch(url.replace(/\/$/, ''), {
     method: 'POST',
     headers: {
       Authorization: `Bearer ${token}`,
       'Content-Type': 'application/json',
     },
     body: JSON.stringify([
-      ['INCR', key],
-      ['EXPIRE', key, windowSeconds, 'NX'],
+      'EVAL',
+      "local count = redis.call('INCR', KEYS[1]); if count == 1 then redis.call('EXPIRE', KEYS[1], ARGV[1]); end; return count;",
+      1,
+      key,
+      windowSeconds,
     ]),
     signal: AbortSignal.timeout(3000),
   });
@@ -78,16 +83,9 @@ async function checkUpstash(key, limit, windowSeconds) {
     throw new Error('Shared rate limiter is unavailable.');
   }
 
-  const results = await response.json();
-  const count = results?.[0]?.result;
-  if (
-    !Array.isArray(results) ||
-    results.length !== 2 ||
-    results.some((result) => result.error) ||
-    !Number.isSafeInteger(count) ||
-    count < 1 ||
-    ![0, 1].includes(results[1]?.result)
-  ) {
+  const result = await response.json();
+  const count = result?.result;
+  if (result?.error || !Number.isSafeInteger(count) || count < 1) {
     throw new Error('Shared rate limiter returned an invalid result.');
   }
   const ok = count <= limit;
