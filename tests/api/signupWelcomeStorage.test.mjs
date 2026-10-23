@@ -46,6 +46,8 @@ function harness({
   session = true,
   sent = true,
   entries = [],
+  checkOwnerArrival = false,
+  ownerAccess = 'denied',
 } = {}) {
   const stored = new Map(entries);
   const navigations = [];
@@ -65,6 +67,8 @@ function harness({
   const context = {
     authMode,
     callbackFailed,
+    checkOwnerArrival,
+    ownerAccess,
     redirectTarget: '/setup?plan=Professional',
     cloud: {
       status,
@@ -94,6 +98,22 @@ function harness({
     run: () => runInNewContext(script, context),
   };
 }
+
+test('owner arrival waits for a server grant and preserves explicit return and failed callback paths', () => {
+  for (const [options, destination] of [
+    [{ checkOwnerArrival: true, ownerAccess: 'checking' }, null],
+    [{ checkOwnerArrival: true, ownerAccess: 'allowed' }, '/owner'],
+    [{ checkOwnerArrival: true, ownerAccess: 'denied' }, '/setup?plan=Professional'],
+    [{ checkOwnerArrival: true, ownerAccess: 'unavailable' }, '/setup?plan=Professional'],
+    [{ checkOwnerArrival: false, ownerAccess: 'allowed' }, '/setup?plan=Professional'],
+    [{ checkOwnerArrival: true, ownerAccess: 'allowed', callbackFailed: true }, null],
+  ]) {
+    const h = harness({ authMode: 'signin', ...options });
+    h.run();
+    assert.deepEqual(h.navigations, destination ? [[destination, true]] : []);
+    assert.equal(h.requests(), 0);
+  }
+});
 
 for (const storageFailure of ['getter', 'read', 'write', 'absent']) {
   test(`signup still reaches its requested setup route when session storage fails at ${storageFailure}`, async () => {

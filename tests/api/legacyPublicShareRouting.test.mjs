@@ -25,7 +25,7 @@ async function appBootstrap(env = {}) {
         name: 'bootstrap-boundaries',
         setup(b) {
           b.onResolve({ filter: /.*/ }, ({ path, importer }) => {
-            if (importer.endsWith('/src/main.tsx') && path !== './lib/routeCanon') {
+            if (importer.replaceAll('\\', '/').endsWith('/src/main.tsx') && path !== './lib/routeCanon') {
               return { path, namespace: 'bootstrap-fixture' };
             }
           });

@@ -6,6 +6,7 @@ import { isSupabaseConfigured } from '@/lib/platformConfig';
 import { productEvent, productEventNames } from '@/lib/productEvents';
 import { trackRuntimeEvent } from '@/lib/runtimeEvents';
 import { useCloudStore } from '@/store/useCloudStore';
+import { useOwnerAccess } from '@/hooks/useOwnerAccess';
 import { useUiStore } from '@/store/useUiStore';
 import { useXbarStore } from '@/store/useXbarStore';
 import './cleanEntryExperience.css';
@@ -120,6 +121,9 @@ export default function Login() {
    * reload.
    */
   const [callbackFailed, setCallbackFailed] = useState(false);
+  const checkOwnerArrival =
+    authMode === 'signin' && !selectedPlan && !(location.state as { from?: string } | null)?.from && !callbackFailed;
+  const ownerAccess = useOwnerAccess(checkOwnerArrival);
 
   useEffect(() => {
     if (callbackFailed) return;
@@ -155,9 +159,20 @@ export default function Login() {
           });
         }
       }
-      navigate(redirectTarget, { replace: true });
+      if (checkOwnerArrival && ownerAccess === 'checking') return;
+      navigate(checkOwnerArrival && ownerAccess === 'allowed' ? '/owner' : redirectTarget, { replace: true });
     }
-  }, [callbackFailed, cloud.session, cloud.status, navigate, redirectTarget, authMode, cloud]);
+  }, [
+    callbackFailed,
+    cloud.session,
+    cloud.status,
+    navigate,
+    redirectTarget,
+    authMode,
+    cloud,
+    checkOwnerArrival,
+    ownerAccess,
+  ]);
 
   /*
    * A callback that failed before it could produce a session.

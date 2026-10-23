@@ -1,12 +1,12 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import { registerHooks } from 'node:module';
-import { fileURLToPath } from 'node:url';
-const root = fileURLToPath(new URL('../..', import.meta.url)).replace(/\/$/, '');
+// Keep dynamic imports as file URLs on Windows as well as POSIX.
+const root = new URL('../..', import.meta.url).href.replace(/\/$/, '');
 registerHooks({
   resolve(specifier, context, next) {
     if (/\/supabaseClient(?:\.[tj]s)?$/.test(specifier))
-      return { url: `file://${root}/tests/api/fixtures/cloudSubscriptionClient.mjs`, shortCircuit: true };
+      return { url: `${root}/tests/api/fixtures/cloudSubscriptionClient.mjs`, shortCircuit: true };
     return next(specifier, context);
   },
 });
