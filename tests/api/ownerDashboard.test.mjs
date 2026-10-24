@@ -62,7 +62,7 @@ function rig(options = {}) {
         },
         async limit() {
           return {
-            error: options.dbError,
+            error: !options.dbErrorTable || options.dbErrorTable === table ? options.dbError : null,
             count: options.rowCount ?? options.tables?.[table]?.length ?? 1,
             data:
               options.tables?.[table] ??
@@ -96,14 +96,23 @@ function rig(options = {}) {
     env,
     getAdmin: () => (options.missingAdmin ? null : admin),
     rateLimit: async () => true,
-    readReadiness: () => ({ ok: true }),
+    readReadiness: () => {
+      if (options.readinessThrows) throw new Error('PRIVATE');
+      return { ok: true };
+    },
     makeStripe: () => {
       calls.push(['stripe']);
       return {
-        accounts: { retrieve: async () => ({ id: options.accountId || 'acct_owner' }) },
+        accounts: {
+          retrieve: async () => {
+            if (options.accountError) throw options.accountError;
+            return { id: options.accountId || 'acct_owner' };
+          },
+        },
         subscriptions: {
           list: async (params) => {
             calls.push(['list', params]);
+            if (options.subscriptionError) throw options.subscriptionError;
             if (options.stripeThrows) throw new Error('PRIVATE');
             return options.page ?? { data: [subscription], has_more: true };
           },
@@ -270,5 +279,72 @@ test('invalid filters, unsupported methods and preflight do not reach billing', 
       r.calls.some(([name]) => name === 'stripe'),
       false,
     );
+  }
+});
+
+test('failed owner reads record only fixed diagnostic categories and keep the response private', async () => {
+  const privateError = (type) => ({
+    type,
+    message: 'PRIVATE sk_live_private customer@example.invalid',
+    raw: { authorization: 'Bearer PRIVATE', customer: 'cus_private' },
+  });
+  for (const [options, stage, reason] of [
+    [{ missingAdmin: true }, 'identity', 'read_failed'],
+    [{ authThrows: true }, 'identity', 'read_failed'],
+    [{ accountError: privateError('StripeAuthenticationError') }, 'billing_account', 'authentication_failed'],
+    [{ accountError: privateError('PRIVATE') }, 'billing_account', 'read_failed'],
+    [{ accountId: 'acct_wrong' }, 'billing_account', 'account_mismatch'],
+    [{ subscriptionError: privateError('StripePermissionError') }, 'subscriptions', 'permission_denied'],
+    [{ subscriptionError: privateError('StripeConnectionError') }, 'subscriptions', 'connection_failed'],
+    [{ subscriptionError: privateError('StripeRateLimitError') }, 'subscriptions', 'rate_limited'],
+    [{ subscriptionError: privateError('StripeInvalidRequestError') }, 'subscriptions', 'invalid_request'],
+    [{ stripeThrows: true }, 'subscriptions', 'read_failed'],
+    [{ page: { data: [], has_more: true } }, 'subscription_validation', 'incomplete_page'],
+    [
+      { page: { data: [{ ...subscription, livemode: false }], has_more: false } },
+      'subscription_validation',
+      'unverified_subscription',
+    ],
+    [
+      { page: { data: [{ ...subscription, customer: 'PRIVATE' }], has_more: false } },
+      'subscription_validation',
+      'missing_customer_identity',
+    ],
+    [{ rowCount: 1001 }, 'workspace_bindings', 'incomplete_bindings'],
+    [{ dbError: privateError('PRIVATE') }, 'workspace_bindings', 'incomplete_bindings'],
+    [{ dbError: privateError('PRIVATE'), dbErrorTable: 'workspaces' }, 'workspace_lookup', 'lookup_failed'],
+    [{ readinessThrows: true }, 'readiness', 'read_failed'],
+  ]) {
+    const warnings = [];
+    const originalWarn = console.warn;
+    console.warn = (...args) => warnings.push(args);
+    try {
+      const res = await rig(options).request();
+      assert.equal(res.statusCode, 503);
+      assert.deepEqual(res.body, {
+        ok: false,
+        message: 'Customer data could not be verified. Refresh to try again; no accounts or payments were changed.',
+      });
+      assert.match(res.headers['Cache-Control'], /no-store/);
+      assert.deepEqual(warnings, [['Owner dashboard verification refused.', { stage, reason }]]);
+    } finally {
+      console.warn = originalWarn;
+    }
+  }
+});
+
+test('successful requests and rejected identities do not emit customer-read diagnostics', async () => {
+  const warnings = [];
+  const originalWarn = console.warn;
+  console.warn = (...args) => warnings.push(args);
+  try {
+    assert.equal((await rig().request()).statusCode, 200);
+    assert.equal((await rig().request({ accessOnly: true })).statusCode, 200);
+    assert.equal((await rig().request({ token: '' })).statusCode, 401);
+    assert.equal((await rig({ user: null }).request()).statusCode, 401);
+    assert.equal((await rig({ user: { id: 'someone-else', email_confirmed_at: 'now' } }).request()).statusCode, 403);
+    assert.deepEqual(warnings, []);
+  } finally {
+    console.warn = originalWarn;
   }
 });

@@ -59,6 +59,8 @@ export function createOwnerHandler({
       return sendJson(res, 503, { ok: false, message: 'Owner access is not configured.' });
     }
     if (!(await rateLimit(req, res, { bucket: 'owner-dashboard', limit: 90, windowSeconds: 60 }))) return;
+    let stage = 'identity';
+    let reason = 'read_failed';
     try {
       const admin = getAdmin();
       if (!admin) throw new Error('Owner identity service unavailable');
@@ -85,19 +87,25 @@ export function createOwnerHandler({
           message: 'Billing requires a live key in production or a test key in previews.',
         });
       }
+      stage = 'billing_client';
       const stripe = makeStripe(key);
+      stage = 'billing_account';
       const account = await stripe.accounts.retrieve();
       const expectedAccount = env.STRIPE_ACCOUNT_ID?.trim();
       if (!/^acct_[A-Za-z0-9]+$/.test(account?.id) || (expectedAccount && account.id !== expectedAccount)) {
+        reason = 'account_mismatch';
         throw new Error('Billing account mismatch');
       }
+      stage = 'subscriptions';
       const page = await stripe.subscriptions.list({
         status,
         limit: PAGE_SIZE,
         expand: ['data.customer'],
         ...(cursor ? { starting_after: cursor } : {}),
       });
+      stage = 'subscription_validation';
       if (!Array.isArray(page?.data) || typeof page.has_more !== 'boolean' || (page.has_more && !page.data.length)) {
+        reason = 'incomplete_page';
         throw new Error('Incomplete billing response');
       }
       for (const subscription of page.data) {
@@ -106,17 +114,22 @@ export function createOwnerHandler({
           subscription.livemode !== (mode === 'live') ||
           !STATUSES.has(subscription.status)
         ) {
+          reason = 'unverified_subscription';
           throw new Error('Unverified subscription');
         }
       }
       const customerIds = [
         ...new Set(page.data.map((s) => (typeof s.customer === 'string' ? s.customer : s.customer?.id))),
       ];
-      if (customerIds.some((id) => !/^cus_[A-Za-z0-9]+$/.test(id))) throw new Error('Missing customer identity');
+      if (customerIds.some((id) => !/^cus_[A-Za-z0-9]+$/.test(id))) {
+        reason = 'missing_customer_identity';
+        throw new Error('Missing customer identity');
+      }
       let bindings = [];
       let workspaces = [];
       let profiles = [];
       if (customerIds.length) {
+        stage = 'workspace_bindings';
         const result = await admin
           .from('workspace_billing_customers')
           .select('workspace_id, stripe_customer_id, stripe_subscription_id', { count: 'exact' })
@@ -127,11 +140,14 @@ export function createOwnerHandler({
           !Array.isArray(result.data) ||
           result.count !== result.data.length ||
           result.data.length > 1000
-        )
+        ) {
+          reason = 'incomplete_bindings';
           throw new Error('Incomplete workspace bindings');
+        }
         bindings = result.data;
         const ids = [...new Set(bindings.map((b) => b.workspace_id))];
         if (ids.length) {
+          stage = 'workspace_lookup';
           const [spaces, plans] = await Promise.all([
             admin.from('workspaces').select('id, name, business_name').in('id', ids).limit(1001),
             admin
@@ -147,12 +163,15 @@ export function createOwnerHandler({
             !Array.isArray(plans.data) ||
             spaces.data.length > 1000 ||
             plans.data.length > 1000
-          )
+          ) {
+            reason = 'lookup_failed';
             throw new Error('Workspace lookup failed');
+          }
           workspaces = spaces.data;
           profiles = plans.data;
         }
       }
+      stage = 'response';
       const base = `https://dashboard.stripe.com/${account.id}${mode === 'test' ? '/test' : ''}`;
       const subscriptions = page.data.map((s) => {
         const customer = typeof s.customer === 'object' && !s.customer.deleted ? s.customer : null;
@@ -196,6 +215,9 @@ export function createOwnerHandler({
           customerUrl: ID.test(customerId) ? `${base}/customers/${customerId}` : null,
         };
       });
+      stage = 'readiness';
+      const readinessResult = readReadiness();
+      stage = 'response';
       return sendJson(res, 200, {
         ok: true,
         fetchedAt: new Date().toISOString(),
@@ -204,9 +226,19 @@ export function createOwnerHandler({
         nextCursor: page.has_more ? page.data.at(-1).id : null,
         billingUrl: `${base}/subscriptions`,
         paymentsUrl: `${base}/payments`,
-        readiness: readReadiness(),
+        readiness: readinessResult,
       });
-    } catch {
+    } catch (error) {
+      // Emit only code-owned categories. Never log provider messages, objects,
+      // request URLs, tokens, account IDs, or customer/workspace identifiers.
+      if (reason === 'read_failed' && (stage === 'billing_account' || stage === 'subscriptions')) {
+        if (error?.type === 'StripeAuthenticationError') reason = 'authentication_failed';
+        else if (error?.type === 'StripePermissionError') reason = 'permission_denied';
+        else if (error?.type === 'StripeConnectionError') reason = 'connection_failed';
+        else if (error?.type === 'StripeRateLimitError') reason = 'rate_limited';
+        else if (error?.type === 'StripeInvalidRequestError') reason = 'invalid_request';
+      }
+      console.warn('Owner dashboard verification refused.', { stage, reason });
       // Never echo provider errors: these can contain credentials/customer data.
       return sendJson(res, 503, {
         ok: false,
