@@ -168,6 +168,15 @@ begin
     where bucket_id = 'horse-documents' and name = doc_shared;
   exception when insufficient_privilege then null;
   end;
+  -- Permissive UPDATE predicates combine across the whole objects table,
+  -- including different buckets. A legacy media destination must not pair
+  -- with document-source manage authority.
+  begin
+    update storage.objects
+    set bucket_id = 'horse-media', name = admin_id::text || '/horses/fixture/taken.jpg'
+    where bucket_id = 'horse-documents' and name = doc_shared;
+  exception when insufficient_privilege then null;
+  end;
   update storage.objects set name = workspace::text || '/documents/fixture/rescued.pdf'
   where bucket_id = 'horse-documents' and name = doc_legacy;
   get diagnostics affected = row_count;
