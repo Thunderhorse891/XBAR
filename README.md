@@ -610,3 +610,17 @@ by the application. See [the billing runbook](docs/OPERATOR-BILLING-RUNBOOK.md)
 for the separate Stripe verification gates. Rollback is to disable the feature
 and restore application code, preserving these additive tables and claims so
 retries, workspace deletion, or redeployment cannot reset promotion eligibility.
+
+### Document approval guard (prepared; production approval required)
+
+`20261107160000_guard_document_approval.sql` separates document upload from approval
+in the database. It preserves existing records, unchanged approved saves and
+authorized reviewer access. Read [the scope and recovery plan](docs/reviews/document-approval.md).
+Rehearse on an isolated database with `supabase/checks/document-review-writes.sql`.
+Only after final review and Erin's explicit production approval:
+
+```sh
+psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f supabase/migrations/20261107160000_guard_document_approval.sql
+```
+
+Merging this code or deploying the website does not execute this command.
