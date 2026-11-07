@@ -634,3 +634,17 @@ psql "$STAGING_DATABASE_URL" -v ON_ERROR_STOP=1 -f supabase/migrations/202610051
 # Production separately, only after explicit production approval:
 psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f supabase/migrations/20261005122848_public_listing_projection.sql
 ```
+
+### Document approval guard (prepared; production approval required)
+
+`20261107160000_guard_document_approval.sql` separates document upload from approval
+in the database. It preserves existing records, unchanged approved saves and
+authorized reviewer access. Read [the scope and recovery plan](docs/reviews/document-approval.md).
+Rehearse on an isolated database with `supabase/checks/document-review-writes.sql`.
+Only after final review and Erin's explicit production approval:
+
+```sh
+psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f supabase/migrations/20261107160000_guard_document_approval.sql
+```
+
+Merging this code or deploying the website does not execute this command.
