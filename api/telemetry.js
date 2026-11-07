@@ -3,6 +3,7 @@ import { getSupabaseAdmin, requireWorkspaceAccess } from './_lib/supabase-admin.
 import { enforceRateLimit } from './_lib/rate-limit.js';
 import { applyCors } from './_lib/cors.js';
 import { parseBody, telemetrySchema } from './_lib/validation.js';
+import { privateSafeRuntimePayload } from './_lib/telemetry-privacy.js';
 
 /*
  * Runtime telemetry intake. This runs with the Supabase service-role key, so a
@@ -60,7 +61,7 @@ export default async function handler(req, res) {
   const requestedWorkspaceId = parsed.data.workspaceId;
   const eventName = parsed.data.eventName || 'runtime.event';
   const severity = parsed.data.severity;
-  const payload = capPayload(parsed.data.payload);
+  const payload = capPayload(privateSafeRuntimePayload(eventName, parsed.data.payload));
 
   // Only associate the event with a workspace when the caller proves membership.
   let workspaceId = null;
