@@ -842,18 +842,26 @@ async function writeConcurrentRow(params: {
   }
   if (table === 'shared_listings')
     update.published_at = payload.state === 'Live' ? (remote.published_at ?? row.updated_at) : null;
+  if (table === 'documents') {
+    const stateEdited = !isRecord(baseline) || (isRecord(row.payload) && row.payload.state !== baseline.state);
+    // An explicit approval/revocation must update both review representations.
+    // Ordinary edits must not clear (or overwrite) an independent server hold.
+    if (stateEdited) update.needs_review = update.state !== 'Ready';
+    else delete update.needs_review;
+  }
   if (typeof remote.updated_at !== 'string')
     throw new WorkspaceSaveConflictError(`Cloud conflict: ${table} has no revision.`);
   // Both revision and payload are pinned: older writers may omit updated_at.
-  const { data, error } = await client
+  let query = client
     .from(table)
     .update(update)
     .eq('workspace_id', workspaceId)
     .eq(idColumn, row[idColumn])
     .eq('updated_at', remote.updated_at)
-    .eq('payload', JSON.stringify(remote.payload))
-    .select(idColumn)
-    .maybeSingle();
+    .eq('payload', JSON.stringify(remote.payload));
+  if (table === 'documents' && 'needs_review' in update && typeof remote.needs_review === 'boolean')
+    query = query.eq('needs_review', remote.needs_review);
+  const { data, error } = await query.select(idColumn).maybeSingle();
   if (error || !confirmed(data))
     throw new WorkspaceSaveConflictError(
       error?.message ?? `Cloud conflict: ${table} changed while saving. Your local change is retained.`,
@@ -1244,6 +1252,7 @@ async function saveWorkspaceBackupToRelationalCloud(
         document_type: document.type,
         source: document.source,
         state: document.state,
+        needs_review: document.state !== 'Ready',
         confidence: document.confidence,
         duplicate_risk: document.duplicateRisk,
         // Persist the upload size so the server-side storage-limit trigger and

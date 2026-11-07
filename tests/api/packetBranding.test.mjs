@@ -61,10 +61,19 @@ const PROFILE = {
   payload: { packetLogoDataUrl: LOGO, contactPhone: '+1 555 010 0200', website: 'https://silverspur.example' },
 };
 
-function install({ profile = PROFILE, profileError = null, allow = true, documents = [], readErrors = {}, role } = {}) {
+function install({
+  profile = PROFILE,
+  profileError = null,
+  allow = true,
+  documents = [],
+  readErrors = {},
+  role,
+  attachmentBytes,
+} = {}) {
   const reads = [],
     writes = [],
-    uploads = [];
+    uploads = [],
+    downloads = [];
   const tables = {
     workspaces: [{ id: WORKSPACE, owner_user_id: allow && !role ? USER : 'someone-else' }],
     workspace_memberships: role ? [{ workspace_id: WORKSPACE, user_id: USER, role, status: 'active' }] : [],
@@ -140,14 +149,63 @@ function install({ profile = PROFILE, profileError = null, allow = true, documen
           return { error: null };
         },
         createSignedUrl: async () => ({ data: { signedUrl: 'https://download.example.test/packet' }, error: null }),
-        download: async () => {
+        download: async (path) => {
+          downloads.push(path);
+          if (attachmentBytes) return { data: new Blob([attachmentBytes]), error: null };
           throw new Error('No attachments expected');
         },
       }),
     },
   };
   __setBillingSupabase(client);
-  return { client, reads, writes, uploads };
+  return { client, reads, writes, uploads, downloads };
+}
+
+for (const [label, override] of [
+  ['pending', { state: 'Needs Review' }],
+  ['missing state', { state: undefined }],
+  ['review flag', { needs_review: true }],
+  ['mirror state', { payload: { state: 'Needs Review' } }],
+  ['identity hold', { payload: { identityReviewRequired: true } }],
+  ['processing hold', { payload: { processingNote: 'OCR requires review' } }],
+  ['duplicate', { duplicate_risk: 'Possible Duplicate' }],
+  ['mirror duplicate', { payload: { duplicateRisk: 'Possible Duplicate' } }],
+  ['document mismatch', { payload: { id: 'other-document' } }],
+  ['horse mismatch', { payload: { horseId: 'other-horse' } }],
+  ['type mismatch', { payload: { type: 'Coggins' } }],
+]) {
+  test(`packet never downloads or seals a selected document with ${label}`, async () => {
+    const bytes = await createSectionedPdf({ title: 'Synthetic attachment', sections: [] });
+    const reviewed = {
+      workspace_id: WORKSPACE,
+      horse_id: 'horse-1',
+      document_id: 'reviewed',
+      title: 'Reviewed source',
+      document_type: 'Registration',
+      state: 'Ready',
+      needs_review: false,
+      storage_path: `${WORKSPACE}/horse-1/reviewed.pdf`,
+      mime_type: 'application/pdf',
+    };
+    const unreviewed = {
+      ...reviewed,
+      document_id: 'unreviewed',
+      title: 'Unreviewed source',
+      storage_path: `${WORKSPACE}/horse-1/unreviewed.pdf`,
+      ...override,
+    };
+    const fixture = install({ documents: [unreviewed, reviewed], attachmentBytes: bytes });
+    const result = await call({ documentIds: ['unreviewed', 'reviewed'] });
+    assert.equal(result.status, 200, result.body.message);
+    assert.deepEqual(fixture.downloads, [reviewed.storage_path]);
+    assert.deepEqual(result.body.includedDocumentIds, ['reviewed']);
+    const saved = fixture.writes.find((write) => write.table === 'sale_packets').row;
+    assert.deepEqual(saved.document_ids, ['reviewed']);
+    const seal = JSON.parse(result.body.seal.payload);
+    assert.ok(!JSON.stringify(seal.documents).includes('unreviewed'));
+    const rendered = await inspectPdf(fixture.uploads[0].bytes);
+    assert.match(rendered.text, /Unreviewed source \(source review required\)/);
+  });
 }
 let counter = 0;
 for (const key of [
