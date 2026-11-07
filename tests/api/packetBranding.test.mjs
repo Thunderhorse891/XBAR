@@ -150,6 +150,39 @@ function install({ profile = PROFILE, profileError = null, allow = true, documen
   return { client, reads, writes, uploads };
 }
 let counter = 0;
+for (const key of [
+  '__proto__.xbar_launch_probe',
+  'constructor.prototype.xbar_launch_probe',
+  'buyer.__proto__.xbar_launch_probe',
+  'buyer..name',
+  'unlisted.field',
+])
+  test(`template field override refuses ${key}`, async () => {
+    const fixture = install();
+    try {
+      const result = await call(
+        { templateId: 'bill-of-sale', output: 'html', fields: { [key]: 'polluted' } },
+        templateHandler,
+      );
+      assert.equal(Object.prototype.xbar_launch_probe, undefined, 'a request mutated Object.prototype');
+      assert.equal(result.status, 400);
+      assert.equal(result.body.ok, false);
+      assert.equal(fixture.writes.length, 0);
+      assert.equal(fixture.uploads.length, 0);
+    } finally {
+      delete Object.prototype.xbar_launch_probe;
+    }
+  });
+test('template field overrides preserve valid buyer and sale placeholders', async () => {
+  install();
+  const result = await call(
+    { templateId: 'bill-of-sale', output: 'html', fields: { 'buyer.name': 'Synthetic Buyer', 'sale.price': '12500' } },
+    templateHandler,
+  );
+  assert.equal(result.status, 200);
+  assert.match(result.body.html, /Synthetic Buyer/);
+  assert.match(result.body.html, /12500/);
+});
 async function call(body = {}, endpoint = handler) {
   const req = Readable.from([JSON.stringify({ workspaceId: WORKSPACE, horseId: 'horse-1', ...body })]);
   req.method = 'POST';

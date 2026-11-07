@@ -2,7 +2,7 @@ import { randomUUID } from 'node:crypto';
 import { readJsonBody, sendJson } from './http.js';
 import { requireWorkspaceAccess } from './supabase-admin.js';
 import { requireRoleCapability } from './permissions.js';
-import { getTemplateById, renderTemplate } from './document-templates.js';
+import { applyTemplateFields, getTemplateById, renderTemplate } from './document-templates.js';
 import { documentObjectPath } from './document-storage.js';
 import { checkStorageCapacity, getWorkspaceEntitlements, tierIncludesPlan } from './entitlements.js';
 import { loadHorseContext } from './horse-context.js';
@@ -91,24 +91,21 @@ export default async function handler(req, res) {
       return sendJson(res, 404, { ok: false, message: `Horse ${horseId} not found in this workspace.` });
     }
 
-    const context = { ...loaded.context };
+    let context = { ...loaded.context };
     if (templateId === 'sales-packet') {
       context.packet = {
         documentList:
           loaded.documents.map((doc) => `${doc.document_type}: ${doc.title}`).join('; ') || 'No documents attached yet',
       };
     }
-    // Caller-supplied placeholder values ({"buyer.name": "...", "sale.price": "..."}).
-    for (const [key, value] of Object.entries(body.fields || {})) {
-      if (typeof value !== 'string') continue;
-      const parts = key.split('.');
-      let target = context;
-      for (const part of parts.slice(0, -1)) {
-        target[part] = target[part] && typeof target[part] === 'object' ? target[part] : {};
-        target = target[part];
-      }
-      target[parts.at(-1)] = value;
-    }
+    const fieldResult = applyTemplateFields({
+      template,
+      overrideContent: templateRow?.template_content || '',
+      context,
+      fields: body.fields ?? {},
+    });
+    if (!fieldResult.ok) return sendJson(res, 400, { ok: false, message: fieldResult.message });
+    context = fieldResult.context;
 
     const rendered = renderTemplate({ template, overrideContent: templateRow?.template_content || '', context });
     const generatedAt = new Date().toISOString();
