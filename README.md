@@ -561,6 +561,30 @@ Website deployment does not execute this command. Historical metadata removal is
 - **Webhook replays**: Stripe webhook deliveries are idempotent on `stripe_event_id` — retried events are acknowledged without re-running the subscription sync.
 - **CI**: every push runs lint, format check, production-dependency audit, typecheck, unit tests, build, and a browser smoke test of the built bundle; CodeQL scans weekly and on PRs; Dependabot files grouped weekly updates.
 
+### Pending public-listing response projection (explicit approval required)
+
+`20261005122848_public_listing_projection.sql` replaces only the existing legacy
+public-listing resolver body with an explicit buyer-field allowlist. It does not
+change grants, RLS, roles or customer records. It is prepared and tested against
+synthetic PostgreSQL data; **do not apply it to production without the owner's
+explicit approval**. Merge and web deployment do not apply this SQL.
+
+Read [the exact response contract, verification plan and emergency fallback](docs/reviews/public-listing-projection/PRODUCTION-APPROVAL.md)
+before staging or production application. The separate
+`supabase/checks/public-listing-projection.fail-closed.sql` temporarily refuses all
+buyer listing resolution if emergency containment is approved; never roll back
+to the historical raw-payload function, which would restore the disclosure.
+
+After the corresponding staging/production approval, the operator runs only the
+reviewed file against that approved destination:
+
+```sh
+# Staging first, only after staging approval:
+psql "$STAGING_DATABASE_URL" -v ON_ERROR_STOP=1 -f supabase/migrations/20261005122848_public_listing_projection.sql
+# Production separately, only after explicit production approval:
+psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f supabase/migrations/20261005122848_public_listing_projection.sql
+```
+
 ### Supabase Bootstrap
 
 Do not paste `supabase/production-schema.sql` directly into production. Generate the executable schema first:
