@@ -10,7 +10,8 @@ registerHooks({
 });
 const { setCloudSubscriptionClient } = await import('./fixtures/cloudSubscriptionClient.mjs');
 const { supabaseConfig } = await import('../../src/lib/platformConfig.ts');
-const { saveWorkspaceBackupToCloud, loadWorkspaceAccessProfile } = await import('../../src/lib/cloudWorkspace.ts');
+const { saveWorkspaceBackupToCloud, loadWorkspaceAccessProfile, upsertSharedListingInCloud } =
+  await import('../../src/lib/cloudWorkspace.ts');
 
 const clone = (value) => (value === undefined ? undefined : JSON.parse(JSON.stringify(value)));
 const horse = { id: 'horse-a', name: 'Blue', sale: { askPrice: 10000 }, medicalTimeline: [] };
@@ -278,6 +279,107 @@ function fixture(remote = {}, beforeUpdate, controls = {}) {
   setCloudSubscriptionClient(client);
   return { data, calls, client };
 }
+
+const listing = () => ({
+  id: 'listing-a',
+  horseId: 'horse-a',
+  sharePath: '/share/horse-a',
+  shareToken: 'old-token',
+  accessMode: 'Public Link',
+  state: 'Live',
+  channels: ['Direct Link'],
+  releaseConfirmedAt: '2026-10-01',
+  releaseConfirmedBy: 'Synthetic seller',
+  updatedAt: '2026-10-01',
+});
+const listingRow = (payload) => ({
+  workspace_id: 'ranch-a',
+  listing_id: payload.id,
+  horse_id: payload.horseId,
+  share_path: payload.sharePath,
+  share_token: payload.shareToken,
+  access_mode: payload.accessMode,
+  state: payload.state,
+  channels: payload.channels,
+  payload: clone(payload),
+  updated_at: '2026-10-01T00:00:00Z',
+});
+const listingContext = (previous) => ({ previous, expectedIdentity: { userId: 'user-a', workspaceId: 'ranch-a' } });
+for (const editChannels of [false, true])
+  test(`legacy listing defaults remain usable after ${editChannels ? 'channel editing' : 'token rotation'}`, async () => {
+    const raw = listing();
+    delete raw.channels;
+    const f = fixture({ shared_listings: [listingRow(raw)] });
+    const { restorePersistedState } = await import('../../src/store/xbarStoreHelpers.ts');
+    const before = restorePersistedState({ sharedListings: [raw] }, { generateMissingSharingTokens: false })
+      .sharedListings[0];
+    assert.deepEqual(before.channels, ['Direct Link']);
+    const result = await upsertSharedListingInCloud(
+      { ...before, shareToken: 'rotated', ...(editChannels ? { channels: ['Direct Link', 'Facebook'] } : {}) },
+      listingContext(before),
+    );
+    assert.equal(result.ok, true, result.message);
+    assert.deepEqual(result.listing.channels, editChannels ? ['Direct Link', 'Facebook'] : ['Direct Link']);
+    assert.equal(result.listing.channels.includes('Facebook'), editChannels);
+    const persisted = f.data.get('shared_listings')[0].payload;
+    assert.equal(persisted.shareToken, 'rotated');
+    assert.equal(
+      Object.hasOwn(persisted, 'channels'),
+      editChannels,
+      'unrelated defaults must not rewrite stored omissions',
+    );
+  });
+for (const [label, remotePatch] of [
+  ['rotated credential', { shareToken: 'new-token' }],
+  ['private access', { accessMode: 'Private Token' }],
+  ['archived listing', { state: 'Archived' }],
+]) {
+  test(`explicit listing save preserves a ${label} from a newer device`, async () => {
+    const before = listing();
+    const remote = { ...before, ...remotePatch };
+    const f = fixture({ shared_listings: [listingRow(remote)] });
+    const result = await upsertSharedListingInCloud(
+      { ...before, channels: ['Direct Link', 'Facebook'] },
+      listingContext(before),
+    );
+    assert.equal(result.ok, true, result.message);
+    const row = f.data.get('shared_listings')[0];
+    for (const [key, value] of Object.entries(remotePatch)) assert.equal(row.payload[key], value);
+    assert.equal(row.share_token, remote.shareToken);
+    assert.equal(row.access_mode, remote.accessMode);
+    assert.equal(row.state, remote.state);
+    for (const [key, value] of Object.entries(remotePatch)) assert.equal(result.listing[key], value);
+    assert.deepEqual(result.listing.channels, row.payload.channels);
+  });
+}
+test('an explicit listing update never recreates a deleted listing', async () => {
+  const f = fixture({ shared_listings: [] });
+  const before = listing();
+  const result = await upsertSharedListingInCloud({ ...before, shareToken: 'replacement' }, listingContext(before));
+  assert.equal(result.ok, false);
+  assert.deepEqual(f.data.get('shared_listings'), []);
+});
+test('a listing change after the conflict read is refused even if its timestamp is unchanged', async () => {
+  const before = listing();
+  const f = fixture({ shared_listings: [listingRow(before)] }, (table, rows) => {
+    if (table === 'shared_listings') {
+      rows[0].share_token = 'newer-token';
+      rows[0].payload = { ...rows[0].payload, shareToken: 'newer-token' };
+    }
+  });
+  const result = await upsertSharedListingInCloud({ ...before, channels: ['Facebook'] }, listingContext(before));
+  assert.equal(result.ok, false);
+  assert.equal(f.data.get('shared_listings')[0].share_token, 'newer-token');
+});
+test('a changed workspace refuses an explicit listing mutation before writing any listing', async () => {
+  const f = fixture({ shared_listings: [listingRow(listing())] });
+  const result = await upsertSharedListingInCloud(listing(), {
+    previous: listing(),
+    expectedIdentity: { userId: 'other-user', workspaceId: 'other-ranch' },
+  });
+  assert.equal(result.ok, false);
+  assert.equal(f.calls.filter((c) => c.table === 'shared_listings' && c.action !== 'read').length, 0);
+});
 
 test('a stale price-only save preserves a teammate vaccination on the same horse', async () => {
   const vaccination = { id: 'medical-1', type: 'Vaccination', notes: 'Rabies' };

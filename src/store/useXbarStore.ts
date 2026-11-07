@@ -1,4 +1,5 @@
 import { hasMeaningfulWorkspace } from '@/lib/cloudSyncPolicy';
+import { stableStringify } from '@/lib/relationalDiff';
 import { changeHorsePhoto } from '@/lib/horsePhotoGallery';
 import { reviewMedia } from '@/lib/mediaApproval';
 import { useEffect, useState } from 'react';
@@ -91,6 +92,7 @@ import type {
   RoleCapability,
   SaleCredentialSeal,
   SalesLead,
+  SharedListingRecord,
   WorkspaceInvitationRecord,
 } from '@/types/xbar';
 import type { BuyerRoomEvent, DocumentRecord, SalePacketBuild, SubscriptionProfile } from '@/types/xbar';
@@ -230,6 +232,29 @@ let documentIntakeQueue: Promise<unknown> = Promise.resolve();
 function readIntakeIdentity(): IntakeIdentity {
   const cloud = useCloudStore.getState();
   return { userId: cloud.session?.user?.id ?? '', workspaceId: cloud.workspaceId ?? '' };
+}
+
+function sharedListingContextError(
+  horseId: string,
+  previous: SharedListingRecord | undefined,
+  identity: IntakeIdentity,
+): string | null {
+  const state = useXbarStore.getState();
+  const cloud = useCloudStore.getState();
+  const recordedOwner = readRecordsOwner();
+  const current = state.sharedListings.find((item) => item.horseId === horseId && item.state !== 'Archived');
+  if (
+    intakeIdentityChanged(identity, readIntakeIdentity()) ||
+    (recordedOwner && recordedOwner !== vaultOwnerId()) ||
+    stableStringify(current) !== stableStringify(previous) ||
+    !state.horses.some((horse) => horse.id === horseId)
+  )
+    return 'The account, workspace or listing changed. Reload before changing buyer access.';
+  return (
+    requireRoleCapability(state.currentRole, 'manageSharedAccess') ??
+    (identity.userId ? requireRoleCapability(cloud.workspaceRole, 'manageSharedAccess') : null) ??
+    null
+  );
 }
 
 function serializeDocumentIntake<T>(run: () => Promise<T>): Promise<T> {
@@ -482,6 +507,7 @@ export const useXbarStore = create<XbarStore>()(
         }
 
         const state = get();
+        const listingIdentity = readIntakeIdentity();
         if (!state.horses.some((horse) => horse.id === horseId)) {
           return { ok: false, message: 'Horse record not found for shared access.' };
         }
@@ -490,7 +516,7 @@ export const useXbarStore = create<XbarStore>()(
           (listing) => listing.horseId === horseId && listing.state !== 'Archived',
         );
         const isActive = Boolean(existingListing);
-        const cloudListing = existingListing
+        let cloudListing = existingListing
           ? {
               ...existingListing,
               state: 'Archived' as const,
@@ -501,16 +527,24 @@ export const useXbarStore = create<XbarStore>()(
             });
 
         if (isSupabaseConfigured()) {
-          const cloudResult = await upsertSharedListingInCloud(cloudListing);
+          const before = sharedListingContextError(horseId, existingListing, listingIdentity);
+          if (before) return { ok: false, message: before };
+          const cloudResult = await upsertSharedListingInCloud(cloudListing, {
+            previous: existingListing,
+            expectedIdentity: listingIdentity,
+          });
           if (!cloudResult.ok) {
             return { ok: false, message: cloudResult.message };
           }
+          cloudListing = cloudResult.listing;
         }
+        const changed = sharedListingContextError(horseId, existingListing, listingIdentity);
+        if (changed) return { ok: false, message: changed };
 
         set((state) => {
           const nextSharedListings = existingListing
             ? state.sharedListings.map((listing) =>
-                listing.horseId === horseId
+                listing.id === existingListing.id
                   ? {
                       ...cloudListing,
                     }
@@ -553,6 +587,7 @@ export const useXbarStore = create<XbarStore>()(
         const deniedMessage = requireRoleCapability(get().currentRole, 'manageSharedAccess');
         if (deniedMessage) return { ok: false, message: deniedMessage };
         const state = get();
+        const listingIdentity = readIntakeIdentity();
         const horse = state.horses.find((item) => item.id === horseId);
         const listing = state.sharedListings.find((item) => item.horseId === horseId && item.state !== 'Archived');
         if (!horse || !listing) return { ok: false, message: 'Create the buyer listing before confirming release.' };
@@ -565,7 +600,7 @@ export const useXbarStore = create<XbarStore>()(
         if (!confirmedBy.trim())
           return { ok: false, message: 'Authorized seller name is required for legal release confirmation.' };
 
-        const nextListing = {
+        let nextListing: SharedListingRecord = {
           ...listing,
           releaseConfirmedAt: nowStamp(),
           releaseConfirmedBy: confirmedBy.trim(),
@@ -573,9 +608,17 @@ export const useXbarStore = create<XbarStore>()(
           updatedAt: todayStamp(),
         };
         if (isSupabaseConfigured()) {
-          const cloudResult = await upsertSharedListingInCloud(nextListing);
+          const before = sharedListingContextError(horseId, listing, listingIdentity);
+          if (before) return { ok: false, message: before };
+          const cloudResult = await upsertSharedListingInCloud(nextListing, {
+            previous: listing,
+            expectedIdentity: listingIdentity,
+          });
           if (!cloudResult.ok) return cloudResult;
+          nextListing = cloudResult.listing;
         }
+        const changed = sharedListingContextError(horseId, listing, listingIdentity);
+        if (changed) return { ok: false, message: changed };
         const auditEvent = createAuditEvent({
           actor: get().currentRole,
           action: 'status-change',
@@ -591,7 +634,10 @@ export const useXbarStore = create<XbarStore>()(
         return { ok: true, message: `${confirmedBy.trim()} confirmed the buyer packet release.`, id: horseId };
       },
       recordSharedChannel: async (horseId, channel) => {
+        const deniedMessage = requireRoleCapability(get().currentRole, 'manageSharedAccess');
+        if (deniedMessage) return { ok: false, message: deniedMessage };
         const state = get();
+        const listingIdentity = readIntakeIdentity();
         const horse = state.horses.find((item) => item.id === horseId);
         const listing = state.sharedListings.find((item) => item.horseId === horseId && item.state !== 'Archived');
         if (!horse || !listing) return { ok: false, message: 'Create the buyer listing before sharing.' };
@@ -607,14 +653,50 @@ export const useXbarStore = create<XbarStore>()(
             message: 'Authorized seller release confirmation is required before sharing the buyer packet.',
           };
         }
+        let nextListing: SharedListingRecord = {
+          ...listing,
+          state: listing.state === 'Draft' ? 'Live' : listing.state,
+          channels: listing.channels.includes(channel) ? listing.channels : [...listing.channels, channel],
+          lastSharedAt: todayStamp(),
+          updatedAt: todayStamp(),
+        };
         if (isSupabaseConfigured()) {
-          const cloudResult = await updateSharedListingChannelsInCloud({ horseId, channel });
+          const before = sharedListingContextError(horseId, listing, listingIdentity);
+          if (before) return { ok: false, message: before };
+          const cloudResult = await updateSharedListingChannelsInCloud({
+            listing,
+            channel,
+            expectedIdentity: listingIdentity,
+          });
           if (!cloudResult.ok) {
             return {
               ok: false,
               message: `Buyer packet share was not recorded in the cloud audit trail: ${cloudResult.message}`,
             };
           }
+          nextListing = cloudResult.listing;
+        }
+        const changed = sharedListingContextError(horseId, listing, listingIdentity);
+        if (changed) return { ok: false, message: changed };
+
+        // Callers captured the link before awaiting this action. A newer remote
+        // archive, release withdrawal or credential change must not distribute
+        // that stale link or create a successful-share audit event.
+        if (
+          nextListing.state !== 'Live' ||
+          !nextListing.releaseConfirmedAt ||
+          !nextListing.releaseConfirmedBy ||
+          nextListing.sharePath !== listing.sharePath ||
+          nextListing.accessMode !== listing.accessMode ||
+          nextListing.shareToken !== listing.shareToken
+        ) {
+          set((current) => ({
+            sharedListings: current.sharedListings.map((item) => (item.id === listing.id ? nextListing : item)),
+          }));
+          return {
+            ok: false,
+            message: 'Buyer access changed on another device. Review the current listing before sharing.',
+          };
         }
 
         const auditEvent = createAuditEvent({
@@ -626,17 +708,7 @@ export const useXbarStore = create<XbarStore>()(
           context: { horseId, channel },
         });
         set((current) => ({
-          sharedListings: current.sharedListings.map((item) =>
-            item.horseId === horseId && item.state !== 'Archived'
-              ? {
-                  ...item,
-                  state: item.state === 'Draft' ? 'Live' : item.state,
-                  channels: item.channels.includes(channel) ? item.channels : [...item.channels, channel],
-                  lastSharedAt: todayStamp(),
-                  updatedAt: todayStamp(),
-                }
-              : item,
-          ),
+          sharedListings: current.sharedListings.map((item) => (item.id === listing.id ? nextListing : item)),
           auditEvents: [auditEvent, ...current.auditEvents].slice(0, 500),
         }));
         return { ok: true, message: 'Buyer packet share recorded.', id: horseId };
@@ -648,6 +720,7 @@ export const useXbarStore = create<XbarStore>()(
         }
 
         const state = get();
+        const listingIdentity = readIntakeIdentity();
         const existingListing = state.sharedListings.find(
           (listing) => listing.horseId === horseId && listing.state !== 'Archived',
         );
@@ -655,7 +728,7 @@ export const useXbarStore = create<XbarStore>()(
           return { ok: false, message: 'Shared listing not found for this horse.' };
         }
 
-        const nextListing = {
+        let nextListing: SharedListingRecord = {
           ...existingListing,
           shareToken: createShareAccessToken(),
           tokenIssuedAt: todayStamp(),
@@ -663,15 +736,23 @@ export const useXbarStore = create<XbarStore>()(
         };
 
         if (isSupabaseConfigured()) {
-          const cloudResult = await upsertSharedListingInCloud(nextListing);
+          const before = sharedListingContextError(horseId, existingListing, listingIdentity);
+          if (before) return { ok: false, message: before };
+          const cloudResult = await upsertSharedListingInCloud(nextListing, {
+            previous: existingListing,
+            expectedIdentity: listingIdentity,
+          });
           if (!cloudResult.ok) {
             return { ok: false, message: cloudResult.message };
           }
+          nextListing = cloudResult.listing;
         }
+        const changed = sharedListingContextError(horseId, existingListing, listingIdentity);
+        if (changed) return { ok: false, message: changed };
 
         set((state) => ({
           sharedListings: state.sharedListings.map((listing) =>
-            listing.horseId === horseId && listing.state !== 'Archived'
+            listing.id === existingListing.id
               ? {
                   ...nextListing,
                 }
@@ -688,6 +769,7 @@ export const useXbarStore = create<XbarStore>()(
         }
 
         const state = get();
+        const listingIdentity = readIntakeIdentity();
         const existingListing = state.sharedListings.find(
           (listing) => listing.horseId === horseId && listing.state !== 'Archived',
         );
@@ -696,7 +778,7 @@ export const useXbarStore = create<XbarStore>()(
         }
 
         const needsToken = accessMode === 'Private Token' && !existingListing.shareToken.trim();
-        const nextListing = {
+        let nextListing: SharedListingRecord = {
           ...existingListing,
           accessMode,
           ...(needsToken ? { shareToken: createShareAccessToken(), tokenIssuedAt: todayStamp() } : {}),
@@ -704,15 +786,23 @@ export const useXbarStore = create<XbarStore>()(
         };
 
         if (isSupabaseConfigured()) {
-          const cloudResult = await upsertSharedListingInCloud(nextListing);
+          const before = sharedListingContextError(horseId, existingListing, listingIdentity);
+          if (before) return { ok: false, message: before };
+          const cloudResult = await upsertSharedListingInCloud(nextListing, {
+            previous: existingListing,
+            expectedIdentity: listingIdentity,
+          });
           if (!cloudResult.ok) {
             return { ok: false, message: cloudResult.message };
           }
+          nextListing = cloudResult.listing;
         }
+        const changed = sharedListingContextError(horseId, existingListing, listingIdentity);
+        if (changed) return { ok: false, message: changed };
 
         set((state) => ({
           sharedListings: state.sharedListings.map((listing) =>
-            listing.horseId === horseId && listing.state !== 'Archived'
+            listing.id === existingListing.id
               ? {
                   ...nextListing,
                 }

@@ -2404,62 +2404,70 @@ export async function removeWorkspaceMemberFromCloud(member: WorkspaceMemberReco
   return { ok: true, message: 'Workspace member removed from cloud.' } as const;
 }
 
-export async function upsertSharedListingInCloud(listing: SharedListingRecord) {
+export async function upsertSharedListingInCloud(
+  listing: SharedListingRecord,
+  contextAtStart: { previous?: SharedListingRecord; expectedIdentity: IntakeIdentity },
+) {
   const context = await getCloudWorkspaceContext();
   if (!context.ok) {
     return context;
   }
 
-  const { error } = await context.client.from('shared_listings').upsert(
-    {
-      workspace_id: context.workspaceId,
-      listing_id: listing.id,
-      horse_id: listing.horseId,
-      share_path: listing.sharePath,
-      access_mode: listing.accessMode,
-      share_token: listing.shareToken,
-      token_issued_at: listing.tokenIssuedAt || new Date().toISOString(),
-      published_at: listing.state === 'Live' ? new Date().toISOString() : null,
-      state: listing.state,
-      channels: listing.channels,
-      payload: listing,
-      updated_at: listing.updatedAt,
-    },
-    {
-      onConflict: 'workspace_id,listing_id',
-    },
-  );
+  if (
+    intakeIdentityChanged(contextAtStart.expectedIdentity, {
+      userId: context.session.user.id,
+      workspaceId: context.workspaceId,
+    }) ||
+    (contextAtStart.previous && contextAtStart.previous.id !== listing.id)
+  )
+    return {
+      ok: false,
+      message: 'The account, workspace or listing changed. Reload before changing buyer access.',
+    } as const;
 
-  if (error) {
-    return { ok: false, message: error.message } as const;
+  try {
+    // Use the same field merge and atomic revision/payload comparison as
+    // autosave. Explicit access actions must not restore another tab's token,
+    // overwrite its restrictions, or recreate a deleted listing.
+    const normalizeListing = (payload: unknown) => restoreCloudState({ sharedListings: [payload] }).sharedListings[0];
+    const saved = await writeConcurrentRow({
+      table: 'shared_listings',
+      idColumn: 'listing_id',
+      workspaceId: context.workspaceId,
+      baseline: contextAtStart.previous,
+      normalizeRemote: normalizeListing,
+      overwrite: false,
+      row: {
+        workspace_id: context.workspaceId,
+        listing_id: listing.id,
+        horse_id: listing.horseId,
+        share_path: listing.sharePath,
+        access_mode: listing.accessMode,
+        share_token: listing.shareToken,
+        token_issued_at: listing.tokenIssuedAt || new Date().toISOString(),
+        published_at: listing.state === 'Live' ? new Date().toISOString() : null,
+        state: listing.state,
+        channels: listing.channels,
+        payload: listing,
+        updated_at: new Date().toISOString(),
+      },
+    });
+    return { ok: true, message: 'Shared listing saved to cloud.', listing: normalizeListing(saved) } as const;
+  } catch (error) {
+    return {
+      ok: false,
+      message: error instanceof Error ? error.message : 'Shared listing could not be saved.',
+    } as const;
   }
-
-  return { ok: true, message: 'Shared listing saved to cloud.' } as const;
 }
 
 export async function updateSharedListingChannelsInCloud(params: {
-  horseId: string;
+  listing: SharedListingRecord;
   channel: SharedChannel;
+  expectedIdentity: IntakeIdentity;
   state?: SharedListingRecord['state'];
 }) {
-  const context = await getCloudWorkspaceContext();
-  if (!context.ok) {
-    return context;
-  }
-
-  const { data: existing, error: existingError } = await context.client
-    .from('shared_listings')
-    .select('payload')
-    .eq('workspace_id', context.workspaceId)
-    .eq('horse_id', params.horseId)
-    .not('state', 'eq', 'Archived')
-    .maybeSingle();
-
-  if (existingError || !existing?.payload || typeof existing.payload !== 'object') {
-    return { ok: false, message: existingError?.message ?? 'Shared listing not found in cloud workspace.' } as const;
-  }
-
-  const payload = existing.payload as SharedListingRecord;
+  const payload = params.listing;
   const nextListing: SharedListingRecord = {
     ...payload,
     channels: payload.channels.includes(params.channel) ? payload.channels : [...payload.channels, params.channel],
@@ -2468,5 +2476,5 @@ export async function updateSharedListingChannelsInCloud(params: {
     updatedAt: todayStamp(),
   };
 
-  return upsertSharedListingInCloud(nextListing);
+  return upsertSharedListingInCloud(nextListing, { previous: payload, expectedIdentity: params.expectedIdentity });
 }
