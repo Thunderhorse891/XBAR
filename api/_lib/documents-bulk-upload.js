@@ -1,6 +1,7 @@
 import { randomUUID } from 'node:crypto';
 import { readJsonBody, sendJson } from './http.js';
 import { requireWorkspaceAccess } from './supabase-admin.js';
+import { requireRoleCapability } from './permissions.js';
 import { runOcr } from './ocr.js';
 import { extractDocument, groupExtractionsIntoCandidates, NEEDS_REVIEW_THRESHOLD } from './document-extraction.js';
 import { extractZipEntries, isZipBuffer, guessMimeType } from './zip.js';
@@ -61,6 +62,28 @@ export default async function handler(req, res) {
     return sendJson(res, access.status, { ok: false, message: access.message });
   }
   const { supabase, user } = access;
+
+  // Auto ingestion can create/edit horses and mark documents reviewed. Check
+  // the whole requested operation before uploading bytes or processing rows.
+  // Upload-only roles can use preview; explicit commits require their actions.
+  const capabilities = new Set(['uploadDocuments']);
+  if (mode === 'auto')
+    for (const capability of ['createHorse', 'editHorse', 'reviewDocuments']) capabilities.add(capability);
+  if (mode === 'commit')
+    for (const assignment of Array.isArray(body.assignments) ? body.assignments : []) {
+      if (assignment?.action === 'create-horse') {
+        capabilities.add('createHorse');
+        capabilities.add('reviewDocuments');
+      }
+      if (assignment?.action === 'attach-horse') {
+        capabilities.add('editHorse');
+        capabilities.add('reviewDocuments');
+      }
+    }
+  for (const capability of capabilities) {
+    const denied = requireRoleCapability(access.role, capability);
+    if (denied) return sendJson(res, 403, { ok: false, code: 'capability_required', message: denied });
+  }
 
   try {
     if (mode === 'commit') {
