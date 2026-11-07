@@ -19,6 +19,8 @@ psql -X -v ON_ERROR_STOP=1 -f "$historical_file"
 psql -X -v ON_ERROR_STOP=1 -v expect_fixed=0 -f tests/database/public-listing-projection.sql
 psql -X -v ON_ERROR_STOP=1 -f supabase/migrations/20261005122848_public_listing_projection.sql
 psql -X -v ON_ERROR_STOP=1 -v expect_fixed=1 -f tests/database/public-listing-projection.sql
+# Each synthetic response mutation runs in its own rolled-back transaction.
+node tests/database/public-listing-projection-mutations.mjs
 # CREATE OR REPLACE must be idempotent.
 psql -X -v ON_ERROR_STOP=1 -f supabase/migrations/20261005122848_public_listing_projection.sql
 psql -X -v ON_ERROR_STOP=1 -v expect_fixed=1 -f tests/database/public-listing-projection.sql

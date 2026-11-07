@@ -29,18 +29,18 @@ begin
   raise notice 'CLOSED: emergency fallback denies an otherwise valid synthetic buyer link';
   return;
  end if;
- if result is null or result #>> '{horse,name}' <> 'Synthetic horse' then raise exception 'Valid buyer link did not resolve'; end if;
- if result #>> '{ownershipRecord,transferStatus}' <> 'Complete' or result #>> '{ownershipRecord,confidence}' <> '95' then raise exception 'Legacy ownership summary regressed'; end if;
- if result #>> '{sharedListing,workspaceId}' <> '10000000-0000-4000-8000-000000000051' then raise exception 'Canonical workspace lost'; end if;
+ if result is null or result #>> '{horse,name}' is distinct from 'Synthetic horse' then raise exception 'Valid buyer link did not resolve'; end if;
+ if result #>> '{ownershipRecord,transferStatus}' is distinct from 'Complete' or result #>> '{ownershipRecord,confidence}' is distinct from '95' then raise exception 'Legacy ownership summary regressed'; end if;
+ if result #>> '{sharedListing,workspaceId}' is distinct from '10000000-0000-4000-8000-000000000051' then raise exception 'Canonical workspace lost'; end if;
  if public.xbar_resolve_public_listing('synthetic-projection',null) is not null or public.xbar_resolve_public_listing('synthetic-projection','wrong') is not null then raise exception 'Private token gate bypass'; end if;
  if fixed then
   if result::text like '%PRIVATE_SENTINEL%' or result->'horse' ?| array['costBasis','insuredValue','owner','location','medicalTimeline','newPrivateField'] then raise exception 'Private data crossed raw RPC boundary'; end if;
-  if result #>> '{horse,sale,askPrice}' <> '15000' or result #>> '{horse,bloodline,sire}' <> 'Public sire' or result #>> '{documents,0,entities,registrationNumber}' <> '12345' then raise exception 'Buyer fields regressed'; end if;
-  if jsonb_array_length(result #> '{horse,gallery}') <> 1 or result #>> '{horse,gallery,0,storagePath}' not like '%/media-public.jpg' then raise exception 'Approved media contract regressed'; end if;
-  if result #>> '{horse,profileImage}' <> 'https://example.invalid/public.jpg' then raise exception 'Primary photo projection regressed'; end if;
+  if result #>> '{horse,sale,askPrice}' is distinct from '15000' or result #>> '{horse,bloodline,sire}' is distinct from 'Public sire' or result #>> '{documents,0,entities,registrationNumber}' is distinct from '12345' then raise exception 'Buyer fields regressed'; end if;
+  if jsonb_array_length(result #> '{horse,gallery}') is distinct from 1 or coalesce(result #>> '{horse,gallery,0,storagePath}', '') not like '%/media-public.jpg' then raise exception 'Approved media contract regressed'; end if;
+  if result #>> '{horse,profileImage}' is distinct from 'https://example.invalid/public.jpg' then raise exception 'Primary photo projection regressed'; end if;
   raise notice 'FIXED: raw anonymous resolver excludes private data and retains buyer fields';
  else
-  if result #>> '{horse,costBasis}' <> '987654' or result::text not like '%PRIVATE_SENTINEL%' then raise exception 'Expected historical exposure did not reproduce'; end if;
+  if result #>> '{horse,costBasis}' is distinct from '987654' or coalesce(result::text, '') not like '%PRIVATE_SENTINEL%' then raise exception 'Expected historical exposure did not reproduce'; end if;
   raise notice 'BASELINE: raw anonymous resolver exposes cost basis and private sentinel';
  end if;
  reset role;
@@ -59,31 +59,31 @@ begin
   update public.horses set payload=payload||'{"name":{"secret":"PRIVATE_SENTINEL"},"bloodline":["PRIVATE_SENTINEL"],"gallery":{"private":"PRIVATE_SENTINEL"},"sale":{"askPrice":{"secret":"PRIVATE_SENTINEL"}},"readiness":null}' where horse_id='horse-projection';
   update public.documents set payload=payload||'{"summary":{"secret":"PRIVATE_SENTINEL"},"entities":{"sire":{"secret":"PRIVATE_SENTINEL"}},"fileSizeBytes":{"secret":"PRIVATE_SENTINEL"}}' where document_id='doc-projection';
   result := public.xbar_resolve_public_listing('synthetic-projection',null);
-  if result is null or result::text like '%PRIVATE_SENTINEL%' or result #> '{horse,gallery}' <> '[]'::jsonb then raise exception 'Malformed containers crossed boundary or broke resolution'; end if;
+  if result is null or result::text like '%PRIVATE_SENTINEL%' or result #> '{horse,gallery}' is distinct from '[]'::jsonb then raise exception 'Malformed containers crossed boundary or broke resolution'; end if;
   update public.horses set payload=jsonb_set(payload,'{gallery}','[{"id":"storage-only","kind":"Conformation","status":"Approved","storagePath":"10000000-0000-4000-8000-000000000051/horses/horse-projection/media-only.jpg"}]') where horse_id='horse-projection';
   result := public.xbar_resolve_public_listing('synthetic-projection',null);
-  if result #>> '{horse,gallery,0,storagePath}' not like '%/media-only.jpg' then raise exception 'Storage-only photo lost'; end if;
+  if coalesce(result #>> '{horse,gallery,0,storagePath}', '') not like '%/media-only.jpg' then raise exception 'Storage-only photo lost'; end if;
   update public.horses set payload=jsonb_set(payload,'{gallery}','[{"id":"older","kind":"Hero","status":"Approved","url":"https://example.invalid/older.jpg"},{"id":"selected","kind":"Conformation","status":"Approved","storagePath":"10000000-0000-4000-8000-000000000051/horses/horse-projection/media-selected.jpg","isPrimary":true}]') where horse_id='horse-projection';
   result := public.xbar_resolve_public_listing('synthetic-projection',null);
-  if result #>> '{horse,gallery,0,id}' <> 'selected' or result #>> '{horse,profileImage}' <> '' then raise exception 'Selected storage-only primary is hidden behind older URL photo'; end if;
+  if result #>> '{horse,gallery,0,id}' is distinct from 'selected' or result #>> '{horse,profileImage}' is distinct from '' then raise exception 'Selected storage-only primary is hidden behind older URL photo'; end if;
   update public.horses set payload=payload||'{"profileImage":"https://example.invalid/selected.jpg","gallery":[{"id":"older","kind":"Hero","status":"Approved","url":"https://example.invalid/older.jpg"},{"id":"selected","kind":"Conformation","status":"Approved","url":"https://example.invalid/selected.jpg"}]}' where horse_id='horse-projection';
   result := public.xbar_resolve_public_listing('synthetic-projection',null);
-  if result #>> '{horse,gallery,0,id}' <> 'selected' or result #>> '{horse,profileImage}' <> 'https://example.invalid/selected.jpg' then raise exception 'Legacy URL-based primary selection regressed'; end if;
+  if result #>> '{horse,gallery,0,id}' is distinct from 'selected' or result #>> '{horse,profileImage}' is distinct from 'https://example.invalid/selected.jpg' then raise exception 'Legacy URL-based primary selection regressed'; end if;
   -- Reproduce the pre-correction false-vs-absent ordering under real PostgreSQL.
   select asset ->> 'id' into broken_first
   from jsonb_array_elements('[{"id":"older","isPrimary":false},{"id":"selected"}]'::jsonb) with ordinality photo(asset, position)
   order by (asset -> 'isPrimary' = 'true'::jsonb) desc nulls last, position limit 1;
-  if broken_first <> 'older' then raise exception 'Expected false-vs-absent ranking trigger changed'; end if;
+  if broken_first is distinct from 'older' then raise exception 'Expected false-vs-absent ranking trigger changed'; end if;
   update public.horses set payload=payload||'{"profileImage":"https://example.invalid/selected.jpg","gallery":[{"id":"older","kind":"Hero","status":"Approved","url":"https://example.invalid/older.jpg","isPrimary":false},{"id":"selected","kind":"Hero","status":"Approved","url":"https://example.invalid/selected.jpg"}]}' where horse_id='horse-projection';
   result := public.xbar_resolve_public_listing('synthetic-projection',null);
-  if result #>> '{horse,gallery,0,id}' <> 'selected' then raise exception 'Explicit false incorrectly outranks missing primary flag'; end if;
+  if result #>> '{horse,gallery,0,id}' is distinct from 'selected' then raise exception 'Explicit false incorrectly outranks missing primary flag'; end if;
   -- Without a selection, preserve source order across absent, null and empty URLs.
   update public.horses set payload=payload||'{"profileImage":null,"gallery":[{"id":"first-storage","kind":"Hero","status":"Approved","storagePath":"10000000-0000-4000-8000-000000000051/horses/horse-projection/media-first.jpg"},{"id":"null-url","kind":"Hero","status":"Approved","url":null,"isPrimary":false},{"id":"older-url","kind":"Hero","status":"Approved","url":"https://example.invalid/older.jpg"}]}' where horse_id='horse-projection';
   result := public.xbar_resolve_public_listing('synthetic-projection',null);
-  if result #>> '{horse,gallery,0,id}' <> 'first-storage' then raise exception 'Null metadata reordered an unselected gallery'; end if;
+  if result #>> '{horse,gallery,0,id}' is distinct from 'first-storage' then raise exception 'Null metadata reordered an unselected gallery'; end if;
   update public.horses set payload=jsonb_set(payload,'{profileImage}','""') where horse_id='horse-projection';
   result := public.xbar_resolve_public_listing('synthetic-projection',null);
-  if result #>> '{horse,gallery,0,id}' <> 'first-storage' then raise exception 'Empty profile selection reordered gallery'; end if;
+  if result #>> '{horse,gallery,0,id}' is distinct from 'first-storage' then raise exception 'Empty profile selection reordered gallery'; end if;
 
 
  end if;
