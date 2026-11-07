@@ -1,5 +1,6 @@
 import { apiConfig, isSupabaseConfigured, monitoringConfig } from '@/lib/platformConfig';
 import { getSupabaseClient } from '@/lib/supabaseClient';
+import { privateSafeRuntimePayload } from '../../api/_lib/telemetry-privacy.js';
 
 export type RuntimeEventSeverity = 'info' | 'warning' | 'error';
 
@@ -53,6 +54,9 @@ export async function trackRuntimeEvent(event: RuntimeEventInput) {
   if (!monitoringConfig.enabled) {
     return;
   }
+
+  // Sanitize before either transport, and leave the caller's state untouched.
+  event = { ...event, payload: privateSafeRuntimePayload(event.eventName, event.payload) };
 
   let accessToken: string | undefined;
   try {

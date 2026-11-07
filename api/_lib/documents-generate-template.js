@@ -1,6 +1,7 @@
 import { randomUUID } from 'node:crypto';
 import { readJsonBody, sendJson } from './http.js';
 import { requireWorkspaceAccess } from './supabase-admin.js';
+import { requireRoleCapability } from './permissions.js';
 import { getTemplateById, renderTemplate } from './document-templates.js';
 import { documentObjectPath } from './document-storage.js';
 import { checkStorageCapacity, getWorkspaceEntitlements, tierIncludesPlan } from './entitlements.js';
@@ -50,6 +51,9 @@ export default async function handler(req, res) {
     return sendJson(res, access.status, { ok: false, message: access.message });
   }
   const { supabase, user } = access;
+
+  const denied = requireRoleCapability(access.role, 'uploadDocuments');
+  if (denied) return sendJson(res, 403, { ok: false, code: 'capability_required', message: denied });
 
   const template = getTemplateById(templateId);
   if (!template) {
