@@ -32,6 +32,92 @@ const ids = {
   workspace_profiles: 'workspace_id',
   workspaces: 'id',
 };
+
+test('a primary-photo edit and approval share one acknowledged autosave baseline', async () => {
+  const { useXbarStore } = await import('../../src/store/useXbarStore.ts');
+  const { useCloudStore } = await import('../../src/store/useCloudStore.ts');
+  const { createEmptyWorkspaceState, createHorseRecord } = await import('../../src/store/xbarStoreHelpers.ts');
+  const { rememberRecordsOwner } = await import('../../src/lib/recordsOwner.ts');
+  await new Promise((resolve) => setImmediate(resolve));
+  const originalWindow = globalThis.window,
+    originalFetch = globalThis.fetch;
+  try {
+    const storage = new Map();
+    globalThis.window = {
+      localStorage: { getItem: (key) => storage.get(key) ?? null, setItem: (key, value) => storage.set(key, value) },
+    };
+    rememberRecordsOwner('ranch-a');
+    const empty = createEmptyWorkspaceState();
+    const photoHorse = createHorseRecord(
+      {
+        name: 'Photo horse',
+        barnName: '',
+        sex: 'Mare',
+        segment: 'Sale Prospect',
+        status: 'Pasture',
+        owner: 'Synthetic',
+        ownerEntity: '',
+        barn: 'Test',
+        pasture: '',
+      },
+      empty.workspaceProfile,
+    );
+    photoHorse.id = 'horse-a';
+    photoHorse.gallery = ['a', 'b'].map((id) => ({
+      id,
+      label: id,
+      kind: 'Hero',
+      url: `https://example.invalid/${id}.jpg`,
+      status: 'Pending',
+      isPrimary: id === 'a',
+    }));
+    photoHorse.profileImage = photoHorse.gallery[0].url;
+    const f = fixture({
+      horses: [
+        {
+          workspace_id: 'ranch-a',
+          horse_id: 'horse-a',
+          payload: clone(photoHorse),
+          updated_at: '2026-10-01T00:00:00Z',
+        },
+      ],
+    });
+    useXbarStore.persist.setOptions({ storage: { getItem: () => null, setItem() {}, removeItem() {} } });
+    useXbarStore.setState({ ...empty, currentRole: 'Admin', horses: [photoHorse] });
+    useCloudStore.setState({
+      session: { user: { id: 'user-a' }, access_token: 'synthetic' },
+      workspaceId: 'ranch-a',
+      workspaceRole: 'Admin',
+      workspaceReady: true,
+      autosaveReady: true,
+      autosaveUnlocked: true,
+    });
+    const baseline = useXbarStore.getState().exportWorkspaceBackup();
+    globalThis.fetch = async (url) => {
+      assert.equal(url, '/api/account/media-review');
+      const remote = f.data.get('horses')[0];
+      remote.payload.gallery = remote.payload.gallery.map((asset) =>
+        asset.id === 'b' ? { ...asset, status: 'Approved' } : asset,
+      );
+      return new Response(
+        JSON.stringify({ ok: true, workspaceId: 'ranch-a', horseId: 'horse-a', assetId: 'b', status: 'Approved' }),
+      );
+    };
+    assert.equal(useXbarStore.getState().changeHorsePhoto('horse-a', 'b', 'primary').ok, true);
+    const reviewed = await useXbarStore.getState().reviewHorseMedia('horse-a', 'b', true);
+    assert.equal(reviewed.ok, true, reviewed.message);
+    const current = useXbarStore.getState().exportWorkspaceBackup();
+    const saved = await saveWorkspaceBackupToCloud(current, { baseline });
+    assert.equal(saved.ok, true, saved.message);
+    const remote = f.data.get('horses')[0].payload;
+    assert.equal(remote.gallery.find((asset) => asset.id === 'b').status, 'Approved');
+    assert.equal(remote.gallery.find((asset) => asset.id === 'b').isPrimary, true);
+    assert.match(reviewed.message, /queued|pending/i);
+  } finally {
+    globalThis.window = originalWindow;
+    globalThis.fetch = originalFetch;
+  }
+});
 function fixture(remote = {}, beforeUpdate, controls = {}) {
   const data = new Map(
     Object.entries({

@@ -1,7 +1,6 @@
 import { hasMeaningfulWorkspace } from '@/lib/cloudSyncPolicy';
 import { changeHorsePhoto } from '@/lib/horsePhotoGallery';
 import { reviewMedia } from '@/lib/mediaApproval';
-import { persistMediaReview } from '@/lib/mediaReviewRequest';
 import { useEffect, useState } from 'react';
 import { normalizePacketWebsite, validatePacketProfile } from '../../api/_lib/packet-branding.js';
 import { create } from 'zustand';
@@ -1771,60 +1770,25 @@ export const useXbarStore = create<XbarStore>()(
       reviewHorseMedia: async (horseId, assetId, approved) => {
         const contextError = horseArchiveContextError('manageSales');
         if (contextError) return { ok: false, message: contextError };
-        const horse = get().horses.find((item) => item.id === horseId);
-        if (!horse) return { ok: false, message: 'Horse record not found.' };
-        const result = reviewMedia(horse.gallery, assetId, get().currentRole, approved);
+        const matches = get().horses.filter((item) => item.id === horseId);
+        if (matches.length !== 1) return { ok: false, message: 'A unique horse record could not be found.' };
+        const result = reviewMedia(matches[0].gallery, assetId, get().currentRole, approved);
         if (!result.ok || !result.gallery) return { ok: false, message: result.message };
-        const identity = readIntakeIdentity();
-        const owner = vaultOwnerId();
-        const cloud = useCloudStore.getState();
-        const shared = isSupabaseConfigured() || Boolean(cloud.session);
-        const asset = horse.gallery.find((item) => item.id === assetId)!;
-        if (shared) {
-          if (!cloud.session?.access_token || !cloud.workspaceId || !cloud.workspaceReady || !cloud.autosaveUnlocked)
-            return { ok: false, message: 'Wait for your shared ranch to finish loading before reviewing media.' };
-          const saved = await persistMediaReview({
-            apiBase: apiConfig.baseUrl,
-            accessToken: cloud.session.access_token,
-            workspaceId: cloud.workspaceId,
-            horseId,
-            assetId,
-            approved,
-            expectedStoragePath: asset.storagePath || '',
-            expectedUrl: asset.url || '',
-          });
-          if (!saved.ok) return saved;
-        }
-        const latestHorse = get().horses.find((item) => item.id === horseId);
-        const currentAssets = latestHorse?.gallery.filter((item) => item.id === assetId) ?? [];
-        if (
-          intakeIdentityChanged(identity, readIntakeIdentity()) ||
-          vaultOwnerId() !== owner ||
-          horseArchiveContextError('manageSales') ||
-          !hasRoleCapability(get().currentRole, 'manageSales') ||
-          currentAssets.length !== 1 ||
-          currentAssets[0].storagePath !== asset.storagePath ||
-          currentAssets[0].url !== asset.url ||
-          currentAssets[0].status !== asset.status
-        )
-          return { ok: false, message: 'The ranch or image changed. Reload to see the saved review status.' };
+        // Keep approval and any unsaved primary/source edits on one autosave
+        // baseline. A separate server write creates an atomic-array conflict.
+        // The database guard enforces the authenticated review capability.
         set((current) => ({
-          horses: current.horses.map((item) =>
-            item.id === horseId
-              ? {
-                  ...item,
-                  gallery: item.gallery.map((image) =>
-                    image.id === assetId
-                      ? { ...image, status: approved ? ('Approved' as const) : ('Pending' as const) }
-                      : image,
-                  ),
-                }
-              : item,
+          horses: current.horses.map((horse) =>
+            horse.id === horseId ? { ...horse, gallery: result.gallery! } : horse,
           ),
         }));
+        const cloud = useCloudStore.getState();
+        const shared = isSupabaseConfigured() || Boolean(cloud.session);
         return {
           ok: true,
-          message: shared ? 'Media review saved to the shared ranch.' : 'Media review saved on this device only.',
+          message: shared
+            ? 'Media review is queued for cloud save. Confirm sync completes before sharing.'
+            : 'Media review saved on this device only.',
           id: assetId,
         };
       },

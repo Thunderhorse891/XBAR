@@ -5,8 +5,8 @@
 -- Owner can save horse details and pending uploads, but cannot mark a photo
 -- Approved or attach a previous photo's approval to another source or horse.
 -- No existing data or staff write policy is changed. Storage object ownership
--- and buyer signing remain separate checks. The server review endpoint still
--- requires a compare-and-set acknowledgment for its selected image.
+-- and buyer signing remain separate checks. Authenticated autosave requires
+-- a compare-and-set acknowledgment and preserves local work on conflicts.
 begin;
 create or replace function public.xbar_guard_sale_media_approval()
 returns trigger

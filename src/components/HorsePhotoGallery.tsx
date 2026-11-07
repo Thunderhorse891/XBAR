@@ -97,7 +97,7 @@ export function HorsePhotoGallery({
                     try {
                       const result = await reviewPhoto(horse.id, asset.id, asset.status !== 'Approved');
                       pushToast({
-                        title: result.ok ? 'Photo review saved' : 'Photo review blocked',
+                        title: result.ok ? 'Photo review updated' : 'Photo review blocked',
                         message: result.message,
                         tone: result.ok ? 'success' : 'error',
                       });
