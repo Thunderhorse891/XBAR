@@ -154,7 +154,7 @@ function RouteTelemetry() {
       workspaceId: workspaceId || undefined,
       eventName: 'navigation.page_view',
       severity: 'info',
-      payload: { pathname: location.pathname, search: location.search },
+      payload: { pathname: location.pathname },
     });
   }, [location.pathname, location.search, workspaceId]);
 
