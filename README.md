@@ -610,3 +610,16 @@ by the application. See [the billing runbook](docs/OPERATOR-BILLING-RUNBOOK.md)
 for the separate Stripe verification gates. Rollback is to disable the feature
 and restore application code, preserving these additive tables and claims so
 retries, workspace deletion, or redeployment cannot reset promotion eligibility.
+
+### Navigation database privacy (prepared; production approval required)
+
+The navigation guard sanitizes new direct writes and removes query/fragment and
+extra metadata from historical navigation events. Read [the exact scope and recovery limits](docs/reviews/navigation-database-privacy.md).
+Rehearse `supabase/checks/telemetry-privacy.sql` on an isolated database first.
+Only after final review and Erin's explicit approval of this production cleanup:
+
+```sh
+psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f supabase/migrations/20261107170000_private_navigation_events.sql
+```
+
+Website deployment does not execute this command. Historical metadata removal is intentional and irreversible.
