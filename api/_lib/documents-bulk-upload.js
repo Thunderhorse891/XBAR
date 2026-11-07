@@ -463,7 +463,10 @@ async function processBatch({ supabase, workspaceId, user, body, mode }) {
     // value, so automatic saves and explicit recovery must use the same input.
     const candidates = groupExtractionsIntoCandidates(extractions.sort((a, b) => a.ref.localeCompare(b.ref)));
     for (const candidate of candidates) {
-      const match = await findExistingHorse(supabase, workspaceId, candidate.fields);
+      const identity = candidate.ambiguous
+        ? { note: 'Conflicting source identity requires review before assigning this document.' }
+        : await findExistingHorse(supabase, workspaceId, candidate.fields);
+      const match = identity.horse;
       const proposal = {
         candidateKey: `cand-${proposals.length + 1}`,
         documentIds: candidate.documentRefs,
@@ -485,7 +488,22 @@ async function processBatch({ supabase, workspaceId, user, body, mode }) {
       context.horseId = '';
       context.createdHorse = false;
       recovery.currentDocumentIds = candidate.documentRefs;
-      if (mode === 'auto') {
+      if (identity.note) {
+        await markDocumentsForReview({
+          supabase,
+          workspaceId,
+          documentIds: candidate.documentRefs,
+          note: identity.note,
+          context,
+          holdProcessingJobs: true,
+        });
+        proposal.ambiguous = true;
+        proposal.note = identity.note;
+        for (const document of documents.filter((document) => proposal.documentIds.includes(document.documentId))) {
+          document.state = 'Needs Review';
+          document.needsReview = true;
+        }
+      } else if (mode === 'auto') {
         if (match) {
           // Identity matches (registration #/microchip) are safe to attach even
           // below the auto-create bar; the document keeps its review flag.
@@ -790,27 +808,29 @@ function summarizeDocument(row) {
 }
 
 async function findExistingHorse(supabase, workspaceId, fields) {
-  const registration = String(fields.registrationNumber || '').trim();
-  if (registration) {
+  const conflict = {
+    note: 'Horse identity conflicts or has multiple matches. Review the original before assigning it.',
+  };
+  const matches = [];
+  // Consult both strong identifiers before choosing a horse. A registration
+  // match does not waive a contradictory microchip (or vice versa).
+  for (const [field, column] of [
+    ['registrationNumber', 'registration_number'],
+    ['microchip', 'microchip'],
+  ]) {
+    const value = String(fields[field] || '').trim();
+    if (!value) continue;
     const data = await readRows(
-      supabase
-        .from('horses')
-        .select('*')
-        .eq('workspace_id', workspaceId)
-        .eq('registration_number', registration)
-        .maybeSingle(),
+      supabase.from('horses').select('*').eq('workspace_id', workspaceId).eq(column, value).limit(2),
       'horse-match-read',
     );
-    if (data) return { ...data, matchedBy: 'registration_number' };
+    if (!Array.isArray(data)) throw new PersistenceError('horse-match-read');
+    if (data.length > 1) return conflict;
+    if (data[0]) matches.push({ ...data[0], matchedBy: column });
   }
-
-  const microchip = String(fields.microchip || '').trim();
-  if (microchip) {
-    const data = await readRows(
-      supabase.from('horses').select('*').eq('workspace_id', workspaceId).eq('microchip', microchip).maybeSingle(),
-      'horse-match-read',
-    );
-    if (data) return { ...data, matchedBy: 'microchip' };
+  if (new Set(matches.map((horse) => horse.horse_id)).size > 1) return conflict;
+  if (matches[0]) {
+    return contradictsHorseIdentity(fields, matches[0]) ? conflict : { horse: matches[0] };
   }
 
   const name = String(fields.name || '').trim();
@@ -820,16 +840,45 @@ async function findExistingHorse(supabase, workspaceId, fields) {
       'horse-match-read',
     );
     if (!Array.isArray(data)) throw new PersistenceError('horse-match-read');
-    if (data?.length === 1) return { ...data[0], matchedBy: 'name' };
+    if (data.length > 1) return conflict;
+    if (data[0]) {
+      return contradictsHorseIdentity(fields, data[0]) ? conflict : { horse: { ...data[0], matchedBy: 'name' } };
+    }
   }
 
-  return null;
+  return {};
+}
+
+function contradictsHorseIdentity(fields, horse) {
+  const identifier = (value) =>
+    String(value || '')
+      .toUpperCase()
+      .replace(/[^A-Z0-9]/g, '');
+  const name = (value) =>
+    String(value || '')
+      .trim()
+      .replace(/\s+/g, ' ')
+      .toUpperCase();
+  return [
+    [fields.registrationNumber, horse.registration_number, identifier],
+    [fields.microchip, horse.microchip, identifier],
+    [fields.name, horse.name, name],
+  ].some(
+    ([source, saved, normalize]) => normalize(source) && normalize(saved) && normalize(source) !== normalize(saved),
+  );
 }
 
 // Move a set of documents into the manual review queue. Used when auto-create
 // is blocked (e.g. horse limit reached) so confident-but-uncreated documents
 // don't linger in 'Queued' where the review surfaces never show them.
-async function markDocumentsForReview({ supabase, workspaceId, documentIds, note, context }) {
+async function markDocumentsForReview({
+  supabase,
+  workspaceId,
+  documentIds,
+  note,
+  context,
+  holdProcessingJobs = false,
+}) {
   const ids = (documentIds || []).filter((id) => typeof id === 'string' && id);
   if (!ids.length) return;
   await saveRows(
@@ -837,6 +886,7 @@ async function markDocumentsForReview({ supabase, workspaceId, documentIds, note
       .from('documents')
       .update({ state: 'Needs Review', needs_review: true, review_notes: note, updated_at: new Date().toISOString() })
       .eq('workspace_id', workspaceId)
+      .eq('horse_id', '')
       .in('document_id', ids),
     {
       context,
@@ -846,6 +896,23 @@ async function markDocumentsForReview({ supabase, workspaceId, documentIds, note
       fields: { workspace_id: workspaceId, state: 'Needs Review', needs_review: true },
     },
   );
+  if (holdProcessingJobs) {
+    await saveRows(
+      supabase
+        .from('document_processing_jobs')
+        .update({ status: 'needs_review' })
+        .eq('workspace_id', workspaceId)
+        .eq('horse_id', '')
+        .in('document_id', ids),
+      {
+        context,
+        phase: 'job-review-hold',
+        key: 'document_id',
+        ids,
+        fields: { workspace_id: workspaceId, status: 'needs_review' },
+      },
+    );
+  }
 }
 
 async function createHorseFromCandidate({
