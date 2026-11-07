@@ -8,6 +8,8 @@ on:
       - 'supabase/checks/records-fixture-schema.sql'
       - 'supabase/checks/staff-writes.sql'
       - 'supabase/checks/media-approval-writes.sql'
+
+      - 'supabase/checks/document-review-writes.sql'
       - '.github/workflows/records-database.yml'
   push:
     branches: [main]
@@ -17,6 +19,8 @@ on:
       - 'supabase/checks/records-fixture-schema.sql'
       - 'supabase/checks/staff-writes.sql'
       - 'supabase/checks/media-approval-writes.sql'
+
+      - 'supabase/checks/document-review-writes.sql'
       - '.github/workflows/records-database.yml'
   workflow_dispatch:
 
@@ -87,4 +91,21 @@ jobs:
           psql -v ON_ERROR_STOP=1 -f supabase/checks/media-approval-writes.sql
           psql -v ON_ERROR_STOP=1 -f supabase/migrations/20261107163000_guard_sale_media_approval.sql
           psql -v ON_ERROR_STOP=1 -f supabase/checks/media-approval-writes.sql
+
+      - name: Reproduce document approval forgery before the guard
+        run: |
+          if out=$(psql -v ON_ERROR_STOP=1 -f supabase/checks/document-review-writes.sql 2>&1); then
+            echo 'The approval check passed without the guard.'
+            exit 1
+          fi
+          echo "$out" | grep -q 'Upload permission forged document approval' || {
+            echo "$out"
+            exit 1
+          }
+      - name: Apply document approval guard and verify real role writes
+        run: |
+          psql -v ON_ERROR_STOP=1 -f supabase/migrations/20261107160000_guard_document_approval.sql
+          psql -v ON_ERROR_STOP=1 -f supabase/checks/document-review-writes.sql
+          psql -v ON_ERROR_STOP=1 -f supabase/migrations/20261107160000_guard_document_approval.sql
+          psql -v ON_ERROR_STOP=1 -f supabase/checks/document-review-writes.sql
           psql -v ON_ERROR_STOP=1 -f supabase/checks/staff-writes.sql
