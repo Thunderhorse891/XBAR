@@ -1,6 +1,7 @@
 import { hasMeaningfulWorkspace } from '@/lib/cloudSyncPolicy';
 import { stableStringify } from '@/lib/relationalDiff';
 import { changeHorsePhoto } from '@/lib/horsePhotoGallery';
+import { reviewMedia } from '@/lib/mediaApproval';
 import { useEffect, useState } from 'react';
 import { normalizePacketWebsite, validatePacketProfile } from '../../api/_lib/packet-branding.js';
 import { create } from 'zustand';
@@ -1832,6 +1833,14 @@ export const useXbarStore = create<XbarStore>()(
         const horse = matches[0];
         const result = changeHorsePhoto(horse, assetId, action);
         if (!result.ok) return result;
+        if (
+          action === 'restore' &&
+          (!hasRoleCapability(get().currentRole, 'manageSales') || horseArchiveContextError('manageSales'))
+        ) {
+          result.gallery = result.gallery.map((asset) =>
+            asset.id === assetId && asset.status === 'Approved' ? { ...asset, status: 'Pending' } : asset,
+          );
+        }
         set((state) => ({
           horses: state.horses.map((item) =>
             item.id === horseId ? { ...item, gallery: result.gallery, profileImage: result.profileImage } : item,
@@ -1845,6 +1854,31 @@ export const useXbarStore = create<XbarStore>()(
               : action === 'restore'
                 ? 'Photo restored to the gallery.'
                 : 'Photo removed from the gallery. The original is retained and can be restored.',
+          id: assetId,
+        };
+      },
+      reviewHorseMedia: async (horseId, assetId, approved) => {
+        const contextError = horseArchiveContextError('manageSales');
+        if (contextError) return { ok: false, message: contextError };
+        const matches = get().horses.filter((item) => item.id === horseId);
+        if (matches.length !== 1) return { ok: false, message: 'A unique horse record could not be found.' };
+        const result = reviewMedia(matches[0].gallery, assetId, get().currentRole, approved);
+        if (!result.ok || !result.gallery) return { ok: false, message: result.message };
+        // Keep approval and any unsaved primary/source edits on one autosave
+        // baseline. A separate server write creates an atomic-array conflict.
+        // The database guard enforces the authenticated review capability.
+        set((current) => ({
+          horses: current.horses.map((horse) =>
+            horse.id === horseId ? { ...horse, gallery: result.gallery! } : horse,
+          ),
+        }));
+        const cloud = useCloudStore.getState();
+        const shared = isSupabaseConfigured() || Boolean(cloud.session);
+        return {
+          ok: true,
+          message: shared
+            ? 'Media review is queued for cloud save. Confirm sync completes before sharing.'
+            : 'Media review saved on this device only.',
           id: assetId,
         };
       },
@@ -1917,7 +1951,7 @@ export const useXbarStore = create<XbarStore>()(
                   // legacy public URLs and local object URLs working.
                   url: '',
                   storagePath: uploadedAsset?.storagePath,
-                  status: 'Approved' as const,
+                  status: 'Pending' as const,
                 },
               };
             }),
@@ -1987,7 +2021,6 @@ export const useXbarStore = create<XbarStore>()(
                           ),
                         }
                       : horse.readiness,
-                    sale: gainedFirstPhoto ? { ...horse.sale, socialReady: true } : horse.sale,
                     activity: [
                       {
                         id: createId('activity'),
