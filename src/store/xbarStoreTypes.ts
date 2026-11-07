@@ -137,6 +137,7 @@ export type XbarStore = {
   createHorseFromDocument: (documentId: string) => ActionResult;
   discardDocument: (documentId: string) => ActionResult;
   uploadHorseMedia: (input: MediaUploadInput) => Promise<ActionResult>;
+  reviewHorseMedia: (horseId: string, assetId: string, approved: boolean) => Promise<ActionResult>;
   changeHorsePhoto: (
     horseId: string,
     assetId: string,

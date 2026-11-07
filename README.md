@@ -571,6 +571,19 @@ Then apply `supabase/production-schema.generated.sql` in the Supabase SQL editor
 
 Managed checkout is restricted to workspace admins and only returns customers to trusted XBAR origins.
 
+### Sale photo approval guard (prepared; production approval required)
+
+`20261107163000_guard_sale_media_approval.sql` prevents ordinary horse writes from
+forging buyer-facing photo approval. Read [the scope and recovery plan](docs/reviews/media-approval.md).
+Rehearse with `supabase/checks/media-approval-writes.sql` on an isolated database.
+Only after final review and Erin's explicit production approval:
+
+```sh
+psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f supabase/migrations/20261107163000_guard_sale_media_approval.sql
+```
+
+Website deployment does not execute this command. Existing originals are preserved.
+
 ## Product State
 
 - Local-first workspace with backup import and export
