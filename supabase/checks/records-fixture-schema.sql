@@ -26,6 +26,7 @@ create table if not exists public.documents (
   title text not null default '',
   state text not null default '',
   payload jsonb not null default '{}'::jsonb,
+  updated_at timestamptz not null default now(),
   primary key (workspace_id, document_id)
 );
 create table if not exists public.intake_batches (

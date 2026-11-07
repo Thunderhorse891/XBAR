@@ -61,13 +61,13 @@ const PROFILE = {
   payload: { packetLogoDataUrl: LOGO, contactPhone: '+1 555 010 0200', website: 'https://silverspur.example' },
 };
 
-function install({ profile = PROFILE, profileError = null, allow = true, documents = [], readErrors = {} } = {}) {
+function install({ profile = PROFILE, profileError = null, allow = true, documents = [], readErrors = {}, role } = {}) {
   const reads = [],
     writes = [],
     uploads = [];
   const tables = {
-    workspaces: [{ id: WORKSPACE, owner_user_id: allow ? USER : 'someone-else' }],
-    workspace_memberships: [],
+    workspaces: [{ id: WORKSPACE, owner_user_id: allow && !role ? USER : 'someone-else' }],
+    workspace_memberships: role ? [{ workspace_id: WORKSPACE, user_id: USER, role, status: 'active' }] : [],
     workspace_subscription_profiles: [{ workspace_id: WORKSPACE, tier: 'Professional', billing_state: 'Active' }],
     horses: [{ workspace_id: WORKSPACE, horse_id: 'horse-1', name: 'Copper', owner_name: 'Taylor Seller' }],
     workspace_profiles: [profile, { ...PROFILE, workspace_id: OTHER_WORKSPACE, ranch_name: 'Foreign Ranch' }].filter(
@@ -183,6 +183,21 @@ test('template field overrides preserve valid buyer and sale placeholders', asyn
   assert.match(result.body.html, /Synthetic Buyer/);
   assert.match(result.body.html, /12500/);
 });
+for (const role of ['Ranch Manager', 'Sales Lead', 'Owner', 'Medical Lead', 'Admin']) {
+  test(`a generated document awaits source review for ${role}`, async () => {
+    const fixture = install({ role });
+    const result = await call({ templateId: 'bill-of-sale', output: 'pdf' }, templateHandler);
+    assert.equal(result.status, 200, result.body.message);
+    const document = fixture.writes.find((write) => write.table === 'documents').row;
+    assert.equal(document.state, 'Needs Review');
+    assert.equal(document.needs_review, true);
+    assert.equal(document.payload.state, 'Needs Review');
+    assert.equal(document.payload.id, document.document_id, 'the review queue must receive a usable document record');
+    assert.equal(document.payload.horseId, 'horse-1');
+    assert.equal(document.payload.title, document.title);
+    assert.equal(document.payload.storagePath, document.storage_path);
+  });
+}
 async function call(body = {}, endpoint = handler) {
   const req = Readable.from([JSON.stringify({ workspaceId: WORKSPACE, horseId: 'horse-1', ...body })]);
   req.method = 'POST';
