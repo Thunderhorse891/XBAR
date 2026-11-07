@@ -71,14 +71,20 @@ class Query {
   }
   maybeSingle() {
     const row = Array.isArray(this.result) ? (this.result[0] ?? null) : this.result;
-    return Promise.resolve({ data: row, error: null });
+    return this.reject
+      ? Promise.reject(new Error('synthetic transport failure'))
+      : Promise.resolve({ data: row, error: this.error ?? null });
   }
   then(resolve, reject) {
-    return Promise.resolve({ data: this.result, error: null }).then(resolve, reject);
+    return (
+      this.reject
+        ? Promise.reject(new Error('synthetic transport failure'))
+        : Promise.resolve({ data: this.result, error: this.error ?? null })
+    ).then(resolve, reject);
   }
 }
 
-function install({ documents = [], packets = [], missing = [], signError = null } = {}) {
+function install({ documents = [], packets = [], missing = [], signError = null, readFailure, transportFailure } = {}) {
   const signed = [];
   const audits = [];
   __setBillingSupabase({
@@ -100,6 +106,8 @@ function install({ documents = [], packets = [], missing = [], signError = null 
       }[table];
       if (rows === undefined) throw new Error(`unexpected table ${table}`);
       const query = new Query(rows);
+      if (table === readFailure) query.error = { message: 'Synthetic database read failed with private detail' };
+      if (table === transportFailure) query.reject = true;
       if (table === 'audit_logs') query.onInsert = (row) => audits.push(row);
       return query;
     },
@@ -153,6 +161,32 @@ function call(handler, url) {
 }
 
 const exportUrl = `/api/horses/export?workspaceId=${WORKSPACE}&horseId=horse-1`;
+for (const table of ['horses', 'documents', 'ownership_records', 'reminders', 'sale_packets'])
+  test(`export refuses a rejected ${table} request`, async () => {
+    const { signed, audits } = install({ transportFailure: table });
+    const response = await call(exportHandler, exportUrl);
+    assert.equal(response.statusCode, 503);
+    assert.equal(response.body.ok, false);
+    assert.deepEqual(signed, []);
+    assert.equal(
+      audits.some((row) => row.action === 'horse.exported'),
+      false,
+    );
+  });
+for (const table of ['horses', 'documents', 'ownership_records', 'reminders', 'sale_packets'])
+  test(`export refuses an incomplete ${table} read before signing files or recording success`, async () => {
+    const { signed, audits } = install({ readFailure: table });
+    const response = await call(exportHandler, exportUrl);
+    assert.equal(response.statusCode, 503);
+    assert.equal(response.body.ok, false);
+    assert.equal('horse' in response.body, false);
+    assert.deepEqual(signed, []);
+    assert.equal(
+      audits.some((row) => row.action === 'horse.exported'),
+      false,
+    );
+    assert.equal(JSON.stringify(response.body).includes('private detail'), false);
+  });
 const doc = (documentId, storagePath) => ({ document_id: documentId, title: documentId, storage_path: storagePath });
 const packet = (packetId, path) => ({ packet_id: packetId, horse_id: 'horse-1', packet_pdf_path: path });
 
