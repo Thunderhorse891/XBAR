@@ -11,6 +11,7 @@
 // the buyer is who finds out.
 
 import { BUYER_FILE_UNAVAILABLE, SELLER_FILE_REFUSED, SELLER_FILE_UNREADABLE } from './document-storage.js';
+import { reviewedDocument } from './document-review.js';
 
 /**
  * Split a horse's documents into the ones this endpoint can embed and a plain
@@ -36,6 +37,14 @@ export function selectPacketDocuments(documents, requestedIds, maxAttachments, {
       if (!found.has(id)) unavailable.push(`${id} (no longer attached to this horse)`);
     }
   }
+
+  // Apply the same authoritative review gate as the packet's health facts
+  // before reading bytes or using an attachment slot. Selection is not review.
+  packetDocs = packetDocs.filter((doc) => {
+    if (reviewedDocument(doc)) return true;
+    unavailable.push(`${doc.title} (source review required)`);
+    return false;
+  });
 
   // No storage_path means the file never reached the bucket: it lives only in
   // the seller's on-device vault, so this endpoint cannot embed it.

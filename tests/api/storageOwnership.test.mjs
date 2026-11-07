@@ -396,8 +396,18 @@ test('a recorded path belongs to a workspace only in canonical form under that w
 });
 
 test('packet assembly names a refused file before the cap, so it never takes a real file’s slot', () => {
-  const own = (id) => ({ document_id: id, title: id, storage_path: `${WORKSPACE}/documents/${id}/f.pdf` });
-  const forged = { document_id: 'forged', title: 'Forged', storage_path: `${OTHER_WORKSPACE}/documents/x/f.pdf` };
+  const own = (id) => ({
+    document_id: id,
+    title: id,
+    state: 'Ready',
+    storage_path: `${WORKSPACE}/documents/${id}/f.pdf`,
+  });
+  const forged = {
+    document_id: 'forged',
+    title: 'Forged',
+    state: 'Ready',
+    storage_path: `${OTHER_WORKSPACE}/documents/x/f.pdf`,
+  };
   const refused = [];
   const refuse = (doc) => {
     if (mayUseClientStoragePath({ storagePath: doc.storage_path, workspaceId: WORKSPACE })) return null;
@@ -416,10 +426,10 @@ test('packet assembly names a refused file before the cap, so it never takes a r
   assert.deepEqual(unavailable, ['Forged (file unavailable)', 'c (over the 2-document packet limit)']);
 });
 
-test('packet assembly without a refuse rule keeps its earlier selection behaviour', () => {
+test('reviewed packet assembly without a refuse rule keeps its earlier selection behaviour', () => {
   const docs = [
-    { document_id: 'a', title: 'A', storage_path: `${WORKSPACE}/documents/a/f.pdf` },
-    { document_id: 'b', title: 'B', storage_path: '' },
+    { document_id: 'a', title: 'A', state: 'Ready', storage_path: `${WORKSPACE}/documents/a/f.pdf` },
+    { document_id: 'b', title: 'B', state: 'Ready', storage_path: '' },
   ];
   const { packetDocs } = selectPacketDocuments(docs, [], 20);
   assert.deepEqual(

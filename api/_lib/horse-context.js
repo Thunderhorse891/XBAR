@@ -3,6 +3,7 @@
 // latest compliance dates pulled from attached documents.
 
 import { recordedDocumentPath } from './document-storage.js';
+import { reviewedDocument } from './document-review.js';
 
 // Report dates are written calendar days, not upload instants. Accept the
 // stored ISO forms without allowing a timestamp's offset to move that day.
@@ -34,29 +35,9 @@ function calendarDay(value) {
   return `${year}-${month}-${day}`;
 }
 
-function reviewedHealthDocument(doc) {
-  const source = doc.payload || {};
-  return (
-    doc.state === 'Ready' &&
-    (!source.state || source.state === 'Ready') &&
-    // A scoped row cannot make conflicting cached mirror evidence belong to
-    // this document/horse. Legacy backend payloads may omit mirror identity.
-    (source.id === undefined || source.id === doc.document_id) &&
-    (source.horseId === undefined || source.horseId === doc.horse_id) &&
-    (source.type === undefined || source.type === doc.document_type) &&
-    !doc.needs_review &&
-    !source.identityReviewRequired &&
-    !(typeof source.processingNote === 'string' && source.processingNote.trim()) &&
-    !(
-      (doc.duplicate_risk === 'Possible Duplicate' || source.duplicateRisk === 'Possible Duplicate') &&
-      !(typeof source.duplicateReviewedAt === 'string' && source.duplicateReviewedAt.trim())
-    )
-  );
-}
-
 function latestHealthEvidence(documents, type, latestPossibleToday) {
   const candidates = documents.flatMap((doc) => {
-    if (doc.document_type !== type || !reviewedHealthDocument(doc)) return [];
+    if (doc.document_type !== type || !reviewedDocument(doc)) return [];
     const fields = doc.extracted_data;
     // Browser mirrors store examDate; backend Coggins extraction stores
     // testDate. Conflicting or malformed supplied dates establish neither.

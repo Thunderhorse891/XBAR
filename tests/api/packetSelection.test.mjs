@@ -17,6 +17,27 @@ const doc = (id, title, storagePath = `docs/${id}.pdf`) => ({
   document_id: id,
   title,
   storage_path: storagePath,
+  state: 'Ready',
+});
+
+test('unreviewed documents never consume an attachment slot and every omission is named', () => {
+  const documents = [
+    { ...doc('pending', 'Pending document'), state: 'Needs Review' },
+    { ...doc('conflict', 'Identity conflict'), payload: { identityReviewRequired: true } },
+    doc('ready', 'Reviewed registration'),
+  ];
+  for (const requested of [[], ['pending', 'conflict', 'ready']]) {
+    const result = selectPacketDocuments(documents, requested, 1);
+    assert.deepEqual(
+      result.packetDocs.map((entry) => entry.document_id),
+      ['ready'],
+    );
+    assert.deepEqual(result.unavailable, [
+      'Pending document (source review required)',
+      'Identity conflict (source review required)',
+    ]);
+    assertNothingVanishes(documents, requested, result);
+  }
 });
 
 /** The invariant itself, asserted the same way for every case below. */
