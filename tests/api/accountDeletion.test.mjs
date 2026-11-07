@@ -173,6 +173,11 @@ function deletionFixture(t) {
     const failure = () => reply({ message: 'Fixture database failure', code: 'XX000' }, 400);
 
     if (url.pathname === '/auth/v1/user') return reply({ id: FIXTURE_USER, email: 'owner@example.invalid' });
+    if (url.pathname === '/rest/v1/workspaces' && method === 'GET' && url.searchParams.has('id')) {
+      if (scenario === 'workspace-read-error') return failure();
+      if (scenario === 'workspace-read-throws') throw new Error('Private workspace read failure');
+      return reply(scenario === 'workspace-remains' ? [{ id: 'ws1' }] : scenario === 'workspace-null' ? null : []);
+    }
     if (url.pathname === '/rest/v1/workspaces' && method === 'GET')
       return scenario === 'owned' ? failure() : reply([{ id: 'ws1' }]);
     if (url.pathname === '/rest/v1/workspace_memberships' && method === 'GET')
@@ -246,7 +251,11 @@ function deletionFixture(t) {
       if (scenario === 'auth-response-lost') throw new Error('Fixture response lost after deletion');
       return scenario === 'auth' ? reply({ message: 'Fixture auth failure' }, 500) : reply({});
     }
-    if (url.pathname === '/rest/v1/workspaces' && method === 'DELETE') return reply(null, 204);
+    if (url.pathname === '/rest/v1/workspaces' && method === 'DELETE') {
+      if (scenario === 'workspace-delete-error') return failure();
+      if (scenario === 'workspace-delete-throws') throw new Error('Private workspace delete failure');
+      return reply(null, 204);
+    }
     if (url.pathname.startsWith('/storage/v1/object/list/')) {
       const { prefix } = JSON.parse(init.body);
       // Only the documents bucket holds the legacy files in this scenario.
@@ -382,6 +391,34 @@ test('a completed deletion keeps files another ranch still uses and records the 
   assert.ok(claimAt > -1 && holdAt > claimAt && billingAt > holdAt && renewAt > billingAt && deleteAt > renewAt);
   assert.ok(state.calls.indexOf('billing-lease-release') > deleteAt);
 });
+
+for (const scenario of [
+  'workspace-delete-error',
+  'workspace-delete-throws',
+  'workspace-read-error',
+  'workspace-read-throws',
+  'workspace-remains',
+  'workspace-null',
+]) {
+  test(`unconfirmed workspace cleanup ${scenario} never reports complete deletion`, async (t) => {
+    const state = deletionFixture(t);
+    state.scenario = scenario;
+    const { default: handler } = await import('../../api/_lib/account-delete.js');
+    const response = await deleteAccount(handler, `fixture-${scenario}`);
+    assert.equal(response.status, 503);
+    assert.equal(response.body.ok, false);
+    assert.equal(response.body.accountDeleted, true);
+    assert.equal(response.body.operationId, 'receipt-1');
+    assert.equal(state.receiptUpdates.at(-1)?.status, 'failed');
+    assert.match(state.receiptUpdates.at(-1)?.failure, /workspace cleanup/i);
+    assert.ok(
+      state.calls.some((call) => call.includes('/storage/')),
+      'safe file cleanup still runs',
+    );
+    assert.deepEqual(state.removed, [`${FIXTURE_USER}/documents/mine.pdf`]);
+    assert.doesNotMatch(JSON.stringify(response.body), /Private workspace|XX000/);
+  });
+}
 
 for (const scenario of ['outcome-error', 'outcome-empty', 'outcome-wrong', 'outcome-throws']) {
   test(`unacknowledged ${scenario} reports deleted account but unconfirmed completion`, async (t) => {

@@ -272,17 +272,25 @@ export default async function handler(req, res) {
     /*
      * Account is gone -- now purge the workspaces that were held.
      *
-     * The owner FK has already cascaded these rows away; the delete below is
-     * kept because it is the statement that expresses the intent, and it is
-     * harmless when the rows are already gone. Storage is NOT cascaded by
-     * anything, which is the part that genuinely still has to run here.
+     * The owner FK normally cascades these rows away, so zero deleted rows is
+     * valid. Verify their absence rather than assuming the cascade completed.
+     * Storage still needs its separate sweep even when row cleanup is uncertain.
      */
+    let workspaceCleanupComplete = true;
     if (purgeable.length) {
-      await supabase
-        .from('workspaces')
-        .delete()
-        .in('id', purgeable)
-        .then(undefined, () => {});
+      try {
+        const { error } = await supabase.from('workspaces').delete().in('id', purgeable);
+        if (error) workspaceCleanupComplete = false;
+        else {
+          const { data: remaining, error: readError } = await supabase
+            .from('workspaces')
+            .select('id')
+            .in('id', purgeable);
+          workspaceCleanupComplete = !readError && Array.isArray(remaining) && remaining.length === 0;
+        }
+      } catch {
+        workspaceCleanupComplete = false;
+      }
     }
     /*
      * Each sweep reports what it could not finish rather than swallowing it.
@@ -305,9 +313,21 @@ export default async function handler(req, res) {
       console.error('account deletion: stored files could not all be removed', { userId: user.id, leftovers });
     }
     await finishReceipt({
-      status: leftovers.length ? 'storage_incomplete' : 'complete',
+      status: !workspaceCleanupComplete ? 'failed' : leftovers.length ? 'storage_incomplete' : 'complete',
+      failure: workspaceCleanupComplete ? '' : 'workspace cleanup unconfirmed',
       storage_leftovers: leftovers,
     });
+
+    if (!workspaceCleanupComplete) {
+      return sendJson(res, 503, {
+        ok: false,
+        accountDeleted: true,
+        operationId: receipt.id,
+        storageCleanupComplete: leftovers.length === 0,
+        message:
+          'Your account was deleted, but workspace cleanup could not be confirmed. Contact support with this operation ID.',
+      });
+    }
 
     return sendJson(res, 200, {
       ok: true,

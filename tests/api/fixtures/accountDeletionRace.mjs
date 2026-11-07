@@ -29,7 +29,8 @@ export async function assertDeletionRace(t, handler) {
     assert.equal(url.hostname, 'deletion-fixture.invalid');
     const method = init.method ?? 'GET';
     if (url.pathname === '/auth/v1/user') return reply({ id: USER, email: 'owner@example.invalid' });
-    if (url.pathname === '/rest/v1/workspaces' && method === 'GET') return reply([{ id: 'ws1' }]);
+    if (url.pathname === '/rest/v1/workspaces' && method === 'GET')
+      return reply(state.authDeleted ? [] : [{ id: 'ws1' }]);
     if (url.pathname === '/rest/v1/workspace_memberships' && method === 'GET') return reply(state.members);
     if (url.pathname === '/rest/v1/rpc/xbar_hold_account_deletion_request') {
       if (state.requestToken && !state.requestExpired)
@@ -97,6 +98,7 @@ export async function assertDeletionRace(t, handler) {
     if (url.pathname === '/rest/v1/documents') return reply([]);
     if (url.pathname === `/auth/v1/admin/users/${USER}` && method === 'DELETE') {
       state.deletedWithNewMember = state.members.length > 0;
+      state.authDeleted = true;
       state.log.push(`auth deleted, membership hold=${state.holds}, other members=${state.members.length}`);
       return reply({});
     }
