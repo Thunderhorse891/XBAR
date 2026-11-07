@@ -4,6 +4,7 @@ import sendWelcomeHandler from '../_lib/account-send-welcome.js';
 import trialStartHandler from '../_lib/account-trial-start.js';
 import upgradeOfferHandler from '../_lib/upgrade-offer.js';
 import ownerHandler from '../_lib/owner-dashboard.js';
+import mediaReviewHandler from '../_lib/account-media-review.js';
 
 /*
  * Single Vercel function serving the account routes:
@@ -28,6 +29,7 @@ function resolveAction(req) {
 
 export default async function handler(req, res) {
   const action = resolveAction(req);
+  if (action === 'media-review') return mediaReviewHandler(req, res);
   if (action === 'owner-access' || action === 'owner-dashboard') {
     return ownerHandler(req, res, { accessOnly: action === 'owner-access' });
   }

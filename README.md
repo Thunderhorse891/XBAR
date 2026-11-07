@@ -610,3 +610,16 @@ by the application. See [the billing runbook](docs/OPERATOR-BILLING-RUNBOOK.md)
 for the separate Stripe verification gates. Rollback is to disable the feature
 and restore application code, preserving these additive tables and claims so
 retries, workspace deletion, or redeployment cannot reset promotion eligibility.
+
+### Sale photo approval guard (prepared; production approval required)
+
+`20261107163000_guard_sale_media_approval.sql` prevents ordinary horse writes from
+forging buyer-facing photo approval. Read [the scope and recovery plan](docs/reviews/media-approval.md).
+Rehearse with `supabase/checks/media-approval-writes.sql` on an isolated database.
+Only after final review and Erin's explicit production approval:
+
+```sh
+psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f supabase/migrations/20261107163000_guard_sale_media_approval.sql
+```
+
+Website deployment does not execute this command. Existing originals are preserved.

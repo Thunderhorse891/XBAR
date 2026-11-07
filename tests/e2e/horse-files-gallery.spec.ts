@@ -34,6 +34,25 @@ async function seedPhotos(page: Page) {
     });
   });
 }
+test('photo approval is explicit and survives a reload', async ({ page }) => {
+  await openHorse(page);
+  await seedPhotos(page);
+  const right = page.getByRole('button', { name: 'View Right side', exact: true }).locator('..');
+  await expect(right.getByText('Needs sale review', { exact: true })).toBeVisible();
+  await right.getByRole('button', { name: 'Approve for buyers', exact: true }).click();
+  await expect(right.getByText('Approved for buyers', { exact: true })).toBeVisible();
+  await page.reload();
+  await expect(right.getByText('Approved for buyers', { exact: true })).toBeVisible();
+  await right.getByRole('button', { name: 'Withdraw buyer approval', exact: true }).click();
+  await expect(right.getByText('Needs sale review', { exact: true })).toBeVisible();
+  await page.evaluate(async () => {
+    const path = '/src/store/useXbarStore.ts';
+    const { useXbarStore } = await import(/* @vite-ignore */ path);
+    useXbarStore.setState({ currentRole: 'Ranch Manager' });
+  });
+  await expect(page.getByRole('button', { name: 'Approve for buyers', exact: true })).toHaveCount(0);
+});
+
 test('gallery previews extra photos, changes primary, removes recoverably and restores across reload', async ({
   page,
 }, testInfo) => {

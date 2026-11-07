@@ -21,9 +21,12 @@ export function HorsePhotoGallery({
   uploading: boolean;
 }) {
   const canManage = useCurrentRoleCapability('uploadMedia');
+  const canReview = useCurrentRoleCapability('manageSales');
   const changePhoto = useXbarStore((s) => s.changeHorsePhoto);
+  const reviewPhoto = useXbarStore((s) => s.reviewHorseMedia);
   const pushToast = useUiStore((s) => s.pushToast);
   const [selectedId, setSelectedId] = useState<string | null>(null);
+  const [reviewingId, setReviewingId] = useState<string | null>(null);
   const [removal, setRemoval] = useState<{ assetId: string; horse: HorseRecord; owner: string; user?: string } | null>(
     null,
   );
@@ -82,6 +85,34 @@ export function HorsePhotoGallery({
               </button>
               <p>{asset.label}</p>
               {primary?.id === asset.id ? <StatusChip tone="info">Primary photo</StatusChip> : null}
+              <StatusChip tone={asset.status === 'Approved' ? 'success' : 'warning'}>
+                {asset.status === 'Approved' ? 'Approved for buyers' : 'Needs sale review'}
+              </StatusChip>
+              {canReview ? (
+                <ActionButton
+                  size="sm"
+                  disabled={uploading || Boolean(reviewingId)}
+                  onClick={async () => {
+                    setReviewingId(asset.id);
+                    try {
+                      const result = await reviewPhoto(horse.id, asset.id, asset.status !== 'Approved');
+                      pushToast({
+                        title: result.ok ? 'Photo review saved' : 'Photo review blocked',
+                        message: result.message,
+                        tone: result.ok ? 'success' : 'error',
+                      });
+                    } finally {
+                      setReviewingId(null);
+                    }
+                  }}
+                >
+                  {reviewingId === asset.id
+                    ? 'Saving review…'
+                    : asset.status === 'Approved'
+                      ? 'Withdraw buyer approval'
+                      : 'Approve for buyers'}
+                </ActionButton>
+              ) : null}
               {canManage ? (
                 <div className="inline-actions" style={{ marginTop: 8 }}>
                   <ActionButton
