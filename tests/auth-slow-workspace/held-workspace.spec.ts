@@ -1,3 +1,4 @@
+import { fulfillRelationalFixture } from './relationalFixture.js';
 import { expect, test, type Page, type Route } from '@playwright/test';
 import {
   blockWebfonts,
@@ -33,12 +34,58 @@ import {
 blockWebfonts();
 
 const WORKSPACE_REST = /\/rest\/v1\/(workspaces|workspace_memberships|workspace_invitations)/;
-const SNAPSHOT_REST = /\/rest\/v1\/workspace_snapshots/;
 // The first relational table a hydration reads, and the one whose URL carries
 // the workspace it decided to read -- which is the whole question on a switch.
 const HORSES_REST = /\/rest\/v1\/horses/;
 const WORKSPACE_ID = '7f1d0c44-0000-4000-8000-0000000000aa';
 const SECOND_WORKSPACE_ID = '7f1d0c44-0000-4000-8000-0000000000bb';
+
+// Every non-held collection is a complete, counted empty result, not a 404
+// that accidentally forces the obsolete snapshot fallback path.
+test.beforeEach(async ({ page }) => {
+  await page.route('**/rest/v1/**', async (route) => {
+    const table = new URL(route.request().url()).pathname.split('/').pop();
+    await fulfillRelationalFixture(route, {
+      status: 200,
+      json:
+        table === 'workspace_subscription_profiles'
+          ? {
+              tier: 'Starter',
+              billing_state: 'Manual Billing',
+              monthly_rate: 0,
+              payload: {},
+              updated_at: '2026-09-10T12:00:00Z',
+            }
+          : table === 'workspace_profiles'
+            ? {
+                payload: {
+                  ranchName: 'Fixture ranch',
+                  businessName: 'Fixture',
+                  setupCompleteAt: '2026-09-10T12:00:00Z',
+                },
+                updated_at: '2026-09-10T12:00:00Z',
+              }
+            : [],
+    });
+  });
+});
+
+function expectOneCompleteHorseRead(urls: string[], workspaceId: string) {
+  expect(urls).toHaveLength(2); // data plus full content verification, exactly once
+  for (const value of urls) {
+    const url = new URL(value);
+    expect(url.searchParams.get('workspace_id')).toBe(`eq.${workspaceId}`);
+    expect(
+      url.searchParams
+        .get('select')
+        ?.split(',')
+        .map((column) => column.trim()),
+    ).toEqual(['horse_id', 'payload', 'updated_at']);
+    expect(url.searchParams.get('order')).toBe('horse_id.asc');
+    expect(url.searchParams.get('offset')).toBe('0');
+    expect(url.searchParams.get('limit')).toBe('500');
+  }
+}
 
 const refusal = (page: Page) => page.getByText(/This page needs a current password-reset link/);
 const newPassword = (page: Page) => page.getByLabel('New password', { exact: true });
@@ -100,7 +147,7 @@ async function fulfilWorkspace(route: Route) {
   const body = url.includes('/workspaces?')
     ? JSON.stringify({ id: url.includes(SECOND_USER_ID) ? SECOND_WORKSPACE_ID : WORKSPACE_ID })
     : '[]';
-  await route.fulfill({ status: 200, contentType: 'application/json', body });
+  await fulfillRelationalFixture(route, { status: 200, contentType: 'application/json', body });
 }
 
 // `owner_user_id=eq.<uuid>` on the workspaces read; the membership reads carry
@@ -114,19 +161,22 @@ function ownerOf(url: string) {
  * hydration that is genuinely in flight rather than one that has already
  * finished.
  */
-async function holdSnapshotApi(page: Page) {
+async function holdRelationalApi(page: Page) {
   const held: Route[] = [];
   const seen: string[] = [];
   let releasing = false;
-  await page.route(SNAPSHOT_REST, async (route) => {
+  await page.route(HORSES_REST, async (route) => {
     seen.push(route.request().url());
     if (releasing) {
-      await route.fulfill({ status: 200, contentType: 'application/json', body: '[]' });
+      await fulfillRelationalFixture(route, { status: 200, contentType: 'application/json', body: '[]' });
       return;
     }
     held.push(route);
   });
   return {
+    get urls() {
+      return [...seen];
+    },
     get count() {
       return seen.length;
     },
@@ -134,7 +184,9 @@ async function holdSnapshotApi(page: Page) {
       releasing = true;
       const pending = held.splice(0, held.length);
       for (const route of pending) {
-        await route.fulfill({ status: 200, contentType: 'application/json', body: '[]' }).catch(() => {});
+        await fulfillRelationalFixture(route, { status: 200, contentType: 'application/json', body: '[]' }).catch(
+          () => {},
+        );
       }
     },
   };
@@ -143,13 +195,13 @@ async function holdSnapshotApi(page: Page) {
 const heldGrant = (page: Page) => page.evaluate((key) => window.sessionStorage.getItem(key) ?? '', RECOVERY_KEY);
 
 /*
- * These snapshot-hold cases need a readable canonical subscription. Leaving
+ * The held relational-read cases need a readable canonical subscription. Leaving
  * this endpoint unmocked returns the static server's 404, so fail-closed
- * entitlement loading correctly stops before the snapshot under test.
+ * entitlement loading correctly stops before records can be installed.
  */
 async function stubReadableSubscription(page: Page) {
   await page.route(/\/rest\/v1\/workspace_subscription_profiles/, (route) =>
-    route.fulfill({
+    fulfillRelationalFixture(route, {
       status: 200,
       contentType: 'application/json',
       body: JSON.stringify({ tier: 'Starter', billing_state: 'Manual Billing', monthly_rate: 0, payload: {} }),
@@ -200,10 +252,10 @@ test('reloading while the workspace API hangs still reaches the form', async ({ 
 test('releasing the workspace API hydrates once, for the workspace it resolved', async ({ page }) => {
   await stubReadableSubscription(page);
   const workspace = await holdWorkspaceApi(page);
-  const snapshotReads: string[] = [];
-  await page.route(SNAPSHOT_REST, async (route) => {
-    snapshotReads.push(route.request().url());
-    await route.fulfill({ status: 200, contentType: 'application/json', body: '[]' });
+  const relationalReads: string[] = [];
+  await page.route(HORSES_REST, async (route) => {
+    relationalReads.push(route.request().url());
+    await fulfillRelationalFixture(route, { status: 200, contentType: 'application/json', body: '[]' });
   });
   await stubGoTrueUser(page);
 
@@ -216,26 +268,26 @@ test('releasing the workspace API hydrates once, for the workspace it resolved',
    * have started hydration against an empty workspace id -- then started again
    * when the real one arrived.
    */
-  expect(snapshotReads).toEqual([]);
+  expect(relationalReads).toEqual([]);
 
   await workspace.release();
   await page.waitForTimeout(4000);
 
   /*
-   * Exactly one. Two would mean the transient unresolved window cleared the
-   * hydration key and the same user and workspace hydrated once per sync --
+   * Exactly one complete logical read. A second data/verification pair means the
+   * transient unresolved window cleared the hydration key and restarted it --
    * which is what happened before this suite existed, and what it caught.
    */
-  expect(snapshotReads).toHaveLength(1);
+  expectOneCompleteHorseRead(relationalReads, WORKSPACE_ID);
   // For the account the profile resolved for, not some other one.
-  expect(snapshotReads[0]).toContain(USER_ID);
+  expect(relationalReads.every((url) => url.includes(WORKSPACE_ID))).toBe(true);
 });
 
 test('a session ending while the workspace API hangs authorizes nothing', async ({ page }) => {
   const workspace = await holdWorkspaceApi(page);
   await stubGoTrueUser(page);
   await page.route('**/auth/v1/token*', (route) =>
-    route.fulfill({
+    fulfillRelationalFixture(route, {
       status: 400,
       contentType: 'application/json',
       body: JSON.stringify({ error: 'invalid_grant', error_description: 'Invalid Refresh Token' }),
@@ -270,7 +322,7 @@ test('an account switch while the workspace API hangs hydrates only the new acco
   const relationalReads: string[] = [];
   await page.route(HORSES_REST, async (route) => {
     relationalReads.push(route.request().url());
-    await route.fulfill({ status: 200, contentType: 'application/json', body: '[]' });
+    await fulfillRelationalFixture(route, { status: 200, contentType: 'application/json', body: '[]' });
   });
   await stubGoTrueUser(page);
 
@@ -332,7 +384,7 @@ test('an account switch while the workspace API hangs hydrates only the new acco
    * and are not what would catch a stale commit. They pin the account the
    * hydration ran for; the count pins that it ran once.
    */
-  expect(relationalReads).toHaveLength(1);
+  expectOneCompleteHorseRead(relationalReads, SECOND_WORKSPACE_ID);
   expect(relationalReads[0]).toContain(SECOND_WORKSPACE_ID);
   expect(relationalReads[0]).not.toContain(WORKSPACE_ID);
 });
@@ -348,19 +400,21 @@ test('switching accounts in a hydrated tab locks its records until the new profi
   const promotions: string[] = [];
   await page.route(HORSES_REST, async (route) => {
     relationalReads.push(route.request().url());
-    await route.fulfill({ status: 200, contentType: 'application/json', body: '[]' });
+    await fulfillRelationalFixture(route, { status: 200, contentType: 'application/json', body: '[]' });
   });
   // Reconciliation's own write. Nothing may push records anywhere while the
   // account on screen and the workspace behind it disagree.
-  await page.route(SNAPSHOT_REST, async (route) => {
-    if (route.request().method() !== 'GET') promotions.push(route.request().method());
-    await route.fulfill({ status: 200, contentType: 'application/json', body: '[]' });
+  await page.route('**/rest/v1/**', async (route) => {
+    if (route.request().method() === 'GET') return route.fallback();
+    promotions.push(route.request().method());
+    await fulfillRelationalFixture(route, { status: 200, contentType: 'application/json', body: '[]' });
   });
   await stubGoTrueUser(page);
 
   await page.goto(recoveryLink());
   await expect(newPassword(page)).toBeVisible({ timeout: 30_000 });
-  await expect.poll(() => relationalReads.length, { timeout: 30_000 }).toBeGreaterThan(0);
+  await expect.poll(() => relationalReads.length, { timeout: 30_000 }).toBe(2);
+  expectOneCompleteHorseRead(relationalReads, WORKSPACE_ID);
   expect(relationalReads[0]).toContain(WORKSPACE_ID);
 
   // Settled as the first account. Now the workspace API goes away, and a
@@ -410,21 +464,21 @@ test('switching accounts in a hydrated tab locks its records until the new profi
   // for the account that is actually signed in.
   await workspace.release();
   await page.waitForTimeout(4000);
-  expect(relationalReads).toHaveLength(1);
+  expectOneCompleteHorseRead(relationalReads, SECOND_WORKSPACE_ID);
   expect(relationalReads[0]).toContain(SECOND_WORKSPACE_ID);
 });
 
 test('a token refresh during hydration does not restart or abandon it', async ({ page }) => {
   await stubReadableSubscription(page);
   const workspace = await holdWorkspaceApi(page, { holding: false });
-  const snapshot = await holdSnapshotApi(page);
+  const remoteRead = await holdRelationalApi(page);
   await stubGoTrueUser(page);
 
   await page.goto(recoveryLink());
   await expect(newPassword(page)).toBeVisible({ timeout: 30_000 });
 
   // Hydration is genuinely in flight: its remote read is outstanding.
-  await expect.poll(() => snapshot.count, { timeout: 30_000 }).toBe(1);
+  await expect.poll(() => remoteRead.count, { timeout: 30_000 }).toBe(1);
 
   /*
    * A real auth-js refresh for the SAME account, mid-hydration -- an ordinary
@@ -448,12 +502,12 @@ test('a token refresh during hydration does not restart or abandon it', async ({
   expect(sessionId).not.toBe('');
   await refreshStoredSession(page, sessionId);
 
-  await snapshot.release();
+  await remoteRead.release();
   await page.waitForTimeout(4000);
 
-  // One read, and no second one: not restarted, and the refresh really did
+  // One complete data/verification pair: not restarted, and the refresh really did
   // happen underneath it.
-  expect(snapshot.count).toBe(1);
+  expectOneCompleteHorseRead(remoteRead.urls, WORKSPACE_ID);
   expect(workspace.owners.filter((owner) => owner === USER_ID).length).toBeGreaterThan(1);
 
   // And the screen the refresh interrupted still works.
@@ -481,7 +535,7 @@ test('a session arriving while an obsolete one hangs resolves without waiting fo
   const relationalReads: string[] = [];
   await page.route(HORSES_REST, async (route) => {
     relationalReads.push(route.request().url());
-    await route.fulfill({ status: 200, contentType: 'application/json', body: '[]' });
+    await fulfillRelationalFixture(route, { status: 200, contentType: 'application/json', body: '[]' });
   });
   await stubGoTrueUser(page);
 
@@ -501,7 +555,8 @@ test('a session arriving while an obsolete one hangs resolves without waiting fo
    * account's request is still outstanding. Nothing is released first: that is
    * the whole assertion.
    */
-  await expect.poll(() => relationalReads.length, { timeout: 30_000 }).toBe(1);
+  await expect.poll(() => relationalReads.length, { timeout: 30_000 }).toBe(2);
+  expectOneCompleteHorseRead(relationalReads, SECOND_WORKSPACE_ID);
   expect(relationalReads[0]).toContain(SECOND_WORKSPACE_ID);
   expect(workspace.count).toBeGreaterThan(0);
 

@@ -8,16 +8,23 @@
 
 function getAllowedOrigins() {
   const vercelOrigin = process.env.VERCEL_URL ? `https://${process.env.VERCEL_URL}` : '';
-  return [process.env.PUBLIC_APP_URL, process.env.VITE_PUBLIC_APP_URL, vercelOrigin]
+  const webOrigins = [process.env.PUBLIC_APP_URL, process.env.VITE_PUBLIC_APP_URL, vercelOrigin]
     .filter(Boolean)
     .map((value) => {
       try {
-        return new URL(value).origin;
+        const url = new URL(value);
+        // Opaque schemes serialize as "null", which must never authorize
+        // sandboxed browser callers. Admit the native origin explicitly below.
+        return url.protocol === 'https:' || url.protocol === 'http:' ? url.origin : '';
       } catch {
         return '';
       }
     })
     .filter(Boolean);
+  // Capacitor's bundled iOS origin, matching the default in capacitor.config.ts.
+  // This only permits bearer-token transport; endpoint authentication and
+  // workspace/capability checks still apply. No cookies or wildcard origins.
+  return [...webOrigins, 'capacitor://localhost'];
 }
 
 /**

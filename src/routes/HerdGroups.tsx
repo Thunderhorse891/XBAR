@@ -30,11 +30,13 @@ export default function HerdGroups() {
 
   const groups = useMemo<Group[]>(() => {
     const bySegment = new Map<HorseSegment, HorseRecord[]>();
-    horses.forEach((h) => {
-      const list = bySegment.get(h.segment) ?? [];
-      list.push(h);
-      bySegment.set(h.segment, list);
-    });
+    horses
+      .filter((h) => !h.archive)
+      .forEach((h) => {
+        const list = bySegment.get(h.segment) ?? [];
+        list.push(h);
+        bySegment.set(h.segment, list);
+      });
     return Array.from(bySegment.entries()).map(([segment, list]) => ({
       id: segment,
       name: segment,
@@ -44,7 +46,7 @@ export default function HerdGroups() {
     }));
   }, [horses]);
 
-  if (horses.length === 0) {
+  if (groups.length === 0) {
     return (
       <>
         <PageHead
@@ -115,10 +117,10 @@ export default function HerdGroups() {
               </div>
             </div>
             <div style={{ display: 'flex', gap: 8, marginTop: 8 }}>
-              <ActionButton size="sm" onClick={() => navigate('/horses')}>
+              <ActionButton size="sm" onClick={() => navigate(`/horses?${new URLSearchParams({ segment: g.id })}`)}>
                 Open Group
               </ActionButton>
-              <ActionButton size="sm" onClick={() => navigate('/today')}>
+              <ActionButton size="sm" onClick={() => navigate(`/today?${new URLSearchParams({ segment: g.id })}`)}>
                 Care Tasks
               </ActionButton>
             </div>

@@ -51,20 +51,32 @@ export function OfferDecisionPanel({
         />
         <MetricCard
           label="Break-even"
-          value={formatCompactCurrency(decision.breakEven)}
+          value={decision.breakEven === null ? 'Unknown' : formatCompactCurrency(decision.breakEven)}
           detail="Cost basis plus linked expenses"
         />
         <MetricCard
           label="Protected floor"
-          value={formatCompactCurrency(decision.safeSalePrice)}
+          value={decision.safeSalePrice === null ? 'Unknown' : formatCompactCurrency(decision.safeSalePrice)}
           detail="Break-even plus protected margin"
           tone="blue"
         />
         <MetricCard
           label="Profit at offer"
-          value={formatCompactCurrency(decision.expectedProfit)}
-          detail={`${Math.round(decision.marginPercent)}% margin`}
-          tone={decision.expectedProfit < 0 ? 'rose' : decision.overrideRequired ? 'amber' : 'emerald'}
+          value={decision.expectedProfit === null ? 'Unknown' : formatCompactCurrency(decision.expectedProfit)}
+          detail={
+            decision.marginPercent === null
+              ? 'Cost records incomplete'
+              : `${Math.round(decision.marginPercent)}% margin`
+          }
+          tone={
+            decision.expectedProfit === null
+              ? 'amber'
+              : decision.expectedProfit < 0
+                ? 'rose'
+                : decision.overrideRequired
+                  ? 'amber'
+                  : 'emerald'
+          }
         />
       </div>
 
@@ -109,7 +121,7 @@ export function OfferDecisionPanel({
           className="button button--ghost button--compact"
           type="button"
           onClick={onCounterAtFloor}
-          disabled={!canManageSales || decision.safeSalePrice <= 0}
+          disabled={!canManageSales || decision.safeSalePrice === null || decision.safeSalePrice <= 0}
         >
           Counter at protected floor
         </button>

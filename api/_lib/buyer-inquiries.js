@@ -1,3 +1,4 @@
+import { isWorkspaceId } from './document-storage.js';
 import { readJsonBody, sendJson } from './http.js';
 import { getSupabaseAdmin } from './supabase-admin.js';
 import { enforceRateLimit } from './rate-limit.js';
@@ -17,6 +18,69 @@ import { BUYER_INQUIRY_KINDS, buyerInquirySchema, parseBody } from './validation
 
 const ALLOWED_KINDS = new Set(BUYER_INQUIRY_KINDS);
 const RATE_LIMIT = { bucket: 'buyer-inquiries', limit: 12, windowSeconds: 60 };
+
+function record(value) {
+  return Boolean(value) && typeof value === 'object' && !Array.isArray(value);
+}
+
+function consistentId(values, workspace = false) {
+  const present = values.filter((value) => value !== undefined);
+  if (!present.length || present.some((value) => typeof value !== 'string' || !value.trim())) return null;
+  if (workspace && present.some((value) => !isWorkspaceId(value))) return null;
+  const normalized = workspace ? present.map((value) => value.toLowerCase()) : present;
+  return normalized.every((value) => value === normalized[0]) ? normalized[0] : null;
+}
+
+// Current RPC returns a nested selected-row envelope; older deployments returned
+// one flat row. Never choose the first of several rows or mix conflicting targets.
+export function resolveBuyerInquiryScope(value, sharePath, shareToken) {
+  if (Array.isArray(value)) {
+    if (value.length !== 1) return null;
+    value = value[0];
+  }
+  if (!record(value)) return null;
+  const nested = Object.hasOwn(value, 'sharedListing');
+  const listing = nested ? value.sharedListing : value;
+  if (!record(listing) || (nested && !record(value.horse))) return null;
+  const workspaceId = consistentId(
+    [value.workspace_id, value.workspaceId, listing.workspace_id, listing.workspaceId],
+    true,
+  );
+  const horseId = consistentId([
+    value.horse_id,
+    value.horseId,
+    listing.horse_id,
+    listing.horseId,
+    nested ? value.horse.id : undefined,
+  ]);
+  const listingId = consistentId([
+    value.listing_id,
+    value.listingId,
+    value.id,
+    listing.listing_id,
+    listing.listingId,
+    listing.id,
+  ]);
+  if (!workspaceId || !horseId || !listingId) return null;
+  if (nested && (typeof value.horse.id !== 'string' || !value.horse.id.trim())) return null;
+  const paths = [value.share_path, value.sharePath, listing.share_path, listing.sharePath].filter(
+    (path) => path !== undefined,
+  );
+  if ((nested && !paths.length) || paths.some((path) => path !== sharePath)) return null;
+  const states = [value.state, listing.state].filter((state) => state !== undefined);
+  if ((nested && !states.length) || states.some((state) => state !== 'Live')) return null;
+  const modes = [value.access_mode, value.accessMode, listing.access_mode, listing.accessMode].filter(
+    (mode) => mode !== undefined,
+  );
+  if (
+    (nested && !modes.length) ||
+    modes.some((mode) => !['Private Token', 'Public Link'].includes(mode) || mode !== modes[0])
+  )
+    return null;
+  const accessMode = modes[0] ?? (shareToken ? 'Private Token' : 'Public Link');
+  if (accessMode === 'Private Token' && !shareToken) return null;
+  return { workspaceId, horseId, listingId, accessMode };
+}
 
 export default async function handler(req, res) {
   if (!applyCors(req, res)) {
@@ -79,13 +143,11 @@ export default async function handler(req, res) {
   if (resolveError || !listing) {
     return sendJson(res, 404, { ok: false, message: 'This listing link is not valid or has been retired.' });
   }
-  const resolved = Array.isArray(listing) ? listing[0] : listing;
-  const workspaceId = resolved?.workspace_id || resolved?.workspaceId;
-  const horseId = resolved?.horse_id || resolved?.horseId || '';
-  const listingId = resolved?.listing_id || resolved?.listingId || '';
-  if (!workspaceId) {
+  const scope = resolveBuyerInquiryScope(listing, sharePath, shareToken);
+  if (!scope) {
     return sendJson(res, 404, { ok: false, message: 'This listing could not be matched to a workspace.' });
   }
+  const { workspaceId, horseId, listingId, accessMode } = scope;
 
   const { error: insertError } = await supabase.from('public_share_events').insert({
     workspace_id: workspaceId,
@@ -93,7 +155,7 @@ export default async function handler(req, res) {
     horse_id: horseId,
     share_path: sharePath,
     event_type: `buyer-${kind}`,
-    access_mode: shareToken ? 'Private Token' : 'Public Link',
+    access_mode: accessMode,
     metadata: {
       buyerName,
       buyerEmail,

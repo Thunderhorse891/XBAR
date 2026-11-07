@@ -1,5 +1,5 @@
 import { useMemo, useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { Link, useNavigate } from 'react-router-dom';
 import { HeartPulse, Plus } from 'lucide-react';
 import { ActionButton, Card, PageHead, StatusChip } from '@/components/saas';
 import { useUiStore } from '@/store/useUiStore';
@@ -110,6 +110,7 @@ export default function HealthCare() {
         subtitle="Vaccines, Coggins, farrier, dental, and medications — everything that keeps a horse healthy and sale-ready."
         actions={
           <>
+            <ActionButton onClick={() => navigate('/medical')}>Open health records</ActionButton>
             <ActionButton
               variant="primary"
               icon={<Plus size={15} />}
@@ -172,8 +173,10 @@ export default function HealthCare() {
           </thead>
           <tbody>
             {rows.map((r) => (
-              <tr key={r.id} onClick={() => navigate(`/horses/${r.horseId}`)}>
-                <td style={{ fontWeight: 600 }}>{r.animal}</td>
+              <tr key={r.id}>
+                <td style={{ fontWeight: 600 }}>
+                  <Link to={`/horses/${r.horseId}`}>{r.animal}</Link>
+                </td>
                 <td>{r.type}</td>
                 <td className="xs-muted">{r.dueDate ?? '—'}</td>
                 <td className="xs-muted">{r.detail}</td>

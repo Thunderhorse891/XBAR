@@ -1,15 +1,32 @@
 // XBAR first-party site script (marketing pages only).
 //
-// Two jobs, both CSP-safe (script-src 'self') and zero-dependency:
-//   1. Progressive motion: one-shot, preference-aware section entrances.
+// Three jobs, all CSP-safe (script-src 'self') and zero-dependency:
+//   1. Legacy public-profile link recovery into the /app browser router.
+//   2. Progressive motion: one-shot, preference-aware section entrances.
 //      Everything is additive — without JS (or with reduced motion) the page
 //      is fully visible and static.
-//   2. Anonymous analytics beacon: pageviews and the two CTA clicks that
+//   3. Anonymous analytics beacon: pageviews and the two CTA clicks that
 //      matter, reported to our own /api/metrics. No cookies, no identifiers,
 //      honors Do Not Track / Global Privacy Control.
 /* global document, location, window */
 (function () {
   'use strict';
+
+  // Older clients shared /#/profiles/<id>?t=<token>. The root is now
+  // marketing, so recover only that exact legacy public route before motion
+  // or analytics. No auth callbacks, arbitrary paths or hash-router previews.
+  // Keep the matcher aligned with routeCanon.legacyPublicProfilePath; tests
+  // execute both real entrypoints against the same compatibility matrix.
+  if (
+    typeof location !== 'undefined' &&
+    location.pathname === '/' &&
+    !location.search &&
+    !location.hostname.endsWith('.github.io') &&
+    /^#\/profiles\/[A-Za-z0-9_-]+(?:\?[^\s#]*)?$/.test(location.hash)
+  ) {
+    location.replace('/app' + location.hash.slice(1));
+    return;
+  }
 
   var doc = typeof document === 'undefined' ? null : document;
   if (!doc) return;

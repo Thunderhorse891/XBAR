@@ -19,6 +19,8 @@ import { buildBudgetSummary, buildCareBoardRows, buildTransferGapRows } from '@/
 import { buildBankedHeadline, buildRanchFinancials } from '@/lib/profitIntelligence';
 import { formatCompactCurrency } from '@/lib/format';
 import { events, track } from '@/lib/telemetry';
+import { buildRanchReport } from '@/lib/ranchReport';
+import { useDayKey } from '@/hooks/useDayKey';
 import { useXbarStore } from '@/store/useXbarStore';
 
 // Stagger index for the motion system; the CSS var drives each child's delay.
@@ -38,6 +40,7 @@ type Signal = {
 
 export default function Dashboard() {
   const navigate = useNavigate();
+  const dayKey = useDayKey();
   const horses = useXbarStore((s) => s.horses);
   const documents = useXbarStore((s) => s.documents);
   const ownershipRecords = useXbarStore((s) => s.ownershipRecords);
@@ -63,9 +66,10 @@ export default function Dashboard() {
     const careDue = careBoard.filter((row) => row.signals.some((sig) => sig.status === 'due'));
     const budget = buildBudgetSummary(expenseReceipts);
     const activeSales = salesLeads.filter((l) => l.stage !== 'Closed');
-    const readiness = horses.length
-      ? Math.round(horses.reduce((sum, h) => sum + (h.readiness?.score ?? 0), 0) / horses.length)
-      : 0;
+    const readiness = buildRanchReport(
+      { horses, documents, ownershipRecords, expenseReceipts, salesLeads },
+      new Date(`${dayKey}T12:00:00`),
+    ).readiness.average;
     const openItems = transferGaps.length + careDue.length + reviewQueue.length;
     return {
       reviewQueue,
@@ -78,7 +82,7 @@ export default function Dashboard() {
       documentActions,
       documentGapHorseCount,
     };
-  }, [horses, documents, ownershipRecords, expenseReceipts, salesLeads]);
+  }, [horses, documents, ownershipRecords, expenseReceipts, salesLeads, dayKey]);
 
   // The money story on the front door — same honest engine as the Money view, so
   // the Dashboard and /financials never disagree. These are all ungated figures
@@ -92,18 +96,18 @@ export default function Dashboard() {
   // and populated views so real spend is never hidden (a workspace can log
   // ranch-wide expenses before its first horse; the Money view treats that as a
   // real, negative picture and so must the Dashboard).
-  // The banked-profit headline state (complete / partial / unknown) comes from the
+  // The estimated-margin completeness state (complete / partial / unknown) comes from the
   // shared engine helper, so the Dashboard and the Money view present it identically.
   const banked = buildBankedHeadline(financials);
   const bankedComplete = banked.state === 'complete';
   const bankedShowValue = banked.state !== 'unknown';
   const bankedMeta =
     banked.state === 'complete'
-      ? `${financials.soldCount} sold${financials.overheadSpend > 0 ? ' · net of overhead' : ''}`
+      ? `${financials.soldCount} sold · after recorded costs and overhead`
       : banked.state === 'partial'
         ? `Partial — ${banked.fixPhrase} to complete`
-        : `${financials.soldCount} sold · ${banked.fixPhrase} to see profit`;
-  // Cash collected is likewise unknown (not $0) when a closed sale has no amount.
+        : `${financials.soldCount} sold · ${banked.fixPhrase} to estimate margin`;
+  // Agreed value is unknown (not $0) when a closed sale has no usable price.
   const missingPrice = financials.soldMissingPriceCount;
   const collectedUnknown = missingPrice > 0 && financials.realizedProceeds === 0;
   const moneyBand = (
@@ -114,7 +118,7 @@ export default function Dashboard() {
         style={motionIndex(0)}
         onClick={() => navigate('/financials')}
       >
-        <span className="xs-money__label">Profit banked</span>
+        <span className="xs-money__label">Estimated sale margin</span>
         {!bankedShowValue ? (
           <span className="xs-money__value">—</span>
         ) : (
@@ -127,7 +131,7 @@ export default function Dashboard() {
             {formatCompactCurrency(Math.abs(financials.netProfit))}
           </span>
         )}
-        <span className="xs-money__meta">{bankedMeta}</span>
+        <span className="xs-money__meta">{bankedMeta}. Payment collection is not tracked.</span>
       </button>
       <button
         type="button"
@@ -135,7 +139,7 @@ export default function Dashboard() {
         style={motionIndex(1)}
         onClick={() => navigate('/financials')}
       >
-        <span className="xs-money__label">Collected from sales</span>
+        <span className="xs-money__label">Agreed sales</span>
         {collectedUnknown ? (
           <span className="xs-money__value">—</span>
         ) : (
@@ -145,8 +149,8 @@ export default function Dashboard() {
           {collectedUnknown
             ? 'Record the sale amount on a closed deal'
             : missingPrice > 0
-              ? `Cash in · ${missingPrice} missing a price`
-              : 'Cash in from closed deals'}
+              ? `Known-value subtotal · ${missingPrice} missing a price`
+              : 'Agreed closed-sale value, not cash received'}
         </span>
       </button>
       <button
@@ -393,7 +397,7 @@ export default function Dashboard() {
       to: '/horses?documents=missing',
       danger: documentGapHorseCount > 0,
     },
-    { v: `${readiness}%`, l: 'Ready to sell', to: '/reports' },
+    { v: `${readiness}%`, l: 'Record readiness', to: '/reports' },
   ];
 
   return (

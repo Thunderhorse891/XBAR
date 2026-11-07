@@ -7,7 +7,7 @@ import {
   openBuyerRequests,
   publicShareEventToBuyerRoomEvent,
 } from '../src/lib/buyerDealRoom.js';
-import { buildUsageMeters, featureGate, usagePressure } from '../src/lib/commercialEngine.js';
+import { featureGate, usagePressure } from '../src/lib/commercialEngine.js';
 import { buildHorseProfitProfile, buildOfferDecision } from '../src/lib/profitIntelligence.js';
 import { buildPublicBuyerPacketArtifact } from '../src/lib/publicBuyerPacket.js';
 import { buildSaleHold } from '../src/lib/saleTrustEngine.js';
@@ -58,14 +58,19 @@ const horse = {
   sale: { askPrice: 18000 },
   alerts: [],
 } as unknown as HorseRecord;
-const receipt = { id: 'receipt-1', horseId: horse.id, category: 'Feed', amount: 2000 } as ExpenseReceipt;
+const receipt = {
+  id: 'receipt-1',
+  horseId: horse.id,
+  category: 'Feed',
+  amount: 2000,
+  receiptDate: '2026-01-01',
+} as ExpenseReceipt;
 
 test('usage pressure moves through warning, upgrade, and hard gate thresholds', () => {
   assert.equal(usagePressure(79, 100), 'clear');
   assert.equal(usagePressure(80, 100), 'warning');
   assert.equal(usagePressure(90, 100), 'upgrade');
   assert.equal(usagePressure(100, 100), 'blocked');
-  assert.equal(buildUsageMeters(subscription('Starter', 5))[0].pressure, 'blocked');
 });
 
 test('commercial features unlock at their intended plans', () => {
@@ -243,4 +248,14 @@ test('sale hold blocks missing Coggins and ownership proof', () => {
     'Clear and a ready upload cannot replace a reviewed proof checklist',
   );
   assert.match(buildSaleHold(horse, documents, ownership).ownershipReviewBlockers[0], /not been reviewed/);
+});
+
+test('incomplete dated costs cannot supply a counter floor or apparent profit', () => {
+  const decision = buildOfferDecision(horse, [{ ...receipt, amount: 9000, receiptDate: 'unreadable' }], 12000);
+  assert.equal(decision.status, 'missing-costs');
+  assert.equal(buildHorseProfitProfile(horse, [{ ...receipt, receiptDate: 'unreadable' }], []).costsKnown, false);
+  assert.equal(decision.breakEven, null);
+  assert.equal(decision.safeSalePrice, null);
+  assert.equal(decision.expectedProfit, null);
+  assert.equal(decision.marginPercent, null);
 });

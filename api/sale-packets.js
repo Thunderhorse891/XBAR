@@ -1,6 +1,7 @@
 import { randomUUID } from 'node:crypto';
 import { readJsonBody, sendJson, getQuery } from './_lib/http.js';
 import { requireWorkspaceAccess } from './_lib/supabase-admin.js';
+import { requireRoleCapability } from './_lib/permissions.js';
 import {
   checkSalePacketCapacity,
   checkStorageCapacity,
@@ -93,6 +94,9 @@ export default async function handler(req, res) {
     return sendJson(res, access.status, { ok: false, message: access.message });
   }
   const { supabase, user } = access;
+
+  const denied = requireRoleCapability(access.role, 'manageSales');
+  if (denied) return sendJson(res, 403, { ok: false, code: 'capability_required', message: denied });
 
   const entitlements = await getWorkspaceEntitlements(supabase, workspaceId, user?.email);
   if (!entitlements.ok) {

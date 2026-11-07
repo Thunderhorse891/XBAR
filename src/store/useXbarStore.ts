@@ -1,3 +1,6 @@
+import { hasMeaningfulWorkspace } from '@/lib/cloudSyncPolicy';
+import { stableStringify } from '@/lib/relationalDiff';
+import { changeHorsePhoto } from '@/lib/horsePhotoGallery';
 import { useEffect, useState } from 'react';
 import { normalizePacketWebsite, validatePacketProfile } from '../../api/_lib/packet-branding.js';
 import { create } from 'zustand';
@@ -88,9 +91,11 @@ import type {
   RoleCapability,
   SaleCredentialSeal,
   SalesLead,
+  SharedListingRecord,
   WorkspaceInvitationRecord,
 } from '@/types/xbar';
 import type { BuyerRoomEvent, DocumentRecord, SalePacketBuild, SubscriptionProfile } from '@/types/xbar';
+import { medicalCompletionUpdates, validateMedicalCompletion } from '@/lib/medicalEvidence';
 import { proposeHorseNameRepairs } from '@/lib/horseNameRepair';
 import type { XbarStore } from '@/store/xbarStoreTypes';
 import {
@@ -228,6 +233,29 @@ function readIntakeIdentity(): IntakeIdentity {
   return { userId: cloud.session?.user?.id ?? '', workspaceId: cloud.workspaceId ?? '' };
 }
 
+function sharedListingContextError(
+  horseId: string,
+  previous: SharedListingRecord | undefined,
+  identity: IntakeIdentity,
+): string | null {
+  const state = useXbarStore.getState();
+  const cloud = useCloudStore.getState();
+  const recordedOwner = readRecordsOwner();
+  const current = state.sharedListings.find((item) => item.horseId === horseId && item.state !== 'Archived');
+  if (
+    intakeIdentityChanged(identity, readIntakeIdentity()) ||
+    (recordedOwner && recordedOwner !== vaultOwnerId()) ||
+    stableStringify(current) !== stableStringify(previous) ||
+    !state.horses.some((horse) => horse.id === horseId)
+  )
+    return 'The account, workspace or listing changed. Reload before changing buyer access.';
+  return (
+    requireRoleCapability(state.currentRole, 'manageSharedAccess') ??
+    (identity.userId ? requireRoleCapability(cloud.workspaceRole, 'manageSharedAccess') : null) ??
+    null
+  );
+}
+
 function serializeDocumentIntake<T>(run: () => Promise<T>): Promise<T> {
   const result = documentIntakeQueue.then(run, run);
   documentIntakeQueue = result.then(
@@ -237,7 +265,7 @@ function serializeDocumentIntake<T>(run: () => Promise<T>): Promise<T> {
   return result;
 }
 
-function horseArchiveContextError(): string | null {
+function horseArchiveContextError(capability: RoleCapability = 'editHorse'): string | null {
   const cloud = useCloudStore.getState();
   const owner = vaultOwnerId();
   const recordedOwner = readRecordsOwner();
@@ -256,7 +284,7 @@ function horseArchiveContextError(): string | null {
     ) {
       return 'Wait for this workspace to finish loading, or resolve its sync warning, before changing the roster.';
     }
-    return requireRoleCapability(cloud.workspaceRole, 'editHorse') ?? null;
+    return requireRoleCapability(cloud.workspaceRole, capability) ?? null;
   }
   return null;
 }
@@ -267,6 +295,15 @@ export const useXbarStore = create<XbarStore>()(
       ...initialState,
       setCurrentRole: (role) => set({ currentRole: role }),
       initializeWorkspace: (profile) => {
+        const setupDenied = requireRoleCapability(get().currentRole, 'manageSettings');
+        if (setupDenied)
+          return {
+            ok: false,
+            message:
+              get().currentRole === 'Pending access'
+                ? 'Ranch access must be verified before creating or changing a workspace.'
+                : setupDenied,
+          };
         const businessName = profile.businessName?.trim() ?? '';
         const ranchName = profile.ranchName?.trim() ?? '';
         if (!businessName || !ranchName) {
@@ -274,6 +311,17 @@ export const useXbarStore = create<XbarStore>()(
         }
 
         const current = get();
+        const recordsOwner = readRecordsOwner();
+        if (
+          hasMeaningfulWorkspace({ workspace: selectPersistedState(current) }) &&
+          recordsOwner !== 'local' &&
+          recordsOwner !== vaultOwnerId()
+        ) {
+          return {
+            ok: false,
+            message: 'These existing records need an explicit ownership review before creating a different ranch.',
+          };
+        }
         const nextProfile = restoreWorkspaceProfile({
           ...current.workspaceProfile,
           ...profile,
@@ -458,6 +506,7 @@ export const useXbarStore = create<XbarStore>()(
         }
 
         const state = get();
+        const listingIdentity = readIntakeIdentity();
         if (!state.horses.some((horse) => horse.id === horseId)) {
           return { ok: false, message: 'Horse record not found for shared access.' };
         }
@@ -466,7 +515,7 @@ export const useXbarStore = create<XbarStore>()(
           (listing) => listing.horseId === horseId && listing.state !== 'Archived',
         );
         const isActive = Boolean(existingListing);
-        const cloudListing = existingListing
+        let cloudListing = existingListing
           ? {
               ...existingListing,
               state: 'Archived' as const,
@@ -477,16 +526,24 @@ export const useXbarStore = create<XbarStore>()(
             });
 
         if (isSupabaseConfigured()) {
-          const cloudResult = await upsertSharedListingInCloud(cloudListing);
+          const before = sharedListingContextError(horseId, existingListing, listingIdentity);
+          if (before) return { ok: false, message: before };
+          const cloudResult = await upsertSharedListingInCloud(cloudListing, {
+            previous: existingListing,
+            expectedIdentity: listingIdentity,
+          });
           if (!cloudResult.ok) {
             return { ok: false, message: cloudResult.message };
           }
+          cloudListing = cloudResult.listing;
         }
+        const changed = sharedListingContextError(horseId, existingListing, listingIdentity);
+        if (changed) return { ok: false, message: changed };
 
         set((state) => {
           const nextSharedListings = existingListing
             ? state.sharedListings.map((listing) =>
-                listing.horseId === horseId
+                listing.id === existingListing.id
                   ? {
                       ...cloudListing,
                     }
@@ -529,6 +586,7 @@ export const useXbarStore = create<XbarStore>()(
         const deniedMessage = requireRoleCapability(get().currentRole, 'manageSharedAccess');
         if (deniedMessage) return { ok: false, message: deniedMessage };
         const state = get();
+        const listingIdentity = readIntakeIdentity();
         const horse = state.horses.find((item) => item.id === horseId);
         const listing = state.sharedListings.find((item) => item.horseId === horseId && item.state !== 'Archived');
         if (!horse || !listing) return { ok: false, message: 'Create the buyer listing before confirming release.' };
@@ -541,7 +599,7 @@ export const useXbarStore = create<XbarStore>()(
         if (!confirmedBy.trim())
           return { ok: false, message: 'Authorized seller name is required for legal release confirmation.' };
 
-        const nextListing = {
+        let nextListing: SharedListingRecord = {
           ...listing,
           releaseConfirmedAt: nowStamp(),
           releaseConfirmedBy: confirmedBy.trim(),
@@ -549,9 +607,17 @@ export const useXbarStore = create<XbarStore>()(
           updatedAt: todayStamp(),
         };
         if (isSupabaseConfigured()) {
-          const cloudResult = await upsertSharedListingInCloud(nextListing);
+          const before = sharedListingContextError(horseId, listing, listingIdentity);
+          if (before) return { ok: false, message: before };
+          const cloudResult = await upsertSharedListingInCloud(nextListing, {
+            previous: listing,
+            expectedIdentity: listingIdentity,
+          });
           if (!cloudResult.ok) return cloudResult;
+          nextListing = cloudResult.listing;
         }
+        const changed = sharedListingContextError(horseId, listing, listingIdentity);
+        if (changed) return { ok: false, message: changed };
         const auditEvent = createAuditEvent({
           actor: get().currentRole,
           action: 'status-change',
@@ -567,7 +633,10 @@ export const useXbarStore = create<XbarStore>()(
         return { ok: true, message: `${confirmedBy.trim()} confirmed the buyer packet release.`, id: horseId };
       },
       recordSharedChannel: async (horseId, channel) => {
+        const deniedMessage = requireRoleCapability(get().currentRole, 'manageSharedAccess');
+        if (deniedMessage) return { ok: false, message: deniedMessage };
         const state = get();
+        const listingIdentity = readIntakeIdentity();
         const horse = state.horses.find((item) => item.id === horseId);
         const listing = state.sharedListings.find((item) => item.horseId === horseId && item.state !== 'Archived');
         if (!horse || !listing) return { ok: false, message: 'Create the buyer listing before sharing.' };
@@ -583,14 +652,50 @@ export const useXbarStore = create<XbarStore>()(
             message: 'Authorized seller release confirmation is required before sharing the buyer packet.',
           };
         }
+        let nextListing: SharedListingRecord = {
+          ...listing,
+          state: listing.state === 'Draft' ? 'Live' : listing.state,
+          channels: listing.channels.includes(channel) ? listing.channels : [...listing.channels, channel],
+          lastSharedAt: todayStamp(),
+          updatedAt: todayStamp(),
+        };
         if (isSupabaseConfigured()) {
-          const cloudResult = await updateSharedListingChannelsInCloud({ horseId, channel });
+          const before = sharedListingContextError(horseId, listing, listingIdentity);
+          if (before) return { ok: false, message: before };
+          const cloudResult = await updateSharedListingChannelsInCloud({
+            listing,
+            channel,
+            expectedIdentity: listingIdentity,
+          });
           if (!cloudResult.ok) {
             return {
               ok: false,
               message: `Buyer packet share was not recorded in the cloud audit trail: ${cloudResult.message}`,
             };
           }
+          nextListing = cloudResult.listing;
+        }
+        const changed = sharedListingContextError(horseId, listing, listingIdentity);
+        if (changed) return { ok: false, message: changed };
+
+        // Callers captured the link before awaiting this action. A newer remote
+        // archive, release withdrawal or credential change must not distribute
+        // that stale link or create a successful-share audit event.
+        if (
+          nextListing.state !== 'Live' ||
+          !nextListing.releaseConfirmedAt ||
+          !nextListing.releaseConfirmedBy ||
+          nextListing.sharePath !== listing.sharePath ||
+          nextListing.accessMode !== listing.accessMode ||
+          nextListing.shareToken !== listing.shareToken
+        ) {
+          set((current) => ({
+            sharedListings: current.sharedListings.map((item) => (item.id === listing.id ? nextListing : item)),
+          }));
+          return {
+            ok: false,
+            message: 'Buyer access changed on another device. Review the current listing before sharing.',
+          };
         }
 
         const auditEvent = createAuditEvent({
@@ -602,17 +707,7 @@ export const useXbarStore = create<XbarStore>()(
           context: { horseId, channel },
         });
         set((current) => ({
-          sharedListings: current.sharedListings.map((item) =>
-            item.horseId === horseId && item.state !== 'Archived'
-              ? {
-                  ...item,
-                  state: item.state === 'Draft' ? 'Live' : item.state,
-                  channels: item.channels.includes(channel) ? item.channels : [...item.channels, channel],
-                  lastSharedAt: todayStamp(),
-                  updatedAt: todayStamp(),
-                }
-              : item,
-          ),
+          sharedListings: current.sharedListings.map((item) => (item.id === listing.id ? nextListing : item)),
           auditEvents: [auditEvent, ...current.auditEvents].slice(0, 500),
         }));
         return { ok: true, message: 'Buyer packet share recorded.', id: horseId };
@@ -624,6 +719,7 @@ export const useXbarStore = create<XbarStore>()(
         }
 
         const state = get();
+        const listingIdentity = readIntakeIdentity();
         const existingListing = state.sharedListings.find(
           (listing) => listing.horseId === horseId && listing.state !== 'Archived',
         );
@@ -631,7 +727,7 @@ export const useXbarStore = create<XbarStore>()(
           return { ok: false, message: 'Shared listing not found for this horse.' };
         }
 
-        const nextListing = {
+        let nextListing: SharedListingRecord = {
           ...existingListing,
           shareToken: createShareAccessToken(),
           tokenIssuedAt: todayStamp(),
@@ -639,15 +735,23 @@ export const useXbarStore = create<XbarStore>()(
         };
 
         if (isSupabaseConfigured()) {
-          const cloudResult = await upsertSharedListingInCloud(nextListing);
+          const before = sharedListingContextError(horseId, existingListing, listingIdentity);
+          if (before) return { ok: false, message: before };
+          const cloudResult = await upsertSharedListingInCloud(nextListing, {
+            previous: existingListing,
+            expectedIdentity: listingIdentity,
+          });
           if (!cloudResult.ok) {
             return { ok: false, message: cloudResult.message };
           }
+          nextListing = cloudResult.listing;
         }
+        const changed = sharedListingContextError(horseId, existingListing, listingIdentity);
+        if (changed) return { ok: false, message: changed };
 
         set((state) => ({
           sharedListings: state.sharedListings.map((listing) =>
-            listing.horseId === horseId && listing.state !== 'Archived'
+            listing.id === existingListing.id
               ? {
                   ...nextListing,
                 }
@@ -664,6 +768,7 @@ export const useXbarStore = create<XbarStore>()(
         }
 
         const state = get();
+        const listingIdentity = readIntakeIdentity();
         const existingListing = state.sharedListings.find(
           (listing) => listing.horseId === horseId && listing.state !== 'Archived',
         );
@@ -671,22 +776,32 @@ export const useXbarStore = create<XbarStore>()(
           return { ok: false, message: 'Shared listing not found for this horse.' };
         }
 
-        const nextListing = {
+        const needsToken = accessMode === 'Private Token' && !existingListing.shareToken.trim();
+        let nextListing: SharedListingRecord = {
           ...existingListing,
           accessMode,
+          ...(needsToken ? { shareToken: createShareAccessToken(), tokenIssuedAt: todayStamp() } : {}),
           updatedAt: todayStamp(),
         };
 
         if (isSupabaseConfigured()) {
-          const cloudResult = await upsertSharedListingInCloud(nextListing);
+          const before = sharedListingContextError(horseId, existingListing, listingIdentity);
+          if (before) return { ok: false, message: before };
+          const cloudResult = await upsertSharedListingInCloud(nextListing, {
+            previous: existingListing,
+            expectedIdentity: listingIdentity,
+          });
           if (!cloudResult.ok) {
             return { ok: false, message: cloudResult.message };
           }
+          nextListing = cloudResult.listing;
         }
+        const changed = sharedListingContextError(horseId, existingListing, listingIdentity);
+        if (changed) return { ok: false, message: changed };
 
         set((state) => ({
           sharedListings: state.sharedListings.map((listing) =>
-            listing.horseId === horseId && listing.state !== 'Archived'
+            listing.id === existingListing.id
               ? {
                   ...nextListing,
                 }
@@ -1707,6 +1822,32 @@ export const useXbarStore = create<XbarStore>()(
 
         return { ok: true, message: `${document.title} was removed from active review.`, id: document.id };
       },
+      changeHorsePhoto: (horseId, assetId, action) => {
+        const contextError = horseArchiveContextError('uploadMedia');
+        if (contextError) return { ok: false, message: contextError };
+        const denied = requireRoleCapability(get().currentRole, 'uploadMedia');
+        if (denied) return { ok: false, message: denied };
+        const matches = get().horses.filter((item) => item.id === horseId);
+        if (matches.length !== 1) return { ok: false, message: 'A unique horse record could not be found.' };
+        const horse = matches[0];
+        const result = changeHorsePhoto(horse, assetId, action);
+        if (!result.ok) return result;
+        set((state) => ({
+          horses: state.horses.map((item) =>
+            item.id === horseId ? { ...item, gallery: result.gallery, profileImage: result.profileImage } : item,
+          ),
+        }));
+        return {
+          ok: true,
+          message:
+            action === 'primary'
+              ? 'Primary photo updated.'
+              : action === 'restore'
+                ? 'Photo restored to the gallery.'
+                : 'Photo removed from the gallery. The original is retained and can be restored.',
+          id: assetId,
+        };
+      },
       uploadHorseMedia: async ({ horseId, files, kind, makePrimary }) => {
         const deniedMessage = requireRoleCapability(get().currentRole, 'uploadMedia');
         if (deniedMessage) {
@@ -1832,7 +1973,9 @@ export const useXbarStore = create<XbarStore>()(
                 ? {
                     ...horse,
                     profileImage: primaryPhotoAsset ? primaryPhotoAsset.url : horse.profileImage,
-                    gallery: [...uploadedAssets, ...horse.gallery],
+                    gallery: [...uploadedAssets, ...horse.gallery].map((asset) =>
+                      primaryPhotoAsset ? { ...asset, isPrimary: asset.id === primaryPhotoAsset.id } : asset,
+                    ),
                     readiness: gainedFirstPhoto
                       ? {
                           ...horse.readiness,
@@ -1890,6 +2033,24 @@ export const useXbarStore = create<XbarStore>()(
         }
 
         const state = get();
+        const receiptIdentity = readIntakeIdentity();
+        const receiptOwner = vaultOwnerId();
+        const receiptRecordsOwner = readRecordsOwner();
+        const receiptContextChanged = () =>
+          intakeIdentityChanged(receiptIdentity, readIntakeIdentity()) ||
+          vaultOwnerId() !== receiptOwner ||
+          readRecordsOwner() !== receiptRecordsOwner ||
+          Boolean(receiptRecordsOwner && receiptRecordsOwner !== receiptOwner) ||
+          Boolean(requireRoleCapability(get().currentRole, 'manageAssets')) ||
+          Boolean(
+            receiptIdentity.userId && requireRoleCapability(useCloudStore.getState().workspaceRole, 'manageAssets'),
+          ) ||
+          Boolean(input.horseId && !get().horses.some((horse) => horse.id === input.horseId));
+        const interrupted = () => ({
+          ok: false,
+          message:
+            'Your account, workspace, access, or horse record changed during receipt upload. No receipt was added. Reopen the intended workspace and try again.',
+        });
         if (input.horseId && !state.horses.some((horse) => horse.id === input.horseId)) {
           return { ok: false, message: 'Horse record not found for this receipt.' };
         }
@@ -1911,17 +2072,21 @@ export const useXbarStore = create<XbarStore>()(
          */
         await beginVaultWrite();
         try {
+          if (receiptContextChanged()) return interrupted();
           let uploadedAsset: Awaited<ReturnType<typeof uploadDocumentAssetToCloud>> = null;
           if (input.file) {
             try {
               uploadedAsset = await uploadDocumentAssetToCloud({
                 file: input.file,
                 horseId: input.horseId,
+                expectedIdentity: receiptIdentity,
               });
             } catch (error) {
               console.error('Cloud receipt upload failed; keeping the file on this device instead.', error);
             }
           }
+
+          if (receiptContextChanged()) return interrupted();
 
           // Same as the document path: when the cloud did not take the file,
           // the device does. A receipt is the evidence behind a number an
@@ -1930,11 +2095,14 @@ export const useXbarStore = create<XbarStore>()(
           let localFileKey: string | undefined;
           if (input.file && !uploadedAsset) {
             try {
-              localFileKey = await storeLocalFile(input.file, input.file.name, input.file.type, vaultOwnerId());
+              localFileKey = await storeLocalFile(input.file, input.file.name, input.file.type, receiptOwner);
             } catch (error) {
               console.error('On-device receipt storage failed; this record will carry no file.', error);
             }
           }
+          // A completed upload belongs to the original identity even if the
+          // active workspace changed while its bytes were being persisted.
+          if (receiptContextChanged()) return interrupted();
           const receipt = createExpenseReceiptRecord(input, {
             localFileKey,
             storagePath: uploadedAsset?.storagePath,
@@ -2264,7 +2432,9 @@ export const useXbarStore = create<XbarStore>()(
           return { ok: false, message: 'Horse record not found for this medical event.' };
         }
 
-        const shouldOpenMedicalReview = event.type === 'Injury';
+        const completionState = event.completionState ?? 'completed';
+        const completionError = validateMedicalCompletion(event.date, completionState);
+        if (completionError) return { ok: false, message: completionError };
         const nextEvent = createTimelineEvent({
           title: event.title,
           summary: event.body,
@@ -2275,16 +2445,15 @@ export const useXbarStore = create<XbarStore>()(
           severity: event.type === 'Injury' ? 'high' : event.type === 'Treatment' ? 'medium' : undefined,
         });
 
+        const medicalEvent = { ...nextEvent, completionState };
         set((state) => ({
           horses: state.horses.map((horse) =>
             horse.id === horseId
               ? {
                   ...horse,
-                  status: shouldOpenMedicalReview ? 'Medical Review' : horse.status,
-                  lastVetVisit: event.type === 'Vet visit' ? event.date : horse.lastVetVisit,
-                  medicalNotes: shouldOpenMedicalReview ? event.body : horse.medicalNotes,
-                  medicalTimeline: [nextEvent, ...horse.medicalTimeline],
-                  activity: [nextEvent, ...horse.activity],
+                  ...medicalCompletionUpdates(horse, medicalEvent),
+                  medicalTimeline: [medicalEvent, ...horse.medicalTimeline],
+                  activity: [medicalEvent, ...horse.activity],
                 }
               : horse,
           ),
@@ -2638,13 +2807,21 @@ export const useXbarStore = create<XbarStore>()(
         return { ok: true, message: 'Horse removed from records.', id: horseId };
       },
       updateMedicalEvent: (horseId, eventId, patch) => {
-        const deniedMessage = requireRoleCapability(get().currentRole, 'editHorse');
+        const deniedMessage = requireRoleCapability(get().currentRole, 'manageMedical');
         if (deniedMessage) return { ok: false, message: deniedMessage };
+        const existing = get()
+          .horses.find((horse) => horse.id === horseId)
+          ?.medicalTimeline.find((event) => event.id === eventId);
+        if (!existing) return { ok: false, message: 'Medical event not found.' };
+        const updated = { ...existing, ...patch };
+        const completionError = validateMedicalCompletion(updated.date, updated.completionState);
+        if (completionError) return { ok: false, message: completionError };
         set((state) => ({
           horses: state.horses.map((h) =>
             h.id === horseId
               ? {
                   ...h,
+                  ...medicalCompletionUpdates(h, updated),
                   medicalTimeline: h.medicalTimeline.map((ev) => (ev.id === eventId ? { ...ev, ...patch } : ev)),
                   activity: h.activity.map((ev) => (ev.id === eventId ? { ...ev, ...patch } : ev)),
                 }
@@ -2654,10 +2831,11 @@ export const useXbarStore = create<XbarStore>()(
         return { ok: true, message: 'Medical event updated.', id: eventId };
       },
       deleteMedicalEvent: (horseId, eventId) => {
-        const deniedMessage = requireRoleCapability(get().currentRole, 'editHorse');
+        const deniedMessage = requireRoleCapability(get().currentRole, 'manageMedical');
         if (deniedMessage) return { ok: false, message: deniedMessage };
         const medicalHorse = get().horses.find((h) => h.id === horseId);
         const removedMedical = medicalHorse?.medicalTimeline.find((ev) => ev.id === eventId);
+        if (!removedMedical) return { ok: false, message: 'Medical event not found.' };
         set((state) => ({
           horses: state.horses.map((h) =>
             h.id === horseId
@@ -3587,10 +3765,18 @@ export const useXbarStore = create<XbarStore>()(
   ),
 );
 
+const pendingRoleWorkspace = {
+  role: 'Pending access' as const,
+  label: 'Access pending',
+  summary: 'Your ranch access must be verified before making changes.',
+  primaryModules: [] as string[],
+  permissions: [] as string[],
+};
+
 export function useCurrentRoleWorkspace() {
   return useXbarStore((state) => {
     const match = state.roleWorkspaces.find((workspace) => workspace.role === state.currentRole);
-    return match ?? state.roleWorkspaces[0];
+    return match ?? pendingRoleWorkspace;
   });
 }
 

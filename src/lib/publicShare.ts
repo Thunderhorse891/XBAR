@@ -1,3 +1,4 @@
+import { isHorsePhotoAsset } from './animalPassport.js';
 import { getSupabaseClient } from '@/lib/supabaseClient';
 import { isSupabaseConfigured } from '@/lib/platformConfig';
 import type { DocumentRecord, HorseRecord, OwnershipRecord, SharedListingRecord } from '@/types/xbar';
@@ -90,6 +91,11 @@ function parsePublicBuyerProfilePayload(value: unknown): PublicBuyerProfilePaylo
 }
 
 function sanitizePublicHorse(horse: HorseRecord): PublicHorseDTO {
+  const gallery = horse.gallery.filter((asset) => asset.status === 'Approved' && isHorsePhotoAsset(asset));
+  const primary =
+    gallery.find((asset) => asset.isPrimary === true) ??
+    gallery.find((asset) => asset.url === horse.profileImage) ??
+    gallery[0];
   return {
     id: horse.id,
     name: horse.name,
@@ -104,9 +110,9 @@ function sanitizePublicHorse(horse: HorseRecord): PublicHorseDTO {
     sex: horse.sex,
     color: horse.color,
     markings: horse.markings,
-    profileImage: horse.profileImage,
+    profileImage: primary?.url ?? '',
     bloodline: horse.bloodline,
-    gallery: horse.gallery.filter((asset) => asset.status === 'Approved'),
+    gallery,
     // Only expose the listing state and asking price — not internal confidence or inquiry counts.
     sale: {
       listingState: horse.sale.listingState,

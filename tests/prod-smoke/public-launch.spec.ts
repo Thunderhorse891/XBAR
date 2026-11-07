@@ -4,7 +4,14 @@ for (const width of [1440, 390]) {
   test(`public launch paths are truthful and usable at ${width}px`, async ({ page }) => {
     await page.setViewportSize({ width, height: 900 });
     await page.goto('/pricing');
-    await expect(page.getByText('Monthly billing is available.', { exact: false })).toBeVisible();
+    await expect(
+      page.getByText('Review the billing options available to your workspace inside XBAR.', { exact: false }),
+    ).toBeVisible();
+    await expect(page.getByRole('rowheader', { name: 'Annual price (billed yearly)', exact: true })).toBeVisible();
+    for (const amount of ['120', '290', '790', '1,990']) {
+      await expect(page.getByText(`$${amount}/year, billed annually`, { exact: false })).toBeVisible();
+    }
+    await expect(page.getByText('Annual billing is not currently offered.', { exact: false })).toHaveCount(0);
     await expect(page.getByRole('rowheader', { name: 'Annual price (2 months free)' })).toHaveCount(0);
     // Public pages share the homepage's native mobile Menu. Prove support
     // is reachable there rather than assuming the retired horizontal rail.

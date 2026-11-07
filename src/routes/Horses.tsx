@@ -1,3 +1,4 @@
+import { HORSE_SEGMENTS } from '@/lib/recordOptions';
 import { useEffect, useMemo, useState } from 'react';
 import { Link, useNavigate, useSearchParams } from 'react-router-dom';
 import { ContextMenu } from '@/components/ContextMenu';
@@ -55,8 +56,8 @@ const statusTone: Record<HorseStatus, 'blue' | 'slate' | 'amber' | 'rose' | 'eme
   Retired: 'slate',
 };
 
-const segments: SegmentFilter[] = ['All', 'Sale Prospect', 'Broodmare', 'Stud', 'Show String', 'Retired'];
-const horseSegments: HorseSegment[] = ['Broodmare', 'Stud', 'Show String', 'Sale Prospect', 'Young Stock', 'Retired'];
+const segments: SegmentFilter[] = ['All', ...HORSE_SEGMENTS];
+const horseSegments = HORSE_SEGMENTS;
 const horseStatuses: HorseStatus[] = [
   'In Training',
   'Broodmare Program',
@@ -976,7 +977,9 @@ export default function Horses() {
                               <strong>{horse.status === 'Sale Prep' ? 'Buyer Prep' : horse.status}</strong>
                             </div>
                             <div className="inline-metrics">
-                              <span>{horse.gallery.length} media assets</span>
+                              <span>
+                                {horse.gallery.filter((asset) => asset.status !== 'Archived').length} media assets
+                              </span>
                               <span>{packet.readyCount} documents ready</span>
                               <span>{horse.location.barn}</span>
                             </div>

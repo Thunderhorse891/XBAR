@@ -1,3 +1,5 @@
+import { buildApiUrl } from './backendApi.js';
+
 // Public packet-verification client.
 //
 // Calls the anonymous /api/buyer/verify endpoint, which returns the
@@ -54,7 +56,7 @@ export async function verifyPacket(packetId: string): Promise<VerifyResult> {
 
   let response: Response;
   try {
-    response = await fetch(`/api/buyer/verify?packetId=${encodeURIComponent(id)}`, {
+    response = await fetch(buildApiUrl(`/api/buyer/verify?packetId=${encodeURIComponent(id)}`), {
       method: 'GET',
       headers: { accept: 'application/json' },
     });

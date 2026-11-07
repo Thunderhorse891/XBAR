@@ -1,4 +1,6 @@
 export type UserRole = 'Admin' | 'Ranch Manager' | 'Owner' | 'Medical Lead' | 'Sales Lead';
+/** UI-only unresolved access; never a persisted membership/invitation role. */
+export type WorkspaceAccessRole = UserRole | 'Pending access';
 export type RoleCapability =
   | 'createHorse'
   | 'editHorse'
@@ -60,7 +62,10 @@ export interface GalleryAsset {
   kind: 'Hero' | 'Conformation' | 'Sale Still' | 'Pedigree' | 'Document Cover';
   url: string;
   storagePath?: string;
-  status: 'Approved' | 'Draft' | 'Pending';
+  status: 'Approved' | 'Draft' | 'Pending' | 'Archived';
+  /** Retained for reversible removal; storage bytes are never deleted here. */
+  previousStatus?: 'Approved' | 'Draft' | 'Pending';
+  isPrimary?: boolean;
 }
 
 export interface BloodlineProfile {
@@ -233,6 +238,8 @@ export interface BreedingRecordDetails {
 }
 
 export interface TimelineEvent {
+  /** Absent on legacy records: completion is unconfirmed. */
+  completionState?: 'planned' | 'completed';
   id: string;
   date: string;
   title: string;

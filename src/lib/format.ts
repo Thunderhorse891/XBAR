@@ -75,6 +75,26 @@ export function localIsoDate(date: Date = new Date()): string {
   return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`;
 }
 
+/**
+ * The day `days` after `date` on the viewer's calendar.
+ *
+ * Calendar arithmetic, not 24-hour steps: the day a clock changes is 23 or 25
+ * hours long, so local midnight plus seven times 24 hours lands on the wrong
+ * date one week in every twenty-six.
+ */
+export function addLocalCalendarDays(date: Date, days: number): Date {
+  return new Date(date.getFullYear(), date.getMonth(), date.getDate() + days);
+}
+
+/**
+ * The viewer's calendar day as a UTC-midnight timestamp, for day-against-day
+ * arithmetic. Two of these differ by an exact multiple of a day in every zone
+ * and across clock changes, which a difference of instants does not.
+ */
+export function localCalendarDay(date: Date = new Date()): number {
+  return Date.UTC(date.getFullYear(), date.getMonth(), date.getDate());
+}
+
 export function formatCurrency(value: number) {
   return currencyFormatter.format(value);
 }

@@ -1,6 +1,7 @@
 import { randomUUID } from 'node:crypto';
 import { readJsonBody, sendJson } from './http.js';
 import { requireWorkspaceAccess } from './supabase-admin.js';
+import { requireRoleCapability } from './permissions.js';
 import { getTemplateById, renderTemplate } from './document-templates.js';
 import { documentObjectPath } from './document-storage.js';
 import { checkStorageCapacity, getWorkspaceEntitlements, tierIncludesPlan } from './entitlements.js';
@@ -50,6 +51,9 @@ export default async function handler(req, res) {
     return sendJson(res, access.status, { ok: false, message: access.message });
   }
   const { supabase, user } = access;
+
+  const denied = requireRoleCapability(access.role, 'uploadDocuments');
+  if (denied) return sendJson(res, 403, { ok: false, code: 'capability_required', message: denied });
 
   const template = getTemplateById(templateId);
   if (!template) {
@@ -164,16 +168,39 @@ export default async function handler(req, res) {
       title: rendered.title,
       document_type: templateId === 'bill-of-sale' ? 'Bill of Sale' : 'Ownership Memo',
       source: 'Sales Packet',
-      state: 'Ready',
+      // Generation is not human review: an unsigned form must not become
+      // approved evidence merely because a role can generate/upload it.
+      state: 'Needs Review',
       confidence: 1,
       original_filename: `${fileBase}.pdf`,
       storage_path: storagePath,
       mime_type: 'application/pdf',
       size_bytes: pdfSizeBytes,
       extracted_data: { templateId, generatedAt },
-      needs_review: false,
+      needs_review: true,
       uploaded_by_user_id: user.id,
-      payload: { generated: true, templateId, missingFields: rendered.missingFields },
+      payload: {
+        id: documentId,
+        horseId,
+        title: rendered.title,
+        type: templateId === 'bill-of-sale' ? 'Bill of Sale' : 'Ownership Memo',
+        source: 'Sales Packet',
+        state: 'Needs Review',
+        uploadedBy: user.email || '',
+        uploadedAt: generatedAt,
+        confidence: 1,
+        duplicateRisk: 'Low',
+        extractedTextPreview: '',
+        entities: {},
+        summary: 'Generated form awaiting review. Generation does not verify signatures or ownership.',
+        fileName: `${fileBase}.pdf`,
+        mimeType: 'application/pdf',
+        fileSizeBytes: pdfSizeBytes,
+        storagePath,
+        generated: true,
+        templateId,
+        missingFields: rendered.missingFields,
+      },
     });
     if (recordError) {
       // The row was rejected after the object was written (e.g. the storage

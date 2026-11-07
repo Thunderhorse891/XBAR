@@ -1,3 +1,4 @@
+import { fulfillRelationalFixture } from './relationalFixture.js';
 import { expect, test } from '@playwright/test';
 import {
   blockWebfonts,
@@ -22,7 +23,7 @@ test('delayed cloud setup restores the requested Settings destination', async ({
     if (table === 'workspace_profiles') {
       profileRequests += 1;
       await profileReady;
-      await route.fulfill({
+      await fulfillRelationalFixture(route, {
         status: 200,
         json: {
           payload: { setupCompleteAt: '2026-09-10T12:00:00Z', ranchName: 'Delayed ranch', businessName: 'Fixture' },
@@ -31,7 +32,7 @@ test('delayed cloud setup restores the requested Settings destination', async ({
       });
       return;
     }
-    await route.fulfill({
+    await fulfillRelationalFixture(route, {
       status: 200,
       json:
         table === 'workspaces'
@@ -69,7 +70,7 @@ test('workspace bootstrap accepts an invitation through the server RPC without c
     const url = new URL(request.url());
     if (url.pathname.endsWith('/rpc/xbar_accept_workspace_invitation')) {
       calls.push(request.postDataJSON());
-      await route.fulfill({ status: 200, json: { workspaceId, role: 'Owner' } });
+      await fulfillRelationalFixture(route, { status: 200, json: { workspaceId, role: 'Owner' } });
       return;
     }
     if (/\/workspace_(memberships|invitations)$/.test(url.pathname) && request.method() !== 'GET') {
@@ -77,7 +78,7 @@ test('workspace bootstrap accepts an invitation through the server RPC without c
     }
     const pendingInvite =
       url.pathname.endsWith('/workspace_invitations') && url.searchParams.get('status') === 'eq.pending';
-    await route.fulfill({
+    await fulfillRelationalFixture(route, {
       status: 200,
       json: pendingInvite
         ? [
@@ -125,7 +126,7 @@ test('pushing a workspace preserves another member account binding', async ({ pa
     const request = route.request();
     const table = new URL(request.url()).pathname.split('/').pop();
     if (table === 'workspaces') {
-      await route.fulfill({ status: 200, json: { id: workspaceId } });
+      await fulfillRelationalFixture(route, { status: 200, json: { id: workspaceId } });
       return;
     }
     if (table === 'workspace_memberships') {
@@ -133,11 +134,17 @@ test('pushing a workspace preserves another member account binding', async ({ pa
         const body = request.postDataJSON();
         membershipWrites.push(...(Array.isArray(body) ? body : [body]));
       }
-      await route.fulfill({ status: 200, json: members });
+      await fulfillRelationalFixture(route, { status: 200, json: members });
+      return;
+    }
+    if (request.method() !== 'GET' && new URL(request.url()).searchParams.has('select')) {
+      const data = request.postDataJSON();
+      const one = request.headers().accept?.includes('application/vnd.pgrst.object+json');
+      await fulfillRelationalFixture(route, { status: 200, json: one ? data : [data] });
       return;
     }
     const single = table === 'workspace_profiles' || table === 'workspace_subscription_profiles';
-    await route.fulfill({
+    await fulfillRelationalFixture(route, {
       status: 200,
       json: single
         ? {
@@ -175,7 +182,9 @@ test('pushing a workspace preserves another member account binding', async ({ pa
   await page.getByRole('checkbox', { name: 'I want the cloud to match this device.' }).check();
   await page.getByRole('button', { name: 'Push and replace cloud', exact: true }).click();
   await expect(page.getByText('Cloud sync complete', { exact: true })).toBeVisible();
-  expect(membershipWrites.some((row) => row.email === RECOVERY_EMAIL && row.user_id === USER_ID)).toBe(true);
+  // Both bindings already exist; an unrelated ranch save must not rewrite either.
+  expect(membershipWrites).toEqual([]);
+  expect(members.find((row) => row.email === RECOVERY_EMAIL)?.user_id).toBe(USER_ID);
   // Ranch saves must leave other accounts' server-owned access bindings alone.
   expect(membershipWrites.filter((row) => row.email === memberEmail)).toEqual([]);
 });

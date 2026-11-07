@@ -28,3 +28,16 @@ export function clientManagedBillingEnabled(env = process.env) {
   const normalized = env.VITE_MANAGED_BILLING_ENABLED?.trim().toLowerCase() ?? '';
   return ['1', 'true', 'yes', 'on'].includes(normalized);
 }
+
+// Public readiness and checkout must agree: production never offers test-mode
+// managed billing. This checks configuration shape only, without Stripe I/O.
+export function serverStripeModeReady(env = process.env) {
+  return env.VERCEL_ENV !== 'production' || /^(sk|rk)_live_[A-Za-z0-9_]+$/.test(env.STRIPE_SECRET_KEY?.trim() || '');
+}
+
+// The optional account pin has one shape contract for public readiness and
+// server-side verification. An unset pin preserves existing deployments.
+export function stripeAccountIdReady(accountId) {
+  const value = accountId?.trim() || '';
+  return !value || /^acct_[A-Za-z0-9]+$/.test(value);
+}

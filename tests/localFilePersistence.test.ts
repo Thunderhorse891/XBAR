@@ -79,7 +79,7 @@ test('the vault is reconciled against the workspace on rehydration', async () =>
   assert.match(
     source,
     /onRehydrateStorage: \(\) => \(state\) => \{[\s\S]*onWorkspaceSettled\(\(\) => \{[\s\S]*?sweepLocalFileVault\(/,
-    'file bytes must be reclaimed when the records that referenced them are gone — but only this workspace\u2019s, since the vault is origin-wide and another account\u2019s files are not orphans',
+    'legacy ownership is reconciled after settling; missing references must never authorize deleting bytes',
   );
 });
 
@@ -400,7 +400,7 @@ test('a throwing file lookup becomes a result, not an escaping rejection', async
    */
   assert.match(
     source,
-    /try \{\s*access = await getDocumentAccessUrl\(record\);\s*\} catch \(error\) \{/,
+    /try \{\s*access = await resolveStoredFileAccess\(record, isCurrent\);\s*\} catch \(error\) \{/,
     'resolution must be guarded',
   );
   assert.match(
@@ -686,8 +686,8 @@ test('two accounts sharing a browser do not share a vault namespace', async () =
    * `'local'` was treated as proof of a single owner, on the reasoning that a
    * browser profile holds exactly one local-only workspace. That is true of
    * signed-OUT use and false the moment relational sync is disabled:
-   * The normal `loadWorkspaceAccessProfile` call returns `workspaceId: null`
-   * (the separate entitlement-only read does not publish workspace identity),
+   * The normal `loadWorkspaceAccessProfile` call verifies canonical capabilities
+   * but deliberately returns `workspaceId: null` in snapshot-only mode,
    * so two people signing into the same browser both owned
    * `'local'` — each became the other's owner. Reads, exports and packet
    * attachments all passed the ownership check, and the sweep deleted the other
@@ -695,7 +695,7 @@ test('two accounts sharing a browser do not share a vault namespace', async () =
    */
   assert.match(
     cloud,
-    /if \(!isRelationalCloudEnabled\(\) && !options\.forEntitlements\) \{\s*return \{\s*workspaceId: null,/,
+    /if \(!isRelationalCloudEnabled\(\) && !options\.forEntitlements\) \{[\s\S]*?forEntitlements: true[\s\S]*?return \{\s*workspaceId: null,/,
     'a signed-in account really does arrive with no workspace id — this is what makes the fallback load-bearing',
   );
 

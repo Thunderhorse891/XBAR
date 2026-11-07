@@ -35,6 +35,12 @@ export function ranchReportToCsv(report: RanchReport, ranchName = ''): string {
   lines.push(csvRow(['Data source', 'Ranch records']));
   lines.push(csvRow(['Rounding', 'Figures keep cents here; the PDF report rounds money to whole dollars.']));
   lines.push(csvRow(['Note', 'Unaudited management estimates based on recorded data. Not an appraisal or an audit.']));
+  lines.push(
+    csvRow([
+      'Payment collection',
+      'Payment collection is not tracked. Closed-sale values and margins use agreed prices, not cash received.',
+    ]),
+  );
   lines.push('');
 
   lines.push(csvRow(['Summary']));
@@ -46,11 +52,26 @@ export function ranchReportToCsv(report: RanchReport, ranchName = ''): string {
   lines.push(csvRow(['Invested in horses', report.money.investedInHorses]));
   lines.push(csvRow(['Invested this month', report.money.investedThisMonth]));
   lines.push(csvRow(['Unallocated overhead this month', report.money.unallocatedThisMonth]));
-  lines.push(csvRow(['Monthly burn (3-month average)', report.money.monthlyBurn]));
+  lines.push(
+    csvRow([
+      'Recorded monthly spend average (history completeness unconfirmed)',
+      report.money.monthlyBurn ?? 'Insufficient history',
+    ]),
+  );
+  lines.push(
+    csvRow([
+      'History coverage',
+      `${report.spendHistory.observedMonths.length} of 3 prior months have records; completeness unconfirmed. No forecast or trend conclusion.`,
+    ]),
+  );
   lines.push(csvRow(['Listed value', report.money.listedValue]));
   lines.push(csvRow(['Value at risk', report.money.valueAtRisk]));
   lines.push(csvRow(['Ready to close', report.money.readyValue]));
   lines.push(csvRow(['Open offers', report.money.pipelineValue]));
+  lines.push(csvRow(['Open offers with unknown prices (excluded from subtotal)', report.money.unpricedOfferCount]));
+  lines.push(
+    csvRow(['Listed horses with unknown prices (excluded from value subtotals)', report.money.unpricedListedCount]),
+  );
   lines.push(csvRow(['Deposits held', report.money.depositsHeld]));
   lines.push(csvRow(['Documents to review', report.documentsToReview]));
   lines.push('');
@@ -61,7 +82,7 @@ export function ranchReportToCsv(report: RanchReport, ranchName = ''): string {
       'Horse',
       'Status',
       'Invested to date',
-      'Monthly burn',
+      'Recorded monthly spend average',
       'Asking price',
       'Break-even',
       'Projected margin',
@@ -69,6 +90,9 @@ export function ranchReportToCsv(report: RanchReport, ranchName = ''): string {
       'Floor',
       'Readiness %',
       'Blockers',
+      'Financial status',
+      'Agreed closed sale value (not cash received)',
+      'Estimated closed sale margin (before overhead)',
     ]),
   );
   for (const horse of report.horses) {
@@ -77,14 +101,17 @@ export function ranchReportToCsv(report: RanchReport, ranchName = ''): string {
         horse.horseName,
         horse.status,
         horse.investedToDate,
-        horse.monthlyBurn,
-        horse.askPrice,
-        horse.breakEvenPrice,
-        horse.projectedMargin,
-        horse.marginPercent,
-        horse.safeDiscountFloor,
+        horse.monthlyBurn ?? 'Unknown',
+        horse.askPrice > 0 ? horse.askPrice : horse.saleInventory ? 'Unknown' : 'N/A',
+        horse.breakEvenPrice ?? 'Unknown',
+        horse.projectedMargin ?? 'Unknown',
+        horse.marginPercent ?? 'Unknown',
+        horse.safeDiscountFloor ?? 'Unknown',
         horse.readinessScore,
         horse.blockers.join('; '),
+        horse.financialStatus,
+        horse.closedSaleValue ?? (horse.financialStatus === 'sold' ? 'Unknown' : 'N/A'),
+        horse.closedSaleProfit ?? 'Unknown',
       ]),
     );
   }

@@ -113,22 +113,22 @@ test('18-horse executive report has three deliberate pages, seven KPIs and compl
     'INVESTED',
     'LISTED VALUE',
     'POTENTIAL MARGIN',
-    'MONTHLY BURN',
+    'RECORDED MONTHLY AVG',
     'SALE-READY VALUE',
     'BLOCKED VALUE',
     'OPEN OFFERS',
     '100% OF ASKING VALUE BLOCKED',
     '$0 ready to close today',
-    'prior 3 complete months',
+    'prior 3 calendar months',
     'not free care',
-    'remaining 20 points',
-    'not itemized',
+    'computed from current records',
+    'missing evidence',
     'unallocated overhead',
   ])
     assert.ok(text.includes(label), label);
   assert.equal(report.money.valueAtRisk, 252000);
   assert.equal(report.money.unallocatedThisMonth, 0);
-  assert.equal(report.money.monthlyBurn, 0);
+  assert.equal(report.money.monthlyBurn, null);
   assert.equal(report.documentsToReview, 0);
   assert.equal(reportDecisions(report).missingCoggins.length, 18);
   for (let i = 2; i <= 18; i++)
@@ -171,9 +171,9 @@ test('burn, overhead and profit exclude different periods and preserve sale inve
   const report = buildRanchReport(input, now),
     decisions = reportDecisions(report);
   assert.equal(report.money.unallocatedThisMonth, 900);
-  assert.equal(report.money.monthlyBurn, 100);
+  assert.equal(report.money.monthlyBurn, null);
   assert.equal(report.money.investedThisMonth, 1147.9);
-  assert.equal(decisions.potentialMargin, 9377);
+  assert.equal(decisions.potentialMargin, 9576.55);
   assert.equal(
     decisions.bands.reduce((n, b) => n + b.count, 0),
     1,
@@ -442,3 +442,213 @@ test('every report footer preserves the original metallic horse artwork aspect r
   assert.equal(marks, (await PDFDocument.load(bytes)).getPageCount(), 'every non-white-label page has the original');
   await assertFits(bytes);
 });
+
+test('unknown costs and sold losses remain distinct in the actual PDF registers', async () => {
+  const data = fixture(2);
+  data.horses[0].name = 'Unknown Cost Horse';
+  data.horses[0].costBasis = 0;
+  data.horses[0].sale.askPrice = 20000;
+  data.horses[1].name = 'Sold Loss Horse';
+  data.horses[1].costBasis = 10000;
+  data.horses[1].sale.askPrice = 20000;
+  data.expenseReceipts = [
+    {
+      id: 'sold-cost',
+      horseId: data.horses[1].id,
+      amount: 900,
+      category: 'Feed',
+      receiptDate: '2026-09-01',
+    } as RanchReportInput['expenseReceipts'][number],
+  ];
+  data.salesLeads = [
+    {
+      id: 'won',
+      horseId: data.horses[1].id,
+      outcome: 'Won',
+      stage: 'Closed',
+      offerAmount: 5000,
+    } as RanchReportInput['salesLeads'][number],
+  ];
+  const report = buildRanchReport(data, now);
+  const bytes = await renderReportPdf(report, 'Synthetic Financial Review', await branding());
+  const text = drawn(bytes)
+    .map((item) => item.text)
+    .join(' ');
+  assert.ok(text.includes('Closed-sale results'));
+  assert.ok(text.includes('-$5,900'));
+  assert.ok(text.includes('Sold Loss Horse - Sold'));
+  assert.ok(text.includes('Unknown'));
+  assert.ok(text.includes('They do not establish cash received'));
+  assert.ok(!text.includes('100% High'));
+  await assertFits(bytes);
+});
+
+test('closed-sale disclaimer precedes its table below the masthead, including continued registers', async () => {
+  const data = fixture(65);
+  data.salesLeads = data.horses.map(
+    (horse) =>
+      ({
+        id: `won-${horse.id}`,
+        horseId: horse.id,
+        stage: 'Closed',
+        outcome: 'Won',
+        offerAmount: 5000,
+      }) as RanchReportInput['salesLeads'][number],
+  );
+  const bytes = await renderReportPdf(buildRanchReport(data, now), 'Synthetic Long Sold Register', await branding());
+  const items = drawn(bytes);
+  const disclaimer = items.findIndex((item) => item.text.startsWith('These are agreed sale amounts'));
+  const firstHeader = items.findIndex((item) => item.text === 'Agreed sale');
+  assert.ok(disclaimer >= 0 && firstHeader >= 0);
+  assert.ok(disclaimer < firstHeader, 'disclaimer must be on the first closed-sale page, before pagination');
+  const top = 792 - items[disclaimer].y - items[disclaimer].size;
+  assert.ok(top >= 125, 'masthead rule at 115 must not strike through the disclaimer');
+  assert.ok(items[firstHeader].y < items[disclaimer].y - 22, 'wrapped disclaimer clears the table header');
+  await assertFits(bytes);
+});
+
+test('PDF headline subtotals disclose malformed prices beside their values', async () => {
+  const data = fixture(2);
+  data.horses[0].sale.askPrice = '25000' as unknown as number;
+  data.salesLeads = [
+    {
+      id: 'invalid-offer',
+      horseId: data.horses[0].id,
+      stage: 'Offer',
+      offerStatus: 'Accepted',
+      counterOfferAmount: '25000',
+      offerAmount: 20000,
+    } as unknown as RanchReportInput['salesLeads'][number],
+  ];
+  const report = buildRanchReport(data, now);
+  assert.equal(report.money.listedValue, 14000);
+  assert.equal(report.money.pipelineValue, 0);
+  assert.equal(report.money.unpricedListedCount, 1);
+  assert.equal(report.money.unpricedOfferCount, 1);
+  const bytes = await renderReportPdf(report, 'Synthetic Unknown Prices', await branding());
+  const items = drawn(bytes);
+  const headlineStart = items.findIndex((item) => item.text === 'Executive dashboard');
+  const headlineEnd = items.findIndex((item) => item.text === 'Sale readiness & blockers');
+  const headline = items
+    .slice(headlineStart, headlineEnd)
+    .map((item) => item.text)
+    .join(' ');
+  assert.ok(headlineStart >= 0 && headlineEnd > headlineStart);
+  assert.ok(headline.includes('Partial / 1 prices unknown'));
+  assert.ok(headline.includes('Known-price subtotal only'));
+  assert.ok(headline.includes('Partial / unknown prices excluded'));
+  assert.ok(headline.includes('$14,000'));
+  assert.ok(!headline.includes('$25,000'));
+  await assertFits(bytes);
+});
+
+function makeReady(data: RanchReportInput, index: number) {
+  const horse = data.horses[index];
+  horse.registrationNumber = '7003333';
+  const source = {
+    id: `source-${horse.id}`,
+    horseId: horse.id,
+    type: 'Ownership Memo',
+    state: 'Ready',
+    localFileKey: 'synthetic-reviewed-source',
+    extractedTextPreview: 'OWNERSHIP MEMO\nRegistration Number: 7003333',
+    entities: { registrationNumber: '7003333' },
+    duplicateRisk: 'Low',
+  } as RanchReportInput['documents'][number];
+  data.ownershipRecords.push({
+    id: `owner-${horse.id}`,
+    horseId: horse.id,
+    transferStatus: 'Clear',
+    proofRequirements: [
+      {
+        id: 'reviewed',
+        kind: 'supporting',
+        label: 'Reviewed source',
+        status: 'verified',
+        documentId: source.id,
+        verifiedBy: 'Synthetic reviewer',
+        verifiedAt: now.toISOString(),
+        reviewAttestedAt: now.toISOString(),
+        reviewedSourceKey: ownershipDocumentReviewKey(source),
+      },
+    ],
+  } as RanchReportInput['ownershipRecords'][number]);
+  data.documents.push(source, {
+    id: `coggins-${horse.id}`,
+    horseId: horse.id,
+    type: 'Coggins',
+    state: 'Ready',
+    entities: { examDate: '2026-09-01' },
+  } as RanchReportInput['documents'][number]);
+}
+
+for (const unpricedIndex of [0, 1]) {
+  test(`PDF blocked-share percentage stays unknown when ${unpricedIndex === 0 ? 'blocked' : 'ready'} inventory lacks a price`, async () => {
+    const data = fixture(2);
+    makeReady(data, 1);
+    data.horses.forEach((horse) => {
+      horse.sale.askPrice = 10000;
+    });
+    data.horses[unpricedIndex].sale.askPrice = 0;
+    const report = buildRanchReport(data, now);
+    assert.equal(report.money.unpricedListedCount, 1);
+    assert.equal(reportDecisions(report).blocked.length, 1);
+    assert.equal(report.money.listedValue, 10000);
+    assert.equal(report.money.readyValue, unpricedIndex === 0 ? 10000 : 0);
+    const bytes = await renderReportPdf(report, 'Synthetic Mixed Price Completeness', await branding());
+    const items = drawn(bytes);
+    const text = items.map((item) => item.text).join(' ');
+    assert.match(text, /BLOCKED SHARE UNKNOWN/);
+    assert.doesNotMatch(text, /\d+% OF ASKING VALUE BLOCKED/);
+    assert.match(text, /known-price ready subtotal/);
+    assert.match(text, /known listed asking value \(partial subtotal\)/);
+    if (unpricedIndex === 0) assert.match(text, /covering \$0 in known asking value \(partial subtotal\)/);
+    await assertFits(bytes);
+  });
+}
+
+test('PDF potential-margin card preserves both missing-price and missing-cost prerequisites', async () => {
+  const data = fixture(2);
+  data.horses[0].sale.askPrice = 0;
+  data.horses[1].costBasis = 0;
+  data.expenseReceipts = data.expenseReceipts.filter((receipt) => receipt.horseId !== data.horses[1].id);
+  const report = buildRanchReport(data, now);
+  assert.equal(report.money.unpricedListedCount, 1);
+  assert.equal(reportDecisions(report).potentialMargin, null);
+  const bytes = await renderReportPdf(report, 'Synthetic Mixed Financial Gaps', await branding());
+  const items = drawn(bytes);
+  const start = items.findIndex((item) => item.text === 'POTENTIAL MARGIN');
+  const end = items.findIndex((item, index) => index > start && item.text === 'RECORDED MONTHLY AVG');
+  const card = items
+    .slice(start, end)
+    .map((item) => item.text)
+    .join(' ');
+  assert.match(card, /Unknown/);
+  assert.match(card, /Prices and costs unknown/);
+  await assertFits(bytes);
+});
+
+for (const pricedSibling of [false, true]) {
+  test(`PDF margin disclosure includes missing costs on the same unpriced horse, priced sibling ${pricedSibling}`, async () => {
+    const data = fixture(pricedSibling ? 2 : 1);
+    data.horses[0].sale.askPrice = 0;
+    data.horses[0].costBasis = 0;
+    data.expenseReceipts = [];
+    const report = buildRanchReport(data, now);
+    assert.equal(report.horses.find((horse) => horse.horseId === data.horses[0].id)?.breakEvenPrice, null);
+    assert.equal(report.money.unpricedListedCount, 1);
+    const expectedSubtotal = pricedSibling ? 9775 : 0;
+    assert.equal(reportDecisions(report).potentialMargin, expectedSubtotal, 'the known-row subtotal remains unchanged');
+    const bytes = await renderReportPdf(report, 'Synthetic Same-Horse Financial Gaps', await branding());
+    const items = drawn(bytes);
+    const start = items.findIndex((item) => item.text === 'POTENTIAL MARGIN');
+    const end = items.findIndex((item, index) => index > start && item.text === 'RECORDED MONTHLY AVG');
+    const card = items
+      .slice(start, end)
+      .map((item) => item.text)
+      .join(' ');
+    assert.match(card, /prices \+ costs unknown/i);
+    assert.match(card, /Partial/);
+    await assertFits(bytes);
+  });
+}

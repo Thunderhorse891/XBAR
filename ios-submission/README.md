@@ -42,6 +42,34 @@ done on Linux/CI.
 
 ---
 
+## Native backend routing
+
+The bundled WebView serves local files from `capacitor://localhost`; it cannot
+serve `/api` requests. `scripts/build-mobile.mjs` now supplies an HTTPS backend
+origin to the mobile bundle. It uses `VITE_API_BASE_URL` when set, otherwise the
+configured app origin (and the existing public-origin fallback). Use the real
+API host when the marketing site and backend have different domains. Explicit
+API URLs must contain no credentials, path, query or fragment. Store builds
+refuse `CAP_SERVER_URL`; use the development workflow for live reload.
+
+Account deletion, welcome email and packet verification use the same backend
+URL helper as the other API clients. Web builds still use same-origin requests
+when no API override is configured. Existing telemetry API-fallback preferences
+are preserved; supplying the native API origin does not enable that fallback.
+
+The API permits the exact bundled iOS origin `capacitor://localhost` and the
+existing configured HTTP(S) web origins. Welcome requests now answer preflight
+before authentication or email work. This is transport permission only: bearer
+tokens, endpoint authentication, workspace permissions and rate limits still
+apply. Wildcards, `Origin: null` and lookalike native origins are not permitted;
+credentialed cookie sharing is not enabled. Custom native schemes require a
+separate reviewed configuration change.
+
+**Synthetic transport tests are not physical-device acceptance.** Validate
+real sign-in, server requests and safe account deletion on an authorized test
+account in the actual WKWebView before distribution. The native Xcode project is
+still not checked into main; held readiness PR #265 is not part of this fix.
+
 ## Steps that require a Mac + Xcode
 
 1. **Generate the native project** (first time only):

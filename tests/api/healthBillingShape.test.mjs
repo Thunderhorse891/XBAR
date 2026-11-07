@@ -17,6 +17,7 @@ const HEALTH_ENV = [
   'VITE_SUPABASE_URL',
   'SUPABASE_SERVICE_ROLE_KEY',
   'STRIPE_SECRET_KEY',
+  'STRIPE_ACCOUNT_ID',
   'STRIPE_WEBHOOK_SECRET',
   'STRIPE_LEGACY_PRICE_IDS',
   'MANAGED_BILLING_ENABLED',
@@ -138,11 +139,6 @@ test('what still works but deserves saying is a warning, not an outage', async (
   assert.equal(noAnnual.body.subsystems.stripeAnnualPriceIds, false);
   assert.match(warnings(noAnnual), /Managed annual checkout is unavailable/);
 
-  const testKey = await health({ ...READY, STRIPE_SECRET_KEY: 'sk_test_51AbCdEf', VERCEL_ENV: 'production' });
-  assert.equal(testKey.statusCode, 200);
-  assert.equal(testKey.body.subsystems.stripeLiveKey, false);
-  assert.match(warnings(testKey), /Production is using a Stripe TEST key/);
-
   const noEmail = await health({ ...READY, RESEND_API_KEY: undefined });
   assert.match(warnings(noEmail), /No email provider is configured/);
 
@@ -180,4 +176,38 @@ test('Gmail readiness is opt-in and does not claim verified delivery', async () 
   assert.match(warnings(missingPassword), /Gmail SMTP is enabled but requires/);
   assert.ok(!JSON.stringify(configured.body).includes(gmail.GMAIL_SMTP_APP_PASSWORD));
   assert.ok(!JSON.stringify(configured.body).includes(gmail.GMAIL_SMTP_USER));
+});
+
+for (const key of ['sk_test_51AbCdEf', 'rk_test_51AbCdEf']) {
+  test(`production readiness refuses ${key.slice(0, 7)} mode without claiming checkout works`, async () => {
+    const response = await health({ ...READY, STRIPE_SECRET_KEY: key, VERCEL_ENV: 'production' });
+    assert.equal(response.statusCode, 503);
+    assert.equal(response.body.checks.billingReady, false);
+    assert.match(reasons(response), /Production managed checkout requires a Stripe LIVE key/);
+    assert.doesNotMatch(warnings(response), /Checkout works/);
+  });
+}
+
+test('preview test mode and production live mode retain healthy readiness', async () => {
+  for (const [VERCEL_ENV, STRIPE_SECRET_KEY] of [
+    ['preview', 'sk_test_51AbCdEf'],
+    ['production', 'sk_live_51AbCdEf'],
+  ]) {
+    const response = await health({ ...READY, VERCEL_ENV, STRIPE_SECRET_KEY });
+    assert.equal(response.statusCode, 200, reasons(response));
+  }
+});
+
+test('health refuses a malformed optional account pin and accepts unset or valid pins', async () => {
+  for (const STRIPE_ACCOUNT_ID of [undefined, '', '   ', 'acct_1NF0M3HcLUCzzEB3']) {
+    const response = await health({ ...READY, VERCEL_ENV: 'production', STRIPE_ACCOUNT_ID });
+    assert.equal(response.statusCode, 200, reasons(response));
+  }
+  for (const STRIPE_ACCOUNT_ID of ['acct_', 'acct_bad value', 'not-an-account']) {
+    const response = await health({ ...READY, VERCEL_ENV: 'production', STRIPE_ACCOUNT_ID });
+    assert.equal(response.statusCode, 503);
+    assert.equal(response.body.checks.billingReady, false);
+    assert.match(reasons(response), /STRIPE_ACCOUNT_ID is set but is not a Stripe account id/);
+    assert.doesNotMatch(JSON.stringify(response.body), /acct_bad value|not-an-account/);
+  }
 });

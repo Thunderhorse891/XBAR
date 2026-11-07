@@ -17,7 +17,9 @@ export type ToastTone = 'success' | 'error' | 'warning' | 'info';
  * the CreateKey labels owned by components/saas/flows.tsx; `horseId`
  * preselects a horse for horse-scoped actions.
  */
-export type QuickCreateRequest = { action: string; horseId?: string };
+// medicalType pre-selects the health record type, so a step like "Log a
+// deworming" opens on Deworming rather than Vet visit.
+export type QuickCreateRequest = { action: string; horseId?: string; medicalType?: string };
 
 export type ToastItem = {
   id: string;
@@ -82,9 +84,16 @@ export const useUiStore = create<UiStore>((set) => ({
   quickCreate: null,
   openQuickCreate: (quickCreate) => set({ quickCreate }),
   closeQuickCreate: () => set({ quickCreate: null }),
-  pushToast: ({ id, duration = 4000, tone = 'info', action, ...toast }) => {
+  pushToast: ({ id, duration, tone = 'info', action, ...toast }) => {
     const toastId = id ?? createToastId();
-    const options = { id: toastId, description: toast.title ? toast.message : undefined, duration, action };
+    const options = {
+      id: toastId,
+      description: toast.title ? toast.message : undefined,
+      // Give confirmations time to be noticed after navigation, and failures
+      // or Undo enough time to read and act. Explicit durations still win.
+      duration: duration ?? (action || tone === 'error' || tone === 'warning' ? 10000 : 6000),
+      action,
+    };
     const message = toast.title ?? toast.message;
     if (tone === 'success') sonnerToast.success(message, options);
     else if (tone === 'error') sonnerToast.error(message, options);

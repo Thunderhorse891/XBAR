@@ -17,6 +17,8 @@ export const events = {
   createSubmitted: 'create.submitted',
 
   taskOpened: 'task.opened',
+  taskDismissed: 'task.dismissed',
+  taskSnoozed: 'task.snoozed',
   taskCompleted: 'task.completed',
   taskBulkCompleted: 'task.bulk_completed',
 
@@ -26,7 +28,7 @@ export const events = {
   packetShared: 'sale.packet_shared',
 
   buyerSelected: 'buyer.selected',
-  buyerAccessRevoked: 'buyer.access_revoked',
+  buyerReadinessChanged: 'buyer.sharing_readiness_changed',
   buyerOfferRecorded: 'buyer.offer_recorded',
 
   documentOpened: 'document.opened',

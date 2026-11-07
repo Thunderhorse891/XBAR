@@ -261,8 +261,9 @@ test('spend anomalies flag categories above trailing average with an action', ()
     receipt('Farrier', 210, 1),
     receipt('Farrier', 190, 2),
     receipt('Farrier', 200, 3),
+    receipt('Feed', 100, 4),
   ];
-  const anomalies = detectSpendAnomalies(receipts, now);
+  const anomalies = detectSpendAnomalies(receipts, now, ['2026-03', '2026-04', '2026-05']);
   assert.equal(anomalies.length, 1);
   assert.equal(anomalies[0]!.category, 'Feed');
   assert.equal(anomalies[0]!.deltaPercent, 80);
@@ -313,12 +314,12 @@ test('horse economics compute burn, break-even, and the safe discount floor', as
   // This previously read 300, which was the old defect in disguise: the window
   // ran from three months back to today, spanning four calendar months, and
   // divided by three — $900 over two months came out as $300 by coincidence.
-  assert.equal(economics.monthlyBurn, 200);
+  assert.equal(economics.monthlyBurn, null, 'a lone old receipt does not fill absent trailing months');
 
-  assert.equal(economics.breakEvenPrice, 2800, 'cost to date plus two months of carry');
-  assert.equal(economics.safeDiscountFloor, 3220, 'break-even plus the 15% protected margin');
-  assert.equal(economics.projectedMargin, 9200);
-  assert.equal(economics.marginPercent, 77);
+  assert.equal(economics.breakEvenPrice, 2400, 'recorded costs only, matching Sales');
+  assert.equal(economics.safeDiscountFloor, 2800, '15% markup rounded up to $100, matching Sales');
+  assert.equal(economics.projectedMargin, 9600);
+  assert.equal(economics.marginPercent, 80);
 });
 
 test('an active medical review prices the listing as blocked with disclosure required', () => {

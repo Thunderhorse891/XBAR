@@ -205,22 +205,39 @@ export async function renderReportPdf(
     'Executive dashboard',
     `${reportCount(report.horseCount, 'horse')} · ${reportCount(report.listedCount, 'horse')} in sale inventory`,
   );
+  const hasMissingListedCosts = decision.listed.some((horse) => horse.breakEvenPrice === null);
   const firstCards = [
     ['Invested', dollars(money.investedToDate), 'Acquisition + all receipts', ink],
-    ['Listed value', dollars(money.listedValue), 'Asking, not appraisal', blue],
+    [
+      'Listed value',
+      dollars(money.listedValue),
+      money.unpricedListedCount ? `Partial / ${money.unpricedListedCount} prices unknown` : 'Asking, not appraisal',
+      blue,
+    ],
     [
       'Potential margin',
       dollars(decision.potentialMargin),
-      'Priced sale horses only',
-      decision.potentialMargin < 0 ? red : green,
+      money.unpricedListedCount
+        ? hasMissingListedCosts
+          ? decision.potentialMargin === null
+            ? 'Prices and costs unknown'
+            : 'Partial / prices + costs unknown'
+          : 'Partial / unknown prices excluded'
+        : 'Unknown if any priced horse lacks costs',
+      decision.potentialMargin !== null && decision.potentialMargin < 0 ? red : green,
     ],
-    ['Monthly burn', dollars(money.monthlyBurn), 'Prior 3 complete months', ink],
+    [
+      'Recorded monthly avg',
+      dollars(money.monthlyBurn),
+      money.monthlyBurn === null ? 'Missing recorded months' : 'History completeness unconfirmed',
+      ink,
+    ],
   ] as const;
   firstCards.forEach(([label, value, note, color], i) => card(label, value, note, 36 + i * 138, 130, 126, color));
   card(
     'Sale-ready value',
     dollars(money.readyValue),
-    'No recorded sale blockers',
+    money.unpricedListedCount ? 'Known-price subtotal only' : 'No recorded sale blockers',
     36,
     209,
     172,
@@ -229,20 +246,35 @@ export async function renderReportPdf(
   card(
     'Blocked value',
     dollars(money.valueAtRisk),
-    `${decision.blocked.length} ${decision.blocked.length === 1 ? 'horse needs' : 'horses need'} action`,
+    money.unpricedListedCount
+      ? 'Known-price subtotal only'
+      : `${decision.blocked.length} ${decision.blocked.length === 1 ? 'horse needs' : 'horses need'} action`,
     220,
     209,
     172,
     money.valueAtRisk > 0 ? red : ink,
   );
-  card('Open offers', dollars(money.pipelineValue), 'Offers may overlap per horse', 404, 209, 172, blue);
-  const blockedShare = money.listedValue > 0 ? Math.round((money.valueAtRisk / money.listedValue) * 100) : 0;
+  card(
+    'Open offers',
+    dollars(money.pipelineValue),
+    money.unpricedOfferCount ? `Partial / ${money.unpricedOfferCount} prices unknown` : 'Offers may overlap per horse',
+    404,
+    209,
+    172,
+    blue,
+  );
+  const askingValuesComplete = money.unpricedListedCount === 0;
+  const blockedShare =
+    askingValuesComplete && money.listedValue > 0 ? Math.round((money.valueAtRisk / money.listedValue) * 100) : null;
+  const readyHeadline = `${dollars(money.readyValue)} ${askingValuesComplete ? 'ready to close today*' : 'known-price ready subtotal*'}`;
   rect(36, 292, 540, 62, decision.blocked.length ? rgb(0.99, 0.94, 0.92) : pale);
   text(
     decision.blocked.length
-      ? money.listedValue > 0
-        ? `${blockedShare}% OF ASKING VALUE BLOCKED`
-        : 'BLOCKED HORSES / ASKING VALUES NOT SET'
+      ? !askingValuesComplete
+        ? 'BLOCKED SHARE UNKNOWN / ASKING PRICES MISSING'
+        : blockedShare !== null
+          ? `${blockedShare}% OF ASKING VALUE BLOCKED`
+          : 'BLOCKED HORSES / ASKING VALUES NOT SET'
       : 'SALE PIPELINE SNAPSHOT',
     49,
     303,
@@ -251,10 +283,10 @@ export async function renderReportPdf(
     true,
   );
   text(
-    `${dollars(money.readyValue)} ready to close today*`,
+    readyHeadline,
     49,
     321,
-    Math.min(19, (19 * 290) / Math.max(290, measure(`${dollars(money.readyValue)} ready to close today*`, 19, true))),
+    Math.min(19, (19 * 290) / Math.max(290, measure(readyHeadline, 19, true))),
     money.readyValue === 0 && report.listedCount ? red : ink,
     true,
   );
@@ -268,13 +300,37 @@ export async function renderReportPdf(
   heading('Capital vs. asking value', 36, 371);
   const maxCapital = Math.max(money.investedToDate, money.listedValue, 1);
   bar('Invested - whole roster + receipts', money.investedToDate, maxCapital, 36, 394, 252);
-  bar('Listed - sale inventory only', money.listedValue, maxCapital, 36, 426, 252, blue);
+  bar(
+    askingValuesComplete ? 'Listed - sale inventory only' : 'Listed - known prices only',
+    money.listedValue,
+    maxCapital,
+    36,
+    426,
+    252,
+    blue,
+  );
   heading('Sale pipeline / asking value', 318, 371);
-  bar('Blocked', money.valueAtRisk, Math.max(1, money.listedValue), 318, 394, 258, red);
-  bar('Sale-ready*', money.readyValue, Math.max(1, money.listedValue), 318, 426, 258, green);
+  bar(
+    askingValuesComplete ? 'Blocked' : 'Blocked - known prices',
+    money.valueAtRisk,
+    Math.max(1, money.listedValue),
+    318,
+    394,
+    258,
+    red,
+  );
+  bar(
+    askingValuesComplete ? 'Sale-ready*' : 'Sale-ready* - known prices',
+    money.readyValue,
+    Math.max(1, money.listedValue),
+    318,
+    426,
+    258,
+    green,
+  );
   heading('What matters now', 36, 464);
   paragraph(
-    `${dollars(money.valueAtRisk)} of listed asking value is held behind recorded sale requirements. Current-month receipts total ${dollars(money.investedThisMonth)}; ${dollars(money.unallocatedThisMonth)} is unallocated overhead. No comparison baseline is on file, so period-over-period change is not shown.`,
+    `${dollars(money.valueAtRisk)} of ${askingValuesComplete ? 'listed asking value' : 'known listed asking value (partial subtotal)'} is held behind recorded sale requirements. Current-month receipts total ${dollars(money.investedThisMonth)}; ${dollars(money.unallocatedThisMonth)} is unallocated overhead. No comparison baseline is on file, so period-over-period change is not shown.`,
     36,
     484,
     540,
@@ -370,10 +426,13 @@ export async function renderReportPdf(
     });
     return y;
   }
-  newPage('Sale readiness & blockers', 'Exception management / blocked first, then asking value');
+  newPage(
+    'Sale readiness & blockers',
+    `Known-value subtotals / ${money.unpricedListedCount} listed prices unknown / ${money.unpricedOfferCount} offer prices unknown`,
+  );
   rect(36, 130, 540, 42, pale);
   text(
-    `${reportCount(decision.blocked.length, 'horse')} blocked  /  ${dollars(money.valueAtRisk)} blocked asking value`,
+    `${reportCount(decision.blocked.length, 'horse')} blocked  /  ${dollars(money.valueAtRisk)} ${askingValuesComplete ? 'blocked asking value' : 'known blocked asking value'}`,
     47,
     138,
     11,
@@ -388,7 +447,7 @@ export async function renderReportPdf(
     muted,
   );
   paragraph(
-    `Average profile readiness ${report.readiness.average}% is a stored score, not sale clearance. The remaining ${Math.max(0, 100 - report.readiness.average)} points are not itemized in these records. Sale gates below are assessed separately and can block all listed value regardless of that score.`,
+    `Average profile readiness ${report.readiness.average}% is computed from current records, not sale clearance. Review each horse profile for the missing evidence. Sale gates below are assessed separately and can block all listed value regardless of that score.`,
     36,
     184,
     540,
@@ -436,8 +495,34 @@ export async function renderReportPdf(
     540,
     7.5,
   );
+  const closed = report.horses.filter((horse) => horse.financialStatus === 'sold');
+  if (closed.length) {
+    newPage('Closed-sale results', 'Recorded deal values and costs / payment collection is separate');
+    const disclaimerHeight = paragraph(
+      'These are agreed sale amounts less recorded costs, before overhead. Payment collection is not tracked. They do not establish cash received or settled profit. Unknown costs or sale prices remain unknown.',
+      36,
+      130,
+      540,
+      8,
+    );
+    table(
+      ['Horse', 'Agreed sale', 'Recorded costs', 'Est. margin'],
+      [180, 120, 120, 120],
+      closed.map((horse) => [
+        { value: horse.horseName },
+        { value: dollars(horse.closedSaleValue) },
+        { value: dollars(horse.investedToDate) },
+        { value: dollars(horse.closedSaleProfit) },
+      ]),
+      130 + disclaimerHeight + 12,
+      687,
+      'Closed-sale results',
+      'Continued',
+      '',
+    );
+  }
   newPage('Horse-level economics', 'Ranked by projected profit / priced sale inventory first');
-  if (decision.listed.some((h) => h.projectedMargin < 0)) {
+  if (decision.listed.some((h) => h.projectedMargin !== null && h.projectedMargin < 0)) {
     text(
       'Action needed: Review negative projected profits before discounting. Clear blocked sale requirements first.',
       36,
@@ -445,7 +530,7 @@ export async function renderReportPdf(
       7,
       red,
     );
-  } else if (decision.listed.some((h) => h.projectedMargin > 0)) {
+  } else if (decision.listed.some((h) => h.projectedMargin !== null && h.projectedMargin > 0)) {
     text(
       'Action needed: Prioritize the highest projected profits below; clear blocked sale requirements before closing.',
       36,
@@ -456,11 +541,29 @@ export async function renderReportPdf(
   }
   const economicRows = decision.ranked.map((h) => {
     const priced = h.saleInventory && h.askPrice > 0;
+    const profitKnown = priced && h.projectedMargin !== null;
     // Spelled out for a lender: single letters with a footnote legend are not
     // how a banker reads a margin band or a sale status.
-    const bandLabel = h.marginPercent >= 30 ? 'High' : h.marginPercent >= 15 ? 'Medium' : 'Low';
-    const color = h.marginPercent >= 30 ? green : h.marginPercent >= 15 ? amber : red;
-    const saleStatus = h.saleInventory ? (h.blockers.length ? 'Blocked' : 'Ready to sell') : 'Not for sale';
+    const bandLabel =
+      h.marginPercent !== null && h.marginPercent >= 30
+        ? 'High'
+        : h.marginPercent !== null && h.marginPercent >= 15
+          ? 'Medium'
+          : 'Low';
+    const color =
+      h.marginPercent !== null && h.marginPercent >= 30
+        ? green
+        : h.marginPercent !== null && h.marginPercent >= 15
+          ? amber
+          : red;
+    const saleStatus =
+      h.financialStatus === 'sold'
+        ? 'Sold'
+        : h.saleInventory
+          ? h.blockers.length
+            ? 'Blocked'
+            : 'Ready to sell'
+          : 'Not for sale';
     return [
       {
         value: `${h.horseName} - ${saleStatus}`,
@@ -472,7 +575,10 @@ export async function renderReportPdf(
       { value: priced ? dollars(h.askPrice) : h.saleInventory ? 'Not set' : 'N/A' },
       { value: dollars(h.breakEvenPrice) },
       { value: priced ? dollars(h.projectedMargin) : 'N/A', color: priced ? color : muted, strong: true },
-      { value: priced ? `${h.marginPercent}% ${bandLabel}` : 'N/A', color: priced ? color : muted },
+      {
+        value: profitKnown ? `${h.marginPercent}% ${bandLabel}` : priced ? 'Unknown' : 'N/A',
+        color: priced ? color : muted,
+      },
       { value: dollars(h.safeDiscountFloor) },
     ];
   });
@@ -526,14 +632,14 @@ export async function renderReportPdf(
     ),
   );
   paragraph(
-    `Current month: ${dollars(money.investedThisMonth)} receipts; ${dollars(money.unallocatedThisMonth)} unallocated overhead. Monthly cost/burn averages the prior 3 complete months, excluding this month. $0 means no net recorded spend in that window, not free care.`,
+    `Current month: ${dollars(money.investedThisMonth)} receipts; ${dollars(money.unallocatedThisMonth)} unallocated overhead. Recorded monthly spend averages the prior 3 calendar months only when each has records; absent months are unknown. History completeness is unconfirmed, so this is not a forecast or trend finding. $0 means no net recorded spend in that window, not free care.`,
     36,
     analysisY + 113,
     540,
     7.5,
   );
   paragraph(
-    'Break-even = investment + 2 months average cost. Profit = asking - break-even; margin = profit / asking. Floor = break-even + 15% (planning rule). Horse figures exclude unallocated overhead. Margin bands: High 30% or more, Medium 15-29%, Low under 15%.',
+    'Break-even = recorded acquisition + linked spend. Profit = asking - break-even; margin = profit / asking. Floor = break-even + 15%, rounded up to $100, matching Sales. No future carry is assumed. Horse figures exclude unallocated overhead. Margin bands: High 30% or more, Medium 15-29%, Low under 15%.',
     36,
     analysisY + 148,
     540,

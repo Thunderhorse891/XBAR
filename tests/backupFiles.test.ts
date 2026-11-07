@@ -112,6 +112,52 @@ test('only the files the workspace still references are carried', async () => {
   }
 });
 
+test('staged restore never changes original bytes or metadata before records are installed', async () => {
+  const restore = installFakeIndexedDb();
+  try {
+    const key = await storeLocalFile(new Blob(['original']), 'original.pdf', undefined, TEST_WORKSPACE);
+    const before = await readLocalFile(key);
+    const context = { workspaceId: TEST_WORKSPACE, freshKeys: true };
+    const result = await importLocalFiles(
+      [{ key, name: 'replacement.pdf', type: 'text/plain', size: 7, storedAt: '', data: btoa('changed') }],
+      context,
+    );
+    assert.equal(result.restored, 1);
+    assert.notEqual(result.remapped[key], key);
+    assert.ok(result.remapped[key]);
+    const original = await readLocalFile(key);
+    assert.equal(original?.name, before?.name);
+    assert.equal(await original?.blob.text(), 'original');
+    assert.equal(await (await readLocalFile(result.remapped[key]))?.blob.text(), 'changed');
+    // A stopped restore installs no remapped records; the original stays usable.
+  } finally {
+    restore();
+  }
+});
+
+for (const failure of ['decode', 'write'] as const) {
+  test(`failed staged ${failure} keeps the original key and file usable`, async () => {
+    let rejectWrites = false;
+    const restore = installFakeIndexedDb({ failWrites: () => rejectWrites });
+    try {
+      const key = await storeLocalFile(new Blob(['original']), 'original.pdf', undefined, TEST_WORKSPACE);
+      const { files } = await exportLocalFiles([key], TEST_WORKSPACE);
+      rejectWrites = failure === 'write';
+      const result = await importLocalFiles(
+        [{ ...files[0], data: failure === 'decode' ? '!!! invalid !!!' : btoa('replacement') }],
+        { workspaceId: TEST_WORKSPACE, freshKeys: true },
+      );
+      assert.equal(result.restored, 0);
+      assert.equal(result.failed.length, 1);
+      assert.deepEqual(result.remapped, {});
+      assert.equal(await (await readLocalFile(key))?.blob.text(), 'original');
+      assert.equal((await listLocalFiles()).length, 1);
+    } finally {
+      restore();
+    }
+  });
+}
+
 test('a file too large for the budget is named, not dropped', async () => {
   const restore = installFakeIndexedDb();
   try {
@@ -713,7 +759,7 @@ test('a restored file belongs to the workspace that restored it', async () => {
 
     const entry = await readLocalFile('vault-r');
     assert.equal(entry?.workspaceId, 'ws-a');
-    assert.equal(await sweepLocalFileVault([], 'ws-a'), 1, 'and is therefore collectable by its owner');
+    assert.equal(await sweepLocalFileVault([], 'ws-a'), 0, 'a stale snapshot must preserve the imported file');
   } finally {
     restore();
   }
@@ -1697,7 +1743,7 @@ test('a record that installs but crashes the route it lands on is refused', asyn
    */
   assert.match(
     helperCode,
-    /optionalStrings: \['details\.followUpDue'\]/,
+    /optionalStrings: \['details\.followUpDue', 'completionState'\]/,
     'the field inside the bag whose type survives every check between the backup and the crash',
   );
   assert.doesNotMatch(
@@ -2961,12 +3007,11 @@ test('the sweep does not delete a file an operation is still installing', async 
       endVaultWrite();
     }
 
-    // The over-rejection direction. Once the operation is done, a genuinely
-    // orphaned file is still collectable — a guard that never lifts turns the
-    // sweep off for the session and the vault grows forever.
+    // Completing a write does not make this tab's references authoritative.
     assert.equal(isVaultWriteInFlight(), false);
     await drainVaultWriteLock();
-    assert.equal(await sweepLocalFileVault([], TEST_WORKSPACE), 1, 'a real orphan is still swept afterwards');
+    assert.equal(await sweepLocalFileVault([], TEST_WORKSPACE), 0);
+    assert.ok(await readLocalFile(key), 'a completed file survives an older snapshot too');
   } finally {
     restore();
   }
@@ -3105,24 +3150,24 @@ test('the sweep declines while another tab is mid-write', async () => {
     releaseOtherTab();
     await drainVaultWriteLock();
 
-    // Over-rejection: once no tab holds it, a real orphan is collectable again.
-    assert.equal(await sweepLocalFileVault([], TEST_WORKSPACE), 1, 'a real orphan is swept once every tab is done');
+    // Releasing the other tab's lock does not publish its new records here.
+    assert.equal(await sweepLocalFileVault([], TEST_WORKSPACE), 0);
+    assert.ok(await readLocalFile(key), 'the other tab’s completed file must also survive');
   } finally {
     restoreLocks();
     restoreDb();
   }
 });
 
-test('a browser without the Web Locks API still sweeps', async () => {
-  // Degrading to "never sweep" would grow the vault forever on any browser
-  // without the API. The single-tab counter is still enforced there.
+test('a browser without Web Locks also preserves apparently unreferenced files', async () => {
   const restoreDb = installFakeIndexedDb();
   const globals = globalThis as { navigator?: unknown };
   const previous = Object.getOwnPropertyDescriptor(globals, 'navigator');
   delete globals.navigator;
   try {
-    await storeLocalFile(new Blob(['bytes']), 'no-locks.pdf', undefined, TEST_WORKSPACE);
-    assert.equal(await sweepLocalFileVault([], TEST_WORKSPACE), 1, 'an orphan is still collectable with no lock API');
+    const key = await storeLocalFile(new Blob(['bytes']), 'no-locks.pdf', undefined, TEST_WORKSPACE);
+    assert.equal(await sweepLocalFileVault([], TEST_WORKSPACE), 0);
+    assert.ok(await readLocalFile(key));
   } finally {
     if (previous) Object.defineProperty(globals, 'navigator', previous);
     restoreDb();
@@ -3186,7 +3231,7 @@ test('a writer cannot start in the middle of a sweep', async () => {
     await writing;
     endVaultWrite();
 
-    assert.equal(swept, 1, 'the sweep still collects the orphan it was started for');
+    assert.equal(swept, 0, 'reconciliation cannot infer that an unreferenced file is orphaned');
     assert.deepEqual(order, ['sweep-done', 'writer-granted'], 'the writer must wait for the sweep, not race it');
   } finally {
     restoreLocks();

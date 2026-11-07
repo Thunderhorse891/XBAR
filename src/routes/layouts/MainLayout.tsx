@@ -32,12 +32,14 @@ import { XbarMark } from '@/components/BrandMark';
 import { HorsesIcon } from '@/components/icons';
 import { Sheet, SheetContent, SheetDescription, SheetTitle, SheetTrigger } from '@/components/ui/sheet';
 import { GlobalCreateDrawer, createActions } from '@/components/saas/flows';
+import { canonicalRoutes } from '@/lib/routeCanon';
 import { billingPath } from '@/lib/billingRoutes';
 import { buyerFollowUpPath } from '@/lib/buyerRoutes';
 import { buildCareBoardRows } from '@/lib/dashboardOps';
 import { buildExpiryRadar, expiryBellCount } from '@/lib/documentExpiry';
 import { isSupabaseConfigured } from '@/lib/platformConfig';
 import { useCloudStore } from '@/store/useCloudStore';
+import { useOwnerAccess } from '@/hooks/useOwnerAccess';
 import { useUiStore } from '@/store/useUiStore';
 import { useXbarStore } from '@/store/useXbarStore';
 import { useEffectiveSubscription } from '@/hooks/useOwnerPreview';
@@ -64,8 +66,8 @@ const navGroups: NavGroup[] = [
   {
     heading: 'Care',
     items: [
-      { label: 'Health', path: '/health-care', icon: Stethoscope, badgeKey: 'care' },
-      { label: 'Breeding', path: '/breeding-foaling', icon: Sprout },
+      { label: 'Health', path: canonicalRoutes.health, icon: Stethoscope, badgeKey: 'care' },
+      { label: 'Breeding', path: canonicalRoutes.breeding, icon: Sprout },
       { label: 'Feed & Supplies', path: '/feed', icon: Wheat },
     ],
   },
@@ -85,7 +87,7 @@ const navGroups: NavGroup[] = [
     items: [
       { label: 'Documents', path: '/documents', icon: FolderOpen, badgeKey: 'docs' },
       { label: 'Expiring soon', path: '/expiring', icon: CalendarClock, badgeKey: 'expiring' },
-      { label: 'Equipment', path: '/equipment', icon: Boxes },
+      { label: 'Equipment', path: canonicalRoutes.equipment, icon: Boxes },
       { label: 'Expenses', path: '/expenses', icon: Coins },
       { label: 'Reports', path: '/reports', icon: Gauge },
     ],
@@ -120,6 +122,7 @@ export default function MainLayout() {
   const subscription = useEffectiveSubscription();
   const currentRole = useXbarStore((state) => state.currentRole);
   const cloudSession = useCloudStore((state) => state.session);
+  const ownerAccess = useOwnerAccess();
   const signOutCloud = useCloudStore((state) => state.signOut);
   const pushToast = useUiStore((state) => state.pushToast);
   const setCommandPaletteOpen = useUiStore((state) => state.setCommandPaletteOpen);
@@ -312,6 +315,9 @@ export default function MainLayout() {
             </button>
             <QuickCreateMenu
               items={[
+                ...(ownerAccess === 'allowed'
+                  ? [{ label: 'Owner dashboard', onSelect: () => navigate('/owner') }]
+                  : []),
                 { label: 'Notifications', onSelect: () => navigate('/reminders') },
                 { label: 'Settings', onSelect: () => navigate('/settings') },
                 { label: 'Invite team', onSelect: () => navigate('/settings') },

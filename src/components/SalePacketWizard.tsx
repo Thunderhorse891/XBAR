@@ -776,14 +776,25 @@ export function SalePacketWizard({
               )}
               {economics && (
                 <div className="confirm-dialog__proof" style={{ marginTop: 14 }}>
-                  <strong>Pricing:</strong> cost to date {formatCompactCurrency(economics.costToDate)} · burn{' '}
-                  {formatCompactCurrency(economics.monthlyBurn)}/mo · break-even{' '}
-                  {formatCompactCurrency(economics.breakEvenPrice)} ·{' '}
-                  <strong>do not discount below {formatCompactCurrency(economics.safeDiscountFloor)}</strong>
+                  <strong>Pricing:</strong> cost to date {formatCompactCurrency(economics.costToDate)} · recorded
+                  monthly avg{' '}
+                  {economics.monthlyBurn === null ? 'Unknown' : formatCompactCurrency(economics.monthlyBurn)}/mo ·
+                  break-even{' '}
+                  {economics.breakEvenPrice === null ? 'Unknown' : formatCompactCurrency(economics.breakEvenPrice)} ·{' '}
+                  <strong>
+                    recorded-cost floor{' '}
+                    {economics.safeDiscountFloor === null
+                      ? 'Unknown'
+                      : formatCompactCurrency(economics.safeDiscountFloor)}
+                  </strong>
                   {economics.askPrice > 0 ? (
                     <>
                       {' '}
-                      · margin at ask {formatCompactCurrency(economics.projectedMargin)} ({economics.marginPercent}%)
+                      · margin at ask{' '}
+                      {economics.projectedMargin === null
+                        ? 'Unknown'
+                        : formatCompactCurrency(economics.projectedMargin)}{' '}
+                      ({economics.marginPercent === null ? 'cost records missing' : `${economics.marginPercent}%`})
                     </>
                   ) : (
                     ' · set an asking price on the horse record'

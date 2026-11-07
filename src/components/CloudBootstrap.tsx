@@ -1,11 +1,19 @@
+import { readRecordsOwner } from '@/lib/recordsOwner';
 import { useEffect, useRef } from 'react';
+import { isRelationalCloudEnabled } from '@/lib/platformConfig';
 import { createLatestWriteGate } from '@/lib/authBootstrap';
 import { acknowledgeCloudDeletions, pendingCloudDeletions } from '@/lib/cloudDeletionQueue';
 import { loadWorkspaceBackupFromCloud, saveWorkspaceBackupToCloud } from '@/lib/cloudWorkspace';
 import { mergeCloudSubscription, withCloudSubscription } from '@/lib/cloudSubscription';
-import { decideCloudReconciliation, serializeWorkspaceBackup } from '@/lib/cloudSyncPolicy';
+import {
+  decideCloudReconciliation,
+  getWorkspacePayload,
+  hasMeaningfulWorkspace,
+  serializeWorkspaceBackup,
+} from '@/lib/cloudSyncPolicy';
 import { promoteLocalVaultFiles } from '@/lib/workspacePromotion';
 import { vaultOwnerId } from '@/lib/vaultOwner';
+import { restorePersistedState } from '@/store/xbarStoreHelpers';
 import { useCloudStore } from '@/store/useCloudStore';
 import { useUiStore } from '@/store/useUiStore';
 import { useWorkspaceHydrated, useXbarStore } from '@/store/useXbarStore';
@@ -86,6 +94,7 @@ export function CloudBootstrap() {
 
     if (cloudStatus !== 'signed-in' || !session?.user.id) {
       hydrationKeyRef.current = '';
+      useCloudStore.getState().setRecoveryContext(undefined);
       // Whatever was loading was loading for somebody else.
       hydrationGateRef.current.retireInFlight();
       lastPersistedSignatureRef.current = serializeWorkspaceBackup(exportWorkspaceBackup());
@@ -147,6 +156,7 @@ export function CloudBootstrap() {
     const hydrationKey = `${session.user.id}:${workspaceId || 'primary'}`;
     if (hydrationKeyRef.current === hydrationKey) return;
     hydrationKeyRef.current = hydrationKey;
+    useCloudStore.getState().setRecoveryContext(undefined);
     setAutosaveReady(false, false);
     const ticketOwns = hydrationGateRef.current.begin();
     const owns = () => {
@@ -207,6 +217,7 @@ export function CloudBootstrap() {
       setSyncState('syncing', 'Reconciling this ranch with cloud records...');
       const remote = await loadWorkspaceBackupFromCloud();
       if (!owns()) return;
+      useCloudStore.getState().setRecoveryContext('recoveryContext' in remote ? remote.recoveryContext : undefined);
       if ('authoritativeSubscription' in remote && remote.authoritativeSubscription) {
         // Entitlements are server-owned, independent of any ranch-data conflict.
         // Updating only this field preserves local horses/documents and prevents
@@ -216,9 +227,37 @@ export function CloudBootstrap() {
         }));
         local = withCloudSubscription(local, remote.authoritativeSubscription);
       }
+      // Relational storage does not contain these three device histories yet.
+      // Its normalized empty arrays cannot establish a history conflict. Only
+      // compare them as local data after the record set and returned authority
+      // are pinned to this same account/ranch. Snapshot comparisons stay exact.
+      const sameRanchRelationalHistory =
+        remote.ok &&
+        remote.source === 'relational' &&
+        Boolean(workspaceId) &&
+        remote.workspaceId === workspaceId &&
+        readRecordsOwner() === workspaceId &&
+        remote.backup.workspace.auditEvents.length === 0 &&
+        remote.backup.workspace.salePacketBuilds.length === 0 &&
+        remote.backup.workspace.buyerRoomEvents.length === 0;
+      const comparisonBackup =
+        remote.ok && sameRanchRelationalHistory
+          ? {
+              ...remote.backup,
+              workspace: {
+                ...remote.backup.workspace,
+                auditEvents: local.workspace.auditEvents,
+                salePacketBuilds: local.workspace.salePacketBuilds,
+                buyerRoomEvents: local.workspace.buyerRoomEvents,
+              },
+            }
+          : remote.ok
+            ? remote.backup
+            : undefined;
       const decision = decideCloudReconciliation({
         local,
-        ...(remote.ok ? { remote: remote.backup } : { remoteError: remote.message }),
+        remoteAuthoritativeEmpty: remote.ok && 'authoritativeEmpty' in remote && remote.authoritativeEmpty,
+        ...(remote.ok ? { remote: comparisonBackup } : { remoteError: remote.message }),
       });
 
       if (decision === 'import-remote' && remote.ok) {
@@ -236,7 +275,19 @@ export function CloudBootstrap() {
       }
 
       if (decision === 'push-local') {
-        const saved = await saveWorkspaceBackupToCloud(local, { deletions });
+        const recordsOwner = readRecordsOwner();
+        if (recordsOwner !== 'local' && recordsOwner !== vaultOwnerId()) {
+          finish(
+            false,
+            'error',
+            'These local records cannot be verified for this account. Autosave is locked until you review an explicit Push or restore in Settings.',
+          );
+          return;
+        }
+        const saved = await saveWorkspaceBackupToCloud(local, {
+          deletions,
+          expectedRecoveryContext: useCloudStore.getState().recoveryContext,
+        });
         if (saved.ok && saved.deletionsApplied) acknowledgeCloudDeletions(deletions);
         if (!owns()) return;
         if (saved.ok && saved.updatedAt) setLastSyncAt(saved.updatedAt);
@@ -364,95 +415,257 @@ export function CloudBootstrap() {
   ]);
 
   useEffect(() => {
+    if (
+      !workspaceHydrated ||
+      cloudStatus !== 'signed-in' ||
+      !autosaveReady ||
+      !autosaveUnlocked ||
+      !isRelationalCloudEnabled()
+    )
+      return;
+    let disposed = false;
+    let loading = false;
+    let generation = 0;
+    const unsubscribe = useCloudStore.subscribe((next, previous) => {
+      if (
+        next.workspaceId !== previous.workspaceId ||
+        next.session?.user.id !== previous.session?.user.id ||
+        next.workspaceRole !== previous.workspaceRole
+      )
+        generation += 1;
+    });
+    const reportRefreshFailure = () =>
+      pushToast({
+        id: 'cloud-refresh-failed',
+        title: 'Teammate updates unavailable',
+        message:
+          'The latest cloud records could not be loaded completely. This device’s records were kept unchanged; refresh will retry.',
+        tone: 'warning',
+        duration: 10000,
+      });
+    const owns = () => {
+      const cloud = useCloudStore.getState();
+      return (
+        !disposed &&
+        cloud.status === 'signed-in' &&
+        cloud.session?.user.id === session?.user.id &&
+        cloud.workspaceId === workspaceId &&
+        cloud.autosaveReady &&
+        cloud.autosaveUnlocked
+      );
+    };
+    const refresh = async () => {
+      if (typeof navigator !== 'undefined' && !navigator.onLine) return;
+      if (typeof document !== 'undefined' && document.visibilityState !== 'visible') return;
+      if (loading || !owns() || useCloudStore.getState().syncState !== 'idle' || pendingCloudDeletions().length) return;
+      const ticket = generation;
+      try {
+        const local = exportWorkspaceBackup();
+        const signature = serializeWorkspaceBackup(local);
+        // Never replace a local edit, failed save, or unknown baseline.
+        if (!lastPersistedBackupRef.current || signature !== lastPersistedSignatureRef.current) return;
+        loading = true;
+        const remote = await loadWorkspaceBackupFromCloud({
+          requireAuthoritative: true,
+          expectedContext: { userId: session?.user.id ?? '', workspaceId },
+        });
+        if (
+          !owns() ||
+          ticket !== generation ||
+          useCloudStore.getState().syncState !== 'idle' ||
+          pendingCloudDeletions().length ||
+          serializeWorkspaceBackup(exportWorkspaceBackup()) !== signature
+        )
+          return;
+        if (!remote.ok || remote.source !== 'relational' || remote.workspaceId !== workspaceId) {
+          reportRefreshFailure();
+          return;
+        }
+        if (remote.authoritativeEmpty) {
+          if (hasMeaningfulWorkspace(local)) reportRefreshFailure();
+          return;
+        }
+        const payload = getWorkspacePayload(remote.backup);
+        if (!payload) return;
+        // Auxiliary local-only collections are preserved when the relational
+        // source does not supply them. A partial/failed cloud load is never installed.
+        const next = restorePersistedState({
+          ...local.workspace,
+          ...payload,
+          // Relational history persistence is a separate migration. Default
+          // empty arrays from normalization must not erase this device's history.
+          auditEvents: local.workspace.auditEvents,
+          salePacketBuilds: local.workspace.salePacketBuilds,
+          buyerRoomEvents: local.workspace.buyerRoomEvents,
+        });
+        useXbarStore.setState(next);
+        const installed = exportWorkspaceBackup();
+        lastPersistedBackupRef.current = installed;
+        lastPersistedSignatureRef.current = serializeWorkspaceBackup(installed);
+        if (remote.updatedAt) setLastSyncAt(remote.updatedAt);
+      } catch {
+        if (owns() && ticket === generation) reportRefreshFailure();
+      } finally {
+        loading = false;
+      }
+    };
+    const onFocus = () => {
+      void refresh();
+    };
+    const interval = window.setInterval(onFocus, 300000);
+    window.addEventListener('focus', onFocus);
+    return () => {
+      disposed = true;
+      window.clearInterval(interval);
+      unsubscribe();
+      window.removeEventListener('focus', onFocus);
+    };
+  }, [
+    workspaceHydrated,
+    cloudStatus,
+    autosaveReady,
+    autosaveUnlocked,
+    session?.user.id,
+    workspaceId,
+    exportWorkspaceBackup,
+    setLastSyncAt,
+    pushToast,
+  ]);
+
+  useEffect(() => {
     if (!workspaceHydrated) return;
     if (cloudStatus !== 'signed-in' || !autosaveReady || !autosaveUnlocked) return;
     let disposed = false;
     let syncTimeout: number | undefined;
     let saving = false;
-
-    const persistCurrent = async () => {
-      if (disposed || saving) return;
-      if (typeof navigator !== 'undefined' && !navigator.onLine) {
-        setSyncState('error', 'Offline. Ranch changes remain local and will retry when the connection returns.');
-        return;
-      }
-      const backup = exportWorkspaceBackup();
-      /*
-       * Read before the request and released only for this amount. The document
-       * intake counts bytes it has put in the bucket so the capacity check can
-       * add them to the server's total; once the server holds those rows they
-       * are inside that total and would otherwise be counted twice. Releasing
-       * the captured amount rather than zeroing is what keeps an upload that
-       * lands while this save is in flight -- and so is not in this snapshot --
-       * still counted.
-       */
-      const stagedAtSnapshot = useCloudStore.getState().stagedStorageBytes;
-      const signature = serializeWorkspaceBackup(backup);
-      if (signature === lastPersistedSignatureRef.current) return;
-      saving = true;
-      setSyncState('syncing', 'Saving ranch changes to cloud...');
-      /*
-       * Only what a person deleted is deleted. This device's copy can be older
-       * than the cloud's -- another phone, or a server-side import, may have
-       * added rows since it loaded -- so a row it lacks is not a row to remove.
-       * The queue is captured before the request and only that capture is
-       * acknowledged: a deletion made while the save is in flight is not in it.
-       */
-      const deletions = pendingCloudDeletions();
-      const result = await saveWorkspaceBackupToCloud(backup, {
-        deletions,
-        baseline: lastPersistedBackupRef.current ?? undefined,
-      });
-      if (result.ok && result.deletionsApplied) acknowledgeCloudDeletions(deletions);
-      saving = false;
-      if (disposed) return;
-      /*
-       * Keyed on whether the DOCUMENT ROWS reached the database, which is a
-       * different question from `ok` in both directions -- so this sits outside
-       * the branch rather than inside the success half.
-       *
-       * `ok` without the rows: with the snapshot fallback enabled a rejected
-       * relational save still reports success once the legacy snapshot lands.
-       * The rancher's work is safe, but `xbar_workspace_storage_bytes` reads
-       * `documents` and nothing was added to it, so releasing the reservation
-       * would leave the uploaded objects counted by nobody.
-       *
-       * The rows without `ok`: the relational save is a sequence of statements,
-       * not a transaction. The documents upsert can commit and a later table
-       * still fail. Those bytes are then in the server's total, and holding the
-       * reservation as well counts them twice -- refusing batches that fit,
-       * until some later save happens to succeed.
-       */
-      if (result.relationalRowsPersisted) settleStagedStorageBytes(stagedAtSnapshot);
-      if (result.ok) {
-        if (result.workspaceId && result.workspaceId !== workspaceId) {
-          setWorkspaceAccessProfile(result.workspaceId, 'Admin');
-        }
-        lastPersistedSignatureRef.current = signature;
-        // The copy just saved -- not the live state, which may have moved on
-        // while the request was in flight and is not in the cloud yet.
-        lastPersistedBackupRef.current = backup;
-        if (result.updatedAt) setLastSyncAt(result.updatedAt);
-        setSyncState('idle', result.message);
-      } else {
-        const message = `${result.message} Changes remain local and will retry.`;
-        setSyncState('error', message);
-        pushToast({
-          id: 'cloud-autosave-failed',
-          title: 'Cloud save paused',
-          message,
-          tone: 'error',
-          duration: 10000,
-        });
-      }
+    let retryDelay = 1600;
+    const userId = session?.user.id;
+    const owns = () => {
+      const current = useCloudStore.getState();
+      return (
+        !disposed &&
+        current.status === 'signed-in' &&
+        current.session?.user.id === userId &&
+        current.workspaceId === workspaceId &&
+        current.autosaveReady &&
+        current.autosaveUnlocked
+      );
     };
-
-    const queuePersist = () => {
+    const schedulePersist = (delay: number) => {
+      if (!owns()) return;
       if (syncTimeout) window.clearTimeout(syncTimeout);
       syncTimeout = window.setTimeout(() => {
         void persistCurrent();
-      }, 1600);
+      }, delay);
     };
+
+    const persistCurrent = async () => {
+      if (!owns() || saving) return;
+      saving = true;
+      let needsRetry = true;
+      try {
+        if (typeof navigator !== 'undefined' && !navigator.onLine) {
+          setSyncState('error', 'Offline. Ranch changes remain local and will retry when the connection returns.');
+          retryDelay = Math.min(retryDelay * 2, 30000);
+          return;
+        }
+        const backup = exportWorkspaceBackup();
+        /*
+         * Read before the request and released only for this amount. The document
+         * intake counts bytes it has put in the bucket so the capacity check can
+         * add them to the server's total; once the server holds those rows they
+         * are inside that total and would otherwise be counted twice. Releasing
+         * the captured amount rather than zeroing is what keeps an upload that
+         * lands while this save is in flight -- and so is not in this snapshot --
+         * still counted.
+         */
+        const stagedAtSnapshot = useCloudStore.getState().stagedStorageBytes;
+        const signature = serializeWorkspaceBackup(backup);
+        if (signature === lastPersistedSignatureRef.current) {
+          needsRetry = false;
+          return;
+        }
+        setSyncState('syncing', 'Saving ranch changes to cloud...');
+        /*
+         * Only what a person deleted is deleted. This device's copy can be older
+         * than the cloud's -- another phone, or a server-side import, may have
+         * added rows since it loaded -- so a row it lacks is not a row to remove.
+         * The queue is captured before the request and only that capture is
+         * acknowledged: a deletion made while the save is in flight is not in it.
+         */
+        const deletions = pendingCloudDeletions();
+        const result = await saveWorkspaceBackupToCloud(backup, {
+          deletions,
+          baseline: lastPersistedBackupRef.current ?? undefined,
+          expectedRecoveryContext: useCloudStore.getState().recoveryContext,
+          expectedContext: { userId: userId ?? '', workspaceId },
+        });
+        if (!owns()) return;
+        if (result.ok && result.deletionsApplied) acknowledgeCloudDeletions(deletions);
+        /*
+         * Keyed on whether the DOCUMENT ROWS reached the database, which is a
+         * different question from `ok` in both directions -- so this sits outside
+         * the branch rather than inside the success half.
+         *
+         * `ok` without the rows: with the snapshot fallback enabled a rejected
+         * relational save still reports success once the legacy snapshot lands.
+         * The rancher's work is safe, but `xbar_workspace_storage_bytes` reads
+         * `documents` and nothing was added to it, so releasing the reservation
+         * would leave the uploaded objects counted by nobody.
+         *
+         * The rows without `ok`: the relational save is a sequence of statements,
+         * not a transaction. The documents upsert can commit and a later table
+         * still fail. Those bytes are then in the server's total, and holding the
+         * reservation as well counts them twice -- refusing batches that fit,
+         * until some later save happens to succeed.
+         */
+        if (result.relationalRowsPersisted) settleStagedStorageBytes(stagedAtSnapshot);
+        if (result.ok) {
+          if (result.workspaceId && result.workspaceId !== workspaceId) {
+            setWorkspaceAccessProfile(result.workspaceId, 'Admin');
+          }
+          const latestSignature = serializeWorkspaceBackup(exportWorkspaceBackup());
+          lastPersistedSignatureRef.current = signature;
+          // The copy just saved -- not the live state, which may have moved on
+          // while the request was in flight and is not in the cloud yet.
+          lastPersistedBackupRef.current = backup;
+          if (result.updatedAt) setLastSyncAt(result.updatedAt);
+          retryDelay = 1600;
+          if (latestSignature === signature) {
+            needsRetry = false;
+            setSyncState('idle', result.message);
+          } else {
+            setSyncState('syncing', 'Newer ranch changes are waiting to save...');
+          }
+        } else {
+          retryDelay = Math.min(retryDelay * 2, 30000);
+          const message = `${result.message} Changes remain local and will retry.`;
+          setSyncState('error', message);
+          pushToast({
+            id: 'cloud-autosave-failed',
+            title: 'Cloud save paused',
+            message,
+            tone: 'error',
+            duration: 10000,
+          });
+        }
+      } catch (error) {
+        retryDelay = Math.min(retryDelay * 2, 30000);
+        if (owns()) {
+          const detail = error instanceof Error ? error.message : 'Cloud save failed.';
+          setSyncState('error', `${detail} Changes remain local and will retry.`);
+        }
+      } finally {
+        saving = false;
+        // Recheck the LIVE snapshot, even when its debounce fired while the
+        // request was in flight. A failed request leaves the baseline intact.
+        if (owns() && needsRetry) {
+          schedulePersist(retryDelay);
+        }
+      }
+    };
+
+    const queuePersist = () => schedulePersist(1600);
     const unsubscribe = useXbarStore.subscribe(queuePersist);
     window.addEventListener('online', queuePersist);
     queuePersist();
@@ -473,6 +686,7 @@ export function CloudBootstrap() {
     setSyncState,
     setWorkspaceAccessProfile,
     settleStagedStorageBytes,
+    session?.user.id,
     workspaceHydrated,
     workspaceId,
   ]);

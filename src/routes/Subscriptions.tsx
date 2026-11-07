@@ -43,6 +43,13 @@ import './checkoutExperience.css';
 
 const tiers: SubscriptionTier[] = ['Starter', 'Professional', 'Ranch Ops', 'Enterprise'];
 
+type CheckoutErrorContext = {
+  tier: SubscriptionTier;
+  billingPeriod: 'monthly' | 'annual';
+  workspaceId: string;
+  userId: string | undefined;
+};
+
 function planAnchor(tier: SubscriptionTier) {
   return tier.replace(/\s/g, '-').toLowerCase();
 }
@@ -64,6 +71,33 @@ export default function Subscriptions() {
   const pushToast = useUiStore((state) => state.pushToast);
   const startTrialSubscription = useXbarStore((state) => state.startTrialSubscription);
   const [checkoutTier, setCheckoutTier] = useState<SubscriptionTier | null>(null);
+  const [checkoutError, setCheckoutError] = useState<(CheckoutErrorContext & { message: string }) | null>(null);
+  const checkoutErrorAttempt = useRef<CheckoutErrorContext | null>(null);
+  const clearCheckoutError = useCallback(() => {
+    checkoutErrorAttempt.current = null;
+    setCheckoutError(null);
+  }, []);
+  useEffect(() => {
+    // Invalidate notices synchronously even when an identity/role round trip
+    // is batched into one render. This does not cancel or change the request.
+    const unsubscribeCloud = useCloudStore.subscribe((next, previous) => {
+      if (next.workspaceId !== previous.workspaceId || next.session?.user.id !== previous.session?.user.id)
+        clearCheckoutError();
+    });
+    const unsubscribeWorkspace = useXbarStore.subscribe((next, previous) => {
+      if (
+        next.currentRole !== previous.currentRole ||
+        hasActivePaidPlan(next.subscription) !== hasActivePaidPlan(previous.subscription) ||
+        isSubscriptionRecoverable(next.subscription) !== isSubscriptionRecoverable(previous.subscription)
+      )
+        clearCheckoutError();
+    });
+    return () => {
+      checkoutErrorAttempt.current = null;
+      unsubscribeCloud();
+      unsubscribeWorkspace();
+    };
+  }, [clearCheckoutError]);
   const [trialStarting, setTrialStarting] = useState(false);
   // Billing period for plan display and checkout. Annual is 10x monthly (2
   // months free). The server fails closed when an annual price id is not
@@ -190,6 +224,44 @@ export default function Subscriptions() {
   // entirely. api/stripe/checkout.js refuses these server-side; this stops the
   // screen offering a button that would be refused.
   const subscriptionActive = hasActivePaidPlan(subscription);
+  // A refusal must outlive its toast, but only for the purchase it describes.
+  // Hide mismatched errors immediately, then discard them so switching back
+  // cannot resurrect one (including a response arriving after a selection change).
+  const checkoutErrorIsCurrent = Boolean(
+    checkoutError &&
+    checkoutError.tier === decisionTier &&
+    checkoutError.billingPeriod === billingPeriod &&
+    checkoutError.workspaceId === workspaceId &&
+    checkoutError.userId === session?.user.id &&
+    canManageBilling &&
+    !subscriptionActive &&
+    !subscriptionRecoverable,
+  );
+  useEffect(() => {
+    const pending = checkoutErrorAttempt.current;
+    if (
+      (pending &&
+        (pending.tier !== decisionTier ||
+          pending.billingPeriod !== billingPeriod ||
+          pending.workspaceId !== workspaceId ||
+          pending.userId !== session?.user.id)) ||
+      (checkoutError && !checkoutErrorIsCurrent)
+    )
+      clearCheckoutError();
+  }, [
+    checkoutError,
+    checkoutErrorIsCurrent,
+    decisionTier,
+    billingPeriod,
+    workspaceId,
+    session?.user.id,
+    clearCheckoutError,
+  ]);
+
+  const selectBillingPeriod = (period: 'monthly' | 'annual') => {
+    if (period !== billingPeriod) clearCheckoutError();
+    setBillingPeriod(period);
+  };
   /*
    * Trial state: 'none' | 'active' | 'expired', computed from the profile's
    * recorded trial start. Native apps never get the trial CTA — Apple treats
@@ -454,6 +526,7 @@ export default function Subscriptions() {
   };
 
   const selectTier = (tier: SubscriptionTier) => {
+    if (tier !== decisionTier) clearCheckoutError();
     setSelectedTier(tier);
     const nextParams = new URLSearchParams(params);
     nextParams.set('plan', tier);
@@ -461,7 +534,10 @@ export default function Subscriptions() {
   };
 
   const beginCheckout = async (tier: SubscriptionTier) => {
+    clearCheckoutError();
     selectTier(tier);
+    const errorAttempt = { tier, billingPeriod, workspaceId, userId: session?.user.id };
+    checkoutErrorAttempt.current = errorAttempt;
     setCheckoutTier(tier);
     emit(productEventNames.checkoutStarted, {
       tier,
@@ -565,9 +641,10 @@ export default function Subscriptions() {
     }
 
     emit(productEventNames.checkoutFailed, { tier, reason: managed.message }, 'warning');
+    if (checkoutErrorAttempt.current === errorAttempt) setCheckoutError({ ...errorAttempt, message: managed.message });
     pushToast({
       title: 'Checkout needs attention',
-      message: `${managed.message} Your workspace and current plan were not changed.`,
+      message: managed.message,
       tone: 'error',
     });
     setCheckoutTier(null);
@@ -846,7 +923,7 @@ export default function Subscriptions() {
                 type="button"
                 aria-pressed={billingPeriod === 'monthly'}
                 className={billingPeriod === 'monthly' ? 'checkout-billing-toggle--active' : ''}
-                onClick={() => setBillingPeriod('monthly')}
+                onClick={() => selectBillingPeriod('monthly')}
               >
                 Monthly
               </button>
@@ -854,7 +931,7 @@ export default function Subscriptions() {
                 type="button"
                 aria-pressed={billingPeriod === 'annual'}
                 className={billingPeriod === 'annual' ? 'checkout-billing-toggle--active' : ''}
-                onClick={() => setBillingPeriod('annual')}
+                onClick={() => selectBillingPeriod('annual')}
               >
                 Annual <small>2 months free</small>
               </button>
@@ -981,6 +1058,13 @@ export default function Subscriptions() {
               </>
             )}
           </div>
+
+          {checkoutErrorIsCurrent && checkoutError && (
+            <div className="checkout-return-banner checkout-return-banner--quiet" role="alert" aria-atomic="true">
+              <strong>Checkout needs attention</strong>
+              <p>{checkoutError.message}</p>
+            </div>
+          )}
 
           {billingPortalAction ? (
             <button

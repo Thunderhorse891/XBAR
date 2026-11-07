@@ -26,6 +26,9 @@ import { SITE_ORIGIN } from './marketing/render.mjs';
 // operator had correctly set in .env.production or .env.local — a custom-domain
 // build would ship the default origin while looking configured.
 const fileEnv = loadEnv('production', process.cwd(), 'VITE_');
+if (process.env.CAP_SERVER_URL) {
+  throw new Error('Unset CAP_SERVER_URL before building the bundled store app. Live reload is development-only.');
+}
 const configuredSiteUrl = (process.env.VITE_PUBLIC_SITE_URL || fileEnv.VITE_PUBLIC_SITE_URL || '').trim();
 const configuredAppUrl = (process.env.VITE_PUBLIC_APP_URL || fileEnv.VITE_PUBLIC_APP_URL || '').trim();
 /*
@@ -55,14 +58,42 @@ const publicSiteUrl = (
  * inside every sale packet, which is the one artifact whose whole purpose is
  * being checkable by a stranger.
  *
- * It also did not buy what it was meant to. buildPublicShareUrl still appends
- * `#/profiles/...`, and the deployed web bundle runs BrowserRouter, which
- * ignores a fragment — so the shared link was broken either way, before and
- * after. Correcting that means changing how share URLs are built for a
- * browser-routed target, which is web behavior this change has no business
- * touching.
+ * Public buyer links now resolve their destination router in
+ * buildPublicShareUrl: native's hash router does not change the public web
+ * deployment's /app/profiles path. Keep this value an origin so all server
+ * consumers and the public-link builder agree.
  */
 const publicAppUrl = (configuredAppUrl || publicSiteUrl).replace(/\/+$/, '');
+
+// A Capacitor app is served from capacitor://localhost, which has no API.
+// Use the app backend origin (not an /app route or marketing-only host).
+const configuredApiUrl = (process.env.VITE_API_BASE_URL || fileEnv.VITE_API_BASE_URL || '').trim();
+// Supplying the native backend must not silently opt users into the telemetry
+// API fallback, whose runtime default otherwise changes when an API URL exists.
+// Preserve the flag/default that applied before this build supplied its origin.
+const telemetryApiFlag = (
+  process.env.VITE_RUNTIME_TELEMETRY_API_ENABLED ??
+  fileEnv.VITE_RUNTIME_TELEMETRY_API_ENABLED ??
+  ''
+)
+  .trim()
+  .toLowerCase();
+const telemetryApiEnabled = ['1', 'true', 'yes', 'on'].includes(telemetryApiFlag)
+  ? true
+  : ['0', 'false', 'no', 'off'].includes(telemetryApiFlag)
+    ? false
+    : Boolean(configuredApiUrl);
+const apiUrl = new URL(configuredApiUrl || publicAppUrl);
+if (
+  apiUrl.protocol !== 'https:' ||
+  apiUrl.username ||
+  apiUrl.password ||
+  apiUrl.search ||
+  apiUrl.hash ||
+  (configuredApiUrl && apiUrl.pathname !== '/')
+) {
+  throw new Error('VITE_API_BASE_URL must be an HTTPS origin without credentials, path, query or fragment.');
+}
 
 const env = {
   ...process.env,
@@ -90,6 +121,8 @@ const env = {
    */
   VITE_PUBLIC_SITE_URL: publicSiteUrl,
   VITE_PUBLIC_APP_URL: publicAppUrl,
+  VITE_API_BASE_URL: apiUrl.origin,
+  VITE_RUNTIME_TELEMETRY_API_ENABLED: String(telemetryApiEnabled),
 };
 
 console.log(`[mobile] legal links resolve to ${publicSiteUrl}; in-app links resolve to ${publicAppUrl}`);

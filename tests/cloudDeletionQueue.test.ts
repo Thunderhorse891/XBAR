@@ -139,7 +139,7 @@ test('every relational table save states its removal mode, and only Push cloud a
   assert.match(cloud, /options\.replace\s*\?\s*\{ mode: 'absent' \}/, 'absence only when replace was asked for');
   assert.match(
     cloud,
-    /if \(removal\.mode === 'absent'\) \{\s*const \{ data: existingRows/,
+    /if \(removal\.mode === 'absent'\) \{\s*if \(params\.overwriteContext\) await verifyReplacementContext\(params\.overwriteContext\);\s*const \{ data: existingRows/,
     'the cloud ids are read only for a replace',
   );
 

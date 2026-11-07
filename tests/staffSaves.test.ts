@@ -40,7 +40,7 @@ test('a staff member is no longer refused at the door; the database decides per 
   // its policy would refuse it and take every other change down with it.
   assert.match(
     cloud,
-    /if \(memberRole !== 'Admin'\) \{\s*return \{ workspaceId, role: memberRole \};\s*\}\s*const \{ error: profileError \} = await client\.from\('workspace_profiles'\)\.upsert\(/,
+    /if \(memberRole !== 'Admin'\) \{\s*return \{ workspaceId, role: memberRole \};\s*\}[\s\S]*await writeConcurrentRow\(/,
   );
   // Push cloud deletes what this device lacks: Admin only.
   assert.match(cloud, /if \(options\.replace && role !== 'Admin'\) \{\s*throw new WorkspaceSaveAccessError\(/);

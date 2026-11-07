@@ -6,11 +6,25 @@ import ErrorBoundary from './components/ErrorBoundary';
 import { InteractionBootstrap } from './components/InteractionBootstrap';
 import { registerGlobalErrorHandlers } from './lib/globalErrorHandlers';
 import { registerOfflineRuntime } from './lib/offlineRuntime';
-import { appBasePath, browserAuthFailureSearch, hashAuthFailureRoute, usesHashRouting } from './lib/routeCanon';
+import {
+  appBasePath,
+  browserAuthFailureSearch,
+  hashAuthFailureRoute,
+  legacyPublicProfilePath,
+  usesHashRouting,
+} from './lib/routeCanon';
 import './styles/brandTokens.css';
 import './index.css';
 import './styles/motion.css';
 import './mobilePolish.css';
+
+// Older web/mobile clients issued public profile links in the fragment.
+// BrowserRouter cannot read them. Migrate before it mounts, without touching
+// the actual HashRouter used by native builds and GitHub Pages previews.
+if (!usesHashRouting()) {
+  const legacyProfile = legacyPublicProfilePath(window.location.pathname, window.location.search, window.location.hash);
+  if (legacyProfile) window.history.replaceState(null, '', legacyProfile);
+}
 
 // The application router lives under /app (see routeCanon.appBasePath). In
 // production the app shell is only ever served on /app/* (vercel.json), but

@@ -1,5 +1,6 @@
 import { isNativeApp } from './nativePlatform.js';
 import { facebookConfig, isFacebookSharingConfigured } from './platformConfig.js';
+import { appBasePath, publicAppRouteUrl, usesHashRouting } from './routeCanon.js';
 
 type FacebookShareResult = {
   ok: boolean;
@@ -28,18 +29,36 @@ export function buildPublicShareUrl(path: string, shareToken?: string) {
   const tokenSuffix = shareToken
     ? `${normalizedPath.includes('?') ? '&' : '?'}t=${encodeURIComponent(shareToken)}`
     : '';
-  const configuredBase = facebookConfig.publicAppUrl;
+  const route = `${normalizedPath}${tokenSuffix}`;
+  const configuredBase = facebookConfig.publicAppUrl.trim();
 
   if (configuredBase) {
-    return `${ensureTrailingSlash(configuredBase.replace(/#.*$/, ''))}#${normalizedPath}${tokenSuffix}`;
+    const base = configuredBase.replace(/#.*$/, '').replace(/\/+$/, '');
+    // The destination, not the app creating the link, owns its router. Native
+    // runs HashRouter but publishes links to the public BrowserRouter at /app.
+    // Keep Pages and explicitly configured hash previews working as well.
+    const sameHashOrigin =
+      !isNativeApp() && usesHashRouting() && typeof window !== 'undefined' && base === window.location.origin;
+    const pagesDestination = /^https?:\/\/[^/]+\.github\.io(?:\/|$)/i.test(base);
+    if (configuredBase.includes('#') || pagesDestination || sameHashOrigin) {
+      const hashBase = sameHashOrigin ? new URL(readBaseUrl(), `${base}/`).toString() : ensureTrailingSlash(base);
+      return `${hashBase}#${route}`;
+    }
+    // Older mobile smoke/release configurations included /app. Accept that
+    // existing spelling without producing /app/app or changing server config.
+    const origin = base.endsWith(appBasePath) ? base.slice(0, -appBasePath.length) : base;
+    return publicAppRouteUrl(route, origin);
   }
 
   if (typeof window !== 'undefined') {
-    const base = new URL(readBaseUrl(), window.location.origin);
-    return `${base.toString()}#${normalizedPath}${tokenSuffix}`;
+    if (!isNativeApp() && usesHashRouting()) {
+      const base = new URL(readBaseUrl(), window.location.origin);
+      return `${base.toString()}#${route}`;
+    }
+    return publicAppRouteUrl(route, window.location.origin);
   }
 
-  return `#${normalizedPath}${tokenSuffix}`;
+  return publicAppRouteUrl(route, '');
 }
 
 export function buildFacebookShareDialogUrl(path: string, shareToken?: string) {

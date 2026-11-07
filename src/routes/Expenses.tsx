@@ -315,15 +315,15 @@ export default function Expenses() {
                 />
                 <MetricCard
                   label="Break-even"
-                  value={formatCompactCurrency(profitProfile.breakEven)}
+                  value={profitProfile.costsKnown ? formatCompactCurrency(profitProfile.breakEven) : 'Unknown'}
                   detail="Cost basis plus linked spend"
                   tone="amber"
                 />
                 <MetricCard
                   label="Safe sale price"
-                  value={formatCompactCurrency(profitProfile.safeSalePrice)}
+                  value={profitProfile.costsKnown ? formatCompactCurrency(profitProfile.safeSalePrice) : 'Unknown'}
                   detail="Break-even plus a 15% operating buffer"
-                  tone={profitProfile.profitLoss >= 0 ? 'emerald' : 'rose'}
+                  tone={!profitProfile.costsKnown ? 'amber' : profitProfile.profitLoss >= 0 ? 'emerald' : 'rose'}
                 />
               </div>
               <div className="stack-list">
@@ -343,12 +343,22 @@ export default function Expenses() {
                       <div>
                         <div className="stack-item__title">{profile.horseName}</div>
                         <div className="stack-item__copy">
-                          Break-even {formatCurrency(profile.breakEven)} · sale value{' '}
+                          Break-even {profile.costsKnown ? formatCurrency(profile.breakEven) : 'Unknown'} · sale value{' '}
                           {formatCurrency(profile.salePrice)}
                         </div>
                       </div>
-                      <Pill tone={profile.profitLoss >= 0 ? 'emerald' : 'rose'}>
-                        {formatCurrency(profile.profitLoss)}
+                      <Pill
+                        tone={
+                          !profile.costsKnown || profile.salePrice <= 0
+                            ? 'amber'
+                            : profile.profitLoss >= 0
+                              ? 'emerald'
+                              : 'rose'
+                        }
+                      >
+                        {profile.costsKnown && profile.salePrice > 0
+                          ? formatCurrency(profile.profitLoss)
+                          : 'Unknown profit'}
                       </Pill>
                     </div>
                   </button>

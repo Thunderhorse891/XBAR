@@ -109,12 +109,32 @@ function requireValue(value: string, label: string, minLength = 2) {
   return null;
 }
 
-export function defaultOwnershipProofRequirements(): OwnershipProofRequirement[] {
+export function defaultOwnershipProofRequirements(recordId?: string): OwnershipProofRequirement[] {
   return [
-    { id: createId('proof'), kind: 'bill_of_sale', label: 'Bill of Sale', status: 'missing' },
-    { id: createId('proof'), kind: 'registration_certificate', label: 'Registration certificate', status: 'missing' },
-    { id: createId('proof'), kind: 'transfer_form', label: 'Signed transfer form', status: 'missing' },
-    { id: createId('proof'), kind: 'signature_page', label: 'Signature page — all parties', status: 'missing' },
+    {
+      id: recordId ? `derived-proof:${recordId}:bill_of_sale` : createId('proof'),
+      kind: 'bill_of_sale',
+      label: 'Bill of Sale',
+      status: 'missing',
+    },
+    {
+      id: recordId ? `derived-proof:${recordId}:registration_certificate` : createId('proof'),
+      kind: 'registration_certificate',
+      label: 'Registration certificate',
+      status: 'missing',
+    },
+    {
+      id: recordId ? `derived-proof:${recordId}:transfer_form` : createId('proof'),
+      kind: 'transfer_form',
+      label: 'Signed transfer form',
+      status: 'missing',
+    },
+    {
+      id: recordId ? `derived-proof:${recordId}:signature_page` : createId('proof'),
+      kind: 'signature_page',
+      label: 'Signature page — all parties',
+      status: 'missing',
+    },
   ];
 }
 
@@ -153,7 +173,7 @@ export function normalizeOwnershipRecord(
           ? { ...item, status: 'linked' as const }
           : item;
       })
-    : defaultOwnershipProofRequirements();
+    : defaultOwnershipProofRequirements(record.id);
   return {
     ...record,
     proofRequirements,

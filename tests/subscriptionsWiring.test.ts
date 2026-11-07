@@ -37,6 +37,29 @@ function beginCheckoutBody(): string {
   return source.slice(start, end);
 }
 
+test('managed checkout failure is retained in an accessible inline notice, not only a transient toast', () => {
+  const body = beginCheckoutBody();
+  assert.ok(body.includes('setCheckoutError({'), 'a managed refusal must retain its message in component state');
+  assert.match(
+    source,
+    /role="alert"[\s\S]*?<strong>Checkout needs attention<\/strong>[\s\S]*?\{checkoutError\.message\}/,
+  );
+  assert.ok(
+    source.includes('checkoutErrorIsCurrent && checkoutError'),
+    'the notice must belong to the current billing context',
+  );
+  const clearError = body.indexOf('clearCheckoutError();');
+  assert.ok(
+    clearError >= 0 && clearError < body.indexOf('startManagedCheckout({'),
+    'a fresh attempt must clear the preceding error before calling checkout',
+  );
+  assert.ok(
+    body.includes('checkoutErrorAttempt.current === errorAttempt'),
+    'an invalidated or superseded attempt must not publish a late inline error',
+  );
+  assert.ok(body.includes('message: managed.message,'), 'server/helper diagnostics must reach the user unchanged');
+});
+
 test('startManagedCheckout receives the live tier, workspace, token, and billing period', () => {
   const body = beginCheckoutBody();
   const call = body.indexOf('startManagedCheckout({');

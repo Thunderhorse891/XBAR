@@ -24,6 +24,7 @@ import type {
   SubscriptionTier,
   TimelineEvent,
   UserRole,
+  WorkspaceAccessRole,
   WorkspaceInvitationRecord,
   WorkspaceMemberRecord,
   WorkspaceProfile,
@@ -77,7 +78,7 @@ export type DocumentIntakeProgress = {
 };
 
 export type XbarStore = {
-  currentRole: UserRole;
+  currentRole: WorkspaceAccessRole;
   horses: HorseRecord[];
   documents: DocumentRecord[];
   intakeBatches: IntakeBatch[];
@@ -98,7 +99,7 @@ export type XbarStore = {
   workspaceMembers: WorkspaceMemberRecord[];
   workspaceInvitations: WorkspaceInvitationRecord[];
   workspaceProfile: WorkspaceProfile;
-  setCurrentRole: (role: UserRole) => void;
+  setCurrentRole: (role: WorkspaceAccessRole) => void;
   /** Reset every workspace data slice back to the empty initial state (used on
    *  account deletion so no data lingers in memory or gets re-persisted). */
   resetWorkspace: () => void;
@@ -136,6 +137,11 @@ export type XbarStore = {
   createHorseFromDocument: (documentId: string) => ActionResult;
   discardDocument: (documentId: string) => ActionResult;
   uploadHorseMedia: (input: MediaUploadInput) => Promise<ActionResult>;
+  changeHorsePhoto: (
+    horseId: string,
+    assetId: string,
+    action: import('../lib/horsePhotoGallery').HorsePhotoAction,
+  ) => ActionResult;
   addExpenseReceipt: (input: ExpenseReceiptInput) => Promise<ActionResult>;
   createSalesLead: (input: LeadInput) => ActionResult;
   updateSalesLead: (
@@ -165,7 +171,11 @@ export type XbarStore = {
   addHorseNote: (horseId: string, note: Pick<HorseNote, 'title' | 'body' | 'author' | 'tone'>) => ActionResult;
   addMedicalEvent: (
     horseId: string,
-    event: Pick<HorseNote, 'title' | 'body' | 'author'> & { date: string; type: MedicalEventType },
+    event: Pick<HorseNote, 'title' | 'body' | 'author'> & {
+      date: string;
+      type: MedicalEventType;
+      completionState?: 'planned' | 'completed';
+    },
   ) => ActionResult;
   addBreedingEvent: (
     horseId: string,
@@ -188,7 +198,7 @@ export type XbarStore = {
   updateMedicalEvent: (
     horseId: string,
     eventId: string,
-    patch: Partial<Pick<TimelineEvent, 'title' | 'summary' | 'date' | 'status'>>,
+    patch: Partial<Pick<TimelineEvent, 'title' | 'summary' | 'date' | 'status' | 'completionState'>>,
   ) => ActionResult;
   deleteMedicalEvent: (horseId: string, eventId: string) => ActionResult;
   updateOwnershipRecord: (

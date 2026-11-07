@@ -474,7 +474,7 @@ export async function exportLocalFiles(
  */
 export async function importLocalFiles(
   files: PortableLocalFile[],
-  context: { workspaceId: string },
+  context: { workspaceId: string; freshKeys?: boolean },
 ): Promise<{ restored: number; failed: UnbackedUpFile[]; remapped: Record<string, string> }> {
   /*
    * Keys are preserved only when they are free, or already ours.
@@ -578,9 +578,8 @@ export async function importLocalFiles(
     try {
       const existing = await readLocalFile(file.key);
       let key = file.key;
-      if (existing && existing.workspaceId !== context.workspaceId) {
+      if (context.freshKeys || (existing && existing.workspaceId !== context.workspaceId)) {
         key = createVaultKey();
-        remapped[file.key] = key;
       }
 
       const bytes = base64ToBytes(file.data);
@@ -612,7 +611,11 @@ export async function importLocalFiles(
         generated: false,
         blob: new Blob([bytes], { type: asText(file.type, 'application/octet-stream') }),
       };
-      await withStore('readwrite', (store) => store.put(entry));
+      // A staged restore must never overwrite a file still referenced by the
+      // original records, even if the caller loses its scope before commit.
+      await withStore('readwrite', (store) => (context.freshKeys ? store.add(entry) : store.put(entry)));
+      // Only committed bytes may become a restored record's new target.
+      if (key !== file.key) remapped[file.key] = key;
       // Marked only after the write landed, so a failed entry does not make a
       // later identical repeat look like a duplicate of something restored.
       takenKeys.add(file.key);
@@ -1009,31 +1012,18 @@ async function sweepOwnedVaultEntries(referencedKeys: Iterable<string>, workspac
     const stored = await listLocalFiles();
     const referenced = new Set(referencedKeys);
 
-    /*
-     * Only files this workspace owns are candidates.
-     *
-     * The vault is origin-wide and a workspace is not, so "in the vault but not
-     * referenced here" never meant "orphaned" — for a browser holding two
-     * accounts it meant "belongs to the other one". Sweeping on that reading
-     * deleted workspace A's device-only files the first time workspace B
-     * hydrated, permanently, and left A's records pointing at nothing.
-     */
-    const mine = stored.filter((entry) => entry.workspaceId === workspaceId);
-    const orphans = orphanedVaultKeys(
-      mine.map((entry) => entry.key),
-      referenced,
-    );
-    for (const key of orphans) {
-      await deleteLocalFile(key);
-    }
+    // A workspace match and a free write lock do not prove that this tab's
+    // references include records already committed by another tab. Startup
+    // reconciliation therefore never deletes apparently unreferenced files.
+    // Explicit deletion and cleanup of an import's own staged keys are separate.
 
     /*
      * Adopt untagged files this workspace demonstrably uses.
      *
      * Entries written before ownership was recorded cannot be swept — unowned
      * is indistinguishable from someone else's. But one that THIS workspace
-     * references is proven to be ours, so claiming it means it can be cleaned up
-     * later instead of lingering forever.
+     * references can retain its existing ownership adoption behavior. No
+     * unreferenced entry is adopted or deleted.
      */
     for (const entry of stored) {
       if (entry.workspaceId !== undefined || !referenced.has(entry.key)) continue;
@@ -1041,12 +1031,13 @@ async function sweepOwnedVaultEntries(referencedKeys: Iterable<string>, workspac
       if (full) await withStore('readwrite', (store) => store.put({ ...full, workspaceId }));
     }
 
-    return orphans.length;
+    return 0;
   } catch {
     return 0;
   }
 }
 
+/** Reconcile legacy ownership; the return value remains the number deleted (always zero). */
 export async function sweepLocalFileVault(referencedKeys: Iterable<string>, workspaceId: string): Promise<number> {
   if (!isLocalFileVaultAvailable()) return 0;
 
@@ -1058,20 +1049,16 @@ export async function sweepLocalFileVault(referencedKeys: Iterable<string>, work
   if (isVaultWriteInFlight()) return 0;
 
   const locks = vaultLockManager();
-  // No Web Locks API: the counter above is the whole guard, which is the
-  // single-tab behaviour this had before locks and is better than never
-  // sweeping at all on those browsers.
+  // Without Web Locks, preserve files just as we do with locks.
   if (!locks) return sweepOwnedVaultEntries(referencedKeys, workspaceId);
 
   /*
    * The lock is HELD for the whole sweep, not probed and released.
    *
-   * Asking "is anyone writing?" and then listing and deleting is not a guard:
-   * a tab that starts a guarded write immediately after the probe commits its
-   * blob before its record exists, and this sweep — already past the check —
-   * deletes it. The only version of this that means anything keeps the
-   * exclusive lock across the listing and every delete, so a writer anywhere
-   * cannot begin until the sweep is done.
+   * Retain the existing exclusive lock across legacy ownership adoption so it
+   * cannot interleave with a guarded import or writer. The lock says nothing
+   * about whether a tab's record snapshot is complete, so it never authorizes
+   * deleting an entry missing from that snapshot.
    *
    * `ifAvailable` still applies: the sweep declines rather than queues, because
    * blocking behind a long document batch to do housekeeping would be worse

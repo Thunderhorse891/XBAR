@@ -1,4 +1,4 @@
-import { serverManagedBillingEnabled } from '../_lib/managed-billing.js';
+import { serverManagedBillingEnabled, serverStripeModeReady, stripeAccountIdReady } from '../_lib/managed-billing.js';
 import Stripe from 'stripe';
 import { readJsonBody, sendJson } from '../_lib/http.js';
 import { buildSubscriptionProfile, getStripePriceIdByTier, sellablePrices } from '../_lib/subscription-plans.js';
@@ -26,6 +26,10 @@ const RATE_LIMIT = { bucket: 'checkout', limit: 10, windowSeconds: 60 };
 const stripeSecretKey = process.env.STRIPE_SECRET_KEY?.trim() || '';
 const stripe = stripeSecretKey ? new Stripe(stripeSecretKey, { apiVersion: '2026-02-25.clover' }) : null;
 const managedBillingEnabled = serverManagedBillingEnabled();
+// Pin validation to the same import-time environment as the Stripe client.
+const stripeModeReady = serverStripeModeReady();
+const expectedAccountId = process.env.STRIPE_ACCOUNT_ID?.trim() || '';
+const expectedLivemode = process.env.VERCEL_ENV === 'production' || /^(sk|rk)_live_/.test(stripeSecretKey);
 
 function getTrustedReturnUrl(requestedReturnUrl) {
   const vercelOrigin = process.env.VERCEL_URL ? `https://${process.env.VERCEL_URL}` : '';
@@ -76,7 +80,7 @@ export default async function handler(req, res) {
     res.setHeader('Cache-Control', 'no-store, max-age=0');
     return sendJson(res, 200, {
       ok: true,
-      managed: managedBillingEnabled && Boolean(stripe),
+      managed: managedBillingEnabled && Boolean(stripe) && stripeModeReady && stripeAccountIdReady(expectedAccountId),
       sellable: sellablePrices(),
     });
   }
@@ -103,6 +107,14 @@ export default async function handler(req, res) {
 
   if (!stripe) {
     return sendJson(res, 503, { ok: false, message: 'Stripe server billing is not configured.' });
+  }
+
+  if (!stripeModeReady) {
+    return sendJson(res, 503, {
+      ok: false,
+      code: 'price_unavailable',
+      message: 'Production checkout is unavailable while live billing is configured. No payment session was created.',
+    });
   }
 
   const parsed = parseBody(checkoutSchema, body);
@@ -230,7 +242,7 @@ export default async function handler(req, res) {
     // A configured ID proves nothing about what Stripe will actually charge.
     // Revalidate before both new sessions and reuse, and before any Stripe write.
     // Prices are immutable: a successful check pins the amount/cadence of this ID.
-    if (!(await verifyCheckoutPrice(stripe, { tier, billingPeriod, priceId }))) {
+    if (!(await verifyCheckoutPrice(stripe, { tier, billingPeriod, priceId, expectedAccountId, expectedLivemode }))) {
       return sendJson(res, 503, {
         ok: false,
         code: 'price_unavailable',

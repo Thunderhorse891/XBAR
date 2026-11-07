@@ -47,6 +47,8 @@ function publicPhotoUrl(horse: Pick<HorseRecord, 'profileImage' | 'gallery'>): s
   const approvedPhotos = (horse.gallery ?? []).filter(
     (asset) => asset.status === 'Approved' && isHorsePhotoAsset(asset),
   );
+  const primary = approvedPhotos.find((asset) => asset.isPrimary === true);
+  if (primary) return str(primary.url);
   const profile = str(horse.profileImage);
   if (profile && approvedPhotos.some((asset) => str(asset.url) === profile)) {
     return profile;

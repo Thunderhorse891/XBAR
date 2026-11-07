@@ -1,3 +1,4 @@
+import { canonicalRoutes } from './routeCanon.js';
 // Universal command-palette index and search.
 //
 // The palette (⌘K / Ctrl+K) is XBAR's fast path to everything a rancher has in
@@ -84,14 +85,14 @@ export const ROUTE_COMMANDS: readonly CommandEntry[] = (
     ['documents', 'Documents', 'Source records and review', '/documents'],
     ['expiring', 'Expiring soon', 'Coggins, health certificates, insurance and contracts', '/expiring'],
     ['ownership', 'Ownership', 'Transfers and documents', '/ownership'],
-    ['medical', 'Health', 'Care records and due work', '/medical'],
-    ['breeding', 'Breeding pipeline', 'Pairings and milestones', '/breeding'],
+    ['medical', 'Health', 'Care overview and records', canonicalRoutes.health],
+    ['breeding', 'Breeding pipeline', 'Breeding overview and records', canonicalRoutes.breeding],
     ['sales', 'Sales', 'Buyer pipeline and listings', '/sales'],
     ['financials', 'Money', 'Profit per animal and ranch P&L', '/financials'],
     ['costs', 'Costs', 'Cost per horse per day and supplier prices', '/costs'],
     ['expenses', 'Expenses', 'Receipts and cost tracking', '/expenses'],
     ['reminders', 'Tasks and reminders', 'Daily work queue', '/reminders'],
-    ['assets', 'Property and equipment', 'Ranch assets and supplies', '/assets'],
+    ['assets', 'Equipment', 'Equipment overview and asset records', canonicalRoutes.equipment],
   ] as const
 ).map(([id, label, detail, path]) => ({ id, label, detail, path, group: 'Navigate' as const, keywords: '' }));
 

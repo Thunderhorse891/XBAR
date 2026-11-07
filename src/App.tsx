@@ -31,7 +31,6 @@ import './routes/interactionSystem.css';
 import './routes/xbarCommandSystem.css';
 import './routes/metalBrandSystem.css';
 import './routes/commandCenterLocal.css';
-import './routes/premiumOperatingSystem.css';
 import './routes/premiumSaasExperience.css';
 import './styles/xbarSaas.css';
 import './styles/signatureWorkspace.css';
@@ -61,6 +60,7 @@ const ExpiringSoon = lazy(() => import('./routes/ExpiringSoon'));
 const Expenses = lazy(() => import('./routes/Expenses'));
 const Horses = lazy(() => import('./routes/Horses'));
 const Login = lazy(() => import('./routes/Login'));
+const OwnerDashboard = lazy(() => import('./routes/OwnerDashboard'));
 const MainLayout = lazy(() => import('./routes/layouts/MainLayout'));
 const Medical = lazy(() => import('./routes/Medical'));
 const NotFound = lazy(() => import('./routes/NotFound'));
@@ -101,6 +101,7 @@ const ROUTE_LABELS: Record<string, string> = {
   '/expenses': 'Expenses',
   '/horses': 'Horses',
   '/login': 'Login',
+  '/owner': 'Owner dashboard',
   '/medical': 'Health Records',
   '/ownership': 'Ownership Records',
   '/reminders': 'Reminders',
@@ -153,7 +154,7 @@ function RouteTelemetry() {
       workspaceId: workspaceId || undefined,
       eventName: 'navigation.page_view',
       severity: 'info',
-      payload: { pathname: location.pathname, search: location.search },
+      payload: { pathname: location.pathname },
     });
   }, [location.pathname, location.search, workspaceId]);
 
@@ -279,6 +280,7 @@ export default function App() {
             <Route path="/verify" element={<VerifyPacket />} />
             <Route path="/verify/:packetId" element={<VerifyPacket />} />
             <Route path="/login" element={<Login />} />
+            <Route path="/owner" element={<OwnerDashboard />} />
             <Route path={passwordResetPath} element={<ResetPassword />} />
             <Route path="/subscribe" element={<Navigate to={billingPath} replace />} />
             <Route
