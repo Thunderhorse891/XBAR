@@ -270,6 +270,41 @@ test('date helpers normalize formats and add a year', () => {
   assert.equal(addOneYear('not a date'), '');
 });
 
+test('OCR date normalization rejects impossible dates and does not guess missing components', () => {
+  for (const input of [
+    '2024-02-31',
+    '02/29/2023',
+    'February 31, 2024',
+    '2026-13-01',
+    '2026-00-01',
+    '2026-01-00',
+    'March 2026',
+    '03/15/026',
+    '2026-01-015',
+    'M 1, 2026',
+  ]) {
+    assert.equal(normalizeDate(input), '', input);
+  }
+  assert.equal(normalizeDate('02/29/2024'), '2024-02-29');
+  assert.equal(normalizeDate('15 March 2019'), '2019-03-15');
+  assert.equal(addOneYear('2024-02-29'), '2025-02-28');
+  assert.equal(addOneYear('2023-02-29'), '');
+  assert.equal(addOneYear('2026-01-31'), '2027-01-31');
+});
+
+test('OCR date fields refuse contradictory or invalid labeled evidence', () => {
+  assert.equal(extractCogginsFields('Test Date: 2026-02-30').testDate, undefined);
+  assert.equal(extractCogginsFields('Test Date: 2026-10-01\nTest Date: 2026-10-02').testDate, undefined);
+  assert.equal(extractCogginsFields('Test Date: 2026-10-01\nTest Date: 2026-02-30').testDate, undefined);
+  assert.equal(extractCogginsFields('Test Date: 2026-10-015').testDate, undefined);
+  assert.equal(extractRegistrationFields('Foaled: 2024-02-31').birthdate, undefined);
+  assert.equal(extractRegistrationFields('Foaled: 2024-02-29').birthdate?.value, '2024-02-29');
+  assert.equal(
+    extractRegistrationFields('Horse Name: SPIRIT\nSire: OLDER HORSE\nFoaled: 2001-01-01').birthdate,
+    undefined,
+  );
+});
+
 test('template catalog matches the tier matrix and renders placeholders', () => {
   // The server catalog is the canonical runtime implementation. Retiring the
   // unused client HTML catalog must preserve every exposed template choice.

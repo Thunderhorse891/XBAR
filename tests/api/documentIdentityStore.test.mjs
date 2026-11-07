@@ -103,6 +103,31 @@ test('creating and approving a profile never backfills source facts from workspa
   assert.deepEqual(JSON.parse(JSON.stringify(useXbarStore.getState().documents[0].entities)), sourceFacts);
 });
 
+test('intake, review and serialized reload retain printed dates without inventing a birthdate', async () => {
+  const result = await intake([
+    new File(['Coggins\nHorse: DATE EVIDENCE\nTest Date: 10/01/2026\nIssued: 2026-10-03'], 'coggins-2020-01-01.txt', {
+      type: 'text/plain',
+    }),
+  ]);
+  assert.equal(result.ok, true);
+  const { documents, horses } = useXbarStore.getState();
+  assert.equal(horses.length, 1);
+  assert.equal(documents[0].entities.examDate, '2026-10-01');
+  assert.equal(documents[0].entities.foaledOn, undefined);
+  assert.equal(horses[0].foaledOn, '');
+  assert.equal(useXbarStore.getState().reviewDocument(documents[0].id, horses[0].id).ok, true);
+  const persisted = JSON.parse(
+    JSON.stringify({
+      documents: useXbarStore.getState().documents,
+      horses: useXbarStore.getState().horses,
+    }),
+  );
+  useXbarStore.setState({ documents: [], horses: [] });
+  useXbarStore.setState(persisted);
+  assert.equal(useXbarStore.getState().documents[0].entities.examDate, '2026-10-01');
+  assert.equal(useXbarStore.getState().horses[0].foaledOn, '');
+});
+
 test('file-vault failure is disclosed and does not wedge a repeated intake', async () => {
   for (let index = 0; index < 2; index += 1) {
     const result = await intake([paper(`SYNTHETIC ${index}`, `123456${index}`)], false);
@@ -112,6 +137,31 @@ test('file-vault failure is disclosed and does not wedge a repeated intake', asy
   }
   assert.equal(useXbarStore.getState().documents.length, 2);
   assert.ok(useXbarStore.getState().documents.every((document) => !document.localFileKey && !document.storagePath));
+});
+
+test('parent registration uncertainty cannot enter the saved pedigree through intake and review', async () => {
+  await intake([
+    new File(
+      [
+        'CERTIFICATE OF REGISTRATION\nRegistered Name: SPIRIT\nRegistration Number: 1234567\nDam: PRETTY MARE\nRegistration Number: 7778889',
+      ],
+      'registration.txt',
+      { type: 'text/plain' },
+    ),
+  ]);
+  const { documents, horses } = useXbarStore.getState();
+  assert.equal(horses.length, 1);
+  assert.equal(horses[0].registrationNumber, '1234567');
+  assert.equal(horses[0].bloodline.dam, 'PRETTY MARE');
+  assert.equal(documents[0].entities.damRegistration, undefined);
+  assert.equal(useXbarStore.getState().reviewDocument(documents[0].id, horses[0].id).ok, true);
+  const saved = JSON.parse(
+    JSON.stringify({ documents: useXbarStore.getState().documents, horses: useXbarStore.getState().horses }),
+  );
+  useXbarStore.setState({ documents: [], horses: [] });
+  useXbarStore.setState(saved);
+  assert.equal(useXbarStore.getState().horses[0].bloodline.dam, 'PRETTY MARE');
+  assert.equal(useXbarStore.getState().documents[0].entities.damRegistration, undefined);
 });
 
 test('one paper with conflicting subject labels cannot auto-link, create or approve', async () => {
