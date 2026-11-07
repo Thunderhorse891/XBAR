@@ -1,4 +1,4 @@
-import { randomUUID } from 'node:crypto';
+import { createHash, randomUUID } from 'node:crypto';
 import { readJsonBody, sendJson } from './http.js';
 import { requireWorkspaceAccess } from './supabase-admin.js';
 import { requireRoleCapability } from './permissions.js';
@@ -22,6 +22,90 @@ const MAX_FILES_PER_BATCH = 25;
 const MAX_OCR_TEXT_CHARS = 20000;
 
 const RATE_LIMIT = { bucket: 'documents-upload', limit: 10, windowSeconds: 60 };
+
+class PersistenceError extends Error {
+  constructor(phase, cause) {
+    super('OCR changes could not be fully confirmed. Review saved records before retrying.');
+    this.phase = phase;
+    this.databaseCode = cause?.code;
+  }
+}
+
+async function readRows(query, phase) {
+  try {
+    const result = await query;
+    if (!result || result.error || !Object.hasOwn(result, 'data') || result.data === undefined)
+      throw new PersistenceError(phase, result?.error);
+    return result.data;
+  } catch (error) {
+    if (error instanceof PersistenceError) throw error;
+    throw new PersistenceError(phase);
+  }
+}
+
+// A successful transport is insufficient: require every intended identity and
+// changed field in RETURNING. Do not retry writes whose acknowledgment was lost.
+async function saveRows(query, { context, phase, key, ids, fields = {} }) {
+  context.writeAttempted = true;
+  const data = await readRows(query.select([...new Set([key, ...Object.keys(fields)])].join(',')), phase);
+  if (
+    !Array.isArray(data) ||
+    data.length !== ids.length ||
+    new Set(data.map((row) => row[key])).size !== ids.length ||
+    !data.every(
+      (row) =>
+        ids.includes(row[key]) &&
+        Object.entries(fields).every(
+          ([k, v]) =>
+            row[k] === v ||
+            (k === 'updated_at' &&
+              typeof row[k] === 'string' &&
+              Number.isFinite(Date.parse(v)) &&
+              Date.parse(row[k]) === Date.parse(v)),
+        ),
+    )
+  )
+    throw new PersistenceError(phase);
+  context.confirmedSteps.push(phase);
+  return data;
+}
+
+function failureResult(error, context, details = {}) {
+  return {
+    ...details,
+    ok: false,
+    retryable: false,
+    phase: error instanceof PersistenceError ? error.phase : 'processing',
+    needsRecovery: context.writeAttempted,
+    confirmedSteps: [...context.confirmedSteps],
+    message:
+      error instanceof PersistenceError
+        ? error.message
+        : 'OCR processing could not be completed. Review the saved records before retrying.',
+  };
+}
+
+function sourceKey(workspaceId, documentIds) {
+  return createHash('sha256')
+    .update(JSON.stringify([workspaceId, [...documentIds].sort()]))
+    .digest('hex');
+}
+
+async function loadDocuments(supabase, workspaceId, documentIds) {
+  const rows = await readRows(
+    supabase.from('documents').select('*').eq('workspace_id', workspaceId).in('document_id', documentIds),
+    'document-read',
+  );
+  if (
+    !Array.isArray(rows) ||
+    rows.length !== documentIds.length ||
+    new Set(rows.map((row) => row.document_id)).size !== documentIds.length ||
+    rows.some((row) => row.workspace_id !== workspaceId || !documentIds.includes(row.document_id))
+  ) {
+    throw new PersistenceError('document-read');
+  }
+  return rows.sort((a, b) => a.document_id.localeCompare(b.document_id));
+}
 
 // Byte size of a file's decoded content (Buffer / Uint8Array); 0 when absent so
 // storage accounting degrades safely rather than throwing.
@@ -93,8 +177,12 @@ export default async function handler(req, res) {
 
     const result = await processBatch({ supabase, workspaceId, user, body, mode });
     return sendJson(res, result.ok ? 200 : result.status || 400, result);
-  } catch (error) {
-    return sendJson(res, 500, { ok: false, message: `Document ingestion failed: ${error.message}` });
+  } catch {
+    return sendJson(res, 500, {
+      ok: false,
+      retryable: false,
+      message: 'Document ingestion could not be completed. Review saved records before retrying.',
+    });
   }
 }
 
@@ -206,206 +294,321 @@ async function processBatch({ supabase, workspaceId, user, body, mode }) {
   let horseSlotsLeft = Math.max(0, entitlements.limits.horseLimit - (horseCapacity.used ?? 0));
 
   const batchId = `batch-${randomUUID()}`;
-  const batchLabel =
-    typeof body.batchLabel === 'string' && body.batchLabel
-      ? body.batchLabel
-      : `OCR intake ${new Date().toISOString().slice(0, 10)}`;
-  await supabase.from('intake_batches').upsert({
-    workspace_id: workspaceId,
-    intake_batch_id: batchId,
-    label: batchLabel,
-    source: 'bulk-upload-with-ocr',
-    state: 'processing',
-    received_at: new Date().toISOString(),
-    payload: { fileCount: expanded.length, mode, uploadedBy: user.id },
-  });
-
+  const context = { writeAttempted: false, confirmedSteps: [], horseId: '' };
   const documents = [];
   const extractions = [];
-
-  for (const file of expanded) {
-    const documentId = `doc-${randomUUID()}`;
-    let storagePath = file.storagePath;
-    // Only objects this loop uploads are ours to delete on failure; a
-    // client-provided storagePath belongs to a prior upload and must be left be.
-    let createdObjectPath = '';
-
-    if (!storagePath && file.content) {
-      try {
-        storagePath = documentObjectPath({ workspaceId, documentId, fileName: file.fileName });
-      } catch (error) {
-        // Same shape as a failed upload: skip this file and say why, rather
-        // than throwing out of a loop that has already stored earlier files.
-        skipped.push({ fileName: file.fileName, reason: error.message });
-        continue;
-      }
-      const { error: uploadError } = await supabase.storage
-        .from(DOCUMENT_BUCKET)
-        .upload(storagePath, file.content, { contentType: file.mimeType, upsert: true });
-      if (uploadError) {
-        skipped.push({ fileName: file.fileName, reason: `upload failed: ${uploadError.message}` });
-        continue;
-      }
-      createdObjectPath = storagePath;
-    }
-
-    const ocr = await runOcr({
-      buffer: file.content,
-      mimeType: file.mimeType,
-      providedText: file.providedText,
-      providedConfidence: file.providedConfidence,
-    });
-
-    const extraction = extractDocument({ text: ocr.text, ocrConfidence: ocr.confidence });
-    const needsReview = extraction.needsReview || !ocr.ok;
-
-    const documentRow = {
-      workspace_id: workspaceId,
-      document_id: documentId,
-      horse_id: '',
-      title: file.fileName,
-      document_type: extraction.documentTypeLabel,
-      source: 'Bulk Intake',
-      state: needsReview ? 'Needs Review' : 'Queued',
-      confidence: extraction.overallConfidence,
-      duplicate_risk: '',
-      original_filename: file.fileName,
-      storage_path: storagePath || '',
-      mime_type: file.mimeType,
-      size_bytes: fileByteSize(file),
-      ocr_text: ocr.text.slice(0, MAX_OCR_TEXT_CHARS),
-      ocr_confidence_map: extraction.confidenceMap,
-      extracted_data: extraction.extractedData,
-      needs_review: needsReview,
-      review_notes: needsReview ? buildReviewNotes(extraction, ocr) : '',
-      intake_batch_id: batchId,
-      uploaded_by_user_id: user.id,
-      payload: {
-        ocrProvider: ocr.provider,
-        pipelineType: extraction.documentType,
-        lowConfidenceFields: extraction.lowConfidenceFields,
-        multiHorse: extraction.multiHorse,
-      },
-    };
-
-    const { error: insertError } = await supabase.from('documents').upsert(documentRow);
-    if (insertError) {
-      // The row was rejected after the object was written (e.g. the storage
-      // trigger firing on a concurrent batch that passed the preflight). Remove
-      // the object this loop just created so its bytes don't linger untracked
-      // and let repeated races grow physical storage past the enforced cap.
-      if (createdObjectPath) {
-        await supabase.storage.from(DOCUMENT_BUCKET).remove([createdObjectPath]);
-      }
-      skipped.push({ fileName: file.fileName, reason: `database insert failed: ${insertError.message}` });
-      continue;
-    }
-
-    await supabase.from('document_processing_jobs').upsert({
-      workspace_id: workspaceId,
-      job_id: `job-${randomUUID()}`,
-      document_id: documentId,
-      horse_id: '',
-      provider: ocr.provider,
-      status: needsReview ? 'needs_review' : 'completed',
-      extracted_text: ocr.text.slice(0, MAX_OCR_TEXT_CHARS),
-      entities: extraction.extractedData,
-      processing_error: ocr.error || '',
-      payload: { batchId, confidence: extraction.overallConfidence },
-    });
-
-    documents.push(summarizeDocument(documentRow));
-    extractions.push({ ...extraction, ref: documentId });
-  }
-
-  // Group documents into horse candidates and match against existing horses
-  // by registration number, microchip, then exact name.
-  const candidates = groupExtractionsIntoCandidates(extractions);
   const proposals = [];
+  const recovery = {
+    files: expanded.map((file) => {
+      const documentId = `doc-${randomUUID()}`;
+      return {
+        documentId,
+        fileName: file.fileName,
+        storagePath:
+          file.storagePath ||
+          (file.content ? documentObjectPath({ workspaceId, documentId, fileName: file.fileName }) : ''),
+        uploaded: false,
+        documentSaved: false,
+        jobSaved: false,
+      };
+    }),
+  };
+  try {
+    const batchLabel =
+      typeof body.batchLabel === 'string' && body.batchLabel
+        ? body.batchLabel
+        : `OCR intake ${new Date().toISOString().slice(0, 10)}`;
+    await saveRows(
+      supabase.from('intake_batches').insert({
+        workspace_id: workspaceId,
+        intake_batch_id: batchId,
+        label: batchLabel,
+        source: 'bulk-upload-with-ocr',
+        state: 'processing',
+        received_at: new Date().toISOString(),
+        // Persist the inventory before uploading any original. Even a lost response
+        // leaves an account-scoped path back to a partially stored file.
+        payload: { fileCount: expanded.length, mode, uploadedBy: user.id, files: recovery.files },
+      }),
+      {
+        context,
+        phase: 'batch-start',
+        key: 'intake_batch_id',
+        ids: [batchId],
+        fields: { workspace_id: workspaceId, state: 'processing' },
+      },
+    );
 
-  for (const candidate of candidates) {
-    const match = await findExistingHorse(supabase, workspaceId, candidate.fields);
-    const proposal = {
-      candidateKey: `cand-${proposals.length + 1}`,
-      documentIds: candidate.documentRefs,
-      documentTypes: candidate.documentTypes,
-      fields: candidate.fields,
-      confidenceMap: candidate.confidenceMap,
-      confidence: candidate.confidence,
-      ambiguous: candidate.ambiguous,
-      matchedHorseId: match?.horse_id || '',
-      matchedHorseName: match?.name || '',
-      matchedBy: match?.matchedBy || '',
-      action: 'review',
-      horseId: '',
-      needsReview: true,
-    };
+    for (const [index, file] of expanded.entries()) {
+      const receipt = recovery.files[index];
+      const documentId = receipt.documentId;
+      const storagePath = receipt.storagePath;
 
-    const confident = candidate.confidence >= NEEDS_REVIEW_THRESHOLD && !candidate.ambiguous;
-    if (mode === 'auto') {
-      if (match) {
-        // Identity matches (registration #/microchip) are safe to attach even
-        // below the auto-create bar; the document keeps its review flag.
-        await attachDocumentsToHorse({ supabase, workspaceId, user, horse: match, candidate, markReviewed: confident });
-        proposal.action = 'attached';
-        proposal.horseId = match.horse_id;
-        proposal.needsReview = !confident;
-      } else if (confident && (candidate.fields.name || candidate.fields.registrationNumber)) {
-        if (horseSlotsLeft < 1) {
-          // Over the paid tier: a confident candidate's documents were inserted
-          // as 'Queued' (needs_review false). Flip them to the review state so
-          // they land in the manual-resolution queue instead of being stranded.
-          const limitNote = `Plan's ${entitlements.limits.horseLimit} horse limit reached — horse not auto-created. Upgrade to continue.`;
-          await markDocumentsForReview({ supabase, workspaceId, documentIds: candidate.documentRefs, note: limitNote });
-          proposal.action = 'review';
-          proposal.needsReview = true;
-          proposal.note = limitNote;
-        } else {
-          horseSlotsLeft -= 1;
-          const horseId = await createHorseFromCandidate({ supabase, workspaceId, user, candidate });
-          proposal.action = 'created';
-          proposal.horseId = horseId;
-          proposal.needsReview = false;
+      if (!file.storagePath && file.content) {
+        const { data: uploaded, error: uploadError } = await supabase.storage
+          .from(DOCUMENT_BUCKET)
+          .upload(storagePath, file.content, { contentType: file.mimeType, upsert: true });
+        if (uploadError || uploaded?.path !== storagePath) throw new PersistenceError('original-upload');
+        receipt.uploaded = true;
+      }
+
+      const ocr = await runOcr({
+        buffer: file.content,
+        mimeType: file.mimeType,
+        providedText: file.providedText,
+        providedConfidence: file.providedConfidence,
+      });
+
+      const extraction = extractDocument({ text: ocr.text, ocrConfidence: ocr.confidence });
+      const needsReview = extraction.needsReview || !ocr.ok;
+
+      const documentRow = {
+        workspace_id: workspaceId,
+        document_id: documentId,
+        horse_id: '',
+        title: file.fileName,
+        document_type: extraction.documentTypeLabel,
+        source: 'Bulk Intake',
+        state: needsReview ? 'Needs Review' : 'Queued',
+        confidence: extraction.overallConfidence,
+        duplicate_risk: '',
+        original_filename: file.fileName,
+        storage_path: storagePath || '',
+        mime_type: file.mimeType,
+        size_bytes: fileByteSize(file),
+        ocr_text: ocr.text.slice(0, MAX_OCR_TEXT_CHARS),
+        ocr_confidence_map: extraction.confidenceMap,
+        extracted_data: extraction.extractedData,
+        needs_review: needsReview,
+        review_notes: needsReview ? buildReviewNotes(extraction, ocr) : '',
+        intake_batch_id: batchId,
+        uploaded_by_user_id: user.id,
+        payload: {
+          ocrProvider: ocr.provider,
+          pipelineType: extraction.documentType,
+          lowConfidenceFields: extraction.lowConfidenceFields,
+          multiHorse: extraction.multiHorse,
+        },
+      };
+
+      try {
+        await saveRows(supabase.from('documents').insert(documentRow), {
+          context,
+          phase: 'document-save',
+          key: 'document_id',
+          ids: [documentId],
+          fields: { workspace_id: workspaceId, storage_path: documentRow.storage_path },
+        });
+      } catch (error) {
+        // Only a definitive SQL rejection plus a confirmed absent row permits
+        // cleanup. Timeouts/lost acknowledgments may already reference these
+        // bytes: preserve them and the batch inventory for recovery.
+        if (receipt.uploaded && /^(?:23\w{3}|42\w{3}|P0001)$/.test(error.databaseCode || '')) {
+          try {
+            const stored = await readRows(
+              supabase
+                .from('documents')
+                .select('document_id')
+                .eq('workspace_id', workspaceId)
+                .eq('document_id', documentId)
+                .maybeSingle(),
+              'document-cleanup-read',
+            );
+            if (!stored) {
+              const { data: removed, error: removeError } = await supabase.storage
+                .from(DOCUMENT_BUCKET)
+                .remove([storagePath]);
+              receipt.originalRemoved =
+                !removeError && Array.isArray(removed) && removed.some((item) => item.name === storagePath);
+              if (receipt.originalRemoved) receipt.uploaded = false;
+            }
+          } catch {
+            /* Keep the original inventory and report the failed operation. */
+          }
+        }
+        throw error;
+      }
+      receipt.documentSaved = true;
+      documents.push(summarizeDocument(documentRow));
+
+      const jobId = `job-${randomUUID()}`;
+      await saveRows(
+        supabase.from('document_processing_jobs').insert({
+          workspace_id: workspaceId,
+          job_id: jobId,
+          document_id: documentId,
+          horse_id: '',
+          provider: ocr.provider,
+          status: needsReview ? 'needs_review' : 'completed',
+          extracted_text: ocr.text.slice(0, MAX_OCR_TEXT_CHARS),
+          entities: extraction.extractedData,
+          processing_error: ocr.error || '',
+          payload: { batchId, confidence: extraction.overallConfidence },
+        }),
+        {
+          context,
+          phase: 'processing-job-save',
+          key: 'job_id',
+          ids: [jobId],
+          fields: { workspace_id: workspaceId, document_id: documentId },
+        },
+      );
+      receipt.jobSaved = true;
+      extractions.push({ ...extraction, ref: documentId });
+    }
+
+    // Group documents into horse candidates and match against existing horses
+    // by registration number, microchip, then exact name.
+    const candidates = groupExtractionsIntoCandidates(extractions);
+    for (const candidate of candidates) {
+      const match = await findExistingHorse(supabase, workspaceId, candidate.fields);
+      const proposal = {
+        candidateKey: `cand-${proposals.length + 1}`,
+        documentIds: candidate.documentRefs,
+        documentTypes: candidate.documentTypes,
+        fields: candidate.fields,
+        confidenceMap: candidate.confidenceMap,
+        confidence: candidate.confidence,
+        ambiguous: candidate.ambiguous,
+        matchedHorseId: match?.horse_id || '',
+        matchedHorseName: match?.name || '',
+        matchedBy: match?.matchedBy || '',
+        action: 'review',
+        horseId: '',
+        needsReview: true,
+      };
+
+      const confident = candidate.confidence >= NEEDS_REVIEW_THRESHOLD && !candidate.ambiguous;
+      proposals.push(proposal);
+      context.horseId = '';
+      context.createdHorse = false;
+      recovery.currentDocumentIds = candidate.documentRefs;
+      if (mode === 'auto') {
+        if (match) {
+          // Identity matches (registration #/microchip) are safe to attach even
+          // below the auto-create bar; the document keeps its review flag.
+          await attachDocumentsToHorse({
+            supabase,
+            workspaceId,
+            user,
+            horse: match,
+            candidate,
+            markReviewed: confident,
+            context,
+          });
+          proposal.action = 'attached';
+          proposal.horseId = match.horse_id;
+          proposal.needsReview = !confident;
+        } else if (confident && (candidate.fields.name || candidate.fields.registrationNumber)) {
+          if (horseSlotsLeft < 1) {
+            // Over the paid tier: a confident candidate's documents were inserted
+            // as 'Queued' (needs_review false). Flip them to the review state so
+            // they land in the manual-resolution queue instead of being stranded.
+            const limitNote = `Plan's ${entitlements.limits.horseLimit} horse limit reached — horse not auto-created. Upgrade to continue.`;
+            await markDocumentsForReview({
+              supabase,
+              workspaceId,
+              documentIds: candidate.documentRefs,
+              note: limitNote,
+              context,
+            });
+            proposal.action = 'review';
+            proposal.needsReview = true;
+            proposal.note = limitNote;
+          } else {
+            const horseId = await createHorseFromCandidate({
+              supabase,
+              workspaceId,
+              user,
+              candidate,
+              context,
+              horseSlotsLeft,
+            });
+            if (context.createdHorse) horseSlotsLeft -= 1;
+            proposal.action = 'created';
+            proposal.horseId = horseId;
+            proposal.needsReview = false;
+          }
+        }
+      }
+      if (proposal.action !== 'review') {
+        for (const document of documents.filter((document) => proposal.documentIds.includes(document.documentId))) {
+          document.horseId = proposal.horseId;
+          document.state = 'Matched';
+          if (!proposal.needsReview) document.needsReview = false;
         }
       }
     }
 
-    proposals.push(proposal);
+    const committed = proposals.filter((proposal) => proposal.action !== 'review').length;
+    const batchState = !skipped.length && committed === proposals.length ? 'completed' : 'needs-review';
+    await saveRows(
+      supabase
+        .from('intake_batches')
+        .update({
+          state: batchState,
+          payload: {
+            fileCount: expanded.length,
+            mode,
+            uploadedBy: user.id,
+            proposals: proposals.length,
+            committed,
+            files: recovery.files,
+            skipped,
+          },
+          updated_at: new Date().toISOString(),
+        })
+        .eq('workspace_id', workspaceId)
+        .eq('intake_batch_id', batchId),
+      {
+        context,
+        phase: 'batch-finish',
+        key: 'intake_batch_id',
+        ids: [batchId],
+        fields: { workspace_id: workspaceId, state: batchState },
+      },
+    );
+
+    await recordAuditEvent(supabase, {
+      workspaceId,
+      actorUserId: user.id,
+      action: 'documents.bulk_upload_with_ocr',
+      entityType: 'intake_batch',
+      entityId: batchId,
+      metadata: { mode, files: expanded.length, proposals: proposals.length, committed, skipped: skipped.length },
+    });
+
+    return {
+      ok: skipped.length === 0,
+      status: skipped.length ? 409 : 200,
+      partial: skipped.length > 0,
+      retryable: false,
+      mode,
+      batchId,
+      documents,
+      proposals,
+      skipped,
+      recovery,
+      summary: {
+        processed: documents.length,
+        autoCommitted: committed,
+        awaitingReview: proposals.length - committed,
+      },
+    };
+  } catch (error) {
+    return {
+      ...failureResult(error, context, {
+        mode,
+        batchId,
+        documents,
+        proposals,
+        skipped,
+        recovery: { ...recovery, horseId: context.horseId },
+      }),
+      status: 409,
+      partial: context.writeAttempted,
+    };
   }
-
-  const committed = proposals.filter((proposal) => proposal.action !== 'review').length;
-  await supabase
-    .from('intake_batches')
-    .update({
-      state: committed === proposals.length ? 'completed' : 'needs-review',
-      payload: { fileCount: expanded.length, mode, uploadedBy: user.id, proposals: proposals.length, committed },
-      updated_at: new Date().toISOString(),
-    })
-    .eq('workspace_id', workspaceId)
-    .eq('intake_batch_id', batchId);
-
-  await recordAuditEvent(supabase, {
-    workspaceId,
-    actorUserId: user.id,
-    action: 'documents.bulk_upload_with_ocr',
-    entityType: 'intake_batch',
-    entityId: batchId,
-    metadata: { mode, files: expanded.length, proposals: proposals.length, committed, skipped: skipped.length },
-  });
-
-  return {
-    ok: true,
-    mode,
-    batchId,
-    documents,
-    proposals,
-    skipped,
-    summary: {
-      processed: documents.length,
-      autoCommitted: committed,
-      awaitingReview: proposals.length - committed,
-    },
-  };
 }
 
 async function commitAssignments({ supabase, workspaceId, user, assignments }) {
@@ -431,11 +634,14 @@ async function commitAssignments({ supabase, workspaceId, user, assignments }) {
 
   const results = [];
   for (const assignment of list) {
-    const documentIds = Array.isArray(assignment.documentIds)
-      ? assignment.documentIds.filter((id) => typeof id === 'string')
-      : [];
-    const action = assignment.action;
-    if (!documentIds.length || !['create-horse', 'attach-horse', 'skip'].includes(action)) {
+    const documentIds = Array.isArray(assignment?.documentIds) ? assignment.documentIds : [];
+    const action = assignment?.action;
+    if (
+      !documentIds.length ||
+      documentIds.some((id) => typeof id !== 'string' || !id.trim()) ||
+      new Set(documentIds).size !== documentIds.length ||
+      !['create-horse', 'attach-horse', 'skip'].includes(action)
+    ) {
       results.push({
         ok: false,
         documentIds,
@@ -449,77 +655,102 @@ async function commitAssignments({ supabase, workspaceId, user, assignments }) {
       continue;
     }
 
-    const { data: rows } = await supabase
-      .from('documents')
-      .select('document_id, extracted_data, ocr_confidence_map, confidence, payload')
-      .eq('workspace_id', workspaceId)
-      .in('document_id', documentIds);
+    const context = { writeAttempted: false, confirmedSteps: [], horseId: '' };
+    try {
+      const rows = await loadDocuments(supabase, workspaceId, documentIds);
 
-    if (!rows?.length) {
-      results.push({ ok: false, documentIds, message: 'Documents not found in this workspace.' });
-      continue;
-    }
-
-    // Rebuild the merged candidate from stored extractions plus any user
-    // corrections supplied in overrides.
-    const candidate = { fields: {}, confidenceMap: {}, documentRefs: [], documentTypes: [], confidence: 0 };
-    for (const row of rows) {
-      candidate.documentRefs.push(row.document_id);
-      candidate.documentTypes.push(row.payload?.pipelineType || 'unknown');
-      candidate.confidence = Math.max(candidate.confidence, Number(row.confidence || 0));
-      for (const [key, value] of Object.entries(row.extracted_data || {})) {
-        const fieldConfidence = Number(row.ocr_confidence_map?.[key] || 0);
-        if (!(key in candidate.fields) || fieldConfidence > (candidate.confidenceMap[key] ?? 0)) {
-          candidate.fields[key] = value;
-          candidate.confidenceMap[key] = fieldConfidence;
+      // Rebuild the merged candidate from stored extractions plus any user
+      // corrections supplied in overrides.
+      const candidate = {
+        fields: {},
+        confidenceMap: {},
+        documentRefs: [],
+        documentTypes: [],
+        confidence: 0,
+        documentRows: rows,
+      };
+      for (const row of rows) {
+        candidate.documentRefs.push(row.document_id);
+        candidate.documentTypes.push(row.payload?.pipelineType || 'unknown');
+        candidate.confidence = Math.max(candidate.confidence, Number(row.confidence || 0));
+        for (const [key, value] of Object.entries(row.extracted_data || {})) {
+          const fieldConfidence = Number(row.ocr_confidence_map?.[key] || 0);
+          if (!(key in candidate.fields) || fieldConfidence > (candidate.confidenceMap[key] ?? 0)) {
+            candidate.fields[key] = value;
+            candidate.confidenceMap[key] = fieldConfidence;
+          }
         }
       }
-    }
-    for (const [key, value] of Object.entries(assignment.overrides || {})) {
-      if (typeof value === 'string') {
-        candidate.fields[key] = value;
-        candidate.confidenceMap[key] = 1;
+      for (const [key, value] of Object.entries(assignment.overrides || {})) {
+        if (typeof value === 'string') {
+          candidate.fields[key] = value;
+          candidate.confidenceMap[key] = 1;
+        }
       }
-    }
 
-    if (action === 'attach-horse') {
-      const horseId = typeof assignment.horseId === 'string' ? assignment.horseId : '';
-      const { data: horse } = await supabase
-        .from('horses')
-        .select('horse_id, name, registration_number, breed, color, birthdate, gender, microchip, registry')
-        .eq('workspace_id', workspaceId)
-        .eq('horse_id', horseId)
-        .maybeSingle();
-      if (!horse) {
-        results.push({ ok: false, documentIds, message: `Horse ${horseId} not found.` });
-        continue;
-      }
-      await attachDocumentsToHorse({ supabase, workspaceId, user, horse, candidate, markReviewed: true });
-      results.push({ ok: true, documentIds, action, horseId });
-    } else {
-      if (horseSlotsLeft < 1) {
-        results.push({
-          ok: false,
-          documentIds,
-          message: `This would exceed the plan's ${entitlements.limits.horseLimit} horse limit. Upgrade to continue.`,
+      if (action === 'attach-horse') {
+        const horseId = typeof assignment.horseId === 'string' ? assignment.horseId : '';
+        const horse = await readRows(
+          supabase.from('horses').select('*').eq('workspace_id', workspaceId).eq('horse_id', horseId).maybeSingle(),
+          'horse-read',
+        );
+        if (!horse) {
+          results.push({ ok: false, documentIds, message: `Horse ${horseId} not found.` });
+          continue;
+        }
+        context.horseId = horseId;
+        await attachDocumentsToHorse({ supabase, workspaceId, user, horse, candidate, markReviewed: true, context });
+        results.push({ ok: true, documentIds, action, horseId });
+      } else {
+        const horseId = await createHorseFromCandidate({
+          supabase,
+          workspaceId,
+          user,
+          candidate,
+          context,
+          horseSlotsLeft,
         });
-        continue;
+        if (context.createdHorse) horseSlotsLeft -= 1;
+        results.push({ ok: true, documentIds, action, horseId });
       }
-      horseSlotsLeft -= 1;
-      const horseId = await createHorseFromCandidate({ supabase, workspaceId, user, candidate });
-      results.push({ ok: true, documentIds, action, horseId });
+    } catch (error) {
+      if (context.createdHorse) horseSlotsLeft -= 1;
+      results.push(failureResult(error, context, { documentIds, action, horseId: context.horseId }));
+      if (context.writeAttempted) {
+        // Unknown writes also make the remaining capacity unknown. Stop this
+        // request and preserve every not-yet-attempted assignment explicitly.
+        for (const pending of list.slice(results.length))
+          results.push({
+            ok: false,
+            action: pending?.action,
+            documentIds: pending?.documentIds || [],
+            phase: 'not-attempted',
+            needsRecovery: false,
+            message: 'An earlier assignment needs recovery; this assignment was not attempted.',
+          });
+        break;
+      }
     }
   }
 
-  await recordAuditEvent(supabase, {
-    workspaceId,
-    actorUserId: user.id,
-    action: 'documents.commit_assignments',
-    entityType: 'documents',
-    metadata: { assignments: results.length },
-  });
+  if (results.some((result) => result.ok && result.action !== 'skip'))
+    await recordAuditEvent(supabase, {
+      workspaceId,
+      actorUserId: user.id,
+      action: 'documents.commit_assignments',
+      entityType: 'documents',
+      metadata: { assignments: results.length },
+    });
 
-  return { ok: true, mode: 'commit', results };
+  const ok = results.every((result) => result.ok);
+  return {
+    ok,
+    status: ok ? 200 : 409,
+    mode: 'commit',
+    retryable: false,
+    partial: !ok && results.some((result) => result.ok || result.needsRecovery),
+    results,
+  };
 }
 
 function buildReviewNotes(extraction, ocr) {
@@ -541,6 +772,7 @@ function buildReviewNotes(extraction, ocr) {
 function summarizeDocument(row) {
   return {
     documentId: row.document_id,
+    horseId: row.horse_id,
     fileName: row.original_filename,
     documentType: row.document_type,
     pipelineType: row.payload.pipelineType,
@@ -558,34 +790,34 @@ function summarizeDocument(row) {
 async function findExistingHorse(supabase, workspaceId, fields) {
   const registration = String(fields.registrationNumber || '').trim();
   if (registration) {
-    const { data } = await supabase
-      .from('horses')
-      .select('horse_id, name, registration_number, breed, color, birthdate, gender, microchip, registry')
-      .eq('workspace_id', workspaceId)
-      .eq('registration_number', registration)
-      .maybeSingle();
+    const data = await readRows(
+      supabase
+        .from('horses')
+        .select('*')
+        .eq('workspace_id', workspaceId)
+        .eq('registration_number', registration)
+        .maybeSingle(),
+      'horse-match-read',
+    );
     if (data) return { ...data, matchedBy: 'registration_number' };
   }
 
   const microchip = String(fields.microchip || '').trim();
   if (microchip) {
-    const { data } = await supabase
-      .from('horses')
-      .select('horse_id, name, registration_number, breed, color, birthdate, gender, microchip, registry')
-      .eq('workspace_id', workspaceId)
-      .eq('microchip', microchip)
-      .maybeSingle();
+    const data = await readRows(
+      supabase.from('horses').select('*').eq('workspace_id', workspaceId).eq('microchip', microchip).maybeSingle(),
+      'horse-match-read',
+    );
     if (data) return { ...data, matchedBy: 'microchip' };
   }
 
   const name = String(fields.name || '').trim();
   if (name) {
-    const { data } = await supabase
-      .from('horses')
-      .select('horse_id, name, registration_number, breed, color, birthdate, gender, microchip, registry')
-      .eq('workspace_id', workspaceId)
-      .ilike('name', name)
-      .limit(2);
+    const data = await readRows(
+      supabase.from('horses').select('*').eq('workspace_id', workspaceId).ilike('name', name).limit(2),
+      'horse-match-read',
+    );
+    if (!Array.isArray(data)) throw new PersistenceError('horse-match-read');
     if (data?.length === 1) return { ...data[0], matchedBy: 'name' };
   }
 
@@ -595,54 +827,100 @@ async function findExistingHorse(supabase, workspaceId, fields) {
 // Move a set of documents into the manual review queue. Used when auto-create
 // is blocked (e.g. horse limit reached) so confident-but-uncreated documents
 // don't linger in 'Queued' where the review surfaces never show them.
-async function markDocumentsForReview({ supabase, workspaceId, documentIds, note }) {
+async function markDocumentsForReview({ supabase, workspaceId, documentIds, note, context }) {
   const ids = (documentIds || []).filter((id) => typeof id === 'string' && id);
   if (!ids.length) return;
-  await supabase
-    .from('documents')
-    .update({ state: 'Needs Review', needs_review: true, review_notes: note, updated_at: new Date().toISOString() })
-    .eq('workspace_id', workspaceId)
-    .in('document_id', ids);
+  await saveRows(
+    supabase
+      .from('documents')
+      .update({ state: 'Needs Review', needs_review: true, review_notes: note, updated_at: new Date().toISOString() })
+      .eq('workspace_id', workspaceId)
+      .in('document_id', ids),
+    {
+      context,
+      phase: 'document-review-hold',
+      key: 'document_id',
+      ids,
+      fields: { workspace_id: workspaceId, state: 'Needs Review', needs_review: true },
+    },
+  );
 }
 
-async function createHorseFromCandidate({ supabase, workspaceId, user, candidate }) {
-  const horseId = `horse-${randomUUID()}`;
+async function createHorseFromCandidate({
+  supabase,
+  workspaceId,
+  user,
+  candidate,
+  context,
+  horseSlotsLeft = Infinity,
+}) {
+  // A lost response must not turn an identical source assignment into another
+  // horse. INSERT (never UPSERT) also prevents a retry overwriting owner edits.
+  const key = sourceKey(workspaceId, candidate.documentRefs);
+  const horseId = `horse-ocr-${key.slice(0, 32)}`;
+  context.horseId = horseId;
   const fields = candidate.fields;
+  const requestHash = createHash('sha256')
+    .update(JSON.stringify(Object.entries(fields).sort(([a], [b]) => a.localeCompare(b))))
+    .digest('hex');
+  candidate.documentRows ||= await loadDocuments(supabase, workspaceId, candidate.documentRefs);
+  if (candidate.documentRows.some((row) => row.horse_id && row.horse_id !== horseId))
+    throw new PersistenceError('document-target');
+  const existing = await readRows(
+    supabase.from('horses').select('*').eq('workspace_id', workspaceId).eq('horse_id', horseId).maybeSingle(),
+    'horse-read',
+  );
+  if (existing) {
+    if (existing.payload?.ocrSourceKey !== key || existing.payload?.ocrRequestHash !== requestHash)
+      throw new PersistenceError('horse-recovery');
+    await linkDocumentsAndReminders({ supabase, workspaceId, user, horseId, candidate, markReviewed: true, context });
+    return horseId;
+  }
+  if (horseSlotsLeft < 1) throw new PersistenceError('horse-capacity');
 
-  const { data: profile } = await supabase
-    .from('workspace_profiles')
-    .select('default_owner_name, default_barn')
-    .eq('workspace_id', workspaceId)
-    .maybeSingle();
+  const profile = await readRows(
+    supabase
+      .from('workspace_profiles')
+      .select('default_owner_name, default_barn')
+      .eq('workspace_id', workspaceId)
+      .maybeSingle(),
+    'workspace-profile-read',
+  );
 
-  await supabase.from('horses').upsert({
-    workspace_id: workspaceId,
-    horse_id: horseId,
-    name: fields.name || `Unnamed (${fields.registrationNumber || 'OCR intake'})`,
-    barn_name: profile?.default_barn || '',
-    segment: '',
-    status: 'Active',
-    registration_number: fields.registrationNumber || '',
-    owner_name: fields.newOwner || profile?.default_owner_name || '',
-    breed: fields.breed || '',
-    color: fields.color || '',
-    birthdate: fields.birthdate || '',
-    gender: fields.gender || '',
-    microchip: fields.microchip || '',
-    registry: fields.registry || '',
-    created_from_document_id: candidate.documentRefs[0] || '',
-    ocr_confidence: candidate.confidence,
-    payload: {
-      sire: fields.sire || '',
-      dam: fields.dam || '',
-      markings: fields.markings || '',
-      dnaStatus: fields.dnaStatus || '',
-      createdBy: 'ocr-pipeline',
-      sourceDocuments: candidate.documentRefs,
-    },
-  });
+  await saveRows(
+    supabase.from('horses').insert({
+      workspace_id: workspaceId,
+      horse_id: horseId,
+      name: fields.name || `Unnamed (${fields.registrationNumber || 'OCR intake'})`,
+      barn_name: profile?.default_barn || '',
+      segment: '',
+      status: 'Active',
+      registration_number: fields.registrationNumber || '',
+      owner_name: fields.newOwner || profile?.default_owner_name || '',
+      breed: fields.breed || '',
+      color: fields.color || '',
+      birthdate: fields.birthdate || '',
+      gender: fields.gender || '',
+      microchip: fields.microchip || '',
+      registry: fields.registry || '',
+      created_from_document_id: candidate.documentRefs[0] || '',
+      ocr_confidence: candidate.confidence,
+      payload: {
+        sire: fields.sire || '',
+        dam: fields.dam || '',
+        markings: fields.markings || '',
+        dnaStatus: fields.dnaStatus || '',
+        createdBy: 'ocr-pipeline',
+        sourceDocuments: candidate.documentRefs,
+        ocrSourceKey: key,
+        ocrRequestHash: requestHash,
+      },
+    }),
+    { context, phase: 'horse-save', key: 'horse_id', ids: [horseId], fields: { workspace_id: workspaceId } },
+  );
+  context.createdHorse = true;
 
-  await linkDocumentsAndReminders({ supabase, workspaceId, user, horseId, candidate, markReviewed: true });
+  await linkDocumentsAndReminders({ supabase, workspaceId, user, horseId, candidate, markReviewed: true, context });
   await recordAuditEvent(supabase, {
     workspaceId,
     actorUserId: user.id,
@@ -654,7 +932,11 @@ async function createHorseFromCandidate({ supabase, workspaceId, user, candidate
   return horseId;
 }
 
-async function attachDocumentsToHorse({ supabase, workspaceId, user, horse, candidate, markReviewed }) {
+async function attachDocumentsToHorse({ supabase, workspaceId, user, horse, candidate, markReviewed, context }) {
+  context.horseId = horse.horse_id;
+  candidate.documentRows ||= await loadDocuments(supabase, workspaceId, candidate.documentRefs);
+  if (candidate.documentRows.some((row) => row.horse_id && row.horse_id !== horse.horse_id))
+    throw new PersistenceError('document-target');
   // Fill in identity fields the existing profile is missing; never overwrite
   // values a person already entered.
   const updates = {};
@@ -669,10 +951,32 @@ async function attachDocumentsToHorse({ supabase, workspaceId, user, horse, cand
   }
   if (Object.keys(updates).length) {
     updates.updated_at = new Date().toISOString();
-    await supabase.from('horses').update(updates).eq('workspace_id', workspaceId).eq('horse_id', horse.horse_id);
+    let query = supabase
+      .from('horses')
+      .update(updates)
+      .eq('workspace_id', workspaceId)
+      .eq('horse_id', horse.horse_id)
+      .eq('updated_at', horse.updated_at);
+    for (const key of Object.keys(updates).filter((key) => key !== 'updated_at'))
+      query = horse[key] == null ? query.is(key, null) : query.eq(key, horse[key]);
+    await saveRows(query, {
+      context,
+      phase: 'horse-update',
+      key: 'horse_id',
+      ids: [horse.horse_id],
+      fields: { workspace_id: workspaceId, ...updates },
+    });
   }
 
-  await linkDocumentsAndReminders({ supabase, workspaceId, user, horseId: horse.horse_id, candidate, markReviewed });
+  await linkDocumentsAndReminders({
+    supabase,
+    workspaceId,
+    user,
+    horseId: horse.horse_id,
+    candidate,
+    markReviewed,
+    context,
+  });
   await recordAuditEvent(supabase, {
     workspaceId,
     actorUserId: user.id,
@@ -683,7 +987,50 @@ async function attachDocumentsToHorse({ supabase, workspaceId, user, horse, cand
   });
 }
 
-async function linkDocumentsAndReminders({ supabase, workspaceId, user, horseId, candidate, markReviewed }) {
+async function linkDocumentsAndReminders({ supabase, workspaceId, user, horseId, candidate, markReviewed, context }) {
+  const jobs = await readRows(
+    supabase
+      .from('document_processing_jobs')
+      .select('*')
+      .eq('workspace_id', workspaceId)
+      .in('document_id', candidate.documentRefs),
+    'processing-job-read',
+  );
+  if (
+    !Array.isArray(jobs) ||
+    jobs.some(
+      (job) =>
+        job.workspace_id !== workspaceId ||
+        !candidate.documentRefs.includes(job.document_id) ||
+        (job.horse_id && job.horse_id !== horseId),
+    )
+  )
+    throw new PersistenceError('processing-job-read');
+  for (const row of candidate.documentRows.filter((row) => !jobs.some((job) => job.document_id === row.document_id))) {
+    // An interrupted preview can save the document but not its processing row.
+    // Rebuild only from its persisted extraction, never by re-uploading bytes.
+    if (!row.payload?.ocrProvider) throw new PersistenceError('processing-job-read');
+    const job = {
+      workspace_id: workspaceId,
+      job_id: `job-ocr-${sourceKey(workspaceId, [row.document_id]).slice(0, 32)}`,
+      document_id: row.document_id,
+      horse_id: '',
+      provider: row.payload.ocrProvider,
+      status: 'needs_review',
+      extracted_text: row.ocr_text || '',
+      entities: row.extracted_data || {},
+      processing_error: '',
+      payload: { batchId: row.intake_batch_id, recoveredFromStoredDocument: true },
+    };
+    await saveRows(supabase.from('document_processing_jobs').insert(job), {
+      context,
+      phase: 'processing-job-recovery',
+      key: 'job_id',
+      ids: [job.job_id],
+      fields: { workspace_id: workspaceId, document_id: row.document_id },
+    });
+    jobs.push(job);
+  }
   const update = {
     horse_id: horseId,
     state: 'Matched',
@@ -692,17 +1039,40 @@ async function linkDocumentsAndReminders({ supabase, workspaceId, user, horseId,
   if (markReviewed) {
     update.needs_review = false;
   }
-  await supabase
-    .from('documents')
-    .update(update)
-    .eq('workspace_id', workspaceId)
-    .in('document_id', candidate.documentRefs);
+  for (const row of candidate.documentRows)
+    await saveRows(
+      supabase
+        .from('documents')
+        .update(update)
+        .eq('workspace_id', workspaceId)
+        .eq('document_id', row.document_id)
+        .eq('horse_id', row.horse_id)
+        .eq('updated_at', row.updated_at),
+      {
+        context,
+        phase: 'document-link',
+        key: 'document_id',
+        ids: [row.document_id],
+        fields: { workspace_id: workspaceId, ...update },
+      },
+    );
 
-  await supabase
-    .from('document_processing_jobs')
-    .update({ horse_id: horseId, status: 'completed', updated_at: new Date().toISOString() })
-    .eq('workspace_id', workspaceId)
-    .in('document_id', candidate.documentRefs);
+  for (const job of jobs) {
+    let query = supabase
+      .from('document_processing_jobs')
+      .update({ horse_id: horseId, status: 'completed', updated_at: new Date().toISOString() })
+      .eq('workspace_id', workspaceId)
+      .eq('job_id', job.job_id)
+      .eq('horse_id', job.horse_id);
+    if (job.updated_at) query = query.eq('updated_at', job.updated_at);
+    await saveRows(query, {
+      context,
+      phase: 'processing-job-link',
+      key: 'job_id',
+      ids: [job.job_id],
+      fields: { workspace_id: workspaceId, horse_id: horseId, status: 'completed' },
+    });
+  }
 
   // Compliance reminders derived from extracted dates.
   const reminders = [];
@@ -715,25 +1085,38 @@ async function linkDocumentsAndReminders({ supabase, workspaceId, user, horseId,
 
   for (const reminder of reminders) {
     if (!/^\d{4}-\d{2}-\d{2}$/.test(reminder.dueDate)) continue;
-    const { data: existing } = await supabase
-      .from('reminders')
-      .select('reminder_id')
-      .eq('workspace_id', workspaceId)
-      .eq('horse_id', horseId)
-      .eq('type', reminder.type)
-      .eq('due_date', reminder.dueDate)
-      .maybeSingle();
+    const existing = await readRows(
+      supabase
+        .from('reminders')
+        .select('reminder_id')
+        .eq('workspace_id', workspaceId)
+        .eq('horse_id', horseId)
+        .eq('type', reminder.type)
+        .eq('due_date', reminder.dueDate)
+        .maybeSingle(),
+      'reminder-read',
+    );
     if (existing) continue;
 
-    await supabase.from('reminders').insert({
-      workspace_id: workspaceId,
-      reminder_id: `rem-${randomUUID()}`,
-      horse_id: horseId,
-      type: reminder.type,
-      due_date: reminder.dueDate,
-      notification_sent: false,
-      source_document_id: reminder.source,
-      payload: { createdBy: 'ocr-pipeline', createdByUser: user.id },
-    });
+    const reminderId = `rem-ocr-${sourceKey(workspaceId, [horseId, reminder.type, reminder.dueDate]).slice(0, 32)}`;
+    await saveRows(
+      supabase.from('reminders').insert({
+        workspace_id: workspaceId,
+        reminder_id: reminderId,
+        horse_id: horseId,
+        type: reminder.type,
+        due_date: reminder.dueDate,
+        notification_sent: false,
+        source_document_id: reminder.source,
+        payload: { createdBy: 'ocr-pipeline', createdByUser: user.id },
+      }),
+      {
+        context,
+        phase: 'reminder-save',
+        key: 'reminder_id',
+        ids: [reminderId],
+        fields: { workspace_id: workspaceId, horse_id: horseId, type: reminder.type, due_date: reminder.dueDate },
+      },
+    );
   }
 }
