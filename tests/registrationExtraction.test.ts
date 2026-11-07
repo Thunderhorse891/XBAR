@@ -2,6 +2,33 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 import { extractRegistrationFields } from '../src/lib/registrationExtraction.js';
 
+test('birth dates require labeled evidence and a real, unambiguous calendar day', () => {
+  const read = (text: string) => extractRegistrationFields(`Name: SPIRIT\n${text}`).foaledOn;
+  assert.equal(read('Certificate issued: 2026-10-01'), undefined);
+  assert.equal(read('Foaled: 2024-02-31'), undefined);
+  assert.equal(read('Foaled: 02/29/2023'), undefined);
+  assert.equal(read('Foaled: 02/29/2024'), '2024-02-29');
+  assert.equal(read('Date Foaled: 15 March 2019'), '2019-03-15');
+  assert.equal(read('Foaled: 2019-03-15\nBirth Date: 2020-03-15'), undefined);
+  assert.equal(read('Foaled: unknown\nIssued: 2026-10-01'), undefined);
+  assert.equal(read('Sire: OLDER HORSE\nFoaled: 2001-01-01'), undefined);
+});
+
+test('unqualified registration fields after a parent cannot become that parent registration', () => {
+  for (const suffix of ['\nRegistration Number: 7778889', ' Registration Number: 7778889', '\nReg No: 7778889']) {
+    const fields = extractRegistrationFields(`Horse Name: SPIRIT\nDam: PRETTY MARE${suffix}`);
+    assert.equal(fields.dam, 'PRETTY MARE');
+    assert.equal(fields.damRegistration, undefined, suffix);
+    assert.equal(fields.registrationNumber, undefined, 'an unscoped number is not reassigned to the subject either');
+  }
+  const explicit = extractRegistrationFields('Horse Name: SPIRIT\nDam: PRETTY MARE\nDam Registration Number: 4445556');
+  assert.equal(explicit.dam, 'PRETTY MARE');
+  assert.equal(explicit.damRegistration, '4445556');
+  const named = extractRegistrationFields('Horse Name: SPIRIT\nDam: MY REGISTRATION NOBLE 4445556');
+  assert.equal(named.dam, 'MY REGISTRATION NOBLE');
+  assert.equal(named.damRegistration, '4445556', 'a field-like word inside a name is not a label');
+});
+
 // OCR flattens a certificate into one noisy line; these fixtures mirror that.
 
 test('extracts every field from a flattened AQHA certificate', () => {

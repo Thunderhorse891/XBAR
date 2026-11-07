@@ -9,6 +9,7 @@
 // unit tested directly and reused anywhere. The browser OCR/PDF plumbing lives
 // in documentIntelligence.ts and hands its output here.
 import type { HorseSex } from '../types/xbar.js';
+import { readLabeledDate } from '../../api/_lib/printed-date.js';
 
 export interface RegistrationFields {
   identityReviewRequired?: boolean;
@@ -279,16 +280,9 @@ function findColor(text: string): string | undefined {
 }
 
 function findFoaledOn(text: string): string | undefined {
-  const labeled = labeledValue(text, 'foaled|foaling|date\\s+foaled|foal\\s+date|born|birth\\s*date');
-  const source = labeled ?? text;
-  const iso = source.match(/\b(20\d{2}|19\d{2})-(\d{1,2})-(\d{1,2})\b/);
-  if (iso) return `${iso[1]}-${pad(iso[2])}-${pad(iso[3])}`;
-  const us = source.match(/\b(\d{1,2})[/\-.](\d{1,2})[/\-.](\d{2,4})\b/);
-  if (us) {
-    const year = us[3].length === 2 ? `20${us[3]}` : us[3];
-    return `${year}-${pad(us[1])}-${pad(us[2])}`;
-  }
-  return undefined;
+  return readLabeledDate(text, [
+    'foaled|foaling(?:\\s+date)?|date\\s+foaled|foal\\s+date|born|birth\\s*date|date\\s+of\\s+birth',
+  ])?.value;
 }
 
 // Boundaries that end a sire/dam entry. Deliberately excludes reg/registration
@@ -331,9 +325,10 @@ const PARENT_REGISTRATION_PATTERN = `\\b(?:(${REGISTRIES.join('|')})\\s*[:#-]?\\
 const PARENT_REGISTRATION_END = new RegExp(`${PARENT_REGISTRATION_PATTERN}\\s*$`, 'i');
 
 /** Collect every top-level parent assertion; contradictions always need review. */
-function findParent(text: string, label: 'sire' | 'dam') {
+function findParent(text: string, label: 'sire' | 'dam', hasSubjectSection: boolean) {
   const names = new Map<string, string>();
   const registrations = new Set<string>();
+  const scopedRegistrations = new Set<string>();
   const registries = new Set<string>();
   const matches: RegExpExecArray[] = [];
   for (const match of text.matchAll(new RegExp(`\\b(?:${PEDIGREE_LABEL})\\b`, 'ig'))) {
@@ -359,7 +354,21 @@ function findParent(text: string, label: 'sire' | 'dam') {
   }
   for (const [index, match] of matches.entries()) {
     if (!new RegExp(`^(?:${parentLabel(label)})$`, 'i').test(match[0])) continue;
-    const entry = normalizeWhitespace(text.slice(match.index, matches[index + 1]?.index));
+    const rawEntry = text.slice(match.index, matches[index + 1]?.index);
+    const valueSource = rawEntry.slice(match[0].length);
+    // A generic full registration field after a parent's name, or a separate
+    // Reg No row, may belong to the subject. Do not assign that uncertain first
+    // identifier to the parent. A qualified "Dam Registration Number" and the
+    // established inline parent-ID forms still carry explicit parent evidence.
+    const unscopedField = valueSource.match(
+      /\bregistration\s*(?:number\b|no\b\.?|#)\s*[:#-]?|(?:\n|[|;])\s*reg\.?\s*(?:number\b|no\b\.?|#)\s*[:#-]?/i,
+    );
+    const prefix = unscopedField ? valueSource.slice(0, unscopedField.index) : '';
+    const unscopedFirstId =
+      hasSubjectSection &&
+      Boolean(cleanFieldValue(prefix)) &&
+      !new RegExp(PARENT_REGISTRATION_PATTERN, 'i').test(prefix);
+    const entry = normalizeWhitespace(rawEntry);
     const nextField = entry.match(PARENT_METADATA_FIELD);
     const chunk = labeledValue(entry.slice(0, nextField?.index), parentLabel(label), PARENT_STOP_GROUP);
     if (!chunk) continue;
@@ -373,7 +382,9 @@ function findParent(text: string, label: 'sire' | 'dam') {
     const identityEnd = numericField?.index === undefined ? chunk.length : firstEnd + numericField.index;
     for (const registration of regMatches) {
       if (registration.index >= identityEnd) break;
-      registrations.add(registration[2].replace(/[\s-]/g, '').toUpperCase());
+      const identifier = registration[2].replace(/[\s-]/g, '').toUpperCase();
+      registrations.add(identifier);
+      if (!unscopedFirstId) scopedRegistrations.add(identifier);
       if (registration[1]) registries.add(registration[1].toUpperCase());
     }
     const name = normalizePedigreeValue(
@@ -395,7 +406,7 @@ function findParent(text: string, label: 'sire' | 'dam') {
   const ambiguous = names.size > 1 || registrations.size > 1 || registries.size > 1;
   return {
     name: ambiguous ? undefined : names.values().next().value,
-    registration: ambiguous ? undefined : registrations.values().next().value,
+    registration: ambiguous ? undefined : scopedRegistrations.values().next().value,
     ambiguous,
   };
 }
@@ -468,10 +479,6 @@ function findHorseNames(text: string, lineStarts: Set<number>): LabeledField[] {
   return candidates;
 }
 
-function pad(value: string) {
-  return value.padStart(2, '0');
-}
-
 function titleCase(value: string) {
   return value.replace(/\b\w/g, (char) => char.toUpperCase());
 }
@@ -523,8 +530,8 @@ export function extractRegistrationFields(rawText: string): RegistrationFields {
   const horseName = horseNames.find((name) => parentIndex < 0 || name.start < parentIndex);
 
   const own = findRegistrationNumber(headText);
-  const sire = findParent(parentText, 'sire');
-  const dam = findParent(parentText, 'dam');
+  const sire = findParent(parentText, 'sire', Boolean(headText.trim()));
+  const dam = findParent(parentText, 'dam', Boolean(headText.trim()));
 
   const subjectNames = new Set(
     horseNames
@@ -551,7 +558,7 @@ export function extractRegistrationFields(rawText: string): RegistrationFields {
     sex: findSex(text),
     color: findColor(text),
     breed: labeledValue(text, 'breed'),
-    foaledOn: findFoaledOn(text),
+    foaledOn: findFoaledOn(headText),
     sire: sire.name,
     sireRegistration: sire.registration,
     dam: dam.name,

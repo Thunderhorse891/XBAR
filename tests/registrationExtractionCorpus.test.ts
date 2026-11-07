@@ -120,6 +120,24 @@ const PARENT_ASSERTION_CORPUS = [
 
 const CORPUS: ExtractionCase[] = [
   {
+    id: 'generic-registration-after-dam-is-unscoped',
+    text: 'Horse Name: SPIRIT\nDam: PRETTY MARE\nRegistration Number: 7778889',
+    name: 'SPIRIT',
+    dam: 'PRETTY MARE',
+    damReg: undefined,
+    reg: undefined,
+    review: false,
+  },
+  {
+    id: 'qualified-parent-registration-retains-parent-identity',
+    text: 'Horse Name: SPIRIT\nDam: PRETTY MARE\nDam Registration Number: 4445556',
+    name: 'SPIRIT',
+    dam: 'PRETTY MARE',
+    damReg: '4445556',
+    reg: undefined,
+    review: false,
+  },
+  {
     id: 'bare-parent-label-after-registration-is-an-assertion',
     text: 'Sire MY SIRE IS GREAT 1111111 Dam MY DAM IS GREAT 2222222',
     sire: 'MY SIRE IS GREAT',

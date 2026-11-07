@@ -16,6 +16,7 @@ import type {
 import { describeDocumentCoverage, fullCoverage, readDocumentWithCoverage } from './documentIntelligence.js';
 import { fingerprintDocument, flagDocumentDuplicates } from './documentDuplicates.js';
 import { extractRegistrationFields, normalizeDocumentIdentityText } from './registrationExtraction.js';
+import { readLabeledDate } from '../../api/_lib/printed-date.js';
 
 const GIGABYTE = 1024 * 1024 * 1024;
 const BASE36_ALPHABET = 'abcdefghijklmnopqrstuvwxyz0123456789';
@@ -345,7 +346,10 @@ function extractOwnerName(haystack: string) {
 }
 
 function extractExamDate(haystack: string) {
-  return haystack.match(/\b20\d{2}-\d{2}-\d{2}\b/)?.[0];
+  return readLabeledDate(haystack, [
+    '(?:test|sample|collection|drawn?|exam(?:ination)?|inspection)\\s*date',
+    'date\\s+(?:of\\s+)?(?:test|sample|collection|drawn?|exam(?:ination)?|inspection)',
+  ])?.value;
 }
 
 function extractVeterinarian(haystack: string) {
@@ -391,7 +395,7 @@ export function extractDocumentEntities(params: { fileName: string; previewText:
     dam: registration.dam,
     damRegistration: registration.damRegistration,
     ownerName: registration.ownerName ?? extractOwnerName(previewText),
-    examDate: inferredType === 'Vet Record' || inferredType === 'Coggins' ? extractExamDate(haystack) : undefined,
+    examDate: inferredType === 'Vet Record' || inferredType === 'Coggins' ? extractExamDate(previewText) : undefined,
     veterinarian:
       inferredType === 'Vet Record' || inferredType === 'Coggins' ? extractVeterinarian(haystack) : undefined,
     transferStatus: extractTransferStatus(haystack, inferredType),

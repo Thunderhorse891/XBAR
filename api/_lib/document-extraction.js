@@ -1,3 +1,5 @@
+import { addOneCalendarYear as addOneYear, readLabeledDate } from './printed-date.js';
+
 // Pure extraction logic for the OCR ingestion pipeline. No I/O here so the
 // classification, field parsing, and merge rules stay unit-testable.
 
@@ -74,70 +76,15 @@ function cleanValue(raw, options = {}) {
   return value;
 }
 
-export function normalizeDate(raw) {
-  const value = String(raw || '').trim();
-  if (!value) return '';
+export { normalizePrintedDate as normalizeDate, addOneCalendarYear as addOneYear } from './printed-date.js';
 
-  const iso = value.match(/^(\d{4})[-/](\d{1,2})[-/](\d{1,2})$/);
-  if (iso) {
-    return `${iso[1]}-${iso[2].padStart(2, '0')}-${iso[3].padStart(2, '0')}`;
-  }
-
-  const us = value.match(/^(\d{1,2})[-/](\d{1,2})[-/](\d{2,4})$/);
-  if (us) {
-    const year = us[3].length === 2 ? `20${us[3]}` : us[3];
-    return `${year}-${us[1].padStart(2, '0')}-${us[2].padStart(2, '0')}`;
-  }
-
-  const months = [
-    'january',
-    'february',
-    'march',
-    'april',
-    'may',
-    'june',
-    'july',
-    'august',
-    'september',
-    'october',
-    'november',
-    'december',
-  ];
-  const written = value.match(/^([a-z]+)\.?\s+(\d{1,2}),?\s+(\d{4})$/i);
-  if (written) {
-    const monthIndex = months.findIndex((month) => month.startsWith(written[1].toLowerCase()));
-    if (monthIndex >= 0) {
-      return `${written[3]}-${String(monthIndex + 1).padStart(2, '0')}-${written[2].padStart(2, '0')}`;
-    }
-  }
-
-  const parsed = new Date(value);
-  if (!Number.isNaN(parsed.getTime())) {
-    return parsed.toISOString().slice(0, 10);
-  }
-  return '';
-}
-
-export function addOneYear(isoDate) {
-  const match = String(isoDate || '').match(/^(\d{4})-(\d{2})-(\d{2})$/);
-  if (!match) return '';
-  return `${Number(match[1]) + 1}-${match[2]}-${match[3]}`;
-}
-
-const DATE_VALUE =
-  '([A-Za-z]+\\.?\\s+\\d{1,2},?\\s+\\d{4}|\\d{1,2}[-/]\\d{1,2}[-/]\\d{2,4}|\\d{4}[-/]\\d{1,2}[-/]\\d{1,2})';
 const NAME_VALUE = "([A-Za-z][A-Za-z0-9 .,'&-]{1,60})";
 const LINE_END = '(?:\\r?\\n|$)';
 
 function dateField(text, labels) {
-  const patterns = labels.map((label) => new RegExp(`${label}\\s*[:#-]?\\s*${DATE_VALUE}`, 'i'));
-  const captured = captureField(text, patterns);
-  if (!captured) return null;
-  const normalized = normalizeDate(captured.value);
-  if (!normalized) return null;
-  return { value: normalized, confidence: captured.confidence };
+  const result = readLabeledDate(text, labels);
+  return result ? { value: result.value, confidence: Math.max(0.55, 0.95 - result.patternIndex * 0.1) } : null;
 }
-
 function nameField(text, labels, options = {}) {
   const patterns = labels.map((label) => new RegExp(`${label}\\s*[:#-]?\\s*${NAME_VALUE}${LINE_END}`, 'i'));
   return captureField(text, patterns, options);
@@ -387,9 +334,10 @@ const PARENT_REGISTRATION_PATTERN = `\\b(?:(${REGISTRIES.join('|')})\\s*[:#-]?\\
 const PARENT_REGISTRATION_END = new RegExp(`${PARENT_REGISTRATION_PATTERN}\\s*$`, 'i');
 
 /** Collect every top-level parent assertion; contradictions always need review. */
-function findParent(text, label) {
+function findParent(text, label, hasSubjectSection) {
   const names = new Map();
   const registrations = new Set();
+  const scopedRegistrations = new Set();
   const registries = new Set();
   const matches = [];
   for (const match of text.matchAll(new RegExp(`\\b(?:${PEDIGREE_LABEL})\\b`, 'ig'))) {
@@ -415,7 +363,21 @@ function findParent(text, label) {
   }
   for (const [index, match] of matches.entries()) {
     if (!new RegExp(`^(?:${parentLabel(label)})$`, 'i').test(match[0])) continue;
-    const entry = normalizeWhitespace(text.slice(match.index, matches[index + 1]?.index));
+    const rawEntry = text.slice(match.index, matches[index + 1]?.index);
+    const valueSource = rawEntry.slice(match[0].length);
+    // A generic full registration field after a parent's name, or a separate
+    // Reg No row, may belong to the subject. Do not assign that uncertain first
+    // identifier to the parent. A qualified "Dam Registration Number" and the
+    // established inline parent-ID forms still carry explicit parent evidence.
+    const unscopedField = valueSource.match(
+      /\bregistration\s*(?:number\b|no\b\.?|#)\s*[:#-]?|(?:\n|[|;])\s*reg\.?\s*(?:number\b|no\b\.?|#)\s*[:#-]?/i,
+    );
+    const prefix = unscopedField ? valueSource.slice(0, unscopedField.index) : '';
+    const unscopedFirstId =
+      hasSubjectSection &&
+      Boolean(cleanFieldValue(prefix)) &&
+      !new RegExp(PARENT_REGISTRATION_PATTERN, 'i').test(prefix);
+    const entry = normalizeWhitespace(rawEntry);
     const nextField = entry.match(PARENT_METADATA_FIELD);
     const chunk = labeledValue(entry.slice(0, nextField?.index), parentLabel(label), PARENT_STOP_GROUP);
     if (!chunk) continue;
@@ -429,7 +391,9 @@ function findParent(text, label) {
     const identityEnd = numericField?.index === undefined ? chunk.length : firstEnd + numericField.index;
     for (const registration of regMatches) {
       if (registration.index >= identityEnd) break;
-      registrations.add(registration[2].replace(/[\s-]/g, '').toUpperCase());
+      const identifier = registration[2].replace(/[\s-]/g, '').toUpperCase();
+      registrations.add(identifier);
+      if (!unscopedFirstId) scopedRegistrations.add(identifier);
       if (registration[1]) registries.add(registration[1].toUpperCase());
     }
     const name = normalizePedigreeValue(
@@ -451,7 +415,7 @@ function findParent(text, label) {
   const ambiguous = names.size > 1 || registrations.size > 1 || registries.size > 1;
   return {
     name: ambiguous ? undefined : names.values().next().value,
-    registration: ambiguous ? undefined : registrations.values().next().value,
+    registration: ambiguous ? undefined : scopedRegistrations.values().next().value,
     ambiguous,
   };
 }
@@ -553,8 +517,8 @@ function extractNameFamily(rawText) {
   const parentText = parentIndex >= 0 ? lines.join('\n').slice(parentIndex) : '';
   const horseName = horseNames.find((name) => parentIndex < 0 || name.start < parentIndex)?.value;
 
-  const sire = findParent(parentText, 'sire');
-  const dam = findParent(parentText, 'dam');
+  const sire = findParent(parentText, 'sire', Boolean(headText.trim()));
+  const dam = findParent(parentText, 'dam', Boolean(headText.trim()));
   return {
     headText,
     horseName,
@@ -608,7 +572,12 @@ export function extractRegistrationFields(text) {
   });
   if (gender) fields.gender = gender;
 
-  const birthdate = dateField(text, ['(?:date\\s+)?foaled', 'foaling\\s+date', 'date\\s+of\\s+birth', 'birth\\s*date']);
+  const birthdate = dateField(nameFamily.headText, [
+    '(?:date\\s+)?foaled',
+    'foaling\\s+date',
+    'date\\s+of\\s+birth',
+    'birth\\s*date',
+  ]);
   if (birthdate) fields.birthdate = birthdate;
 
   if (nameFamily.sire) fields.sire = { value: nameFamily.sire, confidence: 0.95 };

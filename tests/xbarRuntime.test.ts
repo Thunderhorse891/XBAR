@@ -1,7 +1,23 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { nowStamp } from '../src/lib/xbarRuntime.js';
+import { nowStamp, extractDocumentEntities } from '../src/lib/xbarRuntime.js';
 import { compareTimestampDesc, formatDateLabel, formatDateTimeLabel } from '../src/lib/format.js';
+
+test('OCR uses a labeled printed examination date, never a filename or unrelated date', () => {
+  const extract = (text: string) =>
+    extractDocumentEntities({
+      fileName: 'coggins-2020-01-01.pdf',
+      previewText: text,
+      inferredType: 'Coggins',
+    });
+  const result = extract('Horse: SPIRIT\nIssued: 2025-01-01\nTest Date: 10/01/2026');
+  assert.equal(result.examDate, '2026-10-01');
+  assert.equal(result.foaledOn, undefined);
+  assert.equal(extract('Horse: SPIRIT\nIssued: 2026-10-01').examDate, undefined);
+  assert.equal(extract('Test Date: 2026-02-30').examDate, undefined);
+  assert.equal(extract('Test Date: 2026-10-01\nTest Date: 2026-10-02').examDate, undefined);
+  assert.equal(extract('Test Date: October 1, 2026\nTest Date: 2026-10-01').examDate, '2026-10-01');
+});
 
 // nowStamp feeds invitedAt, joinedAt, receivedAt, uploadedAt, offerUpdatedAt
 // and the other audit stamps. They are synced across workspace members and
