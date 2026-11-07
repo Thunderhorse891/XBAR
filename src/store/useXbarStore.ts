@@ -1943,6 +1943,24 @@ export const useXbarStore = create<XbarStore>()(
         }
 
         const state = get();
+        const receiptIdentity = readIntakeIdentity();
+        const receiptOwner = vaultOwnerId();
+        const receiptRecordsOwner = readRecordsOwner();
+        const receiptContextChanged = () =>
+          intakeIdentityChanged(receiptIdentity, readIntakeIdentity()) ||
+          vaultOwnerId() !== receiptOwner ||
+          readRecordsOwner() !== receiptRecordsOwner ||
+          Boolean(receiptRecordsOwner && receiptRecordsOwner !== receiptOwner) ||
+          Boolean(requireRoleCapability(get().currentRole, 'manageAssets')) ||
+          Boolean(
+            receiptIdentity.userId && requireRoleCapability(useCloudStore.getState().workspaceRole, 'manageAssets'),
+          ) ||
+          Boolean(input.horseId && !get().horses.some((horse) => horse.id === input.horseId));
+        const interrupted = () => ({
+          ok: false,
+          message:
+            'Your account, workspace, access, or horse record changed during receipt upload. No receipt was added. Reopen the intended workspace and try again.',
+        });
         if (input.horseId && !state.horses.some((horse) => horse.id === input.horseId)) {
           return { ok: false, message: 'Horse record not found for this receipt.' };
         }
@@ -1964,17 +1982,21 @@ export const useXbarStore = create<XbarStore>()(
          */
         await beginVaultWrite();
         try {
+          if (receiptContextChanged()) return interrupted();
           let uploadedAsset: Awaited<ReturnType<typeof uploadDocumentAssetToCloud>> = null;
           if (input.file) {
             try {
               uploadedAsset = await uploadDocumentAssetToCloud({
                 file: input.file,
                 horseId: input.horseId,
+                expectedIdentity: receiptIdentity,
               });
             } catch (error) {
               console.error('Cloud receipt upload failed; keeping the file on this device instead.', error);
             }
           }
+
+          if (receiptContextChanged()) return interrupted();
 
           // Same as the document path: when the cloud did not take the file,
           // the device does. A receipt is the evidence behind a number an
@@ -1983,11 +2005,14 @@ export const useXbarStore = create<XbarStore>()(
           let localFileKey: string | undefined;
           if (input.file && !uploadedAsset) {
             try {
-              localFileKey = await storeLocalFile(input.file, input.file.name, input.file.type, vaultOwnerId());
+              localFileKey = await storeLocalFile(input.file, input.file.name, input.file.type, receiptOwner);
             } catch (error) {
               console.error('On-device receipt storage failed; this record will carry no file.', error);
             }
           }
+          // A completed upload belongs to the original identity even if the
+          // active workspace changed while its bytes were being persisted.
+          if (receiptContextChanged()) return interrupted();
           const receipt = createExpenseReceiptRecord(input, {
             localFileKey,
             storagePath: uploadedAsset?.storagePath,
