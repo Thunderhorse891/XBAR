@@ -538,6 +538,19 @@ After applying, re-run the security advisor and confirm
 `anon_security_definer_function_executable` has dropped to the intended set;
 the counts are documented at the bottom of file 3.
 
+### Navigation database privacy (prepared; production approval required)
+
+The navigation guard sanitizes new direct writes and removes query/fragment and
+extra metadata from historical navigation events. Read [the exact scope and recovery limits](docs/reviews/navigation-database-privacy.md).
+Rehearse `supabase/checks/telemetry-privacy.sql` on an isolated database first.
+Only after final review and Erin's explicit approval of this production cleanup:
+
+```sh
+psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f supabase/migrations/20261107170000_private_navigation_events.sql
+```
+
+Website deployment does not execute this command. Historical metadata removal is intentional and irreversible.
+
 ### Operations
 
 - **Health probe**: `GET /api/health` returns liveness plus subsystem-configured booleans (no secrets, no database touch). Point uptime monitors here.
@@ -611,15 +624,16 @@ for the separate Stripe verification gates. Rollback is to disable the feature
 and restore application code, preserving these additive tables and claims so
 retries, workspace deletion, or redeployment cannot reset promotion eligibility.
 
-### Navigation database privacy (prepared; production approval required)
+### Document approval guard (prepared; production approval required)
 
-The navigation guard sanitizes new direct writes and removes query/fragment and
-extra metadata from historical navigation events. Read [the exact scope and recovery limits](docs/reviews/navigation-database-privacy.md).
-Rehearse `supabase/checks/telemetry-privacy.sql` on an isolated database first.
-Only after final review and Erin's explicit approval of this production cleanup:
+`20261107160000_guard_document_approval.sql` separates document upload from approval
+in the database. It preserves existing records, unchanged approved saves and
+authorized reviewer access. Read [the scope and recovery plan](docs/reviews/document-approval.md).
+Rehearse on an isolated database with `supabase/checks/document-review-writes.sql`.
+Only after final review and Erin's explicit production approval:
 
 ```sh
-psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f supabase/migrations/20261107170000_private_navigation_events.sql
+psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f supabase/migrations/20261107160000_guard_document_approval.sql
 ```
 
-Website deployment does not execute this command. Historical metadata removal is intentional and irreversible.
+Merging this code or deploying the website does not execute this command.
