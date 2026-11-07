@@ -678,6 +678,26 @@ export const useXbarStore = create<XbarStore>()(
         const changed = sharedListingContextError(horseId, listing, listingIdentity);
         if (changed) return { ok: false, message: changed };
 
+        // Callers captured the link before awaiting this action. A newer remote
+        // archive, release withdrawal or credential change must not distribute
+        // that stale link or create a successful-share audit event.
+        if (
+          nextListing.state !== 'Live' ||
+          !nextListing.releaseConfirmedAt ||
+          !nextListing.releaseConfirmedBy ||
+          nextListing.sharePath !== listing.sharePath ||
+          nextListing.accessMode !== listing.accessMode ||
+          nextListing.shareToken !== listing.shareToken
+        ) {
+          set((current) => ({
+            sharedListings: current.sharedListings.map((item) => (item.id === listing.id ? nextListing : item)),
+          }));
+          return {
+            ok: false,
+            message: 'Buyer access changed on another device. Review the current listing before sharing.',
+          };
+        }
+
         const auditEvent = createAuditEvent({
           actor: state.currentRole,
           action: 'shared',
