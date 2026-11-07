@@ -174,16 +174,21 @@ function fixture(failure = {}) {
 
 const file = 'api/_lib/documents-bulk-upload.js';
 const base = pathToFileURL(path.resolve(file));
-const source = readFileSync(file, 'utf8').replace(/from (['"])(\.\.?\/[^'"]+)\1/g, (_m, _q, relative) => {
-  const url = new URL(relative, base);
-  if (url.pathname.endsWith('/supabase-admin.js'))
-    return 'from "data:text/javascript,export const requireWorkspaceAccess=async()=>globalThis.__ocrPersistenceAccess"';
-  if (url.pathname.endsWith('/rate-limit.js'))
-    return 'from "data:text/javascript,export const enforceRateLimit=async()=>true"';
-  if (url.pathname.endsWith('/entitlements.js'))
-    return 'from "data:text/javascript,export const getWorkspaceEntitlements=async()=>({ok:true,limits:{horseLimit:100}});export const checkHorseCapacity=async()=>({ok:true,used:0});export const checkDocumentCapacity=async()=>({ok:true});export const checkStorageCapacity=async()=>({ok:true})"';
-  return `from '${url.href}'`;
-});
+const source = readFileSync(file, 'utf8')
+  .replace(
+    "import { createHash, randomUUID } from 'node:crypto';",
+    "import { createHash, randomUUID as cryptoRandomUUID } from 'node:crypto'; const randomUUID = () => globalThis.__ocrPersistenceUuids?.shift() ?? cryptoRandomUUID();",
+  )
+  .replace(/from (['"])(\.\.?\/[^'"]+)\1/g, (_m, _q, relative) => {
+    const url = new URL(relative, base);
+    if (url.pathname.endsWith('/supabase-admin.js'))
+      return 'from "data:text/javascript,export const requireWorkspaceAccess=async()=>globalThis.__ocrPersistenceAccess"';
+    if (url.pathname.endsWith('/rate-limit.js'))
+      return 'from "data:text/javascript,export const enforceRateLimit=async()=>true"';
+    if (url.pathname.endsWith('/entitlements.js'))
+      return 'from "data:text/javascript,export const getWorkspaceEntitlements=async()=>({ok:true,limits:{horseLimit:100}});export const checkHorseCapacity=async()=>({ok:true,used:0});export const checkDocumentCapacity=async()=>({ok:true});export const checkStorageCapacity=async()=>({ok:true})"';
+    return `from '${url.href}'`;
+  });
 const handler = (await import(`data:text/javascript;base64,${Buffer.from(source).toString('base64')}`)).default;
 async function invoke(f, body = {}) {
   globalThis.__ocrPersistenceAccess = {
@@ -418,6 +423,45 @@ test('an interrupted automatic assignment resumes through explicit commit with t
   assert.equal(retry.body.results[0].horseId, first.body.recovery.horseId);
   assert.equal(f.tables.horses.length, 1);
   assert.equal(f.storage.length, 1);
+});
+
+test('equal-confidence source fields recover identically when upload and document-ID orders differ', async (t) => {
+  globalThis.__ocrPersistenceUuids = [
+    '00000000-0000-4000-8000-000000000000',
+    'ffffffff-ffff-4fff-8fff-ffffffffffff',
+    '00000000-0000-4000-8000-000000000001',
+  ];
+  t.after(() => {
+    delete globalThis.__ocrPersistenceUuids;
+  });
+  const f = fixture({ table: 'document_processing_jobs', action: 'update', kind: 'error' });
+  const first = await invoke(f, {
+    ...upload,
+    mode: 'auto',
+    files: [
+      upload.files[0],
+      {
+        ...upload.files[0],
+        fileName: 'second-registration.txt',
+        providedText: upload.files[0].providedText.replace('Bay', 'Chestnut'),
+      },
+    ],
+  });
+  assert.equal(first.body.ok, false);
+  assert.equal(f.failureUsed, true);
+  assert.equal(f.tables.horses.length, 1);
+  const ids = first.body.recovery.files.map((file) => file.documentId);
+  assert.ok(ids[0] > ids[1], 'fixture must reverse upload order under ID sorting');
+  const savedHorse = clone(f.tables.horses[0]);
+  const retry = await invoke(f, { assignments: [{ action: 'create-horse', documentIds: ids }] });
+  assert.equal(retry.body.ok, true, JSON.stringify(retry.body));
+  assert.equal(retry.body.results[0].horseId, savedHorse.horse_id);
+  assert.deepEqual(f.tables.horses, [savedHorse], 'recovery must preserve the original horse fields');
+  assert.equal(f.storage.length, 2);
+  for (const id of ids) {
+    assert.equal(f.tables.documents.find((d) => d.document_id === id).horse_id, savedHorse.horse_id);
+    assert.equal(f.tables.document_processing_jobs.find((j) => j.document_id === id).status, 'completed');
+  }
 });
 test('a definitive rejected insert cleans only the newly uploaded unreferenced object', async () => {
   const f = fixture({ table: 'documents', action: 'insert', kind: 'error', code: 'P0001' });

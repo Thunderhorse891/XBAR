@@ -459,7 +459,9 @@ async function processBatch({ supabase, workspaceId, user, body, mode }) {
 
     // Group documents into horse candidates and match against existing horses
     // by registration number, microchip, then exact name.
-    const candidates = groupExtractionsIntoCandidates(extractions);
+    // Match loadDocuments' order: equal-confidence fields retain the first
+    // value, so automatic saves and explicit recovery must use the same input.
+    const candidates = groupExtractionsIntoCandidates(extractions.sort((a, b) => a.ref.localeCompare(b.ref)));
     for (const candidate of candidates) {
       const match = await findExistingHorse(supabase, workspaceId, candidate.fields);
       const proposal = {

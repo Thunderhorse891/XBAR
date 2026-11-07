@@ -19,6 +19,8 @@ does not change extraction rules, customer documents, billing, or database schem
   source document IDs. It uses INSERT, never an overwriting upsert. An explicit
   identical retry reuses only a horse with matching source/request fingerprints;
   changed corrections are refused rather than overwriting an owner-edited horse.
+- Automatic ingestion and explicit recovery merge source fields in the same
+  document-ID order, including ties in extraction confidence.
 - Document links and existing-horse fills compare the read state before updating.
   Processing jobs retain their target identity. A failed/unknown assignment stops
   later assignments and reports them as not attempted.
