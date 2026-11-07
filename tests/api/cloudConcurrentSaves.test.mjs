@@ -219,6 +219,30 @@ const listingRow = (payload) => ({
   updated_at: '2026-10-01T00:00:00Z',
 });
 const listingContext = (previous) => ({ previous, expectedIdentity: { userId: 'user-a', workspaceId: 'ranch-a' } });
+for (const editChannels of [false, true])
+  test(`legacy listing defaults remain usable after ${editChannels ? 'channel editing' : 'token rotation'}`, async () => {
+    const raw = listing();
+    delete raw.channels;
+    const f = fixture({ shared_listings: [listingRow(raw)] });
+    const { restorePersistedState } = await import('../../src/store/xbarStoreHelpers.ts');
+    const before = restorePersistedState({ sharedListings: [raw] }, { generateMissingSharingTokens: false })
+      .sharedListings[0];
+    assert.deepEqual(before.channels, ['Direct Link']);
+    const result = await upsertSharedListingInCloud(
+      { ...before, shareToken: 'rotated', ...(editChannels ? { channels: ['Direct Link', 'Facebook'] } : {}) },
+      listingContext(before),
+    );
+    assert.equal(result.ok, true, result.message);
+    assert.deepEqual(result.listing.channels, editChannels ? ['Direct Link', 'Facebook'] : ['Direct Link']);
+    assert.equal(result.listing.channels.includes('Facebook'), editChannels);
+    const persisted = f.data.get('shared_listings')[0].payload;
+    assert.equal(persisted.shareToken, 'rotated');
+    assert.equal(
+      Object.hasOwn(persisted, 'channels'),
+      editChannels,
+      'unrelated defaults must not rewrite stored omissions',
+    );
+  });
 for (const [label, remotePatch] of [
   ['rotated credential', { shareToken: 'new-token' }],
   ['private access', { accessMode: 'Private Token' }],
@@ -238,11 +262,8 @@ for (const [label, remotePatch] of [
     assert.equal(row.share_token, remote.shareToken);
     assert.equal(row.access_mode, remote.accessMode);
     assert.equal(row.state, remote.state);
-    assert.deepEqual(
-      result.listing,
-      row.payload,
-      'the caller receives the saved listing, including newer restrictions',
-    );
+    for (const [key, value] of Object.entries(remotePatch)) assert.equal(result.listing[key], value);
+    assert.deepEqual(result.listing.channels, row.payload.channels);
   });
 }
 test('an explicit listing update never recreates a deleted listing', async () => {

@@ -2429,11 +2429,13 @@ export async function upsertSharedListingInCloud(
     // Use the same field merge and atomic revision/payload comparison as
     // autosave. Explicit access actions must not restore another tab's token,
     // overwrite its restrictions, or recreate a deleted listing.
+    const normalizeListing = (payload: unknown) => restoreCloudState({ sharedListings: [payload] }).sharedListings[0];
     const saved = await writeConcurrentRow({
       table: 'shared_listings',
       idColumn: 'listing_id',
       workspaceId: context.workspaceId,
       baseline: contextAtStart.previous,
+      normalizeRemote: normalizeListing,
       overwrite: false,
       row: {
         workspace_id: context.workspaceId,
@@ -2450,7 +2452,7 @@ export async function upsertSharedListingInCloud(
         updated_at: new Date().toISOString(),
       },
     });
-    return { ok: true, message: 'Shared listing saved to cloud.', listing: saved as SharedListingRecord } as const;
+    return { ok: true, message: 'Shared listing saved to cloud.', listing: normalizeListing(saved) } as const;
   } catch (error) {
     return {
       ok: false,
