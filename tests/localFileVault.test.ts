@@ -198,7 +198,29 @@ test('references are collected across every record type that can carry a file', 
   assert.deepEqual(new Set(keys), new Set(['vault-doc', 'vault-receipt', 'vault-packet']));
 });
 
-test('the sweep reclaims orphans and keeps everything still referenced', async () => {
+test('stale-tab reconciliation preserves documents, receipts and packets saved after its snapshot', async () => {
+  const restore = installFakeIndexedDb();
+  try {
+    const staleTabReferences: string[] = [];
+    const otherTabRecords: { localFileKey: string }[] = [];
+    for (const name of ['document.pdf', 'receipt.pdf', 'packet.html']) {
+      const key = await storeLocalFile(new Blob([name]), name, undefined, TEST_WORKSPACE);
+      otherTabRecords.push({ localFileKey: key });
+    }
+    // The other tab has COMPLETED its writes. A free lock and a zero writer
+    // counter cannot establish that this tab's reference snapshot is complete.
+    assert.equal(await sweepLocalFileVault(staleTabReferences, TEST_WORKSPACE), 0);
+    for (const { localFileKey } of otherTabRecords) {
+      const entry = await readLocalFile(localFileKey);
+      assert.ok(entry, 'every committed record must retain its file');
+      assert.equal(await entry.blob.text(), entry.name);
+    }
+  } finally {
+    restore();
+  }
+});
+
+test('reconciliation preserves referenced and apparently unreferenced files', async () => {
   const restore = installFakeIndexedDb();
   try {
     const kept = await storeLocalFile(new Blob(['keep']), 'keep.pdf', undefined, TEST_WORKSPACE);
@@ -206,9 +228,9 @@ test('the sweep reclaims orphans and keeps everything still referenced', async (
 
     const removed = await sweepLocalFileVault([kept], TEST_WORKSPACE);
 
-    assert.equal(removed, 1);
+    assert.equal(removed, 0);
     assert.ok(await readLocalFile(kept), 'a referenced file must survive the sweep');
-    assert.equal(await readLocalFile(dropped), null, 'an unreferenced file must be reclaimed');
+    assert.ok(await readLocalFile(dropped), 'absence from this snapshot is not proof that a file is orphaned');
   } finally {
     restore();
   }
@@ -258,12 +280,11 @@ test('one workspace cannot sweep away another workspace files', async () => {
     const mine = await storeLocalFile(new Blob(['my coggins']), 'mine.pdf', undefined, 'ws-a');
     const theirs = await storeLocalFile(new Blob(['their coggins']), 'theirs.pdf', undefined, 'ws-b');
 
-    // Workspace A rehydrates and references nothing at all — a genuinely empty
-    // workspace, which is a real state and does sweep.
+    // Workspace A's empty snapshot cannot establish either file is unused.
     const removed = await sweepLocalFileVault([], 'ws-a');
 
-    assert.equal(removed, 1, 'only this workspace unreferenced file is an orphan');
-    assert.equal(await readLocalFile(mine), null, 'its own orphan is still collected');
+    assert.equal(removed, 0);
+    assert.ok(await readLocalFile(mine), 'another tab may reference this workspace file');
     assert.notEqual(await readLocalFile(theirs), null, 'the other workspace file must survive');
   } finally {
     restore();
@@ -288,7 +309,7 @@ test('a file with no recorded owner is never swept', async () => {
   }
 });
 
-test('an unowned file this workspace uses is adopted, so it can be cleaned up later', async () => {
+test('an unowned referenced file is adopted and survives a later stale snapshot', async () => {
   const restore = installFakeIndexedDb();
   try {
     const legacy = await storeLocalFile(new Blob(['old']), 'legacy.pdf', undefined, 'ws-a');
@@ -296,13 +317,13 @@ test('an unowned file this workspace uses is adopted, so it can be cleaned up la
     assert.ok(entry);
     await storeLegacyEntry({ ...entry, workspaceId: undefined });
 
-    // Referenced by this workspace, so it is provably ours. Claiming it turns a
-    // file that could never be collected into one that can.
+    // Preserve legacy ownership adoption without inferring deletion authority.
     await sweepLocalFileVault([legacy], 'ws-a');
     const adopted = await readLocalFile(legacy);
     assert.equal(adopted?.workspaceId, 'ws-a');
 
-    assert.equal(await sweepLocalFileVault([], 'ws-a'), 1, 'and now it can be collected');
+    assert.equal(await sweepLocalFileVault([], 'ws-a'), 0);
+    assert.ok(await readLocalFile(legacy), 'a later stale snapshot must preserve the adopted file');
   } finally {
     restore();
   }
