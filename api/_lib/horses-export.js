@@ -52,36 +52,50 @@ export default async function handler(req, res) {
   }
   const { supabase, user } = access;
 
-  const { data: horse } = await supabase
-    .from('horses')
-    .select('*')
-    .eq('workspace_id', workspaceId)
-    .eq('horse_id', horseId)
-    .maybeSingle();
-  if (!horse) {
-    return sendJson(res, 404, { ok: false, message: `Horse ${horseId} not found in this workspace.` });
-  }
+  let horse, documents, ownership, reminders, packets;
+  try {
+    const horseResult = await supabase
+      .from('horses')
+      .select('*')
+      .eq('workspace_id', workspaceId)
+      .eq('horse_id', horseId)
+      .maybeSingle();
+    if (horseResult.error) throw new Error('Horse read failed');
+    horse = horseResult.data;
+    if (!horse) {
+      return sendJson(res, 404, { ok: false, message: `Horse ${horseId} not found in this workspace.` });
+    }
 
-  const [{ data: documents }, { data: ownership }, { data: reminders }, { data: packets }] = await Promise.all([
-    supabase
-      .from('documents')
-      .select('*')
-      .eq('workspace_id', workspaceId)
-      .eq('horse_id', horseId)
-      .order('created_at', { ascending: false }),
-    supabase.from('ownership_records').select('*').eq('workspace_id', workspaceId).eq('horse_id', horseId),
-    supabase
-      .from('reminders')
-      .select('*')
-      .eq('workspace_id', workspaceId)
-      .eq('horse_id', horseId)
-      .order('due_date', { ascending: true }),
-    supabase
-      .from('sale_packets')
-      .select('packet_id, packet_pdf_path, watermark_text, shared_with_email, status, created_at')
-      .eq('workspace_id', workspaceId)
-      .eq('horse_id', horseId),
-  ]);
+    const sections = await Promise.all([
+      supabase
+        .from('documents')
+        .select('*')
+        .eq('workspace_id', workspaceId)
+        .eq('horse_id', horseId)
+        .order('created_at', { ascending: false }),
+      supabase.from('ownership_records').select('*').eq('workspace_id', workspaceId).eq('horse_id', horseId),
+      supabase
+        .from('reminders')
+        .select('*')
+        .eq('workspace_id', workspaceId)
+        .eq('horse_id', horseId)
+        .order('due_date', { ascending: true }),
+      supabase
+        .from('sale_packets')
+        .select('packet_id, packet_pdf_path, watermark_text, shared_with_email, status, created_at')
+        .eq('workspace_id', workspaceId)
+        .eq('horse_id', horseId),
+    ]);
+
+    if (sections.some((result) => result.error || !Array.isArray(result.data)))
+      throw new Error('Export section read failed');
+    [documents, ownership, reminders, packets] = sections.map((result) => result.data);
+  } catch {
+    return sendJson(res, 503, {
+      ok: false,
+      message: 'The complete horse record could not be read. No export was created. Please try again.',
+    });
+  }
 
   /*
    * Both paths below are columns a workspace manager can edit, and they are
