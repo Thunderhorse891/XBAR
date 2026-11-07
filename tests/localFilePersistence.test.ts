@@ -79,7 +79,7 @@ test('the vault is reconciled against the workspace on rehydration', async () =>
   assert.match(
     source,
     /onRehydrateStorage: \(\) => \(state\) => \{[\s\S]*onWorkspaceSettled\(\(\) => \{[\s\S]*?sweepLocalFileVault\(/,
-    'file bytes must be reclaimed when the records that referenced them are gone — but only this workspace\u2019s, since the vault is origin-wide and another account\u2019s files are not orphans',
+    'legacy ownership is reconciled after settling; missing references must never authorize deleting bytes',
   );
 });
 
