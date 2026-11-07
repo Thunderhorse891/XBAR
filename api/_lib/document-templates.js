@@ -413,11 +413,48 @@ export function getTemplateById(templateId) {
 
 const PLACEHOLDER_PATTERN = /\{\{\s*([a-zA-Z0-9_.]+)\s*\}\}/g;
 
+function safePlaceholderKey(key) {
+  return (
+    /^[a-zA-Z0-9_]+(?:\.[a-zA-Z0-9_]+)*$/.test(key) &&
+    key.split('.').every((part) => !['__proto__', 'constructor', 'prototype'].includes(part))
+  );
+}
+
+export function applyTemplateFields({ template, overrideContent = '', context, fields = {} }) {
+  if (!fields || typeof fields !== 'object' || Array.isArray(fields))
+    return { ok: false, message: 'Template fields must be a map of placeholder names to text.' };
+  const text =
+    overrideContent.trim() ||
+    template.sections.map((section) => [section.heading, ...section.lines].join('\n')).join('\n');
+  const allowed = new Set([...text.matchAll(PLACEHOLDER_PATTERN)].map((match) => match[1]).filter(safePlaceholderKey));
+  const entries = Object.entries(fields);
+  if (entries.some(([key, value]) => !safePlaceholderKey(key) || !allowed.has(key) || typeof value !== 'string'))
+    return { ok: false, message: 'One or more fields are not valid placeholders for this template.' };
+  const next = structuredClone(context);
+  for (const [key, value] of entries) {
+    const parts = key.split('.');
+    let target = next;
+    for (const part of parts.slice(0, -1)) {
+      if (
+        !Object.hasOwn(target, part) ||
+        !target[part] ||
+        typeof target[part] !== 'object' ||
+        Array.isArray(target[part])
+      )
+        target[part] = Object.create(null);
+      target = target[part];
+    }
+    target[parts.at(-1)] = value;
+  }
+  return { ok: true, context: next };
+}
+
 function lookupPlaceholder(context, key) {
+  if (!safePlaceholderKey(key)) return undefined;
   const parts = key.split('.');
   let current = context;
   for (const part of parts) {
-    if (current == null || typeof current !== 'object') return undefined;
+    if (current == null || typeof current !== 'object' || !Object.hasOwn(current, part)) return undefined;
     current = current[part];
   }
   if (current == null) return undefined;

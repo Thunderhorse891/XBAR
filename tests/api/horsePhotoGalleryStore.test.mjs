@@ -74,6 +74,30 @@ beforeEach(() => {
 const horse = () => useXbarStore.getState().horses[0];
 const change = (id, action) => useXbarStore.getState().changeHorsePhoto('horse', id, action);
 
+test('a Ranch Manager can restore original bytes without restoring sale approval', () => {
+  useXbarStore.setState({ currentRole: 'Ranch Manager' });
+  assert.equal(change('a', 'remove').ok, true);
+  assert.equal(change('a', 'restore').ok, true);
+  const restored = horse().gallery.find((asset) => asset.id === 'a');
+  assert.equal(restored.status, 'Pending');
+  assert.equal(restored.storagePath, 'ranch/horse/a.jpg');
+});
+
+test('a stale local Admin role cannot restore approval after cloud demotion', () => {
+  assert.equal(change('a', 'remove').ok, true);
+  rememberRecordsOwner('ranch');
+  useCloudStore.setState({
+    session: { user: { id: 'test' } },
+    workspaceId: 'ranch',
+    workspaceReady: true,
+    autosaveReady: true,
+    autosaveUnlocked: true,
+    workspaceRole: 'Ranch Manager',
+  });
+  assert.equal(change('a', 'restore').ok, true);
+  assert.equal(horse().gallery.find((asset) => asset.id === 'a').status, 'Pending');
+});
+
 test('a different uploaded photo becomes primary and survives persisted restore', () => {
   assert.equal(change('b', 'primary').ok, true);
   assert.equal(primaryHorseMedia(horse()).storagePath, 'ranch/horse/b.jpg');

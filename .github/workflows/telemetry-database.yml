@@ -1,0 +1,57 @@
+name: Telemetry database privacy
+
+on:
+  pull_request:
+    paths:
+      - 'supabase/migrations/20261107170000_private_navigation_events.sql'
+      - 'supabase/checks/telemetry-*.sql'
+      - 'supabase/checks/storage-fixture-schema.sql'
+      - '.github/workflows/telemetry-database.yml'
+  push:
+    branches: [main]
+    paths:
+      - 'supabase/migrations/20261107170000_private_navigation_events.sql'
+      - 'supabase/checks/telemetry-*.sql'
+      - 'supabase/checks/storage-fixture-schema.sql'
+      - '.github/workflows/telemetry-database.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  telemetry-database:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    services:
+      postgres:
+        image: postgres:17
+        env:
+          POSTGRES_PASSWORD: disposable-test-password
+          POSTGRES_DB: xbar_telemetry_test
+        ports: ['5432:5432']
+        options: >-
+          --health-cmd pg_isready --health-interval 5s --health-timeout 5s --health-retries 10
+    env:
+      PGHOST: localhost
+      PGPORT: 5432
+      PGUSER: postgres
+      PGPASSWORD: disposable-test-password
+      PGDATABASE: xbar_telemetry_test
+    steps:
+      - uses: actions/checkout@v7
+      - name: Reproduce direct-write exposure
+        run: |
+          psql -v ON_ERROR_STOP=1 -f supabase/checks/storage-fixture-schema.sql
+          psql -v ON_ERROR_STOP=1 -f supabase/checks/telemetry-fixture-schema.sql
+          if out=$(psql -v ON_ERROR_STOP=1 -f supabase/checks/telemetry-privacy.sql 2>&1); then
+            echo 'Privacy check passed without the guard.'
+            exit 1
+          fi
+          echo "$out" | grep -q 'Direct navigation insert retained private metadata' || { echo "$out"; exit 1; }
+      - name: Guard new writes and scrub historical navigation
+        run: |
+          psql -v ON_ERROR_STOP=1 -f supabase/migrations/20261107170000_private_navigation_events.sql
+          psql -v ON_ERROR_STOP=1 -f supabase/checks/telemetry-privacy.sql
+          psql -v ON_ERROR_STOP=1 -f supabase/migrations/20261107170000_private_navigation_events.sql
+          psql -v ON_ERROR_STOP=1 -f supabase/checks/telemetry-privacy.sql
