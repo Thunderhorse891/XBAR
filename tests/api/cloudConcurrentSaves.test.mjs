@@ -1,6 +1,8 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import { registerHooks } from 'node:module';
+import { readFile } from 'node:fs/promises';
+import { Readable } from 'node:stream';
 registerHooks({
   resolve(specifier, context, next) {
     if (/\/supabaseClient(?:\.ts|\.js)?$/.test(specifier))
@@ -33,6 +35,249 @@ const ids = {
   workspace_profiles: 'workspace_id',
   workspaces: 'id',
 };
+
+test('generated form becomes packet-eligible only after explicit review and acknowledged cloud sync', async () => {
+  const { useXbarStore } = await import('../../src/store/useXbarStore.ts');
+  const { useCloudStore } = await import('../../src/store/useCloudStore.ts');
+  const { createEmptyWorkspaceState, createHorseRecord } = await import('../../src/store/xbarStoreHelpers.ts');
+  const { rememberRecordsOwner } = await import('../../src/lib/recordsOwner.ts');
+  const { selectPacketDocuments } = await import('../../api/_lib/packet-selection.js');
+  await new Promise((resolve) => setImmediate(resolve));
+  const originalWindow = globalThis.window;
+  try {
+    const workspaceId = '11111111-1111-4111-8111-111111111111';
+    const storage = new Map();
+    globalThis.window = {
+      localStorage: { getItem: (key) => storage.get(key) ?? null, setItem: (key, value) => storage.set(key, value) },
+    };
+    rememberRecordsOwner(workspaceId);
+    const empty = createEmptyWorkspaceState();
+    const generatedHorse = createHorseRecord(
+      {
+        name: 'Blue',
+        barnName: '',
+        sex: 'Mare',
+        segment: 'Sale Prospect',
+        status: 'Pasture',
+        owner: 'Synthetic',
+        ownerEntity: '',
+        barn: 'Test',
+        pasture: '',
+      },
+      empty.workspaceProfile,
+    );
+    generatedHorse.id = 'horse-a';
+    const f = fixture({
+      workspaces: [{ id: workspaceId, owner_user_id: 'user-a', workspace_key: 'primary' }],
+      horses: [
+        {
+          workspace_id: workspaceId,
+          horse_id: 'horse-a',
+          name: 'Blue',
+          payload: clone(generatedHorse),
+          updated_at: '2026-10-01T00:00:00Z',
+        },
+      ],
+      workspace_profiles: [
+        { workspace_id: workspaceId, payload: clone(empty.workspaceProfile), updated_at: '2026-10-01T00:00:00Z' },
+      ],
+    });
+    const uploads = [];
+    f.client.storage = {
+      from: () => ({
+        upload: async (path, bytes) => {
+          uploads.push({ path, bytes });
+          return { error: null };
+        },
+        createSignedUrl: async () => ({ data: { signedUrl: 'https://example.invalid/generated.pdf' }, error: null }),
+      }),
+    };
+    globalThis.__generatedReviewAccess = {
+      ok: true,
+      role: 'Admin',
+      user: { id: 'user-a', email: 'user@example.test' },
+      supabase: f.client,
+    };
+    const sourceUrl = new URL('../../api/_lib/documents-generate-template.js', import.meta.url);
+    const source = (await readFile(sourceUrl, 'utf8')).replace(/from (['"])(\.\.?\/[^'"]+)\1/g, (_m, _q, relative) => {
+      const url = new URL(relative, sourceUrl);
+      if (url.pathname.endsWith('/supabase-admin.js'))
+        return 'from "data:text/javascript,export const requireWorkspaceAccess=async()=>globalThis.__generatedReviewAccess"';
+      if (url.pathname.endsWith('/rate-limit.js'))
+        return 'from "data:text/javascript,export const enforceRateLimit=async()=>true"';
+      if (url.pathname.endsWith('/entitlements.js'))
+        return 'from "data:text/javascript,export const getWorkspaceEntitlements=async()=>({ok:true,effectiveTier:\'Professional\',limits:{storageLimitGb:5}});export const checkStorageCapacity=async()=>({ok:true});export const tierIncludesPlan=()=>true"';
+      return `from '${url.href}'`;
+    });
+    const { default: generate } = await import(`data:text/javascript;base64,${Buffer.from(source).toString('base64')}`);
+    const req = Readable.from([JSON.stringify({ workspaceId, horseId: 'horse-a', templateId: 'bill-of-sale' })]);
+    Object.assign(req, { method: 'POST', headers: {}, url: '/api/documents/generate-template' });
+    const res = {
+      setHeader() {},
+      end(body) {
+        this.body = JSON.parse(body);
+      },
+    };
+    await generate(req, res);
+    assert.equal(res.statusCode, 200, res.body.message);
+    assert.equal(uploads.length, 1);
+    assert.equal(uploads[0].bytes.subarray(0, 4).toString(), '%PDF');
+    const generated = f.data.get('documents')[0];
+    // Database defaults supply the revision in production.
+    generated.updated_at = '2026-10-01T00:00:00Z';
+    assert.equal(generated.state, 'Needs Review');
+    assert.equal(generated.needs_review, true);
+    assert.equal(selectPacketDocuments([generated], [], 10).packetDocs.length, 0);
+    useXbarStore.persist.setOptions({ storage: { getItem: () => null, setItem() {}, removeItem() {} } });
+    useXbarStore.setState({
+      ...empty,
+      currentRole: 'Admin',
+      horses: [generatedHorse],
+      documents: [clone(generated.payload)],
+    });
+    useCloudStore.setState({
+      session: { user: { id: 'user-a' }, access_token: 'synthetic' },
+      workspaceId,
+      workspaceRole: 'Admin',
+      workspaceReady: true,
+      autosaveReady: true,
+      autosaveUnlocked: true,
+    });
+    const baseline = useXbarStore.getState().exportWorkspaceBackup();
+    const approved = useXbarStore.getState().reviewDocument(generated.document_id, 'horse-a');
+    assert.equal(approved.ok, true, approved.message);
+    const saved = await saveWorkspaceBackupToCloud(useXbarStore.getState().exportWorkspaceBackup(), { baseline });
+    assert.equal(saved.ok, true, saved.message);
+    const persisted = f.data.get('documents')[0];
+    assert.equal(persisted.state, 'Ready');
+    assert.equal(persisted.payload.state, 'Ready');
+    assert.equal(persisted.needs_review, false);
+    assert.equal(persisted.storage_path, uploads[0].path);
+    const selected = selectPacketDocuments([persisted], [generated.document_id], 10);
+    assert.deepEqual(
+      selected.packetDocs.map((doc) => doc.document_id),
+      [generated.document_id],
+    );
+    assert.deepEqual(selected.unavailable, []);
+  } finally {
+    globalThis.window = originalWindow;
+    delete globalThis.__generatedReviewAccess;
+  }
+});
+
+for (const remoteState of ['Ready', 'Needs Review'])
+  test(`ordinary document edits preserve a remote ${remoteState} review hold`, async () => {
+    const before = backup();
+    const document = {
+      id: 'doc-a',
+      horseId: 'horse-a',
+      title: 'Original',
+      type: 'Bill of Sale',
+      state: 'Ready',
+      entities: {},
+      duplicateRisk: 'Low',
+    };
+    before.workspace.documents = [document];
+    const f = fixture({
+      documents: [
+        {
+          workspace_id: 'ranch-a',
+          document_id: 'doc-a',
+          horse_id: 'horse-a',
+          document_type: 'Bill of Sale',
+          state: remoteState,
+          needs_review: true,
+          payload: { ...document, state: remoteState },
+          updated_at: '2026-10-01T00:00:00Z',
+        },
+      ],
+    });
+    const after = clone(before);
+    after.workspace.documents[0].title = 'Renamed';
+    const result = await saveWorkspaceBackupToCloud(after, { baseline: before });
+    assert.equal(result.ok, true, result.message);
+    const row = f.data.get('documents')[0];
+    assert.equal(row.state, remoteState);
+    assert.equal(row.payload.state, remoteState);
+    assert.equal(row.needs_review, true);
+  });
+
+for (const approving of [false, true])
+  test(`a review hold added during ${approving ? 'approval' : 'renaming'} is never overwritten`, async () => {
+    const before = backup();
+    const document = {
+      id: 'doc-a',
+      horseId: 'horse-a',
+      title: 'Original',
+      type: 'Bill of Sale',
+      state: approving ? 'Needs Review' : 'Ready',
+      entities: {},
+      duplicateRisk: 'Low',
+    };
+    before.workspace.documents = [document];
+    const f = fixture(
+      {
+        documents: [
+          {
+            workspace_id: 'ranch-a',
+            document_id: 'doc-a',
+            horse_id: 'horse-a',
+            document_type: 'Bill of Sale',
+            state: document.state,
+            needs_review: false,
+            payload: clone(document),
+            updated_at: '2026-10-01T00:00:00Z',
+          },
+        ],
+      },
+      (table, rows) => {
+        if (table === 'documents') rows[0].needs_review = true;
+      },
+    );
+    const after = clone(before);
+    if (approving) after.workspace.documents[0].state = 'Ready';
+    else after.workspace.documents[0].title = 'Renamed';
+    const result = await saveWorkspaceBackupToCloud(after, { baseline: before });
+    assert.equal(result.ok, !approving, result.message);
+    const row = f.data.get('documents')[0];
+    assert.equal(row.state, document.state);
+    assert.equal(row.needs_review, true);
+    assert.equal(row.payload.title, approving ? 'Original' : 'Renamed');
+  });
+
+test('returning an approved document to review persists both representations', async () => {
+  const before = backup();
+  const document = {
+    id: 'doc-a',
+    horseId: 'horse-a',
+    title: 'Original',
+    type: 'Bill of Sale',
+    state: 'Ready',
+    entities: {},
+    duplicateRisk: 'Low',
+  };
+  before.workspace.documents = [document];
+  const f = fixture({
+    documents: [
+      {
+        workspace_id: 'ranch-a',
+        document_id: 'doc-a',
+        state: 'Ready',
+        needs_review: false,
+        payload: clone(document),
+        updated_at: '2026-10-01T00:00:00Z',
+      },
+    ],
+  });
+  const after = clone(before);
+  after.workspace.documents[0].state = 'Needs Review';
+  const result = await saveWorkspaceBackupToCloud(after, { baseline: before });
+  assert.equal(result.ok, true, result.message);
+  const row = f.data.get('documents')[0];
+  assert.equal(row.state, 'Needs Review');
+  assert.equal(row.payload.state, 'Needs Review');
+  assert.equal(row.needs_review, true);
+});
 
 test('a primary-photo edit and approval share one acknowledged autosave baseline', async () => {
   const { useXbarStore } = await import('../../src/store/useXbarStore.ts');
