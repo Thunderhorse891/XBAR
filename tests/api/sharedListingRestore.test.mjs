@@ -12,6 +12,7 @@ for (const existingToken of ['', 'existing-private-token'])
   test(`explicit public-to-private transition ${existingToken ? 'preserves the credential' : 'creates a missing credential'}`, async () => {
     const state = restorePersistedState({
       ...createEmptyWorkspaceState(),
+      horses: [{ id: 'horse-a' }],
       sharedListings: [
         {
           id: 'listing-a',
