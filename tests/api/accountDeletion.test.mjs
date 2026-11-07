@@ -246,10 +246,12 @@ function deletionFixture(t) {
       // Only the documents bucket holds the legacy files in this scenario.
       if (url.pathname !== '/storage/v1/object/list/horse-documents') return reply([]);
       if (prefix === `${FIXTURE_USER}/documents`)
-        return reply([
-          { name: 'shared.pdf', id: 'o1' },
-          { name: 'mine.pdf', id: 'o2' },
-        ]);
+        return reply(
+          [
+            { name: 'shared.pdf', id: 'o1' },
+            { name: 'mine.pdf', id: 'o2' },
+          ].filter((entry) => !(state.removed ?? []).includes(`${prefix}/${entry.name}`)),
+        );
       if (prefix === FIXTURE_USER) return reply([{ name: 'documents', id: null }]);
       return reply([]);
     }
@@ -528,29 +530,37 @@ test("files a surviving ranch still points at are kept; a purged ranch's are not
 test('a storage sweep reports every prefix it could not clear, instead of claiming success', async () => {
   const { removeStoragePrefixes } = await import('../../api/_lib/account-delete.js');
   const removed = [];
-  const fake = (behaviour) => ({
-    storage: {
-      from: () => ({
-        list: async (prefix) => {
-          if (behaviour.listFails?.includes(prefix)) return { data: null, error: { message: 'timeout' } };
-          if (prefix === 'ws-a')
+  const fake = (behaviour) => {
+    const remaining = new Set(['ws-a/p.pdf', 'ws-a/horse-1/q.pdf']);
+    return {
+      storage: {
+        from: () => ({
+          list: async (prefix) => {
+            if (behaviour.listFails?.includes(prefix)) return { data: null, error: { message: 'timeout' } };
+            const entries =
+              prefix === 'ws-a'
+                ? [
+                    { name: 'p.pdf', id: '1' },
+                    { name: 'horse-1', id: null },
+                  ]
+                : prefix === 'ws-a/horse-1'
+                  ? [{ name: 'q.pdf', id: '2' }]
+                  : [];
             return {
-              data: [
-                { name: 'p.pdf', id: '1' },
-                { name: 'horse-1', id: null },
-              ],
+              data: entries.filter((entry) => entry.id === null || remaining.has(`${prefix}/${entry.name}`)),
               error: null,
             };
-          if (prefix === 'ws-a/horse-1') return { data: [{ name: 'q.pdf', id: '2' }], error: null };
-          return { data: [], error: null };
-        },
-        remove: async (paths) => {
-          removed.push(...paths);
-          return behaviour.removeFails ? { data: null, error: { message: 'denied' } } : { data: paths, error: null };
-        },
-      }),
-    },
-  });
+          },
+          remove: async (paths) => {
+            removed.push(...paths);
+            if (behaviour.removeFails) return { data: null, error: { message: 'denied' } };
+            for (const path of paths) remaining.delete(path);
+            return { data: paths, error: null };
+          },
+        }),
+      },
+    };
+  };
 
   assert.deepEqual(await removeStoragePrefixes(fake({}), 'b', ['ws-a', 'ws-empty']), []);
   assert.deepEqual(removed, ['ws-a/p.pdf', 'ws-a/horse-1/q.pdf']);
@@ -563,6 +573,152 @@ test('a storage sweep reports every prefix it could not clear, instead of claimi
   removed.length = 0;
   assert.deepEqual(await removeStoragePrefixes(fake({}), 'b', ['ws-a'], new Set(['ws-a/p.pdf'])), []);
   assert.deepEqual(removed, ['ws-a/horse-1/q.pdf']);
+});
+
+function storageCompletionFixture({ paths = [], transformList, removePaths } = {}) {
+  const remaining = new Set(paths);
+  const listCalls = [];
+  const removeCalls = [];
+  const supabase = {
+    storage: {
+      from(bucket) {
+        assert.equal(bucket, 'synthetic-bucket');
+        return {
+          async list(prefix, options) {
+            listCalls.push({ prefix, ...options });
+            const entries = [...remaining]
+              .filter((path) => path.startsWith(`${prefix}/`))
+              .map((path) => ({ name: path.slice(prefix.length + 1), id: `object:${path}` }))
+              .sort((a, b) => a.name.localeCompare(b.name))
+              .slice(options.offset, options.offset + options.limit);
+            return transformList
+              ? transformList({ prefix, options, entries, call: listCalls.length })
+              : { data: entries, error: null };
+          },
+          async remove(requested) {
+            removeCalls.push([...requested]);
+            for (const path of removePaths ? removePaths(requested) : requested) remaining.delete(path);
+            return { data: [], error: null };
+          },
+        };
+      },
+    },
+  };
+  return { supabase, remaining, listCalls, removeCalls };
+}
+
+for (const malformed of [
+  null,
+  undefined,
+  {},
+  { length: 0 },
+  '',
+  [null],
+  [{ name: '', id: 'object' }],
+  [{ name: 'file.pdf' }],
+  [{ name: 'file.pdf', id: 42 }],
+  [{ name: '../outside.pdf', id: 'object' }],
+]) {
+  test(`a malformed storage listing is incomplete: ${JSON.stringify(malformed)}`, async () => {
+    const { removeStoragePrefixes } = await import('../../api/_lib/account-delete.js');
+    const fixture = storageCompletionFixture({
+      transformList: ({ call }) => ({ data: call === 1 ? malformed : [], error: null }),
+    });
+    assert.deepEqual(await removeStoragePrefixes(fixture.supabase, 'synthetic-bucket', ['ws-fixture']), ['ws-fixture']);
+    assert.equal(fixture.removeCalls.length, 0);
+  });
+}
+
+test('an acknowledged removal that leaves objects behind is incomplete without another delete pass', async () => {
+  const { removeStoragePrefixes } = await import('../../api/_lib/account-delete.js');
+  const fixture = storageCompletionFixture({ paths: ['ws-fixture/file.pdf'], removePaths: () => [] });
+  assert.deepEqual(await removeStoragePrefixes(fixture.supabase, 'synthetic-bucket', ['ws-fixture']), ['ws-fixture']);
+  assert.equal(fixture.removeCalls.length, 1, 'verification must not introduce another deletion attempt');
+  assert.equal(fixture.remaining.size, 1);
+});
+
+test('partial removal stays incomplete even when the provider acknowledges every batch', async () => {
+  const { removeStoragePrefixes } = await import('../../api/_lib/account-delete.js');
+  const fixture = storageCompletionFixture({
+    paths: ['ws-fixture/a.pdf', 'ws-fixture/b.pdf'],
+    removePaths: (requested) => requested.slice(0, 1),
+  });
+  assert.deepEqual(await removeStoragePrefixes(fixture.supabase, 'synthetic-bucket', ['ws-fixture']), ['ws-fixture']);
+  assert.equal(fixture.removeCalls.length, 1);
+  assert.deepEqual([...fixture.remaining], ['ws-fixture/b.pdf']);
+});
+
+test('completion verifies every listing page and permits protected-only remainders', async () => {
+  const { removeStoragePrefixes } = await import('../../api/_lib/account-delete.js');
+  const protectedPaths = Array.from({ length: 101 }, (_, i) => `ws-fixture/keep-${String(i).padStart(3, '0')}.pdf`);
+  const fixture = storageCompletionFixture({ paths: [...protectedPaths, 'ws-fixture/remove.pdf'] });
+  assert.deepEqual(
+    await removeStoragePrefixes(fixture.supabase, 'synthetic-bucket', ['ws-fixture'], new Set(protectedPaths)),
+    [],
+  );
+  assert.deepEqual(fixture.removeCalls, [['ws-fixture/remove.pdf']]);
+  assert.deepEqual(
+    fixture.listCalls.map(({ offset }) => offset),
+    [0, 100, 0, 100],
+  );
+  assert.equal(fixture.remaining.size, 101);
+});
+
+test('a later verification page cannot hide an eligible object behind protected objects', async () => {
+  const { removeStoragePrefixes } = await import('../../api/_lib/account-delete.js');
+  const protectedPaths = Array.from({ length: 100 }, (_, i) => `ws-fixture/keep-${String(i).padStart(3, '0')}.pdf`);
+  const fixture = storageCompletionFixture({
+    paths: [...protectedPaths, 'ws-fixture/remove.pdf'],
+    removePaths: () => [],
+  });
+  assert.deepEqual(
+    await removeStoragePrefixes(fixture.supabase, 'synthetic-bucket', ['ws-fixture'], new Set(protectedPaths)),
+    ['ws-fixture'],
+  );
+  assert.equal(fixture.removeCalls.length, 1);
+});
+
+test('a successful paginated sweep is confirmed empty and repeated invocation removes nothing', async () => {
+  const { removeStoragePrefixes } = await import('../../api/_lib/account-delete.js');
+  const paths = Array.from({ length: 205 }, (_, i) => `ws-fixture/file-${String(i).padStart(3, '0')}.pdf`);
+  const fixture = storageCompletionFixture({ paths });
+  assert.deepEqual(await removeStoragePrefixes(fixture.supabase, 'synthetic-bucket', ['ws-fixture']), []);
+  assert.equal(fixture.remaining.size, 0);
+  assert.deepEqual(
+    fixture.removeCalls.map((batch) => batch.length),
+    [100, 100, 5],
+  );
+  assert.deepEqual(
+    fixture.listCalls.map(({ offset }) => offset),
+    [0, 100, 200, 0],
+  );
+  assert.deepEqual(await removeStoragePrefixes(fixture.supabase, 'synthetic-bucket', ['ws-fixture']), []);
+  assert.equal(fixture.removeCalls.length, 3);
+});
+
+for (const failure of ['malformed', 'provider-error']) {
+  test(`a ${failure} verification listing cannot claim cleanup completion`, async () => {
+    const { removeStoragePrefixes } = await import('../../api/_lib/account-delete.js');
+    const fixture = storageCompletionFixture({
+      paths: ['ws-fixture/file.pdf'],
+      transformList: ({ entries, call }) =>
+        call === 1
+          ? { data: entries, error: null }
+          : { data: null, error: failure === 'provider-error' ? { message: 'synthetic timeout' } : null },
+    });
+    assert.deepEqual(await removeStoragePrefixes(fixture.supabase, 'synthetic-bucket', ['ws-fixture']), ['ws-fixture']);
+    assert.equal(fixture.removeCalls.length, 1);
+    assert.equal(fixture.remaining.size, 0, 'the result stays unknown even if the synthetic removal succeeded');
+  });
+}
+
+test('a malformed later listing page is incomplete', async () => {
+  const { removeStoragePrefixes } = await import('../../api/_lib/account-delete.js');
+  const fixture = storageCompletionFixture({
+    paths: Array.from({ length: 100 }, (_, i) => `ws-fixture/file-${i}.pdf`),
+    transformList: ({ entries, options }) => ({ data: options.offset === 0 ? entries : null, error: null }),
+  });
+  assert.deepEqual(await removeStoragePrefixes(fixture.supabase, 'synthetic-bucket', ['ws-fixture']), ['ws-fixture']);
 });
 
 test('the deletion response says when stored files were left behind', () => {

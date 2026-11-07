@@ -7,7 +7,7 @@ import {
   openBuyerRequests,
   publicShareEventToBuyerRoomEvent,
 } from '../src/lib/buyerDealRoom.js';
-import { buildUsageMeters, featureGate, usagePressure } from '../src/lib/commercialEngine.js';
+import { featureGate, usagePressure } from '../src/lib/commercialEngine.js';
 import { buildHorseProfitProfile, buildOfferDecision } from '../src/lib/profitIntelligence.js';
 import { buildPublicBuyerPacketArtifact } from '../src/lib/publicBuyerPacket.js';
 import { buildSaleHold } from '../src/lib/saleTrustEngine.js';
@@ -71,7 +71,6 @@ test('usage pressure moves through warning, upgrade, and hard gate thresholds', 
   assert.equal(usagePressure(80, 100), 'warning');
   assert.equal(usagePressure(90, 100), 'upgrade');
   assert.equal(usagePressure(100, 100), 'blocked');
-  assert.equal(buildUsageMeters(subscription('Starter', 5))[0].pressure, 'blocked');
 });
 
 test('commercial features unlock at their intended plans', () => {

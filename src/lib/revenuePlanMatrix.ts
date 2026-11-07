@@ -68,7 +68,7 @@ export const revenuePlanMatrix: Record<SubscriptionTier, RevenuePlanProfile> = {
       {
         label: 'Financial intelligence',
         detail:
-          'Profit-per-animal ranking and a ranch-wide profit & loss that separate money banked from money still at stake, plus underwater-price alerts and cost-drag analysis built from your real costs and offers.',
+          'Estimated margin per animal and agreed closed-sale values, with projected herd margins, underwater-price alerts, and cost analysis from recorded costs and offers. Payment collection is not tracked.',
       },
       {
         label: 'Inventory and supply control',

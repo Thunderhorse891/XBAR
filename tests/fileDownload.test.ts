@@ -107,7 +107,6 @@ test('binary content reaches the share sheet byte-for-byte', async () => {
 test('every export refuses honestly when there is no way to save', async () => {
   const { downloadRanchReportCsv } = await import('../src/lib/ranchReportExport.js');
   const { downloadPublicBuyerPacketArtifact } = await import('../src/lib/publicBuyerPacket.js');
-  const { downloadHtmlFile } = await import('../src/lib/documentTemplateLibrary.js');
   const { downloadLegalHtml } = await import('../src/lib/legalDocuments.js');
   const { buildRanchReport } = await import('../src/lib/ranchReport.js');
 
@@ -119,7 +118,6 @@ test('every export refuses honestly when there is no way to save', async () => {
   await withWindow(undefined, async () => {
     const results = [
       await downloadRanchReportCsv(report),
-      await downloadHtmlFile('x.html', '<p>x</p>'),
       await downloadLegalHtml(legalDocuments[0]),
       await downloadPublicBuyerPacketArtifact({ fileName: 'packet.html', html: '<p>x</p>' }),
     ];

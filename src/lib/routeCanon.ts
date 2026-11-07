@@ -11,6 +11,17 @@
 /** Browser base path for the authenticated SPA (React Router basename). */
 export const appBasePath = '/app';
 
+/** Recover only the exact public-profile URL shapes issued by older clients.
+ * The hash query is copied verbatim: it contains the public share capability.
+ * Outer queries are not part of those links and may belong to an OAuth callback.
+ * Keep this bounded matcher aligned with the plain marketing site.js bootstrap;
+ * the same behavioral matrix executes both entrypoints.
+ */
+export function legacyPublicProfilePath(pathname: string, search: string, hash: string): string {
+  if (search || !['/', appBasePath, `${appBasePath}/`].includes(pathname)) return '';
+  return /^#\/profiles\/[A-Za-z0-9_-]+(?:\?[^\s#]*)?$/.test(hash) ? `${appBasePath}${hash.slice(1)}` : '';
+}
+
 /** Where a Supabase password-recovery link returns the customer. */
 export const passwordResetPath = '/reset-password';
 export const loginPath = '/login';

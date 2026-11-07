@@ -1,3 +1,4 @@
+import { recordedOfferPrice } from './financialPrices.js';
 import type { DocumentRecord, ExpenseReceipt, HorseRecord, OwnershipRecord, SalesLead } from '../types/xbar.js';
 import {
   assessRevenueAtRisk,
@@ -52,6 +53,8 @@ export interface RanchReportMoney {
   readyValue: number;
   /** Open offers that have not been won or lost. */
   pipelineValue: number;
+  unpricedOfferCount: number;
+  unpricedListedCount: number;
   depositsHeld: number;
 }
 
@@ -262,7 +265,7 @@ export function buildRanchReport(input: RanchReportInput, now: Date = new Date()
    * exactly as they were — the Sales editor changes the lead, not the horse —
    * so `isSaleInventory` still returns true and the old asking price kept
    * appearing under "Listed", "Ready to close" and "Held up" long after the
-   * money came in. buildRanchFinancials already treats the same horse as
+   * sale was agreed. buildRanchFinancials already treats the same horse as
    * `'sold'`, so the Money screen and this report disagreed about the same
    * animal, in the UI, the CSV and the banker-facing PDF alike.
    *
@@ -281,7 +284,8 @@ export function buildRanchReport(input: RanchReportInput, now: Date = new Date()
    * Sold horses are excluded from the RISK assessment, not from the report.
    * They keep their economics row below — what the operation put into them is
    * still real money and still belongs in the totals — but revenue that has
-   * already been collected is not revenue at risk, and its blockers are moot.
+   * already been agreed belongs to closed-sale results, not open inventory risk.
+   * This does not establish that payment was received.
    */
   const saleInventoryHorses = horses.filter((horse) => !isSold(horse));
 
@@ -458,9 +462,11 @@ export function buildRanchReport(input: RanchReportInput, now: Date = new Date()
       // The counter when there is one, like buildRanchFinancials: once a buyer
       // has countered, the counter is what is actually on the table, and
       // reporting the original ask would overstate the pipeline.
-      pipelineValue: sum(
-        openOffers.map((lead) => positiveMoney(lead.counterOfferAmount) || positiveMoney(lead.offerAmount)),
-      ),
+      pipelineValue: sum(openOffers.map((lead) => recordedOfferPrice(lead.counterOfferAmount, lead.offerAmount))),
+      unpricedOfferCount: openOffers.filter(
+        (lead) => recordedOfferPrice(lead.counterOfferAmount, lead.offerAmount) === 0,
+      ).length,
+      unpricedListedCount: risk.unpricedCount,
       // Money the operation is holding that is not yet its own.
       //
       // A deposit on a deal closed as Won has been applied to the sale — the

@@ -279,6 +279,13 @@ export function SlideOverDrawer({
         <DialogPrimitive.Content
           asChild
           {...(!subtitle ? { 'aria-describedby': undefined } : {})}
+          onInteractOutside={(event) => {
+            // A notification's Close/Undo control is not a request to discard
+            // the draft underneath it. Keep the modal and its focus boundary.
+            if (event.target instanceof Element && event.target.closest('[data-sonner-toast]')) {
+              event.preventDefault();
+            }
+          }}
           onOpenAutoFocus={() => {
             opener.current = document.activeElement instanceof HTMLElement ? document.activeElement : null;
           }}

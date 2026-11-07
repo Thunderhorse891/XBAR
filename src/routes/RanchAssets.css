@@ -1,0 +1,10 @@
+/* Let the register scroll inside its panel instead of widening the editor grid. */
+.ranch-assets-layout,
+.ranch-assets-layout > .panel {
+  min-width: 0;
+}
+
+.ranch-assets-layout .table-shell:focus-visible {
+  outline: 2px solid var(--xbar-cyan);
+  outline-offset: 2px;
+}

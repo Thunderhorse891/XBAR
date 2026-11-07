@@ -190,7 +190,6 @@ const PLAIN_NAVIGATION = new Map([
   ],
   ['src/lib/billingRoutes.ts', 'Defines the route. Nothing to gate; gating here would gate everything.'],
   ['src/lib/subscriptionGates.ts', 'Re-exports the path and holds gate COPY. Renders nothing itself.'],
-  ['src/lib/activation.ts', 'Builds a checklist nothing renders -- only its own test imports it.'],
 ]);
 
 /*
@@ -330,27 +329,6 @@ test('the server still appends its own /app to the configured origin', () => {
     source,
     /\$\{appOrigin\}\/app\/verify\//,
     'sale-packets no longer builds the verify URL by appending /app; the origin-only rule may no longer hold',
-  );
-});
-
-/*
- * activation.ts is exempted because nothing renders it. That has to stay true.
- *
- * It builds a checklist with a "Review billing" step whose `complete` is the
- * paid-plan check -- unfinishable in a store build, exactly like the one
- * removed from GettingStarted. It is harmless only while no screen shows it.
- */
-test('the unrendered activation checklist stays unrendered', () => {
-  const offenders = [];
-  for (const file of sourceFilesUnder(path.join(process.cwd(), 'src'))) {
-    const relative = path.relative(process.cwd(), file).split(path.sep).join('/');
-    if (relative === 'src/lib/activation.ts') continue;
-    if (/buildActivationSteps|summarizeActivation/.test(readFileSync(file, 'utf8'))) offenders.push(relative);
-  }
-  assert.deepEqual(
-    offenders,
-    [],
-    `activation.ts is now rendered by ${offenders.join(', ')}; its billing step is unfinishable in a store build and needs gating like GettingStarted's`,
   );
 });
 

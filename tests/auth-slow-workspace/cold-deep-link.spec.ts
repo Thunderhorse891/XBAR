@@ -1,3 +1,4 @@
+import { fulfillRelationalFixture } from './relationalFixture.js';
 import { expect, test } from '@playwright/test';
 import { blockWebfonts, readStoredAccessToken, sessionLink, stubGoTrueUser } from '../auth-smoke/support.js';
 
@@ -25,12 +26,12 @@ test('a cold deep link waits for the cloud instead of diverting through setup', 
   await stubGoTrueUser(page);
   await page.route('**/rest/v1/**', async (route) => {
     const table = new URL(route.request().url()).pathname.split('/').pop();
-    if (table === 'workspaces') return route.fulfill({ status: 200, json: { id: workspaceId } });
+    if (table === 'workspaces') return fulfillRelationalFixture(route, { status: 200, json: { id: workspaceId } });
     const single = table === 'workspace_profiles' || table === 'workspace_subscription_profiles';
     if (table === 'workspace_profiles' && holdProfile) {
       await new Promise((resolve) => setTimeout(resolve, 1_000));
     }
-    await route.fulfill({
+    await fulfillRelationalFixture(route, {
       status: 200,
       json: single
         ? {

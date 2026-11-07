@@ -119,13 +119,21 @@ export type IdentityPublication = {
   workspaceReady: false;
   status?: 'loading';
   workspaceId?: '';
-  workspaceRole?: 'Owner';
+  workspaceRole?: 'Pending access';
+  recoveryContext?: undefined;
   stagedStorageBytes?: 0;
 };
 
 export function identityPublication(previousUserId: string, nextUserId: string): IdentityPublication {
   if (previousUserId && previousUserId === nextUserId) return { workspaceReady: false };
-  return { workspaceReady: false, status: 'loading', workspaceId: '', workspaceRole: 'Owner', stagedStorageBytes: 0 };
+  return {
+    workspaceReady: false,
+    status: 'loading',
+    workspaceId: '',
+    workspaceRole: 'Pending access',
+    recoveryContext: undefined,
+    stagedStorageBytes: 0,
+  };
 }
 
 type AuthSessionLike = { access_token?: string } | null;

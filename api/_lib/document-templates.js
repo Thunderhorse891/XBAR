@@ -1,4 +1,4 @@
-// Server-side template catalog mirroring src/lib/documentTemplateLibrary.ts.
+// Canonical server-side document template catalog.
 // Each template is a structured section list so the same definition renders
 // to HTML (frontend preview) and to PDF (api/_lib/pdf.js) without an HTML
 // parser. Deployments can override a template by setting template_content

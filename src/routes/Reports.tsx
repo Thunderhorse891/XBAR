@@ -392,6 +392,9 @@ export default function Reports() {
                 <b>{formatCompactCurrency(report.money.valueAtRisk)}</b>
               </div>
             </div>
+            {report.money.unpricedListedCount > 0 ? (
+              <small>Known-value subtotals · {report.money.unpricedListedCount} listed prices unknown</small>
+            ) : null}
           </div>
         )}
       </section>
@@ -429,7 +432,7 @@ export default function Reports() {
               className="ops-metric-card"
               label="Ready to close"
               value={formatCompactCurrency(report.money.readyValue)}
-              detail="Listed value with no blockers"
+              detail={`Known asking value with no blockers${report.money.unpricedListedCount ? ` · Partial: ${report.money.unpricedListedCount} listed prices unknown` : ''}`}
               tone="emerald"
             />
             <MetricCard
@@ -444,14 +447,14 @@ export default function Reports() {
                */
               label="Held up"
               value={formatCompactCurrency(report.money.valueAtRisk)}
-              detail={`${report.risk.items.length} horse${report.risk.items.length === 1 ? '' : 's'} blocked`}
+              detail={`${report.risk.items.length} horse${report.risk.items.length === 1 ? '' : 's'} blocked${report.money.unpricedListedCount ? ` · Partial: ${report.money.unpricedListedCount} listed prices unknown` : ''}`}
               tone={report.money.valueAtRisk > 0 ? 'amber' : 'slate'}
             />
             <MetricCard
               className="ops-metric-card"
               label="Open offers"
               value={formatCompactCurrency(report.money.pipelineValue)}
-              detail={`${formatCurrency(report.money.depositsHeld)} in deposits held`}
+              detail={`${formatCurrency(report.money.depositsHeld)} in deposits marked paid${report.money.unpricedOfferCount ? ` · Partial: ${report.money.unpricedOfferCount} offer prices unknown` : ''}`}
               tone="blue"
             />
             <MetricCard
@@ -481,7 +484,9 @@ export default function Reports() {
                       <span className="report-risk__name">{item.horseName}</span>
                       <span className="report-risk__blockers">{item.blockers.join(' · ')}</span>
                     </div>
-                    <span className="report-risk__amount">{formatCurrency(item.askPrice)}</span>
+                    <span className="report-risk__amount">
+                      {item.askPrice > 0 ? formatCurrency(item.askPrice) : 'Price unknown'}
+                    </span>
                     <button
                       className="button button--ghost button--compact"
                       type="button"
@@ -498,7 +503,7 @@ export default function Reports() {
           <Panel
             className="ops-panel"
             title="Cost and margin by horse"
-            description="Recorded costs and monthly averages, with the same recorded-cost sale floor as Sales. Missing history or costs remain unknown."
+            description="Recorded costs and monthly averages, with the same recorded-cost sale floor as Sales. Missing history or costs remain unknown. Closed-sale margins use agreed prices, not cash received; payment collection is not tracked."
           >
             <div className="report-table-scroll">
               <table className="report-table">
@@ -582,7 +587,7 @@ export default function Reports() {
                       ) : (
                         <td className="report-table__num report-table__muted" colSpan={4}>
                           {horse.financialStatus === 'sold'
-                            ? `Sold: ${horse.closedSaleValue === null ? 'sale price unknown' : formatCurrency(horse.closedSaleValue)} · gross result ${horse.closedSaleProfit === null ? 'unknown' : formatCurrency(horse.closedSaleProfit)} before overhead, not cash received`
+                            ? `Agreed sale: ${horse.closedSaleValue === null ? 'sale price unknown' : formatCurrency(horse.closedSaleValue)} · estimated margin ${horse.closedSaleProfit === null ? 'unknown' : formatCurrency(horse.closedSaleProfit)} before overhead, not cash received`
                             : horse.saleInventory
                               ? 'Asking price not set'
                               : 'Not listed for sale'}

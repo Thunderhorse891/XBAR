@@ -1,4 +1,4 @@
-import type { RoleCapability, UserRole } from '../types/xbar.js';
+import type { RoleCapability, UserRole, WorkspaceAccessRole } from '../types/xbar.js';
 
 const roleCapabilityMap: Record<UserRole, RoleCapability[]> = {
   Admin: [
@@ -48,7 +48,8 @@ const capabilityMessages: Record<RoleCapability, string> = {
   syncCloud: 'This role cannot control cloud sync for this workspace.',
 };
 
-export function hasRoleCapability(role: UserRole, capability: RoleCapability) {
+export function hasRoleCapability(role: WorkspaceAccessRole, capability: RoleCapability) {
+  if (role === 'Pending access') return false;
   return roleCapabilityMap[role]?.includes(capability) ?? false;
 }
 

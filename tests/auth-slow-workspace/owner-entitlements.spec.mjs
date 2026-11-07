@@ -1,3 +1,4 @@
+import { fulfillRelationalFixture } from './relationalFixture.js';
 /* global indexedDB, history, dispatchEvent, PopStateEvent */
 import { expect, test } from '@playwright/test';
 // Playwright resolves the app's Vite aliases. Keep this browser-only fixture
@@ -61,10 +62,10 @@ async function readRanch(page) {
   });
 }
 
-for (const scenario of ['snapshot', 'conflict', 'missing-snapshot']) {
-  const conflict = scenario !== 'snapshot';
+for (const scenario of ['relational', 'conflict', 'missing-snapshot']) {
+  const conflict = scenario !== 'relational';
   const missingSnapshot = scenario === 'missing-snapshot';
-  test(`canonical owner grant restores reports and sixth-horse entry ${missingSnapshot ? 'with no cloud snapshot' : conflict ? 'without overwriting local conflicts' : 'from a Starter cloud snapshot'}`, async ({
+  test(`canonical owner grant restores reports and sixth-horse entry ${missingSnapshot ? 'with no cloud snapshot' : conflict ? 'without overwriting unsynced local work' : 'from complete relational records'}`, async ({
     page,
   }) => {
     const remote = ranch();
@@ -90,6 +91,7 @@ for (const scenario of ['snapshot', 'conflict', 'missing-snapshot']) {
       );
     }
     let cloudWrites = 0;
+    let snapshotReads = 0;
     await stubGoTrueUser(page);
     await page.route('**/rest/v1/**', async (route) => {
       const request = route.request();
@@ -104,7 +106,8 @@ for (const scenario of ['snapshot', 'conflict', 'missing-snapshot']) {
           status: 200,
           json: { tier: 'Enterprise', billing_state: 'Manual Billing', monthly_rate: 0, payload: {} },
         });
-      if (table === 'workspace_snapshots')
+      if (table === 'workspace_snapshots') {
+        snapshotReads += 1;
         return route.fulfill({
           status: 200,
           json: {
@@ -112,9 +115,31 @@ for (const scenario of ['snapshot', 'conflict', 'missing-snapshot']) {
             updated_at: '2026-10-02T00:00:00Z',
           },
         });
-      // One failed relational read must fall back to the records snapshot while
-      // still reading the authoritative subscription independently.
-      return route.fulfill({ status: 503, json: { message: 'Relational fixture unavailable' } });
+      }
+      // Failed record reads retain local work without installing a stale snapshot;
+      // the subscription remains an independently authoritative read.
+      if (conflict) return route.fulfill({ status: 503, json: { message: 'Relational fixture unavailable' } });
+      if (table === 'workspace_profiles')
+        return route.fulfill({
+          status: 200,
+          json: { payload: remote.workspaceProfile, updated_at: '2026-10-02T00:00:00Z' },
+        });
+      const slices = {
+        horses: 'horses',
+        documents: 'documents',
+        intake_batches: 'intakeBatches',
+        ownership_records: 'ownershipRecords',
+        expense_receipts: 'expenseReceipts',
+        ranch_assets: 'ranchAssets',
+        sales_leads: 'salesLeads',
+        shared_listings: 'sharedListings',
+        workspace_memberships: 'workspaceMembers',
+        workspace_invitations: 'workspaceInvitations',
+      };
+      return fulfillRelationalFixture(route, {
+        status: 200,
+        json: (remote[slices[table]] ?? []).map((payload) => ({ payload, updated_at: '2026-10-02T00:00:00Z' })),
+      });
     });
     await page.goto(sessionLink('signin'));
     await expect(page.getByText(/This page needs a current password-reset link/)).toBeVisible();
@@ -130,6 +155,7 @@ for (const scenario of ['snapshot', 'conflict', 'missing-snapshot']) {
     const saved = await readRanch(page);
     expect(saved.horses).toEqual(conflict ? local.horses : remote.horses);
     expect(saved.subscription.monthlyRate).toBe(0);
+    expect(snapshotReads, 'unavailable relational data cannot be replaced by a recovery snapshot').toBe(0);
     if (conflict) expect(cloudWrites, 'conflicting local work must never be automatically pushed').toBe(0);
     await page.goto('/app/horses?new=1');
     await expect(page.getByRole('heading', { name: 'Add a horse', exact: true })).toBeVisible();
@@ -140,5 +166,12 @@ for (const scenario of ['snapshot', 'conflict', 'missing-snapshot']) {
     await page.getByRole('button', { name: 'Create horse record', exact: true }).click();
     await expect.poll(async () => (await readRanch(page)).horses?.length).toBe(6);
     await expect.poll(async () => (await readRanch(page)).subscription?.tier).toBe('Enterprise');
+    if (conflict) {
+      await page.waitForTimeout(2000); // beyond autosave debounce
+      expect(cloudWrites, 'failed record reads cannot authorize autosave after a local edit').toBe(0);
+      const originalHorse = (await readRanch(page)).horses.find((horse) => horse.id === local.horses[0].id);
+      expect(originalHorse, 'the original horse remains after prepending the newly created horse').toBeDefined();
+      expect(originalHorse.notes).toContainEqual(local.horses[0].notes.at(-1));
+    }
   });
 }

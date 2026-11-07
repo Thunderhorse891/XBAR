@@ -1,4 +1,4 @@
-import { FormEvent, useEffect, useMemo, useState } from 'react';
+import { FormEvent, useEffect, useMemo, useRef, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { Ban, MessageSquare, Phone, Send, ShieldCheck, Users } from 'lucide-react';
 import { ActionButton, Card, PageHead, StatusChip } from '@/components/saas';
@@ -11,12 +11,14 @@ import {
 } from '@/lib/buyerOffers';
 import { buyerFollowUpPath } from '@/lib/buyerRoutes';
 import { useUiStore } from '@/store/useUiStore';
-import { useXbarStore } from '@/store/useXbarStore';
+import { useCurrentRoleCapability, useXbarStore } from '@/store/useXbarStore';
+import { useCloudStore } from '@/store/useCloudStore';
+import { getCapabilityDeniedMessage, hasRoleCapability } from '@/lib/permissions';
 import { events, track } from '@/lib/telemetry';
 import type { SalesLead } from '@/types/xbar';
 
-type Access = 'Active' | 'Pending';
-const accessTone = { Active: 'success', Pending: 'warning' } as const;
+type Readiness = 'Ready' | 'Not ready';
+const readinessTone = { Ready: 'success', 'Not ready': 'warning' } as const;
 const initials = (s: string) =>
   s
     .split(' ')
@@ -34,6 +36,12 @@ export default function BuyerDealRoom() {
   const updateSalesLead = useXbarStore((s) => s.updateSalesLead);
   const logBuyerRoomEvent = useXbarStore((state) => state.logBuyerRoomEvent);
   const currentRole = useXbarStore((state) => state.currentRole);
+  const workspaceProfile = useXbarStore((state) => state.workspaceProfile);
+  const canManageSales = useCurrentRoleCapability('manageSales');
+  const cloud = useCloudStore.getState();
+  const actionContext = { workspace: cloud.workspaceId, user: cloud.session?.user.id, profile: workspaceProfile };
+  const changingReadiness = useRef(false);
+  const [readinessError, setReadinessError] = useState('');
   const [selectedId, setSelectedId] = useState<string>(() => routeLeadId ?? leads[0]?.id ?? '');
   const [recordingOffer, setRecordingOffer] = useState(false);
   const [offerDraft, setOfferDraft] = useState<BuyerOfferDraft>(() => createBuyerOfferDraft());
@@ -44,9 +52,9 @@ export default function BuyerDealRoom() {
     return (l: SalesLead) => map.get(l.horseId) ?? 'Unlinked horse';
   }, [horses]);
 
-  // Access + offer come straight from the persisted lead so other views (sales
-  // pipeline open value, etc.) stay consistent after revoking or recording.
-  const accessOf = (l: SalesLead): Access => (l.shareReady ? 'Active' : 'Pending');
+  // This is an internal preparation flag. It cannot prove or revoke access to
+  // a listing token, shared link, or an already downloaded packet.
+  const readinessOf = (l: SalesLead): Readiness => (l.shareReady ? 'Ready' : 'Not ready');
   const offerOf = (l: SalesLead) => l.offerAmount;
 
   const selected = useMemo(() => {
@@ -62,6 +70,7 @@ export default function BuyerDealRoom() {
 
   useEffect(() => {
     setRecordingOffer(false);
+    setReadinessError('');
     setOfferDraft(createBuyerOfferDraft(selected));
     // Reset only when the selected lead's identity changes — deliberately not
     // when its content updates (e.g. after saving an offer), which would wipe
@@ -99,6 +108,79 @@ export default function BuyerDealRoom() {
     setRecordingOffer(false);
   }
 
+  function markNotReady() {
+    if (!selected || changingReadiness.current) return;
+    const fail = (message: string) => {
+      setReadinessError(message);
+      pushToast({ title: 'Readiness change not confirmed', message, tone: 'error' });
+    };
+    const sameContext = () => {
+      const now = useCloudStore.getState();
+      return (
+        now.workspaceId === actionContext.workspace &&
+        now.session?.user.id === actionContext.user &&
+        useXbarStore.getState().workspaceProfile === actionContext.profile
+      );
+    };
+    const live = useXbarStore.getState().salesLeads.find((lead) => lead.id === selected.id);
+    if (!sameContext() || !live) {
+      fail('The buyer or ranch changed. Review the current buyer before continuing.');
+      return;
+    }
+    // A stale second click after the first acknowledged state change is a no-op.
+    if (!live.shareReady) return;
+    if (live !== selected) {
+      fail('The buyer changed. Review the current buyer before continuing.');
+      return;
+    }
+    if (!hasRoleCapability(useXbarStore.getState().currentRole, 'manageSales')) {
+      fail(getCapabilityDeniedMessage('manageSales'));
+      return;
+    }
+    changingReadiness.current = true;
+    setReadinessError('');
+    let updated = false;
+    try {
+      const result = updateSalesLead(selected.id, { shareReady: false });
+      if (!result.ok) {
+        fail(result.message);
+        return;
+      }
+      if (!sameContext()) {
+        fail('The ranch changed before this action could be confirmed. Check the buyer in the original ranch.');
+        return;
+      }
+      const changed = useXbarStore.getState().salesLeads.find((lead) => lead.id === selected.id);
+      if (!changed || changed.shareReady !== false) {
+        fail('The readiness change could not be verified. Check the buyer before trying again.');
+        return;
+      }
+      updated = true;
+      const history = selected.horseId
+        ? logBuyerRoomEvent({
+            horseId: selected.horseId,
+            kind: 'deal-status',
+            actor: currentRole,
+            note: `Marked ${selected.name} not ready for sharing. Existing links were not revoked.`,
+          })
+        : { ok: true };
+      track(events.buyerReadinessChanged, { id: selected.id, ready: false });
+      const message = history.ok
+        ? 'Marked not ready for sharing in this workspace. Existing links and downloaded packets are unchanged.'
+        : 'Readiness changed in this workspace, but its history entry could not be recorded. Existing links and downloaded packets are unchanged.';
+      if (!history.ok) setReadinessError(message);
+      pushToast({ title: 'Sharing readiness updated', message, tone: history.ok ? 'info' : 'warning' });
+    } catch {
+      const message = updated
+        ? 'Readiness changed in this workspace, but its history entry could not be confirmed. Existing links and downloaded packets are unchanged.'
+        : 'The readiness change could not be confirmed. Check the buyer before trying again.';
+      setReadinessError(message);
+      pushToast({ title: 'Readiness change not confirmed', message, tone: updated ? 'warning' : 'error' });
+    } finally {
+      changingReadiness.current = false;
+    }
+  }
+
   if (!selected) {
     return (
       <>
@@ -130,7 +212,7 @@ export default function BuyerDealRoom() {
     );
   }
 
-  const selAccess = accessOf(selected);
+  const selectedReadiness = readinessOf(selected);
   const selOffer = offerOf(selected);
 
   return (
@@ -171,7 +253,7 @@ export default function BuyerDealRoom() {
                   {horseName(r)} · {r.lastTouch}
                 </span>
               </span>
-              <StatusChip tone={accessTone[accessOf(r)]}>{accessOf(r)}</StatusChip>
+              <StatusChip tone={readinessTone[readinessOf(r)]}>{readinessOf(r)}</StatusChip>
             </button>
           ))}
         </div>
@@ -184,8 +266,10 @@ export default function BuyerDealRoom() {
               <div className="xs-detailhead__meta">
                 Interested in {horseName(selected)} · last active {selected.lastTouch}
               </div>
-              <div style={{ display: 'flex', gap: 8, marginTop: 10 }}>
-                <StatusChip tone={accessTone[selAccess]}>Access {selAccess}</StatusChip>
+              <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, marginTop: 10 }}>
+                <StatusChip tone={readinessTone[selectedReadiness]}>
+                  Sharing {selectedReadiness.toLowerCase()}
+                </StatusChip>
                 {selOffer ? (
                   <StatusChip tone="success">Offer received</StatusChip>
                 ) : (
@@ -197,22 +281,10 @@ export default function BuyerDealRoom() {
               <ActionButton
                 size="sm"
                 icon={<Ban size={14} />}
-                disabled={!selected.shareReady}
-                onClick={() => {
-                  track(events.buyerAccessRevoked, { id: selected.id });
-                  updateSalesLead(selected.id, { shareReady: false });
-                  if (selected.horseId) {
-                    logBuyerRoomEvent({
-                      horseId: selected.horseId,
-                      kind: 'deal-status',
-                      actor: currentRole,
-                      note: `Access revoked for ${selected.name}`,
-                    });
-                  }
-                  toast('Access revoked');
-                }}
+                disabled={!canManageSales || !selected.shareReady}
+                onClick={markNotReady}
               >
-                Revoke
+                Mark not ready
               </ActionButton>
               <ActionButton
                 size="sm"
@@ -224,6 +296,19 @@ export default function BuyerDealRoom() {
               </ActionButton>
             </div>
           </div>
+
+          {readinessError ? (
+            <p className="field-error" role="alert">
+              {readinessError}
+            </p>
+          ) : null}
+          <p className="xs-muted">
+            Sharing readiness is an internal note. Manage listing links separately; existing links and downloaded
+            packets are unchanged.
+          </p>
+          <ActionButton size="sm" onClick={() => navigate('/shared-access')}>
+            Manage listing links
+          </ActionButton>
 
           <div className="xs-grid-3">
             <Card>
@@ -241,9 +326,9 @@ export default function BuyerDealRoom() {
               <div style={{ fontSize: 20, fontWeight: 700, marginTop: 4 }}>{selected.channel}</div>
             </Card>
             <Card>
-              <div className="xs-card__sub">Shared access</div>
+              <div className="xs-card__sub">Sharing readiness</div>
               <div style={{ marginTop: 6 }}>
-                <StatusChip tone={accessTone[selAccess]}>{selAccess}</StatusChip>
+                <StatusChip tone={readinessTone[selectedReadiness]}>{selectedReadiness}</StatusChip>
               </div>
             </Card>
           </div>

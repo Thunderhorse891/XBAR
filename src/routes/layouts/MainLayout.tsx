@@ -39,6 +39,7 @@ import { buildCareBoardRows } from '@/lib/dashboardOps';
 import { buildExpiryRadar, expiryBellCount } from '@/lib/documentExpiry';
 import { isSupabaseConfigured } from '@/lib/platformConfig';
 import { useCloudStore } from '@/store/useCloudStore';
+import { useOwnerAccess } from '@/hooks/useOwnerAccess';
 import { useUiStore } from '@/store/useUiStore';
 import { useXbarStore } from '@/store/useXbarStore';
 import { useEffectiveSubscription } from '@/hooks/useOwnerPreview';
@@ -121,6 +122,7 @@ export default function MainLayout() {
   const subscription = useEffectiveSubscription();
   const currentRole = useXbarStore((state) => state.currentRole);
   const cloudSession = useCloudStore((state) => state.session);
+  const ownerAccess = useOwnerAccess();
   const signOutCloud = useCloudStore((state) => state.signOut);
   const pushToast = useUiStore((state) => state.pushToast);
   const setCommandPaletteOpen = useUiStore((state) => state.setCommandPaletteOpen);
@@ -313,6 +315,9 @@ export default function MainLayout() {
             </button>
             <QuickCreateMenu
               items={[
+                ...(ownerAccess === 'allowed'
+                  ? [{ label: 'Owner dashboard', onSelect: () => navigate('/owner') }]
+                  : []),
                 { label: 'Notifications', onSelect: () => navigate('/reminders') },
                 { label: 'Settings', onSelect: () => navigate('/settings') },
                 { label: 'Invite team', onSelect: () => navigate('/settings') },

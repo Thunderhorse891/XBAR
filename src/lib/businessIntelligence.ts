@@ -1,3 +1,4 @@
+import { positiveRecordedPrice } from './financialPrices.js';
 import type { DocumentRecord, ExpenseReceipt, HorseRecord, OwnershipRecord } from '../types/xbar.js';
 import { buildHorseProfitProfile } from './profitIntelligence.js';
 import { recordedReceipts, recordedMonthlyBurn } from './receiptFacts.js';
@@ -29,6 +30,7 @@ export interface RevenueRiskAssessment {
   totalListedValue: number;
   valueAtRisk: number;
   readyValue: number;
+  unpricedCount: number;
   items: RevenueRiskItem[];
 }
 
@@ -84,11 +86,13 @@ export function assessRevenueAtRisk(
   const items: RevenueRiskItem[] = [];
   let totalListedValue = 0;
   let valueAtRisk = 0;
+  let unpricedCount = 0;
 
   for (const horse of horses) {
-    const askPrice = horse.sale?.askPrice ?? 0;
+    const askPrice = positiveRecordedPrice(horse.sale?.askPrice);
     if (!isSaleInventory(horse)) continue;
     totalListedValue += askPrice;
+    if (askPrice === 0) unpricedCount += 1;
 
     const blockers: string[] = [];
     let actionLabel = '';
@@ -155,7 +159,7 @@ export function assessRevenueAtRisk(
   }
 
   items.sort((a, b) => b.askPrice - a.askPrice);
-  return { totalListedValue, valueAtRisk, readyValue: totalListedValue - valueAtRisk, items };
+  return { totalListedValue, valueAtRisk, readyValue: totalListedValue - valueAtRisk, unpricedCount, items };
 }
 
 export interface SpendAnomaly {

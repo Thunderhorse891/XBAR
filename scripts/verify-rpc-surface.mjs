@@ -17,7 +17,8 @@
  * schema: anon drops to exactly xbar_resolve_public_listing and
  * xbar_track_public_share_view, authenticated keeps the two RLS helpers plus
  * the entitlement and storage functions, and service_role keeps
- * xbar_workspace_storage_bytes.
+ * xbar_workspace_storage_bytes, active billing RPCs and request-token deletion
+ * RPCs. Disabled optional upgrade-offer RPCs are not prerequisites here.
  *
  * Requires psql on PATH. It only reads catalog tables and changes nothing.
  */
@@ -113,10 +114,18 @@ const REQUIRED_BY_ROLE = {
   ],
   service_role: [
     'xbar_workspace_storage_bytes(uuid)',
-    // Account deletion holds every owned workspace before the auth delete and
-    // lifts the hold if that fails; without these it refuses every deletion.
-    'xbar_hold_owned_workspaces_for_deletion(uuid)',
-    'xbar_release_account_deletion_holds(uuid)',
+    // Active checkout and webhook call sites need these exact overloads.
+    // A legacy event signature without billing period does not satisfy the
+    // current webhook's named argument contract.
+    'xbar_claim_checkout_lock(uuid, timestamp with time zone, text)',
+    'xbar_apply_subscription_event(uuid, text, text, timestamp with time zone, jsonb, text, text, double precision, jsonb, text, text, text, integer, boolean, text)',
+    // These exact signatures are the protocol account-delete.js calls. The
+    // legacy hold/release functions cannot substitute: the legacy hold now
+    // deliberately refuses, and missing release/confirm grants break recovery
+    // or prevent the handler from reaching the auth delete.
+    'xbar_hold_account_deletion_request(uuid, uuid)',
+    'xbar_release_account_deletion_request(uuid, uuid)',
+    'xbar_confirm_account_deletion_request(uuid, uuid, uuid[])',
   ],
 };
 
@@ -154,7 +163,7 @@ for (const { role, missing } of roleMissing) {
   console.log(
     role === 'authenticated'
       ? 'Signed-in operations will fail with "permission denied for function" until these are granted.'
-      : 'Storage capacity cannot be read, or account deletion cannot hold workspaces, until these are granted.',
+      : 'Storage capacity, billing checkout/event persistence, or account-deletion request handling cannot work until these are granted.',
   );
 }
 

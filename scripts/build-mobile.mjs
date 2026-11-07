@@ -58,12 +58,10 @@ const publicSiteUrl = (
  * inside every sale packet, which is the one artifact whose whole purpose is
  * being checkable by a stranger.
  *
- * It also did not buy what it was meant to. buildPublicShareUrl still appends
- * `#/profiles/...`, and the deployed web bundle runs BrowserRouter, which
- * ignores a fragment — so the shared link was broken either way, before and
- * after. Correcting that means changing how share URLs are built for a
- * browser-routed target, which is web behavior this change has no business
- * touching.
+ * Public buyer links now resolve their destination router in
+ * buildPublicShareUrl: native's hash router does not change the public web
+ * deployment's /app/profiles path. Keep this value an origin so all server
+ * consumers and the public-link builder agree.
  */
 const publicAppUrl = (configuredAppUrl || publicSiteUrl).replace(/\/+$/, '');
 
