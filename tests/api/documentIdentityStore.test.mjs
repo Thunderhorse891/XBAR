@@ -46,6 +46,30 @@ beforeEach((context) => {
   });
 });
 
+test('an unlabeled pedigree cannot attach by one ancestor registration', async () => {
+  const existing = horse('BLUE MOON', '1234567');
+  useXbarStore.setState({ horses: [existing] });
+  const original = structuredClone(useXbarStore.getState().horses);
+  const result = await intake([
+    new File(['THE FAMILY MARE\nBuckskin AQHA #1234567\nOTHER ANCESTOR\nBay AQHA #7654321'], 'pedigree.txt', {
+      type: 'text/plain',
+    }),
+  ]);
+  assert.equal(result.ok, true);
+  assert.deepEqual(result.createdHorseIds, []);
+  assert.deepEqual(useXbarStore.getState().horses, original);
+  const document = useXbarStore.getState().documents[0];
+  assert.equal(document.identityReviewRequired, true);
+  assert.equal(document.horseId, undefined);
+  assert.equal(document.state, 'Needs Review');
+  assert.equal(document.entities.registrationNumber, undefined);
+  assert.equal(document.entities.sex, undefined);
+  assert.equal(document.entities.color, undefined);
+  const retried = useXbarStore.getState().createHorseFromDocument(document.id);
+  assert.equal(retried.ok, false);
+  assert.deepEqual(useXbarStore.getState().horses, original);
+});
+
 test('bulk creation does not duplicate a case-variant name with contradictory registration', async () => {
   const existing = horse('Blue Moon', '7654321');
   useXbarStore.setState({ horses: [existing] });

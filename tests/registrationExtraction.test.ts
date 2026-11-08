@@ -2,6 +2,27 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 import { extractRegistrationFields } from '../src/lib/registrationExtraction.js';
 
+test('unlabeled pedigree identities cannot supply a subject registration, sex or color', () => {
+  const chart =
+    'THE FAMILY MARE\nBuckskin\nAQHA #1234567 1962 Quarter Horse\nOTHER ANCESTOR\nBay AQHA #7654321 1954 Quarter Horse';
+  for (const text of [chart, chart.replace(/\n/g, ' '), chart.toLowerCase()]) {
+    const fields = extractRegistrationFields(text);
+    assert.equal(fields.identityReviewRequired, true);
+    assert.equal(fields.registrationNumber, undefined);
+    assert.equal(fields.sex, undefined);
+    assert.equal(fields.color, undefined);
+  }
+  assert.equal(extractRegistrationFields('AQHA #1234567 2019 Quarter Horse').registrationNumber, '1234567');
+});
+
+test('a parent color cannot supply the subject color', () => {
+  assert.equal(extractRegistrationFields('Horse Name: SPIRIT\nDam: PRETTY HORSE\nColor: Bay').color, undefined);
+  assert.equal(
+    extractRegistrationFields('Horse Name: SPIRIT\nColor: Sorrel\nDam: PRETTY HORSE\nColor: Bay').color,
+    'Sorrel',
+  );
+});
+
 test('a parent name or parent sex cannot supply the subject sex', () => {
   for (const parent of ['Dam: PRETTY MARE', 'Sire: GOLDEN STUD', 'Dam: PRETTY HORSE\nSex: Mare']) {
     const fields = extractRegistrationFields(`Registered Name: BLUE MOON\nRegistration Number: 1234567\n${parent}`);

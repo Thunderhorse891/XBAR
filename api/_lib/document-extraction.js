@@ -1,4 +1,5 @@
 import { addOneCalendarYear as addOneYear, readLabeledDate } from './printed-date.js';
+import { readRegistryIdentifiers } from './registry-identifiers.js';
 
 // Pure extraction logic for the OCR ingestion pipeline. No I/O here so the
 // classification, field parsing, and merge rules stay unit-testable.
@@ -503,7 +504,7 @@ function extractNameFamily(rawText) {
     offset += line.length + 1;
   });
   const text = lines.join(' ');
-  if (!text) return { headText: '', horseName: undefined, sire: undefined, dam: undefined };
+  if (!text) return { headText: '', subjectText: '', horseName: undefined, sire: undefined, dam: undefined };
 
   const horseNames = findHorseNames(text, lineStarts);
   // A labeled name such as DAM GOOD contains data, not a parent-field label.
@@ -521,6 +522,9 @@ function extractNameFamily(rawText) {
   const dam = findParent(parentText, 'dam', Boolean(headText.trim()));
   return {
     headText,
+    // Preserve line boundaries for line-oriented field readers. Flattening
+    // Color into the following Markings field can exceed its length limit.
+    subjectText: parentIndex >= 0 ? lines.join('\n').slice(0, parentIndex) : lines.join('\n'),
     horseName,
     sire: sire.name,
     dam: dam.name,
@@ -561,7 +565,7 @@ export function extractRegistrationFields(text) {
   const breed = nameField(text, ['breed'], { maxLength: 40 });
   if (breed) fields.breed = breed;
 
-  const color = nameField(text, ['colou?r'], { maxLength: 30 });
+  const color = nameField(nameFamily.subjectText, ['colou?r'], { maxLength: 30 });
   if (color) fields.color = color;
 
   const markings = nameField(text, ['markings'], { maxLength: 120 });
@@ -751,6 +755,10 @@ export function detectMultipleHorses(text) {
   );
   for (const match of regMatches) {
     registrations.add(cleanValue(match[1], { uppercase: true }).replace(/\s+/g, ''));
+  }
+
+  for (const entry of readRegistryIdentifiers(source, REGISTRIES)) {
+    registrations.add(entry.registry + entry.number);
   }
 
   const numbers = new Set();

@@ -19,6 +19,7 @@
     "api/_lib/packet-branding-raster.js",
     "api/_lib/workspace-identity.js",
     "api/_lib/printed-date.js",
+    "api/_lib/registry-identifiers.js",
     "src/store/xbarStoreLogic.ts",
     "src/types/xbar.ts",
     "src/lib/salePacketDisclosure.ts",
