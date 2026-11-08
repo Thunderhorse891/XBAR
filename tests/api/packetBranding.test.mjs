@@ -69,6 +69,7 @@ function install({
   readErrors = {},
   role,
   attachmentBytes,
+  horseFields = {},
 } = {}) {
   const reads = [],
     writes = [],
@@ -78,7 +79,9 @@ function install({
     workspaces: [{ id: WORKSPACE, owner_user_id: allow && !role ? USER : 'someone-else' }],
     workspace_memberships: role ? [{ workspace_id: WORKSPACE, user_id: USER, role, status: 'active' }] : [],
     workspace_subscription_profiles: [{ workspace_id: WORKSPACE, tier: 'Professional', billing_state: 'Active' }],
-    horses: [{ workspace_id: WORKSPACE, horse_id: 'horse-1', name: 'Copper', owner_name: 'Taylor Seller' }],
+    horses: [
+      { workspace_id: WORKSPACE, horse_id: 'horse-1', name: 'Copper', owner_name: 'Taylor Seller', ...horseFields },
+    ],
     workspace_profiles: [profile, { ...PROFILE, workspace_id: OTHER_WORKSPACE, ranch_name: 'Foreign Ranch' }].filter(
       Boolean,
     ),
@@ -161,6 +164,22 @@ function install({
   return { client, reads, writes, uploads, downloads };
 }
 
+for (const [horseFields, expected] of [
+  [{ payload: { foaledOn: '2019-04-03' } }, '2019-04-03'],
+  [{ payload: { foaledOn: '2019-04-03', birthdate: '2018-01-01', foaled: '2017-01-01' } }, '2019-04-03'],
+  [{ birthdate: '2020-02-02', payload: { foaledOn: '2019-04-03' } }, '2020-02-02'],
+  [{ payload: { birthdate: '2018-01-01' } }, '2018-01-01'],
+  [{ payload: { foaled: '2017-01-01' } }, '2017-01-01'],
+  [{ payload: {} }, ''],
+]) {
+  test(`report birthdate preserves canonical and legacy horse facts: ${JSON.stringify(horseFields)}`, async () => {
+    const f = install({ horseFields });
+    const result = await loadHorseContext(f.client, WORKSPACE, 'horse-1');
+    assert.equal(result.context.horse.birthdate, expected);
+    assert.equal(f.writes.length, 0);
+  });
+}
+
 for (const [label, override] of [
   ['pending', { state: 'Needs Review' }],
   ['missing state', { state: undefined }],
@@ -240,6 +259,14 @@ test('template field overrides preserve valid buyer and sale placeholders', asyn
   assert.equal(result.status, 200);
   assert.match(result.body.html, /Synthetic Buyer/);
   assert.match(result.body.html, /12500/);
+});
+
+test('generated template includes the stored OCR foaling date', async () => {
+  const f = install({ horseFields: { payload: { foaledOn: '2019-04-03' } } });
+  const result = await call({ templateId: 'bill-of-sale', output: 'html' }, templateHandler);
+  assert.equal(result.status, 200);
+  assert.match(result.body.html, /Foaled: 2019-04-03/);
+  assert.equal(f.writes.length, 0);
 });
 for (const role of ['Ranch Manager', 'Sales Lead', 'Owner', 'Medical Lead', 'Admin']) {
   test(`a generated document awaits source review for ${role}`, async () => {

@@ -125,7 +125,9 @@ for (const patch of [
         type: 'Coggins',
         state: 'Ready',
         uploadedAt: new Date().toISOString(),
-        entities: {},
+        // This test starts from genuinely eligible evidence before the remote
+        // listing changes. Upload time alone cannot establish a Coggins exam.
+        entities: { examDate: new Date().toLocaleDateString('en-CA') },
       },
     ];
     const ownership = {

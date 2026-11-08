@@ -70,7 +70,7 @@ export const salePacketDocumentTypes: Record<
   Exclude<SalePacketSlot['key'], 'aqha-photos'>,
   DocumentRecord['type'][]
 > = {
-  'aqha-papers': ['Registration', 'Bill of Sale'],
+  'aqha-papers': ['Registration'],
   'transfer-papers': ['Ownership Memo', 'Transfer Packet'],
   coggins: ['Coggins'],
   'health-cert': ['Vet Record'],
@@ -351,7 +351,7 @@ export function buildHorsePacketCompleteness(
         ? 'Registry backing document is approved for packet use.'
         : registrationDocs.length
           ? 'Registry data exists, but the source document still needs confirmation.'
-          : 'No registration or bill-of-sale source doc is attached yet.',
+          : 'No registration source document is attached yet.',
       weight: 20,
       tone: 'slate',
     },

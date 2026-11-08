@@ -405,6 +405,14 @@ test('sale packet labels name the horse registry instead of assuming AQHA', () =
   const aqhaPapers = aqhaPacket.saleSlots.find((slot) => slot.key === 'aqha-papers');
   assert.equal(aqhaPapers?.label, 'AQHA papers');
   assert.equal(aqhaPapers?.detail, 'No AQHA registration paper is attached yet.');
+  for (const type of ['Bill of Sale', 'Registration'] as const) {
+    const evidence = { type, state: 'Ready', entities: {} } as DocumentRecord;
+    const packet = buildHorsePacketCompleteness(aqhaHorse, [evidence]);
+    assert.equal(
+      packet.saleSlots.find((slot) => slot.key === 'aqha-papers')?.status,
+      type === 'Registration' ? 'ready' : 'missing',
+    );
+  }
 
   const arabianHorse = createHorse({
     id: 'horse-arabian-label',
