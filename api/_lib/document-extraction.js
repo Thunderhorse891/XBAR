@@ -850,7 +850,9 @@ export function groupExtractionsIntoCandidates(extractions) {
     );
     if (strong) {
       const conflicted =
-        identitiesConflict(registration, strong.registrationNumber) || identitiesConflict(microchip, strong.microchip);
+        identitiesConflict(registration, strong.registrationNumber) ||
+        identitiesConflict(microchip, strong.microchip) ||
+        identitiesConflict(name, strong.name);
       return { candidate: strong, conflicted };
     }
 

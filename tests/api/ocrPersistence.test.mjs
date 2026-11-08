@@ -386,6 +386,128 @@ test('automatic horse lookup errors cannot create a second horse', async () => {
   assert.equal(f.tables.horses.length, 0);
 });
 
+const existingIdentity = (overrides = {}) => ({
+  workspace_id: workspace,
+  horse_id: 'existing-horse',
+  name: 'Spirit of the Desert',
+  registration_number: 'AHA0654321',
+  microchip: '985112004567890',
+  updated_at: '2026-11-01T00:00:00Z',
+  payload: {},
+  ...overrides,
+});
+for (const [name, horses, extraText] of [
+  [
+    'same name but different strong identifiers',
+    [existingIdentity({ registration_number: 'OTHER', microchip: 'OTHER' })],
+  ],
+  ['registration match but different microchip', [existingIdentity({ microchip: 'OTHER' })]],
+  ['microchip match but different registration', [existingIdentity({ registration_number: 'OTHER' })]],
+  ['strong identifier but different name', [existingIdentity({ name: 'Another Horse' })]],
+  [
+    'identifiers point at different horses',
+    [existingIdentity({ microchip: '' }), existingIdentity({ horse_id: 'second', registration_number: '' })],
+  ],
+  ['duplicate registration matches', [existingIdentity(), existingIdentity({ horse_id: 'duplicate', microchip: '' })]],
+  [
+    'multiple name matches',
+    [
+      existingIdentity({ registration_number: '', microchip: '' }),
+      existingIdentity({ horse_id: 'second', registration_number: '', microchip: '' }),
+    ],
+  ],
+  ['conflicting source names despite a registration match', [existingIdentity()], '\nHorse Name: Another Horse'],
+]) {
+  test(`automatic identity review holds ${name} without changing horses or losing originals`, async () => {
+    const f = fixture();
+    f.tables.horses = clone(horses);
+    const before = clone(horses);
+    const result = await invoke(f, {
+      ...upload,
+      mode: 'auto',
+      files: [
+        {
+          ...upload.files[0],
+          providedText: extraText
+            ? upload.files[0].providedText.replace('Registration Number:', `${extraText}\nRegistration Number:`)
+            : upload.files[0].providedText,
+        },
+      ],
+    });
+    assert.equal(result.body.ok, true);
+    assert.equal(result.body.summary.autoCommitted, 0);
+    assert.equal(result.body.proposals[0].action, 'review');
+    assert.equal(result.body.proposals[0].matchedHorseId, '');
+    assert.equal(result.body.proposals[0].needsReview, true);
+    assert.deepEqual(f.tables.horses, before);
+    assert.equal(f.storage.length, 1);
+    for (const id of result.body.proposals[0].documentIds) {
+      const doc = f.tables.documents.find((d) => d.document_id === id);
+      assert.equal(doc.horse_id, '');
+      assert.equal(doc.state, 'Needs Review');
+      assert.equal(doc.needs_review, true);
+      assert.equal(f.tables.document_processing_jobs.find((j) => j.document_id === id).status, 'needs_review');
+      assert.equal(result.body.documents.find((d) => d.documentId === id).state, 'Needs Review');
+    }
+    assert.equal(f.tables.intake_batches[0].state, 'needs-review');
+    assert.equal(f.tables.reminders.length, 0);
+  });
+}
+
+for (const [name, overrides] of [
+  ['consistent strong identity', {}],
+  ['unique name without stored identifiers', { registration_number: '', microchip: '' }],
+]) {
+  test(`automatic attachment preserves ${name}`, async () => {
+    const f = fixture();
+    f.tables.horses = [existingIdentity(overrides)];
+    const result = await invoke(f, { ...upload, mode: 'auto' });
+    assert.equal(result.body.ok, true, JSON.stringify(result.body));
+    assert.equal(result.body.summary.autoCommitted, 1);
+    assert.equal(result.body.proposals[0].action, 'attached');
+    assert.equal(result.body.proposals[0].horseId, 'existing-horse');
+    assert.equal(f.tables.horses.length, 1);
+    assert.equal(f.storage.length, 1);
+  });
+}
+
+test('identity hold write failures refuse batch success and preserve originals', async () => {
+  const f = fixture({ table: 'document_processing_jobs', action: 'update', kind: 'error' });
+  f.tables.horses = [existingIdentity({ microchip: 'OTHER' })];
+  const before = clone(f.tables.horses);
+  const result = await invoke(f, { ...upload, mode: 'auto' });
+  assert.equal(result.body.ok, false);
+  assert.equal(f.failureUsed, true);
+  assert.deepEqual(f.tables.horses, before);
+  assert.equal(f.storage.length, 1);
+  assert.equal(result.body.recovery.files[0].documentSaved, true);
+});
+
+test('same-identifier documents with contradictory names are held together', async () => {
+  const f = fixture();
+  f.tables.horses = [existingIdentity()];
+  const before = clone(f.tables.horses);
+  const result = await invoke(f, {
+    ...upload,
+    mode: 'auto',
+    files: [
+      upload.files[0],
+      {
+        ...upload.files[0],
+        fileName: 'second.txt',
+        providedText: upload.files[0].providedText.replace('Spirit of the Desert', 'Another Horse'),
+      },
+    ],
+  });
+  assert.equal(result.body.ok, true);
+  assert.equal(result.body.summary.autoCommitted, 0);
+  assert.deepEqual(f.tables.horses, before);
+  assert.equal(f.storage.length, 2);
+  assert.equal(result.body.proposals.length, 1);
+  assert.equal(result.body.proposals[0].documentIds.length, 2);
+  assert.ok(result.body.documents.every((d) => d.state === 'Needs Review' && !d.horseId));
+});
+
 test('missing horse-read data and malformed name-search responses never mean no horse exists', async () => {
   const f = fixture({ table: 'horses', action: 'read', kind: 'missing-data' });
   assert.equal((await invoke(f)).body.ok, false);
@@ -549,4 +671,26 @@ for (const table of ['document_processing_jobs', 'reminders'])
     const r = await invoke(f);
     assert.equal(r.body.ok, false);
     assert.equal(f.failureUsed, true);
+  });
+for (const table of ['documents', 'document_processing_jobs'])
+  test(`identity hold preserves a concurrent ${table} assignment`, async () => {
+    const f = fixture({
+      table,
+      action: 'update',
+      kind: 'race',
+      before: (tables) => {
+        const row = tables[table].find((d) => d.document_id !== 'doc-a');
+        row.horse_id = 'owner-selected-horse';
+        if (table === 'documents') {
+          row.state = 'Ready';
+          row.needs_review = false;
+        } else row.status = 'completed';
+      },
+    });
+    f.tables.horses = [existingIdentity({ microchip: 'OTHER' })];
+    const r = await invoke(f, { ...upload, mode: 'auto' });
+    assert.equal(r.body.ok, false);
+    const row = f.tables[table].find((d) => d.document_id !== 'doc-a');
+    assert.equal(row.horse_id, 'owner-selected-horse');
+    assert.equal(table === 'documents' ? row.state : row.status, table === 'documents' ? 'Ready' : 'completed');
   });
