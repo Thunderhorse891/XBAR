@@ -555,7 +555,7 @@ export function extractRegistrationFields(rawText: string): RegistrationFields {
     horseName: horseName?.value,
     registrationNumber: own.number,
     registry: findRegistry(text, own.registry),
-    sex: findSex(text),
+    sex: findSex(headText),
     color: findColor(text),
     breed: labeledValue(text, 'breed'),
     foaledOn: findFoaledOn(headText),

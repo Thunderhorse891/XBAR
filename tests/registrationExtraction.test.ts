@@ -2,6 +2,18 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 import { extractRegistrationFields } from '../src/lib/registrationExtraction.js';
 
+test('a parent name or parent sex cannot supply the subject sex', () => {
+  for (const parent of ['Dam: PRETTY MARE', 'Sire: GOLDEN STUD', 'Dam: PRETTY HORSE\nSex: Mare']) {
+    const fields = extractRegistrationFields(`Registered Name: BLUE MOON\nRegistration Number: 1234567\n${parent}`);
+    assert.equal(fields.sex, undefined, parent);
+  }
+  assert.equal(extractRegistrationFields('Registered Name: BLUE MOON\nSex: Gelding\nDam: PRETTY MARE').sex, 'Gelding');
+  assert.equal(
+    extractRegistrationFields('This bay mare is offered for sale. Registration Number: 9990001\nSire: GOLDEN STUD').sex,
+    'Mare',
+  );
+});
+
 test('birth dates require labeled evidence and a real, unambiguous calendar day', () => {
   const read = (text: string) => extractRegistrationFields(`Name: SPIRIT\n${text}`).foaledOn;
   assert.equal(read('Certificate issued: 2026-10-01'), undefined);

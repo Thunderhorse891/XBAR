@@ -4,6 +4,17 @@ import { readFileSync } from 'node:fs';
 
 import { extractRegistrationFields, detectMultipleHorses } from '../../api/_lib/document-extraction.js';
 
+test('a parent sex label cannot supply the subject gender', () => {
+  const fields = extractRegistrationFields(
+    'Registered Name: BLUE MOON\nRegistration Number: 1234567\nDam: PRETTY HORSE\nSex: Mare',
+  );
+  assert.equal(fields.gender, undefined);
+  assert.equal(
+    extractRegistrationFields('Registered Name: BLUE MOON\nSex: Gelding\nDam: PRETTY MARE\nSex: Mare').gender?.value,
+    'Gelding',
+  );
+});
+
 /*
  * The server reads horse names the way a person would -- same contract as the
  * browser extractor.
