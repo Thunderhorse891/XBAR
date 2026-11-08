@@ -232,6 +232,8 @@ export function normalizeDocumentIdentityText(value: string) {
 }
 
 function findRegistrationNumber(text: string): { number?: string; registry?: string } {
+  const prefixed = readRegistryIdentifiers(text, REGISTRIES);
+  if (prefixed.some((entry) => entry.ambiguous)) return {};
   // Labeled form keeps whatever token follows the label, so "AQHA1234567" is
   // preserved whole while a bare "5551234" stays numeric.
   const labeled = text.match(REGISTRATION_NUMBER_FIELD);
@@ -243,7 +245,6 @@ function findRegistrationNumber(text: string): { number?: string; registry?: str
     return { number: registry ? raw.slice(registry.length) : raw, registry };
   }
 
-  const prefixed = readRegistryIdentifiers(text, REGISTRIES);
   const distinct = new Set(prefixed.map((entry) => entry.registry + entry.number));
   // Unlabeled pedigree charts carry several ancestors. The first ID is not
   // evidence of the subject horse's identity.
@@ -541,7 +542,9 @@ export function extractRegistrationFields(rawText: string): RegistrationFields {
       .map((name) => normalizeDocumentIdentityText(name.value)),
   );
   const prefixedIds = readRegistryIdentifiers(headText, REGISTRIES);
-  const unscopedIdentities = new Set(prefixedIds.map((entry) => entry.registry + entry.number)).size > 1;
+  const unscopedIdentities =
+    prefixedIds.some((entry) => entry.ambiguous) ||
+    new Set(prefixedIds.map((entry) => entry.registry + entry.number)).size > 1;
   const subjectIds = [
     ...[...headText.matchAll(new RegExp(REGISTRATION_NUMBER_FIELD.source, 'gi'))].map((match) =>
       findRegistrationNumber(match[0]),
@@ -551,6 +554,7 @@ export function extractRegistrationFields(rawText: string): RegistrationFields {
   const subjectRegistrations = new Set(subjectIds.map((entry) => entry.number).filter(Boolean));
   const subjectRegistries = new Set(subjectIds.map((entry) => entry.registry).filter(Boolean));
   const identityReviewRequired =
+    unscopedIdentities ||
     subjectNames.size > 1 ||
     subjectRegistrations.size > 1 ||
     subjectRegistries.size > 1 ||

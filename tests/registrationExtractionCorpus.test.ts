@@ -120,6 +120,24 @@ const PARENT_ASSERTION_CORPUS = [
 
 const CORPUS: ExtractionCase[] = [
   {
+    id: 'unlabeled-registration-split-final-digit',
+    text: 'AQHA 123456 7',
+    reg: undefined,
+    review: true,
+  },
+  {
+    id: 'unlabeled-registration-split-middle',
+    text: 'AQHA 123 4567',
+    reg: undefined,
+    review: true,
+  },
+  {
+    id: 'unlabeled-registration-adjacent-year',
+    text: 'AQHA #1234567 1962 Quarter Horse',
+    reg: undefined,
+    review: true,
+  },
+  {
     id: 'unlabeled-pedigree-multiple-registry-identities',
     text: 'OLDER HORSE THE FAMILY MARE\n1954 Quarter Horse 1932 Quarter Horse\nBuckskin 14.3hh\nAQHA #1234567 1962 Quarter Horse\nOTHER ANCESTOR\n1991 Quarter Horse Bay\nAQHA #7654321 1954 Quarter Horse',
     name: undefined,

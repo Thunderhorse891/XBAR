@@ -757,8 +757,9 @@ export function detectMultipleHorses(text) {
     registrations.add(cleanValue(match[1], { uppercase: true }).replace(/\s+/g, ''));
   }
 
-  for (const entry of readRegistryIdentifiers(source, REGISTRIES)) {
-    registrations.add(entry.registry + entry.number);
+  const prefixedIds = readRegistryIdentifiers(source, REGISTRIES);
+  for (const entry of prefixedIds) {
+    if (entry.number) registrations.add(entry.registry + entry.number);
   }
 
   const numbers = new Set();
@@ -772,7 +773,12 @@ export function detectMultipleHorses(text) {
     if (registry) registries.add(registry);
   }
   return {
-    multiple: names.size > 1 || numbers.size > 1 || registries.size > 1 || Boolean(family.parentAmbiguous),
+    multiple:
+      names.size > 1 ||
+      numbers.size > 1 ||
+      registries.size > 1 ||
+      Boolean(family.parentAmbiguous) ||
+      prefixedIds.some((entry) => entry.ambiguous),
     horseNames: [...names],
     registrationNumbers: [...registrations],
   };

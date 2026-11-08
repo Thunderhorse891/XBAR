@@ -12,7 +12,7 @@ test('unlabeled pedigree identities cannot supply a subject registration, sex or
     assert.equal(fields.sex, undefined);
     assert.equal(fields.color, undefined);
   }
-  assert.equal(extractRegistrationFields('AQHA #1234567 2019 Quarter Horse').registrationNumber, '1234567');
+  assert.equal(extractRegistrationFields('AQHA #1234567 Year Foaled: 2019').registrationNumber, '1234567');
 });
 
 test('a parent color cannot supply the subject color', () => {
