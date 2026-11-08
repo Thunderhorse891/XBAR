@@ -10,6 +10,7 @@
 // in documentIntelligence.ts and hands its output here.
 import type { HorseSex } from '../types/xbar.js';
 import { readLabeledDate } from '../../api/_lib/printed-date.js';
+import { readRegistryIdentifiers } from '../../api/_lib/registry-identifiers.js';
 
 export interface RegistrationFields {
   identityReviewRequired?: boolean;
@@ -231,6 +232,8 @@ export function normalizeDocumentIdentityText(value: string) {
 }
 
 function findRegistrationNumber(text: string): { number?: string; registry?: string } {
+  const prefixed = readRegistryIdentifiers(text, REGISTRIES);
+  if (prefixed.some((entry) => entry.ambiguous)) return {};
   // Labeled form keeps whatever token follows the label, so "AQHA1234567" is
   // preserved whole while a bare "5551234" stays numeric.
   const labeled = text.match(REGISTRATION_NUMBER_FIELD);
@@ -242,12 +245,10 @@ function findRegistrationNumber(text: string): { number?: string; registry?: str
     return { number: registry ? raw.slice(registry.length) : raw, registry };
   }
 
-  const registryGroup = REGISTRIES.join('|');
-  const prefixed = text.match(new RegExp(`\\b(${registryGroup})\\s*[:#-]?\\s*(\\d[\\d\\s-]{4,12}\\d)`, 'i'));
-  if (prefixed) {
-    return { registry: prefixed[1].toUpperCase(), number: prefixed[2].replace(/[\s-]/g, '') };
-  }
-  return {};
+  const distinct = new Set(prefixed.map((entry) => entry.registry + entry.number));
+  // Unlabeled pedigree charts carry several ancestors. The first ID is not
+  // evidence of the subject horse's identity.
+  return distinct.size === 1 ? prefixed[0] : {};
 }
 
 function mapSex(raw: string | undefined): HorseSex | undefined {
@@ -261,20 +262,22 @@ function mapSex(raw: string | undefined): HorseSex | undefined {
   return undefined;
 }
 
-function findSex(text: string): HorseSex | undefined {
+function findSex(text: string, allowUnlabeled = true): HorseSex | undefined {
   const labeled = mapSex(labeledValue(text, 'sex|gender'));
   if (labeled) return labeled;
-  // Fall back to any sex word anywhere in the document.
+  if (!allowUnlabeled) return undefined;
+  // Unlabeled prose is usable only within an unambiguous subject section.
   return mapSex(text.match(/\b(gelding|stallion|stud|colt|filly|mare)\b/i)?.[0]);
 }
 
-function findColor(text: string): string | undefined {
+function findColor(text: string, allowUnlabeled = true): string | undefined {
   const labeled = labeledValue(text, 'colou?r');
   if (labeled) {
     const known = COLORS.find((color) => new RegExp(`\\b${color.replace(/[-\s]/g, '[-\\s]')}\\b`, 'i').test(labeled));
     const value = known ?? labeled.split(/\s+/).slice(0, 2).join(' ');
     return titleCase(value);
   }
+  if (!allowUnlabeled) return undefined;
   const found = COLORS.find((color) => new RegExp(`\\b${color.replace(/[-\s]/g, '[-\\s]')}\\b`, 'i').test(text));
   return found ? titleCase(found) : undefined;
 }
@@ -538,12 +541,20 @@ export function extractRegistrationFields(rawText: string): RegistrationFields {
       .filter((name) => parentIndex < 0 || name.start < parentIndex)
       .map((name) => normalizeDocumentIdentityText(name.value)),
   );
-  const subjectIds = [...headText.matchAll(new RegExp(REGISTRATION_NUMBER_FIELD.source, 'gi'))].map((match) =>
-    findRegistrationNumber(match[0]),
-  );
+  const prefixedIds = readRegistryIdentifiers(headText, REGISTRIES);
+  const unscopedIdentities =
+    prefixedIds.some((entry) => entry.ambiguous) ||
+    new Set(prefixedIds.map((entry) => entry.registry + entry.number)).size > 1;
+  const subjectIds = [
+    ...[...headText.matchAll(new RegExp(REGISTRATION_NUMBER_FIELD.source, 'gi'))].map((match) =>
+      findRegistrationNumber(match[0]),
+    ),
+    ...prefixedIds,
+  ];
   const subjectRegistrations = new Set(subjectIds.map((entry) => entry.number).filter(Boolean));
   const subjectRegistries = new Set(subjectIds.map((entry) => entry.registry).filter(Boolean));
   const identityReviewRequired =
+    unscopedIdentities ||
     subjectNames.size > 1 ||
     subjectRegistrations.size > 1 ||
     subjectRegistries.size > 1 ||
@@ -555,8 +566,8 @@ export function extractRegistrationFields(rawText: string): RegistrationFields {
     horseName: horseName?.value,
     registrationNumber: own.number,
     registry: findRegistry(text, own.registry),
-    sex: findSex(headText),
-    color: findColor(text),
+    sex: findSex(headText, !unscopedIdentities),
+    color: findColor(headText, !unscopedIdentities),
     breed: labeledValue(text, 'breed'),
     foaledOn: findFoaledOn(headText),
     sire: sire.name,

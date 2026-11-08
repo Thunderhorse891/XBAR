@@ -120,6 +120,55 @@ const PARENT_ASSERTION_CORPUS = [
 
 const CORPUS: ExtractionCase[] = [
   {
+    id: 'unlabeled-registration-split-final-digit',
+    text: 'AQHA 123456 7',
+    reg: undefined,
+    review: true,
+  },
+  {
+    id: 'unlabeled-registration-split-middle',
+    text: 'AQHA 123 4567',
+    reg: undefined,
+    review: true,
+  },
+  {
+    id: 'unlabeled-registration-adjacent-year',
+    text: 'AQHA #1234567 1962 Quarter Horse',
+    reg: undefined,
+    review: true,
+  },
+  {
+    id: 'unlabeled-pedigree-multiple-registry-identities',
+    text: 'OLDER HORSE THE FAMILY MARE\n1954 Quarter Horse 1932 Quarter Horse\nBuckskin 14.3hh\nAQHA #1234567 1962 Quarter Horse\nOTHER ANCESTOR\n1991 Quarter Horse Bay\nAQHA #7654321 1954 Quarter Horse',
+    name: undefined,
+    reg: undefined,
+    review: true,
+  },
+  {
+    id: 'unlabeled-pedigree-flattened',
+    text: 'OLDER HORSE THE FAMILY MARE 1954 Quarter Horse 1932 Quarter Horse Buckskin AQHA #1234567 1962 Quarter Horse OTHER ANCESTOR Bay AQHA #7654321 1954 Quarter Horse',
+    name: undefined,
+    reg: undefined,
+    review: true,
+  },
+  {
+    id: 'unlabeled-registry-suffix-conflict',
+    text: 'AQHA #1234567AA AQHA #1234567AB',
+    reg: undefined,
+    review: true,
+  },
+  {
+    id: 'unlabeled-registry-body-conflict',
+    text: 'AQHA #1234567 APHA #1234567',
+    reg: undefined,
+    review: true,
+  },
+  {
+    id: 'unlabeled-registry-identical-repeat',
+    text: 'AQHA #1234567 AQHA #1234567',
+    review: false,
+  },
+  {
     id: 'generic-registration-after-dam-is-unscoped',
     text: 'Horse Name: SPIRIT\nDam: PRETTY MARE\nRegistration Number: 7778889',
     name: 'SPIRIT',
