@@ -101,6 +101,8 @@ export default function Settings() {
   const workspaceId = useCloudStore((state) => state.workspaceId);
   const lastCloudSyncAt = useCloudStore((state) => state.lastSyncAt);
   const cloudSyncState = useCloudStore((state) => state.syncState);
+  const cloudSyncMessage = useCloudStore((state) => state.syncMessage);
+  const cloudAutosaveUnlocked = useCloudStore((state) => state.autosaveUnlocked);
   const setLastCloudSyncAt = useCloudStore((state) => state.setLastSyncAt);
   const setCloudSyncState = useCloudStore((state) => state.setSyncState);
   const unlockAutosaveAfterManualSync = useCloudStore((state) => state.unlockAutosaveAfterManualSync);
@@ -940,10 +942,17 @@ export default function Settings() {
                         {cloudSyncState === 'syncing'
                           ? 'Saving relational records'
                           : cloudSyncState === 'error'
-                            ? 'Needs retry'
+                            ? cloudAutosaveUnlocked
+                              ? 'Needs retry'
+                              : 'Needs review'
                             : 'Watching workspace changes'}
                       </span>
                     </div>
+                    {cloudSyncMessage && (
+                      <p className="stack-item__copy" role={cloudSyncState === 'error' ? 'alert' : 'status'}>
+                        {cloudSyncMessage}
+                      </p>
+                    )}
                   </div>
                 </div>
                 <div className="inline-actions">
