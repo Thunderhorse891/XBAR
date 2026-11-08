@@ -519,6 +519,10 @@ export function CloudBootstrap() {
         const next = restorePersistedState({
           ...local.workspace,
           ...payload,
+          // Like initial hydration, take cloud entitlements and retain device
+          // usage. Relational subscription rows do not track local file bytes;
+          // their empty/stale counters must not reset storage on focus refresh.
+          subscription: mergeCloudSubscription(local.workspace.subscription, remote.backup.workspace.subscription),
           // Relational history persistence is a separate migration. Default
           // empty arrays from normalization must not erase this device's history.
           auditEvents: local.workspace.auditEvents,

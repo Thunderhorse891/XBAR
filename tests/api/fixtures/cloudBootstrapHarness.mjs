@@ -78,7 +78,7 @@ export async function cloudBootstrapFixture(configure) {
               '@/lib/cloudSubscription':
                 'export const mergeCloudSubscription=(...args)=>f.mergeCloudSubscription(...args);export const withCloudSubscription=(...args)=>f.withCloudSubscription(...args);',
               '@/store/xbarStoreHelpers':
-                'export const restorePersistedState=(value)=>value; export const alignRelationalRecoveryMetadata=(...args)=>f.alignRelationalRecoveryMetadata?.(...args)??{};',
+                'export const restorePersistedState=(value)=>f.restorePersistedState?f.restorePersistedState(value):value; export const alignRelationalRecoveryMetadata=(...args)=>f.alignRelationalRecoveryMetadata?.(...args)??{};',
               '@/lib/cloudSyncPolicy':
                 'export const serializeWorkspaceBackup=(v)=>f.serializeWorkspaceBackup?f.serializeWorkspaceBackup(v):JSON.stringify(v);export const decideCloudReconciliation=(...args)=>f.decideCloudReconciliation(...args);export const getWorkspacePayload=(v)=>v.workspace;export const hasMeaningfulWorkspace=(...args)=>f.hasMeaningfulWorkspace(...args);',
               '@/lib/workspacePromotion': 'export const promoteLocalVaultFiles=()=>({failed:[]});',

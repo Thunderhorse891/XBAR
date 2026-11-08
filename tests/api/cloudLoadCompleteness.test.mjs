@@ -158,7 +158,12 @@ function fixture(o = {}) {
           return {
             data: o.emptyRelational
               ? null
-              : { tier: 'Enterprise', billing_state: 'Manual Billing', monthly_rate: 0, payload: {} },
+              : (o.subscriptionRow ?? {
+                  tier: 'Enterprise',
+                  billing_state: 'Manual Billing',
+                  monthly_rate: 0,
+                  payload: {},
+                }),
             error: null,
           };
         if (table === 'workspace_profiles')
@@ -414,6 +419,57 @@ for (const failPage of [false, true])
     stop();
     f.dispose();
   });
+for (const variant of ['empty-server-usage', 'stale-server-usage', 'plan-downgrade'])
+  test(`actual focus refresh retains device storage while applying cloud records and limits: ${variant}`, async () => {
+    const options = { count: 2, cap: 1 };
+    const { workspace } = fixture(options);
+    const initial = await loadWorkspaceBackupFromCloud();
+    assert.equal(initial.ok, true);
+    const local = structuredClone(initial.backup);
+    local.workspace.subscription.usage.storageUsedGb = 0.008;
+    local.workspace.auditEvents = [{ id: 'local-audit', at: stamp, summary: 'Retained device history' }];
+    const f = await cloudBootstrapFixture((setup) => {
+      setup.cloud.session.user.id = 'user-owner';
+      setup.cloud.workspaceId = 'ws-owner';
+      setup.backup = local;
+      setup.load = (loadOptions) => loadWorkspaceBackupFromCloud(loadOptions);
+      setup.mergeCloudSubscription = mergeCloudSubscription;
+      setup.restorePersistedState = restorePersistedState;
+      setup.serializeWorkspaceBackup = serializeWorkspaceBackup;
+    });
+    await f.tick(1600);
+    f.calls[0].resolve({ ok: true, message: 'Saved' });
+    await f.tick(0);
+    options.subscriptionRow = {
+      tier: variant === 'plan-downgrade' ? 'Starter' : 'Enterprise',
+      billing_state: variant === 'plan-downgrade' ? 'Inactive' : 'Manual Billing',
+      monthly_rate: 0,
+      payload: variant === 'stale-server-usage' ? { usage: { storageUsedGb: 99 } } : {},
+    };
+    workspace.horses[1].name = 'Latest teammate name';
+    const stop = f.startRefresh();
+    for (let refresh = 0; refresh < 2; refresh += 1) {
+      f.listeners.focus();
+      await f.tick(0);
+      await f.tick(1600);
+      assert.equal(f.backup.workspace.subscription.usage.storageUsedGb, 0.008);
+      assert.equal(f.backup.workspace.horses[1].name, 'Latest teammate name');
+      assert.equal(f.backup.workspace.horses.length, 2);
+      assert.equal(f.backup.workspace.subscription.usage.horsesUsed, 2);
+      assert.deepEqual(f.backup.workspace.auditEvents, local.workspace.auditEvents);
+      assert.equal(f.backup.workspace.subscription.tier, options.subscriptionRow.tier);
+      assert.equal(f.backup.workspace.subscription.billingState, options.subscriptionRow.billing_state);
+      if (variant === 'plan-downgrade')
+        assert.ok(
+          f.backup.workspace.subscription.usage.storageLimitGb < local.workspace.subscription.usage.storageLimitGb,
+        );
+      assert.equal(f.calls.length, 1, 'refresh must not echo-save teammate data or usage');
+      assert.equal(f.toasts?.length ?? 0, 0);
+    }
+    stop();
+    f.dispose();
+  });
+
 for (const variant of [
   'completeProfile',
   'legacyMembership',
