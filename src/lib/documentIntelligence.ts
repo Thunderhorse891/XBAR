@@ -173,7 +173,12 @@ type OcrWorker = {
 };
 
 let pdfJsPromise: Promise<typeof import('pdfjs-dist')> | null = null;
-let pdfWorkerUrlPromise: Promise<string> | null = null;
+let pdfLoadAttempt = 0;
+
+function resetPdfLoader() {
+  pdfJsPromise = null;
+  pdfLoadAttempt += 1;
+}
 
 async function getPdfJs() {
   if (!pdfJsPromise) {
@@ -194,24 +199,36 @@ async function getPdfJs() {
      * Text-layer extraction was unaffected, which is why this stayed hidden:
      * ordinary text PDFs read fine and only scans came back empty.
      */
-    pdfJsPromise = import('pdfjs-dist/legacy/build/pdf.mjs');
+    // Browsers also remember a failed module URL. Clearing just our promise
+    // still rethrows that rejection without a request when signal returns.
+    // Vite emits this self-contained legacy module as a hashed local asset;
+    // a later user attempt gets a fresh URL only after initialization failed.
+    const moduleUrl = new URL('../../node_modules/pdfjs-dist/legacy/build/pdf.mjs', import.meta.url);
+    if (pdfLoadAttempt) moduleUrl.searchParams.set('retry', String(pdfLoadAttempt));
+    pdfJsPromise = (
+      typeof window === 'undefined'
+        ? import('pdfjs-dist/legacy/build/pdf.mjs')
+        : (import(/* @vite-ignore */ moduleUrl.href) as Promise<typeof import('pdfjs-dist')>)
+    ).catch((error) => {
+      resetPdfLoader();
+      throw error;
+    });
   }
 
   return pdfJsPromise;
 }
 
 async function ensurePdfWorkerConfigured() {
-  if (typeof window === 'undefined') {
-    return;
-  }
-
   const pdfJs = await getPdfJs();
-  if (!pdfWorkerUrlPromise) {
-    // Must match the build above, or the worker and the main thread disagree.
-    pdfWorkerUrlPromise = import('pdfjs-dist/legacy/build/pdf.worker.min.mjs?url').then((module) => module.default);
+  if (typeof window === 'undefined') {
+    return pdfJs;
   }
 
-  pdfJs.GlobalWorkerOptions.workerSrc = await pdfWorkerUrlPromise;
+  // A URL needs no extra lazy JS chunk, and must match the legacy module.
+  const workerUrl = new URL('../../node_modules/pdfjs-dist/legacy/build/pdf.worker.min.mjs', import.meta.url);
+  if (pdfLoadAttempt) workerUrl.searchParams.set('retry', String(pdfLoadAttempt));
+  pdfJs.GlobalWorkerOptions.workerSrc = workerUrl.href;
+  return pdfJs;
 }
 
 /*
@@ -333,11 +350,24 @@ async function renderPdfPageToCanvas(pdf: PdfDocument, pageNumber: number) {
 }
 
 async function extractPdfText(file: File): Promise<{ text: string; coverage: DocumentCoverage }> {
+  let worker: InstanceType<(typeof import('pdfjs-dist'))['PDFWorker']> | undefined;
+  let loadingTask: ReturnType<(typeof import('pdfjs-dist'))['getDocument']> | undefined;
   try {
-    await ensurePdfWorkerConfigured();
-    const { getDocument } = await getPdfJs();
+    const { getDocument, PDFWorker } = await ensurePdfWorkerConfigured();
+    if (typeof window !== 'undefined') {
+      worker = new PDFWorker();
+      try {
+        await worker.promise;
+      } catch (error) {
+        // PDF.js caches failed fake-worker startup too. Replace that module on
+        // the next upload; an invalid document itself must not evict a healthy reader.
+        resetPdfLoader();
+        throw error;
+      }
+    }
     const buffer = new Uint8Array(await file.arrayBuffer());
-    const pdf = await getDocument({ data: buffer }).promise;
+    loadingTask = getDocument({ data: buffer, worker });
+    const pdf = await loadingTask.promise;
     const pageCount = Math.min(pdf.numPages, PDF_TEXT_PAGE_LIMIT);
 
     /*
@@ -428,6 +458,14 @@ async function extractPdfText(file: File): Promise<{ text: string; coverage: Doc
      */
     console.error('PDF extraction failed', error);
     return { text: '', coverage: { ...fullCoverage(), readFailed: true } };
+  } finally {
+    // Each read owns its worker. Release it on success, malformed files and
+    // interrupted initialization without changing another concurrent upload.
+    try {
+      await loadingTask?.destroy();
+    } finally {
+      worker?.destroy();
+    }
   }
 }
 
