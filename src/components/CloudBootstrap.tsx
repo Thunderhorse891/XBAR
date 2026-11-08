@@ -13,7 +13,7 @@ import {
 } from '@/lib/cloudSyncPolicy';
 import { promoteLocalVaultFiles } from '@/lib/workspacePromotion';
 import { vaultOwnerId } from '@/lib/vaultOwner';
-import { restorePersistedState } from '@/store/xbarStoreHelpers';
+import { alignRelationalRecoveryMetadata, restorePersistedState } from '@/store/xbarStoreHelpers';
 import { useCloudStore } from '@/store/useCloudStore';
 import { useUiStore } from '@/store/useUiStore';
 import { useWorkspaceHydrated, useXbarStore } from '@/store/useXbarStore';
@@ -240,6 +240,18 @@ export function CloudBootstrap() {
         remote.backup.workspace.auditEvents.length === 0 &&
         remote.backup.workspace.salePacketBuilds.length === 0 &&
         remote.backup.workspace.buyerRoomEvents.length === 0;
+      if (sameRanchRelationalHistory && remote.ok) {
+        // Ordinary saves never write access rows. Compare their authoritative
+        // cloud view and the same proof normalization used by the cloud loader,
+        // rather than locking on legacy placeholders/unattested proof flags.
+        local = {
+          ...local,
+          workspace: {
+            ...local.workspace,
+            ...alignRelationalRecoveryMetadata(local.workspace, remote.backup.workspace),
+          },
+        };
+      }
       const comparisonBackup =
         remote.ok && sameRanchRelationalHistory
           ? {
@@ -249,6 +261,16 @@ export function CloudBootstrap() {
                 auditEvents: local.workspace.auditEvents,
                 salePacketBuilds: local.workspace.salePacketBuilds,
                 buyerRoomEvents: local.workspace.buyerRoomEvents,
+                // These device counters depend on local files/packet history,
+                // not relational rows. Document/file identities compare exactly.
+                subscription: {
+                  ...remote.backup.workspace.subscription,
+                  usage: {
+                    ...remote.backup.workspace.subscription.usage,
+                    storageUsedGb: local.workspace.subscription.usage.storageUsedGb,
+                    salePacketsGenerated: local.workspace.subscription.usage.salePacketsGenerated,
+                  },
+                },
               },
             }
           : remote.ok
@@ -328,6 +350,11 @@ export function CloudBootstrap() {
       }
 
       if (decision === 'connected') {
+        if (sameRanchRelationalHistory && remote.ok) {
+          // Apply to the current store, not the captured copy: edits made while
+          // loading must survive and differ from `local`, the saved baseline.
+          useXbarStore.setState((current) => alignRelationalRecoveryMetadata(current, remote.backup.workspace));
+        }
         if (remote.ok && remote.updatedAt) setLastSyncAt(remote.updatedAt);
 
         /*
