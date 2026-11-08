@@ -77,9 +77,10 @@ export async function cloudBootstrapFixture(configure) {
                 'export const saveWorkspaceBackupToCloud=(...args)=>f.save(...args); export const loadWorkspaceBackupFromCloud=(...args)=>f.load ? f.load(...args) : new Promise(resolve=>f.loads.push(resolve));',
               '@/lib/cloudSubscription':
                 'export const mergeCloudSubscription=(...args)=>f.mergeCloudSubscription(...args);export const withCloudSubscription=(...args)=>f.withCloudSubscription(...args);',
-              '@/store/xbarStoreHelpers': 'export const restorePersistedState=(value)=>value;',
+              '@/store/xbarStoreHelpers':
+                'export const restorePersistedState=(value)=>value; export const alignRelationalRecoveryMetadata=(...args)=>f.alignRelationalRecoveryMetadata?.(...args)??{};',
               '@/lib/cloudSyncPolicy':
-                'export const serializeWorkspaceBackup=(v)=>JSON.stringify(v);export const decideCloudReconciliation=(...args)=>f.decideCloudReconciliation(...args);export const getWorkspacePayload=(v)=>v.workspace;export const hasMeaningfulWorkspace=(...args)=>f.hasMeaningfulWorkspace(...args);',
+                'export const serializeWorkspaceBackup=(v)=>f.serializeWorkspaceBackup?f.serializeWorkspaceBackup(v):JSON.stringify(v);export const decideCloudReconciliation=(...args)=>f.decideCloudReconciliation(...args);export const getWorkspacePayload=(v)=>v.workspace;export const hasMeaningfulWorkspace=(...args)=>f.hasMeaningfulWorkspace(...args);',
               '@/lib/workspacePromotion': 'export const promoteLocalVaultFiles=()=>({failed:[]});',
               '@/lib/vaultOwner': 'export const vaultOwnerId=()=>f.vaultOwner??"local";',
               '@/lib/recordsOwner': 'export const readRecordsOwner=()=>f.recordsOwner??"local";',

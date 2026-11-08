@@ -12,9 +12,10 @@ registerHooks({
 const { setCloudSubscriptionClient } = await import('./fixtures/cloudSubscriptionClient.mjs');
 const { supabaseConfig } = await import('../../src/lib/platformConfig.ts');
 const { loadWorkspaceBackupFromCloud } = await import('../../src/lib/cloudWorkspace.ts');
-const { createEmptyWorkspaceState, restorePersistedState, selectPersistedState } =
+const { createEmptyWorkspaceState, restorePersistedState, selectPersistedState, alignRelationalRecoveryMetadata } =
   await import('../../src/store/xbarStoreHelpers.ts');
-const { decideCloudReconciliation, hasMeaningfulWorkspace } = await import('../../src/lib/cloudSyncPolicy.ts');
+const { decideCloudReconciliation, hasMeaningfulWorkspace, serializeWorkspaceBackup } =
+  await import('../../src/lib/cloudSyncPolicy.ts');
 const { mergeCloudSubscription, withCloudSubscription } = await import('../../src/lib/cloudSubscription.ts');
 const ids = {
   workspace_memberships: 'id',
@@ -80,6 +81,20 @@ function fixture(o = {}) {
     workspace.ownershipRecords = [
       { id: 'ownership-a', horseId: 'horse-00000', legalOwner: 'Owner', transferStatus: 'Pending' },
     ];
+    if (o.unattestedProof) {
+      workspace.ownershipRecords[0].proofRequirements = [
+        {
+          id: 'proof-a',
+          kind: 'registration',
+          label: 'Registration',
+          required: true,
+          status: 'verified',
+          documentId: 'original-a',
+          verifiedAt: stamp,
+        },
+      ];
+      workspace.ownershipRecords[0].auditEvents = [{ id: 'proof-history', summary: 'Original verification' }];
+    }
     tables.ownership_records = workspace.ownershipRecords.map((payload) => ({
       ownership_record_id: payload.id,
       payload,
@@ -229,6 +244,95 @@ function fixture(o = {}) {
     },
   });
   return { workspace };
+}
+
+for (const scenario of [
+  'metadata',
+  'local-edit',
+  'remote-edit',
+  'concurrent-edit',
+  'snapshot',
+  'other-ranch',
+  'unknown-owner',
+]) {
+  test(`saved relational metadata reconnect: ${scenario}`, async () => {
+    const { workspace } = fixture({
+      completeProfile: true,
+      legacyOwnership: true,
+      unattestedProof: true,
+      legacyMembership: true,
+    });
+    const remote = await loadWorkspaceBackupFromCloud();
+    assert.equal(remote.ok, true);
+    const local = { workspace: structuredClone(remote.backup.workspace) };
+    local.workspace.ownershipRecords = structuredClone(workspace.ownershipRecords);
+    local.workspace.workspaceMembers = [
+      { ...local.workspace.workspaceMembers[0], id: 'old-placeholder', email: 'owner@ranch.local' },
+    ];
+    local.workspace.subscription.usage.storageUsedGb = 0.008;
+    local.workspace.subscription.usage.salePacketsGenerated = 1;
+    local.workspace.salePacketBuilds = [{ id: 'local-packet', createdAt: stamp, horseId: 'horse-00000' }];
+    local.workspace.auditEvents = [{ id: 'local-history', summary: 'Preserved event' }];
+    if (scenario === 'local-edit') local.workspace.horses[0].name = 'Unsaved horse';
+    if (scenario === 'remote-edit') remote.backup.workspace.horses[0].name = 'Other device horse';
+    if (scenario === 'snapshot') remote.source = 'snapshot';
+    if (scenario === 'other-ranch') remote.workspaceId = 'another-ranch';
+    const before = structuredClone(local);
+    const helpers = await import('../../src/store/xbarStoreHelpers.ts');
+    const f = await cloudBootstrapFixture((setup) => {
+      setup.hydrateFirst = true;
+      Object.assign(setup, {
+        serializeWorkspaceBackup,
+        decideCloudReconciliation,
+        hasMeaningfulWorkspace,
+        mergeCloudSubscription,
+        withCloudSubscription,
+        alignRelationalRecoveryMetadata: helpers.alignRelationalRecoveryMetadata,
+      });
+      setup.cloud.session.user.id = 'user-owner';
+      setup.cloud.workspaceId = 'ws-owner';
+      setup.recordsOwner = scenario === 'unknown-owner' ? '' : 'ws-owner';
+      setup.vaultOwner = 'ws-owner';
+      setup.backup = structuredClone(local);
+      setup.load = async () => {
+        if (scenario === 'concurrent-edit') setup.backup.workspace.horses[0].name = 'Edit while loading';
+        return remote;
+      };
+    });
+    f.startHydration();
+    await f.tick(0);
+    const connects = ['metadata', 'concurrent-edit'].includes(scenario);
+    assert.equal(f.cloud.autosaveUnlocked, connects);
+    assert.equal(f.imports ?? 0, 0);
+    assert.deepEqual(f.backup.workspace.auditEvents, before.workspace.auditEvents);
+    assert.equal(f.backup.workspace.subscription.usage.storageUsedGb, 0.008);
+    assert.equal(f.backup.workspace.subscription.usage.salePacketsGenerated, 1);
+    assert.deepEqual(f.backup.workspace.salePacketBuilds, before.workspace.salePacketBuilds);
+    assert.deepEqual(f.backup.workspace.documents, before.workspace.documents);
+    assert.deepEqual(
+      f.backup.workspace.ownershipRecords[0].auditEvents,
+      before.workspace.ownershipRecords[0].auditEvents,
+    );
+    if (connects) {
+      assert.deepEqual(f.backup.workspace.workspaceMembers, remote.backup.workspace.workspaceMembers);
+      const proof = f.backup.workspace.ownershipRecords[0].proofRequirements[0];
+      assert.equal(proof.status, 'linked');
+      assert.equal(proof.documentId, 'original-a');
+      assert.equal(proof.verifiedAt, stamp);
+    } else {
+      assert.deepEqual(f.backup.workspace.ownershipRecords, before.workspace.ownershipRecords);
+    }
+    f.dispose = f.startAutosave();
+    await f.tick(1600);
+    assert.equal(f.calls.length, scenario === 'concurrent-edit' ? 1 : 0);
+    if (scenario === 'concurrent-edit') {
+      assert.equal(f.calls[0].backup.workspace.horses[0].name, 'Edit while loading');
+      assert.notEqual(f.calls[0].options.baseline.workspace.horses[0].name, 'Edit while loading');
+      f.calls[0].resolve({ ok: true, message: 'Saved' });
+      await f.tick(0);
+    }
+    f.dispose();
+  });
 }
 test('actual load -> restore -> export reconnects without a false conflict', async () => {
   fixture();
@@ -502,6 +606,8 @@ for (const emptyMode of ['no-metadata', 'subscription-only', 'blank-profile'])
       const f = await cloudBootstrapFixture((setup) => {
         setup.hydrateFirst = true;
         Object.assign(setup, {
+          alignRelationalRecoveryMetadata,
+          serializeWorkspaceBackup,
           decideCloudReconciliation,
           hasMeaningfulWorkspace,
           mergeCloudSubscription,
@@ -578,6 +684,8 @@ for (const recordsOwner of ['', 'account:former-user', 'former-ranch']) {
     const f = await cloudBootstrapFixture((setup) => {
       setup.hydrateFirst = true;
       Object.assign(setup, {
+        alignRelationalRecoveryMetadata,
+        serializeWorkspaceBackup,
         decideCloudReconciliation,
         hasMeaningfulWorkspace,
         mergeCloudSubscription,
@@ -639,6 +747,8 @@ for (const scenario of [
     const f = await cloudBootstrapFixture((setup) => {
       setup.hydrateFirst = true;
       Object.assign(setup, {
+        alignRelationalRecoveryMetadata,
+        serializeWorkspaceBackup,
         decideCloudReconciliation,
         hasMeaningfulWorkspace,
         mergeCloudSubscription,
@@ -657,12 +767,18 @@ for (const scenario of [
     });
     f.startHydration();
     await f.tick(0);
-    const shouldConnect = histories.includes(scenario) || scenario === 'all-history';
+    const shouldConnect = histories.includes(scenario) || scenario === 'all-history' || scenario === 'old-owner-id';
     assert.equal(f.cloud.autosaveReady, scenario !== 'different-remote-account');
     assert.equal(f.cloud.autosaveUnlocked, shouldConnect);
     assert.equal(f.imports ?? 0, 0);
     assert.equal(f.calls.length, 0);
-    assert.deepEqual(f.backup, before, 'reconnect must retain every local history and operational value');
+    const expected = structuredClone(before);
+    if (scenario === 'old-owner-id') expected.workspace.workspaceMembers = returned.backup.workspace.workspaceMembers;
+    assert.deepEqual(
+      f.backup,
+      expected,
+      'reconnect retains local history and business records; access metadata is authoritative',
+    );
     for (const key of histories)
       if (scenario !== 'remote-history-present' || key !== 'auditEvents')
         assert.deepEqual(returned.backup.workspace[key], [], 'must not fabricate remote history');

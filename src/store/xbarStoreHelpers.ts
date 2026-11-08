@@ -417,6 +417,24 @@ export function selectPersistedState(state: PersistedXbarState): PersistedXbarSt
   };
 }
 
+/** Align only loader normalization and server-owned access metadata on a verified same-ranch reconnect. */
+export function alignRelationalRecoveryMetadata(
+  current: PersistedXbarState,
+  remote: Pick<PersistedXbarState, 'workspaceMembers' | 'workspaceInvitations'>,
+) {
+  const access = {
+    workspaceMembers: remote.workspaceMembers,
+    workspaceInvitations: remote.workspaceInvitations,
+  };
+  const derived = syncDerivedValues({ ...current, ...access });
+  return {
+    ...access,
+    ownershipRecords: current.ownershipRecords.map((record) => normalizeOwnershipRecord(record)),
+    subscription: derived.subscription,
+    sharedAccess: derived.sharedAccess,
+  };
+}
+
 /**
  * Would this backup restore, in full?
  *
