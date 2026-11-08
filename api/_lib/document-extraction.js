@@ -567,9 +567,13 @@ export function extractRegistrationFields(text) {
   const markings = nameField(text, ['markings'], { maxLength: 120 });
   if (markings) fields.markings = markings;
 
-  const gender = captureField(text, [/\b(?:sex|gender)\s*[:#-]?\s*(stallion|mare|gelding|colt|filly|male|female)/i], {
-    maxLength: 12,
-  });
+  const gender = captureField(
+    nameFamily.headText,
+    [/\b(?:sex|gender)\s*[:#-]?\s*(stallion|mare|gelding|colt|filly|male|female)/i],
+    {
+      maxLength: 12,
+    },
+  );
   if (gender) fields.gender = gender;
 
   const birthdate = dateField(nameFamily.headText, [
