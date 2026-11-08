@@ -250,6 +250,31 @@ test('sale hold blocks missing Coggins and ownership proof', () => {
   assert.match(buildSaleHold(horse, documents, ownership).ownershipReviewBlockers[0], /not been reviewed/);
 });
 
+test('sale hold requires a reviewed, valid, nonfuture examination date rather than upload time', () => {
+  const now = new Date(2028, 2, 1, 12);
+  for (const [examDate, state, accepted] of [
+    [undefined, 'Ready', false],
+    ['2028-03-02', 'Ready', false],
+    ['2028-02-30', 'Ready', false],
+    ['2026-01-01', 'Ready', false],
+    ['2028-02-29', 'Needs Review', false],
+    ['2028-02-29', 'Ready', true],
+    ['2028-03-01', 'Ready', true],
+    ['2027-03-02', 'Ready', true],
+    ['2027-03-01', 'Ready', false],
+  ] as const) {
+    const document = {
+      horseId: horse.id,
+      type: 'Coggins',
+      state,
+      uploadedAt: now.toISOString(),
+      entities: { examDate },
+    } as DocumentRecord;
+    const result = buildSaleHold(horse, [document], undefined, now);
+    assert.equal(!result.reasons.includes('Current Coggins is missing.'), accepted, `${state}: ${examDate}`);
+  }
+});
+
 test('incomplete dated costs cannot supply a counter floor or apparent profit', () => {
   const decision = buildOfferDecision(horse, [{ ...receipt, amount: 9000, receiptDate: 'unreadable' }], 12000);
   assert.equal(decision.status, 'missing-costs');

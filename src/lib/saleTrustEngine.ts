@@ -1,4 +1,5 @@
 import { ownershipReviewBlockers } from './ownershipDocumentReview.js';
+import { CURRENT_COGGINS_DAYS, hasCurrentReadyDocument } from './documentCurrency.js';
 import type { DocumentRecord, HorseRecord, OwnershipRecord } from '../types/xbar.js';
 
 export type SaleHold = {
@@ -11,12 +12,11 @@ export type SaleHold = {
 };
 
 function hasCurrentCoggins(documents: DocumentRecord[], horseId: string, now = new Date()) {
-  return documents
-    .filter((document) => document.horseId === horseId && document.type === 'Coggins' && document.state === 'Ready')
-    .some((document) => {
-      const parsed = Date.parse(document.entities.examDate ?? document.uploadedAt);
-      return Number.isFinite(parsed) && now.getTime() - parsed <= 365 * 24 * 60 * 60 * 1000;
-    });
+  return hasCurrentReadyDocument(
+    documents.filter((document) => document.horseId === horseId && document.type === 'Coggins'),
+    CURRENT_COGGINS_DAYS,
+    now,
+  );
 }
 
 export function buildSaleHold(

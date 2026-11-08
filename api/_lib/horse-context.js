@@ -139,7 +139,7 @@ export async function loadHorseContext(supabase, workspaceId, horseId, { require
       registry: horse.registry || horsePayload.registry || '',
       breed: horse.breed || horsePayload.breed || '',
       color: horse.color || horsePayload.color || '',
-      birthdate: horse.birthdate || horsePayload.birthdate || horsePayload.foaled || '',
+      birthdate: horse.birthdate || horsePayload.foaledOn || horsePayload.birthdate || horsePayload.foaled || '',
       gender: horse.gender || horsePayload.sex || '',
       microchip: horse.microchip || horsePayload.microchip || '',
       barnName: horse.barn_name,
