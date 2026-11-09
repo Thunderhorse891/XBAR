@@ -39,6 +39,7 @@ import { promoteLocalVaultFiles } from '@/lib/workspacePromotion';
 import type { UserRole, WorkspaceProfile } from '@/types/xbar';
 import { useEffectiveSubscription } from '@/hooks/useOwnerPreview';
 import { saveBlobAsFile } from '@/lib/fileDownload';
+import { BACKUP_CONTEXT_CHANGED, includeCloudOriginals } from '@/lib/portableCloudOriginals';
 import type { RoleCapability } from '@/types/xbar';
 
 function roleLabel(role: UserRole) {
@@ -149,6 +150,7 @@ export default function Settings() {
   const [deleteConfirm, setDeleteConfirm] = useState('');
   const [deleting, setDeleting] = useState(false);
   const [exportingBackup, setExportingBackup] = useState(false);
+  const exportInFlight = useRef(false);
   const [importingBackup, setImportingBackup] = useState(false);
   const importInFlight = useRef(false);
   const transferGeneration = useRef(0);
@@ -162,9 +164,13 @@ export default function Settings() {
         transferGeneration.current += 1;
       }
     });
+    const unsubscribeRole = useXbarStore.subscribe((next, previous) => {
+      if (next.currentRole !== previous.currentRole) transferGeneration.current += 1;
+    });
     return () => {
       transferGeneration.current += 1;
       unsubscribe();
+      unsubscribeRole();
     };
   }, []);
   const captureTransfer = () => ({
@@ -295,16 +301,17 @@ export default function Settings() {
    * their proof was leaving all of it behind.
    */
   const handleExport = async () => {
-    if (exportingBackup) return;
+    if (exportInFlight.current) return;
+    exportInFlight.current = true;
     setExportingBackup(true);
+    const target = captureTransfer();
+    const isCurrent = () =>
+      transferIsCurrent(target, 'manageSettings') && (!target.accountId || readRecordsOwner() === target.ownerId);
     try {
-      const backup = exportWorkspaceBackup();
-      const workspace = backup.workspace as {
-        documents?: { localFileKey?: string }[];
-        expenseReceipts?: { localFileKey?: string }[];
-        salePacketBuilds?: { localFileKey?: string }[];
-      };
-      const { files, skipped } = await exportLocalFiles(
+      if (!isCurrent()) throw new Error(BACKUP_CONTEXT_CHANGED);
+      const backup = structuredClone(exportWorkspaceBackup());
+      const workspace = backup.workspace;
+      let { files, skipped } = await exportLocalFiles(
         referencedVaultKeys(
           workspace.documents ?? [],
           workspace.expenseReceipts ?? [],
@@ -313,8 +320,15 @@ export default function Settings() {
         // A restored record can name a file this workspace does not own. The
         // backup is the one path that COPIES the bytes somewhere they open
         // freely, so the owner has to reach the read.
-        vaultOwnerId(),
+        target.ownerId,
       );
+      const portable = await includeCloudOriginals(workspace, files, skipped, {
+        workspaceId: target.ownerId,
+        isCurrent,
+      });
+      backup.workspace = portable.workspace;
+      files = portable.files;
+      skipped = portable.skipped;
 
       /*
        * The omissions travel WITH the archive, not only in the toast.
@@ -343,6 +357,7 @@ export default function Settings() {
        * path got wrong, this is the one whose consequence is losing the
        * records rather than losing a convenience.
        */
+      if (!isCurrent()) throw new Error(BACKUP_CONTEXT_CHANGED);
       const saved = await saveBlobAsFile(`xbar-workspace-${backup.exportedAt.slice(0, 10)}.json`, blob);
       if (!saved.ok) {
         pushToast({ title: 'Backup was not saved', message: saved.reason, tone: 'error' });
@@ -354,7 +369,7 @@ export default function Settings() {
       // rather than reporting plain success.
       const fileSummary = files.length
         ? `${files.length} file${files.length === 1 ? '' : 's'} included.`
-        : 'No files were stored on this device.';
+        : 'No attached original files were included.';
       pushToast({
         title: skipped.length ? 'Backup exported — some files not included' : 'Backup exported',
         message: skipped.length
@@ -362,13 +377,17 @@ export default function Settings() {
           : `Ranch backup downloaded. ${fileSummary}`,
         tone: skipped.length ? 'warning' : 'success',
       });
-    } catch {
+    } catch (error) {
       pushToast({
         title: 'Backup failed',
-        message: 'The ranch backup could not be exported.',
+        message:
+          error instanceof Error && error.message === BACKUP_CONTEXT_CHANGED
+            ? error.message
+            : 'The ranch backup could not be exported.',
         tone: 'error',
       });
     } finally {
+      exportInFlight.current = false;
       setExportingBackup(false);
     }
   };
@@ -641,6 +660,22 @@ export default function Settings() {
           // successful restore into a failed one.
           danglingNote = ' Files on this device could not be checked against the restored records.';
         }
+      }
+
+      // Cloud/link omissions have no local key to reconcile, but must survive the download and restore.
+      const remoteOmissions =
+        result.ok && Array.isArray(payload.omittedFiles)
+          ? payload.omittedFiles.filter((entry) => entry && (entry.location === 'cloud' || entry.location === 'link'))
+          : [];
+      if (remoteOmissions.length) {
+        const named = remoteOmissions
+          .slice(0, 5)
+          .map(
+            (entry) =>
+              `${typeof entry.name === 'string' ? entry.name : 'Attached original'} (${typeof entry.reason === 'string' ? entry.reason : 'not included'})`,
+          )
+          .join('; ');
+        danglingNote += ` ${remoteOmissions.length} cloud or linked originals were not included in this archive: ${named}${remoteOmissions.length > 5 ? '; …' : ''}`;
       }
 
       // A file that did not come back leaves a record pointing at nothing, and
@@ -1536,7 +1571,11 @@ export default function Settings() {
         </Panel>
       </div>
 
-      <Panel eyebrow="Ranch backup" title="Backups">
+      <Panel
+        eyebrow="Ranch backup"
+        title="Backups"
+        description="Exports ranch records and available document, receipt and packet files. Keep a separate backup of horse-photo originals."
+      >
         <input
           ref={importRef}
           type="file"

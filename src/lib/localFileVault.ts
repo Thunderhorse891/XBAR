@@ -318,6 +318,8 @@ export interface PortableLocalFile {
 
 /** A file the backup could not carry, and why — named rather than dropped. */
 export interface UnbackedUpFile {
+  /** Cloud/link omissions remain visible after restore even without a local vault key. */
+  location?: 'cloud' | 'link';
   /*
    * The vault key, which is what reconciliation matches on.
    *
