@@ -4,16 +4,17 @@ import { saveBlobAsFile } from './fileDownload.js';
 import { isNavigableFileUrl } from './navigableFileUrl.js';
 import type { StoredFileRef } from './storedFiles.js';
 
-const MAX_DOWNLOAD_BYTES = 64 * 1024 * 1024;
+export const MAX_DOWNLOAD_BYTES = 64 * 1024 * 1024;
 const CHANGED = 'The selected document or ranch changed. Open the document again to download it.';
 
-/** Resolve the canonical original, then hand its actual bytes to the existing web/native save helper. */
-export async function downloadStoredFile(
+/** Resolve and read the canonical original with the same identity, size and time bounds for every consumer. */
+export async function readStoredFile(
   record: StoredFileRef & { fileName?: string; title?: string },
   isCurrent: () => boolean = () => true,
-  dependencies = { getDocumentAccessUrl, saveBlobAsFile, fetch: globalThis.fetch },
+  dependencies = { getDocumentAccessUrl, fetch: globalThis.fetch },
   timeoutMs = 30_000,
-): Promise<{ ok: true; via: 'browser' | 'share-sheet' } | { ok: false; message: string }> {
+  maxBytes = MAX_DOWNLOAD_BYTES,
+): Promise<{ ok: true; name: string; blob: Blob } | { ok: false; message: string }> {
   const deadline = Date.now() + timeoutMs;
   let release: (() => void) | undefined;
   const check = () => {
@@ -37,9 +38,9 @@ export async function downloadStoredFile(
       await response.body?.cancel().catch(() => undefined);
       throw new Error('The original file could not be downloaded. Try Open file instead.');
     }
-    if (Number(response.headers.get('content-length')) > MAX_DOWNLOAD_BYTES) {
+    if (Number(response.headers.get('content-length')) > maxBytes) {
       await response.body.cancel().catch(() => undefined);
-      throw new Error('This file is larger than the 64 MB download limit. Use Open file to access the original.');
+      throw new Error('This original exceeds the available download size budget. Use Open file to access it.');
     }
     const reader = response.body.getReader();
     const chunks: ArrayBuffer[] = [];
@@ -50,8 +51,8 @@ export async function downloadStoredFile(
         check();
         if (done) break;
         size += value.byteLength;
-        if (size > MAX_DOWNLOAD_BYTES)
-          throw new Error('This file is larger than the 64 MB download limit. Use Open file to access the original.');
+        if (size > maxBytes)
+          throw new Error('This original exceeds the available download size budget. Use Open file to access it.');
         chunks.push(new Uint8Array(value).buffer);
       }
     } finally {
@@ -63,8 +64,13 @@ export async function downloadStoredFile(
     const name = (access.fileName || record.fileName || record.title || 'document')
       .replace(/[\\/:*?"<>|]/g, '-')
       .slice(0, 180);
-    const result = await dependencies.saveBlobAsFile(name, new Blob(chunks, { type: 'application/octet-stream' }));
-    return result.ok ? result : { ok: false, message: result.reason };
+    return {
+      ok: true,
+      name,
+      blob: new Blob(chunks, {
+        type: response.headers.get('content-type')?.split(';')[0] || 'application/octet-stream',
+      }),
+    };
   } catch (error) {
     return {
       ok: false,
@@ -72,5 +78,29 @@ export async function downloadStoredFile(
     };
   } finally {
     release?.();
+  }
+}
+
+/** Hand verified original bytes to the existing web/native save helper. */
+export async function downloadStoredFile(
+  record: StoredFileRef & { fileName?: string; title?: string },
+  isCurrent: () => boolean = () => true,
+  dependencies = { getDocumentAccessUrl, saveBlobAsFile, fetch: globalThis.fetch },
+  timeoutMs = 30_000,
+): Promise<{ ok: true; via: 'browser' | 'share-sheet' } | { ok: false; message: string }> {
+  try {
+    const read = await readStoredFile(record, isCurrent, dependencies, timeoutMs);
+    if (!read.ok) return read;
+    if (!isCurrent()) return { ok: false, message: CHANGED };
+    const saved = await dependencies.saveBlobAsFile(
+      read.name,
+      new Blob([read.blob], { type: 'application/octet-stream' }),
+    );
+    return saved.ok ? saved : { ok: false, message: saved.reason };
+  } catch (error) {
+    return {
+      ok: false,
+      message: error instanceof Error ? error.message : 'The original file could not be downloaded.',
+    };
   }
 }
