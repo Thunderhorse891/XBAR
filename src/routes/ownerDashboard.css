@@ -281,6 +281,10 @@
   .owner-customer {
     padding: 20px;
   }
+  .owner-customer__heading {
+    flex-direction: column;
+    gap: 12px;
+  }
   .owner-customer__details {
     grid-template-columns: 1fr;
     gap: 18px;
