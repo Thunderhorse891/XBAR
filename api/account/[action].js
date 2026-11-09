@@ -28,8 +28,12 @@ function resolveAction(req) {
 
 export default async function handler(req, res) {
   const action = resolveAction(req);
-  if (action === 'owner-access' || action === 'owner-dashboard') {
-    return ownerHandler(req, res, { accessOnly: action === 'owner-access' });
+  if (['owner-access', 'owner-dashboard', 'owner-readiness', 'owner-accounts'].includes(action)) {
+    return ownerHandler(req, res, {
+      accessOnly: action === 'owner-access',
+      readinessOnly: action === 'owner-readiness',
+      accountsOnly: action === 'owner-accounts',
+    });
   }
   if (action === 'delete') {
     return deleteHandler(req, res);

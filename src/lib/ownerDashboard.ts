@@ -63,6 +63,12 @@ export type OwnerDashboardData = {
   nextCursor: string | null;
   billingUrl: string;
   paymentsUrl: string;
+  readiness: OwnerReadinessData['readiness'];
+};
+
+export type OwnerReadinessData = {
+  ok: true;
+  fetchedAt: string;
   readiness: {
     ok: boolean;
     warnings?: string[];
@@ -70,6 +76,21 @@ export type OwnerDashboardData = {
     subsystems: { email: boolean; remindersCron: boolean };
     checks: { billingReady: boolean };
   };
+};
+
+export type OwnerAccountsData = {
+  ok: true;
+  fetchedAt: string;
+  page: number;
+  nextPage: number | null;
+  accounts: {
+    id: string;
+    email: string | null;
+    emailConfirmed: boolean;
+    createdAt: string | null;
+    lastSignInAt: string | null;
+    ownedWorkspaces: OwnerSubscription['workspaces'];
+  }[];
 };
 
 export function priceLabel(price: OwnerSubscription['prices'][number]) {

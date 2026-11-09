@@ -4,6 +4,7 @@ import { applyCors } from './cors.js';
 import { enforceRateLimit } from './rate-limit.js';
 import { sendJson } from './http.js';
 import healthHandler from '../health.js';
+import { readOwnerAccounts } from './owner-accounts.js';
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const ID = /^(sub|cus|acct)_[A-Za-z0-9]+$/;
@@ -47,7 +48,11 @@ export function createOwnerHandler({
   rateLimit = enforceRateLimit,
   readReadiness = readiness,
 } = {}) {
-  return async function ownerHandler(req, res, { accessOnly = false } = {}) {
+  return async function ownerHandler(
+    req,
+    res,
+    { accessOnly = false, readinessOnly = false, accountsOnly = false } = {},
+  ) {
     res.setHeader('Cache-Control', 'private, no-store, max-age=0');
     if (!applyCors(req, res, { methods: 'GET, OPTIONS' })) return;
     res.setHeader('Vary', 'Origin, Authorization');
@@ -71,6 +76,21 @@ export function createOwnerHandler({
         return sendJson(res, 403, { ok: false, message: 'This dashboard is reserved for the XBAR owner.' });
       }
       if (accessOnly) return sendJson(res, 200, { ok: true, owner: true });
+
+      if (readinessOnly) {
+        stage = 'readiness';
+        return sendJson(res, 200, { ok: true, fetchedAt: new Date().toISOString(), readiness: readReadiness() });
+      }
+      if (accountsOnly) {
+        const pageText = new URL(req.url || '/', 'http://localhost').searchParams.get('page') ?? '1';
+        const page = Number(pageText);
+        if (!/^[1-9][0-9]*$/.test(pageText) || !Number.isSafeInteger(page) || page > 1000000) {
+          return sendJson(res, 400, { ok: false, message: 'Invalid account page.' });
+        }
+        stage = 'accounts';
+        const directory = await readOwnerAccounts(admin, page);
+        return sendJson(res, 200, { ok: true, fetchedAt: new Date().toISOString(), ...directory });
+      }
 
       const query = new URL(req.url || '/', 'http://localhost').searchParams;
       const status = query.get('status') || 'all';
@@ -242,7 +262,11 @@ export function createOwnerHandler({
       // Never echo provider errors: these can contain credentials/customer data.
       return sendJson(res, 503, {
         ok: false,
-        message: 'Customer data could not be verified. Refresh to try again; no accounts or payments were changed.',
+        message: readinessOnly
+          ? 'Service configuration could not be read. No settings were changed.'
+          : accountsOnly
+            ? 'Registered accounts could not be verified. No accounts were changed.'
+            : 'Customer data could not be verified. Refresh to try again; no accounts or payments were changed.',
       });
     }
   };

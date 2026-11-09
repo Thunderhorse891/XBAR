@@ -78,6 +78,104 @@ const sample = {
   ],
 };
 
+const directory = {
+  ok: true,
+  fetchedAt: sample.fetchedAt,
+  page: 1,
+  nextPage: 2,
+  accounts: [
+    {
+      id: '33333333-3333-4333-8333-333333333333',
+      email: 'trial-account@example.invalid',
+      emailConfirmed: false,
+      createdAt: sample.fetchedAt,
+      lastSignInAt: null,
+      ownedWorkspaces: [
+        {
+          id: 'trial-ranch',
+          name: 'Trial only ranch',
+          tier: 'Professional',
+          billingState: 'Trial',
+          syncedAt: sample.fetchedAt,
+        },
+      ],
+    },
+  ],
+};
+test.beforeEach(async ({ page }) => {
+  await page.route('**/api/account/owner-readiness', (r) =>
+    r.fulfill({ json: { ok: true, fetchedAt: sample.fetchedAt, readiness: sample.readiness } }),
+  );
+  await page.route('**/api/account/owner-accounts*', (r) =>
+    r.fulfill({ json: { ...directory, accounts: [], nextPage: null } }),
+  );
+});
+
+test('owner can inspect non-paying accounts and operations while billing fails, without billing retries', async ({
+  page,
+}) => {
+  let billingCalls = 0;
+  await page.route('**/api/account/owner-dashboard*', (r) => {
+    billingCalls++;
+    return r.fulfill({ status: 503, json: { ok: false, message: 'Billing cannot be verified.' } });
+  });
+  await page.route('**/api/account/owner-accounts*', (r) =>
+    r.fulfill({
+      json:
+        new URL(r.request().url()).searchParams.get('page') === '2'
+          ? { ...directory, page: 2, nextPage: null, accounts: [] }
+          : directory,
+    }),
+  );
+  await signIn(page);
+  await expect(page.getByRole('heading', { name: 'Billing unavailable' })).toBeVisible();
+  await expect(page.getByText('No email provider is configured.', { exact: false })).toBeVisible();
+  await expect(page.getByText('trial-account@example.invalid', { exact: true })).toBeVisible();
+  await expect(page.getByText('Trial only ranch', { exact: true })).toBeVisible();
+  await expect(page.getByRole('heading', { name: 'No subscriptions in this view' })).toHaveCount(0);
+  await page.screenshot({ path: 'test-results/owner-independent-sections-desktop.png', fullPage: true });
+  await page.setViewportSize({ width: 390, height: 844 });
+  expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
+  await page.screenshot({ path: 'test-results/owner-independent-sections-mobile.png', fullPage: true });
+  await page.getByRole('button', { name: 'Next account page' }).click();
+  await expect(page.getByText('No registered accounts on this page.', { exact: true })).toBeVisible();
+  await page.getByRole('button', { name: 'Previous account page' }).click();
+  await expect(page.getByText('trial-account@example.invalid', { exact: true })).toBeVisible();
+  expect(billingCalls).toBe(1);
+  expect(
+    await page.evaluate(() =>
+      JSON.stringify({ ...localStorage, ...sessionStorage }).includes('trial-account@example.invalid'),
+    ),
+  ).toBe(false);
+  await page.getByRole('button', { name: 'Sign out', exact: true }).click();
+  await expect(page.getByText('trial-account@example.invalid')).toHaveCount(0);
+});
+
+test('account directory failures remain explicit while independent service status stays visible', async ({ page }) => {
+  await page.route('**/api/account/owner-dashboard*', (r) =>
+    r.fulfill({ status: 503, json: { ok: false, message: 'Billing cannot be verified.' } }),
+  );
+  await page.route('**/api/account/owner-accounts*', (r) =>
+    r.fulfill({ status: 503, json: { ok: false, message: 'Registered accounts could not be verified.' } }),
+  );
+  await signIn(page);
+  await expect(page.getByRole('heading', { name: 'Account directory unavailable' })).toBeVisible();
+  await expect(page.getByText('No registered accounts on this page.', { exact: true })).toHaveCount(0);
+  await expect(page.getByText('No email provider is configured.', { exact: false })).toBeVisible();
+});
+
+for (const action of ['owner-accounts', 'owner-readiness'])
+  test(`an owner refusal on ${action} hides every customer section`, async ({ page }) => {
+    await page.route('**/api/account/owner-dashboard*', (r) => r.fulfill({ json: sample }));
+    await page.route(`**/api/account/${action}*`, (r) =>
+      r.fulfill({ status: 403, json: { ok: false, message: 'Owner access required.' } }),
+    );
+    await signIn(page);
+    await expect(page.getByRole('heading', { name: 'Owner access required' })).toBeVisible();
+    await expect(page.getByText('customer@example.invalid')).toHaveCount(0);
+    await expect(page.getByRole('heading', { name: 'Registered accounts' })).toHaveCount(0);
+  });
+
 async function signIn(page: Page, route = 'owner', identity: Identity = OWNER) {
   await stubGoTrueUser(page, undefined, identity);
   await page.route('**/auth/v1/logout*', (r) => r.fulfill({ status: 204 }));
@@ -141,7 +239,7 @@ test('provider failures show an error, never a false zero-customer dashboard, an
     ),
   );
   await signIn(page);
-  await expect(page.getByRole('heading', { name: 'Dashboard unavailable' })).toBeVisible();
+  await expect(page.getByRole('heading', { name: 'Billing unavailable' })).toBeVisible();
   await expect(page.getByRole('heading', { name: 'No subscriptions in this view' })).toHaveCount(0);
   fail = false;
   await page.getByRole('button', { name: 'Try again' }).click();
@@ -174,8 +272,20 @@ test('switching identity removes owner data while the new identity request is pe
       await r.fulfill({ status: 403, json: { ok: false, message: 'Owner access required.' } });
     } else await r.fulfill({ json: sample });
   });
+  for (const [action, body] of [
+    ['owner-accounts', directory],
+    ['owner-readiness', { ok: true, fetchedAt: sample.fetchedAt, readiness: sample.readiness }],
+  ] as const) {
+    await page.route(`**/api/account/${action}*`, async (r) => {
+      if (secondRequest) {
+        await held;
+        await r.fulfill({ status: 403, json: { ok: false, message: 'Owner access required.' } });
+      } else await r.fulfill({ json: body });
+    });
+  }
   await signIn(page);
   await expect(page.getByRole('heading', { name: 'Synthetic Ranch Customer' })).toBeVisible();
+  await expect(page.getByText('trial-account@example.invalid', { exact: true })).toBeVisible();
   secondRequest = true;
   await stubGoTrueUser(page, undefined, SECOND);
   await page.evaluate(
@@ -190,6 +300,8 @@ test('switching identity removes owner data while the new identity request is pe
     refreshedSession('second-session', SECOND),
   );
   await expect(page.getByText('customer@example.invalid')).toHaveCount(0);
+  await expect(page.getByText('trial-account@example.invalid')).toHaveCount(0);
+  await expect(page.getByText('No email provider is configured.', { exact: false })).toHaveCount(0);
   release?.();
   await expect(page.getByRole('heading', { name: 'Owner access required' })).toBeVisible();
 });
