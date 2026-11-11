@@ -51,7 +51,7 @@ test('context-menu horse selection saves only that horse economics', async ({ pa
   await expect(page.getByLabel('Stud fee', { exact: true })).toHaveValue('100');
   await page
     .locator('.stack-item')
-    .filter({ has: page.getByText('Second Stud', { exact: true }) })
+    .filter({ has: page.getByText('SECOND STUD', { exact: true }) })
     .first()
     .click({ button: 'right' });
   await page.getByRole('menuitem', { name: 'Log breeding event' }).click();
