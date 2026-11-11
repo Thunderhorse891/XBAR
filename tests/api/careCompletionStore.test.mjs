@@ -133,3 +133,52 @@ test('confirming a planned vet visit updates its completed visit date', () => {
   );
   assert.equal(useXbarStore.getState().horses[0].lastVetVisit, localIsoDate());
 });
+
+const addVisit = (date) =>
+  useXbarStore.getState().addMedicalEvent(horse.id, event({ type: 'Vet visit', date, completionState: 'completed' }));
+
+test('deleting the only completed vet visit clears its derived date', () => {
+  const visit = addVisit('2026-01-01');
+  assert.equal(useXbarStore.getState().deleteMedicalEvent(horse.id, visit.id).ok, true);
+  assert.equal(useXbarStore.getState().horses[0].lastVetVisit, '');
+});
+
+test('deleting latest completed vet visit restores the most recent remaining completed visit', () => {
+  addVisit('2025-12-01');
+  const latest = addVisit('2026-01-01');
+  useXbarStore
+    .getState()
+    .addMedicalEvent(horse.id, event({ type: 'Vet visit', date: '2026-02-01', completionState: 'planned' }));
+  useXbarStore.getState().deleteMedicalEvent(horse.id, latest.id);
+  assert.equal(useXbarStore.getState().horses[0].lastVetVisit, '2025-12-01');
+});
+
+test('correcting a completed vet date backwards recomputes the latest visit', () => {
+  addVisit('2025-12-01');
+  const latest = addVisit('2026-01-01');
+  useXbarStore.getState().updateMedicalEvent(horse.id, latest.id, { date: '2025-11-01' });
+  assert.equal(useXbarStore.getState().horses[0].lastVetVisit, '2025-12-01');
+});
+
+test('changing completed vet evidence to planned or another care type removes the derived visit', () => {
+  for (const patch of [{ completionState: 'planned' }, { status: 'Deworming' }]) {
+    useXbarStore.setState({ ...createEmptyWorkspaceState(), currentRole: 'Admin', horses: [structuredClone(horse)] });
+    const visit = addVisit('2026-01-01');
+    useXbarStore.getState().updateMedicalEvent(horse.id, visit.id, patch);
+    assert.equal(useXbarStore.getState().horses[0].lastVetVisit, '');
+  }
+});
+
+test('removing an older visit does not change a separately recorded latest date', () => {
+  const visit = addVisit('2026-01-01');
+  useXbarStore.setState({ horses: [{ ...useXbarStore.getState().horses[0], lastVetVisit: '2026-02-01' }] });
+  useXbarStore.getState().deleteMedicalEvent(horse.id, visit.id);
+  assert.equal(useXbarStore.getState().horses[0].lastVetVisit, '2026-02-01');
+});
+
+test('same-day surviving vet evidence retains its completed date', () => {
+  const visit = addVisit('2026-01-01');
+  addVisit('2026-01-01');
+  useXbarStore.getState().deleteMedicalEvent(horse.id, visit.id);
+  assert.equal(useXbarStore.getState().horses[0].lastVetVisit, '2026-01-01');
+});
