@@ -35,3 +35,29 @@ export function medicalCompletionUpdates(horse: HorseRecord, event: TimelineEven
   }
   return {};
 }
+
+/** Reconcile a date supplied by changed/deleted completed evidence, preserving unrelated history. */
+export function reconcileVetVisit(
+  horse: HorseRecord,
+  previousEvent: TimelineEvent,
+  remainingTimeline: TimelineEvent[],
+): Partial<HorseRecord> {
+  const previousDay = careDay(previousEvent.date);
+  if (
+    previousEvent.status !== 'Vet visit' ||
+    previousEvent.completionState !== 'completed' ||
+    !previousDay ||
+    careDay(horse.lastVetVisit) !== previousDay
+  )
+    return {};
+
+  // No independent historical date can be reconstructed from a removed event.
+  // Only explicit completed visits can supply the replacement, never planned care.
+  const latest = remainingTimeline
+    .filter((event) => event.status === 'Vet visit' && event.completionState === 'completed' && careDay(event.date))
+    .reduce<TimelineEvent | undefined>(
+      (best, event) => (!best || careDay(event.date)! > careDay(best.date)! ? event : best),
+      undefined,
+    );
+  return { lastVetVisit: latest?.date ?? '' };
+}

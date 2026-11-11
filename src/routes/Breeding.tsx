@@ -39,7 +39,7 @@ export default function Breeding() {
   const breedingHorses = horses.filter((horse) => horse.segment === 'Stud' || horse.sex === 'Mare');
   const breedingDocs = documents.filter((document) => document.type === 'Breeding Contract');
   const [selectedHorseId, setSelectedHorseId] = useState(breedingHorses[0]?.id ?? '');
-  const selectedHorse = breedingHorses.find((horse) => horse.id === selectedHorseId) ?? breedingHorses[0];
+  const selectedHorse = breedingHorses.find((horse) => horse.id === selectedHorseId);
   const selectedRevenue = selectedHorse ? buildBreedingRevenueProfile(selectedHorse, expenseReceipts) : undefined;
   const revenueGate = breedingRevenueGate(subscription);
   const initialEconomics = { ...emptyBreedingEconomics, ...selectedHorse?.breedingEconomics };
@@ -50,6 +50,18 @@ export default function Breeding() {
     mareProductionValue: String(initialEconomics.mareProductionValue),
     foalProjectedValue: String(initialEconomics.foalProjectedValue),
   });
+  function selectHorse(horseId: string) {
+    const horse = breedingHorses.find((item) => item.id === horseId);
+    const values = { ...emptyBreedingEconomics, ...horse?.breedingEconomics };
+    setSelectedHorseId(horseId);
+    setEconomics({
+      studFee: String(values.studFee),
+      bookedMares: String(values.bookedMares),
+      breedingCosts: String(values.breedingCosts),
+      mareProductionValue: String(values.mareProductionValue),
+      foalProjectedValue: String(values.foalProjectedValue),
+    });
+  }
   const [eventTitle, setEventTitle] = useState('Breeding milestone');
   const [eventBody, setEventBody] = useState('');
   const [eventDate, setEventDate] = useState(new Date().toISOString().slice(0, 10));
@@ -75,7 +87,7 @@ export default function Breeding() {
         {
           id: 'prepare-event',
           label: 'Log breeding event',
-          onSelect: () => setSelectedHorseId(menuHorse.id),
+          onSelect: () => selectHorse(menuHorse.id),
         },
       ]
     : [];
@@ -467,16 +479,7 @@ export default function Breeding() {
                 className="field-input"
                 value={selectedHorseId}
                 onChange={(event) => {
-                  const horse = breedingHorses.find((item) => item.id === event.target.value);
-                  const values = { ...emptyBreedingEconomics, ...horse?.breedingEconomics };
-                  setSelectedHorseId(event.target.value);
-                  setEconomics({
-                    studFee: String(values.studFee),
-                    bookedMares: String(values.bookedMares),
-                    breedingCosts: String(values.breedingCosts),
-                    mareProductionValue: String(values.mareProductionValue),
-                    foalProjectedValue: String(values.foalProjectedValue),
-                  });
+                  selectHorse(event.target.value);
                 }}
                 disabled={!canManageBreeding}
               >
@@ -530,7 +533,7 @@ export default function Breeding() {
               className="button button--primary button--compact"
               type="button"
               onClick={() => {
-                if (!selectedHorseId || !eventTitle.trim() || !eventBody.trim() || !eventDate.trim()) {
+                if (!selectedHorse || !eventTitle.trim() || !eventBody.trim() || !eventDate.trim()) {
                   setEventError('Horse, date, milestone, and note are required.');
                   return;
                 }

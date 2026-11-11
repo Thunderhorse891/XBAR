@@ -96,7 +96,7 @@ import type {
   WorkspaceInvitationRecord,
 } from '@/types/xbar';
 import type { BuyerRoomEvent, DocumentRecord, SalePacketBuild, SubscriptionProfile } from '@/types/xbar';
-import { medicalCompletionUpdates, validateMedicalCompletion } from '@/lib/medicalEvidence';
+import { medicalCompletionUpdates, reconcileVetVisit, validateMedicalCompletion } from '@/lib/medicalEvidence';
 import { proposeHorseNameRepairs } from '@/lib/horseNameRepair';
 import type { XbarStore } from '@/store/xbarStoreTypes';
 import {
@@ -2850,16 +2850,17 @@ export const useXbarStore = create<XbarStore>()(
         const completionError = validateMedicalCompletion(updated.date, updated.completionState);
         if (completionError) return { ok: false, message: completionError };
         set((state) => ({
-          horses: state.horses.map((h) =>
-            h.id === horseId
-              ? {
-                  ...h,
-                  ...medicalCompletionUpdates(h, updated),
-                  medicalTimeline: h.medicalTimeline.map((ev) => (ev.id === eventId ? { ...ev, ...patch } : ev)),
-                  activity: h.activity.map((ev) => (ev.id === eventId ? { ...ev, ...patch } : ev)),
-                }
-              : h,
-          ),
+          horses: state.horses.map((h) => {
+            if (h.id !== horseId) return h;
+            const medicalTimeline = h.medicalTimeline.map((ev) => (ev.id === eventId ? updated : ev));
+            const reconciled = { ...h, ...reconcileVetVisit(h, existing, medicalTimeline) };
+            return {
+              ...reconciled,
+              ...medicalCompletionUpdates(reconciled, updated),
+              medicalTimeline,
+              activity: h.activity.map((ev) => (ev.id === eventId ? { ...ev, ...patch } : ev)),
+            };
+          }),
         }));
         return { ok: true, message: 'Medical event updated.', id: eventId };
       },
@@ -2874,6 +2875,11 @@ export const useXbarStore = create<XbarStore>()(
             h.id === horseId
               ? {
                   ...h,
+                  ...reconcileVetVisit(
+                    h,
+                    removedMedical,
+                    h.medicalTimeline.filter((ev) => ev.id !== eventId),
+                  ),
                   medicalTimeline: h.medicalTimeline.filter((ev) => ev.id !== eventId),
                   activity: h.activity.filter((ev) => ev.id !== eventId || ev.category !== 'Medical'),
                 }

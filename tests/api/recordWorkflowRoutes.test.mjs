@@ -128,3 +128,58 @@ test('same-route unavailable asset clears the old editor and later hydration ope
   assert.equal(nodes(f.tree, (n) => n.type === 'input' && n.props.value === 'West').length, 1);
   assert.equal(nodes(f.tree, (n) => n.props.children === 'Save asset changes')[0].props.disabled, false);
 });
+
+test('breeding context-menu selection hydrates the selected horse economics before saving', async () => {
+  const f = await renderRoute('Breeding');
+  const horse = (id, fee) => ({
+    ...f.horse,
+    id,
+    name: id,
+    segment: 'Stud',
+    breedingEconomics: {
+      studFee: fee,
+      bookedMares: 2,
+      breedingCosts: 30,
+      mareProductionValue: 40,
+      foalProjectedValue: 50,
+    },
+  });
+  f.state.horses = [horse('first', 100), horse('second', 900)];
+  f.state.subscription = { ...f.state.subscription, tier: 'Enterprise', status: 'active' };
+  f.state.updateBreedingEconomics = (id, economics) => {
+    f.calls.push(['save', id, economics]);
+    return { ok: true };
+  };
+  f.render();
+  const select = () => nodes(f.tree, (n) => n.type === 'select')[0];
+  select().props.onChange({ target: { value: 'first' } });
+  f.render();
+  const rows = nodes(f.tree, (n) => typeof n.props.onContextMenu === 'function');
+  rows[1].props.onContextMenu({ preventDefault() {}, clientX: 0, clientY: 0 });
+  f.render();
+  nodes(f.tree, (n) => n.type === 'ContextMenu')[0]
+    .props.items.find((i) => i.id === 'prepare-event')
+    .onSelect();
+  f.render();
+  action(f, 'Save revenue model');
+  assert.deepEqual(
+    f.calls.find((c) => c[0] === 'save'),
+    ['save', 'second', f.state.horses[1].breedingEconomics],
+  );
+});
+
+test('breeding empty or removed selection never silently saves another horse', async () => {
+  const f = await renderRoute('Breeding');
+  f.state.horses = [
+    { ...f.horse, id: 'first', segment: 'Stud' },
+    { ...f.horse, id: 'second', segment: 'Stud' },
+  ];
+  f.state.subscription = { ...f.state.subscription, tier: 'Enterprise', status: 'active' };
+  f.render();
+  assert.equal(nodes(f.tree, (n) => n.props.children === 'Save revenue model').length, 0);
+  nodes(f.tree, (n) => n.type === 'select')[0].props.onChange({ target: { value: 'first' } });
+  f.render();
+  f.state.horses = f.state.horses.slice(1);
+  f.render();
+  assert.equal(nodes(f.tree, (n) => n.props.children === 'Save revenue model').length, 0);
+});
