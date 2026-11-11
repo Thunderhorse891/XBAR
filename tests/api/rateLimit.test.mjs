@@ -131,3 +131,46 @@ test('rotating the spoofed leftmost entry does not escape the limit on the real 
   );
   assert.equal(other.statusCode, 200);
 });
+
+for (const environment of [{ NODE_ENV: 'production' }, { VERCEL: '1' }, { VERCEL_ENV: 'production' }]) {
+  test(`deployed limiter refuses absent Redis in ${JSON.stringify(environment)}`, async () => {
+    const saved = { ...process.env };
+    try {
+      delete process.env.UPSTASH_REDIS_REST_URL;
+      delete process.env.UPSTASH_REDIS_REST_TOKEN;
+      Object.assign(process.env, environment);
+      const res = mockRes();
+      assert.equal(await enforceRateLimit(reqWith({}), res, { bucket: 'missing', limit: 5, windowSeconds: 60 }), false);
+      assert.equal(res.statusCode, 503);
+    } finally {
+      process.env = saved;
+    }
+  });
+}
+test('Redis increment and expiry use one atomic operation, and the returned count enforces the limit', async () => {
+  const saved = { ...process.env };
+  const originalFetch = globalThis.fetch;
+  let count = 0;
+  process.env.UPSTASH_REDIS_REST_URL = 'https://redis.example.invalid/';
+  process.env.UPSTASH_REDIS_REST_TOKEN = 'fixture';
+  globalThis.fetch = async (url, options) => {
+    assert.equal(url, 'https://redis.example.invalid');
+    const command = JSON.parse(options.body);
+    assert.equal(command[0], 'EVAL');
+    assert.match(command[1], /redis.call\('INCR'/);
+    assert.match(command[1], /redis.call\('EXPIRE'/);
+    assert.deepEqual(command.slice(2), [1, 'xbar:rl:atomic:unknown', 60]);
+    return { ok: true, json: async () => ({ result: ++count }) };
+  };
+  try {
+    const first = mockRes();
+    assert.equal(await enforceRateLimit(reqWith({}), first, { bucket: 'atomic', limit: 1, windowSeconds: 60 }), true);
+    const second = mockRes();
+    assert.equal(await enforceRateLimit(reqWith({}), second, { bucket: 'atomic', limit: 1, windowSeconds: 60 }), false);
+    assert.equal(second.statusCode, 429);
+    assert.equal(count, 2);
+  } finally {
+    globalThis.fetch = originalFetch;
+    process.env = saved;
+  }
+});
