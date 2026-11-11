@@ -43,7 +43,7 @@ test('context-menu horse selection saves only that horse economics', async ({ pa
     });
     useXbarStore.setState({
       horses: [horse('First Stud', 100), horse('Second Stud', 900)],
-      subscription: buildSubscriptionForTier('Enterprise'),
+      subscription: buildSubscriptionForTier(state.subscription, 'Enterprise'),
     });
     history.pushState({}, '', '/app/breeding');
     dispatchEvent(new PopStateEvent('popstate'));
