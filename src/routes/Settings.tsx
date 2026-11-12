@@ -370,11 +370,19 @@ export default function Settings() {
       const fileSummary = files.length
         ? `${files.length} file${files.length === 1 ? '' : 's'} included.`
         : 'No attached original files were included.';
+      const saveSummary =
+        saved.via === 'browser'
+          ? 'Check your browser downloads to confirm the file finished saving.'
+          : 'Ranch backup shared.';
       pushToast({
-        title: skipped.length ? 'Backup exported — some files not included' : 'Backup exported',
+        title: skipped.length
+          ? 'Backup prepared — some files not included'
+          : saved.via === 'browser'
+            ? 'Backup download started'
+            : 'Backup exported',
         message: skipped.length
-          ? `${fileSummary} ${skipped.length} could not be included: ${skipped.map((entry) => `${entry.name} (${entry.reason})`).join('; ')}`
-          : `Ranch backup downloaded. ${fileSummary}`,
+          ? `${fileSummary} ${skipped.length} could not be included: ${skipped.map((entry) => `${entry.name} (${entry.reason})`).join('; ')}. ${saveSummary}`
+          : `${fileSummary} ${saveSummary}`,
         tone: skipped.length ? 'warning' : 'success',
       });
     } catch (error) {
@@ -1571,11 +1579,11 @@ export default function Settings() {
         </Panel>
       </div>
 
-      <Panel
-        eyebrow="Ranch backup"
-        title="Backups"
-        description="Exports ranch records and available document, receipt and packet files. Keep a separate backup of horse-photo originals."
-      >
+      <Panel eyebrow="Ranch backup" title="Backups">
+        <p>
+          Exports ranch records and available document, receipt and packet files. Keep a separate backup of horse-photo
+          originals.
+        </p>
         <input
           ref={importRef}
           type="file"
