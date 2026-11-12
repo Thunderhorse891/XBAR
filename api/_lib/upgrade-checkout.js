@@ -7,7 +7,7 @@ import {
   resolveExpiryFailure,
   splitExpiryBatch,
 } from './checkout-session.js';
-import { findTierByPriceId, getStripePriceIdByTier } from './subscription-plans.js';
+import { findTierByPriceId, getCheckoutPriceIdByTier } from './subscription-plans.js';
 import { checkoutBlockReason, stripeSubscriptionBlocksCheckout } from './subscription-status.js';
 import { tierIncludesPlan } from './entitlements.js';
 import { serverManagedBillingEnabled } from './managed-billing.js';
@@ -205,7 +205,7 @@ export async function prepareUpgradeQuote({
   const account = await stripe.accounts.retrieve();
   if (account.id !== expectedAccount)
     refuse('billing_unavailable', 'Upgrade billing is unavailable while its account is verified.', 503);
-  const priceId = getStripePriceIdByTier(targetTier, input.billingPeriod);
+  const priceId = getCheckoutPriceIdByTier(targetTier, input.billingPeriod);
   if (!priceId) refuse('price_unavailable', 'This plan’s selected billing period is not available yet.', 503);
   const price = await stripe.prices.retrieve(priceId, { expand: ['product'] });
   if (

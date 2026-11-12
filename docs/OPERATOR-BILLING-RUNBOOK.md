@@ -24,8 +24,8 @@ changing prices without locking existing subscribers out.
    and `warnings` (each one is a promise the product is not keeping yet):
    - `subsystems.stripeLiveKey` must be `true` in production. `false` with
      `stripeBilling: true` means a test key: checkout works, no money moves.
-   - A warning about `STRIPE_PRICE_ID_*_ANNUAL` means annual checkout refuses
-     on those plans.
+   - New annual checkout is deliberately disabled. Keep historical annual IDs
+     recognizable for existing subscribers; their subscriptions remain unchanged.
    - A warning about email means welcome, trial, payment-failed and packet
      emails are not being sent. Set `RESEND_API_KEY` (or `SENDGRID_API_KEY`)
      and an `EMAIL_FROM_ADDRESS` on a domain verified with that provider.
@@ -34,22 +34,36 @@ changing prices without locking existing subscribers out.
    Stripe. `npm run preflight` and one controlled real purchase prove they are
    the right account's.
 
-3. **Prices.** Annual is 10× monthly (two months free). Checkout takes cards
-   only.
+3. **New public plans are monthly only.** Checkout takes cards, charges a single
+   flat workspace amount, and includes the listed team seats.
 
-   | Tier         | Monthly | Annual    | Notes                                                |
-   | ------------ | ------- | --------- | ---------------------------------------------------- |
-   | Starter      | $12/mo  | $120/yr   | 5 horses, 1 seat                                     |
-   | Professional | $29/mo  | $290/yr   | sale packets and buyer folders — the tier that sells |
-   | Ranch Ops    | $79/mo  | $790/yr   | teams, breeding, equipment at scale                  |
-   | Enterprise   | $199/mo | $1,990/yr | large rosters                                        |
+   | Tier         | Monthly | Horses | Team seats | Included paid capabilities                            |
+   | ------------ | ------- | ------ | ---------- | ----------------------------------------------------- |
+   | Free         | $0      | 2      | 1          | Manual records; 10 documents; shared launch storage   |
+   | Professional | $20     | 30     | 5          | OCR, calculated reports, PDF/CSV export, sale sharing |
+   | Ranch Ops    | $49.99  | 200    | 20         | Professional plus operations and report styling       |
 
-   Managed checkout sells the Stripe Price ids in `STRIPE_PRICE_ID_<TIER>` and
-   `STRIPE_PRICE_ID_<TIER>_ANNUAL`. Hosted Payment Links
-   (`VITE_STRIPE_PAYMENT_LINK_*`, `..._ANNUAL`) are the fallback when managed
-   checkout is off; a link payment is granted by hand (below), because no
-   webhook ties it to a workspace. If you use links, turn on **collect customer
-   email** in each link's settings — that email is how you find the workspace.
+   New plans include no dedicated storage allowance; existing numeric entitlement records do not provision space.
+
+   Starter and Enterprise are legacy entitlement tiers, not new purchase options.
+   Existing subscribers keep their actual rates, cadence and access. Annual terms
+   for new purchases are undecided. Do not generate annual prices from monthly rates.
+
+   Managed checkout uses only `STRIPE_PRICE_ID_PROFESSIONAL` and
+   `STRIPE_PRICE_ID_RANCH_OPS`, after verifying account, live mode, USD amount,
+   product status and monthly licensed billing. Preserve replaced monthly IDs in
+   `STRIPE_LEGACY_PRICE_IDS` before switching either variable. Keep the original
+   Stripe account; customer/subscription/invoice identities do not migrate between accounts.
+
+   Historical static Payment Links are disabled in the app because their price
+   cannot be verified. Retire externally shared old links and review open sessions
+   and portal offers during the approved cutover. Do not archive legacy products or
+   change subscriptions just to remove an old public offer.
+
+   Reports recalculate from workspace records and export when requested. There is
+   no scheduled report email or report cron. On-device PDF intake inspects up to
+   eight text pages and OCRs up to three scanned pages; the UI reports incomplete
+   coverage. Server Textract is optional and requires separately verified configuration.
 
 ---
 
@@ -83,7 +97,7 @@ workspace.
 ```sql
 insert into public.workspace_subscription_profiles
   (workspace_id, tier, billing_state, monthly_rate, billing_period)
-values ('PASTE-WORKSPACE-UUID', 'Professional', 'Manual Billing', 29, 'monthly')
+values ('PASTE-WORKSPACE-UUID', 'Professional', 'Manual Billing', 20, 'monthly')
 on conflict (workspace_id) do update
   set tier           = excluded.tier,
       billing_state  = excluded.billing_state,
@@ -94,7 +108,7 @@ on conflict (workspace_id) do update
 
 `tier` must be exactly `Starter`, `Professional`, `Ranch Ops` or `Enterprise`.
 The strings are compared literally: a typo is not an error, it silently gives
-the workspace Starter limits. `billing_period` is `'monthly'` or `'annual'`
+the workspace Free limits. `billing_period` is `'monthly'` or `'annual'`
 (the column refuses anything else).
 
 ### 3. Confirm it took
@@ -116,7 +130,7 @@ its stored subscription on load.
 The database entitles a tier only while `billing_state` is `'Active'` or
 `'Manual Billing'` (read from production's `xbar_subscription_limits`,
 2026-10-02). Every other state — `'Inactive'`, `'Past Due'`, anything else —
-gets Starter limits, unless an unexpired trial says otherwise.
+gets Free limits, unless an unexpired trial says otherwise.
 
 - Canceled, lapsed, or revoked: `'Inactive'`.
 - A payment that failed but may still recover: `'Past Due'`.
@@ -163,8 +177,10 @@ renewal.
 
 1. Create the new Prices in Stripe. **Do not archive or delete the old ones**
    while anyone is billed on them.
-2. Put the new ids in `STRIPE_PRICE_ID_<TIER>` / `..._ANNUAL`. Only these are
-   sold to new buyers.
+2. Put verified new monthly ids in `STRIPE_PRICE_ID_PROFESSIONAL` and
+   `STRIPE_PRICE_ID_RANCH_OPS`. Only these are sold to new buyers. Preserve
+   historical annual mappings for existing subscribers; do not configure new
+   annual offers.
 3. Move every replaced id into `STRIPE_LEGACY_PRICE_IDS`, comma-separated, as
    `price_id=Tier:monthly` or `price_id=Tier:annual`:
 
@@ -193,8 +209,9 @@ migration was changed as part of the local implementation.
 2. Verify `STRIPE_UPGRADE_ACCOUNT_ID` against the account reached by the server
    key. Set `STRIPE_UPGRADE_LIVEMODE` deliberately; production requires `true`.
    All target prices are retrieved and checked against the canonical plan
-   amounts, USD, active product, one-month/one-year licensed recurring interval,
-   and expected Stripe mode before any amount is displayed.
+   amounts, USD, active product, one-month licensed recurring interval,
+   and expected Stripe mode before any new checkout amount is displayed. New
+   annual purchases are refused; existing annual subscriptions are unchanged.
 3. Review an existing `STRIPE_UPGRADE_COUPON_ID`: exactly 10 percent, duration
    `once`, valid, unexpired, with redemptions remaining and applicable to each
    target product. Never use a forever/repeating coupon. With no valid coupon,
@@ -231,7 +248,7 @@ migration was changed as part of the local implementation.
    `UPGRADE_OFFERS_ENABLED=true`. Run the full customer flow: first deliberate
    feature click; decline; exact second click with a new request UUID; verify
    one-period discounted subtotal; confirm in Stripe; process webhook; refresh
-   entitlement. Test monthly and annual, repeated click/retry, third attempt,
+   entitlement. Test monthly purchases and annual refusal, repeated click/retry, third attempt,
    account/workspace switches, a second feature after a discount was claimed,
    and an existing paid subscription. New-subscription Checkout expires stale
    sibling sessions under the existing shared billing lease.

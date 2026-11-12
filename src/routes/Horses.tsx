@@ -20,6 +20,7 @@ import { buildSaleReadinessScore } from '@/lib/saleReadinessScore';
 import { buildBuyerPacketReleaseGate } from '@/lib/buyerPacketReleaseGate';
 import { buildHorseDocumentActions, horseAgeLabel } from '@/lib/horseDocumentActions';
 import { useHorseArchiveActions } from '@/hooks/useHorseArchiveActions';
+import { useDayKey } from '@/hooks/useDayKey';
 import './horsesCommand.css';
 import './horseActionFlows.css';
 
@@ -117,9 +118,12 @@ export default function Horses() {
   const createOpen = searchParams.get('new') === '1';
   const showingArchived = searchParams.get('archived') === '1';
   const archivedCount = horses.filter((horse) => Boolean(horse.archive)).length;
-  const activeSharedHorseIds = new Set(
-    sharedListings.filter((listing) => listing.state !== 'Archived').map((listing) => listing.horseId),
+  const liveSharedHorseIds = new Set(
+    sharedListings.filter((listing) => listing.state === 'Live').map((listing) => listing.horseId),
   );
+  // A Coggins or health record can expire without a workspace edit. Keep the
+  // roster's memoized scores and document actions in step with the local day.
+  const dayKey = useDayKey();
 
   const setNewHorseParam = (open: boolean) => {
     const nextParams = new URLSearchParams(searchParams);
@@ -142,12 +146,22 @@ export default function Horses() {
           });
           return [
             horse.id,
-            buildSaleReadinessScore({ horse, documents, receipts: expenseReceipts, ownershipRecord, releaseGate })
-              .score,
+            {
+              score: buildSaleReadinessScore({
+                horse,
+                documents,
+                receipts: expenseReceipts,
+                ownershipRecord,
+                releaseGate,
+              }).score,
+              releaseAllowed: releaseGate.allowed,
+            },
           ] as const;
         }),
       ),
-    [horses, documents, expenseReceipts, ownershipRecords],
+    // The canonical scoring functions read the current date.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [horses, documents, expenseReceipts, ownershipRecords, dayKey],
   );
   const documentActionsById = useMemo(
     () =>
@@ -161,7 +175,8 @@ export default function Horses() {
           ),
         ]),
       ),
-    [horses, documents, ownershipRecords],
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [horses, documents, ownershipRecords, dayKey],
   );
   const horsesWithDocumentGaps = horses.filter((horse) => documentActionsById.get(horse.id)?.length);
 
@@ -198,7 +213,7 @@ export default function Horses() {
       ownershipRecords.find((record) => record.horseId === horse.id),
     ),
   }));
-  const readyToListCount = horses.filter((horse) => horse.readiness.packetStatus === 'Ready').length;
+  const readyToListCount = [...saleReadinessById.values()].filter((readiness) => readiness.releaseAllowed).length;
   // A sale-track horse is blocked when it is on medical review or its sale
   // packet still has unmet document slots.
   const blockedFromSaleCount = commandPackets.filter(
@@ -207,7 +222,7 @@ export default function Horses() {
       (horse.status === 'Medical Review' || packet.saleSlots.some((slot) => slot.status !== 'ready')),
   ).length;
   const missingDocumentCount = [...documentActionsById.values()].reduce((sum, actions) => sum + actions.length, 0);
-  const buyerPacketsLiveCount = activeSharedHorseIds.size;
+  const buyerPacketsLiveCount = liveSharedHorseIds.size;
 
   const handleSavedHorseToggle = async (horseId: string) => {
     setTogglingListingId(horseId);
@@ -273,7 +288,7 @@ export default function Horses() {
         { label: 'Legal owner', value: horse.owner },
         { label: 'Location', value: `${horse.location.barn} | ${horse.location.pasture}` },
         { label: 'Registration', value: horse.aqhaNumber || horse.registrationNumber || 'Pending' },
-        { label: 'Sale readiness', value: formatPercent(saleReadinessById.get(horse.id) ?? 0) },
+        { label: 'Sale readiness', value: formatPercent(saleReadinessById.get(horse.id)?.score ?? 0) },
       ],
       actions: [
         { label: 'Open horse record', path: `/horses/${horse.id}` },
@@ -851,9 +866,10 @@ export default function Horses() {
             filtered.length ? (
               <div className="horse-grid">
                 {filtered.map((horse) => {
-                  const saved = sharedListings.some(
+                  const listing = sharedListings.find(
                     (listing) => listing.horseId === horse.id && listing.state !== 'Archived',
                   );
+                  const saved = Boolean(listing);
                   const toggling = togglingListingId === horse.id;
                   const packet = buildHorsePacketCompleteness(
                     horse,
@@ -861,10 +877,11 @@ export default function Horses() {
                     ownershipRecords.find((record) => record.horseId === horse.id),
                   );
                   const valueLabel = horse.segment === 'Sale Prospect' && horse.sale.askPrice ? 'Ask' : 'Insured';
-                  const accessLabel = saved ? 'Released' : 'Private';
+                  const accessLabel = listing?.state === 'Live' ? 'Released' : saved ? 'Draft' : 'Private';
                   const showSaleSignals = horse.segment === 'Sale Prospect' || horse.status === 'Sale Prep';
                   const openProofSlots = documentActionsById.get(horse.id)?.length ?? 0;
-                  const readiness = saleReadinessById.get(horse.id) ?? 0;
+                  const readiness = saleReadinessById.get(horse.id)?.score ?? 0;
+                  const releaseAllowed = saleReadinessById.get(horse.id)?.releaseAllowed ?? false;
                   const primaryMedia = primaryHorseMedia(horse);
                   return (
                     <div
@@ -897,7 +914,21 @@ export default function Horses() {
                             <Pill tone={statusTone[horse.status]}>
                               {horse.status === 'Sale Prep' ? 'Buyer Prep' : horse.status}
                             </Pill>
-                            <Pill tone={packet.buyerProfileTone}>{packet.buyerProfileStatus}</Pill>
+                            <Pill
+                              tone={
+                                releaseAllowed
+                                  ? 'emerald'
+                                  : packet.buyerProfileStatus === 'Live'
+                                    ? 'amber'
+                                    : packet.buyerProfileTone
+                              }
+                            >
+                              {releaseAllowed
+                                ? 'Release clear'
+                                : packet.buyerProfileStatus === 'Live'
+                                  ? 'Needs Review'
+                                  : packet.buyerProfileStatus}
+                            </Pill>
                           </div>
                           <ActionMenuButton
                             className="icon-button icon-button--compact"
@@ -939,7 +970,9 @@ export default function Horses() {
                           </div>
                           <div className="horse-card__metric">
                             <span>{valueLabel}</span>
-                            <strong>{formatCompactCurrency(horse.sale.askPrice || horse.insuredValue)}</strong>
+                            <strong>
+                              {formatCompactCurrency(valueLabel === 'Ask' ? horse.sale.askPrice : horse.insuredValue)}
+                            </strong>
                           </div>
                           <div className="horse-card__metric">
                             <span>Release</span>
@@ -989,7 +1022,9 @@ export default function Horses() {
                         <div className="horse-card__footer">
                           <div className="status-inline">
                             {saved ? (
-                              <Pill tone="blue">Buyer packet live</Pill>
+                              <Pill tone="blue">
+                                {listing?.state === 'Live' ? 'Buyer packet released' : 'Buyer packet staged'}
+                              </Pill>
                             ) : (
                               <Pill tone={openProofSlots ? 'amber' : 'emerald'}>
                                 {openProofSlots ? `${openProofSlots} document gaps` : 'Documents clear'}
@@ -1115,7 +1150,7 @@ export default function Horses() {
                         {horse.location.barn} · {horse.location.pasture}
                       </td>
                       <td>{horse.documents.length}</td>
-                      <td>{saleReadinessById.get(horse.id) ?? '—'}</td>
+                      <td>{saleReadinessById.get(horse.id)?.score ?? '—'}</td>
                       <td>
                         <Pill tone={statusTone[horse.status]}>
                           {horse.status === 'Sale Prep' ? 'Buyer Prep' : horse.status}

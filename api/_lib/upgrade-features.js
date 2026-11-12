@@ -1,4 +1,4 @@
-/** Shared by the offer API and browser. Existing capabilities keep their tiers. */
+/** Shared by the offer API and browser; targets must match capability gates. */
 export const UPGRADE_FEATURES = Object.freeze({
   buyerDealRoom: {
     tier: 'Professional',
@@ -17,8 +17,13 @@ export const UPGRADE_FEATURES = Object.freeze({
   },
   profitIntelligence: {
     tier: 'Ranch Ops',
-    label: 'Executive ranch reports',
-    detail: 'See horse economics, sale readiness, cost trends and action priorities in a printable report.',
+    label: 'Profit intelligence',
+    detail: 'Use horse economics and offer guardrails to support your operating decisions.',
+  },
+  reports: {
+    tier: 'Professional',
+    label: 'Ranch reports',
+    detail: 'Reports automatically calculated from your records, with PDF and spreadsheet export.',
   },
   breedingRevenue: {
     tier: 'Ranch Ops',
@@ -36,7 +41,7 @@ export const UPGRADE_FEATURES = Object.freeze({
     detail: 'Choose report accents and an executive cover without changing your underlying figures.',
   },
   reportWhiteLabel: {
-    tier: 'Enterprise',
+    tier: 'Ranch Ops',
     label: 'Ranch-first report styling',
     detail: 'Remove decorative platform artwork while retaining source attribution and verification identity.',
   },

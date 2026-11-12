@@ -189,7 +189,7 @@ test('a completed checkout writes the purchased tier and an Active billing state
   assert.equal(params.p_event_type, 'checkout.session.completed');
   assert.equal(params.p_tier, 'Professional', 'the tier the price id maps to');
   assert.equal(params.p_billing_state, 'Active', 'an active Stripe subscription entitles');
-  assert.equal(params.p_monthly_rate, 29, 'Professional monthly rate');
+  assert.equal(params.p_monthly_rate, 20, 'Professional monthly rate');
   assert.equal(params.p_customer_id, 'cus_test_1');
   assert.equal(params.p_subscription_id, 'sub_test_1');
   assert.equal(params.p_price_id, PRICE_PRO_MONTHLY);
@@ -200,7 +200,7 @@ test('a completed checkout writes the purchased tier and an Active billing state
   // The full profile the workspace will gate on carries the same answer.
   assert.equal(params.p_profile.tier, 'Professional');
   assert.equal(params.p_profile.billingState, 'Active');
-  assert.equal(params.p_profile.monthlyRate, 29);
+  assert.equal(params.p_profile.monthlyRate, 20);
   assert.equal(params.p_profile.usage.horseLimit, 30, 'Professional capacity, not the Starter baseline');
 });
 
@@ -507,4 +507,63 @@ test("a failed profile read keeps the database's text out of the response", asyn
   assert.ok(response.statusCode >= 400, 'still a non-2xx, so Stripe retries');
   assert.deepEqual(calls.rpcParams, [], 'nothing is written without the stored tier');
   assert.doesNotMatch(JSON.stringify(response.body), /relation|column|does not exist/);
+});
+
+test('signed paid events grant current Professional and Ranch Ops prices with exact capacities', async () => {
+  for (const [tier, priceId, amount, horses, seats] of [
+    ['Professional', PRICE_PRO_MONTHLY, 2000, 30, 5],
+    ['Ranch Ops', process.env.STRIPE_PRICE_ID_RANCH_OPS, 4999, 200, 20],
+  ]) {
+    stripeScenario.retrieveSubscription = async () => {
+      const subscription = activeSubscription(priceId);
+      Object.assign(subscription.items.data[0].price, {
+        currency: 'usd',
+        unit_amount: amount,
+        recurring: { interval: 'month', interval_count: 1 },
+      });
+      return subscription;
+    };
+    const calls = supabaseFor();
+    const response = await deliver(completedEvent({ eventId: `evt_current_${amount}` }));
+    assert.equal(response.statusCode, 200);
+    const [params] = calls.rpcParams;
+    assert.equal(params.p_tier, tier);
+    assert.equal(params.p_monthly_rate, amount / 100);
+    assert.equal(params.p_profile.usage.horseLimit, horses);
+    assert.equal(params.p_profile.usage.seatLimit, seats);
+  }
+});
+
+test('signed legacy renewals retain historical monthly price and access after repricing', async () => {
+  const previous = process.env.STRIPE_LEGACY_PRICE_IDS;
+  const cases = [
+    ['Starter', 1200],
+    ['Professional', 2900],
+    ['Ranch Ops', 7900],
+    ['Enterprise', 19900],
+  ];
+  process.env.STRIPE_LEGACY_PRICE_IDS = cases.map(([tier, amount]) => `price_old_${amount}=${tier}:monthly`).join(',');
+  try {
+    for (const [tier, amount] of cases) {
+      stripeScenario.retrieveSubscription = async () => {
+        const subscription = activeSubscription(`price_old_${amount}`);
+        Object.assign(subscription.items.data[0].price, {
+          currency: 'usd',
+          unit_amount: amount,
+          recurring: { interval: 'month', interval_count: 1 },
+        });
+        return subscription;
+      };
+      const calls = supabaseFor({ profileRow: { tier, monthly_rate: amount / 100, payload: {} } });
+      const response = await deliver(completedEvent({ eventId: `evt_legacy_${amount}` }));
+      assert.equal(response.statusCode, 200);
+      const [params] = calls.rpcParams;
+      assert.equal(params.p_tier, tier);
+      assert.equal(params.p_billing_state, 'Active');
+      assert.equal(params.p_monthly_rate, amount / 100);
+    }
+  } finally {
+    if (previous === undefined) delete process.env.STRIPE_LEGACY_PRICE_IDS;
+    else process.env.STRIPE_LEGACY_PRICE_IDS = previous;
+  }
 });

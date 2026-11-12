@@ -4,6 +4,7 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import type { MouseEvent } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { DocumentLibrary } from '@/components/DocumentLibrary';
+import { DocumentExtractionPreview } from '@/components/DocumentExtractionPreview';
 import {
   documentWithFreshSource,
   documentIdentityCacheNeedsReview,
@@ -20,6 +21,7 @@ import { billingPath, billingPathForTier } from '@/lib/billingRoutes';
 import { openStoredFileInTab } from '@/lib/openStoredFile';
 import { hasStoredFile, storedFileLabel } from '@/lib/storedFiles';
 import { formatDateTimeLabel } from '@/lib/format';
+import { normalizeStorage } from '@/lib/xbarRuntime';
 import { downloadLegalHtml, legalDocuments, openPrintableLegalDocument } from '@/lib/legalDocuments';
 import { buildDocumentTrustProfile } from '@/lib/xbarPhaseTwo';
 import { useUiStore } from '@/store/useUiStore';
@@ -756,15 +758,17 @@ export default function Documents() {
             title="Stage 1 · Upload"
             action={
               <Pill tone={uploadOpen ? 'blue' : 'slate'}>
-                {uploadOpen
-                  ? 'Top-bar launch'
-                  : `${subscription.usage.storageUsedGb}/${subscription.usage.storageLimitGb} GB used`}
+                {uploadOpen ? 'Top-bar launch' : `${normalizeStorage(subscription.usage.storageUsedGb)} GB used`}
               </Pill>
             }
             className="cursor-context-menu"
             onContextMenu={(event) => openSurfaceMenu('intake', event)}
           >
             <p className="stack-item__copy">{documentIntakeDisclosure}</p>
+            <p className="stack-item__copy">
+              Cloud storage is shared across XBAR at launch. New launch plans do not include a dedicated storage
+              allowance; uploads depend on available capacity.
+            </p>
             <fieldset id="documents-intake" className="form-grid hc-upload-fields" disabled={isSubmitting}>
               <label className="field-stack">
                 <span className="field-label">Batch label</span>
@@ -872,7 +876,11 @@ export default function Documents() {
 
           <Panel
             title="Recent intake batches"
-            description="Each upload lands as a batch and feeds the OCR stage."
+            description={
+              subscription.tier === 'Free'
+                ? 'Manual uploads on Free. Professional unlocks OCR intake.'
+                : 'Each upload lands as a batch and feeds the OCR stage.'
+            }
             className="cursor-context-menu"
             onContextMenu={(event) => openSurfaceMenu('batches', event)}
           >
@@ -907,7 +915,11 @@ export default function Documents() {
               <EmptyState
                 compact
                 title="No document uploads yet"
-                description="Add files above to start the pipeline — OCR picks them up automatically."
+                description={
+                  subscription.tier === 'Free'
+                    ? 'Add files above, then assign and review them manually. Professional unlocks OCR.'
+                    : 'Add files above to start the pipeline — OCR picks them up automatically.'
+                }
               />
             )}
           </Panel>
@@ -967,7 +979,9 @@ export default function Documents() {
                       </div>
                     ) : (
                       <div className="stack-item__copy">
-                        No fields extracted yet — this file is still in the OCR queue.
+                        {subscription.tier === 'Free'
+                          ? 'Manual upload on Free. Professional unlocks text extraction.'
+                          : 'No fields extracted yet — this file is still in the OCR queue.'}
                       </div>
                     )}
                   </div>
@@ -978,7 +992,11 @@ export default function Documents() {
             <EmptyState
               compact
               title="Nothing is processing"
-              description="OCR is idle. Upload documents in stage 1 to feed the queue."
+              description={
+                subscription.tier === 'Free'
+                  ? 'Free uses manual document review. Professional unlocks OCR.'
+                  : 'OCR is idle. Upload documents in stage 1 to feed the queue.'
+              }
               action={
                 <button
                   className="button button--ghost button--compact"
@@ -1090,6 +1108,7 @@ export default function Documents() {
                                     : ''}
                                 </span>
                               ) : null}
+                              <DocumentExtractionPreview document={document} />
                             </div>
                           </td>
                           <td>
@@ -1383,10 +1402,9 @@ export default function Documents() {
             className="cursor-context-menu"
             onContextMenu={(event) => openSurfaceMenu('buyer', event)}
           >
-            {subscription.tier === 'Starter' ? (
+            {!subscription.sharedAccessEnabled ? (
               <p className="panel__description" style={{ marginBottom: 12 }}>
-                Starter records the packet build. Upgrading to Professional unlocks the watermarked PDF and Buyer
-                follow-up.{' '}
+                Professional unlocks shared sale packets, the watermarked PDF and Buyer follow-up.{' '}
                 {canPresentPurchaseFlow() ? (
                   <button
                     className="button button--ghost button--compact"

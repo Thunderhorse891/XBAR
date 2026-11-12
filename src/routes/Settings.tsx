@@ -7,6 +7,7 @@ import { readRecordsOwner } from '@/lib/recordsOwner';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { PageHeader, Panel, Pill } from '@/components/app-ui';
 import { ConfirmActionDialog } from '@/components/ConfirmActionDialog';
+import { UploadRecoveryPanel } from '@/components/UploadRecoveryPanel';
 import { formatDateLabel } from '@/lib/format';
 import { clearCloudDeletions } from '@/lib/cloudDeletionQueue';
 import { loadWorkspaceBackupFromCloud, saveWorkspaceBackupToCloud } from '@/lib/cloudWorkspace';
@@ -1610,6 +1611,8 @@ export default function Settings() {
           </button>
         </div>
       </Panel>
+
+      <UploadRecoveryPanel />
 
       {isSupabaseConfigured() && cloudSession ? (
         <Panel

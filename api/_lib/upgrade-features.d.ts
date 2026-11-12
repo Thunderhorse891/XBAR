@@ -3,6 +3,7 @@ export type UpgradeFeature =
   | 'packetExport'
   | 'teamInvites'
   | 'profitIntelligence'
+  | 'reports'
   | 'breedingRevenue'
   | 'ranchOps'
   | 'reportPresentation'

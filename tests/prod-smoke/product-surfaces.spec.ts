@@ -69,7 +69,7 @@ test('billing page renders every advertised subscription tier', async ({ page })
   await completeLocalOnboarding(page);
   await goToRoute(page, '/app/billing');
 
-  for (const tier of ['Starter', 'Professional', 'Ranch Ops', 'Enterprise']) {
+  for (const tier of ['Free', 'Professional', 'Ranch Ops']) {
     await expect(page.getByText(tier).first()).toBeVisible({ timeout: 15_000 });
   }
   expect(errors, `runtime errors on /billing:\n${errors.join('\n')}`).toEqual([]);

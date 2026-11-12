@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { nowStamp, extractDocumentEntities } from '../src/lib/xbarRuntime.js';
+import { nowStamp, extractDocumentEntities, estimateStorageGb } from '../src/lib/xbarRuntime.js';
 import { compareTimestampDesc, formatDateLabel, formatDateTimeLabel } from '../src/lib/format.js';
 
 test('OCR uses a labeled printed examination date, never a filename or unrelated date', () => {
@@ -95,4 +95,11 @@ test('compareTimestampDesc keeps same-format order and sorts blanks last', () =>
   assert.ok(compareTimestampDesc(a, '') < 0, 'a real stamp beats a blank');
   assert.ok(compareTimestampDesc('', a) > 0, 'a blank sorts last');
   assert.equal(compareTimestampDesc(a, a), 0, 'equal stamps tie');
+});
+
+// Quota math must keep bytes; only presentation may round gigabytes.
+test('storage estimates retain each byte of small and repeated batches', () => {
+  const oneByte = new File(['x'], 'tiny.txt');
+  assert.equal(estimateStorageGb([oneByte]), 1 / 1024 ** 3);
+  assert.equal(estimateStorageGb([oneByte, oneByte]) * 1024 ** 3, 2);
 });

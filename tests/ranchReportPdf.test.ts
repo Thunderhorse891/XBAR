@@ -344,22 +344,41 @@ test('premium report cover retains every original register and source attributio
   await assertFits(premium);
 });
 
-test('Enterprise removes decorative images, never source notes or report records', async () => {
-  const report = buildRanchReport(fixture(18), now);
-  const bytes = await renderReportPdf(report, 'Cedar Ridge Ranch', await branding(), {
-    tier: 'Enterprise',
-    options: { whiteLabel: true, layout: 'cover' },
+for (const tier of ['Ranch Ops', 'Enterprise'] as const) {
+  test(`${tier} removes decorative images, never source notes or report records`, async () => {
+    const report = buildRanchReport(fixture(18), now);
+    const bytes = await renderReportPdf(report, 'Cedar Ridge Ranch', await branding(), {
+      tier,
+      options: { whiteLabel: true, layout: 'cover' },
+    });
+    const text = drawn(bytes)
+      .map((item) => item.text)
+      .join(' ');
+    assert.ok(text.includes('Prepared with XBAR'));
+    assert.ok(text.includes('Unaudited management estimates'));
+    assert.ok(text.includes('Synthetic Ranch Horse 18 - Blocked'));
+    const doc = await PDFDocument.load(bytes);
+    for (const page of doc.getPages())
+      assert.equal(page.node.Resources()?.lookupMaybe(PDFName.of('XObject'), PDFDict)?.keys().length ?? 0, 0);
+    await assertFits(bytes);
   });
-  const text = drawn(bytes)
-    .map((item) => item.text)
-    .join(' ');
-  assert.ok(text.includes('Prepared with XBAR'));
-  assert.ok(text.includes('Unaudited management estimates'));
-  assert.ok(text.includes('Synthetic Ranch Horse 18 - Blocked'));
-  const doc = await PDFDocument.load(bytes);
-  for (const page of doc.getPages())
-    assert.equal(page.node.Resources()?.lookupMaybe(PDFName.of('XObject'), PDFDict)?.keys().length ?? 0, 0);
-  await assertFits(bytes);
+}
+
+test('Professional exports the full standard report without premium styling', async () => {
+  const report = buildRanchReport(fixture(18), now);
+  const assets = await branding();
+  const ordinary = await renderReportPdf(report, 'Cedar Ridge Ranch', assets);
+  const professional = await renderReportPdf(report, 'Cedar Ridge Ranch', assets, {
+    tier: 'Professional',
+    options: { whiteLabel: true, layout: 'cover', accent: '#000000' },
+  });
+  const professionalDoc = await PDFDocument.load(professional);
+  assert.equal(professionalDoc.getPageCount(), (await PDFDocument.load(ordinary)).getPageCount());
+  assert.deepEqual(drawn(professional), drawn(ordinary), 'the standard report keeps all records and source notes');
+  for (const page of professionalDoc.getPages()) {
+    assert.ok((page.node.Resources()?.lookupMaybe(PDFName.of('XObject'), PDFDict)?.keys().length ?? 0) > 0);
+  }
+  await assertFits(professional);
 });
 
 test('report cover contains an exceptionally long ranch name without pushing data into the footer', async () => {

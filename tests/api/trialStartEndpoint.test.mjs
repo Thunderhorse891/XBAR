@@ -235,7 +235,7 @@ test('creates a baseline subscription row when the workspace never touched billi
   assert.equal(writes.length, 1);
   const inserted = writes[0].inserted;
   assert.equal(inserted.workspace_id, 'ws_1');
-  assert.equal(inserted.tier, 'Starter');
+  assert.equal(inserted.tier, 'Free');
   assert.equal(inserted.billing_state, 'Inactive');
   assert.equal(inserted.payload.trial.plan, 'Professional');
 });

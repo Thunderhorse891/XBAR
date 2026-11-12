@@ -77,9 +77,9 @@ const stripeScenario = {
 
 const stripePriceAmounts = {
   price_starter_m: 1200,
-  price_pro_m: 2900,
+  price_pro_m: 2000,
   price_pro_a: 29000,
-  price_ranch_m: 7900,
+  price_ranch_m: 4999,
   price_ranch_a: 79000,
   price_ent_m: 19900,
 };
@@ -325,12 +325,12 @@ function expectedSessionParams({ tier, priceId, seatCount, billingPeriod, custom
   };
 }
 
-test('a Professional annual checkout creates a session with the annual price and full metadata', async () => {
+test('a Professional monthly checkout creates a session with the verified price and full metadata', async () => {
   stripeScenario.reset();
   const calls = supabaseFor();
 
   const response = await invoke(fullHandler, {
-    body: { tier: 'Professional', workspaceId: 'ws_1', billingPeriod: 'annual', seatCount: 3 },
+    body: { tier: 'Professional', workspaceId: 'ws_1', billingPeriod: 'monthly', seatCount: 3 },
   });
 
   assert.equal(response.statusCode, 200);
@@ -342,9 +342,9 @@ test('a Professional annual checkout creates a session with the annual price and
     stripeScenario.createdSessions[0],
     expectedSessionParams({
       tier: 'Professional',
-      priceId: PRICES.Professional.annual,
-      seatCount: 3,
-      billingPeriod: 'annual',
+      priceId: PRICES.Professional.monthly,
+      seatCount: 1,
+      billingPeriod: 'monthly',
       customerId: 'cus_new_1',
     }),
   );
@@ -357,19 +357,18 @@ test('a Professional annual checkout creates a session with the annual price and
   assert.equal(upsert.workspace_id, 'ws_1');
   assert.equal(upsert.stripe_customer_id, 'cus_new_1');
   assert.equal(upsert.stripe_subscription_id, '');
-  assert.equal(upsert.stripe_price_id, PRICES.Professional.annual);
-  assert.equal(upsert.seat_count, 3);
+  assert.equal(upsert.stripe_price_id, PRICES.Professional.monthly);
+  assert.equal(upsert.seat_count, 1);
   assert.equal(upsert.entitlement_payload.billingState, 'Inactive');
   assert.equal(upsert.entitlement_payload.purchasedTier, 'Professional');
-  assert.equal(upsert.entitlement_payload.monthlyRate, 29);
+  assert.equal(upsert.entitlement_payload.monthlyRate, 20);
 });
 
 test('each tier buys its own price id, monthly by default', async () => {
   const cases = [
-    { tier: 'Starter', billingPeriod: undefined, priceId: PRICES.Starter.monthly, period: 'monthly' },
+    { tier: 'Professional', billingPeriod: undefined, priceId: PRICES.Professional.monthly, period: 'monthly' },
     { tier: 'Professional', billingPeriod: 'monthly', priceId: PRICES.Professional.monthly, period: 'monthly' },
-    { tier: 'Ranch Ops', billingPeriod: 'annual', priceId: PRICES['Ranch Ops'].annual, period: 'annual' },
-    { tier: 'Enterprise', billingPeriod: 'monthly', priceId: PRICES.Enterprise.monthly, period: 'monthly' },
+    { tier: 'Ranch Ops', billingPeriod: 'monthly', priceId: PRICES['Ranch Ops'].monthly, period: 'monthly' },
   ];
 
   for (const { tier, billingPeriod, priceId, period } of cases) {
@@ -391,9 +390,9 @@ test('each tier buys its own price id, monthly by default', async () => {
   }
 });
 
-test('seat counts are clamped to 1..100', async () => {
+test('flat workspace subscriptions never multiply charges by seat counts', async () => {
   for (const [requested, expected] of [
-    [500, 100],
+    [500, 1],
     [0, 1],
     ['not-a-number', 1],
     [2.5, 1],
@@ -402,12 +401,12 @@ test('seat counts are clamped to 1..100', async () => {
     supabaseFor();
 
     const response = await invoke(fullHandler, {
-      body: { tier: 'Starter', workspaceId: 'ws_1', seatCount: requested },
+      body: { tier: 'Professional', workspaceId: 'ws_1', seatCount: requested },
     });
 
     assert.equal(response.statusCode, 200);
     const [params] = stripeScenario.createdSessions;
-    assert.equal(params.line_items[0].quantity, expected, `seatCount ${requested} clamps to ${expected}`);
+    assert.equal(params.line_items[0].quantity, expected, `seatCount ${requested} cannot change workspace price`);
     assert.equal(params.metadata.workspace_seats, String(expected));
   }
 });
@@ -534,8 +533,8 @@ test('GET says which plans and cadences can be sold, and names no price id', asy
   assert.equal(response.statusCode, 200);
   assert.equal(response.body.managed, true);
   assert.deepEqual(response.body.sellable, {
-    monthly: { Starter: true, Professional: true, 'Ranch Ops': true, Enterprise: true },
-    annual: { Starter: false, Professional: true, 'Ranch Ops': true, Enterprise: false },
+    monthly: { Free: false, Starter: false, Professional: true, 'Ranch Ops': true, Enterprise: false },
+    annual: { Free: false, Starter: false, Professional: false, 'Ranch Ops': false, Enterprise: false },
   });
   assert.doesNotMatch(JSON.stringify(response.body), /price_/, 'price ids stay on the server');
   assert.equal(response.headers['cache-control'], 'no-store, max-age=0');
@@ -570,11 +569,11 @@ test("a cadence the deployment cannot sell is refused in the buyer's terms", asy
   assert.deepEqual(stripeScenario.calls, [], 'nothing billable is touched');
 });
 
-test('a stale $499 Stripe price cannot be sold as the advertised $199 Enterprise plan', async () => {
+test('a stale $79 Stripe price cannot be sold as the advertised $49.99 Ranch Ops plan', async () => {
   stripeScenario.reset();
-  stripeScenario.priceOverrides = { unit_amount: 49900 };
+  stripeScenario.priceOverrides = { unit_amount: 7900 };
   const calls = supabaseFor();
-  const response = await invoke(fullHandler, { body: { tier: 'Enterprise', workspaceId: 'ws_1' } });
+  const response = await invoke(fullHandler, { body: { tier: 'Ranch Ops', workspaceId: 'ws_1' } });
   assert.equal(response.statusCode, 503);
   assert.equal(response.body.code, 'price_unavailable');
   assert.match(response.body.message, /price could not be verified/i);
@@ -605,7 +604,7 @@ for (const [label, overrides] of [
     stripeScenario.reset();
     stripeScenario.priceOverrides = overrides;
     const calls = supabaseFor();
-    const response = await invoke(fullHandler, { body: { tier: 'Enterprise', workspaceId: 'ws_1' } });
+    const response = await invoke(fullHandler, { body: { tier: 'Ranch Ops', workspaceId: 'ws_1' } });
     assert.equal(response.statusCode, 503);
     assert.equal(response.body.code, 'price_unavailable');
     assert.deepEqual(stripeScenario.createdCustomers, []);
@@ -618,7 +617,7 @@ test('a failed Stripe price lookup fails closed without exposing provider detail
   stripeScenario.reset();
   stripeScenario.priceError = new Error('No such price: price_private_diagnostic');
   supabaseFor();
-  const response = await invoke(fullHandler, { body: { tier: 'Enterprise', workspaceId: 'ws_1' } });
+  const response = await invoke(fullHandler, { body: { tier: 'Ranch Ops', workspaceId: 'ws_1' } });
   assert.equal(response.statusCode, 503);
   assert.equal(response.body.code, 'price_unavailable');
   assert.doesNotMatch(JSON.stringify(response.body), /price_private_diagnostic/);
@@ -627,20 +626,20 @@ test('a failed Stripe price lookup fails closed without exposing provider detail
 
 test('reusing an unfinished checkout also requires a freshly verified price', async () => {
   stripeScenario.reset();
-  stripeScenario.priceOverrides = { unit_amount: 49900 };
-  stripeScenario.openSessions = [reusableEnterpriseSession()];
+  stripeScenario.priceOverrides = { unit_amount: 7900 };
+  stripeScenario.openSessions = [reusableRanchSession()];
   supabaseFor({
     billingRow: { stripe_customer_id: 'cus_existing', stripe_subscription_id: '', entitlement_payload: {} },
   });
-  const response = await invoke(fullHandler, { body: { tier: 'Enterprise', workspaceId: 'ws_1' } });
+  const response = await invoke(fullHandler, { body: { tier: 'Ranch Ops', workspaceId: 'ws_1' } });
   assert.equal(response.statusCode, 503);
   assert.equal(response.body.code, 'price_unavailable');
   assert.equal(response.body.url, undefined);
   assert.deepEqual(stripeScenario.createdSessions, []);
-  assert.deepEqual(stripeScenario.calls, [['prices.retrieve', PRICES.Enterprise.monthly]]);
+  assert.deepEqual(stripeScenario.calls, [['prices.retrieve', PRICES['Ranch Ops'].monthly]]);
 });
 
-function reusableEnterpriseSession() {
+function reusableRanchSession() {
   return {
     id: 'cs_stale',
     status: 'open',
@@ -648,28 +647,28 @@ function reusableEnterpriseSession() {
     url: 'https://checkout.stripe.com/stale',
     metadata: {
       workspace_id: 'ws_1',
-      workspace_tier: 'Enterprise',
+      workspace_tier: 'Ranch Ops',
       workspace_seats: '1',
       workspace_billing_period: 'monthly',
-      workspace_price_id: PRICES.Enterprise.monthly,
+      workspace_price_id: PRICES['Ranch Ops'].monthly,
     },
   };
 }
 
-test('an unchanged correctly priced Enterprise checkout is reused without a second session or billing write', async () => {
+test('an unchanged correctly priced Ranch Ops checkout is reused without a second session or billing write', async () => {
   stripeScenario.reset();
-  stripeScenario.openSessions = [reusableEnterpriseSession()];
+  stripeScenario.openSessions = [reusableRanchSession()];
   const calls = supabaseFor({
     billingRow: { stripe_customer_id: 'cus_existing', stripe_subscription_id: '', entitlement_payload: {} },
   });
-  const response = await invoke(fullHandler, { body: { tier: 'Enterprise', workspaceId: 'ws_1' } });
+  const response = await invoke(fullHandler, { body: { tier: 'Ranch Ops', workspaceId: 'ws_1' } });
   assert.equal(response.statusCode, 200);
   assert.equal(response.body.url, 'https://checkout.stripe.com/stale');
   assert.equal(response.body.sessionId, 'cs_stale');
   assert.deepEqual(stripeScenario.createdCustomers, []);
   assert.deepEqual(stripeScenario.createdSessions, []);
   assert.deepEqual(calls.upserts, []);
-  assert.deepEqual(stripeScenario.calls[0], ['prices.retrieve', PRICES.Enterprise.monthly]);
+  assert.deepEqual(stripeScenario.calls[0], ['prices.retrieve', PRICES['Ranch Ops'].monthly]);
 });
 
 for (const [label, env, priceOverrides, accountId, accountError] of [
@@ -698,7 +697,7 @@ for (const [label, env, priceOverrides, accountId, accountError] of [
     stripeScenario.accountError = accountError;
     const calls = supabaseFor();
     const handler = await importWithEnv({ VERCEL_ENV: undefined, STRIPE_ACCOUNT_ID: undefined, ...env }, label);
-    const response = await invoke(handler, { body: { tier: 'Enterprise', workspaceId: 'ws_1' } });
+    const response = await invoke(handler, { body: { tier: 'Ranch Ops', workspaceId: 'ws_1' } });
     assert.equal(response.statusCode, 503);
     assert.equal(response.body.code, 'price_unavailable');
     assert.deepEqual(stripeScenario.createdCustomers, []);
@@ -716,7 +715,7 @@ test('production checkout accepts the verified live price and pinned account', a
     { VERCEL_ENV: 'production', STRIPE_SECRET_KEY: 'sk_live_endpoint_fixture', STRIPE_ACCOUNT_ID: 'acct_expected' },
     'verified-live-account',
   );
-  const response = await invoke(handler, { body: { tier: 'Enterprise', workspaceId: 'ws_1' } });
+  const response = await invoke(handler, { body: { tier: 'Ranch Ops', workspaceId: 'ws_1' } });
   assert.equal(response.statusCode, 200);
   assert.deepEqual(stripeScenario.calls[0], ['accounts.retrieve']);
   assert.equal(stripeScenario.createdSessions.length, 1);
@@ -766,12 +765,12 @@ test('checkout price diagnostics are fixed reason codes and never raw Stripe dat
     type: 'recurring',
     currency: 'usd',
     billing_scheme: 'per_unit',
-    unit_amount: 1200,
+    unit_amount: 2000,
     recurring: { interval: 'month', interval_count: 1, usage_type: 'licensed' },
     product: { active: true },
   };
   const options = {
-    tier: 'Starter',
+    tier: 'Professional',
     billingPeriod: 'monthly',
     priceId: validPrice.id,
     expectedAccountId: 'acct_expected',
@@ -852,5 +851,38 @@ test('checkout price diagnostics are fixed reason codes and never raw Stripe dat
     assert.deepEqual(logs, []);
   } finally {
     console.warn = originalWarn;
+  }
+});
+
+// Annual IDs remain recognizable for existing subscribers, never newly sold.
+test('all annual requests refuse before Stripe calls and billing writes even when price IDs exist', async () => {
+  for (const tier of Object.keys(PRICES)) {
+    stripeScenario.reset();
+    const calls = supabaseFor();
+    const result = await invoke(fullHandler, { body: { tier, workspaceId: 'ws_1', billingPeriod: 'annual' } });
+    assert.equal(result.statusCode, 409);
+    assert.equal(result.body.code, 'cadence_unavailable');
+    assert.deepEqual(stripeScenario.calls, []);
+    assert.deepEqual(calls.upserts, []);
+  }
+});
+test('Free checkout never creates a Stripe customer, subscription or session', async () => {
+  stripeScenario.reset();
+  const calls = supabaseFor();
+  const result = await invoke(fullHandler, { body: { tier: 'Free', workspaceId: 'ws_1' } });
+  assert.equal(result.statusCode, 400);
+  assert.deepEqual(stripeScenario.calls, []);
+  assert.deepEqual(calls.upserts, []);
+});
+
+test('retired Starter and Enterprise monthly checkout refuses before Stripe or billing writes', async () => {
+  for (const tier of ['Starter', 'Enterprise']) {
+    stripeScenario.reset();
+    const calls = supabaseFor();
+    const result = await invoke(fullHandler, { body: { tier, workspaceId: 'ws_1' } });
+    assert.equal(result.statusCode, 409);
+    assert.equal(result.body.code, 'cadence_unavailable');
+    assert.deepEqual(stripeScenario.calls, []);
+    assert.deepEqual(calls.upserts, []);
   }
 });

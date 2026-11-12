@@ -88,7 +88,7 @@ test('monthlyRate stays the monthly list rate and annualRate the annual one', ()
     billingStatus: 'active',
     priceId: 'price_pro_annual',
   });
-  assert.equal(annual.monthlyRate, 29);
+  assert.equal(annual.monthlyRate, 20);
   assert.equal(annual.annualRate, 290);
 
   const monthly = buildSubscriptionProfile({
@@ -96,7 +96,7 @@ test('monthlyRate stays the monthly list rate and annualRate the annual one', ()
     billingStatus: 'active',
     priceId: 'price_ranchops_monthly',
   });
-  assert.equal(monthly.monthlyRate, 79);
+  assert.equal(monthly.monthlyRate, 49.99);
   assert.equal(monthly.annualRate, 790);
 });
 

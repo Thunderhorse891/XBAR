@@ -1,3 +1,4 @@
+import { buildSubscriptionForTier } from '../../src/lib/xbarRuntime.ts';
 import assert from 'node:assert/strict';
 import { beforeEach, test } from 'node:test';
 import {
@@ -12,6 +13,8 @@ import { useXbarStore } from '../../src/store/useXbarStore.ts';
 await new Promise((resolve) => setImmediate(resolve));
 useXbarStore.persist.setOptions({ storage: { getItem: () => null, setItem: () => {}, removeItem: () => {} } });
 const empty = createEmptyWorkspaceState();
+// Ownership extraction cases require an OCR-enabled paid tier.
+empty.subscription = buildSubscriptionForTier(empty.subscription, 'Starter', { billingState: 'Active' });
 const horse = createHorseRecord(
   {
     name: 'DESERT DAISY',

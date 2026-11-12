@@ -138,3 +138,13 @@ export function formatDateTimeLabel(value: string) {
     minute: '2-digit',
   }).format(parsed);
 }
+
+/** Billing prices must retain cents without changing unrelated financial summaries. */
+export function formatSubscriptionPrice(value: number) {
+  return new Intl.NumberFormat('en-US', {
+    style: 'currency',
+    currency: 'USD',
+    minimumFractionDigits: 0,
+    maximumFractionDigits: 2,
+  }).format(value);
+}

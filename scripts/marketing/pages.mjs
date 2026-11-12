@@ -193,9 +193,9 @@ ${ctaBlock('See the workflow end to end.', 'The product tour walks the document 
 
 const pricing = {
   path: '/pricing',
-  title: 'XBAR Pricing — Starter $12, Professional $29, Ranch Ops $79, Enterprise $199',
+  title: 'XBAR Pricing — Free $0, Professional $20, Ranch Ops $49.99',
   description:
-    'Transparent XBAR pricing. Starter $12/mo, Professional $29/mo, Ranch Ops $79/mo, Enterprise $199/mo — with published horse, seat, document, sale-packet, and storage limits for every plan.',
+    'Transparent XBAR pricing. Free $0, Professional $20/mo, Ranch Ops $49.99/mo — with published horse, seat, document, and sale-packet limits, plus limited shared cloud storage at launch.',
   changefreq: 'monthly',
   priority: '0.9',
   jsonLd: [
@@ -250,13 +250,13 @@ const pricing = {
   <div>
     <p class="kicker">Pricing</p>
     <h1>Simple plans. Published limits. No hidden capacity math.</h1>
-    <p class="lead">Every plan protects the core horse record. Higher tiers add collaboration, buyer sharing, and more document and storage capacity — and the limits below are the same ones the application enforces.</p>
+    <p class="lead">Every plan protects the core horse record. Higher tiers add collaboration, buyer sharing, and more document capacity. Cloud storage is limited and shared across XBAR at launch.</p>
   </div>
 </section>
 
 <section class="section section--flush">
   <div class="wrap">
-    <p class="intro">Compare monthly and annual plan rates below. Annual prices are the total billed each year. Review the billing options available to your workspace inside XBAR. Prices are in USD; confirm the total and recurring billing details in Stripe before subscribing.</p>
+    <p class="intro">Start Free with 2 horses and 1 user, no card required. Paid plans are monthly; new annual subscriptions are not available. Review the billing options available to your workspace inside XBAR. Prices are in USD; confirm the total and recurring billing details in Stripe before subscribing.</p>
     <div class="plans">
       ${marketingPlans
         .map(
@@ -265,7 +265,7 @@ const pricing = {
         <h2 style="font-family:var(--font-ui);font-size:20px">${esc(plan.tier)}</h2>
         <p class="plan__fit">${esc(plan.fit)}</p>
         <p class="plan__price">$${plan.monthlyRate}<small>/month</small></p>
-        <p class="plan__fit">or $${plan.annualRate.toLocaleString('en-US')}/year, billed annually</p>
+
         <ul>${plan.features.map((feature) => `<li>${esc(feature)}</li>`).join('')}</ul>
         <a class="btn${plan.featured ? ' btn--primary' : ''}" href="${signup(plan.tier)}" rel="nofollow">Choose ${esc(plan.tier)}</a>
       </article>`,
@@ -278,19 +278,19 @@ const pricing = {
 <section class="section">
   <div class="wrap">
     <h2>Plan limits, side by side</h2>
+    <p class="intro">Cloud storage is shared across XBAR at launch. New launch plans do not include a dedicated storage allowance; uploads depend on available capacity.</p>
     <div class="table-scroll" role="region" aria-label="Plan capacity comparison" tabindex="0">
       <table class="limits">
-        <caption>These limits are enforced by the application — the same numbers appear in your workspace usage meter.</caption>
+        <caption>Plan record limits and shared launch storage availability.</caption>
         <thead><tr><th scope="col">Capacity</th>${marketingPlans.map((plan) => `<th scope="col">${esc(plan.tier)}</th>`).join('')}</tr></thead>
         <tbody>
           <tr><th scope="row">Monthly price</th>${marketingPlans.map((plan) => `<td>$${plan.monthlyRate}</td>`).join('')}</tr>
-          <tr><th scope="row">Annual price (billed yearly)</th>${marketingPlans.map((plan) => `<td>$${plan.annualRate.toLocaleString('en-US')}/year</td>`).join('')}</tr>
           <tr><th scope="row">Horses</th>${marketingPlans.map((plan) => `<td>${plan.limits.horseLimit.toLocaleString('en-US')}</td>`).join('')}</tr>
           <tr><th scope="row">Team seats</th>${marketingPlans.map((plan) => `<td>${plan.limits.seatLimit}</td>`).join('')}</tr>
           <tr><th scope="row">Client seats</th>${marketingPlans.map((plan) => `<td>${plan.limits.sharedAccessSeatLimit}</td>`).join('')}</tr>
           <tr><th scope="row">Documents</th>${marketingPlans.map((plan) => `<td>${plan.limits.documentLimit.toLocaleString('en-US')}</td>`).join('')}</tr>
           <tr><th scope="row">Sale packets</th>${marketingPlans.map((plan) => `<td>${plan.limits.salePacketLimit.toLocaleString('en-US')}</td>`).join('')}</tr>
-          <tr><th scope="row">Storage</th>${marketingPlans.map((plan) => `<td>${plan.limits.storageLimitGb.toLocaleString('en-US')} GB</td>`).join('')}</tr>
+          <tr><th scope="row">Storage</th>${marketingPlans.map(() => '<td>Limited cloud storage shared across XBAR at launch</td>').join('')}</tr>
         </tbody>
       </table>
     </div>
@@ -303,7 +303,7 @@ const pricing = {
     <div class="faq" style="margin-top:22px">
       <details><summary>Do I need an account to use XBAR?</summary><p>Yes. Create an XBAR account and complete workspace setup to use the hosted app. You can view the <a href="/demo">product tour</a> and fictional sample sale packet without an account.</p></details>
       <details><summary>What happens to my records if I change plans?</summary><p>Your records stay intact. Plans change capacity and collaboration access; they do not erase the operating history you built.</p></details>
-      <details><summary>Is XBAR only for large operations?</summary><p>No. Starter is designed for a smaller records-driven operation. Professional and Ranch Ops add the collaboration, sale-readiness, and capacity larger programs need.</p></details>
+      <details><summary>Is XBAR only for large operations?</summary><p>No. Free supports a private owner with 2 horses and 1 user. Professional and Ranch Ops add the collaboration, sale-readiness, and capacity larger programs need.</p></details>
       <details><summary>How does checkout work?</summary><p>A workspace owner reviews the plan inside XBAR and completes the plan change through secure Stripe checkout.</p></details>
     </div>
   </div>

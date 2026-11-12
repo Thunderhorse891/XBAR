@@ -6,6 +6,26 @@ import {
 } from './subscription-status.js';
 
 export const subscriptionPlans = {
+  Free: {
+    monthlyRate: 0,
+    annualRate: 0,
+    sharedAccessEnabled: false,
+    featureFlags: [
+      'Keep basic horse, care, expense and reminder records',
+      '2 horses and 1 seat — just you',
+      '10 document capacity',
+      'Limited cloud storage shared across XBAR at launch',
+      'Manual document records; OCR and sale sharing require a paid plan',
+    ],
+    limits: {
+      horseLimit: 2,
+      seatLimit: 1,
+      documentLimit: 10,
+      salePacketLimit: 0,
+      storageLimitGb: 1,
+      sharedAccessSeatLimit: 0,
+    },
+  },
   Starter: {
     monthlyRate: 12,
     annualRate: 120,
@@ -14,7 +34,8 @@ export const subscriptionPlans = {
       'Keep clean records — horses, care, documents, expenses, reminders',
       'Proof vault with OCR intake and review',
       '1 seat — just you',
-      '250 document capacity · 25 GB storage',
+      '250 document capacity',
+      'Limited cloud storage shared across XBAR at launch',
     ],
     limits: {
       horseLimit: 5,
@@ -26,15 +47,17 @@ export const subscriptionPlans = {
     },
   },
   Professional: {
-    monthlyRate: 29,
+    monthlyRate: 20,
     annualRate: 290,
     sharedAccessEnabled: true,
     featureFlags: [
-      'Everything in Starter',
+      'Everything in Free, plus OCR document intake and review',
+      'Reports automatically calculated from your records; PDF and spreadsheet export',
       'Make money: watermarked sale packets and buyer folders',
       'Sale listings — publish buyer-ready horse profiles to shared access',
       '5 team seats and 10 client seats',
-      '1,000 document capacity · 100 GB storage',
+      '1,000 document capacity',
+      'Limited cloud storage shared across XBAR at launch',
     ],
     limits: {
       horseLimit: 30,
@@ -46,14 +69,15 @@ export const subscriptionPlans = {
     },
   },
   'Ranch Ops': {
-    monthlyRate: 79,
+    monthlyRate: 49.99,
     annualRate: 790,
     sharedAccessEnabled: true,
     featureFlags: [
       'Everything in Professional',
       'Run the operation: team roles, breeding program, equipment at scale',
       '20 team seats and 40 client seats',
-      '5,000 document capacity · 500 GB storage',
+      '5,000 document capacity',
+      'Limited cloud storage shared across XBAR at launch',
     ],
     limits: {
       horseLimit: 200,
@@ -72,7 +96,8 @@ export const subscriptionPlans = {
       'Everything in Ranch Ops',
       'Scale and control for large rosters and teams',
       '60 team seats and 200 client seats',
-      '20,000 document capacity · 2,500 GB storage',
+      '20,000 document capacity',
+      'Limited cloud storage shared across XBAR at launch',
     ],
     limits: {
       horseLimit: 2000,
@@ -108,6 +133,17 @@ export function getStripePriceIdByTier(tier, billingPeriod = 'monthly') {
   return envMap[tier] || '';
 }
 
+// Existing annual and legacy IDs remain recognizable for subscribers. They are
+// intentionally separate from what NEW checkout may sell while annual terms
+// and the billing-account catalog are awaiting approval.
+export const PAID_SUBSCRIPTION_TIERS = Object.freeze(['Starter', 'Professional', 'Ranch Ops', 'Enterprise']);
+export const PUBLIC_SUBSCRIPTION_TIERS = Object.freeze(['Free', 'Professional', 'Ranch Ops']);
+export const PUBLIC_PAID_SUBSCRIPTION_TIERS = Object.freeze(['Professional', 'Ranch Ops']);
+export function getCheckoutPriceIdByTier(tier, billingPeriod = 'monthly') {
+  if (!PUBLIC_PAID_SUBSCRIPTION_TIERS.includes(tier) || billingPeriod !== 'monthly') return '';
+  return getStripePriceIdByTier(tier, billingPeriod);
+}
+
 const PRICE_ID_SHAPE = /^price_[A-Za-z0-9_]+$/;
 
 /**
@@ -121,7 +157,7 @@ export function sellablePrices() {
   const sellable = { monthly: {}, annual: {} };
   for (const tier of Object.keys(subscriptionPlans)) {
     for (const period of ['monthly', 'annual']) {
-      sellable[period][tier] = PRICE_ID_SHAPE.test(getStripePriceIdByTier(tier, period));
+      sellable[period][tier] = PRICE_ID_SHAPE.test(getCheckoutPriceIdByTier(tier, period));
     }
   }
   return sellable;
@@ -160,7 +196,7 @@ export function readLegacyPriceIds(raw = process.env.STRIPE_LEGACY_PRICE_IDS) {
     }
     const [, priceId, rawTier, period] = match;
     const tier = rawTier.trim();
-    if (!isKnownTier(tier)) {
+    if (!PAID_SUBSCRIPTION_TIERS.includes(tier)) {
       errors.push(`"${entry}" names an unknown tier "${tier}".`);
       continue;
     }
@@ -195,7 +231,7 @@ export function findTierByPriceId(priceId) {
   const normalized = String(priceId ?? '').trim();
   if (!normalized) return null;
   return (
-    Object.keys(subscriptionPlans).find(
+    PAID_SUBSCRIPTION_TIERS.find(
       (tier) =>
         getStripePriceIdByTier(tier, 'monthly') === normalized || getStripePriceIdByTier(tier, 'annual') === normalized,
     ) ||
@@ -219,7 +255,7 @@ export function findTierByPriceId(priceId) {
 export function findBillingPeriodByPriceId(priceId) {
   const normalized = String(priceId ?? '').trim();
   if (!normalized) return null;
-  for (const tier of Object.keys(subscriptionPlans)) {
+  for (const tier of PAID_SUBSCRIPTION_TIERS) {
     if (getStripePriceIdByTier(tier, 'monthly') === normalized) return 'monthly';
     if (getStripePriceIdByTier(tier, 'annual') === normalized) return 'annual';
   }
@@ -231,7 +267,7 @@ export function normalizeBillingState(status) {
   return billingStateForStripeStatus(status);
 }
 
-/** True when `tier` is a plan this build actually sells. */
+/** True when `tier` is a known entitlement tier, including the unsold Free tier. */
 export function isKnownTier(tier) {
   return typeof tier === 'string' && Object.prototype.hasOwnProperty.call(subscriptionPlans, tier);
 }
@@ -274,23 +310,45 @@ export function buildSubscriptionProfile(params) {
   const plan = subscriptionPlans[tier];
   const existingUsage = params.existingUsage || {};
   const renewalDate = params.renewalDate || '';
+  const rates = {
+    monthlyRate: subscriptionPlans[purchasedTier].monthlyRate,
+    annualRate: subscriptionPlans[purchasedTier].annualRate,
+  };
+  const previous = params.existingProfile;
+  if (previous?.tier === purchasedTier) {
+    const monthly = previous.monthly_rate ?? previous.payload?.monthlyRate;
+    const annual = previous.payload?.annualRate;
+    if (typeof monthly === 'number' && Number.isFinite(monthly) && monthly >= 0) rates.monthlyRate = monthly;
+    if (typeof annual === 'number' && Number.isFinite(annual) && annual >= 0) rates.annualRate = annual;
+  }
+  // The authenticated Stripe event's actual unit price outranks the old list
+  // rate. Quantity, discounts and tax are separate from this unit-rate label.
+  const billedPrice = params.billedPrice;
+  if (
+    billedPrice?.currency === 'usd' &&
+    Number.isSafeInteger(billedPrice.unit_amount) &&
+    billedPrice.unit_amount >= 0
+  ) {
+    if (billedPrice.recurring?.interval === 'month' && billedPrice.recurring.interval_count === 1)
+      rates.monthlyRate = billedPrice.unit_amount / 100;
+    if (billedPrice.recurring?.interval === 'year' && billedPrice.recurring.interval_count === 1)
+      rates.annualRate = billedPrice.unit_amount / 100;
+  }
 
   return {
     tier,
     purchasedTier,
     tierRecognized,
-    // The MONTHLY list rate of the plan that was bought — not the amount
-    // charged. The amount charged is monthlyRate when billingPeriod is
-    // 'monthly' and annualRate when billingPeriod is 'annual'. Recording the
-    // period next to the rate is what keeps an annual purchase ($290/yr) from
-    // reading as a $29/mo one; quoting Starter's rate to a canceled Enterprise
-    // workspace would imply a charge that is not happening, and billingState
-    // is what says whether anything is being billed at all.
-    monthlyRate: subscriptionPlans[purchasedTier].monthlyRate,
-    // The amount charged when billingPeriod is 'annual', carried alongside
+    // Preserve the purchased unit rate across list-price changes. The signed
+    // Stripe price takes precedence, then a stored same-tier rate, then the
+    // plan default. The relevant rate is selected by the known billing period;
+    // quantity, discounts, and tax can make an invoice total different.
+    // Billing state separately says whether this purchase is still active.
+    monthlyRate: rates.monthlyRate,
+    // The annual unit rate when billingPeriod is 'annual', carried alongside
     // monthlyRate so a billing screen never has to re-derive the price from
     // the tier and the period.
-    annualRate: subscriptionPlans[purchasedTier].annualRate,
+    annualRate: rates.annualRate,
     // 'monthly' | 'annual' for a purchase whose Stripe price id this
     // deployment recognizes; null when the period is not known (a row written
     // before the period was recorded, or an unrecognized price id).

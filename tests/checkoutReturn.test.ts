@@ -68,19 +68,38 @@ test('an active paid profile confirms the checkout', () => {
   assert.equal(isCheckoutConfirmationComplete(profile), true);
 });
 
-test('a freshly seeded workspace does not confirm a purchase that never happened', () => {
-  // A new workspace is seeded Starter / 'Manual Billing' / rate 0. The billing
-  // state alone is entitled, so confirmation has to require the rate too —
-  // otherwise the very first poll after a real checkout would "confirm" even
-  // before Stripe was paid, for every brand-new workspace.
-  const seeded = subscriptionFromCloudRow({
+test('Free signup and complimentary grants never prove a checkout purchase', () => {
+  for (const row of [
+    { tier: 'Free', billing_state: 'Inactive', monthly_rate: 0 },
+    { tier: 'Starter', billing_state: 'Manual Billing', monthly_rate: 0 },
+    { tier: 'Enterprise', billing_state: 'Manual Billing', monthly_rate: 0 },
+    { tier: 'Starter', billing_state: 'Manual Billing', monthly_rate: 9 },
+    { tier: 'Starter', billing_state: 'Active', monthly_rate: 0 },
+  ]) {
+    const profile = subscriptionFromCloudRow({ ...row, payload: {} });
+    assert.ok(profile);
+    assert.equal(isCheckoutConfirmationComplete(profile), false);
+    if (row.billing_state === 'Manual Billing') assert.equal(profile.tier, row.tier, 'operator access is preserved');
+  }
+});
+
+test('historical annual purchase requires its recorded charge, not a monthly list rate', () => {
+  const annual = subscriptionFromCloudRow({
     tier: 'Starter',
-    billing_state: 'Manual Billing',
+    billing_state: 'Active',
     monthly_rate: 0,
+    billing_period: 'annual',
+    payload: { annualRate: 120 },
+  });
+  assert.equal(isCheckoutConfirmationComplete(annual), true);
+  const unknown = subscriptionFromCloudRow({
+    tier: 'Starter',
+    billing_state: 'Active',
+    monthly_rate: 12,
+    billing_period: 'annual',
     payload: {},
   });
-  assert.ok(seeded, 'fixture must map to a profile');
-  assert.equal(isCheckoutConfirmationComplete(seeded), false);
+  assert.equal(isCheckoutConfirmationComplete(unknown), false);
 });
 
 test('lapsed and past-due profiles do not confirm the checkout', () => {

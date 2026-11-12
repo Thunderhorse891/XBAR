@@ -1,5 +1,6 @@
 import { apiConfig } from './platformConfig.js';
 import type { SubscriptionTier } from '../types/xbar.js';
+import { isPublicPaidPlan } from './publicPlanCatalog.js';
 
 type CheckoutResult =
   | {
@@ -9,69 +10,23 @@ type CheckoutResult =
   | {
       ok: false;
       message: string;
-      /** The server's refusal code, when the server is what refused. */
       code?: string;
     };
 
-/**
- * The one failure that legitimately ends at a Stripe Payment Link: there is no
- * managed identity to check a billing row against.
- *
- * Without a workspace id and access token the endpoint cannot be called at all,
- * so no subscription can be found — and therefore none can be duplicated. That
- * is how a local-only workspace buys a plan, and it must keep working.
- */
+/** Explicit missing-identity refusal, never permission for a static-link fallback. */
 export const NO_MANAGED_IDENTITY = 'no_managed_identity';
 
-/**
- * Whether a failed managed checkout may fall back to the unguarded payment link.
- *
- * Reads as an allowlist, and that direction is the point. Blocking a list of
- * known refusal CODES left every *uncoded* failure falling through — and `fetch`
- * rejecting, or a malformed response body, produces exactly that. Those are the
- * cases where the endpoint's guard never got to run, so a workspace whose
- * billing row holds an active or recoverable subscription would be handed a
- * `mode: 'subscription'` payment link that consults no billing row at all, and
- * charged a second time. A network error is not evidence that a customer has no
- * subscription; it is the absence of evidence either way.
- *
- * So: fall back only when we affirmatively know there was no identity to check.
- * Everything else — server refusals, transport failures, unparseable responses —
- * stops and tells the customer, because none of them establish that a second
- * subscription is safe to create.
- */
-export function canUsePaymentLinkFallback(code?: string): boolean {
-  return code === NO_MANAGED_IDENTITY;
+/** Static links cannot verify the advertised price and are not new-sale routes. */
+export function canUsePaymentLinkFallback(_code?: string): boolean {
+  return false;
 }
 
-/**
- * Which checkout route a purchase takes before any request is made.
- *
- * 'payment_link' here is NOT the fallback below — it is the primary and only
- * route a hosted-link-only deployment has. The two are decided by different
- * facts and must not be collapsed: this one reads configuration BEFORE the
- * endpoint is called, the fallback reads a refusal code AFTER it answered.
- *
- * When managed billing is off, api/stripe/checkout.js returns 503 before it
- * reads a billing row — before the access check, before the duplicate-
- * subscription lookup — and that refusal carries no code because nothing was
- * found. The allowlist then correctly declines to follow it, which suppressed
- * the configured payment link and left every purchase in that deployment
- * ending in an error.
- *
- * Skipping the request gives up no protection: the guard it would have run is
- * unreachable in this mode by construction. A workspace that already has a
- * subscription is refused earlier, by `getCheckoutReadiness`.
- *
- * The condition is the managed-billing flag, never a failure code. With
- * managed billing on, the endpoint is always called and the strict allowlist
- * still governs the fallback, so an uncoded failure still blocks the link.
- */
-export function checkoutRouteFor(params: {
+/** Retain the call contract for existing recovery code; all new sales are managed. */
+export function checkoutRouteFor(_params: {
   managedBillingEnabled: boolean;
   paymentLink: string;
 }): 'managed' | 'payment_link' {
-  return !params.managedBillingEnabled && params.paymentLink ? 'payment_link' : 'managed';
+  return 'managed';
 }
 
 function buildApiUrl(path: string) {
@@ -93,12 +48,17 @@ export async function startManagedCheckout(params: {
   accessToken: string;
   billingPeriod?: 'monthly' | 'annual';
 }): Promise<CheckoutResult> {
+  if (!isPublicPaidPlan(params.tier) || params.billingPeriod === 'annual') {
+    return {
+      ok: false,
+      code: 'plan_not_sellable',
+      message: 'New paid subscriptions are Professional or Ranch Ops, billed monthly. Free needs no checkout.',
+    };
+  }
   if (!params.workspaceId || !params.accessToken) {
     return {
       ok: false,
-      // Coded, because this is the ONLY failure a payment link may follow. It
-      // has to be told apart from a fetch that threw, which looks identical
-      // from the caller's side and is not safe to fall back on.
+      // A missing managed identity is a refusal, never a static-link fallback.
       code: NO_MANAGED_IDENTITY,
       message: 'Sign in to continue to secure checkout.',
     };
@@ -114,7 +74,7 @@ export async function startManagedCheckout(params: {
       body: JSON.stringify({
         tier: params.tier,
         workspaceId: params.workspaceId,
-        billingPeriod: params.billingPeriod === 'annual' ? 'annual' : 'monthly',
+        billingPeriod: 'monthly',
         returnUrl: typeof window !== 'undefined' ? window.location.href : '',
       }),
     });
