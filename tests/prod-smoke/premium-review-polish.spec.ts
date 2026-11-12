@@ -168,6 +168,7 @@ for (const width of [1440, 390]) {
     await setupHorse(page);
     await navigate(page, '/horses');
     const card = page.locator('.horse-card');
+    const release = card.locator('.horse-card__metric').filter({ hasText: 'Release' }).locator('strong');
     const freeWorkspace = await workspace(page);
     expect(freeWorkspace.subscription.tier).toBe('Free');
     expect(freeWorkspace.sharedListings).toEqual([]);
@@ -178,7 +179,7 @@ for (const width of [1440, 390]) {
     ).toBeVisible();
     await expect(card.getByText('Buyer packet staged', { exact: true })).toHaveCount(0);
     await page.reload();
-    await expect(card.getByText('Private', { exact: true })).toBeVisible();
+    await expect(release).toHaveText('Private');
     const deniedWorkspace = await workspace(page);
     expect(deniedWorkspace.sharedListings).toEqual(freeWorkspace.sharedListings);
     expect(deniedWorkspace.horses).toEqual(freeWorkspace.horses);
@@ -187,8 +188,9 @@ for (const width of [1440, 390]) {
     await enablePaidPacketFixture(page);
     await page.getByRole('button', { name: 'Stage packet', exact: true }).click();
     await expect(card.getByText('Buyer packet staged', { exact: true })).toBeVisible();
-    await expect(card.getByText('Draft', { exact: true })).toBeVisible();
+    await expect(release).toHaveText('Draft');
     await expect(page.locator('.hc-kpi').filter({ hasText: 'Buyer Packets Live' }).locator('strong')).toHaveText('0');
+    await expect.poll(async () => (await workspace(page)).sharedListings).toMatchObject([{ state: 'Draft' }]);
     await page.reload();
     await expect(card.getByText('Buyer packet staged', { exact: true })).toBeVisible();
     await seedReview(page);
@@ -198,7 +200,11 @@ for (const width of [1440, 390]) {
     await noOverflow(page);
     await page.screenshot({ path: info.outputPath(`workspace-horse-card-${width}.png`), fullPage: true });
     await page.getByRole('button', { name: 'Hold packet', exact: true }).click();
-    await expect(card.getByText('Private', { exact: true })).toBeVisible();
+    await expect(release).toHaveText('Private');
+    await expect(card.getByText('Buyer packet staged', { exact: true })).toHaveCount(0);
+    await expect.poll(async () => (await workspace(page)).sharedListings).toMatchObject([{ state: 'Archived' }]);
+    await page.reload();
+    await expect(release).toHaveText('Private');
     await expect(card.getByText('Buyer packet staged', { exact: true })).toHaveCount(0);
   });
 
