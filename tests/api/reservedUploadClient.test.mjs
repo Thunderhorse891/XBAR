@@ -4,6 +4,7 @@ import {
   startReservedUpload,
   resumeReservedUpload,
   cancelReservedUpload,
+  checkReservedUpload,
   ReservedUploadError,
   validateUploadPart,
 } from '../../src/lib/reservedUploadClient.ts';
@@ -492,3 +493,312 @@ test('control responses consuming the entire TTL stop after one refresh instead 
   assert.deepEqual(actions(f), ['create', 'parts']);
   assert.equal(f.calls.filter((c) => c.options.method === 'PUT').length, 0);
 });
+
+const noStartRefusal = (patch = {}) => ({
+  ok: false,
+  code: 'upload_file_too_large',
+  requestId,
+  needsRecovery: false,
+  uploadOutcome: 'not_started',
+  maxFileBytes: 50_000_000,
+  message:
+    'This file exceeds the current cloud upload limit of 50 MB (50,000,000 bytes). No cloud upload was started. Keep the original file.',
+  ...patch,
+});
+function refuseCreate(f, body = noStartRefusal(), status = 413) {
+  f.deps.fetch = async (url, options) => {
+    f.calls.push({ url, options });
+    assert.equal(JSON.parse(options.body).action, 'create');
+    return Response.json(body, { status });
+  };
+}
+test('verified fresh 50 MB refusal is durably not started, keeps the original and gives no pending-capacity instruction', async () => {
+  const f = fixture(50_000_001);
+  f.journal.retainOriginal = async () => true;
+  refuseCreate(f);
+  await assert.rejects(f.run, (error) => {
+    assert(error instanceof ReservedUploadError);
+    assert.equal(error.recovery.state, 'not_started');
+    assert.match(error.message, /50 MB/);
+    assert.match(error.message, /No cloud upload was started/);
+    assert.doesNotMatch(error.message, /Unfinished uploads|Recovery ID|reserved|pending/);
+    return true;
+  });
+  assert.equal(f.saved.get(requestId).state, 'not_started');
+  assert.equal(f.saved.get(requestId).original, f.file);
+  assert.equal(f.saved.get(requestId).originalRetention, 'device');
+  assert.deepEqual(actions(f), ['create']);
+});
+test('verified fresh invalid-limit configuration refuses without claiming a reservation or discarding bytes', async () => {
+  const f = fixture();
+  const body = noStartRefusal({ code: 'upload_limit_unavailable' });
+  delete body.maxFileBytes;
+  refuseCreate(f, body, 503);
+  await assert.rejects(
+    f.run,
+    (error) => error.recovery.state === 'not_started' && !/Unfinished uploads|pending|reserved/.test(error.message),
+  );
+  assert.equal(f.saved.get(requestId).original, f.file);
+  assert.equal(f.saved.get(requestId).state, 'not_started');
+});
+for (const [label, patch, status] of [
+  ['wrong request ID', { requestId: 'other' }, 413],
+  ['missing request ID', { requestId: undefined }, 413],
+  ['missing outcome', { uploadOutcome: undefined }, 413],
+  ['false marker only', { uploadOutcome: undefined, code: 'other' }, 413],
+  ['recovery required', { needsRecovery: true }, 413],
+  ['missing recovery marker', { needsRecovery: undefined }, 413],
+  ['contradictory success', { ok: true }, 413],
+  ['unexpected status', {}, 503],
+  ['unexpected code', { code: 'upload_unavailable' }, 413],
+  ['contradictory path', { storagePath }, 413],
+  ['empty path claim', { storagePath: '' }, 413],
+  ['upload row present', { upload: { status: 'reserved' } }, 413],
+  ['null upload row', { upload: null }, 413],
+  ['part URLs present', { parts: [] }, 413],
+  ['invalid maximum', { maxFileBytes: '1' }, 413],
+  ['zero maximum', { maxFileBytes: 0 }, 413],
+  ['file below maximum', { maxFileBytes: 50_000_000 }, 413],
+])
+  test(`unverified no-start claim (${label}) stays pending and does not repeat the unsupported claim`, async () => {
+    const f = fixture(2);
+    refuseCreate(f, noStartRefusal({ maxFileBytes: 1, ...patch }), status);
+    await assert.rejects(f.run, (error) => {
+      assert(error instanceof ReservedUploadError);
+      assert.notEqual(error.recovery.state, 'not_started');
+      assert.doesNotMatch(error.message, /No cloud upload was started/i);
+      assert.match(error.message, /Unfinished uploads/);
+      return true;
+    });
+    assert.equal(f.saved.get(requestId).state, 'pending');
+    assert.equal(f.saved.get(requestId).original, f.file);
+    assert.deepEqual(actions(f), ['create']);
+  });
+test('a matching refusal after parts were transferred cannot erase the reservation or completion uncertainty', async () => {
+  const f = fixture(2);
+  const fetch = f.deps.fetch;
+  f.deps.fetch = async (url, options) => {
+    if (options.method === 'POST' && JSON.parse(options.body).action === 'complete') {
+      f.calls.push({ url, options });
+      return Response.json(noStartRefusal({ maxFileBytes: 1 }), { status: 413 });
+    }
+    return fetch(url, options);
+  };
+  await assert.rejects(f.run, (error) => {
+    assert.notEqual(error.recovery.state, 'not_started');
+    assert.doesNotMatch(error.message, /No cloud upload was started/i);
+    return true;
+  });
+  assert.equal(f.saved.get(requestId).state, 'pending');
+  assert.equal(f.saved.get(requestId).storagePath, storagePath);
+  assert.equal(f.saved.get(requestId).completionStarted, true);
+});
+test('an existing local reservation ID cannot be overwritten by another fresh-create attempt', async () => {
+  const f = fixture();
+  await f.run();
+  const old = { ...f.saved.get(requestId) };
+  const count = f.calls.length;
+  await assert.rejects(f.run, /already|unique|existing/);
+  assert.deepEqual(f.saved.get(requestId), old);
+  assert.equal(f.calls.length, count);
+});
+
+test('a status response cannot make a previously attempted request not-started using create-only refusal markers', async () => {
+  const f = fixture();
+  f.deps.fetch = async (url, options) => {
+    f.calls.push({ url, options });
+    throw Error('Initial response lost');
+  };
+  await assert.rejects(f.run);
+  // Even stale prepared metadata is not proof that a status call is fresh create.
+  f.saved.get(requestId).state = 'prepared';
+  f.deps.fetch = async (url, options) => {
+    f.calls.push({ url, options });
+    return Response.json(noStartRefusal({ maxFileBytes: 1 }), { status: 413 });
+  };
+  await assert.rejects(
+    () => checkReservedUpload(requestId, target, f.deps),
+    (error) => {
+      assert.notEqual(error.recovery.state, 'not_started');
+      assert.doesNotMatch(error.message, /No cloud upload was started/i);
+      return true;
+    },
+  );
+  assert.equal(f.saved.get(requestId).state, 'pending');
+  assert.deepEqual(actions(f), ['create', 'status']);
+});
+test('a valid no-start response received after account change preserves the identity guard', async () => {
+  const f = fixture();
+  f.deps.fetch = async (url, options) => {
+    f.calls.push({ url, options });
+    f.changeIdentity({ ...target, userId: 'replacement' });
+    return Response.json(noStartRefusal({ maxFileBytes: 1 }), { status: 413 });
+  };
+  await assert.rejects(f.run, /account|workspace/);
+  assert.equal(f.saved.get(requestId).state, 'pending');
+  assert.equal(f.saved.get(requestId).original, f.file);
+});
+test('a journal update failure after verified refusal never invents reserved capacity and retries only local persistence', async () => {
+  const f = fixture();
+  const put = f.journal.put;
+  let failed = false;
+  f.journal.put = async (record) => {
+    if (record.state === 'not_started' && !failed) {
+      failed = true;
+      throw Error('metadata write failed');
+    }
+    return put(record);
+  };
+  refuseCreate(f, noStartRefusal({ maxFileBytes: 1 }));
+  await assert.rejects(f.run, (error) => {
+    assert.equal(error.recovery.state, 'not_started');
+    assert.match(error.message, /could not update its upload history/);
+    assert.doesNotMatch(error.message, /Unfinished uploads|pending|reserved|Recovery ID/);
+    return true;
+  });
+  assert.equal(f.saved.get(requestId).state, 'not_started');
+  assert.equal(f.saved.get(requestId).original, f.file);
+  assert.deepEqual(actions(f), ['create']);
+});
+
+for (const [code, status, explanation] of [
+  ['upload_shared_capacity_reached', 507, /shared cloud storage.*limit.*reached/i],
+  ['upload_shared_capacity_unavailable', 503, /shared cloud storage.*could not be verified/i],
+]) {
+  const refusal = (patch = {}) => ({
+    ok: false,
+    code,
+    requestId,
+    needsRecovery: false,
+    uploadOutcome: 'not_started',
+    message: 'Shared cloud storage refused the upload. No cloud upload was started. Keep the original file.',
+    ...patch,
+  });
+  for (const retained of [true, false])
+    test(`${code}: fresh refusal keeps the original (${retained ? 'device copy' : 'session copy'}) without inventing a reservation`, async () => {
+      const f = fixture();
+      f.journal.retainOriginal = async () => retained;
+      refuseCreate(f, refusal(), status);
+      await assert.rejects(f.run, (error) => {
+        assert(error instanceof ReservedUploadError);
+        assert.equal(error.code, code);
+        assert.equal(error.recovery.state, 'not_started');
+        assert.match(error.message, explanation);
+        assert.match(error.message, /No cloud upload was started/);
+        assert.match(error.message, retained ? /retained on this device/ : /Keep the original file/);
+        assert.doesNotMatch(error.message, /Unfinished uploads|Recovery ID|reserved|pending/);
+        return true;
+      });
+      assert.equal(f.saved.get(requestId).state, 'not_started');
+      assert.equal(f.saved.get(requestId).serverStatus, 'not_started');
+      assert.equal(f.saved.get(requestId).original, f.file);
+      assert.equal(f.saved.get(requestId).originalRetention, retained ? 'device' : 'reselect');
+      assert.deepEqual(actions(f), ['create']);
+      assert.equal(f.calls.length, 1);
+    });
+
+  for (const [label, patch, responseStatus = status] of [
+    ['wrong request ID', { requestId: 'other' }],
+    ['missing request ID', { requestId: undefined }],
+    ['missing outcome', { uploadOutcome: undefined }],
+    ['missing recovery marker', { needsRecovery: undefined }],
+    ['both proof markers absent', { needsRecovery: undefined, uploadOutcome: undefined }],
+    ['recovery required', { needsRecovery: true }],
+    ['contradictory success', { ok: true }],
+    ['wrong status', {}, status === 507 ? 503 : 507],
+    ['wrong code', { code: 'upload_shared_capacity_unknown' }],
+    ['maximum present', { maxFileBytes: 50_000_000 }],
+    ['null maximum present', { maxFileBytes: null }],
+    ['empty path present', { storagePath: '' }],
+    ['null upload present', { upload: null }],
+    ['part URLs present', { parts: [] }],
+    ['provider session present', { providerUploadId: 'existing' }],
+    ['aggregate totals present', { totals: { usedBytes: 987654321 } }],
+    ['aggregate bytes present', { reservedBytes: 987654321 }],
+    ['unknown extra field', { unexpected: true }],
+  ])
+    test(`${code}: ${label} cannot establish no-start or disclose response details`, async () => {
+      const f = fixture();
+      refuseCreate(f, refusal(patch), responseStatus);
+      await assert.rejects(f.run, (error) => {
+        assert.notEqual(error.recovery.state, 'not_started');
+        assert.doesNotMatch(error.message, /No cloud upload was started|987654321/i);
+        assert.match(error.message, /Unfinished uploads/);
+        return true;
+      });
+      assert.equal(f.saved.get(requestId).state, 'pending');
+      assert.equal(f.saved.get(requestId).original, f.file);
+      assert.deepEqual(actions(f), ['create']);
+    });
+
+  test(`${code}: a later completion refusal preserves the path and completion uncertainty`, async () => {
+    const f = fixture();
+    const fetch = f.deps.fetch;
+    f.deps.fetch = async (url, options) => {
+      if (options.method === 'POST' && JSON.parse(options.body).action === 'complete') {
+        f.calls.push({ url, options });
+        return Response.json(refusal(), { status });
+      }
+      return fetch(url, options);
+    };
+    await assert.rejects(f.run, (error) => {
+      assert.notEqual(error.recovery.state, 'not_started');
+      assert.doesNotMatch(error.message, /No cloud upload was started/);
+      return true;
+    });
+    assert.equal(f.saved.get(requestId).state, 'pending');
+    assert.equal(f.saved.get(requestId).storagePath, storagePath);
+    assert.equal(f.saved.get(requestId).completionStarted, true);
+    assert.equal(f.saved.get(requestId).original, f.file);
+    assert.deepEqual(actions(f), ['create', 'complete']);
+  });
+
+  test(`${code}: later status with prepared metadata cannot clear an earlier uncertain create`, async () => {
+    const f = fixture();
+    f.deps.fetch = async (url, options) => {
+      f.calls.push({ url, options });
+      throw Error('Initial response lost');
+    };
+    await assert.rejects(f.run);
+    f.saved.get(requestId).state = 'prepared';
+    f.deps.fetch = async (url, options) => {
+      f.calls.push({ url, options });
+      return Response.json(refusal(), { status });
+    };
+    await assert.rejects(
+      () => checkReservedUpload(requestId, target, f.deps),
+      (error) => {
+        assert.notEqual(error.recovery.state, 'not_started');
+        assert.doesNotMatch(error.message, /No cloud upload was started/);
+        return true;
+      },
+    );
+    assert.equal(f.saved.get(requestId).state, 'pending');
+    assert.equal(f.saved.get(requestId).original, f.file);
+    assert.deepEqual(actions(f), ['create', 'status']);
+  });
+
+  test(`${code}: an existing reservation ID is never overwritten or retried as a fresh create`, async () => {
+    const f = fixture();
+    await f.run();
+    const previous = { ...f.saved.get(requestId) };
+    const count = f.calls.length;
+    refuseCreate(f, refusal(), status);
+    await assert.rejects(f.run, /unique upload recovery ID/);
+    assert.deepEqual(f.saved.get(requestId), previous);
+    assert.equal(f.calls.length, count);
+  });
+
+  test(`${code}: an identity change prevents accepting even a valid fresh refusal`, async () => {
+    const f = fixture();
+    f.deps.fetch = async (url, options) => {
+      f.calls.push({ url, options });
+      f.changeIdentity({ ...target, userId: 'replacement' });
+      return Response.json(refusal(), { status });
+    };
+    await assert.rejects(f.run, /account|workspace/);
+    assert.equal(f.saved.get(requestId).state, 'pending');
+    assert.equal(f.saved.get(requestId).original, f.file);
+    assert.deepEqual(actions(f), ['create']);
+  });
+}

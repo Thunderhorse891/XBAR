@@ -715,7 +715,8 @@ test('OCR identity: conflicting review action refuses and a retry uses the corre
 test('packet repair guidance targets the selected horse and retains buyer inputs through a repair', async ({
   page,
 }) => {
-  await bootstrapPaidWorkspace(page);
+  // This repair flow ends by proving the Free-plan packet generation denial.
+  await bootstrapWorkspace(page);
   await seedHorse(page, 'Packet Repair Horse');
   await page.getByRole('link', { name: 'Sale Packets', exact: true }).click();
   const row = page.locator('.xs-mrow').filter({ hasText: 'Packet Repair Horse' });
@@ -1429,7 +1430,7 @@ test('Free signup offers two horses, one user, manual upload and monthly Profess
     const initial = structuredClone(store().subscription);
     const input = {
       name: 'Free Horse',
-      barnName: '',
+      barnName: 'Free Horse',
       sex: 'Mare',
       segment: 'Sale Prospect',
       status: 'Sale Prep',

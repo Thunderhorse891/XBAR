@@ -48,6 +48,7 @@ jobs:
           set -o pipefail
           psql -X -v ON_ERROR_STOP=1 -f tests/database/free-tier-rls.sql
           psql -X -v ON_ERROR_STOP=1 -f tests/database/storage-object-accounting.sql
+          PG_MODULE_PATH="$RUNNER_TEMP/xbar-reservation-pg/node_modules/pg/lib/index.js" node tests/database/project-storage-budget-concurrency.mjs 2>&1 | tee -a free-tier-postgres.log
           python3 tests/database/free-tier-concurrency.py 2>&1 | tee free-tier-postgres.log
           psql -X -v ON_ERROR_STOP=1 -f tests/database/reserved-storage-uploads.sql
           PG_MODULE_PATH="$RUNNER_TEMP/xbar-reservation-pg/node_modules/pg/lib/index.js" node tests/database/reserved-storage-concurrency.mjs 2>&1 | tee -a free-tier-postgres.log

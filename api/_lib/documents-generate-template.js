@@ -169,6 +169,18 @@ export default async function handler(req, res) {
     }
     const { data: uploaded, error: uploadError } = uploadResult ?? {};
     if (uploadError || uploaded?.path !== storagePath) {
+      if (uploadError?.uploadOutcome === 'not_started' && uploadError.needsRecovery === false) {
+        return sendJson(res, uploadError.status || 413, {
+          ok: false,
+          documentId,
+          requestId: uploadError.requestId,
+          code: uploadError.code,
+          maxFileBytes: uploadError.maxFileBytes,
+          needsRecovery: false,
+          uploadOutcome: 'not_started',
+          message: `Failed to store generated PDF: ${uploadError.message}`,
+        });
+      }
       return sendJson(res, 502, {
         ok: false,
         documentId,

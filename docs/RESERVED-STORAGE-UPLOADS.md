@@ -122,3 +122,43 @@ and retain their byte charges until verified settlement. Do not truncate the
 ledger, relax policies into a live unreserved path, delete original objects, or
 re-enable a released request ID. Stop new uploads while restoring a known-safe
 coordinated server/database version and recover unresolved uploads explicitly.
+
+## Project hosting budget (prepared additive migration)
+
+`20261112150000_project_storage_budget.sql` adds a separate aggregate admission
+budget of **900,000,000 bytes**, leaving 100,000,000 bytes below a documented
+1,000,000,000-byte hosting allowance. Workspace plan entitlements are unchanged;
+shared hosting capacity can prevent a new upload even below a workspace limit.
+This is not a guarantee against provider shutdown: other metered resources,
+provider accounting, temporary multipart staging and unreserved privileged writes
+remain outside this final-object/reservation counter. The signed-token cutover
+and hosted drain gates above still apply.
+
+Every backend-measured object across every bucket, including orphans, is counted.
+Active reservations add only bytes not already represented by their actual
+object. Unknown object sizes refuse new admission. A singleton row lock serializes
+new reservations across workspaces; the counter uses one coherent snapshot after
+the lock. Admission requires READ COMMITTED isolation. Existing idempotent
+requests, completion, reconciliation, reads, downloads and recovery remain
+available above budget. No expiry releases a reservation, and no data is trimmed.
+
+The private `upload_project_budget` table has no application-role access or RPC
+setter. An approved operator may deliberately update its single `limit_bytes`
+row through privileged SQL; the row lock also serializes that change with new
+admission. Do not delete the row or expose aggregate totals to clients. Raising
+the budget requires separately verified hosting capacity and explicit approval;
+it is not an automatic hosting upgrade.
+
+Apply only after migration 140000 and coordinated API handling are ready, with
+separate production approval and read-only provider/object inventory. A new
+transaction-refused admission returns PZ001 (capacity reached) or PZ002 (unknown
+capacity); a duplicate committed reservation is checked first and never receives
+those codes. Only a definitive reserve RPC error can mean “not started”; network
+uncertainty retains recovery. Native regressions are in
+`tests/database/project-storage-budget-concurrency.mjs`.
+
+For rollback, stop new upload admission before restoring the previous coordinated
+version. Preserve the budget row, ledger, objects and unresolved charges; removing
+the admission trigger reopens shared-capacity oversubscription and is not a safe
+standalone rollback. Reducing the setting never evicts existing data or cancels
+held uploads.

@@ -5,6 +5,9 @@ import { createStorageTransport, UPLOAD_URL_TTL_SECONDS } from './storage-s3.js'
 
 export const UPLOAD_PART_SIZE = 8 * 1024 * 1024;
 export const MAX_UPLOAD_PART_BATCH = 32;
+// Supabase documents a 50 MB Free-project ceiling. Use decimal bytes, matching
+// Storage's parseFileSizeToBytes('50mb'), conservatively below old 50 MiB defaults.
+export const DEFAULT_MAX_UPLOAD_FILE_BYTES = 50_000_000;
 const TABLE = 'workspace_upload_reservations';
 const capability = {
   document: 'uploadDocuments',
@@ -23,6 +26,42 @@ export class StorageUploadError extends Error {
 const fail = (status, code, message, row) => {
   throw new StorageUploadError(status, code, message, row);
 };
+export function assertStorageFileSize(sizeBytes, row) {
+  const configured = process.env.SUPABASE_STORAGE_MAX_FILE_BYTES;
+  const maximum = configured === undefined || configured === '' ? DEFAULT_MAX_UPLOAD_FILE_BYTES : Number(configured);
+  if (
+    (configured !== undefined && configured !== '' && !/^[1-9][0-9]*$/.test(configured)) ||
+    !Number.isSafeInteger(maximum) ||
+    maximum < 1 ||
+    maximum > UPLOAD_PART_SIZE * 10000
+  ) {
+    const error = new StorageUploadError(
+      503,
+      'upload_limit_unavailable',
+      'The cloud upload size limit is not configured correctly. No new cloud upload was started. Keep the original file.',
+      row,
+    );
+    error.knownNotStarted = !row;
+    throw error;
+  }
+  if (sizeBytes > maximum) {
+    const bytes = `${maximum.toLocaleString('en-US')} bytes`;
+    const limit = maximum >= 1_000_000 ? `${maximum / 1_000_000} MB (${bytes})` : bytes;
+    const outcome = row
+      ? 'This earlier upload still needs reconciliation or cancellation; its reserved space has not been released.'
+      : 'No cloud upload was started.';
+    const error = new StorageUploadError(
+      413,
+      'upload_file_too_large',
+      `This file exceeds the current cloud upload limit of ${limit}. ${outcome} Keep the original file.`,
+      row,
+    );
+    error.knownNotStarted = !row;
+    error.maxFileBytes = maximum;
+    throw error;
+  }
+  return maximum;
+}
 const pending = (row) =>
   fail(
     409,
@@ -69,7 +108,12 @@ export function uploadErrorResult(error, requestId) {
       error instanceof StorageUploadError
         ? error.message
         : 'The upload could not be confirmed. Keep the original and check its status before retrying.',
-    needsRecovery: Boolean(error.row) || !(error instanceof StorageUploadError) || error.status >= 500,
+    needsRecovery:
+      error.knownNotStarted === true
+        ? false
+        : Boolean(error.row) || !(error instanceof StorageUploadError) || error.status >= 500,
+    ...(error.knownNotStarted === true ? { uploadOutcome: 'not_started' } : {}),
+    ...(Number.isSafeInteger(error.maxFileBytes) ? { maxFileBytes: error.maxFileBytes } : {}),
     requestId,
     ...(error.row ? { upload: publicUpload(error.row), storagePath: error.row.object_path } : {}),
   };
@@ -118,7 +162,7 @@ export function createUploadService(access, transport = null) {
     authorize(access, data.upload_kind);
     return data;
   }
-  async function rpc(name, row, args = {}) {
+  async function rpc(name, row, args = {}, { newAdmission = false } = {}) {
     let response;
     try {
       response = await supabase.rpc(name, { p_reservation_id: row.id, ...args });
@@ -126,6 +170,30 @@ export function createUploadService(access, transport = null) {
       pending(row);
     }
     if (response?.error) {
+      // These dedicated database errors are emitted only after the project
+      // lock rechecks that no reservation with this ID exists. A returned
+      // transaction error rolls back admission. Never extend this shortcut to
+      // transport failures, other RPCs, generic P0001 or contradictory data.
+      if (newAdmission && name === 'xbar_reserve_upload' && !row.object_path && response.data === null) {
+        const { code, message } = response.error;
+        let refusal;
+        if (code === 'PZ001' && message === 'Project storage capacity reached. Upload not started.')
+          refusal = new StorageUploadError(
+            507,
+            'upload_shared_capacity_reached',
+            'The shared cloud storage limit would be exceeded. No cloud upload was started. Keep the original file and try again after space is available.',
+          );
+        if (code === 'PZ002' && message === 'Project storage capacity could not be verified. Upload not started.')
+          refusal = new StorageUploadError(
+            503,
+            'upload_shared_capacity_unavailable',
+            'Shared cloud storage capacity could not be verified. No cloud upload was started. Keep the original file and try again later.',
+          );
+        if (refusal) {
+          refusal.knownNotStarted = true;
+          throw refusal;
+        }
+      }
       if (response.error.code === '55000')
         fail(409, 'upload_state_conflict', 'The upload state changed. Check its status before retrying.', row);
       if (/storage limit/i.test(response.error.message || ''))
@@ -151,7 +219,6 @@ export function createUploadService(access, transport = null) {
       !capability[kind] ||
       !Number.isSafeInteger(sizeBytes) ||
       sizeBytes < 1 ||
-      sizeBytes > UPLOAD_PART_SIZE * 10000 ||
       typeof fileName !== 'string' ||
       !fileName ||
       fileName.length > 255 ||
@@ -183,8 +250,12 @@ export function createUploadService(access, transport = null) {
         (body.kind === 'media' && row.object_path.split('/')[2] !== mediaHorseSegment(body.horseId))
       )
         fail(409, 'upload_request_conflict', 'This request ID belongs to a different upload.', row);
+      if (row.state === 'reserved') assertStorageFileSize(body.sizeBytes, row);
       return row.state === 'reserved' ? begin(row) : row;
     }
+    // Read the request identity first: an existing reservation must never be
+    // mislabeled as not started merely because an operator lowered the ceiling.
+    assertStorageFileSize(body.sizeBytes);
     // Validate credentials before reserving; configuration failures must not consume capacity.
     s3();
     const name = safeDocumentSegment(body.fileName, 'upload.bin');
@@ -197,15 +268,20 @@ export function createUploadService(access, transport = null) {
     if (!isWorkspaceObjectPath({ path, workspaceId }) || !path.includes(body.requestId))
       fail(400, 'invalid_upload', 'Invalid generated storage path.');
     row = { id: body.requestId };
-    row = await rpc('xbar_reserve_upload', row, {
-      p_workspace_id: workspaceId,
-      p_actor_user_id: user.id,
-      p_bucket_id: body.bucket,
-      p_object_path: path,
-      p_expected_bytes: body.sizeBytes,
-      p_content_type: body.contentType,
-      p_upload_kind: body.kind,
-    });
+    row = await rpc(
+      'xbar_reserve_upload',
+      row,
+      {
+        p_workspace_id: workspaceId,
+        p_actor_user_id: user.id,
+        p_bucket_id: body.bucket,
+        p_object_path: path,
+        p_expected_bytes: body.sizeBytes,
+        p_content_type: body.contentType,
+        p_upload_kind: body.kind,
+      },
+      { newAdmission: true },
+    );
     return begin(row);
   }
   async function begin(row) {
@@ -394,6 +470,7 @@ export async function uploadReservedBuffer({
       data: null,
       error: {
         ...uploadErrorResult(error, requestId),
+        status: error instanceof StorageUploadError ? error.status : 503,
         message: error instanceof StorageUploadError ? error.message : 'Upload result could not be confirmed.',
       },
     };

@@ -1,5 +1,25 @@
 # Storage quota accounting and release gates
 
+## Provider billing-period restrictions
+
+Supabase measures Storage quota and billing using the billing-period average,
+not only the live object size. Deleting files reduces future accumulated usage
+but does not erase earlier usage or necessarily restore uploads immediately.
+Free-plan usage restrictions generally lift at the next billing-cycle refill,
+possibly after a delay. Verify the actual organization cycle and restriction
+state before giving a reset date; no upgrade or purchase is authorized here.
+
+The application's 900,000,000-byte admission budget counts current measured
+objects and outstanding reservations. It does not reset provider usage history
+or guarantee availability while the provider restricts uploads. Keep originals
+and truthful local-only fallback; do not recommend deletion as a guaranteed
+immediate remedy. Existing reads, downloads and recovery remain available where
+the provider permits them.
+
+Sources:
+https://supabase.com/docs/guides/platform/manage-your-usage/storage-size
+https://supabase.com/docs/guides/platform/billing-faq#how-can-i-remove-restrictions-applied-from-the-fair-use-policy
+
 ## Prepared accounting correction
 
 `20261112130000_storage_object_accounting.sql` changes the existing usage RPC to

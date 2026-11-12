@@ -1,4 +1,4 @@
-import { uploadReservedBuffer } from './storage-upload.js';
+import { uploadReservedBuffer, assertStorageFileSize, uploadErrorResult } from './storage-upload.js';
 import { createHash, randomUUID } from 'node:crypto';
 import { readJsonBody, sendJson } from './http.js';
 import { requireWorkspaceAccess } from './supabase-admin.js';
@@ -267,6 +267,14 @@ async function processBatch({ access, supabase, workspaceId, user, body, mode })
     return { ok: false, status: 400, message: `Batches are limited to ${MAX_FILES_PER_BATCH} files per request.` };
   }
 
+  // Check each new original before the batch inventory or any object is written.
+  // Existing stored originals are not new uploads and keep their current access.
+  try {
+    for (const file of expanded) if (!file.storagePath && file.content) assertStorageFileSize(fileByteSize(file));
+  } catch (error) {
+    return { ...uploadErrorResult(error), status: error.status || 503 };
+  }
+
   const capacity = await checkDocumentCapacity(supabase, workspaceId, expanded.length, entitlements.limits);
   if (!capacity.ok) {
     // status carries the difference between "over your limit" (403) and
@@ -361,7 +369,17 @@ async function processBatch({ access, supabase, workspaceId, user, body, mode })
           bytes: file.content,
           contentType: file.mimeType,
         });
-        if (uploadError || uploaded?.path !== storagePath) throw new PersistenceError('original-upload');
+        if (uploadError || uploaded?.path !== storagePath) {
+          const failure = new PersistenceError('original-upload');
+          if (uploadError?.uploadOutcome === 'not_started' && uploadError.needsRecovery === false) {
+            receipt.uploadOutcome = 'not_started';
+            receipt.uploadErrorCode = uploadError.code;
+            failure.message = uploadError.message;
+            failure.status = uploadError.status;
+            failure.code = uploadError.code;
+          }
+          throw failure;
+        }
         receipt.uploaded = true;
         receipt.uploadOutcome = 'confirmed';
       }
@@ -613,7 +631,8 @@ async function processBatch({ access, supabase, workspaceId, user, body, mode })
         skipped,
         recovery: { ...recovery, horseId: context.horseId },
       }),
-      status: 409,
+      status: error.status || 409,
+      ...(error.code ? { code: error.code } : {}),
       partial: context.writeAttempted,
     };
   }

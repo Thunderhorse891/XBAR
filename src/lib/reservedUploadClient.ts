@@ -62,6 +62,10 @@ type ApiPayload = {
   code?: string;
   message?: string;
   expiresIn?: number;
+  requestId?: string;
+  needsRecovery?: boolean;
+  uploadOutcome?: string;
+  maxFileBytes?: number;
   /** Assigned by request(), not trusted from server JSON or persisted. */
   receivedAtMs?: number;
   requestDurationMs?: number;
@@ -92,7 +96,9 @@ export class ReservedUploadError extends Error {
   readonly code?: string;
   constructor(message: string, recovery: UploadRecovery, code?: string) {
     super(
-      `${message} Recovery ID: ${recovery.requestId}.${recovery.storagePath ? ` Storage path: ${recovery.storagePath}.` : ''} ${recovery.originalRetention === 'device' ? 'The original is retained on this device.' : 'Keep the original file; recovery after a reload may require selecting it again.'} Open Settings, Unfinished uploads to check status.`,
+      recovery.state === 'not_started'
+        ? `${message} ${recovery.originalRetention === 'device' ? 'The original is retained on this device.' : 'Keep the original file.'}`
+        : `${message} Recovery ID: ${recovery.requestId}.${recovery.storagePath ? ` Storage path: ${recovery.storagePath}.` : ''} ${recovery.originalRetention === 'device' ? 'The original is retained on this device.' : 'Keep the original file; recovery after a reload may require selecting it again.'} Open Settings, Unfinished uploads to check status.`,
     );
     this.name = 'ReservedUploadError';
     const { original: _original, ...metadata } = recovery;
@@ -195,11 +201,47 @@ export function validateUploadPart(part: UploadPart, info: UploadInfo, projectUr
   return part;
 }
 
+function confirmedFreshRefusal(payload: ApiPayload, status: number, record: UploadRecovery): boolean {
+  const sharedCapacityRefusal =
+    ((status === 507 && payload.code === 'upload_shared_capacity_reached') ||
+      (status === 503 && payload.code === 'upload_shared_capacity_unavailable')) &&
+    // Shared-budget refusals contain no size limit, reservation state or project
+    // totals. Unknown fields cannot turn a contradictory response into no-start.
+    Object.keys(payload).every((key) =>
+      ['ok', 'code', 'requestId', 'needsRecovery', 'uploadOutcome', 'message'].includes(key),
+    );
+  return (
+    payload.ok === false &&
+    payload.requestId === record.requestId &&
+    payload.needsRecovery === false &&
+    payload.uploadOutcome === 'not_started' &&
+    record.state === 'prepared' &&
+    record.storagePath === undefined &&
+    record.serverStatus === undefined &&
+    !record.completionStarted &&
+    !record.requiresReview &&
+    !['upload', 'storagePath', 'objectPath', 'providerUploadId', 'uploadId', 'parts'].some((key) =>
+      Object.prototype.hasOwnProperty.call(payload, key),
+    ) &&
+    ((status === 413 &&
+      payload.code === 'upload_file_too_large' &&
+      typeof payload.maxFileBytes === 'number' &&
+      Number.isSafeInteger(payload.maxFileBytes) &&
+      payload.maxFileBytes > 0 &&
+      record.sizeBytes > payload.maxFileBytes) ||
+      (status === 503 &&
+        payload.code === 'upload_limit_unavailable' &&
+        !Object.prototype.hasOwnProperty.call(payload, 'maxFileBytes')) ||
+      sharedCapacityRefusal)
+  );
+}
+
 async function request(
   record: UploadRecovery,
   deps: ReservedUploadDependencies,
   action: string,
   extra = {},
+  freshCreate = false,
 ): Promise<ApiPayload> {
   const identity = await assertIdentity(record, deps);
   const requestedAtMs = elapsedNow(deps);
@@ -215,8 +257,44 @@ async function request(
   const requestDurationMs = receivedAtMs >= requestedAtMs ? receivedAtMs - requestedAtMs : PART_URL_MAX_TTL_MS;
   await assertIdentity(record, deps);
   if (!response.ok || payload.ok !== true) {
+    if (freshCreate && action === 'create' && confirmedFreshRefusal(payload, response.status, record)) {
+      // This server response proves no reservation/provider work began. Persist
+      // that outcome before reporting refusal; never release or cancel anything.
+      record.state = 'not_started';
+      record.serverStatus = 'not_started';
+      const message =
+        payload.code === 'upload_file_too_large'
+          ? `This file exceeds the current cloud upload limit of ${payload.maxFileBytes! >= 1_000_000 ? `${payload.maxFileBytes! / 1_000_000} MB (${payload.maxFileBytes!.toLocaleString('en-US')} bytes)` : `${payload.maxFileBytes} bytes`}. No cloud upload was started.`
+          : payload.code === 'upload_limit_unavailable'
+            ? 'The cloud upload size limit is not configured correctly. No cloud upload was started.'
+            : payload.code === 'upload_shared_capacity_reached'
+              ? 'The shared cloud storage upload limit has been reached. No cloud upload was started.'
+              : 'Shared cloud storage capacity could not be verified. No cloud upload was started.';
+      try {
+        await deps.journal.put(record);
+      } catch {
+        throw new ReservedUploadError(
+          `${message} This device could not update its upload history.`,
+          record,
+          payload.code,
+        );
+      }
+      await assertIdentity(record, deps);
+      throw new ReservedUploadError(message, record, payload.code);
+    }
+    // A mismatched or later-action no-start assertion cannot override known
+    // reservation/transfer state, nor may its message repeat unverified success.
+    const unverifiedNoStart =
+      payload.uploadOutcome !== undefined ||
+      payload.needsRecovery === false ||
+      payload.code === 'upload_file_too_large' ||
+      payload.code === 'upload_limit_unavailable' ||
+      payload.code === 'upload_shared_capacity_reached' ||
+      payload.code === 'upload_shared_capacity_unavailable';
     throw new ReservedUploadError(
-      payload.message || `The upload service returned ${response.status}.`,
+      unverifiedNoStart
+        ? 'The upload outcome could not be confirmed. Keep the original and check its status before retrying.'
+        : payload.message || `The upload service returned ${response.status}.`,
       record,
       payload.code,
     );
@@ -392,6 +470,10 @@ export async function startReservedUpload(
   };
   if (!isWorkspaceStorageKey(record.requestId)) throw Error('A secure upload recovery ID could not be created.');
   await assertIdentity(record, deps);
+  // A generated UUID must not overwrite any prior recovery identity. In
+  // particular, a create retry is not a fresh request eligible for no-start.
+  if (await deps.journal.get(record.requestId))
+    throw Error('A unique upload recovery ID could not be created. Keep the original; no new upload was started.');
   // Do not create a reservation whose identity cannot survive reload.
   try {
     await deps.journal.put(record);
@@ -405,14 +487,20 @@ export async function startReservedUpload(
       /* A second full-byte copy is best effort, never a prerequisite for a large upload. */
     }
     await deps.journal.put(record);
-    const payload = await request(record, deps, 'create', {
-      bucket: record.bucket,
-      kind: record.kind,
-      horseId: record.horseId,
-      fileName: record.fileName,
-      contentType: record.contentType,
-      sizeBytes: record.sizeBytes,
-    });
+    const payload = await request(
+      record,
+      deps,
+      'create',
+      {
+        bucket: record.bucket,
+        kind: record.kind,
+        horseId: record.horseId,
+        fileName: record.fileName,
+        contentType: record.contentType,
+        sizeBytes: record.sizeBytes,
+      },
+      true,
+    );
     return transfer(record, input.file, deps, payload);
   });
 }

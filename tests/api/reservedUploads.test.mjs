@@ -105,6 +105,8 @@ function fixture(options = {}) {
     },
     async rpc(name, p) {
       calls.push(name);
+      if (options.rpcThrow === name) throw Error('response lost after unknown database outcome');
+      if (options.rpcResult?.name === name) return clone(options.rpcResult.response);
       if (options.rpcError === name) return { error: { code: 'XX000', message: 'private credential data' } };
       let row = rows.get(p.p_reservation_id);
       const conflict = () => ({ error: { code: '55000', message: 'Conflict' } });
@@ -662,4 +664,316 @@ test('media horse path sanitizer matches the canonical client contract for odd i
     const row = await f.create({ kind: 'media', bucket: 'horse-media', horseId });
     assert.equal(row.object_path.split('/')[2], clientSanitize(horseId, 'record'));
   }
+});
+
+test('Free hosting per-file boundary accepts exactly 50,000,000 bytes before reservation', async () => {
+  const previous = process.env.SUPABASE_STORAGE_MAX_FILE_BYTES;
+  delete process.env.SUPABASE_STORAGE_MAX_FILE_BYTES;
+  try {
+    const f = fixture();
+    const result = await f.invoke(createBody({ sizeBytes: 50_000_000 }));
+    assert.equal(result.status, 200);
+    assert.equal(result.body.upload.sizeBytes, 50_000_000);
+    assert.equal(f.rows.get(ID).expected_bytes, 50_000_000);
+    assert.equal(result.body.parts.at(-1).sizeBytes, 50_000_000 - 5 * UPLOAD_PART_SIZE);
+  } finally {
+    if (previous === undefined) delete process.env.SUPABASE_STORAGE_MAX_FILE_BYTES;
+    else process.env.SUPABASE_STORAGE_MAX_FILE_BYTES = previous;
+  }
+});
+test('Free hosting one byte too large is known not started, before any quota or provider operation', async () => {
+  const previous = process.env.SUPABASE_STORAGE_MAX_FILE_BYTES;
+  delete process.env.SUPABASE_STORAGE_MAX_FILE_BYTES;
+  try {
+    const f = fixture();
+    const result = await f.invoke(createBody({ sizeBytes: 50_000_001 }));
+    assert.equal(result.status, 413);
+    assert.equal(result.body.code, 'upload_file_too_large');
+    assert.equal(result.body.needsRecovery, false);
+    assert.equal(result.body.uploadOutcome, 'not_started');
+    assert.equal(result.body.maxFileBytes, 50_000_000);
+    assert.equal(result.body.requestId, ID);
+    assert.match(result.body.message, /50 MB.*50,000,000 bytes/);
+    assert.match(result.body.message, /Keep the original/);
+    assert.deepEqual(f.calls, []);
+    assert.equal(f.rows.size, 0);
+  } finally {
+    if (previous === undefined) delete process.env.SUPABASE_STORAGE_MAX_FILE_BYTES;
+    else process.env.SUPABASE_STORAGE_MAX_FILE_BYTES = previous;
+  }
+});
+
+async function withFileLimit(value, run) {
+  const previous = process.env.SUPABASE_STORAGE_MAX_FILE_BYTES;
+  if (value === undefined) delete process.env.SUPABASE_STORAGE_MAX_FILE_BYTES;
+  else process.env.SUPABASE_STORAGE_MAX_FILE_BYTES = value;
+  try {
+    return await run();
+  } finally {
+    if (previous === undefined) delete process.env.SUPABASE_STORAGE_MAX_FILE_BYTES;
+    else process.env.SUPABASE_STORAGE_MAX_FILE_BYTES = previous;
+  }
+}
+test('a lower explicitly configured byte limit is exact and rejects before reservation', async () => {
+  await withFileLimit('5', async () => {
+    const exact = fixture();
+    assert.equal((await exact.invoke(createBody({ sizeBytes: 5 }))).status, 200);
+    const over = fixture();
+    const result = await over.invoke(createBody({ sizeBytes: 6 }));
+    assert.equal(result.status, 413);
+    assert.equal(result.body.maxFileBytes, 5);
+    assert.equal(result.body.needsRecovery, false);
+    assert.deepEqual(over.calls, []);
+    assert.equal(over.rows.size, 0);
+  });
+});
+for (const value of [
+  '0',
+  '-1',
+  '1.5',
+  '50MB',
+  '5e7',
+  ' 50000000 ',
+  '9007199254740992',
+  String(UPLOAD_PART_SIZE * 10000 + 1),
+])
+  test(`malformed configured file limit ${value} fails closed without capacity loss`, async () => {
+    await withFileLimit(value, async () => {
+      const f = fixture();
+      const result = await f.invoke(createBody());
+      assert.equal(result.status, 503);
+      assert.equal(result.body.code, 'upload_limit_unavailable');
+      assert.equal(result.body.uploadOutcome, 'not_started');
+      assert.equal(result.body.needsRecovery, false);
+      assert.deepEqual(f.calls, []);
+      assert.equal(f.rows.size, 0);
+    });
+  });
+test('generated Buffer admission uses the same limit before S3 configuration, reservation or part writes', async () => {
+  await withFileLimit('4', async () => {
+    const f = fixture();
+    const bytes = Buffer.from('hello');
+    const result = await uploadReservedBuffer({
+      access: f.access,
+      requestId: ID,
+      bucket: 'horse-documents',
+      storagePath: `${WS}/documents/doc-${ID}/generated.pdf`,
+      bytes,
+      contentType: 'application/pdf',
+    });
+    assert.equal(result.data, null);
+    assert.equal(result.error.status, 413);
+    assert.equal(result.error.code, 'upload_file_too_large');
+    assert.equal(result.error.needsRecovery, false);
+    assert.equal(result.error.uploadOutcome, 'not_started');
+    assert.equal(bytes.toString(), 'hello');
+    assert.deepEqual(f.calls, []);
+    assert.equal(f.rows.size, 0);
+  });
+});
+test('lowering the ceiling never mislabels an earlier held reservation as not started or releases its quota', async () => {
+  const options = { rpcError: 'xbar_begin_upload' };
+  const f = fixture(options);
+  await withFileLimit('5', async () => {
+    await assert.rejects(f.create());
+  });
+  options.rpcError = null;
+  assert.equal(f.rows.get(ID).state, 'reserved');
+  await withFileLimit('4', async () => {
+    const result = await f.invoke(createBody());
+    assert.equal(result.status, 413);
+    assert.equal(result.body.needsRecovery, true);
+    assert.equal(result.body.uploadOutcome, undefined);
+    assert.equal(result.body.upload.requestId, ID);
+    assert.equal(result.body.upload.status, 'reserved');
+    assert.equal(f.rows.size, 1);
+    assert.equal(f.calls.includes('create'), false);
+  });
+});
+test('an already confirmed original remains recoverable after lowering the new-file limit', async () => {
+  const f = fixture();
+  await withFileLimit('5', async () => {
+    await f.service.complete(await f.create());
+  });
+  const count = f.calls.length;
+  await withFileLimit('4', async () => {
+    assert.equal((await f.create()).state, 'stored');
+    assert.equal((await f.service.status(await f.service.read(ID))).state, 'stored');
+  });
+  assert.equal(f.calls.length, count);
+});
+test('the explicit future-host byte limit remains configurable without changing plan quotas', async () => {
+  await withFileLimit('60000000', async () => {
+    const f = fixture();
+    assert.equal((await f.invoke(createBody({ sizeBytes: 50_000_001 }))).status, 200);
+    assert.equal(f.rows.get(ID).expected_bytes, 50_000_001);
+  });
+});
+
+test('very large but valid byte counts still receive the actionable not-started hosting refusal', async () => {
+  await withFileLimit(undefined, async () => {
+    const f = fixture();
+    const result = await f.invoke(createBody({ sizeBytes: 1_000_000_000_000 }));
+    assert.equal(result.status, 413);
+    assert.equal(result.body.code, 'upload_file_too_large');
+    assert.equal(result.body.uploadOutcome, 'not_started');
+    assert.equal(result.body.needsRecovery, false);
+    assert.deepEqual(f.calls, []);
+  });
+});
+
+const sharedRefusals = [
+  {
+    sqlCode: 'PZ001',
+    sqlMessage: 'Project storage capacity reached. Upload not started.',
+    status: 507,
+    code: 'upload_shared_capacity_reached',
+  },
+  {
+    sqlCode: 'PZ002',
+    sqlMessage: 'Project storage capacity could not be verified. Upload not started.',
+    status: 503,
+    code: 'upload_shared_capacity_unavailable',
+  },
+];
+for (const refusal of sharedRefusals)
+  test(`confirmed new-admission ${refusal.sqlCode} refuses before provider writes without reserving quota`, async () => {
+    const f = fixture({
+      rpcResult: {
+        name: 'xbar_reserve_upload',
+        response: { data: null, error: { code: refusal.sqlCode, message: refusal.sqlMessage } },
+      },
+    });
+    const result = await f.invoke(createBody());
+    assert.equal(result.status, refusal.status);
+    assert.equal(result.body.code, refusal.code);
+    assert.equal(result.body.ok, false);
+    assert.equal(result.body.needsRecovery, false);
+    assert.equal(result.body.uploadOutcome, 'not_started');
+    assert.equal(result.body.requestId, ID);
+    assert.equal(result.body.upload, undefined);
+    assert.equal(result.body.storagePath, undefined);
+    assert.equal(result.body.maxFileBytes, undefined);
+    assert.match(result.body.message, /shared cloud storage/i);
+    assert.match(result.body.message, /Keep the original/);
+    assert.deepEqual(f.calls, ['xbar_reserve_upload']);
+    assert.equal(f.rows.size, 0);
+  });
+
+for (const [label, response] of [
+  [
+    'generic SQLSTATE',
+    { data: null, error: { code: 'P0001', message: 'Project storage capacity reached. Upload not started.' } },
+  ],
+  ['different diagnostic', { data: null, error: { code: 'PZ001', message: 'Different error' } }],
+  [
+    'missing data property',
+    { error: { code: 'PZ001', message: 'Project storage capacity reached. Upload not started.' } },
+  ],
+  [
+    'contradictory returned row',
+    { data: { id: ID }, error: { code: 'PZ001', message: 'Project storage capacity reached. Upload not started.' } },
+  ],
+  [
+    'duplicate identity conflict',
+    { data: null, error: { code: '55000', message: 'Upload reservation identity conflict.' } },
+  ],
+])
+  test(`${label} cannot claim a new upload was definitively not started`, async () => {
+    const f = fixture({ rpcResult: { name: 'xbar_reserve_upload', response } });
+    const result = await f.invoke(createBody());
+    assert.equal(result.body.ok, false);
+    assert.equal(result.body.needsRecovery, true);
+    assert.equal(result.body.uploadOutcome, undefined);
+    assert.notEqual(result.body.code, 'upload_shared_capacity_reached');
+    assert.deepEqual(f.calls, ['xbar_reserve_upload']);
+  });
+test('lost reserve transport never becomes not-started even when the workspace looked empty', async () => {
+  const f = fixture({ rpcThrow: 'xbar_reserve_upload' });
+  const result = await f.invoke(createBody());
+  assert.equal(result.body.needsRecovery, true);
+  assert.equal(result.body.uploadOutcome, undefined);
+  assert.equal(result.body.code, 'upload_pending');
+});
+for (const refusal of sharedRefusals)
+  test(`${refusal.sqlCode} from a later lifecycle RPC cannot erase an existing reservation`, async () => {
+    const f = fixture({
+      rpcResult: {
+        name: 'xbar_begin_upload',
+        response: { data: null, error: { code: refusal.sqlCode, message: refusal.sqlMessage } },
+      },
+    });
+    const result = await f.invoke(createBody());
+    assert.equal(result.body.needsRecovery, true);
+    assert.equal(result.body.uploadOutcome, undefined);
+    assert.equal(result.body.code, 'upload_unavailable');
+    assert.equal(f.rows.get(ID).state, 'reserved');
+    assert.equal(f.rows.size, 1);
+    assert.equal(f.calls.includes('create'), false);
+  });
+test('an existing idempotent upload bypasses a later new-admission budget refusal without new charge', async () => {
+  const options = {};
+  const f = fixture(options);
+  const row = await f.create();
+  options.rpcResult = {
+    name: 'xbar_reserve_upload',
+    response: {
+      data: null,
+      error: { code: 'PZ001', message: 'Project storage capacity reached. Upload not started.' },
+    },
+  };
+  assert.equal((await f.create()).object_path, row.object_path);
+  assert.equal(f.calls.filter((call) => call === 'xbar_reserve_upload').length, 1);
+  assert.equal(f.calls.filter((call) => call === 'create').length, 1);
+  assert.equal(f.rows.size, 1);
+});
+test('generated Buffer shared-budget refusal retains bytes and creates no provider operation', async () => {
+  const f = fixture({
+    rpcResult: {
+      name: 'xbar_reserve_upload',
+      response: {
+        data: null,
+        error: { code: 'PZ001', message: 'Project storage capacity reached. Upload not started.' },
+      },
+    },
+  });
+  const bytes = Buffer.from('hello');
+  const result = await uploadReservedBuffer({
+    access: f.access,
+    requestId: ID,
+    bucket: 'horse-documents',
+    storagePath: `${WS}/documents/doc-${ID}/generated.pdf`,
+    bytes,
+    contentType: 'application/pdf',
+    transport: f.transport,
+  });
+  assert.equal(result.data, null);
+  assert.equal(result.error.status, 507);
+  assert.equal(result.error.code, 'upload_shared_capacity_reached');
+  assert.equal(result.error.needsRecovery, false);
+  assert.equal(result.error.uploadOutcome, 'not_started');
+  assert.equal(result.error.requestId, ID);
+  assert.equal(bytes.toString(), 'hello');
+  assert.deepEqual(f.calls, ['xbar_reserve_upload']);
+  assert.equal(f.rows.size, 0);
+});
+
+test('a lost reserve acknowledgment retains a committed reservation and never claims not-started', async () => {
+  const f = fixture();
+  const rpc = f.access.supabase.rpc;
+  f.access.supabase.rpc = async (name, args) => {
+    const result = await rpc(name, args);
+    if (name === 'xbar_reserve_upload') throw Error('acknowledgment lost after commit');
+    return result;
+  };
+  const result = await f.invoke(createBody());
+  assert.equal(result.body.needsRecovery, true);
+  assert.equal(result.body.uploadOutcome, undefined);
+  assert.equal(result.body.code, 'upload_pending');
+  assert.equal(f.rows.size, 1);
+  assert.equal(f.rows.get(ID).state, 'reserved');
+  assert.equal(f.calls.includes('create'), false);
+  const recovered = await f.service.read(ID);
+  assert.equal(recovered.id, ID);
+  assert.equal((await f.service.abort(recovered)).state, 'aborted');
 });

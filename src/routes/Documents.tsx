@@ -4,6 +4,7 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import type { MouseEvent } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { DocumentLibrary } from '@/components/DocumentLibrary';
+import { DocumentExtractionPreview } from '@/components/DocumentExtractionPreview';
 import {
   documentWithFreshSource,
   documentIdentityCacheNeedsReview,
@@ -1107,6 +1108,7 @@ export default function Documents() {
                                     : ''}
                                 </span>
                               ) : null}
+                              <DocumentExtractionPreview document={document} />
                             </div>
                           </td>
                           <td>

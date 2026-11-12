@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react';
+import { useMemo, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { ArrowUpRight, FileText, Lock, Palette } from 'lucide-react';
 import { EmptyState } from '@/components/EmptyState';
@@ -48,7 +48,10 @@ export default function Reports() {
   const subscription = useEffectiveSubscription();
   const locked = reportsGate(subscription);
   const presentationLocked = !canCustomizeReports(subscription.tier);
-  const [exporting, setExporting] = useState<'pdf' | null>(null);
+  const [exporting, setExporting] = useState<'pdf' | 'csv' | null>(null);
+  // React state disables the controls after rendering; the ref also closes
+  // repeated taps and cross-format clicks before that render happens.
+  const exportInFlight = useRef(false);
   const workspaceId = useCloudStore((state) => state.workspaceId);
   const presentationScope = workspaceId || workspaceProfile.ranchName;
   const [presentationState, setPresentationState] = useState({
@@ -228,6 +231,8 @@ export default function Reports() {
     // paid capability, and it must refuse on its own rather than trusting that
     // nothing reached it.
     if (locked) return;
+    if (exportInFlight.current) return;
+    exportInFlight.current = true;
     setExporting('pdf');
     try {
       // Built fresh, not from the memo. This file is handed to a banker with a
@@ -251,19 +256,34 @@ export default function Reports() {
       // looks like it worked.
       pushToast({
         title: 'Report could not be created',
-        message: 'Nothing was saved. Try again, or export the spreadsheet instead.',
+        message: 'Try again, or export the spreadsheet instead.',
         tone: 'warning',
       });
     } finally {
+      exportInFlight.current = false;
       setExporting(null);
     }
   };
 
   const handleCsv = async () => {
     if (locked) return;
-    const saved = await downloadRanchReportCsv(buildRanchReport(reportInput), workspaceProfile.ranchName);
-    if (!saved.ok) {
-      pushToast({ title: 'Spreadsheet was not saved', message: saved.reason, tone: 'warning' });
+    if (exportInFlight.current) return;
+    exportInFlight.current = true;
+    setExporting('csv');
+    try {
+      const saved = await downloadRanchReportCsv(buildRanchReport(reportInput), workspaceProfile.ranchName);
+      if (!saved.ok) {
+        pushToast({ title: 'Spreadsheet was not saved', message: saved.reason, tone: 'warning' });
+      }
+    } catch {
+      pushToast({
+        title: 'Spreadsheet could not be created',
+        message: 'Try again, or download the PDF report instead.',
+        tone: 'warning',
+      });
+    } finally {
+      exportInFlight.current = false;
+      setExporting(null);
     }
   };
 
@@ -338,12 +358,19 @@ export default function Reports() {
                   className="button button--primary"
                   type="button"
                   onClick={handlePdf}
-                  disabled={exporting === 'pdf'}
+                  disabled={exporting !== null}
+                  aria-busy={exporting === 'pdf'}
                 >
                   {exporting === 'pdf' ? 'Creating PDF…' : 'Download PDF report'}
                 </button>
-                <button className="button button--ghost" type="button" onClick={handleCsv}>
-                  Export spreadsheet
+                <button
+                  className="button button--ghost"
+                  type="button"
+                  onClick={handleCsv}
+                  disabled={exporting !== null}
+                  aria-busy={exporting === 'csv'}
+                >
+                  {exporting === 'csv' ? 'Creating spreadsheet…' : 'Export spreadsheet'}
                 </button>
               </>
             )}

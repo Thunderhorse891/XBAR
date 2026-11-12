@@ -736,3 +736,15 @@ psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f supabase/migrations/20261112140000_re
 
 Never release unresolved reservations by timeout or delete them during rollback.
 Existing files, over-cap records and recovery snapshots must remain available.
+
+`20261112150000_project_storage_budget.sql` adds a private project-wide
+900,000,000-byte new-upload budget without changing workspace entitlements or
+removing existing data. Apply after 140000 only with separate production approval,
+provider inventory and the coordinated API/cutover gates in
+[Reserved Storage uploads](docs/RESERVED-STORAGE-UPLOADS.md). Native cross-workspace
+race and recovery tests must pass first. Rollback must stop new admission and
+preserve all objects/reservations; removing only the guard is unsafe.
+
+```sh
+psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f supabase/migrations/20261112150000_project_storage_budget.sql
+```

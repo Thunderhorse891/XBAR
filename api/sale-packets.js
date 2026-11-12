@@ -356,6 +356,18 @@ export default async function handler(req, res) {
     }
     const { data: uploaded, error: uploadError } = uploadResult ?? {};
     if (uploadError || uploaded?.path !== packetPath) {
+      if (uploadError?.uploadOutcome === 'not_started' && uploadError.needsRecovery === false) {
+        return sendJson(res, uploadError.status || 413, {
+          ok: false,
+          packetId,
+          requestId: uploadError.requestId,
+          code: uploadError.code,
+          maxFileBytes: uploadError.maxFileBytes,
+          needsRecovery: false,
+          uploadOutcome: 'not_started',
+          message: `Failed to store sale packet: ${uploadError.message}`,
+        });
+      }
       return sendJson(res, 502, {
         ok: false,
         packetId,

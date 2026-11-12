@@ -81,7 +81,10 @@ async function race(label, firstSQL, secondSQL, expectedError, expectedWait) {
     await second.end();
   }
 }
+const originalProjectBudget = (await admin.query('select limit_bytes from upload_project_budget')).rows[0].limit_bytes;
 try {
+  // This suite isolates workspace limits; the project default has its own race suite.
+  await admin.query('update upload_project_budget set limit_bytes=9007199254740991');
   const f = await fixture(),
     a = randomUUID(),
     b = randomUUID();
@@ -157,5 +160,6 @@ try {
   }
   console.log(`PASS coherent object/reservation accounting across ${observations} concurrent reads`);
 } finally {
+  await admin.query('update upload_project_budget set limit_bytes=$1', [originalProjectBudget]);
   await admin.end();
 }

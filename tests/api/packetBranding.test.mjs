@@ -953,3 +953,61 @@ for (const [label, endpoint, body, idField, pathField] of [
       assert.equal(f.writes.length, 0, 'unconfirmed upload cannot become a saved document or packet');
     });
 }
+
+for (const [label, endpoint, body] of [
+  ['template', templateHandler, { templateId: 'bill-of-sale', output: 'pdf' }],
+  ['packet', handler, {}],
+])
+  test(`${label} reports a per-file admission refusal as not started without row writes or cleanup`, async () => {
+    const f = install();
+    globalThis.__packetReservedUpload = async ({ requestId }) => ({
+      data: null,
+      error: {
+        status: 413,
+        code: 'upload_file_too_large',
+        maxFileBytes: 50_000_000,
+        requestId,
+        uploadOutcome: 'not_started',
+        needsRecovery: false,
+        message: 'This file exceeds the current cloud upload limit. Keep the original file.',
+      },
+    });
+    const result = await call(body, endpoint);
+    assert.equal(result.status, 413);
+    assert.equal(result.body.code, 'upload_file_too_large');
+    assert.equal(result.body.needsRecovery, false);
+    assert.equal(result.body.uploadOutcome, 'not_started');
+    assert.equal(result.body.maxFileBytes, 50_000_000);
+    assert.equal(result.body.storagePath, undefined);
+    assert.equal(result.body.packetPdfPath, undefined);
+    assert.deepEqual(f.uploads, []);
+    assert.deepEqual(f.writes, []);
+  });
+
+for (const [label, endpoint, body] of [
+  ['template', templateHandler, { templateId: 'bill-of-sale', output: 'pdf' }],
+  ['packet', handler, {}],
+])
+  test(`${label} preserves confirmed shared-budget refusal without claiming recovery or recording a file`, async () => {
+    const f = install();
+    globalThis.__packetReservedUpload = async ({ requestId }) => ({
+      data: null,
+      error: {
+        status: 507,
+        code: 'upload_shared_capacity_reached',
+        requestId,
+        uploadOutcome: 'not_started',
+        needsRecovery: false,
+        message: 'The shared cloud storage limit would be exceeded. Keep the original file.',
+      },
+    });
+    const result = await call(body, endpoint);
+    assert.equal(result.status, 507);
+    assert.equal(result.body.code, 'upload_shared_capacity_reached');
+    assert.equal(result.body.uploadOutcome, 'not_started');
+    assert.equal(result.body.needsRecovery, false);
+    assert.equal(result.body.storagePath, undefined);
+    assert.equal(result.body.packetPdfPath, undefined);
+    assert.deepEqual(f.uploads, []);
+    assert.deepEqual(f.writes, []);
+  });

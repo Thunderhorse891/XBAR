@@ -247,3 +247,112 @@ test('document fallback after a workspace switch retains bytes for the original 
     restore();
   }
 });
+
+for (const [code, status, details] of [
+  ['upload_file_too_large', 413, { maxFileBytes: 1 }],
+  ['upload_shared_capacity_reached', 507, {}],
+  ['upload_shared_capacity_unavailable', 503, {}],
+])
+  for (const kind of ['document', 'receipt'])
+    test(`${kind}: verified ${code} refusal retains the same-owner local original without reserved-capacity or recovery claims`, async () => {
+      const { startReservedUpload } = await import('../../src/lib/reservedUploadClient.ts');
+      const restore = installFakeIndexedDb();
+      const workspaceId = '11111111-1111-4111-8111-111111111111';
+      const userId = '22222222-2222-4222-8222-222222222222';
+      const requestId = '33333333-3333-4333-8333-333333333333';
+      const journal = new Map();
+      const requests = [];
+      useCloudStore.setState({ workspaceId, session: { user: { id: userId } } });
+      try {
+        globalThis.__quotaUpload = async ({ file, expectedIdentity }) =>
+          startReservedUpload(
+            {
+              file,
+              target: expectedIdentity,
+              kind,
+              bucket: 'horse-documents',
+            },
+            {
+              projectUrl: 'https://original.supabase.co',
+              apiUrl: 'https://app.example/api/storage/uploads',
+              createRequestId: () => requestId,
+              identity: async () => ({ ...expectedIdentity, accessToken: 'synthetic-token' }),
+              journal: {
+                async get(id) {
+                  return journal.get(id) ?? null;
+                },
+                async put(record) {
+                  journal.set(record.requestId, { ...record });
+                },
+              },
+              fetch: async (_url, options) => {
+                requests.push(JSON.parse(options.body));
+                return Response.json(
+                  {
+                    ok: false,
+                    code,
+                    requestId,
+                    needsRecovery: false,
+                    uploadOutcome: 'not_started',
+                    message: 'Cloud upload admission was refused. No cloud upload was started.',
+                    ...details,
+                  },
+                  { status },
+                );
+              },
+            },
+          );
+        const result =
+          kind === 'receipt'
+            ? await receipt()
+            : await useXbarStore.getState().createDocumentIntake({
+                files: [new File(['xx'], 'manual.txt', { type: 'text/plain' })],
+                source: 'Manual Upload',
+                uploadedBy: 'Test',
+                createHorseFromBatch: false,
+              });
+        assert.equal(result.ok, true, 'local record intake succeeds, not a cloud upload');
+        assert.match(result.message, /No cloud upload was started/);
+        assert.doesNotMatch(result.message, /Unfinished uploads|pending storage|stays reserved|Recovery ID/);
+        const saved =
+          kind === 'receipt' ? useXbarStore.getState().expenseReceipts[0] : useXbarStore.getState().documents[0];
+        assert.equal(saved.storagePath, undefined);
+        const original = await readLocalFile(saved.localFileKey);
+        assert.equal(await original.blob.text(), 'xx');
+        assert.equal(original.workspaceId, workspaceId);
+        assert.equal(useXbarStore.getState().subscription.usage.storageUsedGb, 0);
+        assert.equal(journal.get(requestId).state, 'not_started');
+        assert.deepEqual(
+          requests.map((request) => request.action),
+          ['create'],
+        );
+      } finally {
+        restore();
+      }
+    });
+test('media: verified no-start refusal reports the limit, not a phantom reserved upload', async () => {
+  const { ReservedUploadError } = await import('../../src/lib/reservedUploadClient.ts');
+  globalThis.__quotaUpload = async () => {
+    throw new ReservedUploadError(
+      'This file exceeds the current cloud upload limit of 50 MB (50,000,000 bytes). No cloud upload was started.',
+      {
+        requestId: '33333333-3333-4333-8333-333333333333',
+        target: { userId: 'user-a', workspaceId: 'workspace-a' },
+        bucket: 'horse-media',
+        kind: 'media',
+        fileName: 'photo.jpg',
+        contentType: 'image/jpeg',
+        sizeBytes: 50_000_001,
+        state: 'not_started',
+        originalRetention: 'reselect',
+      },
+      'upload_file_too_large',
+    );
+  };
+  const result = await photo();
+  assert.equal(result.ok, false);
+  assert.match(result.message, /50 MB/);
+  assert.match(result.message, /No cloud upload was started/);
+  assert.doesNotMatch(result.message, /Unfinished uploads|pending|reserved|Recovery ID/);
+  assert.equal(useXbarStore.getState().horses[0].gallery.length, 0);
+});

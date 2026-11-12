@@ -183,8 +183,10 @@ const source = readFileSync(file, 'utf8')
     const url = new URL(relative, base);
     // Preserve all persistence/failure scenarios while substituting the new
     // controlled uploader boundary, not the obsolete direct Storage API.
-    if (url.pathname.endsWith('/storage-upload.js'))
-      return 'from "data:text/javascript,export const uploadReservedBuffer=(...args)=>globalThis.__ocrReservedUpload(...args)"';
+    if (url.pathname.endsWith('/storage-upload.js')) {
+      const fixtureModule = `export { assertStorageFileSize, uploadErrorResult } from ${JSON.stringify(url.href)}; export const uploadReservedBuffer=(...args)=>globalThis.__ocrReservedUpload(...args);`;
+      return `from 'data:text/javascript;base64,${Buffer.from(fixtureModule).toString('base64')}'`;
+    }
     if (url.pathname.endsWith('/supabase-admin.js'))
       return 'from "data:text/javascript,export const requireWorkspaceAccess=async()=>globalThis.__ocrPersistenceAccess"';
     if (url.pathname.endsWith('/rate-limit.js'))
@@ -212,6 +214,7 @@ async function invoke(f, body = {}, role = 'Admin') {
     assert.ok(Buffer.isBuffer(bytes));
     assert.ok(bytes.byteLength > 0);
     assert.equal(typeof contentType, 'string');
+    if (f.reservedUpload) return f.reservedUpload({ access, requestId, bucket, storagePath, bytes, contentType });
     return access.supabase.storage.from(bucket).upload(storagePath, bytes, { contentType, upsert: false });
   };
   const req = Readable.from([
@@ -816,4 +819,51 @@ test('a role without document upload capability is refused before the controlled
   assert.equal(result.body.code, 'capability_required');
   assert.deepEqual(f.storage, []);
   assert.deepEqual(f.calls, []);
+});
+
+test('bulk per-file rejection occurs before batch inventory, object writes or recovery charges', async () => {
+  const previous = process.env.SUPABASE_STORAGE_MAX_FILE_BYTES;
+  process.env.SUPABASE_STORAGE_MAX_FILE_BYTES = '1';
+  try {
+    const f = fixture();
+    const result = await invoke(f, upload);
+    assert.equal(result.statusCode, 413);
+    assert.equal(result.body.code, 'upload_file_too_large');
+    assert.equal(result.body.uploadOutcome, 'not_started');
+    assert.equal(result.body.needsRecovery, false);
+    assert.equal(result.body.maxFileBytes, 1);
+    assert.deepEqual(f.storage, []);
+    assert.deepEqual(f.calls, []);
+    assert.deepEqual(f.tables.intake_batches, []);
+  } finally {
+    if (previous === undefined) delete process.env.SUPABASE_STORAGE_MAX_FILE_BYTES;
+    else process.env.SUPABASE_STORAGE_MAX_FILE_BYTES = previous;
+  }
+});
+
+test('bulk shared-budget refusal distinguishes an unstarted original from its already saved recovery inventory', async () => {
+  const f = fixture();
+  f.reservedUpload = async ({ requestId }) => ({
+    data: null,
+    error: {
+      status: 507,
+      code: 'upload_shared_capacity_reached',
+      requestId,
+      needsRecovery: false,
+      uploadOutcome: 'not_started',
+      message: 'The shared cloud storage limit would be exceeded. Keep the original file.',
+    },
+  });
+  const result = await invoke(f, upload);
+  assert.equal(result.statusCode, 507);
+  assert.equal(result.body.code, 'upload_shared_capacity_reached');
+  assert.equal(result.body.needsRecovery, true, 'the saved batch inventory still needs recovery, not uploaded bytes');
+  assert.equal(result.body.uploadOutcome, undefined, 'a batch is not an individual upload');
+  assert.equal(result.body.recovery.files[0].uploadOutcome, 'not_started');
+  assert.equal(result.body.recovery.files[0].uploadErrorCode, 'upload_shared_capacity_reached');
+  assert.equal(result.body.recovery.files[0].uploaded, false);
+  assert.deepEqual(f.storage, []);
+  assert.equal(f.tables.intake_batches.length, 1);
+  assert.equal(f.tables.documents.length, 1, 'only the preexisting document remains');
+  assert.match(result.body.message, /shared cloud storage/);
 });

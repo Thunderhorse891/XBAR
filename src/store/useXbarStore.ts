@@ -1099,6 +1099,7 @@ export const useXbarStore = create<XbarStore>()(
           const intakeIdentity = readIntakeIdentity();
           const intakeVaultOwner = vaultOwnerId();
           const uploadRecoveryNotices: string[] = [];
+          const uploadNoStartNotices: string[] = [];
 
           // Count active records, not cached usage. Check before reads/uploads,
           // then again after asynchronous work before publishing the batch.
@@ -1242,7 +1243,10 @@ export const useXbarStore = create<XbarStore>()(
                       expectedIdentity: intakeIdentity,
                     });
                   } catch (error) {
-                    if (error instanceof ReservedUploadError) uploadRecoveryNotices.push(error.message);
+                    if (error instanceof ReservedUploadError) {
+                      if (error.recovery.state === 'not_started') uploadNoStartNotices.push(error.message);
+                      else uploadRecoveryNotices.push(error.message);
+                    }
                     console.error('Cloud document upload failed; keeping the file on this device instead.', error);
                   }
                 }
@@ -1488,7 +1492,7 @@ export const useXbarStore = create<XbarStore>()(
 
             return {
               ok: true,
-              message: `${documents.length} file${documents.length === 1 ? '' : 's'} entered the document queue.${batchConflicts.size ? ` ${batchConflicts.size} files need source review. No horse was created from those files.` : ''}${duplicateCount ? ` ${duplicateCount} duplicate warning${duplicateCount === 1 ? '' : 's'} need review: compare files, keep a copy deliberately, or discard the extra. No files were removed.` : ''}${uncheckedLegacy ? ` Exact-file checks could not cover ${uncheckedLegacy} older file${uncheckedLegacy === 1 ? '' : 's'} whose original was unavailable.` : ''}${createdHorses.length ? ` ${createdHorses.length} new horse record${createdHorses.length === 1 ? ' was' : 's were'} created from the upload batch.` : ''}${omittedHorseCount ? ` ${omittedHorseCount} additional horse candidate${omittedHorseCount === 1 ? ' was' : 's were'} left for review because the horse limit was reached.` : ''}${localDocumentCount ? ` ${localDocumentCount} kept as metadata only — this browser could not store the file on this device either.` : ''}${capacityUnverified ? ' Cloud storage could not be reached, so these are on this device only — upload them again once it returns to put them in the cloud.' : ''}${uploadRecoveryNotices.length ? ` ${uploadRecoveryNotices.length} cloud upload${uploadRecoveryNotices.length === 1 ? '' : 's'} need review in Settings, Unfinished uploads. Keep the originals; pending storage stays reserved.` : ''}`,
+              message: `${documents.length} file${documents.length === 1 ? '' : 's'} entered the document queue.${batchConflicts.size ? ` ${batchConflicts.size} files need source review. No horse was created from those files.` : ''}${duplicateCount ? ` ${duplicateCount} duplicate warning${duplicateCount === 1 ? '' : 's'} need review: compare files, keep a copy deliberately, or discard the extra. No files were removed.` : ''}${uncheckedLegacy ? ` Exact-file checks could not cover ${uncheckedLegacy} older file${uncheckedLegacy === 1 ? '' : 's'} whose original was unavailable.` : ''}${createdHorses.length ? ` ${createdHorses.length} new horse record${createdHorses.length === 1 ? ' was' : 's were'} created from the upload batch.` : ''}${omittedHorseCount ? ` ${omittedHorseCount} additional horse candidate${omittedHorseCount === 1 ? ' was' : 's were'} left for review because the horse limit was reached.` : ''}${localDocumentCount ? ` ${localDocumentCount} kept as metadata only — this browser could not store the file on this device either.` : ''}${capacityUnverified ? ' Cloud storage could not be reached, so these are on this device only — upload them again once it returns to put them in the cloud.' : ''}${uploadRecoveryNotices.length ? ` ${uploadRecoveryNotices.length} cloud upload${uploadRecoveryNotices.length === 1 ? '' : 's'} need review in Settings, Unfinished uploads. Keep the originals; pending storage stays reserved.` : ''}${uploadNoStartNotices.length ? ` ${uploadNoStartNotices[0]}` : ''}`,
               id: batch.id,
               createdHorseIds: createdHorses.map((horse) => horse.id),
               duplicateCount,
@@ -1958,6 +1962,7 @@ export const useXbarStore = create<XbarStore>()(
         // storage is not set up), and retrying will not change it.
         let refusedByStoragePolicy = false;
         const mediaRecoveryNotices: string[] = [];
+        const mediaNoStartNotices: string[] = [];
         try {
           const results = await Promise.all(
             fileList.map(async (file) => {
@@ -1966,7 +1971,10 @@ export const useXbarStore = create<XbarStore>()(
                 uploadedAsset = await uploadMediaAssetToCloud({ file, horseId, target: uploadTarget });
               } catch (error) {
                 if (isStoragePolicyRefusal(error)) refusedByStoragePolicy = true;
-                if (error instanceof ReservedUploadError) mediaRecoveryNotices.push(error.message);
+                if (error instanceof ReservedUploadError) {
+                  if (error.recovery.state === 'not_started') mediaNoStartNotices.push(error.message);
+                  else mediaRecoveryNotices.push(error.message);
+                }
                 console.error('Cloud media upload failed.', error);
               }
               return {
@@ -2012,6 +2020,7 @@ export const useXbarStore = create<XbarStore>()(
               ok: false,
               message:
                 mediaRecoveryNotices[0] ??
+                mediaNoStartNotices[0] ??
                 (refusedByStoragePolicy
                   ? "Photo upload was refused by this ranch's storage permissions, so no image was stored. Ask the ranch owner to check your role."
                   : 'Photo upload failed — no image was stored. Check your connection and try again.'),
@@ -2079,7 +2088,7 @@ export const useXbarStore = create<XbarStore>()(
 
           return {
             ok: true,
-            message: `${uploadedAssets.length} photo${uploadedAssets.length === 1 ? '' : 's'} added.${failedCount ? ` ${failedCount} could not be uploaded and ${failedCount === 1 ? 'was' : 'were'} skipped.` : ''}${mediaRecoveryNotices.length ? ' Some uploads need review in Settings, Unfinished uploads. Keep the originals; pending storage stays reserved.' : ''}`,
+            message: `${uploadedAssets.length} photo${uploadedAssets.length === 1 ? '' : 's'} added.${failedCount ? ` ${failedCount} could not be uploaded and ${failedCount === 1 ? 'was' : 'were'} skipped.` : ''}${mediaRecoveryNotices.length ? ' Some uploads need review in Settings, Unfinished uploads. Keep the originals; pending storage stays reserved.' : ''}${mediaNoStartNotices.length ? ` ${mediaNoStartNotices[0]}` : ''}`,
             id: horseId,
           };
         } catch (error) {
@@ -2168,7 +2177,9 @@ export const useXbarStore = create<XbarStore>()(
             } catch (error) {
               if (error instanceof ReservedUploadError)
                 receiptRecoveryNotice =
-                  ' Cloud upload needs review in Settings, Unfinished uploads. Keep the original; pending storage stays reserved.';
+                  error.recovery.state === 'not_started'
+                    ? ` ${error.message}`
+                    : ' Cloud upload needs review in Settings, Unfinished uploads. Keep the original; pending storage stays reserved.';
               console.error('Cloud receipt upload failed; keeping the file on this device instead.', error);
             }
           }
