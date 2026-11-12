@@ -234,7 +234,30 @@ test('OCR pipeline: an uploaded image is read on-device and matched to a horse b
   // (the filename carries no horse signal and no horse was selected).
   const row = page.locator('tr', { hasText: 'scan-001' }).first();
   await expect(row).toBeVisible({ timeout: 30_000 });
-  await expect(row.getByText('Ocr Test Horse').first()).toBeVisible();
+  // Source details may contain the same name while deliberately collapsed.
+  // Check the visible Current horse cell, not the first text match in the row.
+  const currentHorse = row.locator('td').nth(1).locator('.table-cell__stack > span').first();
+  await expect(currentHorse).toBeVisible();
+  await expect(currentHorse).toHaveText(/^ocr test horse$/i);
+  await expect(row.locator('details')).not.toHaveAttribute('open');
+  const matched = await page.evaluate(async () => {
+    const storePath = '/src/store/useXbarStore.ts';
+    const { useXbarStore } = await import(storePath);
+    const state = useXbarStore.getState();
+    const document = state.documents.find((item) => item.fileName === 'scan-001.png');
+    return {
+      horseCount: state.horses.length,
+      horseId: state.horses[0]?.id,
+      documentHorseId: document?.horseId,
+      extractedText: document?.extractedTextPreview,
+      reviewState: document?.state,
+    };
+  });
+  expect(matched.horseCount).toBe(1);
+  expect(matched.horseId).toBeTruthy();
+  expect(matched.documentHorseId).toBe(matched.horseId);
+  expect(matched.extractedText).toMatch(/OCR TEST HORSE/i);
+  expect(matched.reviewState).toBe('Matched');
 });
 
 test('registration intake extracts sex, color, sire and dam into a new horse profile', async ({ page }) => {
