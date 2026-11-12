@@ -1,6 +1,7 @@
 import { expect, test, type Page } from '@playwright/test';
 import { readFile } from 'node:fs/promises';
 import { PDFDocument } from 'pdf-lib';
+import type { DocumentRecord } from '../../src/types/xbar.js';
 
 async function bootstrapWorkspace(page: Page) {
   await page.addInitScript(async () => {
@@ -244,7 +245,7 @@ test('OCR pipeline: an uploaded image is read on-device and matched to a horse b
     const storePath = '/src/store/useXbarStore.ts';
     const { useXbarStore } = await import(storePath);
     const state = useXbarStore.getState();
-    const document = state.documents.find((item) => item.fileName === 'scan-001.png');
+    const document = state.documents.find((item: DocumentRecord) => item.fileName === 'scan-001.png');
     return {
       horseCount: state.horses.length,
       horseId: state.horses[0]?.id,
