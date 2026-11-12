@@ -65,19 +65,15 @@ export function stripCheckoutReturnParam(search: string): string {
  * Whether the profile read from the cloud proves the just-completed checkout
  * landed.
  *
- * The only writer of an entitled paid profile is the webhook (or an operator
- * grant, which also means "this workspace pays"). `hasActivePaidPlan` is the
- * same predicate the plan cards use to mean "this workspace pays", so the
- * confirmation and the buttons can never disagree. An unreadable or absent
- * profile is never confirmation — unknown is not an upgrade, and the poll
- * simply keeps going.
- *
- * The rate check matters, not just the billing state: a freshly initialized
- * workspace is seeded as Starter / 'Manual Billing' / rate 0, and reading the
- * entitled state alone would confirm a purchase that never happened.
+ * Access and a purchase are different: operator grants retain their tier but
+ * do not prove a Stripe checkout completed. Require an Active paid tier and a
+ * finite positive recorded charge. Free, complimentary and unreadable profiles
+ * keep polling rather than claiming a purchase occurred.
  */
 export function isCheckoutConfirmationComplete(profile: SubscriptionProfile | null | undefined): boolean {
-  return !!profile && hasActivePaidPlan(profile);
+  if (!profile || profile.billingState !== 'Active' || !hasActivePaidPlan(profile)) return false;
+  const charge = profile.billingPeriod === 'annual' ? profile.annualRate : profile.monthlyRate;
+  return typeof charge === 'number' && Number.isFinite(charge) && charge > 0;
 }
 
 /** Poll one workspace, with a deadline independent of the network request.

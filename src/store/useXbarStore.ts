@@ -40,7 +40,8 @@ import { toPacketDisclosure } from '@/lib/salePacketDisclosure';
 import { onWorkspaceSettled, vaultOwnerId } from '@/lib/vaultOwner';
 import { clearCloudDeletions, queueCloudDeletions } from '@/lib/cloudDeletionQueue';
 import { readRecordsOwner, rememberRecordsOwner } from '@/lib/recordsOwner';
-import { featureGate } from '@/lib/commercialEngine';
+import { canUseOcr, featureGate } from '@/lib/commercialEngine';
+import { documentIntakeGate, horseCreationGate } from '@/lib/subscriptionGates';
 import { hasActivePaidPlan, isCurrentPaidPlan } from '@/lib/subscriptionDecision';
 import { applyTrialToProfile, parseTrialStart } from '@/lib/trialSubscription';
 import { buildOfferDecision } from '@/lib/profitIntelligence';
@@ -1048,6 +1049,9 @@ export const useXbarStore = create<XbarStore>()(
           return { ok: false, message: validationError };
         }
 
+        const capacityError = horseCreationGate(gateSubscription(get().subscription), get().horses.length);
+        if (capacityError) return { ok: false, message: capacityError };
+
         const horse = createHorseRecord(input, get().workspaceProfile);
         const ownershipRecord = createOwnershipRecord(horse);
         set((state) => ({
@@ -1072,6 +1076,13 @@ export const useXbarStore = create<XbarStore>()(
             return { ok: false, message: deniedMessage };
           }
 
+          if (createHorseFromBatch && !canUseOcr(gateSubscription(get().subscription))) {
+            return {
+              ok: false,
+              message:
+                'Starter unlocks document OCR and automatic horse creation. Free supports manual document upload.',
+            };
+          }
           const fileList = files.filter(Boolean);
           if (!fileList.length) {
             return { ok: false, message: 'Select at least one file to upload.' };
@@ -1087,6 +1098,29 @@ export const useXbarStore = create<XbarStore>()(
            */
           const intakeIdentity = readIntakeIdentity();
 
+          // Count active records, not cached usage. Check before reads/uploads,
+          // then again after asynchronous work before publishing the batch.
+          const intakeOcrAllowed = canUseOcr(gateSubscription(get().subscription));
+          const intakeCapacityError = () => {
+            const current = get();
+            return (
+              (intakeIdentityChanged(intakeIdentity, readIntakeIdentity())
+                ? 'The workspace changed during upload. No records were added.'
+                : null) ??
+              (intakeOcrAllowed && !canUseOcr(gateSubscription(current.subscription))
+                ? 'The plan changed during document processing. Starter is required for OCR.'
+                : null) ??
+              requireRoleCapability(current.currentRole, 'uploadDocuments') ??
+              (createHorseFromBatch ? requireRoleCapability(current.currentRole, 'createHorse') : null) ??
+              documentIntakeGate(
+                gateSubscription(current.subscription),
+                current.documents.filter((document) => document.state !== 'Archived').length,
+                fileList.length,
+              )
+            );
+          };
+          const initialCapacityError = intakeCapacityError();
+          if (initialCapacityError) return { ok: false, message: initialCapacityError };
           const state = get();
           const storageIncrease = estimateStorageGb(fileList);
           const planUsage = entitledUsage(state.subscription);
@@ -1217,6 +1251,8 @@ export const useXbarStore = create<XbarStore>()(
             const duplicateIndex = get().documents.map((document) =>
               legacyHashes.has(document.id) ? { ...document, contentSha256: legacyHashes.get(document.id) } : document,
             );
+            const beforeUploadError = intakeCapacityError();
+            if (beforeUploadError) return { ok: false, message: beforeUploadError };
             let documents: DocumentRecord[] = await Promise.all(
               fileList.map(async (file) => {
                 let uploadedAsset: Awaited<ReturnType<typeof uploadDocumentAssetToCloud>> = null;
@@ -1240,6 +1276,7 @@ export const useXbarStore = create<XbarStore>()(
                   selectedHorse,
                   horses: get().horses,
                   existingDocuments: duplicateIndex,
+                  allowOcr: canUseOcr(gateSubscription(get().subscription)),
                 });
                 // Cloud storage did not take this file — it is either not
                 // configured for this build or the upload failed. Keeping the
@@ -1329,7 +1366,7 @@ export const useXbarStore = create<XbarStore>()(
             );
             const availableHorseSlots = Math.max(
               0,
-              entitledUsage(state.subscription).horseLimit - currentHorses.length,
+              entitledUsage(get().subscription).horseLimit - currentHorses.length,
             );
             const omittedHorseCount = Math.max(0, createdHorseBundles.length - availableHorseSlots);
             createdHorseBundles = createdHorseBundles.slice(0, availableHorseSlots);
@@ -1443,6 +1480,14 @@ export const useXbarStore = create<XbarStore>()(
                 ok: false,
                 message:
                   'The signed-in account changed while these files were uploading, so they were not added. Sign in again and re-upload them.',
+              };
+            }
+
+            const finalCapacityError = intakeCapacityError();
+            if (finalCapacityError) {
+              return {
+                ok: false,
+                message: `${finalCapacityError} No records were added. Files already uploaded may remain in storage; review before retrying.`,
               };
             }
 

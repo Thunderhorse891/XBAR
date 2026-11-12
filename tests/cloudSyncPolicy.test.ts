@@ -366,8 +366,10 @@ test('a second batch is measured against bytes already uploaded, not just persis
    * ordering -- only that the check has not been moved after the commit or
    * deleted.
    */
-  const identityCheck = intake.indexOf('intakeIdentityChanged(');
   const reservation = intake.indexOf('noteStagedStorageBytes(cloudStoredBytes)');
+  // Earlier preflight checks may precede uploads. This invariant concerns the
+  // final check immediately before the synchronous record installation.
+  const identityCheck = intake.lastIndexOf('intakeIdentityChanged(', reservation);
   assert.ok(identityCheck > -1, 'an intake must check that the account it started as is still the account here');
   assert.ok(
     identityCheck < reservation,

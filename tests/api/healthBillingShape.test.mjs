@@ -93,7 +93,8 @@ test('a fully and correctly configured deployment is healthy and says it is live
   assert.equal(response.statusCode, 200, reasons(response));
   assert.equal(response.body.subsystems.stripeLiveKey, true);
   assert.equal(response.body.subsystems.stripeAnnualPriceIds, true);
-  assert.equal(warnings(response), '');
+  assert.equal(response.body.subsystems.newAnnualCheckout, false);
+  assert.match(warnings(response), /Managed annual checkout is unavailable for new purchases/);
 });
 
 test('a value of the wrong kind fails readiness and names the variable', async () => {
@@ -153,7 +154,7 @@ test('missing annual prices warn about unavailable managed checkout without sayi
   const response = await health(values);
   assert.equal(response.statusCode, 200, 'monthly checkout stays configured');
   assert.equal(response.body.subsystems.stripeAnnualPriceIds, false);
-  assert.match(warnings(response), /STRIPE_PRICE_ID_\*_ANNUAL/);
+  assert.match(warnings(response), /pending approved annual terms/);
   assert.doesNotMatch(warnings(response), /annual billing is offered/i);
   assert.match(warnings(response), /Managed annual checkout is unavailable/);
 });

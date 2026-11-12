@@ -67,7 +67,7 @@ async function fixture(options = {}) {
       async retrieve(id) {
         const tier = Object.keys(prices).find((name) => id.startsWith(`price_${prices[name]}_`));
         const annual = id.endsWith('_annual');
-        const monthlyAmounts = { Starter: 1200, Professional: 2900, 'Ranch Ops': 7900, Enterprise: 19900 };
+        const monthlyAmounts = { Starter: 900, Professional: 2900, 'Ranch Ops': 7900, Enterprise: 19900 };
         assert.ok(tier, `Unexpected fixture price ${id}`);
         return {
           id,
@@ -199,32 +199,64 @@ async function fixture(options = {}) {
   };
 }
 
-for (const tier of Object.keys(prices)) {
-  for (const first of ['monthly', 'annual']) {
-    test(`${tier}: ${first} checkout, opposite period, then a retry`, async () => {
-      const app = await fixture();
-      const second = first === 'monthly' ? 'annual' : 'monthly';
-      assert.equal((await app.request(tier, first)).status, 200);
-      const response = await app.request(tier, second, { priceId: 'price_client_must_not_choose' });
-      assert.equal(response.status, 200);
-      assert.equal(app.sessions.length, 2);
-      assert.equal(app.sessions[0].status, 'expired');
-      const current = app.sessions[1];
-      assert.deepEqual(current.line_items, [{ price: priceFor(tier, second), quantity: 1 }]);
-      assert.equal(current.metadata.workspace_price_id, priceFor(tier, second));
-      assert.equal(current.metadata.workspace_billing_period, second);
-      assert.equal(response.url, current.url);
-      assert.ok(app.events.indexOf('expire:cs_0') < app.events.lastIndexOf('create'));
-      const writes = app.events.filter((event) => event === 'write').length;
-      assert.equal((await app.request(tier, second)).url, current.url);
-      assert.equal(app.sessions.length, 2, 'retry must not create another billable session');
-      assert.equal(
-        app.events.filter((event) => event === 'write').length,
-        writes,
-        'reuse must not overwrite webhook state',
-      );
+for (const [index, tier] of Object.keys(prices).entries()) {
+  test(`${tier}: monthly checkout, changed plan, then a retry`, async () => {
+    const app = await fixture();
+    const nextTier = Object.keys(prices)[(index + 1) % Object.keys(prices).length];
+    assert.equal((await app.request(tier, 'monthly')).status, 200);
+    const response = await app.request(nextTier, 'monthly', { priceId: 'price_client_must_not_choose' });
+    assert.equal(response.status, 200);
+    assert.equal(app.sessions.length, 2);
+    assert.equal(app.sessions[0].status, 'expired');
+    const current = app.sessions[1];
+    assert.deepEqual(current.line_items, [{ price: priceFor(nextTier, 'monthly'), quantity: 1 }]);
+    assert.equal(current.metadata.workspace_price_id, priceFor(nextTier, 'monthly'));
+    assert.equal(current.metadata.workspace_billing_period, 'monthly');
+    assert.equal(response.url, current.url);
+    assert.ok(app.events.indexOf('expire:cs_0') < app.events.lastIndexOf('create'));
+    const writes = app.events.filter((event) => event === 'write').length;
+    assert.equal((await app.request(nextTier, 'monthly')).url, current.url);
+    assert.equal(app.sessions.length, 2, 'retry must not create another billable session');
+    assert.equal(
+      app.events.filter((event) => event === 'write').length,
+      writes,
+      'reuse must not overwrite webhook state',
+    );
+  });
+
+  test(`${tier}: new annual checkout is refused without mutating an open monthly purchase`, async () => {
+    const app = await fixture();
+    assert.equal((await app.request(tier, 'monthly')).status, 200);
+    const before = clone({ events: app.events, sessions: app.sessions });
+    const response = await app.request(tier, 'annual');
+    assert.equal(response.status, 409);
+    assert.equal(response.code, 'cadence_unavailable');
+    assert.deepEqual({ events: app.events, sessions: app.sessions }, before);
+  });
+
+  test(`${tier}: a preexisting annual checkout is never reused for a new monthly purchase`, async () => {
+    const app = await fixture();
+    app.sessions.push({
+      id: 'cs_legacy_annual',
+      status: 'open',
+      mode: 'subscription',
+      url: 'https://checkout.test/legacy',
+      metadata: {
+        workspace_id: 'ws-test',
+        workspace_tier: tier,
+        workspace_seats: '1',
+        workspace_billing_period: 'annual',
+        workspace_price_id: priceFor(tier, 'annual'),
+      },
     });
-  }
+    const response = await app.request(tier, 'monthly');
+    assert.equal(response.status, 200);
+    assert.equal(app.sessions[0].status, 'expired');
+    assert.equal(app.sessions.length, 2);
+    assert.equal(app.sessions[1].metadata.workspace_billing_period, 'monthly');
+    assert.equal(app.sessions[1].metadata.workspace_price_id, priceFor(tier, 'monthly'));
+    assert.ok(app.events.indexOf('expire:cs_legacy_annual') < app.events.lastIndexOf('create'));
+  });
 }
 
 test('an old session without cadence metadata is closed before replacement', async () => {
@@ -253,10 +285,10 @@ for (const [race, status, code] of [
   ['complete', 409, 'subscription_active'],
   ['open', 503, 'billing_unavailable'],
 ]) {
-  test(`switching periods refuses when the old session is ${race} after expiry fails`, async () => {
+  test(`switching paid plans refuses when the old session is ${race} after expiry fails`, async () => {
     const app = await fixture({ expireRace: race });
     await app.request();
-    const response = await app.request('Professional', 'annual');
+    const response = await app.request('Enterprise', 'monthly');
     assert.equal(response.status, status);
     assert.equal(response.code, code);
     assert.equal(app.sessions.length, 1, 'no second subscription may be created');

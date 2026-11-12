@@ -71,7 +71,7 @@ import type { PersistedXbarState, XbarStore } from '@/store/xbarStoreTypes';
  * what `restorePersistedState` normalizes needs it incremented in the same
  * commit.
  */
-export const WORKSPACE_SCHEMA_VERSION = 9;
+export const WORKSPACE_SCHEMA_VERSION = 10;
 const legacyDemoHorseIds = new Set([
   'horse-wiggy',
   'horse-hancock',

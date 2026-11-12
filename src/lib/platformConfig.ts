@@ -81,6 +81,7 @@ export const ownerPreviewConfig = {
 export const stripeConfig = {
   managedBillingEnabled: readFlag(env.VITE_MANAGED_BILLING_ENABLED, false),
   paymentLinks: {
+    Free: '',
     Starter: readEnv(env.VITE_STRIPE_PAYMENT_LINK_STARTER),
     Professional: readEnv(env.VITE_STRIPE_PAYMENT_LINK_PROFESSIONAL),
     'Ranch Ops': readEnv(env.VITE_STRIPE_PAYMENT_LINK_RANCH_OPS),
@@ -90,6 +91,7 @@ export const stripeConfig = {
   // checkout for that tier reports "not configured" instead of silently
   // selling the monthly link — a static link cannot change its own interval.
   annualPaymentLinks: {
+    Free: '',
     Starter: readEnv(env.VITE_STRIPE_PAYMENT_LINK_STARTER_ANNUAL),
     Professional: readEnv(env.VITE_STRIPE_PAYMENT_LINK_PROFESSIONAL_ANNUAL),
     'Ranch Ops': readEnv(env.VITE_STRIPE_PAYMENT_LINK_RANCH_OPS_ANNUAL),
@@ -152,5 +154,6 @@ export function isPublicShareLocalPreviewEnabled() {
 }
 
 export function getStripePaymentLink(tier: SubscriptionTier, billingPeriod: 'monthly' | 'annual' = 'monthly') {
-  return billingPeriod === 'annual' ? stripeConfig.annualPaymentLinks[tier] : stripeConfig.paymentLinks[tier];
+  // Historical price mappings remain, but no new annual or Free checkout is sold.
+  return billingPeriod === 'annual' || tier === 'Free' ? '' : stripeConfig.paymentLinks[tier];
 }

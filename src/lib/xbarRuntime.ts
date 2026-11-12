@@ -31,8 +31,29 @@ export const subscriptionTierConfig: Record<
     >;
   }
 > = {
+  // Initial conservative ancillary limits; owner review required before launch.
+  Free: {
+    monthlyRate: 0,
+    annualRate: 0,
+    sharedAccessEnabled: false,
+    featureFlags: [
+      '2 horses and 1 user',
+      'Manual document upload',
+      '1 seat, 10 documents and 1 GB document storage',
+      'No card required',
+      'No OCR or shared sale packets',
+    ],
+    limits: {
+      horseLimit: 2,
+      seatLimit: 1,
+      documentLimit: 10,
+      salePacketLimit: 0,
+      storageLimitGb: 1,
+      sharedAccessSeatLimit: 0,
+    },
+  },
   Starter: {
-    monthlyRate: 12,
+    monthlyRate: 9,
     annualRate: 120,
     sharedAccessEnabled: false,
     featureFlags: [
@@ -542,9 +563,11 @@ export async function buildDocumentRecord(params: {
   selectedHorse?: HorseRecord;
   horses: HorseRecord[];
   existingDocuments: DocumentRecord[];
+  allowOcr?: boolean;
 }) {
   const { file, uploadedBy, source, selectedHorse, horses, existingDocuments } = params;
-  const { text: previewText, coverage } = await readFileTextSnippet(file);
+  const { text: previewText, coverage } =
+    params.allowOcr === false ? { text: '', coverage: fullCoverage() } : await readFileTextSnippet(file);
   const typeReview = inferDocumentType(file.name, previewText);
   const inferredType = typeReview.type;
   const { identityReviewRequired, ...extractedEntities } = extractDocumentEntities({
@@ -554,7 +577,7 @@ export async function buildDocumentRecord(params: {
   });
   const bestMatch = selectedHorse
     ? { horse: selectedHorse, confidence: 0.99, reason: 'Document was manually attached during upload' }
-    : identityReviewRequired
+    : identityReviewRequired || params.allowOcr === false
       ? undefined
       : resolveDocumentHorseMatch(horses, `${file.name} ${previewText}`, extractedEntities).match;
   const matchedHorse = bestMatch?.horse;
@@ -564,7 +587,7 @@ export async function buildDocumentRecord(params: {
 
   // These are facts read from this document. Copying missing fields from the
   // matched profile made review claim the scan contained facts it never read.
-  const entities: DocumentEntities = extractedEntities;
+  const entities: DocumentEntities = params.allowOcr === false ? {} : extractedEntities;
   const entityCount = Object.values(entities).filter(Boolean).length;
 
   let confidence = bestMatch?.confidence ?? 0.54;
@@ -603,7 +626,9 @@ export async function buildDocumentRecord(params: {
     // Empty unless the reader stopped short of the whole file.
     identityReviewRequired,
     processingNote: [
-      describeDocumentCoverage(coverage),
+      params.allowOcr === false
+        ? 'Manual upload on Free. OCR requires Starter or higher.'
+        : describeDocumentCoverage(coverage),
       typeReview.ambiguous ? 'Multiple document types were read. Upload separate sources for each requirement.' : '',
       identityReviewRequired ? documentIdentityReviewNote : '',
     ]

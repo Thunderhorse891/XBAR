@@ -73,6 +73,7 @@ export default function handler(req, res) {
     stripeWebhook: Boolean(process.env.STRIPE_WEBHOOK_SECRET),
     stripePriceIds,
     stripeAnnualPriceIds: annualPriceIds,
+    newAnnualCheckout: false,
     // Whether the secret key is a LIVE key. Not a secret, and exactly what an
     // operator needs to see: stripeBilling true with this false is a test key.
     stripeLiveKey: stripeMode === 'live',
@@ -202,8 +203,10 @@ export default function handler(req, res) {
   }
   reasons.push(...malformed);
 
-  if (managedBillingTouched && !annualPriceIds) {
-    warnings.push('Managed annual checkout is unavailable for plans missing STRIPE_PRICE_ID_*_ANNUAL.');
+  if (managedBillingTouched) {
+    warnings.push(
+      'Managed annual checkout is unavailable for new purchases pending approved annual terms. Existing annual subscriptions remain supported.',
+    );
   }
   if (managedBillingTouched && !serverStripeModeReady()) {
     reasons.push('Production managed checkout requires a Stripe LIVE key. Test-mode checkout is unavailable.');

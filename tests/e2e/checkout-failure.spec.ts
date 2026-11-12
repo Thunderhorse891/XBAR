@@ -89,17 +89,17 @@ test('checkout refusal stays visible after the toast expires and clears while re
   await expect(page.locator('.checkout-primary-action')).toBeEnabled();
 });
 
-for (const change of ['plan', 'cadence', 'workspace', 'account', 'permission'] as const) {
+for (const change of ['plan', 'workspace', 'account', 'permission'] as const) {
   test(`a checkout error clears after a ${change} change`, async ({ page }) => {
-    await stubCheckout(page, refused);
+    let attempts = 0;
+    await stubCheckout(page, (route) => {
+      if (++attempts === 1) return refused(route);
+    });
     await openBilling(page);
     await page.getByRole('button', { name: 'Continue to secure checkout' }).click();
     await expect(errorNotice(page)).toBeVisible();
     if (change === 'plan') {
-      await page.getByRole('button', { name: 'View Starter setup' }).click();
-    } else if (change === 'cadence') {
-      await page.getByRole('button', { name: 'Annual 2 months free' }).click();
-      await page.getByRole('button', { name: 'Monthly', exact: true }).click();
+      await page.getByRole('button', { name: 'Choose Starter', exact: true }).click();
     } else {
       await page.evaluate(async (change) => {
         const cloudPath = '/src/store/useCloudStore.ts';
@@ -116,24 +116,16 @@ for (const change of ['plan', 'cadence', 'workspace', 'account', 'permission'] a
   });
 }
 
-for (const roundTrip of [false, true]) {
-  test(`a late refusal stays discarded after a cadence ${roundTrip ? 'round trip' : 'change'}`, async ({ page }) => {
-    let pending: Route | undefined;
-    await stubCheckout(page, (route) => {
-      pending = route;
-    });
-    await openBilling(page);
-    await page.getByRole('button', { name: 'Continue to secure checkout' }).click();
-    await expect.poll(() => pending).toBeTruthy();
-    await page.getByRole('button', { name: 'Annual 2 months free' }).click();
-    if (roundTrip) await page.getByRole('button', { name: 'Monthly', exact: true }).click();
-    await refused(pending!);
-    await expect(page.locator('.checkout-primary-action')).toBeEnabled();
-    await expect(errorNotice(page)).toHaveCount(0);
-    await page.getByRole('button', { name: 'Monthly', exact: true }).click();
-    await expect(errorNotice(page)).toHaveCount(0);
-  });
-}
+test('new annual checkout is not offered even when an old catalog advertises it', async ({ page }) => {
+  await stubCheckout(page, refused);
+  await openBilling(page);
+  await expect(page.getByRole('button', { name: /Annual/ })).toHaveCount(0);
+  await expect(page.locator('.checkout-billing-toggle')).toHaveCount(0);
+  await expect(page.getByRole('article', { name: 'Free plan' })).toContainText('2 horses · 1 user · No card required');
+  await expect(
+    page.locator('.checkout-plan').filter({ has: page.getByRole('heading', { name: 'Starter', exact: true }) }),
+  ).toContainText('$9');
+});
 
 test('a workspace round trip before a refusal cannot restore an invalidated inline error', async ({ page }) => {
   let pending: Route | undefined;
@@ -166,3 +158,30 @@ test('refreshing a token for the same identity preserves the checkout error', as
   });
   await expect(errorNotice(page)).toBeVisible();
 });
+
+for (const cadence of ['monthly', 'annual', 'unknown'] as const) {
+  test(`existing purchased rate is shown truthfully for ${cadence} billing`, async ({ page }) => {
+    await stubCheckout(page, refused);
+    await openBilling(page);
+    await page.evaluate(async (cadence) => {
+      const storePath = '/src/store/useXbarStore.ts';
+      const { useXbarStore } = await import(storePath);
+      useXbarStore.setState({
+        subscription: {
+          ...useXbarStore.getState().subscription,
+          tier: 'Starter',
+          purchasedTier: 'Starter',
+          billingState: 'Active',
+          monthlyRate: 12,
+          annualRate: 120,
+          billingPeriod: cadence === 'unknown' ? undefined : cadence,
+        },
+      });
+    }, cadence);
+    const summary = page.getByRole('status').filter({ hasText: 'Current subscription:' });
+    await expect(summary).toContainText(
+      cadence === 'annual' ? '$120 / year' : cadence === 'monthly' ? '$12 / month' : 'Billing cadence unavailable',
+    );
+    if (cadence === 'unknown') await expect(summary).not.toContainText('/ month');
+  });
+}

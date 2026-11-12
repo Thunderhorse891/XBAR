@@ -193,9 +193,9 @@ ${ctaBlock('See the workflow end to end.', 'The product tour walks the document 
 
 const pricing = {
   path: '/pricing',
-  title: 'XBAR Pricing — Starter $12, Professional $29, Ranch Ops $79, Enterprise $199',
+  title: 'XBAR Pricing — Free $0, Starter $9, Professional $29, Ranch Ops $79, Enterprise $199',
   description:
-    'Transparent XBAR pricing. Starter $12/mo, Professional $29/mo, Ranch Ops $79/mo, Enterprise $199/mo — with published horse, seat, document, sale-packet, and storage limits for every plan.',
+    'Transparent XBAR pricing. Free $0, Starter $9/mo, Professional $29/mo, Ranch Ops $79/mo, Enterprise $199/mo — with published horse, seat, document, sale-packet, and storage limits for every plan.',
   changefreq: 'monthly',
   priority: '0.9',
   jsonLd: [
@@ -256,7 +256,7 @@ const pricing = {
 
 <section class="section section--flush">
   <div class="wrap">
-    <p class="intro">Compare monthly and annual plan rates below. Annual prices are the total billed each year. Review the billing options available to your workspace inside XBAR. Prices are in USD; confirm the total and recurring billing details in Stripe before subscribing.</p>
+    <p class="intro">Start Free with 2 horses and 1 user, no card required. Paid plans are monthly; new annual subscriptions are not available. Review the billing options available to your workspace inside XBAR. Prices are in USD; confirm the total and recurring billing details in Stripe before subscribing.</p>
     <div class="plans">
       ${marketingPlans
         .map(
@@ -265,7 +265,7 @@ const pricing = {
         <h2 style="font-family:var(--font-ui);font-size:20px">${esc(plan.tier)}</h2>
         <p class="plan__fit">${esc(plan.fit)}</p>
         <p class="plan__price">$${plan.monthlyRate}<small>/month</small></p>
-        <p class="plan__fit">or $${plan.annualRate.toLocaleString('en-US')}/year, billed annually</p>
+
         <ul>${plan.features.map((feature) => `<li>${esc(feature)}</li>`).join('')}</ul>
         <a class="btn${plan.featured ? ' btn--primary' : ''}" href="${signup(plan.tier)}" rel="nofollow">Choose ${esc(plan.tier)}</a>
       </article>`,
@@ -284,7 +284,6 @@ const pricing = {
         <thead><tr><th scope="col">Capacity</th>${marketingPlans.map((plan) => `<th scope="col">${esc(plan.tier)}</th>`).join('')}</tr></thead>
         <tbody>
           <tr><th scope="row">Monthly price</th>${marketingPlans.map((plan) => `<td>$${plan.monthlyRate}</td>`).join('')}</tr>
-          <tr><th scope="row">Annual price (billed yearly)</th>${marketingPlans.map((plan) => `<td>$${plan.annualRate.toLocaleString('en-US')}/year</td>`).join('')}</tr>
           <tr><th scope="row">Horses</th>${marketingPlans.map((plan) => `<td>${plan.limits.horseLimit.toLocaleString('en-US')}</td>`).join('')}</tr>
           <tr><th scope="row">Team seats</th>${marketingPlans.map((plan) => `<td>${plan.limits.seatLimit}</td>`).join('')}</tr>
           <tr><th scope="row">Client seats</th>${marketingPlans.map((plan) => `<td>${plan.limits.sharedAccessSeatLimit}</td>`).join('')}</tr>

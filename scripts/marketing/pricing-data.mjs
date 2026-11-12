@@ -8,8 +8,29 @@
 
 export const marketingPlans = [
   {
+    tier: 'Free',
+    monthlyRate: 0,
+    annualRate: 0,
+    fit: 'For a private owner starting with 2 horses and 1 user.',
+    features: [
+      '2 horses and 1 user',
+      'Manual document upload',
+      '1 seat, 10 documents and 1 GB document storage',
+      'No card required',
+      'No OCR or shared sale packets',
+    ],
+    limits: {
+      horseLimit: 2,
+      seatLimit: 1,
+      documentLimit: 10,
+      salePacketLimit: 0,
+      storageLimitGb: 1,
+      sharedAccessSeatLimit: 0,
+    },
+  },
+  {
     tier: 'Starter',
-    monthlyRate: 12,
+    monthlyRate: 9,
     annualRate: 120,
     fit: 'For smaller records-driven operations getting out of spreadsheets.',
     features: [

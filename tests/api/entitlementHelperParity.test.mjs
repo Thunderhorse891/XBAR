@@ -93,7 +93,10 @@ for (const fn of HELPERS) {
       `${fn} (defined in ${migration}) should gate on \`${expected}\`, matching entitledTierForBillingState`,
     );
 
-    assert.match(body, /else 'Starter'/, `${fn} should fall back to Starter for every other billing state`);
+    assert.ok(
+      body.includes(`else '${BASELINE_TIER}'`),
+      `${fn} should fall back to ${BASELINE_TIER} for every other billing state`,
+    );
   });
 
   test(`${fn} no longer downgrades only Past Due`, () => {
@@ -419,4 +422,36 @@ test('the terminal-status shortlist reads the payload shape the webhook writes',
     !sql.includes("payload #>> '{data,object,status}'"),
     'that path returns null for every row the webhook writes',
   );
+});
+
+test('Free migration preserves stored subscriptions and authorization surfaces', () => {
+  const sql = readFileSync(path.join(migrationsDir, '20261112120000_distinct_free_tier.sql'), 'utf8');
+  const executable = sql.replace(/--[^\n]*/g, ' ');
+  assert.doesNotMatch(
+    executable,
+    /drop\s+(?:function|trigger|policy)|delete\s+from|update\s+public\.workspace_subscription_profiles/i,
+  );
+  assert.match(sql, /alter column tier set default 'Free'/);
+  assert.match(sql, /alter column billing_state set default 'Inactive'/);
+  for (const fn of HELPERS) {
+    const { body } = effectiveDefinition(fn);
+    assert.match(
+      body,
+      /when billing_state not in \('Active', 'Manual Billing'\)\s+and public\.xbar_trial_active\(payload\)/,
+    );
+  }
+});
+
+test('Free resource gates serialize counts and preserve non-growth writes after downgrade', () => {
+  const commercial = effectiveDefinition('xbar_enforce_commercial_resource_limits').body;
+  assert.ok(commercial.indexOf('pg_advisory_xact_lock') < commercial.indexOf('select count(*)'));
+  assert.match(commercial, /not resource_exists and current_count \+ 1 > limits\.horse_limit/);
+  assert.match(commercial, /not coalesce\(document_was_active, false\)/);
+  assert.match(commercial, /not resource_exists and current_count \+ 1 > limits\.sale_packet_limit/);
+  const storage = effectiveDefinition('xbar_enforce_storage_limit').body;
+  assert.match(storage, /new\.workspace_id = old\.workspace_id and new\.size_bytes <= old\.size_bytes/);
+  assert.match(storage, /new\.size_bytes <= previous_bytes/);
+  const seats = effectiveDefinition('xbar_enforce_workspace_seat_limits').body;
+  assert.match(seats, /'xbar-seats:'/);
+  assert.match(seats, /lower\(btrim\(email\)\) <> lower\(btrim\(coalesce\(new\.email/);
 });

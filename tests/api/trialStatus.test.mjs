@@ -307,7 +307,7 @@ test('startWorkspaceTrial creates a baseline row when none exists', async () => 
 
   assert.equal(result.ok, true);
   assert.equal(observed.insert.workspace_id, 'ws-1');
-  assert.equal(observed.insert.tier, 'Starter');
+  assert.equal(observed.insert.tier, 'Free');
   assert.equal(observed.insert.billing_state, 'Inactive');
   assert.equal(observed.insert.monthly_rate, 0);
   assert.deepEqual(observed.insert.payload.trial, result.trial);

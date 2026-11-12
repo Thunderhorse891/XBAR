@@ -2,6 +2,7 @@ import type { SubscriptionProfile, SubscriptionTier } from '../types/xbar.js';
 import { buildSubscriptionForTier, subscriptionTierConfig } from './xbarRuntime.js';
 
 export const planOutcomes: Record<SubscriptionTier, string[]> = {
+  Free: ['Keep records for 2 horses', 'Start with 1 user and no card'],
   Starter: [
     'Build a dependable horse record',
     'Keep care and source documents together',
@@ -206,7 +207,7 @@ export function getBillingPortalAction(params: {
 
 export function recommendedTier(currentTier: SubscriptionTier, requestedTier?: SubscriptionTier) {
   if (requestedTier) return requestedTier;
-  const order: SubscriptionTier[] = ['Starter', 'Professional', 'Ranch Ops', 'Enterprise'];
+  const order: SubscriptionTier[] = ['Free', 'Starter', 'Professional', 'Ranch Ops', 'Enterprise'];
   return order[Math.min(order.indexOf(currentTier) + 1, order.length - 1)];
 }
 
@@ -279,23 +280,12 @@ export function isEntitledBillingState(billingState: SubscriptionProfile['billin
 }
 
 /**
- * True when this workspace is on a paid plan at all.
- *
- * Both conditions are load-bearing, and each covers a case the other misses:
- *
- *   - the billing state must be entitled, or a canceled subscription would
- *     still read as configured;
- *   - the rate must be non-zero, because a freshly initialized workspace is
- *     seeded as Starter / 'Manual Billing' / rate 0. That seed is a setup
- *     state, not a purchase, and reading it as one tells a brand-new workspace
- *     its billing is already handled.
- *
- * The rate is a *supporting* condition, not the signal. Reading it alone —
- * which is what these screens used to do — is what let a lapsed plan look
- * current.
+ * True when this workspace has an entitled paid tier, including operator grants.
+ * Free is explicitly distinct. A zero-rate Manual Billing paid tier is an
+ * intentional grant, not the signup seed, and must not open duplicate checkout.
  */
 export function hasActivePaidPlan(subscription: SubscriptionProfile): boolean {
-  return isEntitledBillingState(subscription.billingState) && subscription.monthlyRate > 0;
+  return isEntitledBillingState(subscription.billingState) && subscription.tier !== 'Free';
 }
 
 /** True when `tier` specifically is the plan this workspace is paying for. */
@@ -334,14 +324,17 @@ export function isCurrentPaidPlan(subscription: SubscriptionProfile, tier: Subsc
 export function normalizeTier(value: unknown): SubscriptionTier {
   return typeof value === 'string' && Object.prototype.hasOwnProperty.call(subscriptionTierConfig, value)
     ? (value as SubscriptionTier)
-    : 'Starter';
+    : 'Free';
 }
 
 export function clampSubscriptionToEntitlement(subscription: SubscriptionProfile): SubscriptionProfile {
-  if (isEntitledBillingState(subscription.billingState)) return subscription;
+  if (isEntitledBillingState(subscription.billingState)) {
+    const tier = normalizeTier(subscription.tier);
+    return { ...buildSubscriptionForTier(subscription, tier), monthlyRate: subscription.monthlyRate };
+  }
 
   return {
-    ...buildSubscriptionForTier(subscription, 'Starter'),
+    ...buildSubscriptionForTier(subscription, 'Free'),
     // Normalized here too, not only at restore. This function is the other
     // producer of purchasedTier, and it is the value the billing screen indexes
     // the plan tables with — leaving it unchecked in one of the two producers

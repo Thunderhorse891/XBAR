@@ -31,7 +31,7 @@ function appTierConfigSource() {
 }
 
 const marketingByTier = Object.fromEntries(marketingPlans.map((plan) => [plan.tier, plan]));
-const TIERS = ['Starter', 'Professional', 'Ranch Ops', 'Enterprise'];
+const TIERS = ['Free', 'Starter', 'Professional', 'Ranch Ops', 'Enterprise'];
 
 test('all three sources define exactly the same tiers', () => {
   assert.deepEqual(Object.keys(subscriptionPlans), TIERS);
@@ -114,7 +114,10 @@ test('every limit the server enforces is a positive number', () => {
 
       // sharedAccessSeatLimit is deliberately 0 on Starter: that tier includes
       // no Horse Owner / Client accounts at all.
-      if (!(tier === 'Starter' && name === 'sharedAccessSeatLimit')) {
+      if (!(
+        (['Free', 'Starter'].includes(tier) && name === 'sharedAccessSeatLimit') ||
+        (tier === 'Free' && name === 'salePacketLimit')
+      )) {
         assert.ok(value > 0, `${tier}.${name} is ${value}`);
       }
     }

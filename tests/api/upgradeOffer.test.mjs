@@ -368,11 +368,8 @@ test('every shared feature uses the authoritative required tier', async () => {
     assert.equal(result.body.offer.targetTier, value.tier);
   }
 });
-test('monthly and annual quote actual verified base price and exactly one 10% period', async () => {
-  for (const [billingPeriod, normal] of [
-    ['monthly', 2900],
-    ['annual', 29000],
-  ]) {
+test('monthly quote uses actual verified base price and exactly one 10% period', async () => {
+  for (const [billingPeriod, normal] of [['monthly', 2900]]) {
     const s = scenario();
     const result = await s.discountAttempt({ billingPeriod });
     assert.equal(result.body.offer.regularAmountCents, normal);
@@ -765,4 +762,12 @@ test('checkout helper independently refuses paid flow when release gate is absen
     (error) => error.code === 'paid_confirmation_unverified',
   );
   assert.equal(s.calls.length, 0);
+});
+
+test('annual upgrade offers remain unavailable even with a configured annual price', async () => {
+  const s = scenario();
+  const result = await s.discountAttempt({ billingPeriod: 'annual' });
+  assert.equal(result.body.offer.checkoutAvailable, false);
+  assert.equal(result.body.offer.regularAmountCents, null);
+  assert.equal(result.body.offer.firstPeriodAmountCents, null);
 });

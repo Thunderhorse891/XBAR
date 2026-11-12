@@ -58,12 +58,12 @@ test('canonical cancellation overrides a stale paid payload without losing usage
       usage: { horsesUsed: 23, horseLimit: 2000 },
     },
   });
-  assert.equal(canceled?.tier, 'Starter');
+  assert.equal(canceled?.tier, 'Free');
   assert.equal(canceled?.purchasedTier, 'Professional');
   assert.equal(canceled?.billingState, 'Inactive');
   assert.equal(canceled?.monthlyRate, 79);
   assert.equal(canceled?.usage.horsesUsed, 23);
-  assert.equal(canceled?.usage.horseLimit, 5);
+  assert.equal(canceled?.usage.horseLimit, 2);
   assert.equal(canceled?.renewalDate, '2026-10-01');
   assert.equal(canceled?.subscriptionRecoverable, true);
 });
@@ -75,7 +75,7 @@ test('unknown cloud values cannot reuse a privileged payload or permit duplicate
     monthly_rate: -1,
     payload: { tier: 'Enterprise', billingState: 'Active', subscriptionRecoverable: 'false' },
   });
-  assert.equal(unknown?.tier, 'Starter');
+  assert.equal(unknown?.tier, 'Free');
   assert.equal(unknown?.billingState, 'Inactive');
   assert.equal(unknown?.monthlyRate, 0);
   assert.equal(unknown?.subscriptionRecoverable, true);
@@ -168,7 +168,7 @@ test('recommendation moves one operating level at a time and respects selection'
   assert.match(planOutcomes['Ranch Ops'].join(' '), /one rhythm/);
 });
 test('subscription prices stay aligned to the current approved pricing table', () => {
-  assert.equal(subscriptionPlans.Starter.monthlyRate, 12);
+  assert.equal(subscriptionPlans.Starter.monthlyRate, 9);
   assert.equal(subscriptionPlans.Professional.monthlyRate, 29);
   assert.equal(subscriptionPlans['Ranch Ops'].monthlyRate, 79);
   assert.equal(subscriptionPlans.Enterprise.monthlyRate, 199);
@@ -257,9 +257,9 @@ test('a freshly seeded workspace has not bought Starter', () => {
   // subscriptionSeed is Starter / 'Manual Billing' / rate 0. That is a setup
   // state, not a purchase: treating it as one labels Starter "Current plan" on
   // a brand-new workspace and disables the checkout, so it can never be bought.
-  const seeded = subscriptionFixture({ tier: 'Starter', monthlyRate: 0, billingState: 'Manual Billing' });
+  const seeded = subscriptionFixture({ tier: 'Free', monthlyRate: 0, billingState: 'Inactive' });
 
-  assert.equal(isEntitledBillingState(seeded.billingState), true, 'precondition: the seed state is entitled');
+  assert.equal(isEntitledBillingState(seeded.billingState), false, 'Free is not a paid entitlement');
   assert.equal(isCurrentPaidPlan(seeded, 'Starter'), false, 'an unpaid setup must stay purchasable');
 });
 
@@ -352,9 +352,9 @@ test('a stored payload is clamped to what its billing state supports', () => {
     }),
   );
 
-  assert.equal(lapsed.tier, 'Starter', 'a lapsed payload must not keep the tier the gates read');
+  assert.equal(lapsed.tier, 'Free', 'a lapsed payload must not keep the tier the gates read');
   assert.equal(lapsed.sharedAccessEnabled, false);
-  assert.equal(lapsed.usage.horseLimit, 5);
+  assert.equal(lapsed.usage.horseLimit, 2);
   assert.equal(lapsed.usage.seatLimit, 1);
 
   // What was bought survives, so the billing screen can still name it.
@@ -394,7 +394,7 @@ test('a past-due payload drops to the baseline but keeps the account', () => {
     }),
   );
 
-  assert.equal(pastDue.tier, 'Starter');
+  assert.equal(pastDue.tier, 'Free');
   assert.equal(pastDue.purchasedTier, 'Ranch Ops');
   // Past Due is not the same as gone: the record of what they had is intact, so
   // recovering billing restores the tier rather than re-purchasing it.
@@ -411,9 +411,9 @@ test('a past-due payload drops to the baseline but keeps the account', () => {
  * progress and hiding a real setup step.
  */
 test('an unconfigured workspace has not completed billing setup', () => {
-  const seeded = subscriptionFixture({ tier: 'Starter', monthlyRate: 0, billingState: 'Manual Billing' });
+  const seeded = subscriptionFixture({ tier: 'Free', monthlyRate: 0, billingState: 'Inactive' });
 
-  assert.equal(isEntitledBillingState(seeded.billingState), true, 'precondition: the seed state is entitled');
+  assert.equal(isEntitledBillingState(seeded.billingState), false, 'Free is not a paid entitlement');
   assert.equal(hasActivePaidPlan(seeded), false, 'a zero-rate seed is a setup state, not a purchase');
 });
 
@@ -641,18 +641,18 @@ test('the billing screen selects the lapsed tier rather than recommending from i
  * one that was reported is how the rest would have survived.
  */
 test('an unknown tier decays to the baseline rather than to a paid plan', () => {
-  assert.equal(normalizeTier('Platinum Elite'), 'Starter');
-  assert.equal(normalizeTier(''), 'Starter');
-  assert.equal(normalizeTier(undefined), 'Starter');
-  assert.equal(normalizeTier(null), 'Starter');
-  assert.equal(normalizeTier(42), 'Starter');
-  assert.equal(normalizeTier({ tier: 'Enterprise' }), 'Starter');
+  assert.equal(normalizeTier('Platinum Elite'), 'Free');
+  assert.equal(normalizeTier(''), 'Free');
+  assert.equal(normalizeTier(undefined), 'Free');
+  assert.equal(normalizeTier(null), 'Free');
+  assert.equal(normalizeTier(42), 'Free');
+  assert.equal(normalizeTier({ tier: 'Enterprise' }), 'Free');
 
   // Prototype keys are not tiers. `subscriptionPlans['constructor']` is truthy
   // through the prototype chain, so a naive `in` or truthiness check would
   // accept it and hand the screen an object that is not a plan.
-  assert.equal(normalizeTier('constructor'), 'Starter');
-  assert.equal(normalizeTier('toString'), 'Starter');
+  assert.equal(normalizeTier('constructor'), 'Free');
+  assert.equal(normalizeTier('toString'), 'Free');
 
   // Real tiers pass through untouched.
   for (const tier of Object.keys(subscriptionPlans) as SubscriptionTier[]) {

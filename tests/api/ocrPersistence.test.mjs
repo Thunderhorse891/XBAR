@@ -186,7 +186,7 @@ const source = readFileSync(file, 'utf8')
     if (url.pathname.endsWith('/rate-limit.js'))
       return 'from "data:text/javascript,export const enforceRateLimit=async()=>true"';
     if (url.pathname.endsWith('/entitlements.js'))
-      return 'from "data:text/javascript,export const getWorkspaceEntitlements=async()=>({ok:true,limits:{horseLimit:100}});export const checkHorseCapacity=async()=>({ok:true,used:0});export const checkDocumentCapacity=async()=>({ok:true});export const checkStorageCapacity=async()=>({ok:true})"';
+      return 'from "data:text/javascript,export const getWorkspaceEntitlements=async()=>({ok:true,effectiveTier:globalThis.__ocrPersistenceTier||\'Starter\',limits:{horseLimit:100}});export const checkHorseCapacity=async()=>({ok:true,used:0});export const checkDocumentCapacity=async()=>({ok:true});export const checkStorageCapacity=async()=>({ok:true})"';
     return `from '${url.href}'`;
   });
 const handler = (await import(`data:text/javascript;base64,${Buffer.from(source).toString('base64')}`)).default;
@@ -694,3 +694,24 @@ for (const table of ['documents', 'document_processing_jobs'])
     assert.equal(row.horse_id, 'owner-selected-horse');
     assert.equal(table === 'documents' ? row.state : row.status, table === 'documents' ? 'Ready' : 'completed');
   });
+
+test('Free OCR preview/auto is rejected before remote file download or any write', async () => {
+  globalThis.__ocrPersistenceTier = 'Free';
+  try {
+    for (const mode of ['preview', 'auto']) {
+      const f = fixture();
+      const before = clone(f.tables);
+      const response = await invoke(f, {
+        mode,
+        files: [{ fileName: 'paid.pdf', storagePath: `${workspace}/documents/paid.pdf` }],
+      });
+      assert.equal(response.statusCode, 403);
+      assert.equal(response.body.code, 'paid_ocr_required');
+      assert.deepEqual(f.tables, before);
+      assert.deepEqual(f.calls, []);
+      assert.deepEqual(f.storage, []);
+    }
+  } finally {
+    delete globalThis.__ocrPersistenceTier;
+  }
+});

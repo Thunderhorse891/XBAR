@@ -634,19 +634,19 @@ test('payback is measured against what is paid now, never a lapsed plan’s stor
     monthlyRate: 79,
     paying: true,
   });
-  // Canceled: the tier drops to Starter but the purchased rate stays on file.
+  // Canceled: the purchased tier and rate remain on file without paid access.
   // The stored rate below is a legacy price on purpose — whatever it is, the
-  // payback card measures against the current list price (12), never it.
+  // payback card measures against the current Starter list price (9), never it.
   assert.deepEqual(paybackPlan(profile({ tier: 'Starter', monthlyRate: 199, billingState: 'Inactive' })), {
     tier: 'Starter',
-    monthlyRate: 12,
+    monthlyRate: 9,
     paying: false,
   });
   assert.equal(paybackPlan(profile({ tier: 'Ranch Ops', monthlyRate: 79, billingState: 'Past Due' })).paying, false);
-  // A fresh workspace is seeded at rate 0 under Manual Billing: a list price, not a purchase.
+  // Legacy complimentary Starter workspaces can retain rate 0 under Manual Billing.
   assert.deepEqual(paybackPlan(profile({ tier: 'Starter', monthlyRate: 0, billingState: 'Manual Billing' })), {
     tier: 'Starter',
-    monthlyRate: 12,
+    monthlyRate: 9,
     paying: false,
   });
 
@@ -732,4 +732,39 @@ test('a one-off spike or discount in the last three deliveries does not move the
   // But two cheaper deliveries in a row, or a cheaper latest one, mean the price came down.
   assert.deepEqual(series(10, 12, 12, 5, 5), [], 'two cheaper deliveries in a row are the price now');
   assert.deepEqual(series(10, 12, 12, 5), [], 'the latest delivery is the price now');
+});
+
+test('complimentary entitlements are not spend while a positive annual charge remains spend', () => {
+  for (const tier of ['Starter', 'Enterprise'] as const) {
+    for (const billingState of ['Active', 'Manual Billing'] as const) {
+      const result = paybackPlan({
+        tier,
+        billingState,
+        monthlyRate: 0,
+        billingPeriod: 'monthly',
+        annualRate: 120,
+      } as SubscriptionProfile);
+      assert.equal(result.paying, false, `${tier}/${billingState} has no current charge`);
+      assert.equal(
+        result.monthlyRate,
+        tier === 'Starter' ? 9 : 199,
+        'show the comparison list price, not fictional spend',
+      );
+    }
+  }
+  assert.deepEqual(
+    paybackPlan({
+      tier: 'Starter',
+      billingState: 'Active',
+      monthlyRate: 0,
+      billingPeriod: 'annual',
+      annualRate: 120,
+    } as SubscriptionProfile),
+    { tier: 'Starter', monthlyRate: 10, paying: true },
+  );
+  assert.deepEqual(paybackPlan({ tier: 'Free', billingState: 'Inactive', monthlyRate: 0 } as SubscriptionProfile), {
+    tier: 'Free',
+    monthlyRate: 0,
+    paying: false,
+  });
 });

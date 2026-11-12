@@ -1,13 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
-import {
-  canUsePaymentLinkFallback,
-  checkoutRouteFor,
-  loadSellablePrices,
-  requestTrialStart,
-  startManagedCheckout,
-  type SellablePrices,
-} from '@/lib/billingApi';
+import { canUsePaymentLinkFallback, checkoutRouteFor, requestTrialStart, startManagedCheckout } from '@/lib/billingApi';
 import { parseCheckoutReturn, stripCheckoutReturnParam, watchCheckoutConfirmation } from '@/lib/checkoutReturn';
 import { refreshWorkspaceSubscriptionProfile } from '@/lib/cloudWorkspace';
 import { formatCurrency } from '@/lib/format';
@@ -99,27 +92,8 @@ export default function Subscriptions() {
     };
   }, [clearCheckoutError]);
   const [trialStarting, setTrialStarting] = useState(false);
-  // Billing period for plan display and checkout. Annual is 10x monthly (2
-  // months free). The server fails closed when an annual price id is not
-  // configured, so selecting annual before Stripe is set up cannot sell the
-  // wrong period — checkout refuses instead.
-  //
-  // It opens on the cadence the workspace already pays (audit F14): an annual
-  // subscriber who lands here is shown annual prices, not monthly ones.
-  const [chosenPeriod, setBillingPeriod] = useState<'monthly' | 'annual'>(subscription.billingPeriod ?? 'monthly');
-  // What the server can sell, read before a cadence is offered. Null until it
-  // answers, and null if it never does -- either way only monthly is offered.
-  const [sellable, setSellable] = useState<SellablePrices | null>(null);
-  useEffect(() => {
-    if (!stripeConfig.managedBillingEnabled) return;
-    let cancelled = false;
-    void loadSellablePrices().then((prices) => {
-      if (!cancelled) setSellable(prices);
-    });
-    return () => {
-      cancelled = true;
-    };
-  }, []);
+  // New purchases are monthly only. Existing cadence is shown separately below.
+  const billingPeriod: 'monthly' | 'annual' = 'monthly';
   // After a lapse, `tier` is the baseline the workspace fell back to, so
   // recommending from it offers Professional to someone who just lost
   // Enterprise. purchasedTier is what they had.
@@ -134,7 +108,10 @@ export default function Subscriptions() {
   // Only when the workspace is not currently entitled. An active or comped
   // workspace has purchasedTier === tier, and there the upgrade recommendation
   // is exactly what the screen should lead with.
-  const lapsedTier = isEntitledBillingState(subscription.billingState) ? undefined : subscription.purchasedTier;
+  const lapsedTier =
+    isEntitledBillingState(subscription.billingState) || subscription.purchasedTier === 'Free'
+      ? undefined
+      : subscription.purchasedTier;
   const defaultDecisionTier = requestedTier ?? lapsedTier ?? recommendedTier(subscription.tier);
   const [selectedTier, setSelectedTier] = useState<SubscriptionTier>(defaultDecisionTier);
   const decisionTier = selectedTier;
@@ -166,16 +143,6 @@ export default function Subscriptions() {
     };
   }, [hasManagedIdentity, workspaceId, subscription, session?.access_token]);
   const billingEnabled = stripeConfig.managedBillingEnabled;
-  // Annual is offered only where it can actually be bought: an annual price the
-  // server confirms it holds, or an annual payment link. Managed billing being
-  // on is not that -- production offered annual with no annual price set, and a
-  // buyer who chose it got a refusal at the moment of paying.
-  const annualManaged =
-    billingEnabled && Boolean(sellable?.managed && tiers.some((tier) => sellable.annual[tier] === true));
-  const annualAvailable = annualManaged || tiers.some((tier) => Boolean(getStripePaymentLink(tier, 'annual')));
-  // The cadence every price, label and checkout below uses: the one chosen when
-  // it can be sold, monthly otherwise, so no screen quotes a price nobody can pay.
-  const billingPeriod: 'monthly' | 'annual' = annualAvailable ? chosenPeriod : 'monthly';
   const selectedPaymentLink = Boolean(getStripePaymentLink(decisionTier, billingPeriod));
   /*
    * Read once per render and passed to every billing decision below.
@@ -202,7 +169,7 @@ export default function Subscriptions() {
    * bought behind it.
    */
   const selectedCheckoutConfigured = !nativeApp && (billingEnabled || selectedPaymentLink);
-  const starterSetup = subscription.tier === 'Starter' && subscription.monthlyRate === 0;
+  const starterSetup = subscription.tier === 'Free';
   // A workspace whose Stripe subscription can still bill it. Buying here would
   // open a second one beside it, so every checkout path is blocked.
   //
@@ -258,10 +225,6 @@ export default function Subscriptions() {
     clearCheckoutError,
   ]);
 
-  const selectBillingPeriod = (period: 'monthly' | 'annual') => {
-    if (period !== billingPeriod) clearCheckoutError();
-    setBillingPeriod(period);
-  };
   /*
    * Trial state: 'none' | 'active' | 'expired', computed from the profile's
    * recorded trial start. Native apps never get the trial CTA — Apple treats
@@ -534,6 +497,7 @@ export default function Subscriptions() {
   };
 
   const beginCheckout = async (tier: SubscriptionTier) => {
+    if (tier === 'Free') return;
     clearCheckoutError();
     selectTier(tier);
     const errorAttempt = { tier, billingPeriod, workspaceId, userId: session?.user.id };
@@ -720,7 +684,7 @@ export default function Subscriptions() {
     const profile = revenuePlanMatrix[tier];
     const highlighted = tier === decisionTier;
     const paidCurrent = isCurrentPaidPlan(subscription, tier);
-    const setupCurrent = tier === 'Starter' && starterSetup;
+    const setupCurrent = false;
     const busy = checkoutTier === tier;
     const readiness = getCheckoutReadiness({
       billingEnabled,
@@ -758,8 +722,8 @@ export default function Subscriptions() {
           <p>{profile.fit}</p>
         </div>
         <div className="checkout-plan__price">
-          <strong>{formatCurrency(billingPeriod === 'annual' ? config.annualRate : config.monthlyRate)}</strong>
-          <small>{billingPeriod === 'annual' ? '/ year · 2 months free' : '/ month'}</small>
+          <strong>{formatCurrency(config.monthlyRate)}</strong>
+          <small>{'/ month'}</small>
         </div>
         <ul>
           <li>{formatLimit(config.limits.horseLimit, 'horses')}</li>
@@ -779,10 +743,10 @@ export default function Subscriptions() {
           <button
             type="button"
             disabled={checkoutTier !== null}
-            title={`View ${paidCurrent ? 'current plan' : 'Starter setup'} details`}
+            title={`View ${paidCurrent ? 'current plan' : 'Free plan'} details`}
             onClick={chooseTier}
           >
-            {paidCurrent ? 'View current plan' : 'View Starter setup'}
+            {paidCurrent ? 'View current plan' : 'View Free plan'}
           </button>
         ) : (
           <button
@@ -804,7 +768,7 @@ export default function Subscriptions() {
           {paidCurrent
             ? 'Your active paid capacity.'
             : setupCurrent
-              ? 'No paid Starter subscription is active yet.'
+              ? 'Free includes 2 horses and 1 user, no card required.'
               : readiness.reason}
         </small>
       </article>
@@ -869,11 +833,32 @@ export default function Subscriptions() {
             </div>
           )}
 
+          <article className="checkout-plan" aria-label="Free plan">
+            <h3>Free</h3>
+            <strong>$0</strong>
+            <p>2 horses · 1 user · No card required</p>
+            <p>Manual document upload. OCR and shared sale packets require a paid plan.</p>
+            <button type="button" onClick={() => navigate(workspaceReady ? '/' : '/setup')}>
+              {subscription.tier === 'Free' ? 'Continue with Free' : 'Continue to workspace'}
+            </button>
+          </article>
+          {hasActivePaidPlan(subscription) && (
+            <p role="status">
+              Current subscription: {subscription.purchasedTier ?? subscription.tier} ·{' '}
+              {subscription.billingPeriod === 'annual'
+                ? subscription.annualRate
+                  ? `${formatCurrency(subscription.annualRate)} / year`
+                  : 'Annual billing (rate unavailable)'
+                : subscription.billingPeriod === 'monthly'
+                  ? `${formatCurrency(subscription.monthlyRate)} / month`
+                  : 'Billing cadence unavailable'}
+            </p>
+          )}
           <div className="checkout-trial">
             <div>
               {!workspaceReady ? (
                 <>
-                  <span>Starter setup</span>
+                  <span>Free plan</span>
                   <h2>Start with XBAR</h2>
                   <p>No payment is collected in this local setup flow. Paid plans require completed checkout.</p>
                 </>
@@ -912,31 +897,10 @@ export default function Subscriptions() {
                 : trialState === 'active'
                   ? `${trialDaysLeft} of 14 days left · full Professional access`
                   : trialState === 'expired'
-                    ? 'Pick a plan below to keep going'
-                    : `${formatLimit(subscriptionPlans.Starter.limits.horseLimit, 'horses')} and ${formatLimit(subscriptionPlans.Starter.limits.documentLimit, 'documents')}`}
+                    ? 'Continue Free or choose a paid plan below'
+                    : `${formatLimit(subscriptionPlans.Free.limits.horseLimit, 'horses')} and ${formatLimit(subscriptionPlans.Free.limits.documentLimit, 'documents')}`}
             </small>
           </div>
-
-          {annualAvailable && (
-            <div className="checkout-billing-toggle" role="group" aria-label="Billing period">
-              <button
-                type="button"
-                aria-pressed={billingPeriod === 'monthly'}
-                className={billingPeriod === 'monthly' ? 'checkout-billing-toggle--active' : ''}
-                onClick={() => selectBillingPeriod('monthly')}
-              >
-                Monthly
-              </button>
-              <button
-                type="button"
-                aria-pressed={billingPeriod === 'annual'}
-                className={billingPeriod === 'annual' ? 'checkout-billing-toggle--active' : ''}
-                onClick={() => selectBillingPeriod('annual')}
-              >
-                Annual <small>2 months free</small>
-              </button>
-            </div>
-          )}
 
           <div className="checkout-plan-list" aria-label="Paid plans">
             {tiers.map(renderPaidPlan)}
@@ -951,23 +915,9 @@ export default function Subscriptions() {
           </div>
 
           <div className="checkout-total">
-            <span>
-              {selectedCheckoutConfigured
-                ? 'Due at checkout'
-                : billingPeriod === 'annual'
-                  ? 'Annual price'
-                  : 'Monthly price'}
-            </span>
-            <strong>
-              {formatCurrency(billingPeriod === 'annual' ? decisionConfig.annualRate : decisionConfig.monthlyRate)}
-            </strong>
-            <small>
-              {selectedCheckoutConfigured
-                ? billingPeriod === 'annual'
-                  ? 'then annually'
-                  : 'then monthly'
-                : 'not charged in app'}
-            </small>
+            <span>{selectedCheckoutConfigured ? 'Due at checkout' : 'Monthly price'}</span>
+            <strong>{formatCurrency(decisionConfig.monthlyRate)}</strong>
+            <small>{selectedCheckoutConfigured ? 'then monthly' : 'not charged in app'}</small>
           </div>
 
           {selectedReadiness.mode === 'manual' ? (
@@ -1030,7 +980,7 @@ export default function Subscriptions() {
               <>
                 <div>
                   <span>Billing</span>
-                  <strong>{billingPeriod === 'annual' ? 'Annual' : 'Monthly'}</strong>
+                  <strong>{'Monthly'}</strong>
                 </div>
                 <div>
                   <span>Payment</span>
@@ -1108,7 +1058,7 @@ export default function Subscriptions() {
                   ? trialStarting
                     ? 'Starting trial…'
                     : 'Start 14-day Professional trial instead'
-                  : 'Continue with Starter setup'}
+                  : 'Continue with Free plan'}
           </button>
           {/*
             Said plainly, because the alternative is a customer staring at a

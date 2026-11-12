@@ -1,7 +1,7 @@
 import { serverManagedBillingEnabled, serverStripeModeReady, stripeAccountIdReady } from '../_lib/managed-billing.js';
 import Stripe from 'stripe';
 import { readJsonBody, sendJson } from '../_lib/http.js';
-import { buildSubscriptionProfile, getStripePriceIdByTier, sellablePrices } from '../_lib/subscription-plans.js';
+import { buildSubscriptionProfile, getCheckoutPriceIdByTier, sellablePrices } from '../_lib/subscription-plans.js';
 import { verifyCheckoutPrice } from '../_lib/checkout-price.js';
 import { checkoutBlockReason } from '../_lib/subscription-status.js';
 import {
@@ -126,7 +126,7 @@ export default async function handler(req, res) {
   const returnUrl = getTrustedReturnUrl(parsed.data.returnUrl);
   const requestedSeatCount = Number(parsed.data.seatCount || 1);
   const seatCount = Number.isInteger(requestedSeatCount) ? Math.min(100, Math.max(1, requestedSeatCount)) : 1;
-  const priceId = getStripePriceIdByTier(tier, billingPeriod);
+  const priceId = getCheckoutPriceIdByTier(tier, billingPeriod);
 
   if (!workspaceId) {
     return sendJson(res, 400, { ok: false, message: 'Workspace id is required.' });

@@ -82,8 +82,8 @@ test('an expired trial falls back to the baseline', async () => {
   const result = await getWorkspaceEntitlements(supabase, 'ws-1', 'rancher@example.com');
 
   assert.equal(result.ok, true);
-  assert.equal(result.effectiveTier, 'Starter');
-  assert.deepEqual(result.limits, subscriptionPlans.Starter.limits);
+  assert.equal(result.effectiveTier, 'Free');
+  assert.deepEqual(result.limits, subscriptionPlans.Free.limits);
   assert.equal(result.trial.status, 'expired');
 });
 
@@ -104,7 +104,7 @@ test('a workspace with no trial record is unaffected', async () => {
   const result = await getWorkspaceEntitlements(supabase, 'ws-1', 'rancher@example.com');
 
   assert.equal(result.ok, true);
-  assert.equal(result.effectiveTier, 'Starter');
+  assert.equal(result.effectiveTier, 'Free');
   assert.equal(result.trial.status, 'none');
 });
 
@@ -117,5 +117,5 @@ test('a malformed trial record grants nothing', async () => {
   const result = await getWorkspaceEntitlements(supabase, 'ws-1', 'rancher@example.com');
 
   assert.equal(result.ok, true);
-  assert.equal(result.effectiveTier, 'Starter');
+  assert.equal(result.effectiveTier, 'Free');
 });

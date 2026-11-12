@@ -5,7 +5,7 @@ export type CommercialFeature =
 
 export type UsagePressure = 'clear' | 'warning' | 'upgrade' | 'blocked';
 
-const planOrder: SubscriptionTier[] = ['Starter', 'Professional', 'Ranch Ops', 'Enterprise'];
+const planOrder: SubscriptionTier[] = ['Free', 'Starter', 'Professional', 'Ranch Ops', 'Enterprise'];
 const minimumPlanByFeature: Record<CommercialFeature, SubscriptionTier> = {
   buyerDealRoom: 'Professional',
   packetExport: 'Professional',
@@ -47,4 +47,8 @@ export function usageGate(label: string, used: number, limit: number, incoming =
   return used + incoming <= limit
     ? null
     : `${label} limit reached (${used}/${limit}). Upgrade to unlock more capacity.`;
+}
+
+export function canUseOcr(subscription: SubscriptionProfile): boolean {
+  return planRank(subscription.tier) >= planRank('Starter');
 }

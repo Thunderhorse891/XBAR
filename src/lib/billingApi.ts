@@ -93,6 +93,13 @@ export async function startManagedCheckout(params: {
   accessToken: string;
   billingPeriod?: 'monthly' | 'annual';
 }): Promise<CheckoutResult> {
+  if (params.tier === 'Free' || params.billingPeriod === 'annual') {
+    return {
+      ok: false,
+      code: 'plan_not_sellable',
+      message: 'Free needs no checkout. New paid subscriptions are monthly only.',
+    };
+  }
   if (!params.workspaceId || !params.accessToken) {
     return {
       ok: false,
@@ -114,7 +121,7 @@ export async function startManagedCheckout(params: {
       body: JSON.stringify({
         tier: params.tier,
         workspaceId: params.workspaceId,
-        billingPeriod: params.billingPeriod === 'annual' ? 'annual' : 'monthly',
+        billingPeriod: 'monthly',
         returnUrl: typeof window !== 'undefined' ? window.location.href : '',
       }),
     });

@@ -187,6 +187,16 @@ export default async function handler(req, res) {
 }
 
 async function processBatch({ supabase, workspaceId, user, body, mode }) {
+  const entitlements = await getWorkspaceEntitlements(supabase, workspaceId, user?.email);
+  if (!entitlements.ok) return { ok: false, status: entitlements.status, message: entitlements.message };
+  if (entitlements.effectiveTier === 'Free') {
+    return {
+      ok: false,
+      status: 403,
+      code: 'paid_ocr_required',
+      message: 'OCR document intake is available on Starter and higher plans. Your saved records remain available.',
+    };
+  }
   const inputFiles = Array.isArray(body.files) ? body.files : [];
   if (!inputFiles.length) {
     return { ok: false, status: 400, message: 'files[] is required for preview/auto ingestion.' };
@@ -254,11 +264,6 @@ async function processBatch({ supabase, workspaceId, user, body, mode }) {
   }
   if (expanded.length > MAX_FILES_PER_BATCH) {
     return { ok: false, status: 400, message: `Batches are limited to ${MAX_FILES_PER_BATCH} files per request.` };
-  }
-
-  const entitlements = await getWorkspaceEntitlements(supabase, workspaceId, user?.email);
-  if (!entitlements.ok) {
-    return { ok: false, status: entitlements.status, message: entitlements.message };
   }
 
   const capacity = await checkDocumentCapacity(supabase, workspaceId, expanded.length, entitlements.limits);

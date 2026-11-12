@@ -63,12 +63,17 @@ test('the effective SQL helpers honor an active trial as Professional', () => {
 
     assert.match(
       body,
-      /when public\.xbar_trial_active\(payload\) then 'Professional'/,
-      `${fn} (${winner}) does not grant Professional for an active trial`,
+      /when billing_state not in \('Active', 'Manual Billing'\)\s+and public\.xbar_trial_active\(payload\) then 'Professional'/,
+      `${fn} (${winner}) does not grant Professional only for an unentitled active trial`,
     );
     // The billing-state allowlist still wins over the trial, and everything
-    // else still falls to Starter — the trial only ever raises the baseline.
+    // else still falls to Free — the trial only ever raises the baseline.
     assert.match(body, /billing_state in \('Active', 'Manual Billing'\)/);
-    assert.match(body, /else 'Starter'/);
+    assert.match(body, /else 'Free'/);
+    assert.ok(
+      body.indexOf("when billing_state in ('Active', 'Manual Billing')") <
+        body.indexOf('public.xbar_trial_active(payload)'),
+      'paid/manual entitlement must take precedence over trial',
+    );
   }
 });

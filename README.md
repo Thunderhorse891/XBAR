@@ -674,3 +674,34 @@ psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f supabase/migrations/20261107160000_gu
 ```
 
 Merging this code or deploying the website does not execute this command.
+
+### Distinct Free tier (prepared; production approval required)
+
+`20261112120000_distinct_free_tier.sql` gives unentitled workspaces a Free baseline:
+2 horses, 1 user, 10 active documents, 1 GiB of recorded storage, and no new sale
+packets or shared-owner seats. Existing paid and Manual Billing profiles are not
+rewritten. Existing above-cap records remain readable, and unchanged upserts and
+non-growth edits remain available after downgrade. New growth is checked under
+workspace locks. Trial access remains Professional only for unentitled workspaces
+within the existing trial window.
+
+Before production, review the final migration and matching application changes,
+run `supabase/checks/run-distinct-free-tier.mjs` with an optional local PGlite
+installation, and run `supabase/checks/distinct-free-tier.sql` only against its
+minimal disposable fixture schema. The PGlite runner supports `--baseline` to
+confirm the new contract fails against the previous implementation. It does not
+prove multi-connection races or production RLS: separately verify concurrent
+quota-boundary writes and signed-in permissions on a disposable full-schema
+database. Do not create paid Supabase branches or run fixture checks in production.
+
+After those checks and Erin's explicit production migration approval:
+
+```sh
+psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f supabase/migrations/20261112120000_distinct_free_tier.sql
+```
+
+Merging or deploying application code does not apply this migration. Preserve
+existing records during rollback: restore the previous helper/trigger definitions
+and subscription-column defaults from preceding migrations, coordinated with the
+application rollback. Do not delete Free profiles, trial history, or above-cap
+records. Review that rollback separately before applying it to production.

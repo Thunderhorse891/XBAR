@@ -872,7 +872,11 @@ export default function Documents() {
 
           <Panel
             title="Recent intake batches"
-            description="Each upload lands as a batch and feeds the OCR stage."
+            description={
+              subscription.tier === 'Free'
+                ? 'Manual uploads on Free. Starter unlocks OCR intake.'
+                : 'Each upload lands as a batch and feeds the OCR stage.'
+            }
             className="cursor-context-menu"
             onContextMenu={(event) => openSurfaceMenu('batches', event)}
           >
@@ -907,7 +911,11 @@ export default function Documents() {
               <EmptyState
                 compact
                 title="No document uploads yet"
-                description="Add files above to start the pipeline — OCR picks them up automatically."
+                description={
+                  subscription.tier === 'Free'
+                    ? 'Add files above, then assign and review them manually. Starter unlocks OCR.'
+                    : 'Add files above to start the pipeline — OCR picks them up automatically.'
+                }
               />
             )}
           </Panel>
@@ -967,7 +975,9 @@ export default function Documents() {
                       </div>
                     ) : (
                       <div className="stack-item__copy">
-                        No fields extracted yet — this file is still in the OCR queue.
+                        {subscription.tier === 'Free'
+                          ? 'Manual upload on Free. Starter unlocks text extraction.'
+                          : 'No fields extracted yet — this file is still in the OCR queue.'}
                       </div>
                     )}
                   </div>
@@ -978,7 +988,11 @@ export default function Documents() {
             <EmptyState
               compact
               title="Nothing is processing"
-              description="OCR is idle. Upload documents in stage 1 to feed the queue."
+              description={
+                subscription.tier === 'Free'
+                  ? 'Free uses manual document review. Starter unlocks OCR.'
+                  : 'OCR is idle. Upload documents in stage 1 to feed the queue.'
+              }
               action={
                 <button
                   className="button button--ghost button--compact"
@@ -1383,10 +1397,9 @@ export default function Documents() {
             className="cursor-context-menu"
             onContextMenu={(event) => openSurfaceMenu('buyer', event)}
           >
-            {subscription.tier === 'Starter' ? (
+            {!subscription.sharedAccessEnabled ? (
               <p className="panel__description" style={{ marginBottom: 12 }}>
-                Starter records the packet build. Upgrading to Professional unlocks the watermarked PDF and Buyer
-                follow-up.{' '}
+                Professional unlocks shared sale packets, the watermarked PDF and Buyer follow-up.{' '}
                 {canPresentPurchaseFlow() ? (
                   <button
                     className="button button--ghost button--compact"

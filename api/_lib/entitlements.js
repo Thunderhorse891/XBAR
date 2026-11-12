@@ -1,9 +1,14 @@
 import { subscriptionPlans, isKnownTier } from './subscription-plans.js';
-import { BASELINE_TIER, entitledTierForBillingState, isKnownBillingState } from './subscription-status.js';
+import {
+  BASELINE_TIER,
+  entitledTierForBillingState,
+  isKnownBillingState,
+  isEntitledBillingState,
+} from './subscription-status.js';
 import { TRIAL_PLAN_TIER, getTrialState, readTrialFromPayload, trialDaysRemaining } from './trial-status.js';
 import { isCompedEmail } from './comp-access.js';
 
-const TIER_ORDER = ['Starter', 'Professional', 'Ranch Ops', 'Enterprise'];
+const TIER_ORDER = ['Free', 'Starter', 'Professional', 'Ranch Ops', 'Enterprise'];
 
 /*
  * Shown whenever the database cannot tell us what a workspace has or is using.
@@ -66,7 +71,7 @@ export async function getWorkspaceEntitlements(supabase, workspaceId, userEmail)
   // already entitles keeps what it has, and a malformed record grants nothing.
   const trial = readTrialFromPayload(data?.payload);
   const trialState = getTrialState(trial);
-  if (trialState === 'active' && effectiveTier === BASELINE_TIER) {
+  if (trialState === 'active' && !isEntitledBillingState(billingState)) {
     effectiveTier = TRIAL_PLAN_TIER;
   }
 
