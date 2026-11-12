@@ -1,0 +1,53 @@
+name: Workspace metadata RPC access
+on:
+  pull_request:
+    paths:
+      - 'supabase/migrations/**'
+      - 'supabase/checks/*metadata*'
+      - 'supabase/checks/storage-fixture-schema.sql'
+      - '.github/workflows/workspace-metadata-rpcs.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  rpc-access:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    services:
+      postgres:
+        image: postgres:17
+        env:
+          POSTGRES_PASSWORD: disposable-test-password
+          POSTGRES_DB: xbar_rpc_test
+        ports: ['5432:5432']
+        options: >-
+          --health-cmd pg_isready --health-interval 5s
+          --health-timeout 5s --health-retries 10
+    env:
+      PGHOST: localhost
+      PGPORT: 5432
+      PGUSER: postgres
+      PGPASSWORD: disposable-test-password
+      PGDATABASE: xbar_rpc_test
+    steps:
+      - uses: actions/checkout@v7
+      - name: Disposable production-shaped starting state
+        run: |
+          psql -v ON_ERROR_STOP=1 -f supabase/checks/storage-fixture-schema.sql
+          psql -v ON_ERROR_STOP=1 -f supabase/checks/workspace-metadata-fixture-schema.sql
+          psql -v ON_ERROR_STOP=1 -f supabase/migrations/20260924130000_trial_entitlement.sql
+          psql -v ON_ERROR_STOP=1 -f supabase/migrations/20260724_storage_limit_enforcement.sql
+          psql -v ON_ERROR_STOP=1 -f supabase/migrations/20261002090000_seat_reservation_consumed_on_accept.sql
+          psql -v ON_ERROR_STOP=1 -c 'create trigger fixture_seat_limit before insert or update on public.workspace_memberships for each row execute function public.xbar_enforce_workspace_seat_limits();'
+      - name: Regression fails on direct calculator exposure
+        run: |
+          if out=$(psql -v ON_ERROR_STOP=1 -f supabase/checks/workspace-metadata-rpc-access.sql 2>&1); then
+            echo 'Baseline unexpectedly passed'; exit 1
+          fi
+          echo "$out" | grep -q 'Client directly invoked internal calculator' || { echo "$out"; exit 1; }
+      - name: Apply locally and verify access and trigger compatibility
+        run: |
+          psql -v ON_ERROR_STOP=1 -f supabase/migrations/20261112090000_guard_workspace_metadata_rpcs.sql
+          psql -v ON_ERROR_STOP=1 -f supabase/checks/workspace-metadata-rpc-access.sql
+          psql -v ON_ERROR_STOP=1 -f supabase/migrations/20261112090000_guard_workspace_metadata_rpcs.sql
+          psql -v ON_ERROR_STOP=1 -f supabase/checks/workspace-metadata-rpc-access.sql
