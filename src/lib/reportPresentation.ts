@@ -24,17 +24,21 @@ export function validReportAccent(value: string) {
   return 1.05 / (luminance + 0.05) >= 4.5;
 }
 
+export function canCustomizeReports(tier: SubscriptionTier) {
+  return planRank(tier) >= planRank('Ranch Ops');
+}
+
 export function resolveReportPresentation(
   tier: SubscriptionTier,
   requested?: Partial<ReportPresentation>,
 ): ReportPresentation {
-  const premium = planRank(tier) >= planRank('Ranch Ops');
+  const premium = canCustomizeReports(tier);
   return {
     accent:
       premium && requested?.accent && validReportAccent(requested.accent)
         ? requested.accent
         : DEFAULT_REPORT_PRESENTATION.accent,
     layout: premium && requested?.layout === 'cover' ? 'cover' : 'standard',
-    whiteLabel: tier === 'Enterprise' && requested?.whiteLabel === true,
+    whiteLabel: premium && requested?.whiteLabel === true,
   };
 }

@@ -559,7 +559,11 @@ export function paybackPlan(subscription: SubscriptionProfile): PaybackPlan {
     const monthlyRate = annual
       ? Math.round(((subscription.annualRate as number) / 12) * 100) / 100
       : subscription.monthlyRate;
-    return { tier: subscription.tier, monthlyRate, paying: true };
+    // Entitlement includes complimentary operator grants. Only a positive,
+    // finite billed amount is actual spend for this financial comparison.
+    if (Number.isFinite(monthlyRate) && monthlyRate > 0) {
+      return { tier: subscription.tier, monthlyRate, paying: true };
+    }
   }
   return { tier: subscription.tier, monthlyRate: subscriptionTierConfig[subscription.tier].monthlyRate, paying: false };
 }

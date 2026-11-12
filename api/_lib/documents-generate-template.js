@@ -1,3 +1,5 @@
+import { uploadReservedBuffer } from './storage-upload.js';
+import { recordNewStoredObject } from './stored-record.js';
 import { randomUUID } from 'node:crypto';
 import { readJsonBody, sendJson } from './http.js';
 import { requireWorkspaceAccess } from './supabase-admin.js';
@@ -133,7 +135,7 @@ export default async function handler(req, res) {
     if (!storage.ok) {
       // Propagate the gate's own status and code. A refusal because usage could
       // not be read is a retryable 503, not a quota violation — reporting it as
-      // storage_limit_reached tells the customer to upgrade over a transient
+      // storage_limit_reached would misreport a transient
       // database error, and stops clients treating it as retryable.
       return sendJson(res, storage.status ?? 403, {
         ok: false,
@@ -151,67 +153,94 @@ export default async function handler(req, res) {
       fileName: `${fileBase}.pdf`,
       fallbackName: 'document.pdf',
     });
-    const { error: uploadError } = await supabase.storage
-      .from(DOCUMENT_BUCKET)
-      .upload(storagePath, Buffer.from(pdfBytes), { contentType: 'application/pdf', upsert: true });
-    if (uploadError) {
-      return sendJson(res, 502, { ok: false, message: `Failed to store generated PDF: ${uploadError.message}` });
+    let uploadResult;
+    try {
+      uploadResult = await uploadReservedBuffer({
+        access,
+        requestId: documentId.slice(4),
+        bucket: DOCUMENT_BUCKET,
+        storagePath,
+        bytes: Buffer.from(pdfBytes),
+        contentType: 'application/pdf',
+      });
+    } catch {
+      // Storage may have committed before the transport response was lost.
+      uploadResult = { error: { message: 'upload result could not be confirmed' } };
+    }
+    const { data: uploaded, error: uploadError } = uploadResult ?? {};
+    if (uploadError || uploaded?.path !== storagePath) {
+      return sendJson(res, 502, {
+        ok: false,
+        documentId,
+        storagePath,
+        needsRecovery: true,
+        uploadOutcome: 'unconfirmed',
+        message: `Failed to store generated PDF: ${uploadError?.message || 'upload acknowledgment missing'}`,
+      });
     }
 
-    const { error: recordError } = await supabase.from('documents').upsert({
-      workspace_id: workspaceId,
-      document_id: documentId,
-      horse_id: horseId,
-      title: rendered.title,
-      document_type: templateId === 'bill-of-sale' ? 'Bill of Sale' : 'Ownership Memo',
-      source: 'Sales Packet',
-      // Generation is not human review: an unsigned form must not become
-      // approved evidence merely because a role can generate/upload it.
-      state: 'Needs Review',
-      confidence: 1,
-      original_filename: `${fileBase}.pdf`,
-      storage_path: storagePath,
-      mime_type: 'application/pdf',
-      size_bytes: pdfSizeBytes,
-      extracted_data: { templateId, generatedAt },
-      needs_review: true,
-      uploaded_by_user_id: user.id,
-      payload: {
-        id: documentId,
-        horseId,
+    const recorded = await recordNewStoredObject({
+      supabase,
+      path: storagePath,
+      table: 'documents',
+      key: 'document_id',
+      pathColumn: 'storage_path',
+      row: {
+        workspace_id: workspaceId,
+        document_id: documentId,
+        horse_id: horseId,
         title: rendered.title,
-        type: templateId === 'bill-of-sale' ? 'Bill of Sale' : 'Ownership Memo',
+        document_type: templateId === 'bill-of-sale' ? 'Bill of Sale' : 'Ownership Memo',
         source: 'Sales Packet',
+        // Generation is not human review: an unsigned form must not become
+        // approved evidence merely because a role can generate/upload it.
         state: 'Needs Review',
-        uploadedBy: user.email || '',
-        uploadedAt: generatedAt,
         confidence: 1,
-        duplicateRisk: 'Low',
-        extractedTextPreview: '',
-        entities: {},
-        summary: 'Generated form awaiting review. Generation does not verify signatures or ownership.',
-        fileName: `${fileBase}.pdf`,
-        mimeType: 'application/pdf',
-        fileSizeBytes: pdfSizeBytes,
-        storagePath,
-        generated: true,
-        templateId,
-        missingFields: rendered.missingFields,
+        original_filename: `${fileBase}.pdf`,
+        storage_path: storagePath,
+        mime_type: 'application/pdf',
+        size_bytes: pdfSizeBytes,
+        extracted_data: { templateId, generatedAt },
+        needs_review: true,
+        uploaded_by_user_id: user.id,
+        payload: {
+          id: documentId,
+          horseId,
+          title: rendered.title,
+          type: templateId === 'bill-of-sale' ? 'Bill of Sale' : 'Ownership Memo',
+          source: 'Sales Packet',
+          state: 'Needs Review',
+          uploadedBy: user.email || '',
+          uploadedAt: generatedAt,
+          confidence: 1,
+          duplicateRisk: 'Low',
+          extractedTextPreview: '',
+          entities: {},
+          summary: 'Generated form awaiting review. Generation does not verify signatures or ownership.',
+          fileName: `${fileBase}.pdf`,
+          mimeType: 'application/pdf',
+          fileSizeBytes: pdfSizeBytes,
+          storagePath,
+          generated: true,
+          templateId,
+          missingFields: rendered.missingFields,
+        },
       },
     });
-    if (recordError) {
-      // The row was rejected after the object was written (e.g. the storage
-      // trigger firing on a concurrent request that slipped past the preflight).
-      // Delete the orphan and surface the failure rather than signing a URL to a
-      // document that was never recorded.
-      await supabase.storage.from(DOCUMENT_BUCKET).remove([storagePath]);
-      const overLimit = /storage limit/i.test(recordError.message);
+    if (!recorded.ok) {
+      // A failed record save cannot prove exclusive ownership or atomically
+      // exclude payload/recovery references. Keep the original recoverable.
+      const overLimit = /storage limit/i.test(recorded.message);
       return sendJson(res, overLimit ? 403 : 502, {
         ok: false,
+        documentId,
+        storagePath,
+        cleanup: recorded.cleanup,
+        needsRecovery: true,
         code: overLimit ? 'storage_limit_reached' : undefined,
         message: overLimit
-          ? `This document would exceed the plan's ${entitlements.limits.storageLimitGb} GB storage limit. Upgrade to continue.`
-          : `Failed to record generated document: ${recordError.message}`,
+          ? 'This document would exceed the workspace storage limit. Cloud storage is limited and shared across XBAR at launch. Contact support before uploading more.'
+          : `Failed to record generated document: ${recorded.message}`,
       });
     }
 

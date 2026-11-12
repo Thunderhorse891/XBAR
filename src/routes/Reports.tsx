@@ -11,13 +11,14 @@ import { requestFeatureUpgrade } from '@/store/useUpgradeStore';
 import { formatCompactCurrency, formatCurrency } from '@/lib/format';
 import { buildRanchReport } from '@/lib/ranchReport';
 import { downloadRanchReportCsv, downloadRanchReportPdf } from '@/lib/ranchReportExport';
-import { profitIntelligenceGate } from '@/lib/subscriptionGates';
+import { reportsGate } from '@/lib/subscriptionGates';
 import { useUiStore } from '@/store/useUiStore';
 import { useXbarStore } from '@/store/useXbarStore';
 import './operationsExperience.css';
 import './reportsExperience.css';
 import { canPresentPurchaseFlow } from '@/lib/nativePlatform';
 import {
+  canCustomizeReports,
   DEFAULT_REPORT_PRESENTATION,
   REPORT_ACCENT_PRESETS,
   resolveReportPresentation,
@@ -27,24 +28,10 @@ import {
 import { useCloudStore } from '@/store/useCloudStore';
 
 /*
- * What the operation is worth, what it costs, and what is holding money up.
- *
- * This screen used to show three counts and a readiness donut — nothing about
- * money, and no way to get any of it out of the app. The arithmetic was already
- * in the product (businessIntelligence.ts) but only ever appeared per-horse in
- * the sale-packet wizard and as alerts on the reminders screen, so there was no
- * place that answered the question an owner actually asks.
- *
- * The money half is profit intelligence, which is a Ranch Ops feature —
- * `commercialEngine.ts` says so, and Financials and Expenses have gated it all
- * along. Surfacing cost, break-even, margin and spend anomalies here without
- * the same gate made this screen a way around the paywall, and the exports made
- * it a way around it in a file you could keep. So the gate wraps the analytics
- * AND both export buttons.
- *
- * Readiness and the document count stay open. They were on this screen before
- * this change and are not profit intelligence, so gating them would take
- * something away from Starter rather than protect something paid.
+ * Standard reports and exports belong to Professional and higher plans.
+ * Ranch Ops adds report styling and retains its separate profit intelligence
+ * workflows on Financials, Expenses and AnimalProfile. Readiness and document
+ * counts remain available to Free and legacy Starter, as before.
  */
 export default function Reports() {
   const navigate = useNavigate();
@@ -59,7 +46,8 @@ export default function Reports() {
   // Ranch Ops customer sees. This screen gates a feature, so it reads the
   // preview — unlike the billing screen, which reports on billing itself.
   const subscription = useEffectiveSubscription();
-  const locked = profitIntelligenceGate(subscription);
+  const locked = reportsGate(subscription);
+  const presentationLocked = !canCustomizeReports(subscription.tier);
   const [exporting, setExporting] = useState<'pdf' | null>(null);
   const workspaceId = useCloudStore((state) => state.workspaceId);
   const presentationScope = workspaceId || workspaceProfile.ranchName;
@@ -113,7 +101,7 @@ export default function Reports() {
             <span>Ranch Ops</span>
             <strong>Executive styling</strong>
           </div>
-          {locked ? (
+          {presentationLocked ? (
             <>
               <p>Choose your report color and add a polished executive cover.</p>
               {canPresentPurchaseFlow() && (
@@ -168,10 +156,10 @@ export default function Reports() {
             </>
           )}
           <div className="report-studio__tier">
-            <span>Enterprise</span>
+            <span>Ranch Ops</span>
             <strong>Ranch-first presentation</strong>
           </div>
-          {subscription.tier === 'Enterprise' ? (
+          {!presentationLocked ? (
             <label className="report-studio__check">
               <input
                 type="checkbox"
@@ -299,8 +287,8 @@ export default function Reports() {
             <div className="ops-kicker">Ranch reporting</div>
             <h1 id="reports-title">Know what the herd is worth</h1>
             <p>
-              Cost per horse, break-even, what is waiting on documents, and where the spend is going — in one report you
-              can hand to a banker or an accountant.
+              Reports automatically calculated from your records, with PDF and spreadsheet export. Cost per horse,
+              break-even, document blockers and recorded spend in one place.
             </p>
           </div>
         </section>
@@ -327,8 +315,8 @@ export default function Reports() {
           <div className="ops-kicker">Ranch reporting</div>
           <h1 id="reports-title">Know what the herd is worth</h1>
           <p>
-            Cost per horse, break-even, what is waiting on documents, and where the spend is going. Export it and hand
-            it to a banker, an accountant or a partner.
+            Reports automatically calculated from your records, with PDF and spreadsheet export. Cost per horse,
+            break-even, document blockers and recorded spend in one place.
           </p>
           <div className="ops-hero__actions">
             {locked ? (
@@ -339,9 +327,9 @@ export default function Reports() {
                 <button
                   className="button button--primary"
                   type="button"
-                  onClick={() => requestFeatureUpgrade('profitIntelligence')}
+                  onClick={() => requestFeatureUpgrade('reports')}
                 >
-                  Unlock with Ranch Ops
+                  Unlock with Professional
                 </button>
               ) : null
             ) : (
@@ -362,8 +350,8 @@ export default function Reports() {
           </div>
         </div>
         {locked ? (
-          <div className="ops-hero__ledger" aria-label="Ranch reporting is a Ranch Ops feature">
-            <span>Ranch Ops</span>
+          <div className="ops-hero__ledger" aria-label="Ranch reporting is a Professional feature">
+            <span>Professional</span>
             <strong className="report-locked__headline">
               <Lock size={22} aria-hidden="true" /> Locked
             </strong>
@@ -408,7 +396,7 @@ export default function Reports() {
         >
           <EmptyState
             title={locked}
-            description="Ranch Ops turns the records you already keep into the numbers a banker, an accountant or a partner asks for."
+            description="Professional turns the records you already keep into the numbers a banker, an accountant or a partner asks for."
             // Same locked state as the hero button above, so it gets the same
             // answer. Leaving this one lit while gating that one would put two
             // different answers to one question on a single screen.
@@ -417,9 +405,9 @@ export default function Reports() {
                 <button
                   className="button button--primary"
                   type="button"
-                  onClick={() => requestFeatureUpgrade('profitIntelligence')}
+                  onClick={() => requestFeatureUpgrade('reports')}
                 >
-                  See Ranch Ops
+                  See Professional
                 </button>
               ) : null
             }

@@ -21,7 +21,7 @@
  */
 
 /** Lowest-capability plan. Used whenever a workspace is not entitled to more. */
-export const BASELINE_TIER = 'Starter';
+export const BASELINE_TIER = 'Free';
 
 /**
  * Paying (or in an agreed trial), so the purchased tier applies.

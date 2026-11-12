@@ -1,7 +1,9 @@
 import type { SubscriptionProfile, SubscriptionTier } from '../types/xbar.js';
+import { isPublicPaidPlan } from './publicPlanCatalog.js';
 import { buildSubscriptionForTier, subscriptionTierConfig } from './xbarRuntime.js';
 
 export const planOutcomes: Record<SubscriptionTier, string[]> = {
+  Free: ['Keep records for 2 horses', 'Start with 1 user and no card'],
   Starter: [
     'Build a dependable horse record',
     'Keep care and source documents together',
@@ -28,7 +30,7 @@ export type CheckoutReadiness = {
   ready: boolean;
   /**
    * How the plan change happens when ready:
-   * - 'checkout': a secure Stripe checkout (managed session or payment link) completes first.
+   * - 'checkout': a verified managed Stripe checkout completes first.
    * - 'manual': online checkout is not configured, so an admin/manual billing
    *   state must explicitly activate the plan before capacity changes.
    * - 'recover': a subscription already exists and can still bill the customer.
@@ -45,6 +47,7 @@ export function getCheckoutReadiness(params: {
   billingEnabled: boolean;
   canManageBilling: boolean;
   hasManagedIdentity: boolean;
+  /** Legacy caller input; static links no longer authorize new purchases. */
   hasPaymentLink: boolean;
   checkoutInProgress: boolean;
   /**
@@ -132,8 +135,6 @@ export function getCheckoutReadiness(params: {
         'This workspace still has a subscription with Stripe that has not been settled or resumed. Sort that one out through the card issuer or Stripe’s billing email — starting a new checkout here would bill you twice.',
     };
   }
-  if (params.hasPaymentLink)
-    return { ready: true, mode: 'checkout', reason: 'Secure checkout opens next. XBAR never stores raw card numbers.' };
   if (!params.billingEnabled) {
     // Stripe is not configured for this deployment. Say that plainly rather
     // than implying the customer has a manual route they can take: there is no
@@ -142,7 +143,7 @@ export function getCheckoutReadiness(params: {
     return {
       ready: false,
       mode: 'manual',
-      reason: 'Billing is not configured yet, so plans cannot be purchased in the app.',
+      reason: 'Managed checkout is unavailable. Sign in and try again once verified billing is configured.',
     };
   }
   if (!params.hasManagedIdentity)
@@ -205,9 +206,9 @@ export function getBillingPortalAction(params: {
 }
 
 export function recommendedTier(currentTier: SubscriptionTier, requestedTier?: SubscriptionTier) {
-  if (requestedTier) return requestedTier;
-  const order: SubscriptionTier[] = ['Starter', 'Professional', 'Ranch Ops', 'Enterprise'];
-  return order[Math.min(order.indexOf(currentTier) + 1, order.length - 1)];
+  if (isPublicPaidPlan(requestedTier)) return requestedTier;
+  // Retired Starter/Enterprise remain valid entitlements, never new sale offers.
+  return currentTier === 'Free' || currentTier === 'Starter' ? 'Professional' : 'Ranch Ops';
 }
 
 /**
@@ -279,23 +280,12 @@ export function isEntitledBillingState(billingState: SubscriptionProfile['billin
 }
 
 /**
- * True when this workspace is on a paid plan at all.
- *
- * Both conditions are load-bearing, and each covers a case the other misses:
- *
- *   - the billing state must be entitled, or a canceled subscription would
- *     still read as configured;
- *   - the rate must be non-zero, because a freshly initialized workspace is
- *     seeded as Starter / 'Manual Billing' / rate 0. That seed is a setup
- *     state, not a purchase, and reading it as one tells a brand-new workspace
- *     its billing is already handled.
- *
- * The rate is a *supporting* condition, not the signal. Reading it alone —
- * which is what these screens used to do — is what let a lapsed plan look
- * current.
+ * True when this workspace has an entitled paid tier, including operator grants.
+ * Free is explicitly distinct. A zero-rate Manual Billing paid tier is an
+ * intentional grant, not the signup seed, and must not open duplicate checkout.
  */
 export function hasActivePaidPlan(subscription: SubscriptionProfile): boolean {
-  return isEntitledBillingState(subscription.billingState) && subscription.monthlyRate > 0;
+  return isEntitledBillingState(subscription.billingState) && subscription.tier !== 'Free';
 }
 
 /** True when `tier` specifically is the plan this workspace is paying for. */
@@ -334,14 +324,17 @@ export function isCurrentPaidPlan(subscription: SubscriptionProfile, tier: Subsc
 export function normalizeTier(value: unknown): SubscriptionTier {
   return typeof value === 'string' && Object.prototype.hasOwnProperty.call(subscriptionTierConfig, value)
     ? (value as SubscriptionTier)
-    : 'Starter';
+    : 'Free';
 }
 
 export function clampSubscriptionToEntitlement(subscription: SubscriptionProfile): SubscriptionProfile {
-  if (isEntitledBillingState(subscription.billingState)) return subscription;
+  if (isEntitledBillingState(subscription.billingState)) {
+    const tier = normalizeTier(subscription.tier);
+    return { ...buildSubscriptionForTier(subscription, tier), monthlyRate: subscription.monthlyRate };
+  }
 
   return {
-    ...buildSubscriptionForTier(subscription, 'Starter'),
+    ...buildSubscriptionForTier(subscription, 'Free'),
     // Normalized here too, not only at restore. This function is the other
     // producer of purchasedTier, and it is the value the billing screen indexes
     // the plan tables with — leaving it unchecked in one of the two producers

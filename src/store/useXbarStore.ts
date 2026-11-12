@@ -22,6 +22,7 @@ import { normalizeWorkspaceEmail, validateWorkspaceInvitation } from '@/lib/work
 import { apiConfig, isRelationalCloudEnabled, isSupabaseConfigured } from '@/lib/platformConfig';
 import { useCloudStore } from '@/store/useCloudStore';
 import { hasRoleCapability } from '@/lib/permissions';
+import { ReservedUploadError } from '@/lib/reservedUploadClient';
 import { hasHorsePhoto, isHorsePhotoAsset } from '@/lib/animalPassport';
 import { groupDocumentBatchCandidates } from '@/lib/documentBatchIdentity';
 import { flagDocumentDuplicates, documentDuplicateNeedsReview, fingerprintDocument } from '@/lib/documentDuplicates';
@@ -40,7 +41,8 @@ import { toPacketDisclosure } from '@/lib/salePacketDisclosure';
 import { onWorkspaceSettled, vaultOwnerId } from '@/lib/vaultOwner';
 import { clearCloudDeletions, queueCloudDeletions } from '@/lib/cloudDeletionQueue';
 import { readRecordsOwner, rememberRecordsOwner } from '@/lib/recordsOwner';
-import { featureGate } from '@/lib/commercialEngine';
+import { canUseOcr, featureGate } from '@/lib/commercialEngine';
+import { documentIntakeGate, horseCreationGate } from '@/lib/subscriptionGates';
 import { hasActivePaidPlan, isCurrentPaidPlan } from '@/lib/subscriptionDecision';
 import { applyTrialToProfile, parseTrialStart } from '@/lib/trialSubscription';
 import { buildOfferDecision } from '@/lib/profitIntelligence';
@@ -112,7 +114,6 @@ import {
   initialState,
   isWorkspaceSetup,
   looksLikeLegacyDemoWorkspace,
-  normalizeUsage,
   promoteDocument,
   requireRoleCapability,
   restorePersistedState,
@@ -1048,6 +1049,9 @@ export const useXbarStore = create<XbarStore>()(
           return { ok: false, message: validationError };
         }
 
+        const capacityError = horseCreationGate(gateSubscription(get().subscription), get().horses.length);
+        if (capacityError) return { ok: false, message: capacityError };
+
         const horse = createHorseRecord(input, get().workspaceProfile);
         const ownershipRecord = createOwnershipRecord(horse);
         set((state) => ({
@@ -1072,6 +1076,13 @@ export const useXbarStore = create<XbarStore>()(
             return { ok: false, message: deniedMessage };
           }
 
+          if (createHorseFromBatch && !canUseOcr(gateSubscription(get().subscription))) {
+            return {
+              ok: false,
+              message:
+                'Professional unlocks document OCR and automatic horse creation. Free supports manual document upload.',
+            };
+          }
           const fileList = files.filter(Boolean);
           if (!fileList.length) {
             return { ok: false, message: 'Select at least one file to upload.' };
@@ -1086,7 +1097,32 @@ export const useXbarStore = create<XbarStore>()(
            * starts. See the check beside the commit below.
            */
           const intakeIdentity = readIntakeIdentity();
+          const intakeVaultOwner = vaultOwnerId();
+          const uploadRecoveryNotices: string[] = [];
 
+          // Count active records, not cached usage. Check before reads/uploads,
+          // then again after asynchronous work before publishing the batch.
+          const intakeOcrAllowed = canUseOcr(gateSubscription(get().subscription));
+          const intakeCapacityError = () => {
+            const current = get();
+            return (
+              (intakeIdentityChanged(intakeIdentity, readIntakeIdentity())
+                ? 'The workspace changed during upload. No records were added.'
+                : null) ??
+              (intakeOcrAllowed && !canUseOcr(gateSubscription(current.subscription))
+                ? 'The plan changed during document processing. Professional or Ranch Ops is required for OCR.'
+                : null) ??
+              requireRoleCapability(current.currentRole, 'uploadDocuments') ??
+              (createHorseFromBatch ? requireRoleCapability(current.currentRole, 'createHorse') : null) ??
+              documentIntakeGate(
+                gateSubscription(current.subscription),
+                current.documents.filter((document) => document.state !== 'Archived').length,
+                fileList.length,
+              )
+            );
+          };
+          const initialCapacityError = intakeCapacityError();
+          if (initialCapacityError) return { ok: false, message: initialCapacityError };
           const state = get();
           const storageIncrease = estimateStorageGb(fileList);
           const planUsage = entitledUsage(state.subscription);
@@ -1106,46 +1142,19 @@ export const useXbarStore = create<XbarStore>()(
           let capacityUnverified = false;
           if (isSupabaseConfigured()) {
             try {
-              const storedBytes = await loadWorkspaceStorageBytes();
+              const storedBytes = await loadWorkspaceStorageBytes(intakeIdentity);
               const incomingBytes = fileList.reduce((total, file) => total + file.size, 0);
-              /*
-               * The RPC is authoritative about PERSISTED ROWS, not about bytes.
-               * It sums `documents` AND `sale_packets`, and a row lands about 1.6
-               * seconds after its object does -- CloudBootstrap's autosave
-               * debounce. A second batch started inside that window would be
-               * measured against a total that predates the first one, and both
-               * could pass just under the cap.
-               *
-               * Staged bytes are ADDED to that total, never compared with it.
-               * Comparing was wrong because the two quantities have different
-               * scopes: a local document total carries no sale packets, so in a
-               * workspace holding more packet bytes than staged document bytes
-               * the server total won the comparison and the staged files dropped
-               * out of the sum entirely. What the server cannot know yet is
-               * exactly this -- objects already in the bucket whose rows have not
-               * been accepted -- so it is the one thing the client may add.
-               *
-               * Counted in exact bytes as each upload succeeds, NOT from
-               * `storageUsedGb`: that field goes through `normalizeUsage`,
-               * `Math.round(value * 1000) / 1000`, three decimals of a gigabyte
-               * or about 1 MiB, so anything under roughly half of that rounds to
-               * a zero increment and a run of small batches would keep measuring
-               * itself against the pre-upload total.
-               *
-               * This closes the window within a client. Two devices uploading in
-               * the same instant still meet at the storage trigger, which is the
-               * backstop and stays one -- a client-side reservation cannot be
-               * atomic across devices. A reload before the first push also clears
-               * the staged counter; the next autosave lands ~1.6s later and the
-               * trigger covers that window too.
-               */
-              const knownBytes = storedBytes + useCloudStore.getState().stagedStorageBytes;
+              // Stored objects are already charged by the authoritative RPC,
+              // including objects whose record autosave is pending. Adding staged
+              // bytes again would double-charge those same originals.
+              const knownBytes = storedBytes;
               if (knownBytes + incomingBytes > planUsage.storageLimitGb * 1024 * 1024 * 1024) {
                 // Known to be over cap: refusing is right, and it is the one
                 // answer the customer can act on by upgrading.
                 return {
                   ok: false,
-                  message: 'Storage limit reached for the current plan. Upgrade before adding more files.',
+                  message:
+                    'Storage limit reached for the current plan. Cloud storage is limited and shared across XBAR at launch. Contact support before uploading more.',
                 };
               }
             } catch (error) {
@@ -1156,7 +1165,8 @@ export const useXbarStore = create<XbarStore>()(
           } else if (planUsage.storageUsedGb + storageIncrease > planUsage.storageLimitGb) {
             return {
               ok: false,
-              message: 'Storage limit reached for the current plan. Upgrade before adding more files.',
+              message:
+                'Storage limit reached for the current plan. Cloud storage is limited and shared across XBAR at launch. Contact support before uploading more.',
             };
           }
 
@@ -1217,6 +1227,8 @@ export const useXbarStore = create<XbarStore>()(
             const duplicateIndex = get().documents.map((document) =>
               legacyHashes.has(document.id) ? { ...document, contentSha256: legacyHashes.get(document.id) } : document,
             );
+            const beforeUploadError = intakeCapacityError();
+            if (beforeUploadError) return { ok: false, message: beforeUploadError };
             let documents: DocumentRecord[] = await Promise.all(
               fileList.map(async (file) => {
                 let uploadedAsset: Awaited<ReturnType<typeof uploadDocumentAssetToCloud>> = null;
@@ -1230,6 +1242,7 @@ export const useXbarStore = create<XbarStore>()(
                       expectedIdentity: intakeIdentity,
                     });
                   } catch (error) {
+                    if (error instanceof ReservedUploadError) uploadRecoveryNotices.push(error.message);
                     console.error('Cloud document upload failed; keeping the file on this device instead.', error);
                   }
                 }
@@ -1240,6 +1253,7 @@ export const useXbarStore = create<XbarStore>()(
                   selectedHorse,
                   horses: get().horses,
                   existingDocuments: duplicateIndex,
+                  allowOcr: canUseOcr(gateSubscription(get().subscription)),
                 });
                 // Cloud storage did not take this file — it is either not
                 // configured for this build or the upload failed. Keeping the
@@ -1251,7 +1265,7 @@ export const useXbarStore = create<XbarStore>()(
                 let localFileKey: string | undefined;
                 if (!uploadedAsset) {
                   try {
-                    localFileKey = await storeLocalFile(file, file.name, file.type, vaultOwnerId());
+                    localFileKey = await storeLocalFile(file, file.name, file.type, intakeVaultOwner);
                     // Counted where the bytes are actually written, so the figure
                     // cannot drift from what the vault holds.
                     localStoredBytes += file.size;
@@ -1329,7 +1343,7 @@ export const useXbarStore = create<XbarStore>()(
             );
             const availableHorseSlots = Math.max(
               0,
-              entitledUsage(state.subscription).horseLimit - currentHorses.length,
+              entitledUsage(get().subscription).horseLimit - currentHorses.length,
             );
             const omittedHorseCount = Math.max(0, createdHorseBundles.length - availableHorseSlots);
             createdHorseBundles = createdHorseBundles.slice(0, availableHorseSlots);
@@ -1396,26 +1410,9 @@ export const useXbarStore = create<XbarStore>()(
             const chargedStorageGb =
               (isSupabaseConfigured() ? cloudStoredBytes : localStoredBytes) / (1024 * 1024 * 1024);
 
-            /*
-             * Staged in the same synchronous step that installs the records, and
-             * deliberately not when each upload returned.
-             *
-             * A reservation has to mean "bytes the next saved snapshot will
-             * account for". Counted at upload time it did not: an autosave queued
-             * by an earlier edit could fire during the OCR that follows the
-             * upload, capture the reservation, and persist a snapshot that did
-             * not contain those records yet -- releasing a reservation for bytes
-             * the database had still not been told about. Set here, every
-             * exported snapshot holds either both the records and the reservation
-             * or neither, and nothing can run between these two statements.
-             *
-             * Counting at upload time was meant to protect a second batch
-             * started mid-flight. That is now prevented where it belongs --
-             * this action is serialized, see `serializeDocumentIntake` --
-             * rather than assumed of two screens that each guard on their own
-             * component state. A second TAB has its own counter regardless and
-             * meets the storage trigger.
-             */
+            // Keep the existing autosave bookkeeping bound to this snapshot.
+            // The object-based quota RPC already counts these bytes, so this
+            // staged counter is no longer added to storage preflight totals.
             /*
              * An intake spans uploads and OCR, which is long enough for another
              * tab to sign a DIFFERENT account in underneath it. The identity is
@@ -1441,8 +1438,15 @@ export const useXbarStore = create<XbarStore>()(
             if (intakeIdentityChanged(intakeIdentity, readIntakeIdentity())) {
               return {
                 ok: false,
-                message:
-                  'The signed-in account changed while these files were uploading, so they were not added. Sign in again and re-upload them.',
+                message: `The signed-in account changed while these files were uploading, so they were not added. Return to the original account and check Settings, Unfinished uploads before trying again.${uploadRecoveryNotices.length ? ` ${uploadRecoveryNotices[0]}` : ''}`,
+              };
+            }
+
+            const finalCapacityError = intakeCapacityError();
+            if (finalCapacityError) {
+              return {
+                ok: false,
+                message: `${finalCapacityError} No records were added. Files already uploaded may remain in storage; review before retrying.`,
               };
             }
 
@@ -1476,7 +1480,7 @@ export const useXbarStore = create<XbarStore>()(
                     ...current.subscription.usage,
                     documentsProcessed: allDocuments.filter((document) => document.state !== 'Archived').length,
                     horsesUsed: createdHorses.length + nextHorses.length,
-                    storageUsedGb: normalizeUsage(current.subscription.usage.storageUsedGb + chargedStorageGb),
+                    storageUsedGb: current.subscription.usage.storageUsedGb + chargedStorageGb,
                   },
                 },
               };
@@ -1484,7 +1488,7 @@ export const useXbarStore = create<XbarStore>()(
 
             return {
               ok: true,
-              message: `${documents.length} file${documents.length === 1 ? '' : 's'} entered the document queue.${batchConflicts.size ? ` ${batchConflicts.size} files need source review. No horse was created from those files.` : ''}${duplicateCount ? ` ${duplicateCount} duplicate warning${duplicateCount === 1 ? '' : 's'} need review: compare files, keep a copy deliberately, or discard the extra. No files were removed.` : ''}${uncheckedLegacy ? ` Exact-file checks could not cover ${uncheckedLegacy} older file${uncheckedLegacy === 1 ? '' : 's'} whose original was unavailable.` : ''}${createdHorses.length ? ` ${createdHorses.length} new horse record${createdHorses.length === 1 ? ' was' : 's were'} created from the upload batch.` : ''}${omittedHorseCount ? ` ${omittedHorseCount} additional horse candidate${omittedHorseCount === 1 ? ' was' : 's were'} left for review because the horse limit was reached.` : ''}${localDocumentCount ? ` ${localDocumentCount} kept as metadata only — this browser could not store the file on this device either.` : ''}${capacityUnverified ? ' Cloud storage could not be reached, so these are on this device only — upload them again once it returns to put them in the cloud.' : ''}`,
+              message: `${documents.length} file${documents.length === 1 ? '' : 's'} entered the document queue.${batchConflicts.size ? ` ${batchConflicts.size} files need source review. No horse was created from those files.` : ''}${duplicateCount ? ` ${duplicateCount} duplicate warning${duplicateCount === 1 ? '' : 's'} need review: compare files, keep a copy deliberately, or discard the extra. No files were removed.` : ''}${uncheckedLegacy ? ` Exact-file checks could not cover ${uncheckedLegacy} older file${uncheckedLegacy === 1 ? '' : 's'} whose original was unavailable.` : ''}${createdHorses.length ? ` ${createdHorses.length} new horse record${createdHorses.length === 1 ? ' was' : 's were'} created from the upload batch.` : ''}${omittedHorseCount ? ` ${omittedHorseCount} additional horse candidate${omittedHorseCount === 1 ? ' was' : 's were'} left for review because the horse limit was reached.` : ''}${localDocumentCount ? ` ${localDocumentCount} kept as metadata only — this browser could not store the file on this device either.` : ''}${capacityUnverified ? ' Cloud storage could not be reached, so these are on this device only — upload them again once it returns to put them in the cloud.' : ''}${uploadRecoveryNotices.length ? ` ${uploadRecoveryNotices.length} cloud upload${uploadRecoveryNotices.length === 1 ? '' : 's'} need review in Settings, Unfinished uploads. Keep the originals; pending storage stays reserved.` : ''}`,
               id: batch.id,
               createdHorseIds: createdHorses.map((horse) => horse.id),
               duplicateCount,
@@ -1902,19 +1906,44 @@ export const useXbarStore = create<XbarStore>()(
         // the one-time photo readiness credit or is just a replacement.
         const priorHasPhoto = hasHorsePhoto(targetHorse);
 
-        // Pre-flight against the whole selection so we never start uploads that
-        // clearly cannot fit; the actual charge below is only for retained files.
-        const preflightIncrease = estimateStorageGb(fileList);
+        // Read exact stored bytes, never the rounded display/cache total. The
+        // database guards remain necessary for concurrent clients.
+        const uploadTarget = readIntakeIdentity();
+        const incomingBytes = fileList.reduce((total, file) => total + file.size, 0);
         const mediaUsage = entitledUsage(state.subscription);
-        if (mediaUsage.storageUsedGb + preflightIncrease > mediaUsage.storageLimitGb) {
-          return { ok: false, message: 'Storage limit reached for this plan. Upgrade before uploading more media.' };
+        let usedBytes = mediaUsage.storageUsedGb * 1024 ** 3;
+        if (isSupabaseConfigured()) {
+          try {
+            usedBytes = await loadWorkspaceStorageBytes(uploadTarget);
+          } catch {
+            return {
+              ok: false,
+              message: 'Storage usage could not be verified. No photos were uploaded. Try again when connected.',
+            };
+          }
+        }
+        if (photoBatchIdentityChanged(uploadTarget, readIntakeIdentity())) {
+          return {
+            ok: false,
+            message:
+              'Your account or workspace changed before the photos could be uploaded. Try again in the intended workspace.',
+          };
+        }
+        const currentMediaUsage = entitledUsage(get().subscription);
+        const mediaDenied = requireRoleCapability(get().currentRole, 'uploadMedia');
+        if (mediaDenied) return { ok: false, message: mediaDenied };
+        if (usedBytes + incomingBytes > currentMediaUsage.storageLimitGb * 1024 ** 3) {
+          return {
+            ok: false,
+            message:
+              'Storage limit reached for this plan. Cloud storage is limited and shared across XBAR at launch. Contact support before uploading more.',
+          };
         }
 
         // Photos are filed under the ranch's cloud workspace. A signed-in
         // account with no workspace resolved has nowhere to put them, and
         // "check your connection" would send them looking for the wrong
         // problem -- so say which of the real causes it is.
-        const uploadTarget = readIntakeIdentity();
         if (uploadTarget.userId && !uploadTarget.workspaceId) {
           return {
             ok: false,
@@ -1928,6 +1957,7 @@ export const useXbarStore = create<XbarStore>()(
         // role may not upload photos to this ranch (or the ranch's photo
         // storage is not set up), and retrying will not change it.
         let refusedByStoragePolicy = false;
+        const mediaRecoveryNotices: string[] = [];
         try {
           const results = await Promise.all(
             fileList.map(async (file) => {
@@ -1936,6 +1966,7 @@ export const useXbarStore = create<XbarStore>()(
                 uploadedAsset = await uploadMediaAssetToCloud({ file, horseId, target: uploadTarget });
               } catch (error) {
                 if (isStoragePolicyRefusal(error)) refusedByStoragePolicy = true;
+                if (error instanceof ReservedUploadError) mediaRecoveryNotices.push(error.message);
                 console.error('Cloud media upload failed.', error);
               }
               return {
@@ -1964,7 +1995,7 @@ export const useXbarStore = create<XbarStore>()(
             return {
               ok: false,
               message:
-                'The signed-in account changed while these photos were uploading, so they were not added. Sign in again and re-upload them.',
+                'The signed-in account changed while these photos were uploading, so they were not added. Return to the original account and check Settings, Unfinished uploads before trying again.',
             };
           }
 
@@ -1979,9 +2010,11 @@ export const useXbarStore = create<XbarStore>()(
           if (uploadedAssets.length === 0) {
             return {
               ok: false,
-              message: refusedByStoragePolicy
-                ? "Photo upload was refused by this ranch's storage permissions, so no image was stored. Ask the ranch owner to check your role."
-                : 'Photo upload failed — no image was stored. Check your connection and try again.',
+              message:
+                mediaRecoveryNotices[0] ??
+                (refusedByStoragePolicy
+                  ? "Photo upload was refused by this ranch's storage permissions, so no image was stored. Ask the ranch owner to check your role."
+                  : 'Photo upload failed — no image was stored. Check your connection and try again.'),
             };
           }
 
@@ -2039,14 +2072,14 @@ export const useXbarStore = create<XbarStore>()(
               ...current.subscription,
               usage: {
                 ...current.subscription.usage,
-                storageUsedGb: normalizeUsage(current.subscription.usage.storageUsedGb + chargedIncrease),
+                storageUsedGb: current.subscription.usage.storageUsedGb + chargedIncrease,
               },
             },
           }));
 
           return {
             ok: true,
-            message: `${uploadedAssets.length} photo${uploadedAssets.length === 1 ? '' : 's'} added.${failedCount ? ` ${failedCount} could not be uploaded and ${failedCount === 1 ? 'was' : 'were'} skipped.` : ''}`,
+            message: `${uploadedAssets.length} photo${uploadedAssets.length === 1 ? '' : 's'} added.${failedCount ? ` ${failedCount} could not be uploaded and ${failedCount === 1 ? 'was' : 'were'} skipped.` : ''}${mediaRecoveryNotices.length ? ' Some uploads need review in Settings, Unfinished uploads. Keep the originals; pending storage stays reserved.' : ''}`,
             id: horseId,
           };
         } catch (error) {
@@ -2067,6 +2100,7 @@ export const useXbarStore = create<XbarStore>()(
 
         const state = get();
         const receiptIdentity = readIntakeIdentity();
+        let receiptRecoveryNotice = '';
         const receiptOwner = vaultOwnerId();
         const receiptRecordsOwner = readRecordsOwner();
         const receiptContextChanged = () =>
@@ -2082,7 +2116,7 @@ export const useXbarStore = create<XbarStore>()(
         const interrupted = () => ({
           ok: false,
           message:
-            'Your account, workspace, access, or horse record changed during receipt upload. No receipt was added. Reopen the intended workspace and try again.',
+            'Your account, workspace, access, or horse record changed during receipt upload. No receipt was added. Reopen the intended workspace and check Settings, Unfinished uploads before trying again.',
         });
         if (input.horseId && !state.horses.some((horse) => horse.id === input.horseId)) {
           return { ok: false, message: 'Horse record not found for this receipt.' };
@@ -2091,10 +2125,26 @@ export const useXbarStore = create<XbarStore>()(
         const fileList = input.file ? [input.file] : [];
         const storageIncrease = estimateStorageGb(fileList);
         const receiptUsage = entitledUsage(state.subscription);
-        if (fileList.length && receiptUsage.storageUsedGb + storageIncrease > receiptUsage.storageLimitGb) {
+        let cloudUploadsAllowed = true;
+        let usedBytes = receiptUsage.storageUsedGb * 1024 ** 3;
+        if (fileList.length && isSupabaseConfigured()) {
+          try {
+            usedBytes = await loadWorkspaceStorageBytes(receiptIdentity);
+          } catch (error) {
+            console.error('Cloud receipt usage could not be checked; keeping the original on this device.', error);
+            cloudUploadsAllowed = false;
+          }
+        }
+        if (receiptContextChanged()) return interrupted();
+        if (
+          fileList.length &&
+          cloudUploadsAllowed &&
+          usedBytes + (input.file?.size ?? 0) > entitledUsage(get().subscription).storageLimitGb * 1024 ** 3
+        ) {
           return {
             ok: false,
-            message: 'Storage limit reached for the current plan. Remove files or upgrade before adding more receipts.',
+            message:
+              'Storage limit reached for the current plan. Cloud storage is limited and shared across XBAR at launch. Contact support before uploading more.',
           };
         }
 
@@ -2107,14 +2157,18 @@ export const useXbarStore = create<XbarStore>()(
         try {
           if (receiptContextChanged()) return interrupted();
           let uploadedAsset: Awaited<ReturnType<typeof uploadDocumentAssetToCloud>> = null;
-          if (input.file) {
+          if (input.file && cloudUploadsAllowed) {
             try {
               uploadedAsset = await uploadDocumentAssetToCloud({
                 file: input.file,
                 horseId: input.horseId,
                 expectedIdentity: receiptIdentity,
+                kind: 'receipt',
               });
             } catch (error) {
+              if (error instanceof ReservedUploadError)
+                receiptRecoveryNotice =
+                  ' Cloud upload needs review in Settings, Unfinished uploads. Keep the original; pending storage stays reserved.';
               console.error('Cloud receipt upload failed; keeping the file on this device instead.', error);
             }
           }
@@ -2168,7 +2222,15 @@ export const useXbarStore = create<XbarStore>()(
               ...current.subscription,
               usage: {
                 ...current.subscription.usage,
-                storageUsedGb: normalizeUsage(current.subscription.usage.storageUsedGb + storageIncrease),
+                storageUsedGb:
+                  current.subscription.usage.storageUsedGb +
+                  (isSupabaseConfigured()
+                    ? uploadedAsset
+                      ? storageIncrease
+                      : 0
+                    : uploadedAsset || localFileKey
+                      ? storageIncrease
+                      : 0),
               },
             },
           }));
@@ -2181,7 +2243,7 @@ export const useXbarStore = create<XbarStore>()(
           const receiptFileLost = Boolean(input.file) && !uploadedAsset?.storagePath && !localFileKey;
           return {
             ok: true,
-            message: `${receipt.category} receipt logged.${receiptFileLost ? ' The receipt file could not be saved — this browser could not store it on this device, and cloud storage is unavailable.' : ''}`,
+            message: `${receipt.category} receipt logged.${input.file && !cloudUploadsAllowed && localFileKey ? ' The original is saved on this device only because cloud storage usage could not be verified.' : ''}${receiptFileLost ? ' The receipt file could not be saved — this browser could not store it on this device, and cloud storage is unavailable.' : ''}${receiptRecoveryNotice}`,
             id: receipt.id,
           };
         } catch (error) {

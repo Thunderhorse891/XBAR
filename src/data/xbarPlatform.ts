@@ -1,3 +1,4 @@
+import { subscriptionTierConfig } from '@/lib/xbarRuntime';
 import {
   ExpenseReceipt,
   OwnershipRecord,
@@ -23,28 +24,23 @@ export const expenseReceiptsSeed: ExpenseReceipt[] = [
 ];
 
 export const subscriptionSeed: SubscriptionProfile = {
-  tier: 'Starter',
+  tier: 'Free',
   monthlyRate: 0,
   renewalDate: '',
-  billingState: 'Manual Billing',
+  billingState: 'Inactive',
   // A brand-new workspace has never had a Stripe subscription, so there is
   // nothing to recover and every plan must be purchasable.
   subscriptionRecoverable: false,
   sharedAccessEnabled: false,
-  featureFlags: ['First-run workspace setup', 'Manual document upload', 'Receipt logging', 'Horse ledger'],
+  featureFlags: [...subscriptionTierConfig.Free.featureFlags],
   usage: {
     horsesUsed: 0,
-    horseLimit: 5,
     seatsUsed: 0,
-    seatLimit: 1,
     documentsProcessed: 0,
-    documentLimit: 250,
     salePacketsGenerated: 0,
-    salePacketLimit: 2,
     storageUsedGb: 0,
-    storageLimitGb: 5,
     sharedAccessSeatsUsed: 0,
-    sharedAccessSeatLimit: 1,
+    ...subscriptionTierConfig.Free.limits,
   },
 };
 

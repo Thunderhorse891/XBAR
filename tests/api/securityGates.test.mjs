@@ -162,15 +162,7 @@ test('health endpoint reports ready when managed billing can sync entitlements',
   assert.equal('reasons' in response.body, false);
 });
 
-test('health endpoint stays healthy on hosted payment links alone', async () => {
-  /*
-   * Hosted links are a complete configuration: the client redirects to a
-   * Stripe-hosted page and this deployment holds no secret, receives no
-   * webhook and knows no price ID. Requiring the managed stack of it returned
-   * 503 for a deployment whose checkout works — and README.md points uptime
-   * monitors and load balancers at this endpoint, so the probe would have
-   * pulled a working deployment out of service.
-   */
+test('free-only health never claims disabled historical payment links can sell plans', async () => {
   const response = await withRuntimeEnv(
     {
       VITE_STRIPE_PAYMENT_LINK_STARTER: 'https://buy.stripe.com/test_starter',
@@ -185,16 +177,12 @@ test('health endpoint stays healthy on hosted payment links alone', async () => 
   assert.equal(response.body.ok, true);
   assert.equal(response.body.status, 'healthy');
   assert.equal(response.body.checks.billingReady, true);
-  assert.equal(response.body.subsystems.paymentLinks, true);
+  assert.equal(response.body.subsystems.paymentLinks, false);
   assert.equal('reasons' in response.body, false, 'a complete configuration must not be given remediation steps');
 
-  /*
-   * Healthy, but not silently: without a webhook nothing tells this deployment
-   * that a link payment succeeded, so entitlements are granted by hand. Said
-   * out loud rather than left for an operator to infer from a boolean.
-   */
-  assert.match(response.body.warnings.join(' '), /payment links only/i);
-  assert.match(response.body.warnings.join(' '), /manually/i);
+  assert.equal(response.body.subsystems.legacyPaymentLinksConfigured, true);
+  assert.match(response.body.warnings.join(' '), /hosted payment links are disabled/i);
+  assert.match(response.body.warnings.join(' '), /verified monthly prices/i);
 });
 
 test('a half-configured managed stack is still unhealthy, with or without links', async () => {

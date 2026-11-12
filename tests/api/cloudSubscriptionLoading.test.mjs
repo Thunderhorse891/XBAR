@@ -193,7 +193,7 @@ test('canonical cancellation defeats a stale Enterprise snapshot', async () => {
   fixture({ data: stale, row: { tier: 'Enterprise', billing_state: 'Inactive', monthly_rate: 199, payload: {} } });
   const loaded = await loadWorkspaceBackupFromCloud();
   assert.equal(loaded.ok, true);
-  assert.equal(loaded.authoritativeSubscription.tier, 'Starter');
+  assert.equal(loaded.authoritativeSubscription.tier, 'Free');
   assert.ok(horseCreationGate(loaded.authoritativeSubscription, 5));
   assert.ok(profitIntelligenceGate(loaded.authoritativeSubscription));
 });
@@ -212,7 +212,7 @@ test('a genuinely missing canonical row cannot inherit privileges from a snapsho
   fixture({ row: null, data: stale });
   const loaded = await loadWorkspaceBackupFromCloud();
   assert.equal(loaded.ok, true);
-  assert.equal(loaded.authoritativeSubscription.tier, 'Starter');
+  assert.equal(loaded.authoritativeSubscription.tier, 'Free');
   assert.equal(loaded.authoritativeSubscription.monthlyRate, 0);
 });
 
@@ -245,7 +245,7 @@ test('a legacy snapshot with no relational workspace still loads its records at 
   const original = fixture({ ownerId: null, data: legacy });
   const loaded = await loadWorkspaceBackupFromCloud();
   assert.equal(loaded.ok, true);
-  assert.equal(loaded.authoritativeSubscription.tier, 'Starter');
+  assert.equal(loaded.authoritativeSubscription.tier, 'Free');
   assert.deepEqual(loaded.backup.workspace.horses, original.workspace.horses);
   assert.deepEqual(loaded.backup.workspace.documents, original.workspace.documents);
   assert.equal(calls.filter((c) => c.table === 'workspace_invitations').length, 0);
@@ -299,7 +299,7 @@ test('cancellation is authoritative even when no fallback snapshot exists', asyn
   fixture({ relational: true, data: null, row: { tier: 'Enterprise', billing_state: 'Inactive', monthly_rate: 199 } });
   const loaded = await loadWorkspaceBackupFromCloud();
   assert.equal(loaded.ok, false);
-  assert.equal(loaded.authoritativeSubscription?.tier, 'Starter');
+  assert.equal(loaded.authoritativeSubscription?.tier, 'Free');
   assert.ok(profitIntelligenceGate(loaded.authoritativeSubscription));
 });
 

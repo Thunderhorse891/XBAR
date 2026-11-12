@@ -32,18 +32,13 @@ export function canStartTrial(
   profile: SubscriptionProfile,
   context: { nativeApp: boolean; canManageBilling: boolean; localOrMissingBillingRow?: boolean },
 ): boolean {
-  // The client represents an unpurchased workspace with the Manual Billing /
-  // Starter / zero-rate seed. A real paid Starter row must still be refused.
-  const setupSeed =
-    context.localOrMissingBillingRow === true &&
-    profile.tier === 'Starter' &&
-    profile.billingState === 'Manual Billing' &&
-    profile.monthlyRate === 0;
+  // Free may try Professional. Every entitled paid tier, including a zero-rate
+  // operator grant, retains its purchased access and cannot start a trial.
   return (
     !profile.trialStart &&
     !context.nativeApp &&
     context.canManageBilling &&
-    (!isEntitledBillingState(profile.billingState) || setupSeed) &&
+    !isEntitledBillingState(profile.billingState) &&
     !isSubscriptionRecoverable(profile)
   );
 }
@@ -101,7 +96,7 @@ export function trialDaysRemaining(trialStart: string | undefined, now: Date = n
  */
 export function applyTrialToProfile(profile: SubscriptionProfile, now: Date = new Date()): SubscriptionProfile {
   if (getTrialState(profile.trialStart, now) !== 'active') return profile;
-  if (isEntitledBillingState(profile.billingState) && profile.tier !== 'Starter') return profile;
+  if (isEntitledBillingState(profile.billingState)) return profile;
 
   const config = subscriptionTierConfig[TRIAL_PLAN_TIER];
   return {

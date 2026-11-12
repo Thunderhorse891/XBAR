@@ -1,4 +1,4 @@
-import { subscriptionPlans } from './subscription-plans.js';
+import { subscriptionPlans, PUBLIC_PAID_SUBSCRIPTION_TIERS } from './subscription-plans.js';
 import { stripeAccountIdReady } from './managed-billing.js';
 
 // Only fixed, code-owned reasons enter server logs. Stripe exception messages
@@ -24,8 +24,9 @@ export async function verifyCheckoutPrice(
   { tier, billingPeriod, priceId, expectedAccountId, expectedLivemode },
 ) {
   const plan = subscriptionPlans[tier];
-  if (!stripe || !plan || !priceId || !['monthly', 'annual'].includes(billingPeriod)) return false;
-  const expectedAmount = (billingPeriod === 'annual' ? plan.annualRate : plan.monthlyRate) * 100;
+  if (!stripe || !plan || !priceId || !PUBLIC_PAID_SUBSCRIPTION_TIERS.includes(tier) || billingPeriod !== 'monthly')
+    return false;
+  const expectedAmount = plan.monthlyRate * 100;
   let stage = 'account';
   try {
     // Account IDs are nonsecret configuration, never a client-supplied value.
@@ -50,7 +51,7 @@ export async function verifyCheckoutPrice(
       price.currency === 'usd' &&
       price.billing_scheme === 'per_unit' &&
       !price.transform_quantity &&
-      price.recurring?.interval === (billingPeriod === 'annual' ? 'year' : 'month') &&
+      price.recurring?.interval === 'month' &&
       price.recurring?.interval_count === 1 &&
       price.recurring?.usage_type === 'licensed' &&
       typeof price.product === 'object' &&

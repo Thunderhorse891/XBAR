@@ -79,6 +79,7 @@ async function syncWorkspaceSubscription({
   customerId,
   subscriptionId,
   priceId,
+  billedPrice,
   status,
   currentPeriodEnd,
   quantity,
@@ -107,7 +108,7 @@ async function syncWorkspaceSubscription({
    */
   const { data: existingProfile, error: existingProfileError } = await supabase
     .from('workspace_subscription_profiles')
-    .select('tier, payload')
+    .select('tier, monthly_rate, payload')
     .eq('workspace_id', workspaceId)
     .maybeSingle();
 
@@ -153,6 +154,8 @@ async function syncWorkspaceSubscription({
     // billing interval, so the line item's price id is what the purchase was
     // billed on — on the sibling path too, where priceId is the sibling's.
     priceId,
+    billedPrice,
+    existingProfile,
     renewalDate: currentPeriodEnd ? new Date(currentPeriodEnd * 1000).toISOString().slice(0, 10) : '',
     existingUsage,
   });
@@ -298,6 +301,7 @@ export default async function handler(req, res) {
           customerId,
           subscriptionId,
           priceId: lineItem?.price?.id || '',
+          billedPrice: lineItem?.price,
           status: subscription.status,
           currentPeriodEnd: subscriptionPeriodEnd(subscription, lineItem),
           quantity: lineItem?.quantity || 1,
@@ -426,6 +430,7 @@ export default async function handler(req, res) {
           // workspace's billing record at a subscription that no longer exists.
           subscriptionId: effective.id || payload.id,
           priceId: effectiveLineItem?.price?.id || '',
+          billedPrice: effectiveLineItem?.price,
           status: effective.status,
           currentPeriodEnd: subscriptionPeriodEnd(effective, effectiveLineItem),
           quantity: effectiveLineItem?.quantity || 1,

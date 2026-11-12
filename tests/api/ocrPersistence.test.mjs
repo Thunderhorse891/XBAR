@@ -181,21 +181,38 @@ const source = readFileSync(file, 'utf8')
   )
   .replace(/from (['"])(\.\.?\/[^'"]+)\1/g, (_m, _q, relative) => {
     const url = new URL(relative, base);
+    // Preserve all persistence/failure scenarios while substituting the new
+    // controlled uploader boundary, not the obsolete direct Storage API.
+    if (url.pathname.endsWith('/storage-upload.js'))
+      return 'from "data:text/javascript,export const uploadReservedBuffer=(...args)=>globalThis.__ocrReservedUpload(...args)"';
     if (url.pathname.endsWith('/supabase-admin.js'))
       return 'from "data:text/javascript,export const requireWorkspaceAccess=async()=>globalThis.__ocrPersistenceAccess"';
     if (url.pathname.endsWith('/rate-limit.js'))
       return 'from "data:text/javascript,export const enforceRateLimit=async()=>true"';
     if (url.pathname.endsWith('/entitlements.js'))
-      return 'from "data:text/javascript,export const getWorkspaceEntitlements=async()=>({ok:true,limits:{horseLimit:100}});export const checkHorseCapacity=async()=>({ok:true,used:0});export const checkDocumentCapacity=async()=>({ok:true});export const checkStorageCapacity=async()=>({ok:true})"';
+      return 'from "data:text/javascript,export const getWorkspaceEntitlements=async()=>({ok:true,effectiveTier:globalThis.__ocrPersistenceTier||\'Starter\',limits:{horseLimit:100}});export const checkHorseCapacity=async()=>({ok:true,used:0});export const checkDocumentCapacity=async()=>({ok:true});export const checkStorageCapacity=async(_client,_workspace,bytes)=>{globalThis.__ocrIncomingBytes=bytes;return {ok:true}}"';
     return `from '${url.href}'`;
   });
 const handler = (await import(`data:text/javascript;base64,${Buffer.from(source).toString('base64')}`)).default;
-async function invoke(f, body = {}) {
+async function invoke(f, body = {}, role = 'Admin') {
   globalThis.__ocrPersistenceAccess = {
     ok: true,
-    role: 'Admin',
+    workspaceId: workspace,
+    role,
     user: { id: 'synthetic-user', email: 'test@example.invalid' },
     supabase: f.supabase,
+  };
+  globalThis.__ocrReservedUpload = ({ access, requestId, bucket, storagePath, bytes, contentType }) => {
+    assert.equal(access, globalThis.__ocrPersistenceAccess);
+    assert.equal(access.supabase, f.supabase);
+    assert.equal(access.workspaceId, workspace);
+    assert.equal(bucket, 'horse-documents');
+    assert.match(requestId, /^[0-9a-f-]{36}$/);
+    assert.ok(storagePath.startsWith(`${workspace}/documents/doc-${requestId}/`));
+    assert.ok(Buffer.isBuffer(bytes));
+    assert.ok(bytes.byteLength > 0);
+    assert.equal(typeof contentType, 'string');
+    return access.supabase.storage.from(bucket).upload(storagePath, bytes, { contentType, upsert: false });
   };
   const req = Readable.from([
     JSON.stringify({
@@ -585,12 +602,14 @@ test('equal-confidence source fields recover identically when upload and documen
     assert.equal(f.tables.document_processing_jobs.find((j) => j.document_id === id).status, 'completed');
   }
 });
-test('a definitive rejected insert cleans only the newly uploaded unreferenced object', async () => {
+test('a definitive rejected insert retains its recoverable original and inventory', async () => {
   const f = fixture({ table: 'documents', action: 'insert', kind: 'error', code: 'P0001' });
   const r = await invoke(f, upload);
   assert.equal(r.body.ok, false);
-  assert.equal(f.storage.length, 0);
-  assert.equal(r.body.recovery.files[0].originalRemoved, true);
+  assert.equal(f.storage.length, 1);
+  assert.notEqual(r.body.recovery.files[0].originalRemoved, true);
+  assert.equal(r.body.recovery.files[0].storagePath, f.storage[0]);
+  assert.equal(r.body.needsRecovery, true);
 });
 test('client-supplied originals are never removed after row rejection', async () => {
   const f = fixture({ table: 'documents', action: 'insert', kind: 'error', code: 'P0001' });
@@ -694,3 +713,107 @@ for (const table of ['documents', 'document_processing_jobs'])
     assert.equal(row.horse_id, 'owner-selected-horse');
     assert.equal(table === 'documents' ? row.state : row.status, table === 'documents' ? 'Ready' : 'completed');
   });
+
+test('Free OCR preview/auto is rejected before remote file download or any write', async () => {
+  globalThis.__ocrPersistenceTier = 'Free';
+  try {
+    for (const mode of ['preview', 'auto']) {
+      const f = fixture();
+      const before = clone(f.tables);
+      const response = await invoke(f, {
+        mode,
+        files: [{ fileName: 'paid.pdf', storagePath: `${workspace}/documents/paid.pdf` }],
+      });
+      assert.equal(response.statusCode, 403);
+      assert.equal(response.body.code, 'paid_ocr_required');
+      assert.deepEqual(f.tables, before);
+      assert.deepEqual(f.calls, []);
+      assert.deepEqual(f.storage, []);
+    }
+  } finally {
+    delete globalThis.__ocrPersistenceTier;
+  }
+});
+
+test('Professional and Ranch Ops OCR preview and automatic processing preserve their originals and committed links', async () => {
+  try {
+    for (const tier of ['Professional', 'Ranch Ops']) {
+      globalThis.__ocrPersistenceTier = tier;
+      for (const mode of ['preview', 'auto']) {
+        const f = fixture();
+        const response = await invoke(f, { ...upload, mode });
+        assert.equal(response.statusCode, 200, `${tier}/${mode}`);
+        assert.equal(response.body.ok, true);
+        assert.equal(f.storage.length, 1);
+        const stored = f.tables.documents.find((document) => document.document_id !== 'doc-a');
+        assert.ok(stored, 'the original document is recorded');
+        assert.equal(stored.storage_path, f.storage[0]);
+        if (mode === 'auto') {
+          assert.equal(response.body.summary.autoCommitted, 1);
+          assert.equal(stored.horse_id, response.body.proposals[0].horseId);
+        }
+      }
+    }
+  } finally {
+    delete globalThis.__ocrPersistenceTier;
+  }
+});
+
+test('a rejected upload preserves a different document that references the same fresh path', async () => {
+  let f;
+  f = fixture({
+    table: 'documents',
+    action: 'insert',
+    kind: 'error',
+    code: 'P0001',
+    before: (tables) =>
+      tables.documents.push({ workspace_id: workspace, document_id: 'recovery-reference', storage_path: f.storage[0] }),
+  });
+  const result = await invoke(f, upload);
+  assert.equal(result.body.ok, false);
+  assert.equal(f.storage.length, 1);
+  assert.equal(f.tables.documents.find((d) => d.document_id === 'recovery-reference').storage_path, f.storage[0]);
+  assert.notEqual(result.body.recovery.files[0].originalRemoved, true);
+});
+test('bulk OCR preflight charges only newly uploaded bytes, never the existing original twice', async () => {
+  const f = fixture();
+  const supplied = `${workspace}/documents/prior/original.txt`;
+  const result = await invoke(f, {
+    ...upload,
+    files: [{ ...upload.files[0], storagePath: supplied }, upload.files[0]],
+  });
+  assert.equal(result.body.ok, true);
+  assert.equal(globalThis.__ocrIncomingBytes, Buffer.from('original file').byteLength);
+  assert.equal(f.storage.length, 1);
+});
+
+test('a lost original-upload response preserves the batch path without claiming confirmed upload', async () => {
+  const f = fixture();
+  const from = f.supabase.storage.from;
+  f.supabase.storage.from = (bucket) => {
+    const storage = from(bucket);
+    return {
+      ...storage,
+      async upload(...args) {
+        await storage.upload(...args);
+        throw new Error('acknowledgment lost');
+      },
+    };
+  };
+  const result = await invoke(f, upload);
+  assert.equal(result.body.ok, false);
+  assert.equal(result.body.needsRecovery, true);
+  assert.equal(f.storage.length, 1);
+  assert.equal(result.body.recovery.files[0].storagePath, f.storage[0]);
+  assert.equal(result.body.recovery.files[0].uploaded, false);
+  assert.equal(result.body.recovery.files[0].uploadOutcome, 'unconfirmed');
+});
+
+test('a role without document upload capability is refused before the controlled uploader or batch write', async () => {
+  const f = fixture();
+  const result = await invoke(f, upload, 'Viewer');
+  assert.equal(result.statusCode, 403);
+  assert.equal(result.body.code, 'capability_required');
+  assert.deepEqual(f.storage, []);
+  assert.deepEqual(f.calls, []);
+});

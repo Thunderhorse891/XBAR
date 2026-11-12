@@ -1,3 +1,4 @@
+import { buildSubscriptionForTier } from '../../src/lib/xbarRuntime.ts';
 import assert from 'node:assert/strict';
 import { beforeEach, test } from 'node:test';
 import { createEmptyWorkspaceState, createHorseRecord } from '../../src/store/xbarStoreHelpers.ts';
@@ -38,7 +39,14 @@ const intake = (files, createHorseFromBatch = true) =>
     .createDocumentIntake({ files, source: 'Bulk Intake', uploadedBy: 'Synthetic', createHorseFromBatch });
 
 beforeEach((context) => {
-  useXbarStore.setState({ ...createEmptyWorkspaceState(), currentRole: 'Admin', workspaceProfile: profile });
+  const empty = createEmptyWorkspaceState();
+  // Identity/OCR corpus runs on paid Starter, not the card-free signup tier.
+  useXbarStore.setState({
+    ...empty,
+    subscription: buildSubscriptionForTier(empty.subscription, 'Starter', { billingState: 'Active' }),
+    currentRole: 'Admin',
+    workspaceProfile: profile,
+  });
   const original = console.error;
   context.mock.method(console, 'error', (message, ...args) => {
     if (String(message).startsWith('On-device file storage failed;')) return;

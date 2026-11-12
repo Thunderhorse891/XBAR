@@ -45,7 +45,7 @@ export type MedicalEventType =
 
 export type TransferStatus = 'Clear' | 'Pending Signatures' | 'AQHA Review' | 'Attention Required';
 
-export type SubscriptionTier = 'Starter' | 'Professional' | 'Ranch Ops' | 'Enterprise';
+export type SubscriptionTier = 'Free' | 'Starter' | 'Professional' | 'Ranch Ops' | 'Enterprise';
 
 export type AssetCategory = 'Tack' | 'Equipment' | 'Medical Kit' | 'Feed & Supply' | 'Transport';
 

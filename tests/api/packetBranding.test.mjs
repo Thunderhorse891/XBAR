@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 import { createHash } from 'node:crypto';
 import { Readable } from 'node:stream';
-import { register } from 'node:module';
+import { register, registerHooks } from 'node:module';
 import { readFile, writeFile } from 'node:fs/promises';
 import { deflateSync, inflateSync } from 'node:zlib';
 import { PDFDocument, PDFName, StandardFonts } from 'pdf-lib';
@@ -11,6 +11,17 @@ process.env.SUPABASE_URL = 'https://packet-branding-test.supabase.co';
 process.env.SUPABASE_SERVICE_ROLE_KEY = 'synthetic-key';
 register(new URL('./fixtures/billingLoader.mjs', import.meta.url));
 const { __setBillingSupabase } = await import('./fixtures/billingSupabaseStub.mjs');
+// This suite exercises PDF/row/recovery behavior. The controlled transport's
+// authorization, reservation and provider contract is tested in reservedUploads.
+registerHooks({
+  resolve(specifier, context, next) {
+    if (specifier.endsWith('/storage-upload.js')) {
+      const source = 'export const uploadReservedBuffer = (...args) => globalThis.__packetReservedUpload(...args);';
+      return { url: `data:text/javascript;base64,${Buffer.from(source).toString('base64')}`, shortCircuit: true };
+    }
+    return next(specifier, context);
+  },
+});
 const { default: handler } = await import('../../api/sale-packets.js');
 const { default: templateHandler } = await import('../../api/_lib/documents-generate-template.js');
 const { loadHorseContext } = await import('../../api/_lib/horse-context.js');
@@ -136,7 +147,7 @@ function install({
           const rows = tables[table].filter((row) => filters.every(([key, value]) => row[key] === value));
           const error = readErrors[table] || (table === 'workspace_profiles' ? profileError : null);
           return Promise.resolve({
-            data: values ? null : error ? null : single ? (rows[0] ?? null) : rows,
+            data: error ? null : values ? (single ? values : [values]) : single ? (rows[0] ?? null) : rows,
             error,
             count: count ? rows.length : undefined,
           }).then(resolve, reject);
@@ -149,7 +160,7 @@ function install({
       from: (bucket) => ({
         upload: async (path, bytes) => {
           uploads.push({ bucket, path, bytes });
-          return { error: null };
+          return { data: { path }, error: null };
         },
         createSignedUrl: async () => ({ data: { signedUrl: 'https://download.example.test/packet' }, error: null }),
         download: async (path) => {
@@ -159,6 +170,12 @@ function install({
         },
       }),
     },
+  };
+  globalThis.__packetReservedUpload = ({ access, requestId, bucket, storagePath, bytes, contentType }) => {
+    assert.equal(access.workspaceId, WORKSPACE);
+    assert.equal(access.user.id, USER);
+    assert.ok(storagePath.includes(requestId), 'recovery identity must match the reserved original');
+    return client.storage.from(bucket).upload(storagePath, bytes, { contentType, upsert: false });
   };
   __setBillingSupabase(client);
   return { client, reads, writes, uploads, downloads };
@@ -906,3 +923,33 @@ test('contradictory mirror identities cannot supply health facts while matching 
     }
   }
 });
+
+for (const [label, endpoint, body, idField, pathField] of [
+  ['template', templateHandler, { templateId: 'bill-of-sale', output: 'pdf' }, 'documentId', 'storagePath'],
+  ['packet', handler, {}, 'packetId', 'packetPdfPath'],
+]) {
+  for (const mode of ['missing acknowledgment', 'lost response'])
+    test(`${label} preserves recovery identity when upload has ${mode}`, async () => {
+      const f = install();
+      const from = f.client.storage.from;
+      f.client.storage.from = (bucket) => {
+        const storage = from(bucket);
+        return {
+          ...storage,
+          async upload(...args) {
+            await storage.upload(...args);
+            if (mode === 'lost response') throw new Error('response lost after upload');
+            return { data: null, error: null };
+          },
+        };
+      };
+      const result = await call(body, endpoint);
+      assert.equal(result.status, 502);
+      assert.equal(result.body.ok, false);
+      assert.equal(result.body.needsRecovery, true);
+      assert.equal(result.body.uploadOutcome, 'unconfirmed');
+      assert.equal(result.body[pathField], f.uploads[0].path);
+      assert.ok(result.body[idField]);
+      assert.equal(f.writes.length, 0, 'unconfirmed upload cannot become a saved document or packet');
+    });
+}

@@ -1,13 +1,15 @@
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import {
+  canCustomizeReports,
   DEFAULT_REPORT_PRESENTATION,
   REPORT_ACCENT_PRESETS,
   resolveReportPresentation,
   validReportAccent,
 } from '../src/lib/reportPresentation.js';
 
-for (const tier of ['Starter', 'Professional'] as const) {
+for (const tier of ['Free', 'Starter', 'Professional'] as const) {
+  assert.equal(canCustomizeReports(tier), false);
   assert.deepEqual(
     resolveReportPresentation(tier, { accent: '#000000', layout: 'cover', whiteLabel: true }),
     DEFAULT_REPORT_PRESENTATION,
@@ -16,9 +18,13 @@ for (const tier of ['Starter', 'Professional'] as const) {
 assert.deepEqual(resolveReportPresentation('Ranch Ops', { accent: '#000000', layout: 'cover', whiteLabel: true }), {
   accent: '#000000',
   layout: 'cover',
-  whiteLabel: false,
+  whiteLabel: true,
 });
-assert.equal(resolveReportPresentation('Enterprise', { whiteLabel: true }).whiteLabel, true);
+for (const tier of ['Ranch Ops', 'Enterprise'] as const) {
+  assert.equal(canCustomizeReports(tier), true);
+  assert.equal(resolveReportPresentation(tier, { whiteLabel: true }).whiteLabel, true);
+}
+
 for (const color of [
   '#ffffff',
   '#eeeeee',

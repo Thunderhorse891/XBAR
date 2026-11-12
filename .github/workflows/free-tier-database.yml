@@ -1,0 +1,60 @@
+name: Free tier database contract
+
+on:
+  pull_request:
+    paths:
+      - 'supabase/**'
+      - 'tests/database/**'
+      - '.github/workflows/free-tier-database.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  free-tier-database:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    services:
+      postgres:
+        image: postgres:17.6
+        env:
+          POSTGRES_PASSWORD: synthetic-ci-only
+          POSTGRES_DB: xbar_free_tier_test
+        ports: ['5432:5432']
+        options: >-
+          --health-cmd "pg_isready -U postgres -d xbar_free_tier_test"
+          --health-interval 5s --health-timeout 5s --health-retries 10
+    env:
+      PGHOST: localhost
+      PGPORT: 5432
+      PGUSER: postgres
+      PGPASSWORD: synthetic-ci-only
+      PGDATABASE: xbar_free_tier_test
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 24
+      - name: Load complete current schema into disposable PostgreSQL
+        run: |
+          node scripts/prepare-supabase-schema.mjs
+          psql -X -v ON_ERROR_STOP=1 -f tests/database/bootstrap.sql
+          psql -X -v ON_ERROR_STOP=1 -f supabase/production-schema.generated.sql
+      - name: Install isolated native database test client
+        run: npm install --prefix "$RUNNER_TEMP/xbar-reservation-pg" --ignore-scripts --no-audit --no-fund pg@8.16.3
+      - name: Verify full-schema RLS and committed concurrent quota writes
+        run: |
+          set -o pipefail
+          psql -X -v ON_ERROR_STOP=1 -f tests/database/free-tier-rls.sql
+          psql -X -v ON_ERROR_STOP=1 -f tests/database/storage-object-accounting.sql
+          python3 tests/database/free-tier-concurrency.py 2>&1 | tee free-tier-postgres.log
+          psql -X -v ON_ERROR_STOP=1 -f tests/database/reserved-storage-uploads.sql
+          PG_MODULE_PATH="$RUNNER_TEMP/xbar-reservation-pg/node_modules/pg/lib/index.js" node tests/database/reserved-storage-concurrency.mjs 2>&1 | tee -a free-tier-postgres.log
+      - name: Retain synthetic evidence
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: free-tier-postgres-evidence
+          path: free-tier-postgres.log
+          retention-days: 7
