@@ -39,9 +39,11 @@ changing prices without locking existing subscribers out.
 
    | Tier         | Monthly | Horses | Team seats | Included paid capabilities                            |
    | ------------ | ------- | ------ | ---------- | ----------------------------------------------------- |
-   | Free         | $0      | 2      | 1          | Manual records; 10 documents / 1 GB                   |
+   | Free         | $0      | 2      | 1          | Manual records; 10 documents; shared launch storage   |
    | Professional | $20     | 30     | 5          | OCR, calculated reports, PDF/CSV export, sale sharing |
    | Ranch Ops    | $49.99  | 200    | 20         | Professional plus operations and report styling       |
+
+   New plans include no dedicated storage allowance; existing numeric entitlement records do not provision space.
 
    Starter and Enterprise are legacy entitlement tiers, not new purchase options.
    Existing subscribers keep their actual rates, cadence and access. Annual terms
@@ -175,8 +177,10 @@ renewal.
 
 1. Create the new Prices in Stripe. **Do not archive or delete the old ones**
    while anyone is billed on them.
-2. Put the new ids in `STRIPE_PRICE_ID_<TIER>` / `..._ANNUAL`. Only these are
-   sold to new buyers.
+2. Put verified new monthly ids in `STRIPE_PRICE_ID_PROFESSIONAL` and
+   `STRIPE_PRICE_ID_RANCH_OPS`. Only these are sold to new buyers. Preserve
+   historical annual mappings for existing subscribers; do not configure new
+   annual offers.
 3. Move every replaced id into `STRIPE_LEGACY_PRICE_IDS`, comma-separated, as
    `price_id=Tier:monthly` or `price_id=Tier:annual`:
 
@@ -205,8 +209,9 @@ migration was changed as part of the local implementation.
 2. Verify `STRIPE_UPGRADE_ACCOUNT_ID` against the account reached by the server
    key. Set `STRIPE_UPGRADE_LIVEMODE` deliberately; production requires `true`.
    All target prices are retrieved and checked against the canonical plan
-   amounts, USD, active product, one-month/one-year licensed recurring interval,
-   and expected Stripe mode before any amount is displayed.
+   amounts, USD, active product, one-month licensed recurring interval,
+   and expected Stripe mode before any new checkout amount is displayed. New
+   annual purchases are refused; existing annual subscriptions are unchanged.
 3. Review an existing `STRIPE_UPGRADE_COUPON_ID`: exactly 10 percent, duration
    `once`, valid, unexpired, with redemptions remaining and applicable to each
    target product. Never use a forever/repeating coupon. With no valid coupon,

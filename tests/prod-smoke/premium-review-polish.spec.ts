@@ -1,4 +1,6 @@
 import { expect, test, type Page } from '@playwright/test';
+import { buildSubscriptionForTier } from '../../src/lib/xbarRuntime.js';
+import type { SubscriptionProfile } from '../../src/types/xbar.js';
 
 // Disposable local-first records only. This verifies the production app bundle,
 // not hosted permissions, payment or storage delivery.
@@ -29,6 +31,78 @@ async function noOverflow(page: Page) {
   const size = await page.evaluate(() => ({ viewport: innerWidth, page: document.documentElement.scrollWidth }));
   expect(size.page).toBeLessThanOrEqual(size.viewport);
 }
+async function workspace(page: Page) {
+  return page.evaluate(async () => {
+    const raw = await new Promise<string>((resolve, reject) => {
+      const open = indexedDB.open('xbar-workspace', 1);
+      open.onerror = () => reject(open.error);
+      open.onsuccess = () => {
+        const db = open.result;
+        const request = db.transaction('persist', 'readonly').objectStore('persist').get('xbar-live-workspace');
+        request.onsuccess = () => {
+          db.close();
+          resolve(request.result);
+        };
+        request.onerror = () => {
+          db.close();
+          reject(request.error);
+        };
+      };
+    });
+    return JSON.parse(raw).state as {
+      subscription: SubscriptionProfile;
+      sharedListings: unknown[];
+      horses: unknown[];
+    };
+  });
+}
+
+async function enablePaidPacketFixture(page: Page) {
+  // Seed only this disposable local fixture using the canonical plan builder.
+  // Staging packets requires paid access; no hosted billing state is changed.
+  const current = await workspace(page);
+  expect(current.subscription.tier).toBe('Free');
+  const subscription = {
+    ...buildSubscriptionForTier(current.subscription, 'Professional', { billingState: 'Active' }),
+    purchasedTier: 'Professional' as const,
+  };
+  await page.evaluate(
+    (paidSubscription) =>
+      new Promise<void>((resolve, reject) => {
+        const open = indexedDB.open('xbar-workspace', 1);
+        open.onerror = () => reject(open.error);
+        open.onsuccess = () => {
+          const db = open.result;
+          const transaction = db.transaction('persist', 'readwrite');
+          const store = transaction.objectStore('persist');
+          const request = store.get('xbar-live-workspace');
+          request.onsuccess = () => {
+            const saved = JSON.parse(request.result as string);
+            saved.state.subscription = paidSubscription;
+            store.put(JSON.stringify(saved), 'xbar-live-workspace');
+          };
+          transaction.oncomplete = () => {
+            db.close();
+            resolve();
+          };
+          transaction.onerror = () => {
+            db.close();
+            reject(transaction.error);
+          };
+          transaction.onabort = () => {
+            db.close();
+            reject(new Error('Paid packet fixture transaction aborted'));
+          };
+        };
+      }),
+    subscription,
+  );
+  // Hydrate the paid fixture before exercising the existing packet workflow.
+  await page.reload();
+  await expect(page.getByRole('button', { name: 'Create', exact: true })).toBeVisible();
+  expect((await workspace(page)).subscription).toMatchObject({ tier: 'Professional', billingState: 'Active' });
+}
+
 async function seedReview(page: Page) {
   await page.evaluate(
     () =>
@@ -93,8 +167,25 @@ for (const width of [1440, 390]) {
     await page.emulateMedia({ reducedMotion: 'reduce' });
     await setupHorse(page);
     await navigate(page, '/horses');
-    await page.getByRole('button', { name: 'Stage packet', exact: true }).click();
     const card = page.locator('.horse-card');
+    const freeWorkspace = await workspace(page);
+    expect(freeWorkspace.subscription.tier).toBe('Free');
+    expect(freeWorkspace.sharedListings).toEqual([]);
+    await page.getByRole('button', { name: 'Stage packet', exact: true }).click();
+    await expect(page.getByText('Buyer packet blocked', { exact: true })).toBeVisible();
+    await expect(
+      page.getByText('Sale listings are available on Professional and higher plans.', { exact: false }),
+    ).toBeVisible();
+    await expect(card.getByText('Buyer packet staged', { exact: true })).toHaveCount(0);
+    await page.reload();
+    await expect(card.getByText('Private', { exact: true })).toBeVisible();
+    const deniedWorkspace = await workspace(page);
+    expect(deniedWorkspace.sharedListings).toEqual(freeWorkspace.sharedListings);
+    expect(deniedWorkspace.horses).toEqual(freeWorkspace.horses);
+    expect(deniedWorkspace.subscription).toEqual(freeWorkspace.subscription);
+
+    await enablePaidPacketFixture(page);
+    await page.getByRole('button', { name: 'Stage packet', exact: true }).click();
     await expect(card.getByText('Buyer packet staged', { exact: true })).toBeVisible();
     await expect(card.getByText('Draft', { exact: true })).toBeVisible();
     await expect(page.locator('.hc-kpi').filter({ hasText: 'Buyer Packets Live' }).locator('strong')).toHaveText('0');
@@ -105,7 +196,7 @@ for (const width of [1440, 390]) {
       '$12K',
     );
     await noOverflow(page);
-    await page.screenshot({ path: info.outputPath(`horse-card-${width}.png`), fullPage: true });
+    await page.screenshot({ path: info.outputPath(`workspace-horse-card-${width}.png`), fullPage: true });
     await page.getByRole('button', { name: 'Hold packet', exact: true }).click();
     await expect(card.getByText('Private', { exact: true })).toBeVisible();
     await expect(card.getByText('Buyer packet staged', { exact: true })).toHaveCount(0);
@@ -131,7 +222,7 @@ for (const width of [1440, 390]) {
     await expect(details).not.toContainText('9999999');
     await expect(details.getByRole('region')).toHaveAttribute('tabindex', '0');
     await noOverflow(page);
-    await page.screenshot({ path: info.outputPath(`ocr-review-${width}.png`), fullPage: true });
+    await page.screenshot({ path: info.outputPath(`workspace-ocr-review-${width}.png`), fullPage: true });
     await details.locator('summary').press('Space');
     await expect(details).not.toHaveAttribute('open');
     await page.reload();
