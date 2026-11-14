@@ -53,10 +53,19 @@ test('a workspace already at its limit cannot add a single horse', async () => {
   assert.equal(result.ok, false);
 });
 
-test('a null count (empty workspace) is treated as zero in use', async () => {
-  const supabase = fakeSupabaseWithCount(null);
-  const result = await checkHorseCapacity(supabase, 'ws-1', starterLimits.horseLimit, starterLimits);
+test('an exact zero count permits the empty workspace while an unknown count refuses', async () => {
+  // PostgREST reports an empty exact count as numeric zero. Null means that
+  // no usable count was supplied; it cannot establish an empty workspace.
+  const result = await checkHorseCapacity(fakeSupabaseWithCount(0), 'ws-1', starterLimits.horseLimit, starterLimits);
   assert.deepEqual(result, { ok: true, used: 0 });
+  const unknown = await checkHorseCapacity(
+    fakeSupabaseWithCount(null),
+    'ws-1',
+    starterLimits.horseLimit,
+    starterLimits,
+  );
+  assert.equal(unknown.ok, false);
+  assert.equal(unknown.status, 503);
 });
 
 test('every published tier enforces its own horse limit', async () => {

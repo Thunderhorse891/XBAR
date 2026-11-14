@@ -1,6 +1,10 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import { build } from 'esbuild';
+import { mkdtempSync, writeFileSync, rmSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
+import { loadEnv } from 'vite';
 let scenario = 0;
 
 async function bundle(entry, env = {}, plugins = []) {
@@ -194,5 +198,57 @@ test('native API routing does not implicitly enable telemetry API fallback', asy
     process.env = original;
     delete globalThis.__mobileBuildInput;
     delete globalThis.__mobileBuildOutput;
+  }
+});
+
+test('local web smoke build pins its target despite inherited native-build flags', async () => {
+  const original = { ...process.env };
+  let launched;
+  let fixtureDirectory;
+  try {
+    Object.assign(process.env, {
+      VITE_NATIVE_APP: 'true',
+      XBAR_SKIP_MARKETING: '1',
+      VITE_ROUTER_MODE: 'hash',
+      VITE_STATIC_TARGET: 'github-pages',
+      VITE_SUPABASE_URL: 'https://synthetic.invalid',
+      VITE_SUPABASE_ANON_KEY: 'synthetic-key',
+    });
+    globalThis.__localBuildOutput = undefined;
+    await bundle('scripts/build-local.mjs', {}, [
+      {
+        name: 'capture-local-launcher',
+        setup(b) {
+          b.onResolve({ filter: /^node:child_process$/ }, ({ path }) => ({ path, namespace: 'local-fixture' }));
+          b.onLoad({ filter: /.*/, namespace: 'local-fixture' }, () => ({
+            contents:
+              'export function spawn(command, args, options) { globalThis.__localBuildOutput = { command, args, env: options.env }; return { on() {} }; }',
+          }));
+        },
+      },
+    ]);
+    launched = globalThis.__localBuildOutput;
+    assert.equal(launched.command, 'npm');
+    assert.deepEqual(launched.args, ['run', 'build']);
+    assert.equal(launched.env.VITE_NATIVE_APP, 'false');
+    assert.equal(launched.env.XBAR_SKIP_MARKETING, '');
+    assert.equal(launched.env.VITE_ROUTER_MODE, 'browser');
+    assert.equal(launched.env.VITE_STATIC_TARGET, 'web');
+    assert.equal(launched.env.VITE_ALLOW_LOCAL_MODE, 'true');
+    assert.equal(launched.env.VITE_SUPABASE_URL, '');
+    assert.equal(launched.env.VITE_SUPABASE_ANON_KEY, '');
+    fixtureDirectory = mkdtempSync(join(tmpdir(), 'xbar-local-env-'));
+    writeFileSync(
+      join(fixtureDirectory, '.env.production'),
+      'VITE_SUPABASE_URL=https://synthetic.invalid\nVITE_SUPABASE_ANON_KEY=synthetic-key\n',
+    );
+    process.env = launched.env;
+    const resolved = loadEnv('production', fixtureDirectory, 'VITE_');
+    assert.equal(resolved.VITE_SUPABASE_URL, '', 'local mode must override cloud values in production env files');
+    assert.equal(resolved.VITE_SUPABASE_ANON_KEY, '');
+  } finally {
+    process.env = original;
+    delete globalThis.__localBuildOutput;
+    if (fixtureDirectory) rmSync(fixtureDirectory, { recursive: true, force: true });
   }
 });

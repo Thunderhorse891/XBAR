@@ -9,10 +9,13 @@ const root = new URL('../../', import.meta.url);
 const sql = (path) => readFileSync(new URL(path, root), 'utf8');
 const db = new PGlite();
 await db.exec(`create role authenticated;
+create schema auth;
+create table auth.users(id uuid primary key,email text);
+create table workspaces(id uuid primary key,owner_user_id uuid,name text);
 create table workspace_subscription_profiles(workspace_id uuid primary key, tier text not null default 'Starter',billing_state text not null default 'Manual Billing',payload jsonb not null default '{}');
 create table horses(workspace_id uuid,horse_id text,payload jsonb not null default '{}',primary key(workspace_id,horse_id));
 create table documents(workspace_id uuid,document_id text,state text,payload jsonb not null default '{}',size_bytes bigint not null default 0 check(size_bytes>=0),primary key(workspace_id,document_id));
-create table sale_packets(workspace_id uuid,packet_id text,payload jsonb not null default '{}',size_bytes bigint not null default 0 check(size_bytes>=0),primary key(workspace_id,packet_id));
+create table sale_packets(workspace_id uuid,packet_id text,created_at timestamptz not null default now(),payload jsonb not null default '{}',size_bytes bigint not null default 0 check(size_bytes>=0),primary key(workspace_id,packet_id));
 create table shared_listings(workspace_id uuid,listing_id text,state text,payload jsonb not null default '{}',updated_at timestamptz default now(),published_at timestamptz,primary key(workspace_id,listing_id));
 create table sales_leads(workspace_id uuid,lead_id text,payload jsonb not null default '{}',primary key(workspace_id,lead_id));
 create table workspace_memberships(workspace_id uuid,email text,user_id uuid,role text,status text,unique(workspace_id,email));
@@ -43,6 +46,9 @@ if (process.argv.includes('--baseline')) {
   await db.exec(sql('supabase/migrations/20261002090000_seat_reservation_consumed_on_accept.sql'));
 } else {
   await db.exec(sql('supabase/migrations/20261112120000_distinct_free_tier.sql'));
+  await db.exec(sql('supabase/migrations/20261114120000_sale_packet_rolling_allowance.sql'));
+  if (process.argv.includes('--packet-window-baseline'))
+    await db.exec(sql('supabase/rollbacks/20261114120000_sale_packet_rolling_allowance.sql'));
 }
 for (const table of ['horses', 'documents', 'sale_packets', 'shared_listings', 'sales_leads'])
   await db.exec(
@@ -57,7 +63,8 @@ for (const table of ['workspace_memberships', 'workspace_invitations'])
     `create trigger enforce_seats before insert or update on ${table} for each row execute function xbar_enforce_workspace_seat_limits();`,
   );
 await db.exec(sql('supabase/checks/distinct-free-tier.sql'));
+await db.exec(sql('tests/database/sale-packet-window.sql'));
 console.log(
-  'PASS: disposable PGlite Free tier matrix, quotas, trial boundary, above-cap edits/upserts and downgrade preservation. Concurrency and real RLS not tested.',
+  'PASS: disposable PGlite Free tier matrix, quotas, trial boundary, above-cap edits/upserts, rolling packet windows and downgrade preservation. Concurrency and real RLS not tested.',
 );
 await db.close();

@@ -1,0 +1,7 @@
+path,sha256,lines,review_status,reason
+scripts/build-local.mjs,775557c4e977ecf65c05f479b17f872496031d8f7ee18601e8edad8b3245a24c,31,reviewed,batch 3 manual line review; scope and limits in local-web-build.md
+tests/api/nativeRouting.test.mjs,c0312259a75b1f5e6ffe9d6bfbc0ab39c2359a4ece6c7f48ca0393c0e1cb266f,254,reviewed,batch 3 manual line review; scope and limits in local-web-build.md
+supabase/migrations/20261112120000_distinct_free_tier.sql,7698322acc379e605aeda8e58541d82eccf0ece996cad7616a031d6430a7f7f9,363,reviewed,batch 3 manual line review; scope and limits in local-web-build.md
+supabase/migrations/20261112130000_storage_object_accounting.sql,a6206574f552b632dbb047ddf3f067dc5e2ab27aec88be0b45b311156a157e67,187,reviewed,batch 3 manual line review; scope and limits in local-web-build.md
+supabase/migrations/20261112140000_reserved_storage_uploads.sql,34e96bef587dd0496db5d9c8c575a6644683219f534d0550d57a1c8801329534,293,reviewed,batch 3 manual line review; scope and limits in local-web-build.md
+supabase/migrations/20261112150000_project_storage_budget.sql,eed66077bcd7a995207ff07f79e755248f34d95f59d48d3452f63fa78042ea0e,56,reviewed,batch 3 manual line review; scope and limits in local-web-build.md

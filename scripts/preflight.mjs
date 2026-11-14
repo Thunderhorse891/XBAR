@@ -31,6 +31,28 @@ const groups = [
     ],
   },
   {
+    title: 'Controlled original-file uploads',
+    unlocks: 'Reserved uploads of horse photos, documents and sale packets. No direct-upload fallback is available.',
+    required: [
+      { name: 'SUPABASE_URL', note: 'project URL (API functions)' },
+      { name: 'SUPABASE_SERVICE_ROLE_KEY', note: 'reservation RPC access (server only)' },
+      { name: 'SUPABASE_STORAGE_S3_REGION', note: 'verified provider region' },
+      { name: 'SUPABASE_STORAGE_S3_ACCESS_KEY_ID', note: 'server-only S3 credential; never a JWT' },
+      { name: 'SUPABASE_STORAGE_S3_SECRET_ACCESS_KEY', note: 'server-only S3 credential; never a JWT' },
+    ],
+    optional: [
+      { name: 'SUPABASE_STORAGE_S3_ENDPOINT', note: 'defaults to the project /storage/v1/s3 endpoint' },
+      {
+        name: 'SUPABASE_STORAGE_MAX_FILE_BYTES',
+        note: 'defaults to 50,000,000 bytes; invalid values refuse admission',
+      },
+    ],
+    extra: [
+      'Presence only: credential validity, provider limits, CORS, migrations, old upload-capability draining and interrupted-upload recovery remain unverified.',
+      'Never run these checks against live records or raise hosting limits without separate authorization.',
+    ],
+  },
+  {
     title: 'Online billing (Stripe)',
     unlocks:
       'Self-serve checkout and subscription management. Until fully configured, the app honestly shows the manual-billing panel.',

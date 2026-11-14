@@ -99,3 +99,4 @@ shared component / branding / fields (runtime usage to trace),src/components/ui/
 shared component / branding / fields (runtime usage to trace),src/components/ui/textarea.tsx,pending,map customer-visible states; synthetic keyboard/mobile/contrast and actual-device acceptance required
 transactional/customer email template,api/_lib/lifecycleEmails.js,specific pricing/copy sections checked; full surface pending,synthetic browser + keyboard/mobile/contrast + real device acceptance still required
 transactional/customer email template,api/sale-packets.js,pending,synthetic browser + keyboard/mobile/contrast + real device acceptance still required
+app screen,src/pages/Dashboard.tsx,Free copy section reviewed; whole file and full journey pending,synthetic first-horse and manual-upload copy checks pending final-head CI; actual devices unverified
