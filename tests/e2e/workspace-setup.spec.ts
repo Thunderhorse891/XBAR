@@ -1540,7 +1540,8 @@ test('choosing Free opens the workspace after two required setup fields without 
       count: state.horses.length,
     };
   });
-  expect(savedHorse).toMatchObject({ tier: 'Free', horseName: 'Free Journey First Horse', count: 1 });
+  // Registered horse names are normalized to uppercase by createHorseRecord.
+  expect(savedHorse).toMatchObject({ tier: 'Free', horseName: 'FREE JOURNEY FIRST HORSE', count: 1 });
   expect(savedHorse.horseId).toBeTruthy();
   await page.reload();
   await expect
