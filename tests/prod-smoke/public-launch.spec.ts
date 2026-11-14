@@ -13,13 +13,13 @@ for (const width of [1440, 390]) {
     await expect(page.getByRole('rowheader', { name: 'Annual price (billed yearly)', exact: true })).toHaveCount(0);
     const plans = page.locator('.plan');
     await expect(plans).toHaveCount(2);
-    for (const [tier, amount] of [
-      ['Professional', '19.99'],
-      ['Ranch Ops', '49.99'],
+    for (const [tier, expectedPrice] of [
+      ['Professional', '$19.99/month'],
+      ['Ranch Ops', '$49.99/month'],
     ]) {
       const card = plans.filter({ has: page.getByRole('heading', { name: tier, exact: true }) });
       await expect(card).toBeVisible();
-      await expect(card.locator('.plan__price')).toHaveText(`${amount}/month`);
+      await expect(card.locator('.plan__price')).toHaveText(expectedPrice);
       await expect(card.getByRole('link', { name: `Choose ${tier}`, exact: true })).toBeVisible();
     }
     for (const tier of ['Starter', 'Enterprise']) {
