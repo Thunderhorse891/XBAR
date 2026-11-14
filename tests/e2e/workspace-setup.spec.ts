@@ -1501,7 +1501,7 @@ test('choosing Free opens the workspace after two required setup fields without 
   await page.getByPlaceholder('Primary Ranch').fill('Free Journey Ranch');
   await page.getByRole('button', { name: 'Create workspace', exact: true }).click();
   await expect(page).toHaveURL(/\/app$/);
-  await expect(page.getByRole('button', { name: 'Add your first horse', exact: true })).toBeVisible();
+  await expect(page.getByRole('button', { name: 'Add first horse', exact: true })).toBeVisible();
   expect(
     await page.evaluate(async () => {
       const path = '/src/store/useXbarStore.ts';
@@ -1515,4 +1515,41 @@ test('choosing Free opens the workspace after two required setup fields without 
       };
     }),
   ).toEqual({ tier: 'Free', horses: 0, owner: 'Free Journey Ranch', entity: 'Free Journey' });
+  await page.getByRole('button', { name: 'Add first horse', exact: true }).click();
+  await expect(page.getByRole('heading', { name: 'Add a horse', exact: true })).toBeVisible();
+  await page.getByLabel('Registered name', { exact: true }).fill('Free Journey First Horse');
+  await page.getByLabel('Barn name', { exact: true }).fill('Journey');
+  await expect(page.getByLabel('Legal owner', { exact: true })).toHaveValue('Free Journey Ranch');
+  await expect(page.getByLabel('Owner entity', { exact: true })).toHaveValue('Free Journey');
+  await page.getByRole('button', { name: 'Create horse record', exact: true }).click();
+  await expect(page).toHaveURL(/\/horses\/[^/]+$/);
+  const savedHorse = await page.evaluate(async () => {
+    const path = '/src/store/useXbarStore.ts';
+    const { useXbarStore } = await import(/* @vite-ignore */ path);
+    const state = useXbarStore.getState();
+    return {
+      tier: state.subscription.tier,
+      horseId: state.horses[0]?.id,
+      horseName: state.horses[0]?.name,
+      count: state.horses.length,
+    };
+  });
+  expect(savedHorse).toMatchObject({ tier: 'Free', horseName: 'Free Journey First Horse', count: 1 });
+  expect(savedHorse.horseId).toBeTruthy();
+  await page.reload();
+  await expect
+    .poll(() =>
+      page.evaluate(async () => {
+        const path = '/src/store/useXbarStore.ts';
+        const { useXbarStore } = await import(/* @vite-ignore */ path);
+        const state = useXbarStore.getState();
+        return {
+          tier: state.subscription.tier,
+          horseId: state.horses[0]?.id,
+          horseName: state.horses[0]?.name,
+          count: state.horses.length,
+        };
+      }),
+    )
+    .toEqual(savedHorse);
 });
