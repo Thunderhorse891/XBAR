@@ -6,10 +6,14 @@ const env = {
   VITE_ROUTER_MODE: 'browser',
   VITE_RUNTIME_MONITORING_ENABLED: 'false',
   VITE_STATIC_TARGET: 'web',
+  // A preceding mobile build must not change what the web smoke suite tests.
+  VITE_NATIVE_APP: 'false',
+  XBAR_SKIP_MARKETING: '',
+  // Explicit empty values outrank .env files in Vite. Deleting these keys
+  // permits a local production .env file to re-enable real cloud accounts.
+  VITE_SUPABASE_URL: '',
+  VITE_SUPABASE_ANON_KEY: '',
 };
-
-delete env.VITE_SUPABASE_URL;
-delete env.VITE_SUPABASE_ANON_KEY;
 
 const child = spawn('npm', ['run', 'build'], {
   stdio: 'inherit',

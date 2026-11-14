@@ -87,20 +87,35 @@ test('generated form becomes packet-eligible only after explicit review and ackn
       from: () => ({
         upload: async (path, bytes) => {
           uploads.push({ path, bytes });
-          return { error: null };
+          return { data: { path }, error: null };
         },
         createSignedUrl: async () => ({ data: { signedUrl: 'https://example.invalid/generated.pdf' }, error: null }),
       }),
     };
     globalThis.__generatedReviewAccess = {
       ok: true,
+      workspaceId,
       role: 'Admin',
       user: { id: 'user-a', email: 'user@example.test' },
       supabase: f.client,
     };
+    // This suite pins generation/review/sync behavior. Reservation and provider
+    // semantics run through the real helper in reservedUploads and the native
+    // database/Storage integration; replace only that transport boundary here.
+    globalThis.__generatedReviewUpload = ({ access, requestId, bucket, storagePath, bytes, contentType }) => {
+      assert.equal(access, globalThis.__generatedReviewAccess);
+      assert.equal(access.workspaceId, workspaceId);
+      assert.equal(bucket, 'horse-documents');
+      assert.match(requestId, /^[0-9a-f-]{36}$/);
+      assert.ok(storagePath.startsWith(`${workspaceId}/documents/doc-${requestId}/`));
+      assert.equal(contentType, 'application/pdf');
+      return access.supabase.storage.from(bucket).upload(storagePath, bytes, { contentType, upsert: false });
+    };
     const sourceUrl = new URL('../../api/_lib/documents-generate-template.js', import.meta.url);
     const source = (await readFile(sourceUrl, 'utf8')).replace(/from (['"])(\.\.?\/[^'"]+)\1/g, (_m, _q, relative) => {
       const url = new URL(relative, sourceUrl);
+      if (url.pathname.endsWith('/storage-upload.js'))
+        return 'from "data:text/javascript,export const uploadReservedBuffer=(...args)=>globalThis.__generatedReviewUpload(...args)"';
       if (url.pathname.endsWith('/supabase-admin.js'))
         return 'from "data:text/javascript,export const requireWorkspaceAccess=async()=>globalThis.__generatedReviewAccess"';
       if (url.pathname.endsWith('/rate-limit.js'))
@@ -162,6 +177,7 @@ test('generated form becomes packet-eligible only after explicit review and ackn
   } finally {
     globalThis.window = originalWindow;
     delete globalThis.__generatedReviewAccess;
+    delete globalThis.__generatedReviewUpload;
   }
 });
 

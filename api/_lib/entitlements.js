@@ -1,9 +1,15 @@
+import { parseStorageBytes } from './storage-bytes.js';
 import { subscriptionPlans, isKnownTier } from './subscription-plans.js';
-import { BASELINE_TIER, entitledTierForBillingState, isKnownBillingState } from './subscription-status.js';
+import {
+  BASELINE_TIER,
+  entitledTierForBillingState,
+  isKnownBillingState,
+  isEntitledBillingState,
+} from './subscription-status.js';
 import { TRIAL_PLAN_TIER, getTrialState, readTrialFromPayload, trialDaysRemaining } from './trial-status.js';
 import { isCompedEmail } from './comp-access.js';
 
-const TIER_ORDER = ['Starter', 'Professional', 'Ranch Ops', 'Enterprise'];
+const TIER_ORDER = ['Free', 'Starter', 'Professional', 'Ranch Ops', 'Enterprise'];
 
 /*
  * Shown whenever the database cannot tell us what a workspace has or is using.
@@ -15,6 +21,8 @@ const TIER_ORDER = ['Starter', 'Professional', 'Ranch Ops', 'Enterprise'];
  */
 const CLOUD_UNAVAILABLE_MESSAGE =
   'Cloud services are unavailable right now, so this action was not applied. Try again in a moment.';
+
+const isExactCount = (count) => Number.isSafeInteger(count) && count >= 0;
 
 function usageUnavailable(subject) {
   return {
@@ -66,7 +74,7 @@ export async function getWorkspaceEntitlements(supabase, workspaceId, userEmail)
   // already entitles keeps what it has, and a malformed record grants nothing.
   const trial = readTrialFromPayload(data?.payload);
   const trialState = getTrialState(trial);
-  if (trialState === 'active' && effectiveTier === BASELINE_TIER) {
+  if (trialState === 'active' && !isEntitledBillingState(billingState)) {
     effectiveTier = TRIAL_PLAN_TIER;
   }
 
@@ -107,7 +115,7 @@ export function tierIncludesPlan(tier, minimumPlan) {
  * Each one used to discard the error from its usage query:
  *
  *     const { count } = await supabase.from('horses')...
- *     const used = Number(count || 0);
+ *     const used = count;
  *
  * On any failed read `count` is null, `used` collapses to 0, and the limit
  * stops applying — while the request returns a clean pass. Every paid tier is
@@ -126,9 +134,9 @@ export async function checkDocumentCapacity(supabase, workspaceId, incomingCount
     .eq('workspace_id', workspaceId)
     .neq('state', 'Archived');
 
-  if (error) return usageUnavailable('document usage');
+  if (error || !isExactCount(count)) return usageUnavailable('document usage');
 
-  const used = Number(count || 0);
+  const used = count;
   if (used + incomingCount > limits.documentLimit) {
     return {
       ok: false,
@@ -144,9 +152,9 @@ export async function checkHorseCapacity(supabase, workspaceId, incomingCount, l
     .select('horse_id', { count: 'exact', head: true })
     .eq('workspace_id', workspaceId);
 
-  if (error) return usageUnavailable('horse count');
+  if (error || !isExactCount(count)) return usageUnavailable('horse count');
 
-  const used = Number(count || 0);
+  const used = count;
   if (used + incomingCount > limits.horseLimit) {
     return {
       ok: false,
@@ -178,10 +186,11 @@ export async function checkSeatCapacity(supabase, workspaceId, incomingCount, li
 
   // Both halves matter: seats in use are active members plus pending invites,
   // so either query failing leaves the total unknown, not merely incomplete.
-  if (memberships.error) return usageUnavailable('team seat usage');
-  if (invitations.error) return usageUnavailable('pending invitation count');
+  if (memberships.error || !isExactCount(memberships.count)) return usageUnavailable('team seat usage');
+  if (invitations.error || !isExactCount(invitations.count)) return usageUnavailable('pending invitation count');
 
-  const used = Number(memberships.count || 0) + Number(invitations.count || 0);
+  const used = memberships.count + invitations.count;
+  if (!isExactCount(used)) return usageUnavailable('team seat usage');
   if (used + incomingCount > limits.seatLimit) {
     return {
       ok: false,
@@ -213,9 +222,9 @@ export async function checkSalePacketCapacity(supabase, workspaceId, incomingCou
     .eq('workspace_id', workspaceId)
     .gte('created_at', windowStart);
 
-  if (error) return usageUnavailable('sale packet count');
+  if (error || !isExactCount(count)) return usageUnavailable('sale packet count');
 
-  const used = Number(count || 0);
+  const used = count;
   if (used + incomingCount > limits.salePacketLimit) {
     return {
       ok: false,
@@ -231,25 +240,26 @@ export async function checkSalePacketCapacity(supabase, workspaceId, incomingCou
 const BYTES_PER_GB = 1024 * 1024 * 1024;
 
 export async function checkStorageCapacity(supabase, workspaceId, incomingBytes, limits) {
-  // Authoritative usage comes from the DB (live documents + sale packets),
-  // never a carried-forward or client-estimated figure.
-  const { data, error } = await supabase.rpc('xbar_workspace_storage_bytes', { p_workspace_id: workspaceId });
-
-  // A permission error here is a realistic failure, not a hypothetical: the
-  // service role holds EXECUTE on this function through PostgreSQL's default
-  // PUBLIC grant, so revoking that grant without re-granting to service_role
-  // breaks this call. BYPASSRLS does not cover function EXECUTE.
-  if (error) return usageUnavailable('storage usage');
-
-  const usedBytes = Number(data || 0);
-  const incoming = Math.max(0, Number(incomingBytes) || 0);
+  // Includes all stored workspace objects, including photos and receipt scans.
+  // Missing, malformed or inaccessible totals are uncertainty, never zero.
+  let usage;
+  try {
+    usage = await supabase.rpc('xbar_workspace_storage_bytes', { p_workspace_id: workspaceId });
+  } catch {
+    return usageUnavailable('storage usage');
+  }
+  const usedBytes = parseStorageBytes(usage?.data);
+  const incoming = parseStorageBytes(incomingBytes);
   const capBytes = Number(limits.storageLimitGb) * BYTES_PER_GB;
+  if (usage?.error || usedBytes === null || incoming === null || !Number.isSafeInteger(capBytes) || capBytes < 0) {
+    return usageUnavailable('storage usage');
+  }
 
   if (usedBytes + incoming > capBytes) {
     const usedGb = (usedBytes / BYTES_PER_GB).toFixed(1);
     return {
       ok: false,
-      message: `This upload would exceed the plan's ${limits.storageLimitGb} GB storage limit (${usedGb} GB in use). Upgrade to continue.`,
+      message: `This upload would exceed the workspace storage limit (${usedGb} GB in use). Cloud storage is limited and shared across XBAR at launch. Contact support before uploading more.`,
     };
   }
   return { ok: true, usedBytes };

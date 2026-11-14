@@ -152,6 +152,10 @@
   ],
   "rewrites": [
     {
+      "source": "/api/storage/uploads",
+      "destination": "/api/documents/storage-uploads"
+    },
+    {
       "source": "/app",
       "destination": "/app.html"
     },

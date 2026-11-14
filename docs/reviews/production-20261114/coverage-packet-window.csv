@@ -1,0 +1,10 @@
+path,sha256,lines,review_status,baseline_membership
+.github/workflows/free-tier-database.yml,8d1bd84140b2095af136452197e8d245141db6d4d85651a5028753a5bd142653,62,reviewed,original 929-file baseline
+supabase/checks/run-distinct-free-tier.mjs,f6b95728d76c1d0582d4046d6b2e11d81d2ce7f8e2da79de62fb0f8e68f8918a,70,reviewed,original 929-file baseline
+supabase/checks/distinct-free-tier.sql,49ce0503bada65d71d206ed1596c704f8a3f4a5d3c9a92d8026c39c2841deb5b,136,reviewed,original 929-file baseline
+tests/database/free-tier-rls.sql,34e48d650de756fc11706b1d1726a4744113d880929ee15e187393b6e5201663,61,reviewed,original 929-file baseline
+tests/api/salePacketAllowance.test.mjs,824a53514918f97da8c4f6a397f3f1f611cee2271ab0388e9f5f188822d12811,97,reviewed,original 929-file baseline
+src/lib/salePacketAllowance.ts,436d97e5343ebe89af51e89221b506dcdbbadb394761715971d44a68de13bae8,20,reviewed,original 929-file baseline
+supabase/migrations/20261114120000_sale_packet_rolling_allowance.sql,ee410eae21b25061274ba6ab74faabce6cd3d1537f66bcf4d7f7f53359a9f205,104,reviewed,new in batch 4
+supabase/rollbacks/20261114120000_sale_packet_rolling_allowance.sql,ffc26b86bb87e501f39fa7821f04b294260cc38c661cb72090058186a05f1ff3,99,reviewed,new in batch 4
+tests/database/sale-packet-window.sql,8e66c412ea6cd8a229dfb4f0d72caaa6763aff3b05fb5b998857e83b2bb85731,55,reviewed,new in batch 4

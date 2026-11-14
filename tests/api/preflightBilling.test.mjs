@@ -5,16 +5,7 @@ import path from 'node:path';
 
 const repoRoot = process.cwd();
 
-/*
- * The preflight "Online billing (Stripe)" group used to require only the four
- * monthly STRIPE_PRICE_ID_* variables. A deployment with no annual price ids
- * configured — where every annual checkout would refuse at runtime — still
- * reported billing as CONFIGURED. The group must not call billing fully
- * configured while the annual prices are missing.
- *
- * The script is executed as a subprocess with a scrubbed environment so the
- * developer's own shell cannot leak values into the result.
- */
+// New sales require only the two public monthly prices. Legacy IDs remain optional.
 
 const MONTHLY_VARS = {
   STRIPE_SECRET_KEY: 'sk_test_preflight',
@@ -42,38 +33,53 @@ function runPreflight(env) {
   });
 }
 
-test('billing is NOT reported configured when the annual price ids are missing', () => {
-  const output = runPreflight(MONTHLY_VARS);
+test('public monthly catalog is configured without retired or annual IDs', () => {
+  const output = runPreflight({ ...MONTHLY_VARS, STRIPE_PRICE_ID_STARTER: '', STRIPE_PRICE_ID_ENTERPRISE: '' });
+  assert.ok(output.includes('Online billing (Stripe) — CONFIGURED (UNVERIFIED)'));
+  assert.ok(output.includes('New annual checkout is disabled'));
+  for (const name of ANNUAL_NAMES) assert.ok(output.includes(`○ unset  ${name}`));
+});
 
-  assert.ok(
-    output.includes('Online billing (Stripe) — NOT CONFIGURED'),
-    `expected the billing group to be NOT CONFIGURED, got:\n${output}`,
-  );
-
-  for (const name of ANNUAL_NAMES) {
-    assert.ok(output.includes(`✗ missing  ${name}`), `expected ${name} to be reported missing, got:\n${output}`);
+test('each missing public monthly price blocks configuration', () => {
+  for (const name of ['STRIPE_PRICE_ID_PROFESSIONAL', 'STRIPE_PRICE_ID_RANCH_OPS']) {
+    const output = runPreflight({ ...MONTHLY_VARS, ...ANNUAL_VARS, [name]: '' });
+    assert.ok(output.includes('Online billing (Stripe) — NOT CONFIGURED'));
+    assert.ok(output.includes(`✗ missing  ${name}`));
   }
 });
 
-test('each missing annual price id is reported individually', () => {
-  // One annual id present and three absent must still fail the group: a
-  // partially configured annual catalog is not a configured one.
-  const output = runPreflight({ ...MONTHLY_VARS, STRIPE_PRICE_ID_STARTER_ANNUAL: 'price_starter_annual' });
-
-  assert.ok(output.includes('Online billing (Stripe) — NOT CONFIGURED'));
-  assert.ok(output.includes('✓ set  STRIPE_PRICE_ID_STARTER_ANNUAL'));
-  assert.ok(output.includes('✗ missing  STRIPE_PRICE_ID_PROFESSIONAL_ANNUAL'));
-});
-
-test('billing IS reported configured when all eight price ids are set', () => {
+test('historical annual and retired prices remain reported as optional recognition configuration', () => {
   const output = runPreflight({ ...MONTHLY_VARS, ...ANNUAL_VARS });
+  assert.ok(output.includes('Online billing (Stripe) — CONFIGURED (UNVERIFIED)'));
+  for (const name of ANNUAL_NAMES) assert.ok(output.includes(`✓ set  ${name}`));
+  assert.ok(output.includes('legacy annual subscriber recognition only'));
+});
 
-  assert.ok(
-    output.includes('Online billing (Stripe) — CONFIGURED (UNVERIFIED)'),
-    `expected the billing group to be CONFIGURED, got:\n${output}`,
-  );
+const STORAGE_VARS = {
+  SUPABASE_URL: 'https://synthetic.supabase.co',
+  SUPABASE_SERVICE_ROLE_KEY: 'synthetic-service-secret',
+  SUPABASE_STORAGE_S3_REGION: 'synthetic-region',
+  SUPABASE_STORAGE_S3_ACCESS_KEY_ID: 'synthetic-access-secret',
+  SUPABASE_STORAGE_S3_SECRET_ACCESS_KEY: 'synthetic-storage-secret',
+};
 
-  for (const name of ANNUAL_NAMES) {
-    assert.ok(output.includes(`✓ set  ${name}`), `expected ${name} to be reported set, got:\n${output}`);
+test('preflight reports missing controlled upload prerequisites without exposing credentials', () => {
+  for (const name of Object.keys(STORAGE_VARS)) {
+    const output = runPreflight({ ...STORAGE_VARS, [name]: '' });
+    assert.ok(output.includes('Controlled original-file uploads — NOT CONFIGURED'), name);
+    assert.ok(output.includes(`✗ missing  ${name}`), name);
+    for (const secret of ['synthetic-service-secret', 'synthetic-access-secret', 'synthetic-storage-secret']) {
+      assert.ok(!output.includes(secret));
+    }
   }
+});
+
+test('configured storage remains explicitly unverified and requires hosted recovery checks', () => {
+  const output = runPreflight(STORAGE_VARS);
+  assert.ok(output.includes('Controlled original-file uploads — CONFIGURED (UNVERIFIED)'));
+  assert.ok(
+    output.includes(
+      'provider limits, CORS, migrations, old upload-capability draining and interrupted-upload recovery remain unverified',
+    ),
+  );
 });

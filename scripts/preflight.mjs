@@ -31,25 +31,48 @@ const groups = [
     ],
   },
   {
+    title: 'Controlled original-file uploads',
+    unlocks: 'Reserved uploads of horse photos, documents and sale packets. No direct-upload fallback is available.',
+    required: [
+      { name: 'SUPABASE_URL', note: 'project URL (API functions)' },
+      { name: 'SUPABASE_SERVICE_ROLE_KEY', note: 'reservation RPC access (server only)' },
+      { name: 'SUPABASE_STORAGE_S3_REGION', note: 'verified provider region' },
+      { name: 'SUPABASE_STORAGE_S3_ACCESS_KEY_ID', note: 'server-only S3 credential; never a JWT' },
+      { name: 'SUPABASE_STORAGE_S3_SECRET_ACCESS_KEY', note: 'server-only S3 credential; never a JWT' },
+    ],
+    optional: [
+      { name: 'SUPABASE_STORAGE_S3_ENDPOINT', note: 'defaults to the project /storage/v1/s3 endpoint' },
+      {
+        name: 'SUPABASE_STORAGE_MAX_FILE_BYTES',
+        note: 'defaults to 50,000,000 bytes; invalid values refuse admission',
+      },
+    ],
+    extra: [
+      'Presence only: credential validity, provider limits, CORS, migrations, old upload-capability draining and interrupted-upload recovery remain unverified.',
+      'Never run these checks against live records or raise hosting limits without separate authorization.',
+    ],
+  },
+  {
     title: 'Online billing (Stripe)',
     unlocks:
       'Self-serve checkout and subscription management. Until fully configured, the app honestly shows the manual-billing panel.',
     required: [
       { name: 'STRIPE_SECRET_KEY' },
       { name: 'STRIPE_WEBHOOK_SECRET', note: 'from the dashboard webhook endpoint' },
-      { name: 'STRIPE_PRICE_ID_STARTER' },
-      { name: 'STRIPE_PRICE_ID_PROFESSIONAL' },
-      { name: 'STRIPE_PRICE_ID_RANCH_OPS' },
-      { name: 'STRIPE_PRICE_ID_ENTERPRISE' },
-      // Annual billing has its own Stripe Price per tier (a Price pins its
-      // interval), and checkout refuses an annual purchase without one — so a
-      // deployment missing these is not fully configured for billing.
-      { name: 'STRIPE_PRICE_ID_STARTER_ANNUAL', note: 'annual price' },
-      { name: 'STRIPE_PRICE_ID_PROFESSIONAL_ANNUAL', note: 'annual price' },
-      { name: 'STRIPE_PRICE_ID_RANCH_OPS_ANNUAL', note: 'annual price' },
-      { name: 'STRIPE_PRICE_ID_ENTERPRISE_ANNUAL', note: 'annual price' },
+      { name: 'STRIPE_PRICE_ID_PROFESSIONAL', note: '$19.99 monthly' },
+      { name: 'STRIPE_PRICE_ID_RANCH_OPS', note: '$49.99 monthly' },
+    ],
+    optional: [
+      { name: 'STRIPE_PRICE_ID_STARTER', note: 'legacy subscriber recognition only' },
+      { name: 'STRIPE_PRICE_ID_ENTERPRISE', note: 'legacy subscriber recognition only' },
+      ...['STARTER', 'PROFESSIONAL', 'RANCH_OPS', 'ENTERPRISE'].map((tier) => ({
+        name: `STRIPE_PRICE_ID_${tier}_ANNUAL`,
+        note: 'legacy annual subscriber recognition only',
+      })),
+      { name: 'STRIPE_LEGACY_PRICE_IDS', note: 'preserve replaced price IDs for existing subscribers' },
     ],
     extra: [
+      'New sales are Free, Professional $19.99/month and Ranch Ops $49.99/month. New annual checkout is disabled; preserve historical annual IDs for existing subscribers.',
       `VITE_MANAGED_BILLING_ENABLED is ${flagOn('VITE_MANAGED_BILLING_ENABLED') ? 'ON — the app shows online checkout' : 'OFF — the app shows the manual-billing panel'}. Flip it to true only after every Stripe value above is set (billing also requires Supabase).`,
     ],
   },

@@ -62,18 +62,11 @@ test('anything short of a clear answer offers nothing beyond monthly', async () 
   assert.deepEqual(loose, { managed: false, monthly: { Starter: false }, annual: { Starter: false } });
 });
 
-test("the billing screen offers annual only on the server's word, and quotes only what it can sell", async () => {
+test('the billing screen never sells new annual subscriptions, even with legacy catalog mappings', async () => {
   const screen = await readFile('src/routes/Subscriptions.tsx', 'utf8');
-  // Managed billing being on is no longer enough on its own.
-  assert.doesNotMatch(screen, /const annualAvailable = billingEnabled \|\|/);
-  assert.match(
-    screen,
-    /const annualManaged =\s*billingEnabled && Boolean\(sellable\?\.managed && tiers\.some\(\(tier\) => sellable\.annual\[tier\] === true\)\);/,
-  );
-  // Every price, label and checkout reads the derived cadence.
-  assert.match(screen, /const billingPeriod: 'monthly' \| 'annual' = annualAvailable \? chosenPeriod : 'monthly';/);
-  assert.match(
-    screen,
-    /void loadSellablePrices\(\)\.then\(\(prices\) => \{\s*if \(!cancelled\) setSellable\(prices\);/,
-  );
+  assert.match(screen, /const billingPeriod: 'monthly' \| 'annual' = 'monthly';/);
+  assert.doesNotMatch(screen, /annualAvailable|annualManaged|setBillingPeriod|checkout-billing-toggle/);
+  assert.match(screen, /subscription.billingPeriod === 'annual'/, 'existing annual accounts retain accurate cadence');
+  const client = await readFile('src/lib/billingApi.ts', 'utf8');
+  assert.match(client, /!isPublicPaidPlan\(params.tier\) \|\| params.billingPeriod === 'annual'/);
 });

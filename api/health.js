@@ -50,13 +50,8 @@ export default function handler(req, res) {
    */
   const managedBilling = serverManagedBillingEnabled();
   const clientManagedBilling = clientManagedBillingEnabled();
-  const stripePriceIds = [
-    'STRIPE_PRICE_ID_STARTER',
-    'STRIPE_PRICE_ID_PROFESSIONAL',
-    'STRIPE_PRICE_ID_RANCH_OPS',
-    'STRIPE_PRICE_ID_ENTERPRISE',
-  ].every(hasEnv);
-  const paymentLinks = [
+  const stripePriceIds = ['STRIPE_PRICE_ID_PROFESSIONAL', 'STRIPE_PRICE_ID_RANCH_OPS'].every(hasEnv);
+  const legacyPaymentLinksConfigured = [
     'VITE_STRIPE_PAYMENT_LINK_STARTER',
     'VITE_STRIPE_PAYMENT_LINK_PROFESSIONAL',
     'VITE_STRIPE_PAYMENT_LINK_RANCH_OPS',
@@ -73,33 +68,19 @@ export default function handler(req, res) {
     stripeWebhook: Boolean(process.env.STRIPE_WEBHOOK_SECRET),
     stripePriceIds,
     stripeAnnualPriceIds: annualPriceIds,
+    newAnnualCheckout: false,
     // Whether the secret key is a LIVE key. Not a secret, and exactly what an
     // operator needs to see: stripeBilling true with this false is a test key.
     stripeLiveKey: stripeMode === 'live',
     managedBilling,
     clientManagedBilling,
-    paymentLinks,
+    paymentLinks: false,
+    legacyPaymentLinksConfigured,
     email: isEmailConfigured(),
     remindersCron: Boolean(process.env.CRON_SECRET),
   };
-  /*
-   * Two billing shapes are complete, and only one of them needs the server.
-   *
-   * Hosted payment links are a whole configuration on their own: the client
-   * redirects to a Stripe-hosted page, and nothing on this deployment has to
-   * hold a secret key, receive a webhook, or know a price ID. It is how a
-   * workspace with no cloud session buys a plan.
-   *
-   * So the managed-billing requirements below are triggered by the MANAGED
-   * signals only. Including `paymentLinks` here made a link-only deployment
-   * fail its own readiness probe — and README.md points uptime monitors and
-   * load balancers at this endpoint, so a working deployment would have been
-   * pulled out of service for using a configuration the app supports.
-   *
-   * A half-configured managed stack is still unhealthy, which is the case this
-   * check exists for: those pieces are useless apart, and the failure they
-   * produce otherwise is a checkout that dies mid-flow.
-   */
+  // Paid checkout is managed and price-verified. Historical static links are
+  // ignored by the app because their amount/account cannot be verified here.
   const managedBillingTouched =
     subsystems.managedBilling ||
     subsystems.clientManagedBilling ||
@@ -118,16 +99,9 @@ export default function handler(req, res) {
   const reasons = [];
   const warnings = [];
 
-  /*
-   * Healthy, but worth saying out loud rather than leaving an operator to infer
-   * it from a subsystem boolean: without a webhook nothing tells this
-   * deployment that a link payment succeeded, so entitlements after a hosted
-   * checkout are granted by hand. That is a deliberate operating mode, not a
-   * fault, which is why it is a warning and not a 503.
-   */
-  if (subsystems.paymentLinks && !managedBillingTouched) {
+  if (legacyPaymentLinksConfigured) {
     warnings.push(
-      'Billing runs on hosted Stripe payment links only. Checkout works, but no webhook confirms payment, so entitlements must be granted manually.',
+      'Historical hosted payment links are disabled in the app. New paid purchases require managed checkout with verified monthly prices; retire old external links separately.',
     );
   }
 
@@ -141,7 +115,7 @@ export default function handler(req, res) {
     reasons.push('STRIPE_WEBHOOK_SECRET is required before Stripe can confirm paid entitlements.');
   }
   if (managedBillingTouched && !subsystems.stripePriceIds) {
-    reasons.push('All STRIPE_PRICE_ID_* values are required before every tier can be purchased and synced.');
+    reasons.push('STRIPE_PRICE_ID_PROFESSIONAL and STRIPE_PRICE_ID_RANCH_OPS are required for new monthly purchases.');
   }
   if (managedBillingTouched && !subsystems.managedBilling) {
     reasons.push('MANAGED_BILLING_ENABLED must be true before the server will create checkout sessions.');
@@ -202,8 +176,10 @@ export default function handler(req, res) {
   }
   reasons.push(...malformed);
 
-  if (managedBillingTouched && !annualPriceIds) {
-    warnings.push('Managed annual checkout is unavailable for plans missing STRIPE_PRICE_ID_*_ANNUAL.');
+  if (managedBillingTouched) {
+    warnings.push(
+      'Managed annual checkout is unavailable for new purchases pending approved annual terms. Existing annual subscriptions remain supported.',
+    );
   }
   if (managedBillingTouched && !serverStripeModeReady()) {
     reasons.push('Production managed checkout requires a Stripe LIVE key. Test-mode checkout is unavailable.');

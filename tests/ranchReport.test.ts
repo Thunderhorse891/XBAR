@@ -1429,3 +1429,13 @@ test('financial truth: unusable cost dates cannot silently lower the safe sale d
   assert.equal(report.horses[0].safeDiscountFloor, null);
   assert.equal(buildOfferDecision(h, receipts, 12000).status, 'missing-costs');
 });
+
+test('the Reports route uses the report-specific gate for analytics and both export actions', async () => {
+  const source = await readFile('src/routes/Reports.tsx', 'utf8');
+  assert.match(source, /const locked = reportsGate\(subscription\)/);
+  assert.doesNotMatch(source, /profitIntelligenceGate/);
+  assert.match(source, /const handlePdf = async \(\) => \{[\s\S]*?if \(locked\) return;/);
+  assert.match(source, /const handleCsv = async \(\) => \{[\s\S]*?if \(locked\) return;/);
+  assert.match(source, /requestFeatureUpgrade\('reports'\)/);
+  assert.match(source, /Reports automatically calculated from your records, with PDF and spreadsheet export\./);
+});

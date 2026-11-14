@@ -227,7 +227,7 @@ export default function Dashboard() {
               {
                 icon: <Upload size={20} />,
                 title: 'Upload documents',
-                meta: 'Coggins, registration papers, and health records — we read them and file them for you.',
+                meta: 'Keep original Coggins, registration, and health records together. Review extracted details when OCR is available.',
                 to: '/documents?upload=1',
               },
               {

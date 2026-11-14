@@ -1,14 +1,15 @@
+import { parseStorageBytes } from '../../api/_lib/storage-bytes.js';
 import { hasMeaningfulWorkspace } from '@/lib/cloudSyncPolicy';
 import { loadCompleteCloudRows } from '@/lib/cloudLoadPagination';
 import { apiConfig, isRelationalCloudEnabled, isSnapshotFallbackEnabled, supabaseConfig } from '@/lib/platformConfig';
 import { publicShareEventToBuyerRoomEvent, type PublicShareEventRow } from '@/lib/buyerDealRoom';
-import {
-  buildDocumentStoragePath,
-  buildMediaStoragePath,
-  explainUnopenableCloudDocument,
-  isWorkspaceStorageKey,
-} from '@/lib/documentStoragePath';
-import { createId, todayStamp } from '@/lib/xbarRuntime';
+import { explainUnopenableCloudDocument, isWorkspaceStorageKey } from '@/lib/documentStoragePath';
+import { todayStamp } from '@/lib/xbarRuntime';
+import { buildApiUrl } from '@/lib/backendApi';
+import { useCloudStore } from '@/store/useCloudStore';
+import { hasRoleCapability } from '@/lib/permissions';
+import { startReservedUpload, type UploadKind, type ReservedUploadDependencies } from '@/lib/reservedUploadClient';
+import { reservedUploadJournal } from '@/lib/reservedUploadJournal';
 import { WORKSPACE_SCHEMA_VERSION, restorePersistedState, selectPersistedState } from '@/store/xbarStoreHelpers';
 import { intakeIdentityChanged, type IntakeIdentity } from '@/store/xbarStoreLogic';
 import { getSupabaseClient } from '@/lib/supabaseClient';
@@ -1965,55 +1966,52 @@ export async function loadWorkspaceBackupFromCloud(
   } as const;
 }
 
+/** Pin every reservation, part and completion to the live account and selected ranch. */
+export function cloudUploadDependencies(kind: UploadKind): ReservedUploadDependencies {
+  return {
+    projectUrl: supabaseConfig.url,
+    apiUrl: buildApiUrl('/api/storage/uploads'),
+    journal: reservedUploadJournal,
+    fetch: (...args) => fetch(...args),
+    createRequestId: () => crypto.randomUUID(),
+    async identity() {
+      const before = useCloudStore.getState();
+      const session = await getActiveSession();
+      const current = useCloudStore.getState();
+      const capability = kind === 'media' ? 'uploadMedia' : kind === 'receipt' ? 'manageAssets' : 'uploadDocuments';
+      if (
+        !session?.access_token ||
+        !current.workspaceId ||
+        before.workspaceId !== current.workspaceId ||
+        before.session?.user.id !== current.session?.user.id ||
+        session.user.id !== current.session?.user.id ||
+        !hasRoleCapability(current.workspaceRole, capability)
+      )
+        return null;
+      return { userId: session.user.id, workspaceId: current.workspaceId, accessToken: session.access_token };
+    },
+  };
+}
+
 export async function uploadMediaAssetToCloud(params: { file: File; horseId: string; target: IntakeIdentity }) {
   const client = getSupabaseClient();
-  if (!client) {
-    return null;
-  }
-
+  if (!client) return null;
   const session = await getActiveSession();
-  if (!session?.user) {
-    return null;
-  }
-
-  // Workspace first, like documents: the storage policy grants a photo to the
-  // members of the workspace named by its first segment, and to no one else.
-  // The earlier uploader-first key made a photo readable through any gallery
-  // that listed its path -- and a gallery is something an owner can edit.
-  //
-  // The workspace is the one the batch started in (resolved once by the
-  // caller, not re-queried per file), and the file is written only while the
-  // same account is still signed in: a photo must never be filed under a ranch
-  // the uploader has just switched away from.
+  if (!session?.user) return null;
   const { target } = params;
-  if (!isWorkspaceStorageKey(target.workspaceId) || session.user.id !== target.userId) {
-    return null;
-  }
-  const path = buildMediaStoragePath({
-    workspaceId: target.workspaceId,
-    horseId: params.horseId,
-    objectId: createId('media'),
-    originalFileName: params.file.name,
-  });
-  if (!path) {
-    return null;
-  }
-  const { error } = await client.storage.from(supabaseConfig.mediaBucket).upload(path, params.file, {
-    upsert: false,
-    contentType: params.file.type || undefined,
-  });
-
-  if (error) {
-    throw error;
-  }
-
-  // The horse-media bucket is private, so there is deliberately no public URL
-  // here. Callers persist `storagePath` and every render resolves a
-  // short-lived signed URL via getHorseMediaSignedUrl (workspace members) or
-  // the token-gated buyer media endpoint (shared listings).
-  return {
-    storagePath: path,
-  };
+  if (!isWorkspaceStorageKey(target.workspaceId) || session.user.id !== target.userId) return null;
+  // Server chooses the canonical workspace/horse path after reserving quota.
+  // No ordinary authenticated Storage upload is an error fallback.
+  return startReservedUpload(
+    {
+      file: params.file,
+      horseId: params.horseId,
+      target,
+      kind: 'media',
+      bucket: supabaseConfig.mediaBucket,
+    },
+    cloudUploadDependencies('media'),
+  );
 }
 
 /**
@@ -2059,54 +2057,17 @@ export async function getHorseMediaSignedUrl(
   return data.signedUrl;
 }
 
-/**
- * Put a document's bytes where the whole ranch can reach them.
- *
- * Keyed to the WORKSPACE, not to the person uploading. It used to be keyed to
- * `session.user.id`, and since `horse-documents` is a private bucket whose
- * policy compares that first segment against membership, every teammate saw the
- * document listed and was refused when they opened it. The object path and the
- * `documents` row now answer to the same workspace.
- *
- * When no workspace resolves -- a build with cloud sync off, a session whose
- * membership has not loaded, a signed-out tab -- this returns `null` rather than
- * writing the file somewhere unreadable. The caller reads `null` as "the cloud
- * did not take this file" and keeps the bytes on the device, which is a file the
- * customer still has rather than one nobody can open.
- */
+/** Upload documents and receipts through the same server-owned quota boundary. */
 export async function uploadDocumentAssetToCloud(params: {
   file: File;
   horseId?: string;
-  /*
-   * Who this upload is FOR, captured by the caller before its batch began.
-   *
-   * This function resolves the destination from the LIVE session, which is the
-   * right thing for a one-off upload and the wrong thing inside a long intake:
-   * another tab can sign a different account in while files and OCR are still
-   * in flight, and then these bytes -- one customer's Coggins, registration
-   * papers, vet records -- are written under the REPLACEMENT workspace's
-   * prefix, where that workspace's members can read them.
-   *
-   * The intake's own identity check catches the switch at commit time, but by
-   * then the object exists. It stops the row, not the file. So the caller says
-   * whose upload this is and it is refused rather than misfiled, which leaves
-   * nothing to clean up afterwards: a refusal returns null, the same as any
-   * other failed upload, and the file stays on the device as metadata only.
-   *
-   * Omit both to keep the old behaviour for callers with no batch to belong to.
-   */
   expectedIdentity?: IntakeIdentity;
+  kind?: 'document' | 'receipt';
 }) {
   const client = getSupabaseClient();
-  if (!client) {
-    return null;
-  }
-
+  if (!client) return null;
   const session = await getActiveSession();
-  if (!session?.user) {
-    return null;
-  }
-
+  if (!session?.user) return null;
   const accessProfile = await loadWorkspaceAccessProfile(session);
   if (
     params.expectedIdentity &&
@@ -2117,29 +2078,19 @@ export async function uploadDocumentAssetToCloud(params: {
   ) {
     return null;
   }
-
-  const path = buildDocumentStoragePath({
-    workspaceId: accessProfile.workspaceId,
-    horseId: params.horseId,
-    objectId: createId('document'),
-    originalFileName: params.file.name,
-  });
-  if (!path) {
-    return null;
-  }
-
-  const { error } = await client.storage.from(supabaseConfig.documentBucket).upload(path, params.file, {
-    upsert: false,
-    contentType: params.file.type || undefined,
-  });
-
-  if (error) {
-    throw error;
-  }
-
-  return {
-    storagePath: path,
-  };
+  if (!isWorkspaceStorageKey(accessProfile.workspaceId)) return null;
+  const target = params.expectedIdentity ?? { userId: session.user.id, workspaceId: accessProfile.workspaceId };
+  const kind = params.kind ?? 'document';
+  return startReservedUpload(
+    {
+      file: params.file,
+      horseId: params.horseId,
+      target,
+      kind,
+      bucket: supabaseConfig.documentBucket,
+    },
+    cloudUploadDependencies(kind),
+  );
 }
 
 /**
@@ -2148,7 +2099,7 @@ export async function uploadDocumentAssetToCloud(params: {
  * callers must not fall back to a cached subscription total when it cannot be
  * read, because doing so can upload bytes that the documents trigger rejects.
  */
-export async function loadWorkspaceStorageBytes(): Promise<number> {
+export async function loadWorkspaceStorageBytes(expectedIdentity?: IntakeIdentity): Promise<number> {
   const client = getSupabaseClient();
   if (!client) {
     throw new Error('Cloud storage usage is unavailable.');
@@ -2164,13 +2115,20 @@ export async function loadWorkspaceStorageBytes(): Promise<number> {
     throw new Error('Finish workspace setup before uploading documents.');
   }
 
+  if (
+    expectedIdentity &&
+    intakeIdentityChanged(expectedIdentity, { userId: session.user.id, workspaceId: accessProfile.workspaceId })
+  ) {
+    throw new Error('The account or workspace changed before storage usage could be checked.');
+  }
+
   const { data, error } = await client.rpc('xbar_workspace_storage_bytes', {
     p_workspace_id: accessProfile.workspaceId,
   });
   if (error) throw error;
 
-  const bytes = typeof data === 'number' ? data : Number(data);
-  if (!Number.isFinite(bytes) || bytes < 0) {
+  const bytes = parseStorageBytes(data);
+  if (bytes === null) {
     throw new Error('Cloud storage usage returned an invalid value.');
   }
   return bytes;

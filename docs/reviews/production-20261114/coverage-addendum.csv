@@ -1,0 +1,15 @@
+path,sha256,lines,review_status,reason
+api/_lib/permissions.js,9130524f84bdb63d2bf7f10196cea80e32f82f63d31f32f36fd8bdd9536c3a42,65,reviewed,batch 2 manual line review; scope and limits in capacity-counts.md
+api/_lib/managed-billing.js,e29d8b83e07215d1476c69afed5cf517971e182e80793f0251520c5b811f838f,43,reviewed,batch 2 manual line review; scope and limits in capacity-counts.md
+api/_lib/entitlements.js,8c41a06b522838afabab531af0b733043b8f716ed7050caa2b652693cf1368cc,266,reviewed,batch 2 manual line review; scope and limits in capacity-counts.md
+api/_lib/checkout-price.js,8feff7ca444ae53875c26dcac5f15c4d7bcff81976f7efce44531ac95f4d2c02,67,reviewed,batch 2 manual line review; scope and limits in capacity-counts.md
+tests/api/capacityGateFailClosed.test.mjs,fa2d2f328802bc958c8b7f989f3cc0f8ba5a282a92c93153651c9088ef413e7f,293,reviewed,batch 2 manual line review; scope and limits in capacity-counts.md
+tests/api/horseCapacity.test.mjs,263668ebabdc80ee43cc8feade179cafdee5f9ccced0b63b186a95273c504222,145,reviewed,batch 2 manual line review; scope and limits in capacity-counts.md
+tests/api/nativeRouting.test.mjs,baf6a54874f1320e9cb595a26ef4ef5d87d47006bc2df6634ffdb72d73397689,198,reviewed,batch 2 manual line review; scope and limits in capacity-counts.md
+scripts/build-auth-smoke.mjs,209800f2df372eaf99faf4a6917aeff8df920fca68f5f42f4923ae4ed247fced,80,reviewed,batch 2 manual line review; scope and limits in capacity-counts.md
+scripts/build-auth-slow-workspace.mjs,37cee142f2b6ae923cf52fcf9b32041732e0e53fdc7d5d42788bbe5388ae9b29,69,reviewed,batch 2 manual line review; scope and limits in capacity-counts.md
+scripts/build-mobile-smoke.mjs,c1de6b727360b071f6f853435355a44700c59b27ef39f2a8d0e0702df6d722f8,70,reviewed,batch 2 manual line review; scope and limits in capacity-counts.md
+scripts/build-mobile.mjs,32a894eb280baf89677decc511cee05a2a2dcf27d1ff9f431abbd065f27d5749,142,reviewed,batch 2 manual line review; scope and limits in capacity-counts.md
+scripts/serve-dist.mjs,4e3d6eedff3b8b7f4e7cf2d2445d17f72b5c2527552dc8fbbb7e3dfe4451d260,114,reviewed,batch 2 manual line review; scope and limits in capacity-counts.md
+scripts/verify-rpc-surface.mjs,d166ce4a0182954b68633005f6dd1f04f58b1c757dc8567e8e1fd79d6fada800,177,reviewed,batch 2 manual line review; scope and limits in capacity-counts.md
+scripts/test-owner-mode-prod-block.mjs,9db6026675dd04d0410da2d95d0ac7348048119c88d2e6e9e6a381a1a4ad2c81,38,reviewed,batch 2 manual line review; scope and limits in capacity-counts.md

@@ -240,8 +240,8 @@ test('the unavailable reason says which tier is needed and whether this is a pre
   assert.match(previewLocal, /cloud actions behind it are not/);
 });
 
-test('every sellable tier is previewable, and nothing else is', () => {
-  assert.deepEqual([...PREVIEWABLE_TIERS], ['Starter', 'Professional', 'Ranch Ops', 'Enterprise']);
+test('every entitlement tier is previewable, and nothing else is', () => {
+  assert.deepEqual([...PREVIEWABLE_TIERS], ['Free', 'Starter', 'Professional', 'Ranch Ops', 'Enterprise']);
 
   for (const tier of PREVIEWABLE_TIERS) {
     assert.equal(isPreviewableTier(tier), true);

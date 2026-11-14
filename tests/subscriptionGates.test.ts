@@ -1,6 +1,11 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { documentIntakeGate, sharedListingGate } from '../src/lib/subscriptionGates.js';
+import {
+  documentIntakeGate,
+  sharedListingGate,
+  reportsGate,
+  profitIntelligenceGate,
+} from '../src/lib/subscriptionGates.js';
 import { subscriptionPlans } from '../src/lib/subscriptionPlans.js';
 import type { SubscriptionProfile, SubscriptionTier } from '../src/types/xbar.js';
 
@@ -71,4 +76,17 @@ test('applying a tier upgrades limits and features while preserving usage counts
   // An upgrade unlocks gates that blocked the lower tier.
   assert.equal(sharedListingGate(upgraded), null);
   assert.equal(documentIntakeGate(upgraded, 200, 300), null);
+});
+
+test('standard reports unlock on Professional while legacy access and profit tools keep their boundaries', () => {
+  for (const tier of ['Free', 'Starter'] as const) {
+    assert.match(reportsGate(subscription(tier)) ?? '', /Professional.*ranch reports/);
+  }
+  for (const tier of ['Professional', 'Ranch Ops', 'Enterprise'] as const) {
+    assert.equal(reportsGate(subscription(tier)), null, tier);
+  }
+  assert.match(profitIntelligenceGate(subscription('Professional')) ?? '', /Ranch Ops/);
+  for (const tier of ['Ranch Ops', 'Enterprise'] as const) {
+    assert.equal(profitIntelligenceGate(subscription(tier)), null, tier);
+  }
 });
