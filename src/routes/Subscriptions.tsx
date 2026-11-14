@@ -27,7 +27,7 @@ import {
   recommendedTier,
 } from '@/lib/subscriptionDecision';
 import { subscriptionPlans } from '@/lib/subscriptionPlans';
-import { isPublicPaidPlan, publicPaidPlanTiers } from '@/lib/publicPlanCatalog';
+import { isPublicPaidPlan, publicPaidPlanTiers, publicPlanName } from '@/lib/publicPlanCatalog';
 import { canStartTrial, getTrialState, trialDaysRemaining, trialStatusCopy } from '@/lib/trialSubscription';
 import { useCloudStore } from '@/store/useCloudStore';
 import { useUiStore } from '@/store/useUiStore';
@@ -406,7 +406,7 @@ export default function Subscriptions() {
         emit(productEventNames.checkoutConfirmed, { tier: profile.tier });
         pushToast({
           title: 'Your plan is active',
-          message: `${profile.tier} is now active on this workspace.`,
+          message: `${publicPlanName(profile.tier)} is now active on this workspace.`,
           tone: 'success',
         });
         setCheckoutReturnState('confirmed');
@@ -651,15 +651,15 @@ export default function Subscriptions() {
       if (applied.ok) {
         emit(productEventNames.trialStarted, { plan: 'Professional' });
         pushToast({
-          title: 'Professional trial started',
-          message: 'You have 14 days of full Professional access. No card was charged.',
+          title: 'Standard trial started',
+          message: 'You have 14 days of full Standard access. No card was charged.',
         });
       } else {
         // The server already recorded the trial, so this is a local-view
         // problem, not a lost trial: the next cloud load reads the record.
         pushToast({
           title: 'Trial started',
-          message: `${applied.message} Reload the page to see your Professional access.`,
+          message: `${applied.message} Reload the page to see your Standard access.`,
           tone: 'warning',
         });
       }
@@ -707,7 +707,7 @@ export default function Subscriptions() {
       >
         <div>
           <span>{highlighted ? 'Selected tier' : 'Operational tier'}</span>
-          <h3>{tier}</h3>
+          <h3>{publicPlanName(tier)}</h3>
           <p>{profile.fit}</p>
         </div>
         <div className="checkout-plan__price">
@@ -741,16 +741,16 @@ export default function Subscriptions() {
           <button
             type="button"
             disabled={checkoutTier !== null}
-            title={readiness.ready ? readiness.reason : `View ${tier} details. ${readiness.reason}`}
+            title={readiness.ready ? readiness.reason : `View ${publicPlanName(tier)} details. ${readiness.reason}`}
             onClick={chooseTier}
           >
             {busy
               ? 'Opening checkout...'
               : !readiness.ready
-                ? `View ${tier}`
+                ? `View ${publicPlanName(tier)}`
                 : readiness.mode === 'recover'
                   ? 'Payment needs attention'
-                  : `Choose ${tier}`}
+                  : `Choose ${publicPlanName(tier)}`}
           </button>
         )}
         <small>
@@ -833,7 +833,7 @@ export default function Subscriptions() {
           </article>
           {hasActivePaidPlan(subscription) && (
             <p role="status">
-              Current subscription: {subscription.purchasedTier ?? subscription.tier} ·{' '}
+              Current subscription: {publicPlanName(subscription.purchasedTier ?? subscription.tier)} ·{' '}
               {subscription.billingPeriod === 'annual'
                 ? subscription.annualRate
                   ? `${formatSubscriptionPrice(subscription.annualRate)} / year`
@@ -884,7 +884,7 @@ export default function Subscriptions() {
               {starterSetup
                 ? 'Setup active'
                 : trialState === 'active'
-                  ? `${trialDaysLeft} of 14 days left · full Professional access`
+                  ? `${trialDaysLeft} of 14 days left · full Standard access`
                   : trialState === 'expired'
                     ? 'Continue Free or choose a paid plan below'
                     : `${formatLimit(subscriptionPlans.Free.limits.horseLimit, 'horses')} and ${formatLimit(subscriptionPlans.Free.limits.documentLimit, 'documents')}`}
@@ -899,7 +899,7 @@ export default function Subscriptions() {
         <aside className="checkout-panel checkout-panel--payment" aria-label="Payment method">
           <div className="checkout-heading checkout-heading--compact">
             <p>Billing summary</p>
-            <h2>{decisionTier}</h2>
+            <h2>{publicPlanName(decisionTier)}</h2>
             <span>{decisionProfile.fit}</span>
           </div>
 
@@ -1046,7 +1046,7 @@ export default function Subscriptions() {
                 : trialCanStart
                   ? trialStarting
                     ? 'Starting trial…'
-                    : 'Start 14-day Professional trial instead'
+                    : 'Start 14-day Standard trial instead'
                   : 'Continue with Free plan'}
           </button>
           {/*

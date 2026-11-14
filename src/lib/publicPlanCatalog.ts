@@ -8,3 +8,10 @@ export type PublicPaidPlanTier = (typeof publicPaidPlanTiers)[number];
 export function isPublicPaidPlan(tier: SubscriptionTier | undefined): tier is PublicPaidPlanTier {
   return tier === 'Professional' || tier === 'Ranch Ops';
 }
+
+/** Display names only: persisted tiers and Stripe price mappings stay stable. */
+export function publicPlanName(tier: SubscriptionTier): string {
+  if (tier === 'Professional') return 'Standard';
+  if (tier === 'Ranch Ops') return 'Pro';
+  return tier;
+}
