@@ -100,7 +100,7 @@ export const subscriptionTierConfig: Record<
     annualRate: 790,
     sharedAccessEnabled: true,
     featureFlags: [
-      'Everything in Professional',
+      'Everything in Standard',
       'Run the operation: team roles, breeding, equipment, and supplies',
       '20 team seats and 40 client seats',
       '5,000 documents',
@@ -120,7 +120,7 @@ export const subscriptionTierConfig: Record<
     annualRate: 1990,
     sharedAccessEnabled: true,
     featureFlags: [
-      'Everything in Ranch Ops',
+      'Everything in Pro',
       'Scale and control for large rosters and teams',
       '60 team seats and 200 client seats',
       '20,000 documents',

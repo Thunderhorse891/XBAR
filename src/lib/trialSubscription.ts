@@ -124,21 +124,21 @@ export function trialStatusCopy(
   switch (state) {
     case 'active':
       return {
-        eyebrow: 'Professional trial',
+        eyebrow: 'Standard trial',
         heading: 'Trial active',
-        message: `Your Professional trial ends in ${daysRemaining} ${daysRemaining === 1 ? 'day' : 'days'}. Choose a plan to keep these features.`,
+        message: `Your Standard trial ends in ${daysRemaining} ${daysRemaining === 1 ? 'day' : 'days'}. Choose a plan to keep these features.`,
       };
     case 'expired':
       return {
-        eyebrow: 'Professional trial',
+        eyebrow: 'Standard trial',
         heading: 'Trial ended',
-        message: 'Your 14-day Professional trial has ended. Choose a plan below to restore Professional features.',
+        message: 'Your 14-day Standard trial has ended. Choose a plan below to restore Standard features.',
       };
     default:
       return {
-        eyebrow: 'Professional trial',
-        heading: 'Try Professional free for 14 days',
-        message: 'Try every Professional feature free for 14 days. No card required.',
+        eyebrow: 'Standard trial',
+        heading: 'Try Standard free for 14 days',
+        message: 'Try every Standard feature free for 14 days. No card required.',
       };
   }
 }

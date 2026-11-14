@@ -9,6 +9,7 @@
 export const marketingPlans = [
   {
     tier: 'Free',
+    displayName: 'Free',
     monthlyRate: 0,
     annualRate: 0,
     fit: 'For a private owner starting with 2 horses and 1 user.',
@@ -31,6 +32,7 @@ export const marketingPlans = [
   },
   {
     tier: 'Professional',
+    displayName: 'Standard',
     monthlyRate: 20,
     annualRate: 290,
     featured: true,
@@ -55,11 +57,12 @@ export const marketingPlans = [
   },
   {
     tier: 'Ranch Ops',
+    displayName: 'Pro',
     monthlyRate: 49.99,
     annualRate: 790,
     fit: 'For multi-user operations with significant record volume.',
     features: [
-      'Everything in Professional',
+      'Everything in Standard',
       'Run the operation: team roles, breeding, equipment, and supplies',
       '20 team seats and 40 client seats',
       '5,000 documents',

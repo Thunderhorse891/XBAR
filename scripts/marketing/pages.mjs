@@ -193,9 +193,9 @@ ${ctaBlock('See the workflow end to end.', 'The product tour walks the document 
 
 const pricing = {
   path: '/pricing',
-  title: 'XBAR Pricing — Free $0, Professional $20, Ranch Ops $49.99',
+  title: 'XBAR Pricing — Free $0, Standard $20, Pro $49.99',
   description:
-    'Transparent XBAR pricing. Free $0, Professional $20/mo, Ranch Ops $49.99/mo — with published horse, seat, document, and sale-packet limits, plus limited shared cloud storage at launch.',
+    'Transparent XBAR pricing. Free $0, Standard $20/mo, Pro $49.99/mo — with published horse, seat, document, and sale-packet limits, plus limited shared cloud storage at launch.',
   changefreq: 'monthly',
   priority: '0.9',
   jsonLd: [
@@ -207,7 +207,7 @@ const pricing = {
       brand: { '@type': 'Brand', name: 'XBAR' },
       offers: marketingPlans.map((plan) => ({
         '@type': 'Offer',
-        name: plan.tier,
+        name: plan.displayName,
         price: String(plan.monthlyRate),
         priceCurrency: 'USD',
         url: `${SITE_ORIGIN}/pricing`,
@@ -261,13 +261,13 @@ const pricing = {
       ${marketingPlans
         .map(
           (plan) => `<article class="plan${plan.featured ? ' plan--featured' : ''}">
-        ${plan.featured ? '<span class="plan__badge">Professional</span>' : ''}
-        <h2 style="font-family:var(--font-ui);font-size:20px">${esc(plan.tier)}</h2>
+        ${plan.featured ? '<span class="plan__badge">Standard</span>' : ''}
+        <h2 style="font-family:var(--font-ui);font-size:20px">${esc(plan.displayName)}</h2>
         <p class="plan__fit">${esc(plan.fit)}</p>
         <p class="plan__price">$${plan.monthlyRate}<small>/month</small></p>
 
         <ul>${plan.features.map((feature) => `<li>${esc(feature)}</li>`).join('')}</ul>
-        <a class="btn${plan.featured ? ' btn--primary' : ''}" href="${signup(plan.tier)}" rel="nofollow">Choose ${esc(plan.tier)}</a>
+        <a class="btn${plan.featured ? ' btn--primary' : ''}" href="${signup(plan.tier)}" rel="nofollow">Choose ${esc(plan.displayName)}</a>
       </article>`,
         )
         .join('\n      ')}
@@ -282,7 +282,7 @@ const pricing = {
     <div class="table-scroll" role="region" aria-label="Plan capacity comparison" tabindex="0">
       <table class="limits">
         <caption>Plan record limits and shared launch storage availability.</caption>
-        <thead><tr><th scope="col">Capacity</th>${marketingPlans.map((plan) => `<th scope="col">${esc(plan.tier)}</th>`).join('')}</tr></thead>
+        <thead><tr><th scope="col">Capacity</th>${marketingPlans.map((plan) => `<th scope="col">${esc(plan.displayName)}</th>`).join('')}</tr></thead>
         <tbody>
           <tr><th scope="row">Monthly price</th>${marketingPlans.map((plan) => `<td>$${plan.monthlyRate}</td>`).join('')}</tr>
           <tr><th scope="row">Horses</th>${marketingPlans.map((plan) => `<td>${plan.limits.horseLimit.toLocaleString('en-US')}</td>`).join('')}</tr>
@@ -303,7 +303,7 @@ const pricing = {
     <div class="faq" style="margin-top:22px">
       <details><summary>Do I need an account to use XBAR?</summary><p>Yes. Create an XBAR account and complete workspace setup to use the hosted app. You can view the <a href="/demo">product tour</a> and fictional sample sale packet without an account.</p></details>
       <details><summary>What happens to my records if I change plans?</summary><p>Your records stay intact. Plans change capacity and collaboration access; they do not erase the operating history you built.</p></details>
-      <details><summary>Is XBAR only for large operations?</summary><p>No. Free supports a private owner with 2 horses and 1 user. Professional and Ranch Ops add the collaboration, sale-readiness, and capacity larger programs need.</p></details>
+      <details><summary>Is XBAR only for large operations?</summary><p>No. Free supports a private owner with 2 horses and 1 user. Standard and Pro add the collaboration, sale-readiness, and capacity larger programs need.</p></details>
       <details><summary>How does checkout work?</summary><p>A workspace owner reviews the plan inside XBAR and completes the plan change through secure Stripe checkout.</p></details>
     </div>
   </div>

@@ -95,7 +95,7 @@ test('billing cards can select tiers even when checkout is not configured', () =
 
   assert.match(source, /const \[selectedTier, setSelectedTier\] = useState<SubscriptionTier>/);
   assert.match(source, /const selectTier = \(tier: SubscriptionTier\) =>/);
-  assert.match(source, /!readiness\.ready\s*\?\s*`View \$\{tier\}`/);
+  assert.match(source, /!readiness\.ready\s*\?\s*`View \$\{publicPlanName\(tier\)\}`/);
   assert.match(source, /disabled={checkoutTier !== null}/);
   assert.doesNotMatch(source, /disabled={!readiness\.ready}/);
 });

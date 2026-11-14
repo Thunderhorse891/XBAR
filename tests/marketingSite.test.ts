@@ -1,4 +1,4 @@
-import { publicPlanTiers } from '../src/lib/publicPlanCatalog.js';
+import { publicPlanTiers, publicPlanName } from '../src/lib/publicPlanCatalog.js';
 import assert from 'node:assert/strict';
 import path from 'node:path';
 import { readFile } from 'node:fs/promises';
@@ -480,4 +480,29 @@ test('all public routes show the complete original B artwork without traced subs
       assert.doesNotMatch(svg, /<path\b|<text\b|xbar-signature__trace/);
     }
   }
+});
+
+// Public product names must not rewrite persisted Stripe/entitlement identifiers.
+test('launch pricing presents the approved names and preserves checkout tier identifiers', async () => {
+  const { marketingPlans } = await load('scripts/marketing/pricing-data.mjs');
+  for (const tier of publicPlanTiers) {
+    assert.equal(marketingPlans.find((plan: { tier: string }) => plan.tier === tier).displayName, publicPlanName(tier));
+  }
+  const { marketingPages } = await load('scripts/marketing/pages.mjs');
+  const pricing = marketingPages.find((page: MarketingPage) => page.path === '/pricing');
+  assert.deepEqual(
+    marketingPlans.map((plan: { displayName: string; monthlyRate: number }) => [plan.displayName, plan.monthlyRate]),
+    [
+      ['Free', 0],
+      ['Standard', 20],
+      ['Pro', 49.99],
+    ],
+  );
+  assert.deepEqual(
+    marketingPlans.map((plan: { tier: string }) => plan.tier),
+    ['Free', 'Professional', 'Ranch Ops'],
+  );
+  assert.match(pricing.body, />Choose Standard</);
+  assert.match(pricing.body, />Choose Pro</);
+  assert.doesNotMatch(pricing.title, /Professional|Ranch Ops/);
 });
