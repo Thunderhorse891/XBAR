@@ -252,3 +252,45 @@ test('local web smoke build pins its target despite inherited native-build flags
     if (fixtureDirectory) rmSync(fixtureDirectory, { recursive: true, force: true });
   }
 });
+
+async function previewListenPort(args = [], envPort) {
+  const originalArgv = process.argv;
+  const originalPort = process.env.PORT;
+  try {
+    process.argv = ['/synthetic/node', '/synthetic/serve-dist.mjs', ...args];
+    if (envPort === undefined) delete process.env.PORT;
+    else process.env.PORT = envPort;
+    globalThis.__previewListen = undefined;
+    await bundle('scripts/serve-dist.mjs', {}, [
+      {
+        name: 'capture-preview-listen',
+        setup(b) {
+          b.onResolve({ filter: /^(node:http|node:url)$/ }, ({ path }) => ({ path, namespace: 'preview-fixture' }));
+          b.onLoad({ filter: /.*/, namespace: 'preview-fixture' }, ({ path }) => ({
+            contents:
+              path === 'node:url'
+                ? 'export const fileURLToPath = () => "/synthetic/scripts/serve-dist.mjs";'
+                : 'export const createServer = () => ({ listen(port, host) { if (!Number.isInteger(port) || port < 0 || port > 65535) throw new RangeError("Invalid listen port"); globalThis.__previewListen = { port, host }; } });',
+          }));
+          b.onEnd((r) => {
+            r.outputFiles[0].contents = Buffer.from(r.outputFiles[0].text + `\n// preview scenario ${++scenario}`);
+          });
+        },
+      },
+    ]);
+    return globalThis.__previewListen;
+  } finally {
+    process.argv = originalArgv;
+    if (originalPort === undefined) delete process.env.PORT;
+    else process.env.PORT = originalPort;
+    delete globalThis.__previewListen;
+  }
+}
+
+test('preview server defaults to 4173 without a port flag and preserves explicit precedence', async () => {
+  assert.deepEqual(await previewListenPort(), { port: 4173, host: '0.0.0.0' });
+  assert.equal((await previewListenPort(['--unrelated'])).port, 4173);
+  assert.equal((await previewListenPort(['--port', '4321'])).port, 4321);
+  assert.equal((await previewListenPort(['--port', '4321'], '4567')).port, 4567);
+  assert.equal((await previewListenPort(['--port', '0'])).port, 0);
+});

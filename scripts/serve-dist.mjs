@@ -13,7 +13,8 @@ import { fileURLToPath } from 'node:url';
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 const dist = path.resolve(here, '..', 'dist');
-const port = Number(process.env.PORT ?? process.argv[process.argv.indexOf('--port') + 1] ?? 4173);
+const portFlag = process.argv.indexOf('--port');
+const port = Number(process.env.PORT ?? (portFlag >= 0 ? process.argv[portFlag + 1] : undefined) ?? 4173);
 
 const MIME = {
   '.html': 'text/html; charset=utf-8',
