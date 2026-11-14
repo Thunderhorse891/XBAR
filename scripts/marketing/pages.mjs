@@ -193,9 +193,9 @@ ${ctaBlock('See the workflow end to end.', 'The product tour walks the document 
 
 const pricing = {
   path: '/pricing',
-  title: 'XBAR Pricing — Free $0, Professional $20, Ranch Ops $49.99',
+  title: 'XBAR Pricing — Free $0, Professional $19.99, Ranch Ops $49.99',
   description:
-    'Transparent XBAR pricing. Free $0, Professional $20/mo, Ranch Ops $49.99/mo — with published horse, seat, document, and sale-packet limits, plus limited shared cloud storage at launch.',
+    'Transparent XBAR pricing. Free $0, Professional $19.99/mo, Ranch Ops $49.99/mo — with published horse, seat, document, and sale-packet limits, plus limited shared cloud storage at launch.',
   changefreq: 'monthly',
   priority: '0.9',
   jsonLd: [

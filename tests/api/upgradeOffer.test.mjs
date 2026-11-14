@@ -22,7 +22,7 @@ process.env.STRIPE_PRICE_ID_PROFESSIONAL = 'price_pro';
 process.env.STRIPE_PRICE_ID_PROFESSIONAL_ANNUAL = 'price_pro_annual';
 process.env.STRIPE_PRICE_ID_RANCH_OPS = 'price_ranch';
 process.env.STRIPE_PRICE_ID_ENTERPRISE = 'price_enterprise';
-const prices = { price_pro: 2000, price_pro_annual: 29000, price_ranch: 4999, price_enterprise: 19900 };
+const prices = { price_pro: 1999, price_pro_annual: 29000, price_ranch: 4999, price_enterprise: 19900 };
 const priceObject = (id) => ({
   id,
   active: true,
@@ -369,11 +369,11 @@ test('every shared feature uses the authoritative required tier', async () => {
   }
 });
 test('monthly quote uses actual verified base price and exactly one 10% period', async () => {
-  for (const [billingPeriod, normal] of [['monthly', 2000]]) {
+  for (const [billingPeriod, normal] of [['monthly', 1999]]) {
     const s = scenario();
     const result = await s.discountAttempt({ billingPeriod });
     assert.equal(result.body.offer.regularAmountCents, normal);
-    assert.equal(result.body.offer.firstPeriodAmountCents, normal * 0.9);
+    assert.equal(result.body.offer.firstPeriodAmountCents, Math.round(normal * 0.9));
   }
 });
 test('forged price/tier/coupon is rejected before auth or persistence', async () => {
@@ -787,13 +787,13 @@ test('Professional reports and Ranch Ops ranch-first styling do not offer or cre
   }
 });
 
-test('Free report upgrade targets the verified $20 Professional monthly plan', async () => {
+test('Free report upgrade targets the verified $19.99 Professional monthly plan', async () => {
   const s = scenario();
   s.effectiveTier = 'Free';
   const result = await s.request({ feature: 'reports' });
   assert.equal(result.status, 200);
   assert.equal(result.body.offer.targetTier, 'Professional');
-  assert.equal(result.body.offer.regularAmountCents, 2000);
+  assert.equal(result.body.offer.regularAmountCents, 1999);
 });
 
 test('Ranch Ops offer retains exact $49.99 cents and rounds its one-period discount to cents', async () => {

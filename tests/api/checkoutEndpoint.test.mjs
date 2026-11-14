@@ -77,7 +77,7 @@ const stripeScenario = {
 
 const stripePriceAmounts = {
   price_starter_m: 1200,
-  price_pro_m: 2000,
+  price_pro_m: 1999,
   price_pro_a: 29000,
   price_ranch_m: 4999,
   price_ranch_a: 79000,
@@ -361,7 +361,7 @@ test('a Professional monthly checkout creates a session with the verified price 
   assert.equal(upsert.seat_count, 1);
   assert.equal(upsert.entitlement_payload.billingState, 'Inactive');
   assert.equal(upsert.entitlement_payload.purchasedTier, 'Professional');
-  assert.equal(upsert.entitlement_payload.monthlyRate, 20);
+  assert.equal(upsert.entitlement_payload.monthlyRate, 19.99);
 });
 
 test('each tier buys its own price id, monthly by default', async () => {
@@ -765,7 +765,7 @@ test('checkout price diagnostics are fixed reason codes and never raw Stripe dat
     type: 'recurring',
     currency: 'usd',
     billing_scheme: 'per_unit',
-    unit_amount: 2000,
+    unit_amount: 1999,
     recurring: { interval: 'month', interval_count: 1, usage_type: 'licensed' },
     product: { active: true },
   };
@@ -884,5 +884,35 @@ test('retired Starter and Enterprise monthly checkout refuses before Stripe or b
     assert.equal(result.body.code, 'cadence_unavailable');
     assert.deepEqual(stripeScenario.calls, []);
     assert.deepEqual(calls.upserts, []);
+  }
+});
+
+test('approved monthly checkout accepts exactly 1999 and 4999 USD cents', async () => {
+  const { verifyCheckoutPrice } = await import('../../api/_lib/checkout-price.js');
+  for (const [tier, cents] of [
+    ['Professional', 1999],
+    ['Ranch Ops', 4999],
+  ]) {
+    for (const amount of [cents - 1, cents, cents + 1, 2000, 2900, 7900]) {
+      const stripe = {
+        prices: {
+          retrieve: async () => ({
+            id: 'price_synthetic',
+            active: true,
+            type: 'recurring',
+            currency: 'usd',
+            billing_scheme: 'per_unit',
+            unit_amount: amount,
+            recurring: { interval: 'month', interval_count: 1, usage_type: 'licensed' },
+            product: { active: true },
+          }),
+        },
+      };
+      assert.equal(
+        await verifyCheckoutPrice(stripe, { tier, billingPeriod: 'monthly', priceId: 'price_synthetic' }),
+        amount === cents,
+        `${tier}: ${amount}`,
+      );
+    }
   }
 });

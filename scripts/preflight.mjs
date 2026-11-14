@@ -37,7 +37,7 @@ const groups = [
     required: [
       { name: 'STRIPE_SECRET_KEY' },
       { name: 'STRIPE_WEBHOOK_SECRET', note: 'from the dashboard webhook endpoint' },
-      { name: 'STRIPE_PRICE_ID_PROFESSIONAL', note: '$20 monthly' },
+      { name: 'STRIPE_PRICE_ID_PROFESSIONAL', note: '$19.99 monthly' },
       { name: 'STRIPE_PRICE_ID_RANCH_OPS', note: '$49.99 monthly' },
     ],
     optional: [
@@ -50,7 +50,7 @@ const groups = [
       { name: 'STRIPE_LEGACY_PRICE_IDS', note: 'preserve replaced price IDs for existing subscribers' },
     ],
     extra: [
-      'New sales are Free, Professional $20/month and Ranch Ops $49.99/month. New annual checkout is disabled; preserve historical annual IDs for existing subscribers.',
+      'New sales are Free, Professional $19.99/month and Ranch Ops $49.99/month. New annual checkout is disabled; preserve historical annual IDs for existing subscribers.',
       `VITE_MANAGED_BILLING_ENABLED is ${flagOn('VITE_MANAGED_BILLING_ENABLED') ? 'ON — the app shows online checkout' : 'OFF — the app shows the manual-billing panel'}. Flip it to true only after every Stripe value above is set (billing also requires Supabase).`,
     ],
   },

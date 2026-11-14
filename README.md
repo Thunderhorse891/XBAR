@@ -597,7 +597,7 @@ Then apply `supabase/production-schema.generated.sql` in the Supabase SQL editor
 
 ### Stripe Go-Live
 
-1. New public plans are Free (2 horses / 1 user), Professional `$20` per month (30 / 5), and Ranch Ops `$49.99` per month (200 / 20). Create only the two paid monthly prices. Annual pricing is not approved; Starter and Enterprise remain legacy entitlements only.
+1. New public plans are Free (2 horses / 1 user), Professional `$19.99` per month (30 / 5), and Ranch Ops `$49.99` per month (200 / 20). Create only the two paid monthly prices. Annual pricing is not approved; Starter and Enterprise remain legacy entitlements only.
 2. Preserve the original Stripe account and existing subscribers. Before replacing `STRIPE_PRICE_ID_PROFESSIONAL` or `STRIPE_PRICE_ID_RANCH_OPS`, append their old IDs to `STRIPE_LEGACY_PRICE_IDS`. Keep historical annual and retired-tier IDs for webhook recognition.
 3. Configure `/api/stripe/webhook` for `checkout.session.completed`, `customer.subscription.created`, `customer.subscription.updated`, and `customer.subscription.deleted`. Verify signed test fixtures and an approved controlled checkout before enabling public billing.
 4. Review old external Payment Links, open checkout sessions and portal offers. The app disables unverified static-link fallback; old shared URLs need separate authorized retirement. Existing subscription records must not be repriced or deleted.

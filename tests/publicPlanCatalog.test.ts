@@ -19,7 +19,7 @@ test('exactly three public plans use the approved monthly prices and horse/user 
     }),
     [
       ['Free', 0, 2, 1],
-      ['Professional', 20, 30, 5],
+      ['Professional', 19.99, 30, 5],
       ['Ranch Ops', 49.99, 200, 20],
     ],
   );
@@ -27,7 +27,7 @@ test('exactly three public plans use the approved monthly prices and horse/user 
 
 test('billing shows exact cents without changing unrelated finance rounding', () => {
   assert.equal(formatSubscriptionPrice(49.99), '$49.99');
-  assert.equal(formatSubscriptionPrice(20), '$20');
+  assert.equal(formatSubscriptionPrice(19.99), '$19.99');
   assert.equal(formatSubscriptionPrice(0), '$0');
   assert.equal(formatCurrency(49.99), '$50');
 });
@@ -36,6 +36,7 @@ test('legacy subscriber access and recorded monthly/annual rates survive the pub
   for (const [tier, amount] of [
     ['Starter', 12],
     ['Professional', 29],
+    ['Professional', 20],
     ['Ranch Ops', 79],
     ['Enterprise', 199],
   ] as const) {

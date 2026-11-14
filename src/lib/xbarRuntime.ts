@@ -74,7 +74,7 @@ export const subscriptionTierConfig: Record<
     },
   },
   Professional: {
-    monthlyRate: 20,
+    monthlyRate: 19.99,
     annualRate: 290,
     sharedAccessEnabled: true,
     featureFlags: [

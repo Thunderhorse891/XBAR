@@ -31,7 +31,7 @@ export const marketingPlans = [
   },
   {
     tier: 'Professional',
-    monthlyRate: 20,
+    monthlyRate: 19.99,
     annualRate: 290,
     featured: true,
     fit: 'For active breeding and sale businesses that need stronger workflows.',

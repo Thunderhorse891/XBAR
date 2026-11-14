@@ -26,7 +26,9 @@ export async function verifyCheckoutPrice(
   const plan = subscriptionPlans[tier];
   if (!stripe || !plan || !priceId || !PUBLIC_PAID_SUBSCRIPTION_TIERS.includes(tier) || billingPeriod !== 'monthly')
     return false;
-  const expectedAmount = plan.monthlyRate * 100;
+  // Convert the code-owned decimal USD rate to exact integer cents.
+  // 19.99 * 100 is 1998.9999999999998 in binary floating-point.
+  const expectedAmount = Math.round(plan.monthlyRate * 100);
   let stage = 'account';
   try {
     // Account IDs are nonsecret configuration, never a client-supplied value.

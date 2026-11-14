@@ -286,3 +286,62 @@ test('Professional offers Ranch Ops styling without enabling the controls, and d
   await expect(page.getByRole('button', { name: 'Export spreadsheet' })).toHaveCount(0);
   await expect(page.getByLabel('Money summary')).toHaveCount(0);
 });
+
+for (const width of [390, 1440]) {
+  test(`Free upgrade reviews $19.99, recovers a failed request, and acknowledges newly included access at ${width}px`, async ({
+    page,
+  }) => {
+    await page.setViewportSize({ width, height: 900 });
+    let checkoutRequests = 0;
+    await page.route('**/api/account/upgrade-offer', async (route) => {
+      const body = route.request().postDataJSON();
+      if (body.action === 'decline') return route.fulfill({ json: { ok: true } });
+      if (body.action === 'checkout') {
+        checkoutRequests++;
+        return checkoutRequests === 1
+          ? route.fulfill({
+              status: 503,
+              json: { ok: false, message: 'Synthetic billing check unavailable. Retry when connected.' },
+            })
+          : route.fulfill({ json: { ok: true, allowed: true, offer: null } });
+      }
+      return route.fulfill({
+        json: {
+          ok: true,
+          offer: {
+            ...body,
+            targetTier: 'Professional',
+            currency: 'USD',
+            billingPeriod: 'monthly',
+            regularAmountCents: 1999,
+            firstPeriodAmountCents: 1999,
+            discountPercent: 0,
+            checkoutAvailable: true,
+          },
+        },
+      });
+    });
+    await openReports(page, 'Free', true, true);
+    const trigger = page.getByRole('button', { name: 'Unlock with Professional', exact: true });
+    await trigger.click();
+    const dialog = page.getByRole('dialog', { name: 'Ranch reports', exact: true });
+    await expect(dialog).toContainText('$19.99 per month');
+    for (const name of ['Close', 'Not now', 'Review upgrade']) {
+      const control = dialog.getByRole('button', { name, exact: true });
+      const box = await control.boundingBox();
+      expect(box?.height, `${name} touch height`).toBeGreaterThanOrEqual(44);
+      expect(box?.width, `${name} touch width`).toBeGreaterThanOrEqual(44);
+    }
+    await dialog.getByRole('button', { name: 'Review upgrade', exact: true }).click();
+    await expect(dialog).toContainText('Synthetic billing check unavailable');
+    await expect(dialog.getByRole('button', { name: 'Review upgrade', exact: true })).toBeEnabled();
+    await dialog.getByRole('button', { name: 'Review upgrade', exact: true }).click();
+    await expect(dialog).toContainText('Your plan already includes this feature');
+    await expect(dialog.getByRole('button', { name: 'Review upgrade', exact: true })).toHaveCount(0);
+    await dialog.getByRole('button', { name: 'Close', exact: true }).click();
+    await expect(dialog).toHaveCount(0);
+    await expect(trigger).toBeFocused();
+    await expect(page).toHaveURL(/\/app\/reports$/);
+    expect(checkoutRequests).toBe(2);
+  });
+}

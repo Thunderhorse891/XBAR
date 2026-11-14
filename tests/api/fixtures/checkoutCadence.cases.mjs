@@ -68,7 +68,7 @@ async function fixture(options = {}) {
       async retrieve(id) {
         const tier = Object.keys(prices).find((name) => id.startsWith(`price_${prices[name]}_`));
         const annual = id.endsWith('_annual');
-        const monthlyAmounts = { Starter: 1200, Professional: 2000, 'Ranch Ops': 4999, Enterprise: 19900 };
+        const monthlyAmounts = { Starter: 1200, Professional: 1999, 'Ranch Ops': 4999, Enterprise: 19900 };
         assert.ok(tier, `Unexpected fixture price ${id}`);
         return {
           id,
