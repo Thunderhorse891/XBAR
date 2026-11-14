@@ -1,5 +1,6 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
+import { createClient } from '@supabase/supabase-js';
 
 import {
   checkDocumentCapacity,
@@ -203,4 +204,90 @@ test('an explicitly manual-billed workspace keeps its tier', async () => {
 
   assert.equal(result.effectiveTier, 'Ranch Ops');
   assert.deepEqual(result.limits, subscriptionPlans['Ranch Ops'].limits);
+});
+
+// Exact-count queries can resolve without an error but without a usable count
+// (for example, an absent Content-Range count). Unknown is not an empty table.
+function countSupabase(counts = {}) {
+  return {
+    from(table) {
+      const query = {
+        select: () => query,
+        eq: () => query,
+        neq: () => query,
+        gte: () => query,
+        then: (resolve) => resolve({ count: counts[table], error: null }),
+      };
+      return query;
+    },
+  };
+}
+const countGates = [
+  ['documents', 'documents', checkDocumentCapacity, 'documentLimit'],
+  ['horses', 'horses', checkHorseCapacity, 'horseLimit'],
+  ['packets', 'sale_packets', checkSalePacketCapacity, 'salePacketLimit'],
+];
+for (const [label, table, gate, limitKey] of countGates) {
+  test(`${label}: absent or malformed exact counts remain retryable uncertainty`, async () => {
+    for (const count of [null, undefined, NaN, Infinity, -1, 0.5, '0', Number.MAX_SAFE_INTEGER + 1]) {
+      const result = await gate(countSupabase({ [table]: count }), 'ws-1', 1, limits);
+      assert.equal(result.ok, false, `${label} must not assume usage from ${String(count)}`);
+      assert.equal(result.status, 503);
+      assert.equal(result.retryable, true);
+      assert.doesNotMatch(result.message, /upgrade/i);
+    }
+  });
+  test(`${label}: verified zero and exact capacity retain their existing behavior`, async () => {
+    assert.deepEqual(await gate(countSupabase({ [table]: 0 }), 'ws-1', 1, limits), { ok: true, used: 0 });
+    assert.equal((await gate(countSupabase({ [table]: limits[limitKey] - 1 }), 'ws-1', 1, limits)).ok, true);
+    assert.equal((await gate(countSupabase({ [table]: limits[limitKey] }), 'ws-1', 1, limits)).ok, false);
+  });
+}
+test('seats require independently verified membership and invitation counts', async () => {
+  for (const table of ['workspace_memberships', 'workspace_invitations']) {
+    for (const count of [null, undefined, NaN, Infinity, -1, 0.5, '0']) {
+      const counts = { workspace_memberships: 0, workspace_invitations: 0, [table]: count };
+      const result = await checkSeatCapacity(countSupabase(counts), 'ws-1', 1, limits);
+      assert.equal(result.ok, false, `${table}: ${String(count)}`);
+      assert.equal(result.status, 503);
+    }
+  }
+  assert.deepEqual(
+    await checkSeatCapacity(countSupabase({ workspace_memberships: 0, workspace_invitations: 0 }), 'ws-1', 1, limits),
+    { ok: true, used: 0 },
+  );
+});
+
+test('seat count addition cannot turn unsafe arithmetic into verified usage', async () => {
+  const result = await checkSeatCapacity(
+    countSupabase({ workspace_memberships: Number.MAX_SAFE_INTEGER, workspace_invitations: 1 }),
+    'ws-1',
+    0,
+    limits,
+  );
+  assert.equal(result.ok, false);
+  assert.equal(result.status, 503);
+});
+
+test('real Supabase client distinguishes an empty exact result from an omitted count header', async () => {
+  for (const hasCount of [true, false]) {
+    let called = false;
+    const client = createClient('https://synthetic.invalid', 'synthetic-anon', {
+      auth: { persistSession: false, autoRefreshToken: false },
+      global: {
+        fetch: async (_url, options) => {
+          called = true;
+          assert.equal(options.method, 'HEAD');
+          return new Response(null, { status: 200, headers: hasCount ? { 'content-range': '*/0' } : {} });
+        },
+      },
+    });
+    const result = await checkHorseCapacity(client, 'ws-1', 1, limits);
+    assert.equal(called, true);
+    if (hasCount) assert.deepEqual(result, { ok: true, used: 0 });
+    else {
+      assert.equal(result.ok, false);
+      assert.equal(result.status, 503);
+    }
+  }
 });

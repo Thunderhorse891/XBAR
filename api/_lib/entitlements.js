@@ -22,6 +22,8 @@ const TIER_ORDER = ['Free', 'Starter', 'Professional', 'Ranch Ops', 'Enterprise'
 const CLOUD_UNAVAILABLE_MESSAGE =
   'Cloud services are unavailable right now, so this action was not applied. Try again in a moment.';
 
+const isExactCount = (count) => Number.isSafeInteger(count) && count >= 0;
+
 function usageUnavailable(subject) {
   return {
     ok: false,
@@ -113,7 +115,7 @@ export function tierIncludesPlan(tier, minimumPlan) {
  * Each one used to discard the error from its usage query:
  *
  *     const { count } = await supabase.from('horses')...
- *     const used = Number(count || 0);
+ *     const used = count;
  *
  * On any failed read `count` is null, `used` collapses to 0, and the limit
  * stops applying — while the request returns a clean pass. Every paid tier is
@@ -132,9 +134,9 @@ export async function checkDocumentCapacity(supabase, workspaceId, incomingCount
     .eq('workspace_id', workspaceId)
     .neq('state', 'Archived');
 
-  if (error) return usageUnavailable('document usage');
+  if (error || !isExactCount(count)) return usageUnavailable('document usage');
 
-  const used = Number(count || 0);
+  const used = count;
   if (used + incomingCount > limits.documentLimit) {
     return {
       ok: false,
@@ -150,9 +152,9 @@ export async function checkHorseCapacity(supabase, workspaceId, incomingCount, l
     .select('horse_id', { count: 'exact', head: true })
     .eq('workspace_id', workspaceId);
 
-  if (error) return usageUnavailable('horse count');
+  if (error || !isExactCount(count)) return usageUnavailable('horse count');
 
-  const used = Number(count || 0);
+  const used = count;
   if (used + incomingCount > limits.horseLimit) {
     return {
       ok: false,
@@ -184,10 +186,11 @@ export async function checkSeatCapacity(supabase, workspaceId, incomingCount, li
 
   // Both halves matter: seats in use are active members plus pending invites,
   // so either query failing leaves the total unknown, not merely incomplete.
-  if (memberships.error) return usageUnavailable('team seat usage');
-  if (invitations.error) return usageUnavailable('pending invitation count');
+  if (memberships.error || !isExactCount(memberships.count)) return usageUnavailable('team seat usage');
+  if (invitations.error || !isExactCount(invitations.count)) return usageUnavailable('pending invitation count');
 
-  const used = Number(memberships.count || 0) + Number(invitations.count || 0);
+  const used = memberships.count + invitations.count;
+  if (!isExactCount(used)) return usageUnavailable('team seat usage');
   if (used + incomingCount > limits.seatLimit) {
     return {
       ok: false,
@@ -219,9 +222,9 @@ export async function checkSalePacketCapacity(supabase, workspaceId, incomingCou
     .eq('workspace_id', workspaceId)
     .gte('created_at', windowStart);
 
-  if (error) return usageUnavailable('sale packet count');
+  if (error || !isExactCount(count)) return usageUnavailable('sale packet count');
 
-  const used = Number(count || 0);
+  const used = count;
   if (used + incomingCount > limits.salePacketLimit) {
     return {
       ok: false,
