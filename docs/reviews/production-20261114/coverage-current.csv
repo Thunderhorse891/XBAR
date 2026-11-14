@@ -253,7 +253,7 @@ scripts/build-auth-smoke.mjs,209800f2df372eaf99faf4a6917aeff8df920fca68f5f42f492
 scripts/build-local.mjs,775557c4e977ecf65c05f479b17f872496031d8f7ee18601e8edad8b3245a24c,31,reviewed,prior completed review; content hash matched
 scripts/build-marketing.mjs,c276e75e95b94c48bbe3fbc505cebf24cd5581f1ca119303383b8feb579820df,163,pending,not reviewed; exclusion/pending scope retained from baseline inventory
 scripts/build-mobile-smoke.mjs,c1de6b727360b071f6f853435355a44700c59b27ef39f2a8d0e0702df6d722f8,70,reviewed,prior completed review; content hash matched
-scripts/build-mobile.mjs,32a894eb280baf89677decc511cee05a2a2dcf27d1ff9f431abbd065f27d5749,142,reviewed,prior completed review; content hash matched
+scripts/build-mobile.mjs,32a894eb280baf89677decc511cee05a2a2dcf27d1ff9f431abbd065f27d5749,142,reviewed,polish batch full reread; preview default-port regression fixed in scoped script; other modules unchanged
 scripts/build.ps1,2073b6facfdef4c9f6c28a0b93af86531b007a17eca372e56808f54ec428cd6b,11,excluded,not reviewed; exclusion/pending scope retained from baseline inventory
 scripts/capture-product-screenshots.mjs,3a2cec746fa29d65facf13f0e493fcc46faa92c33b8f0635122059daa37d9e5b,94,pending,not reviewed; exclusion/pending scope retained from baseline inventory
 scripts/download-and-build.ps1,7f197b3d456ddac79a4aadb6a34f2039a03257fb5bdc3f9355b1ae146d1b6110,20,excluded,not reviewed; exclusion/pending scope retained from baseline inventory
@@ -272,7 +272,7 @@ scripts/marketing/site.js,1cb09b6d3f1dbd03a31cc3ebc0ab55ff0089a8452b72cefb6f8109
 scripts/preflight.mjs,b7cebb825339cb377c1e3f10c8d437854e837ca9031a27ee2be88702fea58eae,177,reviewed,integration batch full reread
 scripts/prepare-ocr-assets.mjs,76e9202e81d85dd975a3e9c0c9e9a79fdb11d5713ee8f650a498229b7feb2f01,40,reviewed,prior completed review; content hash matched
 scripts/prepare-supabase-schema.mjs,37407734188c0c98b9badf2e5744a0aec5f4693bf19d303365fc36328f83c944,52,reviewed,prior completed review; content hash matched
-scripts/serve-dist.mjs,4e3d6eedff3b8b7f4e7cf2d2445d17f72b5c2527552dc8fbbb7e3dfe4451d260,114,reviewed,prior completed review; content hash matched
+scripts/serve-dist.mjs,120fee75d2429f67698b130e32abb9b8b6039ba22450bfbe370728df581935a7,115,reviewed,polish batch full reread; preview default-port regression fixed in scoped script; other modules unchanged
 scripts/setup.ps1,b32f7623c1e8f2ce03a0ec587f112edd41ab597101d02958d7d7d9caf17b6ec0,19,excluded,not reviewed; exclusion/pending scope retained from baseline inventory
 scripts/test-owner-mode-prod-block.mjs,9db6026675dd04d0410da2d95d0ac7348048119c88d2e6e9e6a381a1a4ad2c81,38,reviewed,prior completed review; content hash matched
 scripts/test-trial-event-race.py,f77fc999fb71658bad35b4303f826416cc8f0db2cee467afe617550379c64b2b,89,pending,not reviewed; exclusion/pending scope retained from baseline inventory
@@ -285,7 +285,7 @@ src/components/BuyerDealRoomPanel.tsx,66de23ebc2276f2dd08870c9dcd83aa59172f44c86
 src/components/BuyerResponseQueue.tsx,5f4d8c3eef33c0604e87bf804a4256c3dcc164f356a4e713f5111c71666a9a2c,351,pending,not reviewed; exclusion/pending scope retained from baseline inventory
 src/components/CloudBootstrap.tsx,e6080a61aeff8ded3dc79827f94775f24cef88363d37a7c44e2be9fb71687390,726,pending,not reviewed; exclusion/pending scope retained from baseline inventory
 src/components/CommandBrief.tsx,cd4e4253cd590ee2ea4e06301b2273c920a0ed0499fb500dfb7e6a5aa4fb774c,128,pending,not reviewed; exclusion/pending scope retained from baseline inventory
-src/components/ConfirmActionDialog.tsx,222e021f511cc41317e3cd24595e313de46ccfdc70018f69a3c5ca6f75a77598,146,pending,not reviewed; exclusion/pending scope retained from baseline inventory
+src/components/ConfirmActionDialog.tsx,222e021f511cc41317e3cd24595e313de46ccfdc70018f69a3c5ca6f75a77598,146,reviewed,polish batch full reread; preview default-port regression fixed in scoped script; other modules unchanged
 src/components/ContextMenu.tsx,c97e477f9ba9a287312ebbe27d186a57e590c423db7659258615b7e3a8e64d93,78,pending,not reviewed; exclusion/pending scope retained from baseline inventory
 src/components/DocumentExtractionPreview.tsx,14d16f1f46ec6cc6cd982b05385b82deca9ba27ac75b6f4e964076a5b26c57c8,57,pending,not reviewed; exclusion/pending scope retained from baseline inventory
 src/components/DocumentLibrary.tsx,613f78eb954f7dcb49d7416222382553727d76d41e8913a2fb0c00dfaf3997fd,117,pending,not reviewed; exclusion/pending scope retained from baseline inventory
@@ -294,7 +294,7 @@ src/components/ErrorBoundary.tsx,16077bf9ae74d38d3a575f2649a504443c5f388a0f0c1f1
 src/components/HorseDocuments.tsx,32ef2b505f828247ade9593cfa433d21a4d4d784a57f5f0d66f4d65116000358,142,pending,not reviewed; exclusion/pending scope retained from baseline inventory
 src/components/HorseMediaPreview.tsx,5500914158d0ca580c57dec6cfb23bf428e9b36b259ed64d459960a36047432e,73,pending,not reviewed; exclusion/pending scope retained from baseline inventory
 src/components/HorsePhotoGallery.tsx,ea74e1e7c490336a13171de8d971e21dc25c55db985b0839f3ccc88e5037884b,217,pending,not reviewed; exclusion/pending scope retained from baseline inventory
-src/components/HorsePhotoSourceDialog.tsx,cefd375e5cb4caa9bfcdab606e03a7272987362632d2a3d67038f02ad4bd6df6,94,pending,not reviewed; exclusion/pending scope retained from baseline inventory
+src/components/HorsePhotoSourceDialog.tsx,cefd375e5cb4caa9bfcdab606e03a7272987362632d2a3d67038f02ad4bd6df6,94,reviewed,polish batch full reread; preview default-port regression fixed in scoped script; other modules unchanged
 src/components/InteractionBootstrap.tsx,6fed380912b75e45b7273b58ed33b5e33b490dbb37053051f96b1bf3e7bd75c9,192,pending,not reviewed; exclusion/pending scope retained from baseline inventory
 src/components/InteractionSystem.tsx,c79c27c89c263f0466471827802959c9cfa1753f11ba50931be0b9c66163a0a7,643,pending,not reviewed; exclusion/pending scope retained from baseline inventory
 src/components/OfferDecisionPanel.tsx,777f2c9696de2c68ce7ab5f2300fc99605001b12c9b953c7735aa2b18dfe229b,139,pending,not reviewed; exclusion/pending scope retained from baseline inventory
@@ -307,11 +307,11 @@ src/components/SalePacketWizard.tsx,75d45d662511c336c425231f10fc8ba01a40af8dff1d
 src/components/SaleReadinessCard.tsx,6e37645e771a2f97c6a281972d4205b8977250fe6c5d6bb06091bdf906757540,164,pending,not reviewed; exclusion/pending scope retained from baseline inventory
 src/components/SubscriptionEnforcement.tsx,8742b8041b4311ee1ae101ca015e7e4b74804f6937a7e555a3d36a0e52b68270,83,pending,not reviewed; exclusion/pending scope retained from baseline inventory
 src/components/UpgradePrompt.tsx,fc02ff9633fc69abd68ed3b4e40f41f881fba5d29e1f1c60d9fb4ddd825f1f0a,243,reviewed,prior completed review; content hash matched
-src/components/UploadRecoveryPanel.tsx,4e520f92a1083f423588ae3840c7f12e11359527bb7778b8bd2555e506398c60,191,pending,not reviewed; exclusion/pending scope retained from baseline inventory
+src/components/UploadRecoveryPanel.tsx,4e520f92a1083f423588ae3840c7f12e11359527bb7778b8bd2555e506398c60,191,reviewed,polish batch full reread; preview default-port regression fixed in scoped script; other modules unchanged
 src/components/VerifiedByXbar.tsx,3635aacbcd2cca82a4bf4c839fdb6f615b59d08141ae8fff01c12f2c543aefe0,38,pending,not reviewed; exclusion/pending scope retained from baseline inventory
 src/components/app-ui.tsx,06713647609d793fc83288f153f9476e685c922253725d0a6b0697e579518602,248,pending,not reviewed; exclusion/pending scope retained from baseline inventory
 src/components/commandBrief.css,c895bfd927d03ebdad2f2c9c3d666f252d0b9f6b545616a4a26511e416cc3858,257,pending,not reviewed; exclusion/pending scope retained from baseline inventory
-src/components/confirmActionDialog.css,6176b6b2ac350845cb5452f7cf49537700e52ff27d91a14d0a710f0d95eb62a1,159,pending,not reviewed; exclusion/pending scope retained from baseline inventory
+src/components/confirmActionDialog.css,6176b6b2ac350845cb5452f7cf49537700e52ff27d91a14d0a710f0d95eb62a1,159,reviewed,polish batch full reread; preview default-port regression fixed in scoped script; other modules unchanged
 src/components/dataviz/Charts.tsx,cf5a5cffcb012398568b3d4be610e8e7a1b7d2d648437b1cac65a47ce8b91e04,304,pending,not reviewed; exclusion/pending scope retained from baseline inventory
 src/components/dataviz/dataviz.css,0806350ff09b0675f953c2f875fc9cd9f4a1301abf83ba51f6b69ed518af4235,123,pending,not reviewed; exclusion/pending scope retained from baseline inventory
 src/components/icons.tsx,0499bb0f36da6e3e86a808beb61ada9e2c9dea41a470618c1019b5bc9d44cab3,202,pending,not reviewed; exclusion/pending scope retained from baseline inventory
@@ -326,7 +326,7 @@ src/components/ui/button.tsx,584e7f89b624a79ccc65d5fdaa2263ba38bf604c3f362bce6a7
 src/components/ui/card.tsx,81e16a300d9e9a6d97d9ed6893c58e34c12887306f51fed3dc4b3b7788881515,43,pending,not reviewed; exclusion/pending scope retained from baseline inventory
 src/components/ui/checkbox.tsx,5a8c350c49b47a57f7389141aeafb94a3caf0e6f9e00560cf2446b76f405acab,26,pending,not reviewed; exclusion/pending scope retained from baseline inventory
 src/components/ui/command.tsx,c62e753ea5ab62cd9ea5e2bfcbb78372ecfa5af8091ff35c1c70094ed8c73161,143,pending,not reviewed; exclusion/pending scope retained from baseline inventory
-src/components/ui/dialog.tsx,4ff691e5f72b5eca4030262234a2a8f6b2c448de97e1c057d2cf247f6dbd2a4c,95,reviewed,prior completed review; content hash matched
+src/components/ui/dialog.tsx,4ff691e5f72b5eca4030262234a2a8f6b2c448de97e1c057d2cf247f6dbd2a4c,95,reviewed,polish batch full reread; preview default-port regression fixed in scoped script; other modules unchanged
 src/components/ui/dropdown-menu.tsx,7a72d89281c3396cba2cacf06af946e084f78ce1d548de28a9343bfd57059705,179,pending,not reviewed; exclusion/pending scope retained from baseline inventory
 src/components/ui/field.tsx,aff117477fcb73b2f5167a2075f81b5cbfc3a1d9422bbe2dbddc3c28fdd5bc83,224,pending,not reviewed; exclusion/pending scope retained from baseline inventory
 src/components/ui/form.tsx,5f5d4f3b39bcd95d7394d815329b308891c88630065abba6a0c16c1708b833ff,140,pending,not reviewed; exclusion/pending scope retained from baseline inventory
@@ -357,7 +357,7 @@ src/features/reminders/types.ts,670ec3864d6ebad55344459ce9538bf47a3a99dd3e5efcb9
 src/hooks/useDayKey.ts,3f3e857aa90bb128380815f0994547555b762f5917c822629b3feaa3acf73723,160,pending,not reviewed; exclusion/pending scope retained from baseline inventory
 src/hooks/useHorseArchiveActions.ts,ddb72ea100114a09fa2f669a7548686a1bd532dac5c8eb9b9c722d75ce6d6414,37,pending,not reviewed; exclusion/pending scope retained from baseline inventory
 src/hooks/useHorseMediaUrl.ts,160ef6a63bdb5a518dc65ea44baa4267a10835010c5bf21b9c7789f6cc1eaccb,55,pending,not reviewed; exclusion/pending scope retained from baseline inventory
-src/hooks/useHorsePhotoSelection.ts,a397f4888b35abdbede4bb34c1cb28de71cf0f19611a91710fb28a2cf364b201,68,pending,not reviewed; exclusion/pending scope retained from baseline inventory
+src/hooks/useHorsePhotoSelection.ts,a397f4888b35abdbede4bb34c1cb28de71cf0f19611a91710fb28a2cf364b201,68,reviewed,polish batch full reread; preview default-port regression fixed in scoped script; other modules unchanged
 src/hooks/useOwnerAccess.ts,b73f1d72b248aa6c80be675fab036ee111925f6558127718c273dec7f6b5c950,34,pending,not reviewed; exclusion/pending scope retained from baseline inventory
 src/hooks/useOwnerPreview.ts,1944baef777748621e316f15cde316b03d86acad47c0dde89d37a548c345b949,118,pending,not reviewed; exclusion/pending scope retained from baseline inventory
 src/hooks/useOwnerResource.ts,fd9a4c16ae30bf35332912415b61a90da84be151521be5ef2dae81c9a0a4302c,37,pending,not reviewed; exclusion/pending scope retained from baseline inventory
@@ -436,7 +436,7 @@ src/lib/passwordRecovery.ts,1c0df20039edaa364da93a7f15568fdc4a183e46663ac8c3ad88
 src/lib/passwordUpdateRequest.ts,9d8b13a12be4fd545abf57063688bcff84d646a1bccb7c7b6f991116522fd193,82,reviewed,integration batch full reread
 src/lib/pendingHostedPurchase.ts,ff0578b01766501903c2c43f6a86bdce028313894509077c0e847737b760d9c0,289,pending,not reviewed; exclusion/pending scope retained from baseline inventory
 src/lib/permissions.ts,732482e4b66cd0fd376c8521d6f3d389e8ae0247593504d7a8ba227fea5f9bb3,58,pending,not reviewed; exclusion/pending scope retained from baseline inventory
-src/lib/photoSelection.ts,9b36246911d092bfed7cbc2233adc5bbe52f9b9d21608f39115d2a1ff51a5d3c,72,pending,not reviewed; exclusion/pending scope retained from baseline inventory
+src/lib/photoSelection.ts,9b36246911d092bfed7cbc2233adc5bbe52f9b9d21608f39115d2a1ff51a5d3c,72,reviewed,polish batch full reread; preview default-port regression fixed in scoped script; other modules unchanged
 src/lib/platformConfig.ts,f4ee4aa64191d91761ca683a8d3b5b200cdc649a7a2df830140d0004e42752d4,160,pending,not reviewed; exclusion/pending scope retained from baseline inventory
 src/lib/portableCloudOriginals.ts,c91422226a2252a63cf6d89a60a426b3495dc9a0c888e1f11b4c8b521d62b05f,144,pending,not reviewed; exclusion/pending scope retained from baseline inventory
 src/lib/productEvents.ts,e5d3ff25872ae965d79342a721bf41b130e727c36cdc977e18a5d5c11768c3ff,23,pending,not reviewed; exclusion/pending scope retained from baseline inventory
@@ -699,7 +699,7 @@ tests/api/mediaApprovalStore.test.mjs,1222ab4a76459ff998607497815bcc05abbc964637
 tests/api/metrics.test.mjs,44350a5af45b245fa44a5ba141ee69629b91d7c6e77574b0594b0f562cf9a4c8,84,pending,not reviewed; exclusion/pending scope retained from baseline inventory
 tests/api/nativeCors.test.mjs,5f5b477a79b0c8f288d8137903321d33f75877a89b4a73440f6d10e599acf521,216,pending,not reviewed; exclusion/pending scope retained from baseline inventory
 tests/api/nativePurchaseSurface.test.mjs,61383d4dda34e22724fff482accf8b5f88e89a815f9e75707f8f63d518f698ba,361,pending,not reviewed; exclusion/pending scope retained from baseline inventory
-tests/api/nativeRouting.test.mjs,c0312259a75b1f5e6ffe9d6bfbc0ab39c2359a4ece6c7f48ca0393c0e1cb266f,254,reviewed,prior completed review; content hash matched
+tests/api/nativeRouting.test.mjs,19e6073a972e215df28ecc0cb83f607ef9616a9367946290d3dcc1788efaab88,296,reviewed,polish batch full reread; preview default-port regression fixed in scoped script; other modules unchanged
 tests/api/ocrPersistence.test.mjs,9a8e36cb52422246d56835f1e9eaebe44c2c9462d361a6b02a0b6ac0c9100948,869,pending,not reviewed; exclusion/pending scope retained from baseline inventory
 tests/api/ownerDashboard.test.mjs,66e3ca179b384032dc70523975bc3e30d67ae81062fbee1705c8642cb9d14d3f,541,pending,not reviewed; exclusion/pending scope retained from baseline inventory
 tests/api/packetBranding.test.mjs,f002beadd5a92ab0d4294a0c640a8742a0056731507882c1031da91e923e06f7,1013,pending,not reviewed; exclusion/pending scope retained from baseline inventory
