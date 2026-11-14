@@ -733,8 +733,8 @@ export default function Horses() {
           <span className="hc-onboard__eyebrow">Start here</span>
           <h2 className="hc-onboard__title">Build your first sale-ready horse record.</h2>
           <p className="hc-onboard__copy">
-            XBAR is more than a records shelf. Bring in a horse&apos;s documents and it assembles the profile, checks
-            the sale packet for missing documents, and keeps the horse ready to show to buyers.
+            Keep horse details, original documents, and ownership history together. Review record gaps before preparing
+            a sale.
           </p>
           <div className="hc-onboard__paths">
             <button className="hc-path" type="button" onClick={() => setNewHorseParam(true)} disabled={!canCreateHorse}>
@@ -747,8 +747,8 @@ export default function Horses() {
               <span className="hc-path__step">Start from documents</span>
               <strong>Upload documents</strong>
               <p>
-                Drop registration papers, Coggins, and vet records. XBAR reads them and files each one toward a
-                horse&apos;s sale packet.
+                Upload registration papers, Coggins, and vet records. Link originals to the right horse; review
+                extracted details when OCR is available.
               </p>
               <em>Upload Documents →</em>
             </Link>

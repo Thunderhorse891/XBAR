@@ -1515,6 +1515,12 @@ test('choosing Free opens the workspace after two required setup fields without 
       };
     }),
   ).toEqual({ tier: 'Free', horses: 0, owner: 'Free Journey Ranch', entity: 'Free Journey' });
+  await expect(page.locator('.xs-homegrid')).toContainText('Review extracted details when OCR is available.');
+  await expect(page.locator('.xs-homegrid')).not.toContainText('we read them and file them for you');
+  await page.getByRole('link', { name: 'Horses', exact: true }).click();
+  await expect(page.locator('.hc-onboard')).toContainText('review extracted details when OCR is available.');
+  await page.goBack();
+  await expect(page).toHaveURL(/\/app$/);
   await page.getByRole('button', { name: 'Add first horse', exact: true }).click();
   await expect(page.getByRole('heading', { name: 'Add a horse', exact: true })).toBeVisible();
   await page.getByLabel('Registered name', { exact: true }).fill('Free Journey First Horse');
