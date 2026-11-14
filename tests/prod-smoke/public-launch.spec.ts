@@ -7,12 +7,17 @@ for (const width of [1440, 390]) {
     await expect(
       page.getByText('Review the billing options available to your workspace inside XBAR.', { exact: false }),
     ).toBeVisible();
-    await expect(page.getByRole('rowheader', { name: 'Annual price (billed yearly)', exact: true })).toBeVisible();
-    for (const amount of ['120', '290', '790', '1,990']) {
-      await expect(page.getByText(`$${amount}/year, billed annually`, { exact: false })).toBeVisible();
+    await expect(page.getByRole('rowheader', { name: 'Annual price (billed yearly)', exact: true })).toHaveCount(0);
+    const plans = page.locator('.plan');
+    await expect(plans).toHaveCount(2);
+    for (const [tier, amount] of [
+      ['Professional', '19.99'],
+      ['Ranch Ops', '49.99'],
+    ]) {
+      await expect(
+        plans.filter({ has: page.getByRole('heading', { name: tier, exact: true }) }).locator('.plan__price'),
+      ).toHaveText(`$${amount}/month`);
     }
-    await expect(page.getByText('Annual billing is not currently offered.', { exact: false })).toHaveCount(0);
-    await expect(page.getByRole('rowheader', { name: 'Annual price (2 months free)' })).toHaveCount(0);
     // Public pages share the homepage's native mobile Menu. Prove support
     // is reachable there rather than assuming the retired horizontal rail.
     if (width === 390) await page.locator('.landing-mobile-nav > summary').click();

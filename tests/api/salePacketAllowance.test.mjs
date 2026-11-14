@@ -84,9 +84,10 @@ test('the client counts the same window the server enforces', () => {
   const client = readFileSync('src/lib/salePacketAllowance.ts', 'utf8');
   const clientWindow = Number(/export const SALE_PACKET_WINDOW_DAYS = (\d+);/.exec(client)?.[1]);
   assert.equal(clientWindow, SALE_PACKET_WINDOW_DAYS, 'a screen and a server that disagree refuse or promise wrongly');
-  // The plan screen says what the server does.
+  // The existing database trigger can still enforce a lifetime ceiling.
+  // New checkout must not promise automatic renewal before that is aligned.
   const screen = readFileSync('src/routes/Subscriptions.tsx', 'utf8');
-  assert.match(screen, new RegExp(`'sale packets'\\)\\} every ${SALE_PACKET_WINDOW_DAYS} days`));
+  assert.doesNotMatch(screen, new RegExp(`'sale packets'\\)\\} every ${SALE_PACKET_WINDOW_DAYS} days`));
 });
 
 test('only generating a packet is metered; reading or re-signing one is not', () => {

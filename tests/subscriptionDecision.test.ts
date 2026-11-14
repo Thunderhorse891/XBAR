@@ -169,8 +169,8 @@ test('recommendation moves one operating level at a time and respects selection'
 });
 test('subscription prices stay aligned to the current approved pricing table', () => {
   assert.equal(subscriptionPlans.Starter.monthlyRate, 12);
-  assert.equal(subscriptionPlans.Professional.monthlyRate, 29);
-  assert.equal(subscriptionPlans['Ranch Ops'].monthlyRate, 79);
+  assert.equal(subscriptionPlans.Professional.monthlyRate, 19.99);
+  assert.equal(subscriptionPlans['Ranch Ops'].monthlyRate, 49.99);
   assert.equal(subscriptionPlans.Enterprise.monthlyRate, 199);
   assert.equal(subscriptionPlans.Starter.annualRate, 120);
   assert.equal(subscriptionPlans.Professional.annualRate, 290);
@@ -1082,68 +1082,13 @@ test('the pending marker stops applying once the workspace is entitled', async (
   );
 });
 
-test('every payment-link redirect goes through the pending-purchase guard', async () => {
+test('billing redirects only to the portal or a managed checkout result', async () => {
   const screen = await readFile(path.join(process.cwd(), 'src/routes/Subscriptions.tsx'), 'utf8');
-
-  /*
-   * There are two routes to a payment link — the hosted-only primary route and
-   * the `no_managed_identity` fallback — and they are the same act with the
-   * same consequence: a static link that cannot associate its subscription
-   * with a workspace, in a deployment with no webhook to confirm it. The guard
-   * shipped on one branch and not the other, so this pins the shape that makes
-   * that impossible rather than the two call sites.
-   */
-  const helperAt = screen.indexOf('const followPaymentLink = async (');
-  assert.ok(helperAt > -1, 'the single payment-link redirect must be findable');
-  const helper = screen.slice(helperAt, screen.indexOf('const openBillingPortal', helperAt));
-
-  /*
-   * One CLAIM, not a read followed by a write. Re-reading storage instead of a
-   * cached snapshot fixed the tab that decided from stale state, but two tabs
-   * clicking at once can both finish a read before either writes, and a
-   * check-then-set they both pass guards nothing. The claim puts the read and
-   * the write inside one cross-tab lock; splitting them again reopens the
-   * window, and the marker's workspace stamp is carried into it here — a
-   * marker written under the local scope while a cloud workspace is open never
-   * matches on read, which loses the guard with the suite still green.
-   */
-  assert.match(
-    helper,
-    /const claim = await claimPendingHostedPurchase\(\s*\{ tier, startedAt: new Date\(\)\.toISOString\(\), workspaceId \},\s*new Date\(\),\s*!subscriptionActive,\s*\);/,
-    'the redirect must claim the purchase under the lock, stamped with its workspace',
-  );
-  assert.match(helper, /if \(!claim\.claimed\)/, 'and refuse when the claim is refused');
-  assert.doesNotMatch(
-    helper,
-    /readPendingHostedPurchase|writePendingHostedPurchase/,
-    'reading or writing the marker beside the claim is the check-then-set that was removed',
-  );
-  const claimAt = helper.indexOf('claimPendingHostedPurchase(');
-  const assignAt = helper.indexOf('window.location.assign(link)');
-  assert.ok(claimAt > -1 && assignAt > claimAt, 'and it must claim before it leaves the page');
-  assert.match(
-    screen,
-    /isPendingHostedPurchase\(pendingPurchase, new Date\(\), workspaceId\)/,
-    'and it must be read back against the workspace being viewed, not the one on the marker',
-  );
-  assert.match(helper, /window\.location\.assign\(link\)/, 'before leaving the page');
-
-  /*
-   * And nothing else may follow a link. Three redirects exist — the guarded
-   * payment link, the billing portal, and a managed checkout session, neither
-   * of which is a static link — so a FOURTH is the thing to catch: it is how a
-   * new route would skip this guard, exactly as the fallback did.
-   */
-  const assigned = [...screen.matchAll(/window\.location\.assign\(([^)]+)\)/g)].map(([, expression]) => expression);
   assert.deepEqual(
-    assigned.sort(),
-    ['billingPortalAction.url', 'link', 'managed.url'],
-    'a new redirect must be routed through followPaymentLink, not added beside it',
+    [...screen.matchAll(/window\.location\.assign\(([^)]+)\)/g)].map((match) => match[1]),
+    ['billingPortalAction.url', 'managed.url'],
   );
-
-  // Both call sites must actually use the helper rather than reimplementing it.
-  assert.match(screen, /await followPaymentLink\(tier, hostedOnlyLink\);/, 'the hosted-only route');
-  assert.match(screen, /await followPaymentLink\(tier, fallback, managed\.message\);/, 'and the no-identity fallback');
+  assert.doesNotMatch(screen, /getStripePaymentLink|followPaymentLink|canUsePaymentLinkFallback/);
 });
 
 test('a second billing tab learns about the first tab’s purchase', async () => {
@@ -1416,18 +1361,12 @@ test('an active subscriber is not blocked by their own pending marker', async ()
   }
 });
 
-test('the billing screen claims the purchase rather than reading and writing it', async () => {
+test('billing rechecks legacy hosted payment recovery before opening managed Stripe checkout', async () => {
   const screen = await readFile(path.join(process.cwd(), 'src/routes/Subscriptions.tsx'), 'utf8');
-
-  assert.match(screen, /const claim = await claimPendingHostedPurchase\(/, 'the redirect must claim');
-  assert.doesNotMatch(
-    screen,
-    /writePendingHostedPurchase/,
-    'writing the marker outside the claim reopens the check-then-set window',
-  );
-
-  const assigned = [...screen.matchAll(/await followPaymentLink\(/g)];
-  assert.equal(assigned.length, 2, 'both payment-link routes must await the claim before redirecting');
+  const action = screen.slice(screen.indexOf('const beginCheckout ='));
+  assert.match(action, /isPendingHostedPurchase\(readPendingHostedPurchase\(workspaceId\)/);
+  assert.ok(action.indexOf('isPendingHostedPurchase') < action.indexOf('startManagedCheckout'));
+  assert.doesNotMatch(screen, /writePendingHostedPurchase|claimPendingHostedPurchase/);
 });
 
 /*
