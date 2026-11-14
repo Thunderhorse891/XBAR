@@ -748,3 +748,22 @@ preserve all objects/reservations; removing only the guard is unsafe.
 ```sh
 psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f supabase/migrations/20261112150000_project_storage_budget.sql
 ```
+
+### Rolling sale-packet allowance (prepared; approval required)
+
+`20261114120000_sale_packet_rolling_allowance.sql` aligns the database trigger
+with the existing API/client allowance: packets generated in the past 30 days
+(720 elapsed hours). Historical packets remain readable and editable. Run
+`tests/database/sale-packet-window.sql` only on a disposable full-schema database;
+the optional in-memory check is documented in
+[the packet-window review](docs/reviews/production-20261114/packet-window.md).
+After full-schema CI, coordinated release review and explicit owner approval:
+
+```sh
+psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f supabase/migrations/20261114120000_sale_packet_rolling_allowance.sql
+```
+
+The prepared rollback at
+`supabase/rollbacks/20261114120000_sale_packet_rolling_allowance.sql` restores only
+the prior function and its lifetime limitation, without deleting records or
+changing grants. It requires separate approval. Do not erase packets to free quota.
