@@ -54,3 +54,32 @@ test('historical annual and retired prices remain reported as optional recogniti
   for (const name of ANNUAL_NAMES) assert.ok(output.includes(`✓ set  ${name}`));
   assert.ok(output.includes('legacy annual subscriber recognition only'));
 });
+
+const STORAGE_VARS = {
+  SUPABASE_URL: 'https://synthetic.supabase.co',
+  SUPABASE_SERVICE_ROLE_KEY: 'synthetic-service-secret',
+  SUPABASE_STORAGE_S3_REGION: 'synthetic-region',
+  SUPABASE_STORAGE_S3_ACCESS_KEY_ID: 'synthetic-access-secret',
+  SUPABASE_STORAGE_S3_SECRET_ACCESS_KEY: 'synthetic-storage-secret',
+};
+
+test('preflight reports missing controlled upload prerequisites without exposing credentials', () => {
+  for (const name of Object.keys(STORAGE_VARS)) {
+    const output = runPreflight({ ...STORAGE_VARS, [name]: '' });
+    assert.ok(output.includes('Controlled original-file uploads — NOT CONFIGURED'), name);
+    assert.ok(output.includes(`✗ missing  ${name}`), name);
+    for (const secret of ['synthetic-service-secret', 'synthetic-access-secret', 'synthetic-storage-secret']) {
+      assert.ok(!output.includes(secret));
+    }
+  }
+});
+
+test('configured storage remains explicitly unverified and requires hosted recovery checks', () => {
+  const output = runPreflight(STORAGE_VARS);
+  assert.ok(output.includes('Controlled original-file uploads — CONFIGURED (UNVERIFIED)'));
+  assert.ok(
+    output.includes(
+      'provider limits, CORS, migrations, old upload-capability draining and interrupted-upload recovery remain unverified',
+    ),
+  );
+});
