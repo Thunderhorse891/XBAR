@@ -124,7 +124,7 @@ test('new annual checkout is not offered even when an old catalog advertises it'
   await expect(page.getByRole('article', { name: 'Free plan' })).toContainText('2 horses · 1 user · No card required');
   await expect(
     page.locator('.checkout-plan').filter({ has: page.getByRole('heading', { name: 'Professional', exact: true }) }),
-  ).toContainText('$20');
+  ).toContainText('$19.99');
   await expect(page.locator('.checkout-plan')).toHaveCount(3);
   await expect(
     page.locator('.checkout-plan').filter({ has: page.getByRole('heading', { name: 'Ranch Ops', exact: true }) }),

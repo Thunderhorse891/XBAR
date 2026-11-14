@@ -40,7 +40,7 @@ changing prices without locking existing subscribers out.
    | Tier         | Monthly | Horses | Team seats | Included paid capabilities                            |
    | ------------ | ------- | ------ | ---------- | ----------------------------------------------------- |
    | Free         | $0      | 2      | 1          | Manual records; 10 documents; shared launch storage   |
-   | Professional | $20     | 30     | 5          | OCR, calculated reports, PDF/CSV export, sale sharing |
+   | Professional | $19.99  | 30     | 5          | OCR, calculated reports, PDF/CSV export, sale sharing |
    | Ranch Ops    | $49.99  | 200    | 20         | Professional plus operations and report styling       |
 
    New plans include no dedicated storage allowance; existing numeric entitlement records do not provision space.
@@ -97,7 +97,7 @@ workspace.
 ```sql
 insert into public.workspace_subscription_profiles
   (workspace_id, tier, billing_state, monthly_rate, billing_period)
-values ('PASTE-WORKSPACE-UUID', 'Professional', 'Manual Billing', 20, 'monthly')
+values ('PASTE-WORKSPACE-UUID', 'Professional', 'Manual Billing', 19.99, 'monthly')
 on conflict (workspace_id) do update
   set tier           = excluded.tier,
       billing_state  = excluded.billing_state,

@@ -1443,7 +1443,7 @@ test('a workspace round trip during raster validation cannot persist an old pack
   expect(await packetPersistenceCounts(page)).toEqual(before);
 });
 
-test('Free signup offers two horses, one user, manual upload and monthly Professional at twenty dollars', async ({
+test('Free signup offers two horses, one user, manual upload and monthly Professional at nineteen dollars and ninety-nine cents', async ({
   page,
 }) => {
   await bootstrapWorkspace(page);
@@ -1490,6 +1490,29 @@ test('Free signup offers two horses, one user, manual upload and monthly Profess
   await expect(page.getByRole('article', { name: 'Free plan' })).toContainText('No card required');
   await expect(
     page.locator('.checkout-plan').filter({ has: page.getByRole('heading', { name: 'Professional', exact: true }) }),
-  ).toContainText('$20');
+  ).toContainText('$19.99');
   await expect(page.getByRole('button', { name: /Annual/ })).toHaveCount(0);
+});
+
+test('choosing Free opens the workspace after two required setup fields without a billing detour', async ({ page }) => {
+  await page.addInitScript(() => localStorage.setItem('xbar-command-center-entry', 'true'));
+  await page.goto('/app/setup?plan=Free');
+  await page.getByPlaceholder('XBAR LLC').fill('Free Journey');
+  await page.getByPlaceholder('Primary Ranch').fill('Free Journey Ranch');
+  await page.getByRole('button', { name: 'Create workspace', exact: true }).click();
+  await expect(page).toHaveURL(/\/app$/);
+  await expect(page.getByRole('button', { name: 'Add your first horse', exact: true })).toBeVisible();
+  expect(
+    await page.evaluate(async () => {
+      const path = '/src/store/useXbarStore.ts';
+      const { useXbarStore } = await import(/* @vite-ignore */ path);
+      const state = useXbarStore.getState();
+      return {
+        tier: state.subscription.tier,
+        horses: state.horses.length,
+        owner: state.workspaceProfile.defaultOwnerName,
+        entity: state.workspaceProfile.defaultOwnerEntity,
+      };
+    }),
+  ).toEqual({ tier: 'Free', horses: 0, owner: 'Free Journey Ranch', entity: 'Free Journey' });
 });

@@ -39,7 +39,7 @@ test('managed checkout is admin-only and validates return origins', () => {
 
 test('server subscription prices match advertised production tiers', () => {
   assert.match(plansSource, /Starter:[\s\S]*monthlyRate: 12/);
-  assert.match(plansSource, /Professional:[\s\S]*monthlyRate: 20/);
+  assert.match(plansSource, /Professional:[\s\S]*monthlyRate: 19\.99/);
   assert.match(plansSource, /'Ranch Ops':[\s\S]*monthlyRate: 49\.99/);
   assert.match(plansSource, /Enterprise:[\s\S]*monthlyRate: 199/);
   // Historical annual rates remain recognizable; new annual checkout is disabled.

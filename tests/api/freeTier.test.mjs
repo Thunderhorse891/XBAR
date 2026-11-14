@@ -131,10 +131,10 @@ test('active paid profiles preserve every currently purchased limit', () => {
   }
 });
 
-test('public monthly prices are 0/20/49.99 and retired tiers retain legacy reference rates without repricing historical subscribers', () => {
+test('public monthly prices are 0/19.99/49.99 and retired tiers retain legacy reference rates without repricing historical subscribers', () => {
   assert.deepEqual(
     Object.values(subscriptionPlans).map((p) => p.monthlyRate),
-    [0, 12, 20, 49.99, 199],
+    [0, 12, 19.99, 49.99, 199],
   );
 });
 test('Starter historical monthly price survives with authenticated Stripe amount or stored amount', () => {

@@ -63,6 +63,7 @@ export default function SetupWorkspace() {
    * unreachable.
    */
   const postSetupPath = useMemo(() => {
+    if (selectedPlan === 'Free') return '/';
     if (selectedPlan && canPresentPurchaseFlow()) return billingPathForTier(selectedPlan);
     // The setup guard can run before cloud hydration restores a configured
     // ranch. Return to that requested screen instead of losing its deep link.
@@ -81,7 +82,7 @@ export default function SetupWorkspace() {
   const cloudWorkspaceRequired = supabaseReady && status === 'signed-in' && !workspaceId;
 
   const accessLabel = useMemo(() => {
-    if (!supabaseReady) return 'Browser trial';
+    if (!supabaseReady) return 'Device-only setup';
     return status === 'signed-in' ? 'Cloud ready' : 'Sign-in pending';
   }, [status, supabaseReady]);
 

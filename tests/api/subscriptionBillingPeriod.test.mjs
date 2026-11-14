@@ -88,7 +88,7 @@ test('monthlyRate stays the monthly list rate and annualRate the annual one', ()
     billingStatus: 'active',
     priceId: 'price_pro_annual',
   });
-  assert.equal(annual.monthlyRate, 20);
+  assert.equal(annual.monthlyRate, 19.99);
   assert.equal(annual.annualRate, 290);
 
   const monthly = buildSubscriptionProfile({

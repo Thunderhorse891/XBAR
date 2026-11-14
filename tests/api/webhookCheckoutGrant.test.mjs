@@ -189,7 +189,7 @@ test('a completed checkout writes the purchased tier and an Active billing state
   assert.equal(params.p_event_type, 'checkout.session.completed');
   assert.equal(params.p_tier, 'Professional', 'the tier the price id maps to');
   assert.equal(params.p_billing_state, 'Active', 'an active Stripe subscription entitles');
-  assert.equal(params.p_monthly_rate, 20, 'Professional monthly rate');
+  assert.equal(params.p_monthly_rate, 19.99, 'Professional monthly rate');
   assert.equal(params.p_customer_id, 'cus_test_1');
   assert.equal(params.p_subscription_id, 'sub_test_1');
   assert.equal(params.p_price_id, PRICE_PRO_MONTHLY);
@@ -200,7 +200,7 @@ test('a completed checkout writes the purchased tier and an Active billing state
   // The full profile the workspace will gate on carries the same answer.
   assert.equal(params.p_profile.tier, 'Professional');
   assert.equal(params.p_profile.billingState, 'Active');
-  assert.equal(params.p_profile.monthlyRate, 20);
+  assert.equal(params.p_profile.monthlyRate, 19.99);
   assert.equal(params.p_profile.usage.horseLimit, 30, 'Professional capacity, not the Starter baseline');
 });
 
@@ -511,7 +511,7 @@ test("a failed profile read keeps the database's text out of the response", asyn
 
 test('signed paid events grant current Professional and Ranch Ops prices with exact capacities', async () => {
   for (const [tier, priceId, amount, horses, seats] of [
-    ['Professional', PRICE_PRO_MONTHLY, 2000, 30, 5],
+    ['Professional', PRICE_PRO_MONTHLY, 1999, 30, 5],
     ['Ranch Ops', process.env.STRIPE_PRICE_ID_RANCH_OPS, 4999, 200, 20],
   ]) {
     stripeScenario.retrieveSubscription = async () => {

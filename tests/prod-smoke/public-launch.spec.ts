@@ -16,7 +16,7 @@ for (const width of [1440, 390]) {
     await expect(plans).toHaveCount(3);
     for (const [tier, amount] of [
       ['Free', '0'],
-      ['Professional', '20'],
+      ['Professional', '19.99'],
       ['Ranch Ops', '49.99'],
     ]) {
       await expect(

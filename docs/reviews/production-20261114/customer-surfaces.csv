@@ -1,0 +1,101 @@
+category,source_or_surface,status,remaining_acceptance
+app screen,src/routes/AnimalProfile.tsx,pending,synthetic browser + keyboard/mobile/contrast + real device acceptance still required
+app screen,src/routes/Breeding.tsx,pending,synthetic browser + keyboard/mobile/contrast + real device acceptance still required
+app screen,src/routes/BreedingFoaling.tsx,pending,synthetic browser + keyboard/mobile/contrast + real device acceptance still required
+app screen,src/routes/BuyerDealRoom.tsx,pending,synthetic browser + keyboard/mobile/contrast + real device acceptance still required
+app screen,src/routes/BuyerProfile.tsx,pending,synthetic browser + keyboard/mobile/contrast + real device acceptance still required
+app screen,src/routes/Costs.tsx,pending,synthetic browser + keyboard/mobile/contrast + real device acceptance still required
+app screen,src/routes/Documents.tsx,pending,synthetic browser + keyboard/mobile/contrast + real device acceptance still required
+app screen,src/routes/Equipment.tsx,pending,synthetic browser + keyboard/mobile/contrast + real device acceptance still required
+app screen,src/routes/Expenses.tsx,pending,synthetic browser + keyboard/mobile/contrast + real device acceptance still required
+app screen,src/routes/ExpiringSoon.tsx,pending,synthetic browser + keyboard/mobile/contrast + real device acceptance still required
+app screen,src/routes/FeedInventory.tsx,pending,synthetic browser + keyboard/mobile/contrast + real device acceptance still required
+app screen,src/routes/Financials.tsx,pending,synthetic browser + keyboard/mobile/contrast + real device acceptance still required
+app screen,src/routes/GettingStarted.tsx,pending,synthetic browser + keyboard/mobile/contrast + real device acceptance still required
+app screen,src/routes/HealthCare.tsx,pending,synthetic browser + keyboard/mobile/contrast + real device acceptance still required
+app screen,src/routes/HerdGroups.tsx,pending,synthetic browser + keyboard/mobile/contrast + real device acceptance still required
+app screen,src/routes/Horses.tsx,pending,synthetic browser + keyboard/mobile/contrast + real device acceptance still required
+app screen,src/routes/Login.tsx,pending,synthetic browser + keyboard/mobile/contrast + real device acceptance still required
+app screen,src/routes/Medical.tsx,pending,synthetic browser + keyboard/mobile/contrast + real device acceptance still required
+app screen,src/routes/NotFound.tsx,pending,synthetic browser + keyboard/mobile/contrast + real device acceptance still required
+app screen,src/routes/OwnerDashboard.tsx,pending,synthetic browser + keyboard/mobile/contrast + real device acceptance still required
+app screen,src/routes/Ownership.tsx,pending,synthetic browser + keyboard/mobile/contrast + real device acceptance still required
+app screen,src/routes/OwnershipChain.tsx,pending,synthetic browser + keyboard/mobile/contrast + real device acceptance still required
+app screen,src/routes/Pastures.tsx,pending,synthetic browser + keyboard/mobile/contrast + real device acceptance still required
+app screen,src/routes/RanchAssets.tsx,pending,synthetic browser + keyboard/mobile/contrast + real device acceptance still required
+app screen,src/routes/Reminders.tsx,pending,synthetic browser + keyboard/mobile/contrast + real device acceptance still required
+app screen,src/routes/Reports.tsx,pending,synthetic browser + keyboard/mobile/contrast + real device acceptance still required
+app screen,src/routes/ResetPassword.tsx,pending,synthetic browser + keyboard/mobile/contrast + real device acceptance still required
+app screen,src/routes/SalePacketStudio.tsx,pending,synthetic browser + keyboard/mobile/contrast + real device acceptance still required
+app screen,src/routes/Sales.tsx,pending,synthetic browser + keyboard/mobile/contrast + real device acceptance still required
+app screen,src/routes/Settings.tsx,pending,synthetic browser + keyboard/mobile/contrast + real device acceptance still required
+app screen,src/routes/SetupWorkspace.tsx,pending,synthetic browser + keyboard/mobile/contrast + real device acceptance still required
+app screen,src/routes/SharedAccess.tsx,pending,synthetic browser + keyboard/mobile/contrast + real device acceptance still required
+app screen,src/routes/Subscriptions.tsx,specific pricing/copy sections checked; full surface pending,synthetic browser + keyboard/mobile/contrast + real device acceptance still required
+app screen,src/routes/TodayWork.tsx,pending,synthetic browser + keyboard/mobile/contrast + real device acceptance still required
+app screen,src/routes/VerifyPacket.tsx,pending,synthetic browser + keyboard/mobile/contrast + real device acceptance still required
+app screen,src/routes/Weather.tsx,pending,synthetic browser + keyboard/mobile/contrast + real device acceptance still required
+app screen,src/routes/layouts/MainLayout.tsx,pending,synthetic browser + keyboard/mobile/contrast + real device acceptance still required
+dialog / notice / image interaction,src/components/ConfirmActionDialog.tsx,pending,synthetic browser + keyboard/mobile/contrast + real device acceptance still required
+dialog / notice / image interaction,src/components/HorsePhotoGallery.tsx,pending,synthetic browser + keyboard/mobile/contrast + real device acceptance still required
+dialog / notice / image interaction,src/components/HorsePhotoSourceDialog.tsx,pending,synthetic browser + keyboard/mobile/contrast + real device acceptance still required
+dialog / notice / image interaction,src/components/SubscriptionEnforcement.tsx,pending,synthetic browser + keyboard/mobile/contrast + real device acceptance still required
+dialog / notice / image interaction,src/components/UpgradePrompt.tsx,code reviewed; new browser checks pending,synthetic browser + keyboard/mobile/contrast + real device acceptance still required
+external hosted surface,Stripe checkout / cancellation / receipt / customer portal,live unverified,catalog amounts verified by owner thread; wiring and actual outcomes unverified; no live actions
+public page / artwork / shared rendering,scripts/marketing/home.mjs,pending,synthetic browser + keyboard/mobile/contrast + real device acceptance still required
+public page / artwork / shared rendering,scripts/marketing/pages.mjs,specific pricing/copy sections checked; full surface pending,synthetic browser + keyboard/mobile/contrast + real device acceptance still required
+public page / artwork / shared rendering,scripts/marketing/pricing-data.mjs,pending,synthetic browser + keyboard/mobile/contrast + real device acceptance still required
+public page / artwork / shared rendering,scripts/marketing/render.mjs,pending,synthetic browser + keyboard/mobile/contrast + real device acceptance still required
+public page / artwork / shared rendering,scripts/marketing/sample-packet.mjs,pending,synthetic browser + keyboard/mobile/contrast + real device acceptance still required
+public page / artwork / shared rendering,scripts/marketing/signature.mjs,pending,synthetic browser + keyboard/mobile/contrast + real device acceptance still required
+shared component / branding / fields (runtime usage to trace),src/components/BrandMark.tsx,pending,map customer-visible states; synthetic keyboard/mobile/contrast and actual-device acceptance required
+shared component / branding / fields (runtime usage to trace),src/components/BuyerDealRoomPanel.tsx,pending,map customer-visible states; synthetic keyboard/mobile/contrast and actual-device acceptance required
+shared component / branding / fields (runtime usage to trace),src/components/BuyerResponseQueue.tsx,pending,map customer-visible states; synthetic keyboard/mobile/contrast and actual-device acceptance required
+shared component / branding / fields (runtime usage to trace),src/components/CloudBootstrap.tsx,pending,map customer-visible states; synthetic keyboard/mobile/contrast and actual-device acceptance required
+shared component / branding / fields (runtime usage to trace),src/components/CommandBrief.tsx,pending,map customer-visible states; synthetic keyboard/mobile/contrast and actual-device acceptance required
+shared component / branding / fields (runtime usage to trace),src/components/ContextMenu.tsx,pending,map customer-visible states; synthetic keyboard/mobile/contrast and actual-device acceptance required
+shared component / branding / fields (runtime usage to trace),src/components/DocumentExtractionPreview.tsx,pending,map customer-visible states; synthetic keyboard/mobile/contrast and actual-device acceptance required
+shared component / branding / fields (runtime usage to trace),src/components/DocumentLibrary.tsx,pending,map customer-visible states; synthetic keyboard/mobile/contrast and actual-device acceptance required
+shared component / branding / fields (runtime usage to trace),src/components/EmptyState.tsx,pending,map customer-visible states; synthetic keyboard/mobile/contrast and actual-device acceptance required
+shared component / branding / fields (runtime usage to trace),src/components/ErrorBoundary.tsx,pending,map customer-visible states; synthetic keyboard/mobile/contrast and actual-device acceptance required
+shared component / branding / fields (runtime usage to trace),src/components/HorseDocuments.tsx,pending,map customer-visible states; synthetic keyboard/mobile/contrast and actual-device acceptance required
+shared component / branding / fields (runtime usage to trace),src/components/HorseMediaPreview.tsx,pending,map customer-visible states; synthetic keyboard/mobile/contrast and actual-device acceptance required
+shared component / branding / fields (runtime usage to trace),src/components/InteractionBootstrap.tsx,pending,map customer-visible states; synthetic keyboard/mobile/contrast and actual-device acceptance required
+shared component / branding / fields (runtime usage to trace),src/components/InteractionSystem.tsx,pending,map customer-visible states; synthetic keyboard/mobile/contrast and actual-device acceptance required
+shared component / branding / fields (runtime usage to trace),src/components/OfferDecisionPanel.tsx,pending,map customer-visible states; synthetic keyboard/mobile/contrast and actual-device acceptance required
+shared component / branding / fields (runtime usage to trace),src/components/OwnerTestModeBar.tsx,pending,map customer-visible states; synthetic keyboard/mobile/contrast and actual-device acceptance required
+shared component / branding / fields (runtime usage to trace),src/components/RequireCloudAuth.tsx,pending,map customer-visible states; synthetic keyboard/mobile/contrast and actual-device acceptance required
+shared component / branding / fields (runtime usage to trace),src/components/RequireSubscriptionFeature.tsx,pending,map customer-visible states; synthetic keyboard/mobile/contrast and actual-device acceptance required
+shared component / branding / fields (runtime usage to trace),src/components/RequireWorkspaceSetup.tsx,pending,map customer-visible states; synthetic keyboard/mobile/contrast and actual-device acceptance required
+shared component / branding / fields (runtime usage to trace),src/components/SalePacketSlots.tsx,pending,map customer-visible states; synthetic keyboard/mobile/contrast and actual-device acceptance required
+shared component / branding / fields (runtime usage to trace),src/components/SalePacketWizard.tsx,pending,map customer-visible states; synthetic keyboard/mobile/contrast and actual-device acceptance required
+shared component / branding / fields (runtime usage to trace),src/components/SaleReadinessCard.tsx,pending,map customer-visible states; synthetic keyboard/mobile/contrast and actual-device acceptance required
+shared component / branding / fields (runtime usage to trace),src/components/UploadRecoveryPanel.tsx,pending,map customer-visible states; synthetic keyboard/mobile/contrast and actual-device acceptance required
+shared component / branding / fields (runtime usage to trace),src/components/VerifiedByXbar.tsx,pending,map customer-visible states; synthetic keyboard/mobile/contrast and actual-device acceptance required
+shared component / branding / fields (runtime usage to trace),src/components/app-ui.tsx,pending,map customer-visible states; synthetic keyboard/mobile/contrast and actual-device acceptance required
+shared component / branding / fields (runtime usage to trace),src/components/dataviz/Charts.tsx,pending,map customer-visible states; synthetic keyboard/mobile/contrast and actual-device acceptance required
+shared component / branding / fields (runtime usage to trace),src/components/icons.tsx,pending,map customer-visible states; synthetic keyboard/mobile/contrast and actual-device acceptance required
+shared component / branding / fields (runtime usage to trace),src/components/saas/flows.tsx,pending,map customer-visible states; synthetic keyboard/mobile/contrast and actual-device acceptance required
+shared component / branding / fields (runtime usage to trace),src/components/saas/index.tsx,pending,map customer-visible states; synthetic keyboard/mobile/contrast and actual-device acceptance required
+shared component / branding / fields (runtime usage to trace),src/components/ui/accordion.tsx,pending,map customer-visible states; synthetic keyboard/mobile/contrast and actual-device acceptance required
+shared component / branding / fields (runtime usage to trace),src/components/ui/alert-dialog.tsx,pending,map customer-visible states; synthetic keyboard/mobile/contrast and actual-device acceptance required
+shared component / branding / fields (runtime usage to trace),src/components/ui/badge.tsx,pending,map customer-visible states; synthetic keyboard/mobile/contrast and actual-device acceptance required
+shared component / branding / fields (runtime usage to trace),src/components/ui/button.tsx,pending,map customer-visible states; synthetic keyboard/mobile/contrast and actual-device acceptance required
+shared component / branding / fields (runtime usage to trace),src/components/ui/card.tsx,pending,map customer-visible states; synthetic keyboard/mobile/contrast and actual-device acceptance required
+shared component / branding / fields (runtime usage to trace),src/components/ui/checkbox.tsx,pending,map customer-visible states; synthetic keyboard/mobile/contrast and actual-device acceptance required
+shared component / branding / fields (runtime usage to trace),src/components/ui/command.tsx,pending,map customer-visible states; synthetic keyboard/mobile/contrast and actual-device acceptance required
+shared component / branding / fields (runtime usage to trace),src/components/ui/dialog.tsx,pending,map customer-visible states; synthetic keyboard/mobile/contrast and actual-device acceptance required
+shared component / branding / fields (runtime usage to trace),src/components/ui/dropdown-menu.tsx,pending,map customer-visible states; synthetic keyboard/mobile/contrast and actual-device acceptance required
+shared component / branding / fields (runtime usage to trace),src/components/ui/field.tsx,pending,map customer-visible states; synthetic keyboard/mobile/contrast and actual-device acceptance required
+shared component / branding / fields (runtime usage to trace),src/components/ui/form.tsx,pending,map customer-visible states; synthetic keyboard/mobile/contrast and actual-device acceptance required
+shared component / branding / fields (runtime usage to trace),src/components/ui/input.tsx,pending,map customer-visible states; synthetic keyboard/mobile/contrast and actual-device acceptance required
+shared component / branding / fields (runtime usage to trace),src/components/ui/label.tsx,pending,map customer-visible states; synthetic keyboard/mobile/contrast and actual-device acceptance required
+shared component / branding / fields (runtime usage to trace),src/components/ui/select.tsx,pending,map customer-visible states; synthetic keyboard/mobile/contrast and actual-device acceptance required
+shared component / branding / fields (runtime usage to trace),src/components/ui/separator.tsx,pending,map customer-visible states; synthetic keyboard/mobile/contrast and actual-device acceptance required
+shared component / branding / fields (runtime usage to trace),src/components/ui/sheet.tsx,pending,map customer-visible states; synthetic keyboard/mobile/contrast and actual-device acceptance required
+shared component / branding / fields (runtime usage to trace),src/components/ui/sonner.tsx,pending,map customer-visible states; synthetic keyboard/mobile/contrast and actual-device acceptance required
+shared component / branding / fields (runtime usage to trace),src/components/ui/table.tsx,pending,map customer-visible states; synthetic keyboard/mobile/contrast and actual-device acceptance required
+shared component / branding / fields (runtime usage to trace),src/components/ui/tabs.tsx,pending,map customer-visible states; synthetic keyboard/mobile/contrast and actual-device acceptance required
+shared component / branding / fields (runtime usage to trace),src/components/ui/textarea.tsx,pending,map customer-visible states; synthetic keyboard/mobile/contrast and actual-device acceptance required
+transactional/customer email template,api/_lib/lifecycleEmails.js,specific pricing/copy sections checked; full surface pending,synthetic browser + keyboard/mobile/contrast + real device acceptance still required
+transactional/customer email template,api/sale-packets.js,pending,synthetic browser + keyboard/mobile/contrast + real device acceptance still required

@@ -170,7 +170,7 @@ test('recommendation moves one operating level at a time and respects selection'
 });
 test('subscription prices stay aligned to the current approved pricing table', () => {
   assert.equal(subscriptionPlans.Starter.monthlyRate, 12);
-  assert.equal(subscriptionPlans.Professional.monthlyRate, 20);
+  assert.equal(subscriptionPlans.Professional.monthlyRate, 19.99);
   assert.equal(subscriptionPlans['Ranch Ops'].monthlyRate, 49.99);
   assert.equal(subscriptionPlans.Enterprise.monthlyRate, 199);
   assert.equal(subscriptionPlans.Starter.annualRate, 120);
