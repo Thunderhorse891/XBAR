@@ -24,7 +24,7 @@ CLAUDE.md,144cdcd9d4d5f9ddb07f854cf6fc8594756ecbd84a20517352b5cc792a164d2d,149,e
 LICENSE,286f3600ff827371e2c298a2be18165c791bf5fa173f29895945f76cddb61489,24,excluded,not reviewed; exclusion/pending scope retained from baseline inventory
 README.md,3457724b77a22331c464076c1e8d7d5366c10d8c3bb1a207d3e68c6cc9a23b03,769,excluded,not reviewed; exclusion/pending scope retained from baseline inventory
 api/_lib/account-delete.js,798cd1038078b7c35a3753048bc5ee8e2a34d9e3888661759e2f46c4e9641d31,416,pending,not reviewed; exclusion/pending scope retained from baseline inventory
-api/_lib/account-deletion-billing.js,ac075c22c70c948c0c083ef6fe3c77878e866fd19afcdd931d18c3dd3a2ac45a,111,pending,not reviewed; exclusion/pending scope retained from baseline inventory
+api/_lib/account-deletion-billing.js,ac075c22c70c948c0c083ef6fe3c77878e866fd19afcdd931d18c3dd3a2ac45a,111,reviewed,integration follow-up full read; unchanged; no reproducible defect established
 api/_lib/account-deletion.js,68efde46c540cacdddfdf32e07976c84185915c234901aa00afbbc99535e15ab,182,pending,not reviewed; exclusion/pending scope retained from baseline inventory
 api/_lib/account-send-welcome.js,d0adfa9c1c985754f2989577acec3d948f0c963ca908b937ad7333f4d50ea4bb,55,pending,not reviewed; exclusion/pending scope retained from baseline inventory
 api/_lib/account-trial-start.js,935d5b096e6b6ab31666a829744a833032735d90a8595eee242fcbf17766d75f,62,pending,not reviewed; exclusion/pending scope retained from baseline inventory
@@ -370,7 +370,7 @@ src/lib/authErrors.ts,59c25b3588432f9f88375476e033dd42146797c4cde6fe4c5df17c03e0
 src/lib/authProviders.ts,088f4fbd12d359d3dde67f1b4e56f2cb255d0d423fea27e4512db97454379b07,79,pending,not reviewed; exclusion/pending scope retained from baseline inventory
 src/lib/authStorage.ts,bda15e1efa0576c5464532ad75298ef0d603c9e63a8885409614bebbcfcccfcf,224,reviewed,integration batch full reread
 src/lib/backendApi.ts,3beef6b55d850a6f89ba541c8ea93d12fe889029725d0e8b3178bf64e3dcdc27,118,pending,not reviewed; exclusion/pending scope retained from baseline inventory
-src/lib/billingApi.ts,13e59b65902a065cfe850dfc89337aabdde2fe40c68ebfabc3d262db68c00742,207,pending,not reviewed; exclusion/pending scope retained from baseline inventory
+src/lib/billingApi.ts,13e59b65902a065cfe850dfc89337aabdde2fe40c68ebfabc3d262db68c00742,207,reviewed,integration follow-up full read; unchanged; no reproducible defect established
 src/lib/billingRoutes.ts,f805848d7c20ffd1b1d99da8dc63910129dbe2c491fb081cdd62cd2d2791686f,8,reviewed,integration batch full reread
 src/lib/breedingIntelligence.ts,5fd1ce62b33f34196b47f24702e598a897cf91b2435b81a7568865deee6ca92a,405,pending,not reviewed; exclusion/pending scope retained from baseline inventory
 src/lib/breedingRevenue.ts,e2b1b132c1611e0b986bb4a0a28e717944948261e1b34679795c73cf2f20e29d,21,pending,not reviewed; exclusion/pending scope retained from baseline inventory
@@ -838,7 +838,7 @@ tests/e2e/report-upgrades.spec.ts,6687a89ae51c543dd66e24b41c17a349376a6e792a1f3b
 tests/e2e/restore-workspace-scope.spec.ts,2c29b46113174b4b04feed827d70a193db4729dfa0b9b296d81fa87cd0af896a,344,pending,not reviewed; exclusion/pending scope retained from baseline inventory
 tests/e2e/retired-style-regression.spec.ts,51fb917e8b211150c153e890a2f8a22944e06818d51f7f3c685dd25802514f25,42,pending,not reviewed; exclusion/pending scope retained from baseline inventory
 tests/e2e/vault-stale-tab.spec.ts,d4407b79d5da948b74d8d1698c1f3b395473c23a518913046bd4b14b4be5288d,47,pending,not reviewed; exclusion/pending scope retained from baseline inventory
-tests/e2e/workspace-setup.spec.ts,215317af9eb47dbf1111cb603a0f4436e1a13e0b6b23f11759c32a64e7dc1c79,1561,pending,not reviewed; exclusion/pending scope retained from baseline inventory
+tests/e2e/workspace-setup.spec.ts,5ab3c6c5d0613ff0f33f9f23ef42e10abb45ac5c0564f155226388dade26edb0,1561,pending,not reviewed; exclusion/pending scope retained from baseline inventory
 tests/envExampleCoverage.test.ts,2049782b85fbec3b46f4dc5cee6b1ba746f0c710e57abb67d0bdd0295faf1312,153,pending,not reviewed; exclusion/pending scope retained from baseline inventory
 tests/facebookSharing.test.ts,4a1879af87c672e236d3bf998c369a2ca0841b24e84dc8fc2f3b51fd606aaa1a,157,pending,not reviewed; exclusion/pending scope retained from baseline inventory
 tests/fileDownload.test.ts,5e4af8ef35fbf4a8abaefc12f460cf29736dcdd2838ba1f8d0a8372d6b869d05,245,pending,not reviewed; exclusion/pending scope retained from baseline inventory

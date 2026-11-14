@@ -39,7 +39,7 @@ fully reread. Four additional auth/recovery modules were fully read: bootstrap,
 session storage, recovery gating and token-bound password updates. No new
 reproducible defect was established in those four, so their code is unchanged.
 The small billing-route and horse-create gate modules were also fully read; their code is unchanged.
-Counts: **54 reviewed, 735 maintained code/configuration files pending, 140
+Counts: **56 reviewed, 733 maintained code/configuration files pending, 140
 excluded**. Newly authored files and review metadata remain outside that original
 denominator. Larger customer-facing modules previously read in sections still
 remain pending as whole-file reviews.
@@ -123,3 +123,29 @@ The draft integration PR targets unchanged main so the whole inherited #396
 patch plus these compatible fixes receive the complete configured CI/CodeQL
 checks together. This target is not authorization to merge or deploy. All
 source drafts remain separate and unmerged.
+
+## Follow-up evidence
+
+#402 run 43616357781 at 71ee05c passed canonical static/unit/build and 107
+production smoke tests, then 223 product tests passed and one new assertion
+failed: first-horse creation saved the registered name in uppercase. The source
+createHorseRecord intentionally trims and uppercases that field. The test now
+expects the exact normalized name, retaining same-ID, count, tier and reload
+assertions. This test-only correction is published in #402 at
+4b65efcea0b265ad793b77e9006ee9972fea2836 and included in this integration
+follow-up. Test TypeScript compilation passes; final-head browser CI remains
+required. The previous integration head 63b78ee has the same known assertion
+mismatch, so its product result cannot certify this follow-up.
+
+Full reads of src/lib/billingApi.ts and api/_lib/account-deletion-billing.js
+found no new reproducible defect; they remain unchanged. The consolidated
+ledger now records 56 reviewed, 733 maintained pending and 140 excluded.
+
+The separate checkout release lane owns production sequencing. Main currently
+retains legacy rates and allows legacy/annual new sales; changing only price
+IDs cannot sell the approved amounts because exact price validation compares
+against code-owned rates. The draft checkout also forces flat quantity one,
+limits new sales to the two monthly plans and preserves actual purchased rates
+through webhook updates. A checkout-only candidate must deliberately select
+and test those dependencies; this broad draft additionally includes Free and
+storage migrations and must not be silently deployed as checkout-only.
