@@ -183,3 +183,77 @@ test('breeding empty or removed selection never silently saves another horse', a
   f.render();
   assert.equal(nodes(f.tree, (n) => n.props.children === 'Save revenue model').length, 0);
 });
+
+async function nativeCodeLogin() {
+  const f = await renderRoute('Login', {}, '', {
+    cloud: {
+      status: 'signed-out',
+      sendEmailCode: async () => ({ ok: true, message: 'Check your email for a sign-in code.' }),
+      verifyEmailCode: async () => ({ ok: false, message: 'Synthetic code rejected.' }),
+    },
+    modules: {
+      '@/store/useCloudStore':
+        'export const useCloudStore=(fn)=>fn?fn(f.cloud):f.cloud;useCloudStore.getState=()=>f.cloud;',
+      '@/hooks/useOwnerAccess': 'export const useOwnerAccess=()=>"denied";',
+      '@/lib/platformConfig': 'export const isSupabaseConfigured=()=>true;',
+      '@/lib/nativePlatform':
+        'export const canPresentThirdPartySignIn=()=>false;export const canPresentPurchaseFlow=()=>false;export const publicSiteHref=(p)=>p;',
+      '@/lib/runtimeEvents': 'export const trackRuntimeEvent=async()=>{};',
+      '@/lib/authProviders': 'export const presentableOAuthProviders=()=>[];',
+    },
+  });
+  nodes(f.tree, (n) => n.type === 'input' && n.props.type === 'email')[0].props.onChange({
+    target: { value: 'rider@example.invalid' },
+  });
+  f.render();
+  await nodes(f.tree, (n) => n.props.children === 'Email me a sign-in code')[0].props.onClick();
+  await new Promise((done) => setImmediate(done));
+  f.render();
+  return f;
+}
+
+test('native code sign-in submits independently of the required password and stays recoverable on refusal', async () => {
+  const f = await nativeCodeLogin();
+  const codeForm = () => nodes(f.tree, (n) => n.type === 'form' && n.props['aria-label'] === 'Email code sign-in')[0];
+  assert.ok(codeForm(), 'code verification needs its own submit path, outside password validation');
+  assert.equal(nodes(codeForm(), (n) => n.type === 'input' && n.props.type === 'password').length, 0);
+  const input = () => nodes(codeForm(), (n) => n.type === 'input' && n.props.autoComplete === 'one-time-code')[0];
+  const label = nodes(codeForm(), (n) => n.type === 'label')[0];
+  assert.equal(label.props.htmlFor, input().props.id);
+  const submitted = [];
+  let resolve;
+  f.cloud.verifyEmailCode = (email, token) => {
+    submitted.push([email, token]);
+    return new Promise((done) => {
+      resolve = done;
+    });
+  };
+  let prevented = 0;
+  codeForm().props.onSubmit({
+    preventDefault() {
+      prevented++;
+    },
+  });
+  assert.equal(submitted.length, 0, 'empty code must not start verification');
+  input().props.onChange({ target: { value: '123456' } });
+  f.render();
+  codeForm().props.onSubmit({
+    preventDefault() {
+      prevented++;
+    },
+  });
+  f.render();
+  codeForm().props.onSubmit({
+    preventDefault() {
+      prevented++;
+    },
+  });
+  assert.equal(prevented, 3);
+  assert.deepEqual(submitted, [['rider@example.invalid', '123456']], 'busy submit must not duplicate verification');
+  resolve({ ok: false, message: 'Synthetic code rejected.' });
+  await new Promise((done) => setImmediate(done));
+  f.render();
+  assert.equal(input().props.value, '123456', 'refusal keeps the entered code available to correct');
+  assert.equal(nodes(f.tree, (n) => n.props.role === 'alert')[0].props.children, 'Synthetic code rejected.');
+  assert.equal(nodes(codeForm(), (n) => n.type === 'button' && n.props.type === 'submit')[0].props.disabled, false);
+});
