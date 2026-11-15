@@ -1,5 +1,8 @@
 import { expect, test, type Locator } from '@playwright/test';
 
+// These regressions must pass on their first attempt.
+test.describe.configure({ retries: 0 });
+
 async function visibleOutline(control: Locator) {
   await expect(control).toHaveCSS('outline-style', 'solid');
   expect(await control.evaluate((node) => parseFloat(getComputedStyle(node).outlineWidth))).toBeGreaterThanOrEqual(2);
