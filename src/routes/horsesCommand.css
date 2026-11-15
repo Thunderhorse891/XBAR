@@ -381,3 +381,74 @@
   justify-content: flex-start;
   gap: 6px;
 }
+
+/* Consistent action hierarchy: quiet secondary controls, one clear record link.
+   Scoped to the roster so account and checkout controls retain their own UI. */
+.hc-workspace :is(.hc-roster-head__actions, .horse-card__footer) .button {
+  min-height: 44px;
+  min-width: 0;
+  padding: 10px 14px;
+  border-radius: 10px;
+  border-color: var(--xbar-border-strong);
+  background: var(--xbar-surface);
+  color: var(--xbar-text);
+  box-shadow: none;
+  font-weight: 650;
+  text-align: center;
+  white-space: normal;
+}
+.hc-workspace :is(.hc-roster-head__actions, .horse-card__footer) .button--primary {
+  border-color: var(--accent-ink);
+  background: var(--accent-ink);
+  color: var(--xbar-white);
+}
+.hc-workspace :is(.hc-roster-head__actions, .horse-card__footer) .button:hover:not(:disabled) {
+  border-color: var(--accent-edge);
+  background: var(--xbar-surface-cool);
+  box-shadow: none;
+}
+.hc-workspace :is(.hc-roster-head__actions, .horse-card__footer) .button--primary:hover:not(:disabled) {
+  background: var(--accent-ink-hover);
+  color: var(--xbar-white);
+}
+.hc-workspace :is(.hc-roster-head__actions, .horse-card__footer) .button--primary:active:not(:disabled) {
+  background: var(--accent-ink-press);
+}
+.hc-workspace .horse-card__footer .inline-actions {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+}
+.hc-workspace .horse-card__footer .button--primary {
+  grid-column: 1 / -1;
+}
+.hc-workspace .horse-card__metric {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+.hc-workspace .horse-card__metric span,
+.hc-workspace .horse-card__fact strong {
+  color: var(--xbar-text-muted);
+  font-size: 0.75rem;
+  letter-spacing: 0.06em;
+}
+.hc-workspace .horse-card__fact {
+  min-width: 0;
+  border-radius: 10px;
+  border-color: var(--xbar-border);
+  background: var(--xbar-surface-warm);
+  overflow-wrap: anywhere;
+}
+@media (max-width: 640px) {
+  .hc-roster-head__actions {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    width: 100%;
+  }
+  .hc-workspace .horse-card__facts {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+  .hc-workspace .horse-card__fact:first-child {
+    grid-column: 1 / -1;
+  }
+}

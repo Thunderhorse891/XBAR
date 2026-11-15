@@ -118,7 +118,7 @@ body::before {
 
 /* Steel controls with electric-blue active energy. */
 
-.button,
+.button:not(.hc-roster-head__actions *, .horse-card__footer *),
 .icon-button,
 button[class*='border'],
 a[class*='border'] {
@@ -129,7 +129,7 @@ a[class*='border'] {
     0 8px 18px -12px rgba(17, 21, 27, 0.4) !important;
 }
 
-.button--primary,
+.button--primary:not(.hc-roster-head__actions *, .horse-card__footer *),
 button[class*='bg-[#1155dd]'],
 a[class*='bg-[#1155dd]'] {
   border-color: rgba(92, 196, 255, 0.78) !important;
