@@ -18,6 +18,10 @@ async function setup(page: Page) {
     await page.getByPlaceholder(placeholder).fill(value);
   await page.getByRole('button', { name: 'Create workspace', exact: true }).click();
   await expect(page.getByRole('heading', { name: 'Get your horse records in order.', exact: true })).toBeVisible();
+  for (const close of await page.getByRole('button', { name: 'Close toast', exact: true }).all()) {
+    await close.focus();
+    await page.keyboard.press('Enter');
+  }
 }
 
 async function doubleText(drawer: Locator) {
@@ -62,6 +66,19 @@ for (const width of [320, 390, 1440]) {
     expect(await drawer.evaluate((node) => node.scrollWidth)).toBeLessThanOrEqual(
       await drawer.evaluate((node) => node.clientWidth),
     );
+    const content = await footer.evaluate((node) => {
+      const rect = node.getBoundingClientRect(),
+        style = getComputedStyle(node);
+      return { left: rect.left + parseFloat(style.paddingLeft), right: rect.right - parseFloat(style.paddingRight) };
+    });
+    for (const button of await footer.getByRole('button').all()) {
+      const rect = (await button.boundingBox())!;
+      expect(rect.x).toBeGreaterThanOrEqual(content.left - 1);
+      expect(rect.x + rect.width).toBeLessThanOrEqual(content.right + 1);
+      expect(await button.evaluate((node) => node.scrollHeight)).toBeLessThanOrEqual(
+        await button.evaluate((node) => node.clientHeight),
+      );
+    }
     const name = drawer.getByRole('textbox', { name: 'Name', exact: true });
     const cancel = drawer.getByRole('button', { name: 'Cancel', exact: true });
     const add = drawer.getByRole('button', { name: 'Add Horse', exact: true });
@@ -80,7 +97,7 @@ for (const width of [320, 390, 1440]) {
       await expect(field).toBeInViewport();
     }
     await page.keyboard.press('Enter');
-    await expect(drawer.getByRole('alert')).toHaveText('A registered name is required.');
+    await expect(drawer.getByRole('alert')).toHaveText('Enter a name to add the horse.');
     await expect(drawer).toBeVisible();
     await page.screenshot({ path: info.outputPath(`workspace-drawer-error-${width}.png`) });
     for (let i = 0; i < 6; i++) await page.keyboard.press('Shift+Tab');
