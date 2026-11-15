@@ -216,7 +216,7 @@ test('@auth a rejected auth callback lands on sign-in with the reason, not not-f
   await expect(page.getByText('Email link has expired')).toBeVisible({ timeout: 30_000 });
   await expect(page.getByText('Page not found')).toHaveCount(0);
   // On the sign-in screen, with a way onwards rather than a dead end.
-  await expect(page.getByLabel('Email')).toBeVisible();
+  await expect(page.getByRole('textbox', { name: 'Email or User ID', exact: true })).toBeVisible();
 });
 
 test('@auth the sign-in screen still renders when site data is blocked', async ({ page }) => {
@@ -238,7 +238,7 @@ test('@auth the sign-in screen still renders when site data is blocked', async (
   });
 
   await page.goto('/#/login');
-  await expect(page.getByLabel('Email')).toBeVisible({ timeout: 30_000 });
+  await expect(page.getByRole('textbox', { name: 'Email or User ID', exact: true })).toBeVisible({ timeout: 30_000 });
   await expect(page.getByText('This screen hit a runtime problem')).toHaveCount(0);
 });
 
