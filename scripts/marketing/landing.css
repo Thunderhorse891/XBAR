@@ -118,6 +118,34 @@
 .landing-text-link > span {
   color: var(--ink-soft);
 }
+/* Decorative in-page arrow stays legible when a UI font omits arrow glyphs. */
+.landing-actions .landing-text-link > span {
+  position: relative;
+  flex: none;
+  width: 12px;
+  height: 12px;
+  font-size: 0;
+}
+.landing-actions .landing-text-link > span::before {
+  content: '';
+  position: absolute;
+  right: 1px;
+  bottom: 1px;
+  width: 8px;
+  height: 8px;
+  border-right: 1.5px solid currentColor;
+  border-bottom: 1.5px solid currentColor;
+}
+.landing-actions .landing-text-link > span::after {
+  content: '';
+  position: absolute;
+  left: 0;
+  top: 5px;
+  width: 12px;
+  height: 1.5px;
+  background: currentColor;
+  transform: rotate(45deg);
+}
 .landing-note {
   font-size: 13px;
   color: var(--ink-soft);

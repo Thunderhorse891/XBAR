@@ -62,3 +62,13 @@ Before/after visual review remains a release gate. A successful build is not
 approval for a broader redesign or production promotion. Keep this PR draft,
 inspect retained captures and review the final exact head before any separate
 release decision.
+
+## Draft-preview observation
+
+The READY preview of first head c8d0282 was inspected read-only on desktop.
+The original artwork/headline were preserved and both hero controls measured
+50.75px high. Pause motion kept the full hero visible. A missing decorative
+arrow glyph was observed in the secondary action; the follow-up uses a small
+font-independent CSS arrow in that existing aria-hidden span. No logo, link
+text or destination changes. New final-head captures/checks remain required;
+first-head screenshots do not certify a later head.
