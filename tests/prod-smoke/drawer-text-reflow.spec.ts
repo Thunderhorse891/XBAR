@@ -1,0 +1,105 @@
+import { expect, test, type Locator, type Page } from '@playwright/test';
+
+test.describe.configure({ retries: 0 });
+
+async function setup(page: Page) {
+  await page.addInitScript(() => localStorage.setItem('xbar-command-center-entry', 'true'));
+  await page.goto('/app/setup');
+  for (const [placeholder, value] of [
+    ['XBAR LLC', 'Cedar Ridge'],
+    ['Primary Ranch', 'Cedar Ridge Ranch'],
+    ['Ranch manager', 'Example Manager'],
+    ['ops@yourranch.com', 'preview@example.test'],
+    ['Legal owner', 'Cedar Ridge'],
+    ['Owner entity', 'Cedar Ridge'],
+    ['Barn A', 'Main Barn'],
+    ['Pasture 1', 'North Pasture'],
+  ])
+    await page.getByPlaceholder(placeholder).fill(value);
+  await page.getByRole('button', { name: 'Create workspace', exact: true }).click();
+  await expect(page.getByRole('heading', { name: 'Get your horse records in order.', exact: true })).toBeVisible();
+}
+
+async function doubleText(drawer: Locator) {
+  // Synthetic text-only enlargement, not browser zoom, native Dynamic Type or hardware evidence.
+  // Snapshot every original computed size before applying any change, avoiding inherited compounding.
+  return drawer.evaluate((root) => {
+    const sizes = [root, ...root.querySelectorAll<HTMLElement>('*')].map((node) => {
+      const style = getComputedStyle(node);
+      return { node: node as HTMLElement, font: parseFloat(style.fontSize), line: parseFloat(style.lineHeight) };
+    });
+    for (const { node, font, line } of sizes) {
+      node.style.setProperty('font-size', `${font * 2}px`, 'important');
+      if (Number.isFinite(line)) node.style.setProperty('line-height', `${line * 2}px`, 'important');
+    }
+    const button = root.querySelector('.xs-drawer__foot button')!;
+    return {
+      original: sizes.find((item) => item.node === button)!.font,
+      enlarged: parseFloat(getComputedStyle(button).fontSize),
+    };
+  });
+}
+
+for (const width of [320, 390, 1440]) {
+  test(`first horse stays usable with 200 percent text and keyboard at ${width}px`, async ({ page }, info) => {
+    await page.setViewportSize({ width, height: 900 });
+    await page.emulateMedia({ reducedMotion: 'reduce' });
+    await setup(page);
+    const opener = page.getByRole('button', { name: 'Create', exact: true });
+    await opener.focus();
+    await page.keyboard.press('Enter');
+    await page.getByRole('menuitem', { name: 'Add Horse', exact: true }).focus();
+    await page.keyboard.press('Enter');
+    const drawer = page.getByRole('dialog', { name: 'Add Horse', exact: true });
+    await expect(drawer).toBeVisible();
+    const scale = await doubleText(drawer);
+    expect(scale.enlarged).toBeCloseTo(scale.original * 2, 1);
+    await page.screenshot({ path: info.outputPath(`workspace-drawer-text-${width}.png`) });
+    const footer = drawer.locator('.xs-drawer__foot');
+    expect(await footer.evaluate((node) => node.scrollWidth)).toBeLessThanOrEqual(
+      await footer.evaluate((node) => node.clientWidth),
+    );
+    expect(await drawer.evaluate((node) => node.scrollWidth)).toBeLessThanOrEqual(
+      await drawer.evaluate((node) => node.clientWidth),
+    );
+    const name = drawer.getByRole('textbox', { name: 'Name', exact: true });
+    const cancel = drawer.getByRole('button', { name: 'Cancel', exact: true });
+    const add = drawer.getByRole('button', { name: 'Add Horse', exact: true });
+    await drawer.getByRole('button', { name: 'Close', exact: true }).focus();
+    for (const field of [
+      name,
+      drawer.getByRole('combobox', { name: 'Segment', exact: true }),
+      drawer.getByRole('combobox', { name: 'Sex', exact: true }),
+      drawer.getByRole('textbox', { name: /^Owner/ }),
+      drawer.getByRole('textbox', { name: 'Location', exact: true }),
+      cancel,
+      add,
+    ]) {
+      await page.keyboard.press('Tab');
+      await expect(field).toBeFocused();
+      await expect(field).toBeInViewport();
+    }
+    await page.keyboard.press('Enter');
+    await expect(drawer.getByRole('alert')).toHaveText('A registered name is required.');
+    await expect(drawer).toBeVisible();
+    await page.screenshot({ path: info.outputPath(`workspace-drawer-error-${width}.png`) });
+    for (let i = 0; i < 6; i++) await page.keyboard.press('Shift+Tab');
+    await expect(name).toBeFocused();
+    await page.keyboard.type('Copper Canyon');
+    for (let i = 0; i < 6; i++) await page.keyboard.press('Tab');
+    await expect(add).toBeFocused();
+    await page.keyboard.press('Enter');
+    await expect(drawer).toHaveCount(0);
+    await expect(page.locator('.xs-objhead__name')).toHaveText(/copper canyon/i);
+    // Keyboard-only reopen/cancel keeps the existing record and restores its opener.
+    await opener.focus();
+    await page.keyboard.press('Enter');
+    await page.getByRole('menuitem', { name: 'Add Horse', exact: true }).focus();
+    await page.keyboard.press('Enter');
+    await expect(drawer).toBeVisible();
+    await page.keyboard.press('Escape');
+    await expect(drawer).toHaveCount(0);
+    await expect(opener).toBeFocused();
+    await expect(page.locator('.xs-objhead__name')).toHaveText(/copper canyon/i);
+  });
+}
