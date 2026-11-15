@@ -297,6 +297,11 @@ select:focus,
 textarea:focus {
   border-color: rgba(45, 140, 255, 0.72) !important;
   box-shadow: 0 0 0 3px rgba(24, 168, 255, 0.16) !important;
+}
+
+/* Entry fields own their keyboard/forced-colors ring. Keep the legacy
+ * suppression scoped away from them without adding another override. */
+:is(.field-input, input, select, textarea):focus:not(:where(.clean-field input)) {
   outline: none !important;
 }
 
