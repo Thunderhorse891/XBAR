@@ -9,7 +9,7 @@ The current original horse/wordmark artwork, product voice and hero composition
 are preserved. No new imagery or derivative logo is introduced.
 
 Before screenshots come from completed run 43622987643 at checkout draft
-bc67a55356ed0a150390c875b6729ad3e28ffa66, workspace-design-review artifact 14124732560. The four styling files were compared against main with zero diff;
+bc67a55356ed0a150390c875b6729ad3e28ffa66, workspace-design-review artifact 14124732560. The baseline styling files were compared against main with zero diff;
 the draft's billing changes are not incorporated. Captures use disposable
 Cedar Ridge/Copper Canyon fixture records, not customer data. Named originals
 were also retained under output/xbar-visual-polish outside application source.
@@ -72,3 +72,9 @@ arrow glyph was observed in the secondary action; the follow-up uses a small
 font-independent CSS arrow in that existing aria-hidden span. No logo, link
 text or destination changes. New final-head captures/checks remain required;
 first-head screenshots do not certify a later head.
+
+The earlier command-system stylesheet also forces the same glossy button
+properties. Its four rest/hover selectors now exclude the same two roster
+contexts; disabled feedback and other routes remain unchanged. This closes the
+remaining cascade conflict without adding an important override. Earlier-head
+captures/checks must not be transferred to this final selector correction.

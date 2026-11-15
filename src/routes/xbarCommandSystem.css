@@ -308,7 +308,7 @@ label,
 
 /* ── Buttons ────────────────────────────────── */
 
-.button,
+.button:not(.hc-roster-head__actions *, .horse-card__footer *),
 .icon-button,
 button[class*='border'],
 a[class*='border'] {
@@ -320,7 +320,7 @@ a[class*='border'] {
     0 6px 16px -10px rgba(17, 21, 27, 0.3) !important;
 }
 
-.button--primary,
+.button--primary:not(.hc-roster-head__actions *, .horse-card__footer *),
 button[class*='bg-[#1155dd]'],
 a[class*='bg-[#1155dd]'] {
   border-color: rgba(45, 140, 255, 0.72) !important;
@@ -331,7 +331,7 @@ a[class*='bg-[#1155dd]'] {
     inset 0 1px 0 rgba(255, 255, 255, 0.22) !important;
 }
 
-.button:hover,
+.button:not(.hc-roster-head__actions *, .horse-card__footer *):hover,
 .icon-button:hover,
 button[class*='border']:hover,
 a[class*='border']:hover {
@@ -341,7 +341,7 @@ a[class*='border']:hover {
   color: #0d1420 !important;
 }
 
-.button--primary:hover,
+.button--primary:not(.hc-roster-head__actions *, .horse-card__footer *):hover,
 button[class*='bg-[#1155dd]']:hover,
 a[class*='bg-[#1155dd]']:hover {
   background: linear-gradient(180deg, #4aa0ff 0%, #207cff 100%) !important;
