@@ -1,4 +1,4 @@
-import { type FormEvent, useMemo, useState } from 'react';
+import { type FormEvent, useEffect, useMemo, useRef, useState } from 'react';
 import { Navigate, useLocation, useNavigate, useSearchParams } from 'react-router-dom';
 import { XbarMark } from '@/components/BrandMark';
 import { billingPathForTier } from '@/lib/billingRoutes';
@@ -39,6 +39,10 @@ export default function SetupWorkspace() {
   const [signingOut, setSigningOut] = useState(false);
   const [signOutError, setSignOutError] = useState('');
   const [formError, setFormError] = useState('');
+  const formErrorRef = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    if (formError) formErrorRef.current?.focus();
+  }, [formError]);
   const [cloudSetupBlocked, setCloudSetupBlocked] = useState(false);
   const [form, setForm] = useState({
     businessName: workspaceProfile.businessName,
@@ -122,6 +126,7 @@ export default function SetupWorkspace() {
     event.preventDefault();
     if (signingOut || saving) return;
     setSaving(true);
+    setFormError('');
     setCloudSetupBlocked(false);
 
     const result = initializeWorkspace(applyWorkspaceProfileDefaults(form));
@@ -330,7 +335,11 @@ export default function SetupWorkspace() {
               </label>
             </div>
 
-            {formError ? <div className="clean-form-error">{formError}</div> : null}
+            {formError ? (
+              <div ref={formErrorRef} className="clean-form-error" role="alert" tabIndex={-1}>
+                {formError}
+              </div>
+            ) : null}
 
             <div className="clean-action-stack">
               <button className="clean-primary-button" type="submit" disabled={saving || signingOut}>

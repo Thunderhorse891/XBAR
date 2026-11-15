@@ -73,6 +73,13 @@ export async function renderRoute(name, changes = {}, params = '', options = {})
       {
         name: 'controlled-route-boundaries',
         setup(b) {
+          const modules = options.modules ?? {};
+          b.onResolve({ filter: /.*/ }, ({ path }) =>
+            Object.hasOwn(modules, path) ? { path, namespace: 'controlled-module' } : undefined,
+          );
+          b.onLoad({ filter: /.*/, namespace: 'controlled-module' }, ({ path }) => ({
+            contents: 'const f=globalThis.__recordWorkflowFixture;' + modules[path],
+          }));
           b.onResolve(
             {
               filter:
@@ -92,7 +99,7 @@ export async function renderRoute(name, changes = {}, params = '', options = {})
                 export const useState=(initial)=>{const i=f.cursor++;if(!(i in f.slots))f.slots[i]=typeof initial==="function"?initial():initial;return [f.slots[i],(v)=>{const next=typeof v==="function"?v(f.slots[i]):v;f.dirty ||= next!==f.slots[i];f.slots[i]=next}]};`;
             else if (path === 'react-router-dom')
               code =
-                'export const useNavigate=()=>((p)=>f.calls.push(["navigate",p])); export const useParams=()=>({id:f.horse.id});export const useLocation=()=>f.location; export const useSearchParams=()=>{if(f.searchText!==f.params){f.searchText=f.params;f.searchValue=new URLSearchParams(f.params)}return [f.searchValue,(p)=>{f.params=p.toString()}]};export const Link="a";';
+                'export const useNavigate=()=>((p)=>f.calls.push(["navigate",p])); export const useParams=()=>({id:f.horse.id});export const useLocation=()=>f.location; export const useSearchParams=()=>{if(f.searchText!==f.params){f.searchText=f.params;f.searchValue=new URLSearchParams(f.params)}return [f.searchValue,(p)=>{f.params=p.toString()}]};export const Link="a";export const Navigate="Navigate";';
             else if (path === '@/store/useXbarStore')
               code =
                 'export const useXbarStore=(fn)=>fn(f.state); useXbarStore.getState=()=>f.state;useXbarStore.subscribe=()=>()=>{}; export const useHorseRecord=()=>f.state.horses.find(h=>h.id===f.horse.id);export const useCurrentRoleCapability=()=>f.state.currentRole==="Admin";';
