@@ -17,3 +17,7 @@ The existing drawer footer now wraps instead of spilling left, retains its heigh
 The regression checks exact double font size, footer and drawer overflow, each action's content boundaries and vertical text fit, keyboard-only field order, empty-name persistent alert, retained form, correction/retry, saved horse identity, keyboard reopen/cancel and opener focus restoration. Baseline and error screenshots use synthetic fixtures only. Final exact-head results remain required.
 
 Guidance: Apple HIG Accessibility https://developer.apple.com/design/human-interface-guidelines/accessibility and Fluent2 Accessibility https://fluent2.microsoft.design/accessibility call for enlarged text without losing content and keyboard usability. This is bounded engineering evidence, not certification. Actual hardware, browser text-zoom settings, VoiceOver/Narrator, hosted auth and checkout remain unverified. Existing local browser interface/socket restrictions prevent a local rendered run; canonical remote browser CI is used.
+
+## Shared footer coverage
+
+The shared component has four contexts: normal quick-create forms, the no-horse next-step footer, Pastures location details, and TodayWork task details. Added separate320px doubled-text zero-retry cases for the latter three, measuring the same boundaries/text fit and verifying Escape returns focus. Fixtures are browser-local; the task case creates a synthetic horse through the real drawer before opening a derived task. These cases are not passed until final-head CI confirms them.

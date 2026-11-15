@@ -44,6 +44,29 @@ async function doubleText(drawer: Locator) {
   });
 }
 
+async function footerFits(drawer: Locator) {
+  const footer = drawer.locator('.xs-drawer__foot');
+  expect(await footer.evaluate((node) => node.scrollWidth)).toBeLessThanOrEqual(
+    await footer.evaluate((node) => node.clientWidth),
+  );
+  expect(await drawer.evaluate((node) => node.scrollWidth)).toBeLessThanOrEqual(
+    await drawer.evaluate((node) => node.clientWidth),
+  );
+  const content = await footer.evaluate((node) => {
+    const rect = node.getBoundingClientRect(),
+      style = getComputedStyle(node);
+    return { left: rect.left + parseFloat(style.paddingLeft), right: rect.right - parseFloat(style.paddingRight) };
+  });
+  for (const button of await footer.getByRole('button').all()) {
+    const rect = (await button.boundingBox())!;
+    expect(rect.x).toBeGreaterThanOrEqual(content.left - 1);
+    expect(rect.x + rect.width).toBeLessThanOrEqual(content.right + 1);
+    expect(await button.evaluate((node) => node.scrollHeight)).toBeLessThanOrEqual(
+      await button.evaluate((node) => node.clientHeight),
+    );
+  }
+}
+
 for (const width of [320, 390, 1440]) {
   test(`first horse stays usable with 200 percent text and keyboard at ${width}px`, async ({ page }, info) => {
     await page.setViewportSize({ width, height: 900 });
@@ -59,26 +82,7 @@ for (const width of [320, 390, 1440]) {
     const scale = await doubleText(drawer);
     expect(scale.enlarged).toBeCloseTo(scale.original * 2, 1);
     await page.screenshot({ path: info.outputPath(`workspace-drawer-text-${width}.png`) });
-    const footer = drawer.locator('.xs-drawer__foot');
-    expect(await footer.evaluate((node) => node.scrollWidth)).toBeLessThanOrEqual(
-      await footer.evaluate((node) => node.clientWidth),
-    );
-    expect(await drawer.evaluate((node) => node.scrollWidth)).toBeLessThanOrEqual(
-      await drawer.evaluate((node) => node.clientWidth),
-    );
-    const content = await footer.evaluate((node) => {
-      const rect = node.getBoundingClientRect(),
-        style = getComputedStyle(node);
-      return { left: rect.left + parseFloat(style.paddingLeft), right: rect.right - parseFloat(style.paddingRight) };
-    });
-    for (const button of await footer.getByRole('button').all()) {
-      const rect = (await button.boundingBox())!;
-      expect(rect.x).toBeGreaterThanOrEqual(content.left - 1);
-      expect(rect.x + rect.width).toBeLessThanOrEqual(content.right + 1);
-      expect(await button.evaluate((node) => node.scrollHeight)).toBeLessThanOrEqual(
-        await button.evaluate((node) => node.clientHeight),
-      );
-    }
+    await footerFits(drawer);
     const name = drawer.getByRole('textbox', { name: 'Name', exact: true });
     const cancel = drawer.getByRole('button', { name: 'Cancel', exact: true });
     const add = drawer.getByRole('button', { name: 'Add Horse', exact: true });
@@ -118,5 +122,52 @@ for (const width of [320, 390, 1440]) {
     await expect(drawer).toHaveCount(0);
     await expect(opener).toBeFocused();
     await expect(page.locator('.xs-objhead__name')).toHaveText(/copper canyon/i);
+  });
+}
+
+for (const context of ['empty horse action', 'pasture details', 'task details']) {
+  test(`shared drawer footer reflows at 200 percent text: ${context}`, async ({ page }, info) => {
+    await page.setViewportSize({ width: 320, height: 900 });
+    await page.emulateMedia({ reducedMotion: 'reduce' });
+    await setup(page);
+    const create = page.getByRole('button', { name: 'Create', exact: true });
+    let opener: Locator;
+    if (context === 'empty horse action') {
+      opener = create;
+      await create.focus();
+      await page.keyboard.press('Enter');
+      await page.getByRole('menuitem', { name: 'Move Horse', exact: true }).focus();
+      await page.keyboard.press('Enter');
+    } else if (context === 'pasture details') {
+      await page.goto('/app/pastures');
+      opener = page.getByRole('button', { name: /^Main Barn/ });
+      await opener.focus();
+      await page.keyboard.press('Enter');
+    } else {
+      await create.focus();
+      await page.keyboard.press('Enter');
+      await page.getByRole('menuitem', { name: 'Add Horse', exact: true }).focus();
+      await page.keyboard.press('Enter');
+      const form = page.getByRole('dialog', { name: 'Add Horse', exact: true });
+      await form.getByRole('textbox', { name: 'Name', exact: true }).focus();
+      await page.keyboard.type('Copper Canyon');
+      await form.getByRole('button', { name: 'Add Horse', exact: true }).focus();
+      await page.keyboard.press('Enter');
+      await expect(form).toHaveCount(0);
+      await expect(page.locator('.xs-objhead__name')).toHaveText(/copper canyon/i);
+      await page.goto('/app/today');
+      opener = page.getByRole('button', { name: /^Open task:/ }).first();
+      await opener.focus();
+      await page.keyboard.press('Enter');
+    }
+    const drawer = page.getByRole('dialog');
+    await expect(drawer).toBeVisible();
+    const scale = await doubleText(drawer);
+    expect(scale.enlarged).toBeCloseTo(scale.original * 2, 1);
+    await footerFits(drawer);
+    await page.screenshot({ path: info.outputPath(`workspace-shared-drawer-${context.replaceAll(' ', '-')}.png`) });
+    await page.keyboard.press('Escape');
+    await expect(drawer).toHaveCount(0);
+    await expect(opener).toBeFocused();
   });
 }
