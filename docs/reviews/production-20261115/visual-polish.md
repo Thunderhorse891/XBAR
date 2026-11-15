@@ -78,3 +78,19 @@ properties. Its four rest/hover selectors now exclude the same two roster
 contexts; disabled feedback and other routes remain unchanged. This closes the
 remaining cascade conflict without adding an important override. Earlier-head
 captures/checks must not be transferred to this final selector correction.
+
+Run 43729761304 at fbe106d confirmed the corrected flat roster controls,
+44px targets, primary contrast, full-width record link and keyboard focus in
+both new card cases before stopping on an incorrect fixture expectation. The
+fixture explicitly saves Legal owner as Cedar Ridge; the new assertion still
+expected the separately named Cedar Ridge Ranch. The test-only follow-up uses
+the explicit saved owner, retaining the registry and overflow assertions.
+Application styling is unchanged by that follow-up. Earlier same-CSS captures
+are valid visual evidence but do not certify the latest test-head CI result.
+
+Visual capture review also found two inherited phone layout constraints: the
+facts container still used display:flex despite new grid columns, and wrapped
+header labels retained a fixed control height. The scoped rules now explicitly
+use a grid for phone facts and automatic control height with a 44px minimum.
+The browser cases measure matching fact rows and header content overflow;
+card-only captures make the resulting action hierarchy easier to review.

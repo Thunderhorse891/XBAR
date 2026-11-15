@@ -92,6 +92,14 @@ for (const width of [390, 1440]) {
     await page.goto('/app/horses');
     const card = page.locator('.horse-card');
     await expect(card).toHaveCount(1);
+    for (const control of await page.locator('.hc-roster-head__actions .button').all()) {
+      const size = await control.evaluate((element) => ({
+        scroll: element.scrollHeight,
+        client: element.clientHeight,
+      }));
+      expect(size.scroll).toBeLessThanOrEqual(size.client);
+      expect((await control.boundingBox())!.height).toBeGreaterThanOrEqual(44);
+    }
     const actions = card.locator('.horse-card__footer .inline-actions');
     const record = actions.getByRole('link', { name: 'Horse record', exact: true });
     const quick = actions.getByRole('button', { name: 'Quick review', exact: true });
@@ -106,11 +114,16 @@ for (const width of [390, 1440]) {
     expect(
       await quick.evaluate((element) => parseFloat(getComputedStyle(element).outlineWidth)),
     ).toBeGreaterThanOrEqual(2);
-    await expect(card.locator('.horse-card__fact').filter({ hasText: 'Legal owner' })).toContainText(
-      'Cedar Ridge Ranch',
-    );
+    await expect(card.locator('.horse-card__fact').filter({ hasText: 'Legal owner' })).toContainText('Cedar Ridge');
     await expect(card.locator('.horse-card__fact').filter({ hasText: 'Registry' })).toContainText('Pending');
+    if (width === 390) {
+      const owner = (await card.locator('.horse-card__fact').filter({ hasText: 'Legal owner' }).boundingBox())!;
+      const location = (await card.locator('.horse-card__fact').filter({ hasText: 'Location' }).boundingBox())!;
+      const registry = (await card.locator('.horse-card__fact').filter({ hasText: 'Registry' }).boundingBox())!;
+      expect(location.y).toBeCloseTo(registry.y, 0);
+      expect(owner.width).toBeCloseTo((await card.locator('.horse-card__facts').boundingBox())!.width, 0);
+    }
     await noOverflow(page, width);
-    await page.screenshot({ path: info.outputPath(`workspace-polish-card-${width}.png`), fullPage: true });
+    await card.screenshot({ path: info.outputPath(`workspace-polish-card-${width}.png`) });
   });
 }

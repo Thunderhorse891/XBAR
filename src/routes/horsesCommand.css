@@ -385,7 +385,9 @@
 /* Consistent action hierarchy: quiet secondary controls, one clear record link.
    Scoped to the roster so account and checkout controls retain their own UI. */
 .hc-workspace :is(.hc-roster-head__actions, .horse-card__footer) .button {
+  height: auto;
   min-height: 44px;
+  line-height: 1.35;
   min-width: 0;
   padding: 10px 14px;
   border-radius: 10px;
@@ -446,6 +448,7 @@
     width: 100%;
   }
   .hc-workspace .horse-card__facts {
+    display: grid;
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
   .hc-workspace .horse-card__fact:first-child {
