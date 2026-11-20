@@ -35,6 +35,7 @@ import './routes/premiumSaasExperience.css';
 import './styles/xbarSaas.css';
 import './styles/signatureWorkspace.css';
 
+const CopilotDemo = lazy(() => import('./routes/CopilotDemo'));
 const Dashboard = lazy(() => import('./pages/Dashboard'));
 const GettingStarted = lazy(() => import('./routes/GettingStarted'));
 const ResetPassword = lazy(() => import('./routes/ResetPassword'));
@@ -276,6 +277,7 @@ export default function App() {
           }
         >
           <Routes>
+            <Route path="/copilot-demo" element={<CopilotDemo />} />
             <Route path="/profiles/:id" element={<BuyerProfile />} />
             <Route path="/verify" element={<VerifyPacket />} />
             <Route path="/verify/:packetId" element={<VerifyPacket />} />

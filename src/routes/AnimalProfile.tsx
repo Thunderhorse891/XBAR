@@ -1,3 +1,4 @@
+import { RanchCopilot } from '@/components/RanchCopilot';
 import { HorseDocuments } from '@/components/HorseDocuments';
 import { HorsePhotoGallery } from '@/components/HorsePhotoGallery';
 import { horseAgeLabel } from '@/lib/horseDocumentActions';
@@ -376,6 +377,12 @@ export default function AnimalProfile() {
         ))}
       </div>
 
+      <RanchCopilot
+        key={animal.id}
+        horse={animal}
+        documents={documents}
+        ownership={ownershipRecords.find((r) => r.horseId === animal.id)}
+      />
       {tab === 'Overview' ? (
         <>
           {saleReadiness ? (
