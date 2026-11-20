@@ -32,7 +32,10 @@ export function clientManagedBillingEnabled(env = process.env) {
 // Public readiness and checkout must agree: production never offers test-mode
 // managed billing. This checks configuration shape only, without Stripe I/O.
 export function serverStripeModeReady(env = process.env) {
-  return env.VERCEL_ENV !== 'production' || /^(sk|rk)_live_[A-Za-z0-9_]+$/.test(env.STRIPE_SECRET_KEY?.trim() || '');
+  const key = env.STRIPE_SECRET_KEY?.trim() || '';
+  if (env.VERCEL_ENV === 'production') return /^(sk|rk)_live_[A-Za-z0-9_]+$/.test(key);
+  if (env.VERCEL_ENV === 'preview') return /^(sk|rk)_test_[A-Za-z0-9_]+$/.test(key);
+  return true;
 }
 
 // The optional account pin has one shape contract for public readiness and
@@ -40,4 +43,11 @@ export function serverStripeModeReady(env = process.env) {
 export function stripeAccountIdReady(accountId) {
   const value = accountId?.trim() || '';
   return !value || /^acct_[A-Za-z0-9]+$/.test(value);
+}
+
+// Hosted selling must be pinned to the account verified for that environment.
+export function serverCheckoutAccountPinReady(env = process.env) {
+  const account = env.STRIPE_ACCOUNT_ID?.trim();
+  const hosted = env.VERCEL_ENV === 'production' || env.VERCEL_ENV === 'preview';
+  return (!hosted || Boolean(account)) && stripeAccountIdReady(account);
 }

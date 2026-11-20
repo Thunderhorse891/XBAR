@@ -51,15 +51,15 @@ export const subscriptionTierConfig: Record<
     },
   },
   Professional: {
-    monthlyRate: 29,
+    monthlyRate: 19.99,
     annualRate: 290,
     sharedAccessEnabled: true,
     featureFlags: [
-      'Everything in Starter',
+      'Horse records and document OCR',
       'Share approved sale packets and keep buyer follow-up in one place',
       'Sale listings for buyer-ready horse profiles',
       '5 team seats and 10 client seats',
-      '1,000 documents and 100 GB storage',
+      'Up to 1,000 active documents',
     ],
     limits: {
       horseLimit: 30,
@@ -71,14 +71,14 @@ export const subscriptionTierConfig: Record<
     },
   },
   'Ranch Ops': {
-    monthlyRate: 79,
+    monthlyRate: 49.99,
     annualRate: 790,
     sharedAccessEnabled: true,
     featureFlags: [
       'Everything in Professional',
       'Run the operation: team roles, breeding, equipment, and supplies',
       '20 team seats and 40 client seats',
-      '5,000 documents and 500 GB storage',
+      'Up to 5,000 active documents',
     ],
     limits: {
       horseLimit: 200,

@@ -3,11 +3,12 @@ import { gmailSmtpStatus } from './_lib/gmail-smtp.js';
 import { sendJson } from './_lib/http.js';
 import {
   clientManagedBillingEnabled,
+  serverCheckoutAccountPinReady,
   serverManagedBillingEnabled,
   serverStripeModeReady,
   stripeAccountIdReady,
 } from './_lib/managed-billing.js';
-import { readLegacyPriceIds } from './_lib/subscription-plans.js';
+import { readLegacyPriceIds, sellablePrices } from './_lib/subscription-plans.js';
 
 /*
  * Liveness/readiness probe for uptime monitoring and load balancers.
@@ -50,12 +51,8 @@ export default function handler(req, res) {
    */
   const managedBilling = serverManagedBillingEnabled();
   const clientManagedBilling = clientManagedBillingEnabled();
-  const stripePriceIds = [
-    'STRIPE_PRICE_ID_STARTER',
-    'STRIPE_PRICE_ID_PROFESSIONAL',
-    'STRIPE_PRICE_ID_RANCH_OPS',
-    'STRIPE_PRICE_ID_ENTERPRISE',
-  ].every(hasEnv);
+  const prices = sellablePrices();
+  const stripePriceIds = prices.monthly.Professional && prices.monthly['Ranch Ops'];
   const paymentLinks = [
     'VITE_STRIPE_PAYMENT_LINK_STARTER',
     'VITE_STRIPE_PAYMENT_LINK_PROFESSIONAL',
@@ -64,7 +61,7 @@ export default function handler(req, res) {
   ].some(hasEnv);
   const secretKey = envValue('STRIPE_SECRET_KEY');
   const stripeMode = SECRET_KEY_SHAPE.exec(secretKey)?.[1] ?? null;
-  const annualPriceIds = PRICE_TIERS.every((tier) => hasEnv(`STRIPE_PRICE_ID_${tier}_ANNUAL`));
+  const annualPriceIds = false; // no annual price is offered to new buyers
   const subsystems = {
     supabaseAdmin: Boolean(
       (process.env.SUPABASE_URL || process.env.VITE_SUPABASE_URL) && process.env.SUPABASE_SERVICE_ROLE_KEY,
@@ -82,24 +79,8 @@ export default function handler(req, res) {
     email: isEmailConfigured(),
     remindersCron: Boolean(process.env.CRON_SECRET),
   };
-  /*
-   * Two billing shapes are complete, and only one of them needs the server.
-   *
-   * Hosted payment links are a whole configuration on their own: the client
-   * redirects to a Stripe-hosted page, and nothing on this deployment has to
-   * hold a secret key, receive a webhook, or know a price ID. It is how a
-   * workspace with no cloud session buys a plan.
-   *
-   * So the managed-billing requirements below are triggered by the MANAGED
-   * signals only. Including `paymentLinks` here made a link-only deployment
-   * fail its own readiness probe — and README.md points uptime monitors and
-   * load balancers at this endpoint, so a working deployment would have been
-   * pulled out of service for using a configuration the app supports.
-   *
-   * A half-configured managed stack is still unhealthy, which is the case this
-   * check exists for: those pieces are useless apart, and the failure they
-   * produce otherwise is a checkout that dies mid-flow.
-   */
+  // Shape and presence only: verifying the account's actual prices and
+  // signed webhook deliveries requires Stripe and an isolated exercise.
   const managedBillingTouched =
     subsystems.managedBilling ||
     subsystems.clientManagedBilling ||
@@ -114,21 +95,13 @@ export default function handler(req, res) {
       subsystems.stripePriceIds &&
       subsystems.managedBilling &&
       subsystems.clientManagedBilling &&
-      serverStripeModeReady());
+      serverStripeModeReady() &&
+      serverCheckoutAccountPinReady());
   const reasons = [];
   const warnings = [];
 
-  /*
-   * Healthy, but worth saying out loud rather than leaving an operator to infer
-   * it from a subsystem boolean: without a webhook nothing tells this
-   * deployment that a link payment succeeded, so entitlements after a hosted
-   * checkout are granted by hand. That is a deliberate operating mode, not a
-   * fault, which is why it is a warning and not a 503.
-   */
-  if (subsystems.paymentLinks && !managedBillingTouched) {
-    warnings.push(
-      'Billing runs on hosted Stripe payment links only. Checkout works, but no webhook confirms payment, so entitlements must be granted manually.',
-    );
+  if (subsystems.paymentLinks) {
+    warnings.push('Legacy hosted Stripe payment links are configured but not offered by this app.');
   }
 
   if (managedBillingTouched && !subsystems.supabaseAdmin) {
@@ -141,7 +114,9 @@ export default function handler(req, res) {
     reasons.push('STRIPE_WEBHOOK_SECRET is required before Stripe can confirm paid entitlements.');
   }
   if (managedBillingTouched && !subsystems.stripePriceIds) {
-    reasons.push('All STRIPE_PRICE_ID_* values are required before every tier can be purchased and synced.');
+    reasons.push(
+      'Unique monthly STRIPE_PRICE_ID_PROFESSIONAL and STRIPE_PRICE_ID_RANCH_OPS mappings are required for paid checkout.',
+    );
   }
   if (managedBillingTouched && !subsystems.managedBilling) {
     reasons.push('MANAGED_BILLING_ENABLED must be true before the server will create checkout sessions.');
@@ -168,6 +143,8 @@ export default function handler(req, res) {
   const malformed = [];
   if (!stripeAccountIdReady(envValue('STRIPE_ACCOUNT_ID'))) {
     malformed.push('STRIPE_ACCOUNT_ID is set but is not a Stripe account id (acct_...).');
+  } else if (managedBillingTouched && !serverCheckoutAccountPinReady()) {
+    reasons.push('STRIPE_ACCOUNT_ID is required for hosted checkout.');
   }
   if (secretKey && !stripeMode) {
     malformed.push('STRIPE_SECRET_KEY is set but is not a Stripe secret key (sk_live_, sk_test_ or rk_...).');
@@ -194,19 +171,22 @@ export default function handler(req, res) {
     if (names.length > 1) malformed.push(`${names.join(' and ')} hold the same price id; each plan needs its own.`);
   }
   const legacy = readLegacyPriceIds();
-  for (const error of legacy.errors) malformed.push(`STRIPE_LEGACY_PRICE_IDS: ${error}`);
+  if (legacy.errors.length) {
+    malformed.push('STRIPE_LEGACY_PRICE_IDS contains invalid or conflicting entries; check the billing runbook.');
+  }
   for (const priceId of legacy.entries.keys()) {
     if (priceOwners.has(priceId)) {
-      malformed.push(`STRIPE_LEGACY_PRICE_IDS lists ${priceId}, which is also a current price; list it in one place.`);
+      malformed.push('STRIPE_LEGACY_PRICE_IDS includes an entry that is also a current price; list it in one place.');
     }
   }
   reasons.push(...malformed);
 
-  if (managedBillingTouched && !annualPriceIds) {
-    warnings.push('Managed annual checkout is unavailable for plans missing STRIPE_PRICE_ID_*_ANNUAL.');
-  }
   if (managedBillingTouched && !serverStripeModeReady()) {
-    reasons.push('Production managed checkout requires a Stripe LIVE key. Test-mode checkout is unavailable.');
+    reasons.push(
+      process.env.VERCEL_ENV === 'preview'
+        ? 'Preview managed checkout requires a Stripe TEST key.'
+        : 'Production managed checkout requires a Stripe LIVE key. Test-mode checkout is unavailable.',
+    );
   }
   const gmail = gmailSmtpStatus();
   const gmailSelected = gmail.enabled && !hasEnv('RESEND_API_KEY') && !hasEnv('SENDGRID_API_KEY');

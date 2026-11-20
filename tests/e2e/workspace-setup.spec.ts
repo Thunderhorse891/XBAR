@@ -167,13 +167,30 @@ test('sales renders the buyer follow-up sales surface', async ({ page }) => {
   await expect(page.getByRole('heading', { name: 'Buyer follow-up' })).toBeVisible();
 });
 
-test('billing page shows tier cards', async ({ page }) => {
+test('the account menu opens the two monthly billing options without changing local setup', async ({ page }) => {
   await bootstrapWorkspace(page);
   await page.getByRole('button', { name: 'Account menu', exact: true }).click();
   await page.getByRole('menuitem', { name: 'Billing', exact: true }).click();
   await expect(page.getByRole('menu')).toBeHidden();
   await expect(page.getByRole('heading', { name: 'Review Billing' })).toBeVisible();
-  await expect(page.locator('.checkout-plan')).toHaveCount(4);
+  await expect(page).toHaveURL(/\/app\/billing$/);
+
+  const cards = page.locator('.checkout-plan-list .checkout-plan');
+  await expect(cards).toHaveCount(2);
+  for (const [tier, price] of [
+    ['Professional', '$19.99'],
+    ['Ranch Ops', '$49.99'],
+  ]) {
+    const card = cards.filter({ has: page.getByRole('heading', { name: tier, exact: true }) });
+    await expect(card).toBeVisible();
+    await expect(card.locator('.checkout-plan__price strong')).toHaveText(price);
+    await expect(card.locator('.checkout-plan__price small')).toHaveText('/ month');
+  }
+  await expect(cards.getByRole('heading', { name: /^(Starter|Enterprise)$/ })).toHaveCount(0);
+  await expect(page.getByRole('group', { name: 'Billing period' })).toHaveCount(0);
+  await expect(page.locator('.checkout-trial').getByText('Setup active', { exact: true })).toBeVisible();
+  await expect(page.locator('.checkout-trial').getByText(/No card required/)).toBeVisible();
+  await expect(page.locator('.checkout-primary-action')).toBeDisabled();
 });
 
 test('OCR pipeline: an uploaded image is read on-device and matched to a horse by its pixels', async ({ page }) => {

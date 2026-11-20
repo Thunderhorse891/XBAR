@@ -57,14 +57,13 @@ test('an annual subscriber is measured at a twelfth of what they pay a year', ()
   assert.equal(paybackPlan(monthly).monthlyRate, 29, 'a monthly subscriber pays the monthly rate');
 });
 
-test('the billing screen opens on the cadence already paid and names it at checkout', async () => {
+test('the billing screen separates recorded historical cadence from new monthly checkout', async () => {
   const screen = await readFile('src/routes/Subscriptions.tsx', 'utf8');
-  assert.match(screen, /useState<'monthly' \| 'annual'>\(subscription\.billingPeriod \?\? 'monthly'\)/);
-  assert.match(
-    screen,
-    /<span>Billing<\/span>\s*<strong>\{billingPeriod === 'annual' \? 'Annual' : 'Monthly'\}<\/strong>/,
-  );
-  assert.doesNotMatch(screen, /<strong>Monthly<\/strong>/, 'no hardcoded cadence');
+  assert.match(screen, /const billingPeriod = 'monthly' as const;/);
+  assert.match(screen, /subscription.billingPeriod === 'annual'/);
+  assert.match(screen, /Recorded plan rate: \{formatCurrencyCents\(subscription\.annualRate!\)\} per year/);
+  assert.match(screen, /Recorded plan rate: \{formatCurrencyCents\(subscription\.monthlyRate\)\} per month/);
+  assert.doesNotMatch(screen, /checkout-billing-toggle/);
 
   // Both reads of the subscription row carry the column the mapper prefers.
   const cloud = await readFile('src/lib/cloudWorkspace.ts', 'utf8');

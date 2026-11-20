@@ -33,13 +33,6 @@ const source = readFileSync(path.join(process.cwd(), 'src/routes/Subscriptions.t
 // what makes each of them safe.
 const GATED_NAVIGATIONS = [
   {
-    // Hosted Stripe payment link.
-    fn: 'followPaymentLink',
-    // Reached only from beginCheckout, which returns before any navigation
-    // whenever readiness is not ready — and nativeApp forces exactly that.
-    guardedBy: 'beginCheckout',
-  },
-  {
     // Stripe-managed Checkout Session.
     fn: 'beginCheckout',
     guardedBy: 'getCheckoutReadiness',

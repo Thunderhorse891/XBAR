@@ -4,15 +4,27 @@ for (const width of [1440, 390]) {
   test(`public launch paths are truthful and usable at ${width}px`, async ({ page }) => {
     await page.setViewportSize({ width, height: 900 });
     await page.goto('/pricing');
+    await expect(page.getByText(/New subscriptions are monthly, in USD per workspace/)).toBeVisible();
     await expect(
-      page.getByText('Review the billing options available to your workspace inside XBAR.', { exact: false }),
+      page.getByText(
+        /Review the billing options available to your workspace inside XBAR and confirm the total in Stripe/,
+      ),
     ).toBeVisible();
-    await expect(page.getByRole('rowheader', { name: 'Annual price (billed yearly)', exact: true })).toBeVisible();
-    for (const amount of ['120', '290', '790', '1,990']) {
-      await expect(page.getByText(`$${amount}/year, billed annually`, { exact: false })).toBeVisible();
+    await expect(page.getByRole('rowheader', { name: 'Annual price (billed yearly)', exact: true })).toHaveCount(0);
+    const plans = page.locator('.plan');
+    await expect(plans).toHaveCount(2);
+    for (const [tier, expectedPrice] of [
+      ['Professional', '$19.99/month'],
+      ['Ranch Ops', '$49.99/month'],
+    ]) {
+      const card = plans.filter({ has: page.getByRole('heading', { name: tier, exact: true }) });
+      await expect(card).toBeVisible();
+      await expect(card.locator('.plan__price')).toHaveText(expectedPrice);
+      await expect(card.getByRole('link', { name: `Choose ${tier}`, exact: true })).toBeVisible();
     }
-    await expect(page.getByText('Annual billing is not currently offered.', { exact: false })).toHaveCount(0);
-    await expect(page.getByRole('rowheader', { name: 'Annual price (2 months free)' })).toHaveCount(0);
+    for (const tier of ['Starter', 'Enterprise']) {
+      await expect(plans.getByRole('link', { name: `Choose ${tier}`, exact: true })).toHaveCount(0);
+    }
     // Public pages share the homepage's native mobile Menu. Prove support
     // is reachable there rather than assuming the retired horizontal rail.
     if (width === 390) await page.locator('.landing-mobile-nav > summary').click();

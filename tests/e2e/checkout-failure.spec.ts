@@ -45,7 +45,7 @@ async function stubCheckout(page: Page, onCheckout: (route: Route) => Promise<vo
         json: {
           ok: true,
           managed: true,
-          sellable: { monthly: { Professional: true }, annual: { Professional: true } },
+          sellable: { monthly: { Professional: true }, annual: { Professional: false } },
         },
       });
       return;
@@ -89,17 +89,14 @@ test('checkout refusal stays visible after the toast expires and clears while re
   await expect(page.locator('.checkout-primary-action')).toBeEnabled();
 });
 
-for (const change of ['plan', 'cadence', 'workspace', 'account', 'permission'] as const) {
+for (const change of ['plan', 'workspace', 'account', 'permission'] as const) {
   test(`a checkout error clears after a ${change} change`, async ({ page }) => {
     await stubCheckout(page, refused);
     await openBilling(page);
     await page.getByRole('button', { name: 'Continue to secure checkout' }).click();
     await expect(errorNotice(page)).toBeVisible();
     if (change === 'plan') {
-      await page.getByRole('button', { name: 'View Starter setup' }).click();
-    } else if (change === 'cadence') {
-      await page.getByRole('button', { name: 'Annual 2 months free' }).click();
-      await page.getByRole('button', { name: 'Monthly', exact: true }).click();
+      await page.getByRole('button', { name: 'View Ranch Ops' }).click();
     } else {
       await page.evaluate(async (change) => {
         const cloudPath = '/src/store/useCloudStore.ts';
@@ -116,24 +113,14 @@ for (const change of ['plan', 'cadence', 'workspace', 'account', 'permission'] a
   });
 }
 
-for (const roundTrip of [false, true]) {
-  test(`a late refusal stays discarded after a cadence ${roundTrip ? 'round trip' : 'change'}`, async ({ page }) => {
-    let pending: Route | undefined;
-    await stubCheckout(page, (route) => {
-      pending = route;
-    });
-    await openBilling(page);
-    await page.getByRole('button', { name: 'Continue to secure checkout' }).click();
-    await expect.poll(() => pending).toBeTruthy();
-    await page.getByRole('button', { name: 'Annual 2 months free' }).click();
-    if (roundTrip) await page.getByRole('button', { name: 'Monthly', exact: true }).click();
-    await refused(pending!);
-    await expect(page.locator('.checkout-primary-action')).toBeEnabled();
-    await expect(errorNotice(page)).toHaveCount(0);
-    await page.getByRole('button', { name: 'Monthly', exact: true }).click();
-    await expect(errorNotice(page)).toHaveCount(0);
-  });
-}
+test('billing displays exact monthly prices and no annual offer', async ({ page }) => {
+  await stubCheckout(page, refused);
+  await openBilling(page);
+  await expect(page.locator('#professional .checkout-plan__price strong')).toHaveText('$19.99');
+  await expect(page.locator('#ranch-ops .checkout-plan__price strong')).toHaveText('$49.99');
+  await expect(page.getByRole('group', { name: 'Billing period' })).toHaveCount(0);
+  await expect(page.locator('#starter, #enterprise')).toHaveCount(0);
+});
 
 test('a workspace round trip before a refusal cannot restore an invalidated inline error', async ({ page }) => {
   let pending: Route | undefined;
