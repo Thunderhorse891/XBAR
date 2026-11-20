@@ -9,6 +9,8 @@ export default tseslint.config(
   {
     ignores: [
       'dist',
+      'dist-copilot-preview',
+      'preview/dist',
       'node_modules',
       '.codex-test-dist',
       'public/ocr',
