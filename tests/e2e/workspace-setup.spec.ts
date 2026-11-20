@@ -1401,3 +1401,50 @@ test('a workspace round trip during raster validation cannot persist an old pack
   await expect(wizard.getByRole('button', { name: 'Retry sale packet' })).toBeEnabled();
   expect(await packetPersistenceCounts(page)).toEqual(before);
 });
+
+test('mobile setup error stays recoverable through Back and first-horse reload', async ({ page }) => {
+  await page.setViewportSize({ width: 390, height: 844 });
+  await page.addInitScript(() => localStorage.setItem('xbar-command-center-entry', 'true'));
+  await page.goto('/app/setup');
+  await page.getByRole('button', { name: 'Create workspace', exact: true }).click();
+  const error = page.locator('.clean-form-error[role="alert"]');
+  await expect(error).toContainText('Business name and ranch name are required');
+  await expect(error).toBeFocused();
+  await expect(error).toBeInViewport();
+  await page.getByPlaceholder('XBAR LLC').fill('Patient Rider LLC');
+  await page.getByPlaceholder('Primary Ranch').fill('Patient Ranch');
+  await page.getByRole('button', { name: 'Create workspace', exact: true }).click();
+  await expect(page).toHaveURL(/\/app$/);
+  await page.goto('/app/horses');
+  await expect(page).toHaveURL(/\/app\/horses$/);
+  await page.goBack();
+  await expect(page).toHaveURL(/\/app$/);
+  await page.getByRole('button', { name: 'Add first horse', exact: true }).click();
+  await expect(page.getByRole('heading', { name: 'Add a horse', exact: true })).toBeVisible();
+  await page.getByLabel('Registered name', { exact: true }).fill('Patient First Horse');
+  await page.getByLabel('Barn name', { exact: true }).fill('Patient');
+  await expect(page.getByLabel('Legal owner', { exact: true })).toHaveValue('Patient Ranch');
+  await expect(page.getByLabel('Owner entity', { exact: true })).toHaveValue('Patient Rider LLC');
+  await page.getByRole('button', { name: 'Create horse record', exact: true }).click();
+  await expect(page).toHaveURL(/\/horses\/[^/]+$/);
+  const saved = await page.evaluate(async () => {
+    const path = '/src/store/useXbarStore.ts';
+    const { useXbarStore } = await import(/* @vite-ignore */ path);
+    const horses = useXbarStore.getState().horses;
+    return { id: horses[0]?.id, name: horses[0]?.name, count: horses.length };
+  });
+  expect(saved).toMatchObject({ name: 'PATIENT FIRST HORSE', count: 1 });
+  expect(saved.id).toBeTruthy();
+  await page.reload();
+  await expect
+    .poll(() =>
+      page.evaluate(async () => {
+        const path = '/src/store/useXbarStore.ts';
+        const { useXbarStore } = await import(/* @vite-ignore */ path);
+        const horses = useXbarStore.getState().horses;
+        return { id: horses[0]?.id, name: horses[0]?.name, count: horses.length };
+      }),
+    )
+    .toEqual(saved);
+  expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(390);
+});

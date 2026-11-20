@@ -183,3 +183,73 @@ test('breeding empty or removed selection never silently saves another horse', a
   f.render();
   assert.equal(nodes(f.tree, (n) => n.props.children === 'Save revenue model').length, 0);
 });
+
+test('setup cloud failure is announced, retains details and offers an independent retry', async () => {
+  const f = await renderRoute('SetupWorkspace', {}, 'plan=Professional', {
+    cloud: {
+      status: 'signed-in',
+      session: { user: { id: 'synthetic-rider' } },
+      workspaceId: null,
+      setSyncState() {},
+      setLastSyncAt() {},
+      setWorkspaceAccessProfile() {},
+      saveWorkspace: async () => ({ ok: false, message: 'Synthetic connection interrupted.' }),
+    },
+    modules: {
+      '@/store/useXbarStore':
+        'export const useXbarStore=(fn)=>fn(f.state); export const useWorkspaceHydrated=()=>true;export const useWorkspaceReady=()=>Boolean(f.state.workspaceProfile.setupCompleteAt);',
+      '@/lib/platformConfig': 'export const isSupabaseConfigured=()=>true;export const isStaticPreviewHost=()=>false;',
+      '@/lib/cloudWorkspace': 'export const saveWorkspaceBackupToCloud=()=>f.cloud.saveWorkspace();',
+    },
+  });
+  const originals = [];
+  f.state.initializeWorkspace = (profile) => {
+    originals.push(profile);
+    f.state.workspaceProfile = { ...profile, setupCompleteAt: 'synthetic-time' };
+    return { ok: true, message: 'Created on this device.' };
+  };
+  f.state.exportWorkspaceBackup = () => ({ workspace: f.state.workspaceProfile });
+  f.render();
+  const field = (placeholder) => nodes(f.tree, (n) => n.type === 'input' && n.props.placeholder === placeholder)[0];
+  field('XBAR LLC').props.onChange({ target: { value: 'Patient Rider LLC' } });
+  f.render();
+  field('Primary Ranch').props.onChange({ target: { value: 'Patient Ranch' } });
+  f.render();
+  const submit = () => nodes(f.tree, (n) => n.type === 'form')[0].props.onSubmit({ preventDefault() {} });
+  await submit();
+  f.render();
+  const alert = nodes(f.tree, (n) => n.props.role === 'alert' && n.props.className === 'clean-form-error')[0];
+  assert.ok(alert, 'setup failure must be announced in its persistent form, not just a toast');
+  assert.match(alert.props.children, /Synthetic connection interrupted/);
+  assert.equal(alert.props.tabIndex, -1, 'the failure summary must be focusable without adding a tab stop');
+  assert.equal(field('XBAR LLC').props.value, 'Patient Rider LLC');
+  assert.equal(field('Primary Ranch').props.value, 'Patient Ranch');
+  assert.equal(
+    f.calls.some((c) => c[0] === 'navigate'),
+    false,
+  );
+  let release;
+  f.cloud.saveWorkspace = () =>
+    new Promise((done) => {
+      release = done;
+    });
+  const retry = submit();
+  f.render();
+  assert.equal(
+    nodes(f.tree, (n) => n.props.role === 'alert').length,
+    0,
+    'retry clears the previous failure while waiting',
+  );
+  assert.equal(
+    nodes(f.tree, (n) => n.type === 'button' && n.props.children === 'Creating workspace...')[0].props.disabled,
+    true,
+  );
+  release({ ok: true, workspaceId: 'synthetic-ranch', message: 'Saved.' });
+  await retry;
+  f.render();
+  assert.deepEqual(originals[1], originals[0], 'retry preserves exact submitted details and derived owner defaults');
+  assert.deepEqual(
+    f.calls.filter((c) => c[0] === 'navigate'),
+    [['navigate', '/billing?plan=Professional']],
+  );
+});
