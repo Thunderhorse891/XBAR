@@ -32,13 +32,14 @@ const VALID_RPC_GRANTS = [
   ...[
     'xbar_has_workspace_access(uuid)',
     'xbar_can_manage_workspace(uuid)',
-    'xbar_commercial_limits(uuid)',
-    'xbar_subscription_limits(uuid)',
+    'xbar_workspace_storage_bytes(uuid)',
     'xbar_accept_workspace_invitation(uuid, text)',
     'xbar_has_workspace_capability(uuid, text)',
     'xbar_record_exists(text, uuid, text)',
   ].map((signature) => `authenticated\t${signature}`),
   ...[
+    'xbar_commercial_limits(uuid)',
+    'xbar_subscription_limits(uuid)',
     'xbar_workspace_storage_bytes(uuid)',
     ...CURRENT_DELETION_RPCS,
     ...CURRENT_BILLING_RPCS,
@@ -73,6 +74,14 @@ test('the verifier accepts all required current grants', () => {
   assert.equal(result.status, 0, result.stdout + result.stderr);
   assert.match(result.stdout, /every required grant is present/);
 });
+
+for (const fn of ['xbar_commercial_limits(uuid)', 'xbar_subscription_limits(uuid)']) {
+  test(`the verifier rejects direct authenticated access to internal calculator ${fn}`, () => {
+    const result = runRpcVerifier([...VALID_RPC_GRANTS, `authenticated\t${fn}`]);
+    assert.equal(result.status, 1, result.stdout + result.stderr);
+    assert.match(result.stdout, /authenticated can directly execute internal/);
+  });
+}
 
 for (const missing of [...CURRENT_DELETION_RPCS.map((signature) => [signature]), CURRENT_DELETION_RPCS]) {
   test(`the verifier fails when current account-deletion grants are missing: ${missing.join(', ')}`, () => {
@@ -372,8 +381,15 @@ test('the verifier only reports success for an exact match', () => {
 
   // The success branch has to be guarded by every check, or it is reachable
   // with a required grant missing — for anon, or for any other role.
-  const guard = script.lastIndexOf('if (!anonMissing.length && !anonExtra.length && !anyRoleMissing)', success);
-  assert.notEqual(guard, -1, 'success must require no extras, nothing missing, and no role short a grant');
+  const guard = script.lastIndexOf(
+    'if (!anonMissing.length && !anonExtra.length && !anyRoleMissing && !authForbidden.length)',
+    success,
+  );
+  assert.notEqual(
+    guard,
+    -1,
+    'success must require no extras, nothing missing, no role short a grant, and no direct internal calculator grants',
+  );
 });
 
 /*

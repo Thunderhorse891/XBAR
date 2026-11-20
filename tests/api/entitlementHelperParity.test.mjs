@@ -43,10 +43,13 @@ const HELPERS = ['xbar_subscription_limits', 'xbar_commercial_limits'];
 
 /** The last migration (in apply order) that defines `fn` — the definition that wins. */
 function effectiveDefinition(fn) {
+  // GRANT/REVOKE also contain `function public.name(` but do not replace its
+  // calculation body. The metadata-access migration changes only those ACLs.
+  const declaration = new RegExp(`^\\s*create\\s+or\\s+replace\\s+function\\s+public\\.${fn}\\s*\\(`, 'im');
   const defining = readdirSync(migrationsDir)
     .filter((file) => file.endsWith('.sql'))
     .sort()
-    .filter((file) => readFileSync(path.join(migrationsDir, file), 'utf8').includes(`function public.${fn}(`));
+    .filter((file) => declaration.test(readFileSync(path.join(migrationsDir, file), 'utf8')));
 
   assert.ok(defining.length > 0, `no migration defines ${fn}`);
 
@@ -54,7 +57,7 @@ function effectiveDefinition(fn) {
   const sql = readFileSync(path.join(migrationsDir, winner), 'utf8');
   // Only the body of this function, so a sibling definition in the same file
   // cannot satisfy an assertion about this one.
-  const start = sql.indexOf(`function public.${fn}(`);
+  const start = declaration.exec(sql).index;
   const end = sql.indexOf('$$;', start);
   assert.ok(end > start, `could not isolate the body of ${fn} in ${winner}`);
 

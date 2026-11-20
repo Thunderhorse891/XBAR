@@ -51,14 +51,16 @@ test('the effective SQL helpers honor an active trial as Professional', () => {
   const migrationsDir = path.join(process.cwd(), 'supabase', 'migrations');
 
   for (const fn of ['xbar_subscription_limits', 'xbar_commercial_limits']) {
+    // A later ACL-only GRANT/REVOKE is not a replacement calculation body.
+    const declaration = new RegExp(`^\\s*create\\s+or\\s+replace\\s+function\\s+public\\.${fn}\\s*\\(`, 'im');
     const defining = readdirSync(migrationsDir)
       .filter((file) => file.endsWith('.sql'))
       .sort()
-      .filter((file) => readFileSync(path.join(migrationsDir, file), 'utf8').includes(`function public.${fn}(`));
+      .filter((file) => declaration.test(readFileSync(path.join(migrationsDir, file), 'utf8')));
     assert.ok(defining.length > 0, `no migration defines ${fn}`);
     const winner = defining[defining.length - 1];
     const sql = readFileSync(path.join(migrationsDir, winner), 'utf8');
-    const start = sql.indexOf(`function public.${fn}(`);
+    const start = declaration.exec(sql).index;
     const body = sql.slice(start, sql.indexOf('$$;', start));
 
     assert.match(

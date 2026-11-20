@@ -674,3 +674,20 @@ psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f supabase/migrations/20261107160000_gu
 ```
 
 Merging this code or deploying the website does not execute this command.
+
+### Workspace metadata RPC access (prepared; production approval required)
+
+`20261112090000_guard_workspace_metadata_rpcs.sql` closes direct client calls to
+internal plan calculators and checks workspace access before storage aggregation.
+It reuses draft #395; it is separate from the fictional Copilot demo. The real
+seat-trigger check must pass for invitation acceptance before membership exists.
+See [the advisor assessment and local evidence](docs/reviews/advisors-20261120.md).
+Only after final review, isolated PostgreSQL integration checks, saved rollback
+definitions/grants and Erin's explicit production-migration approval:
+
+```sh
+psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f supabase/migrations/20261112090000_guard_workspace_metadata_rpcs.sql
+```
+
+This is a reviewable operator command, not authorization to execute it. A website
+deployment does not apply it. Do not reapply the entire schema as a rollback.
