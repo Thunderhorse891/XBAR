@@ -389,7 +389,21 @@
 .clean-field input:focus {
   border-color: rgba(49, 95, 127, 0.68);
   box-shadow: 0 0 0 3px rgba(49, 95, 127, 0.14);
-  outline: none;
+}
+
+/* Keep keyboard focus perceivable without relying on shadows. The password
+ * input is clipped by its wrapper, so outline that complete control too. */
+.clean-field input:focus-visible,
+.clean-password-field:focus-within {
+  outline: 3px solid var(--entry-blue);
+  outline-offset: 2px;
+}
+
+@media (forced-colors: active) {
+  .clean-field input:focus-visible,
+  .clean-password-field:focus-within {
+    outline-color: Highlight;
+  }
 }
 
 .clean-password-field {
