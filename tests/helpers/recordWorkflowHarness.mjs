@@ -73,6 +73,13 @@ export async function renderRoute(name, changes = {}, params = '', options = {})
       {
         name: 'controlled-route-boundaries',
         setup(b) {
+          const modules = options.modules ?? {};
+          b.onResolve({ filter: /.*/ }, ({ path }) =>
+            Object.hasOwn(modules, path) ? { path, namespace: 'controlled-module' } : undefined,
+          );
+          b.onLoad({ filter: /.*/, namespace: 'controlled-module' }, ({ path }) => ({
+            contents: 'const f=globalThis.__recordWorkflowFixture;' + modules[path],
+          }));
           b.onResolve(
             {
               filter:

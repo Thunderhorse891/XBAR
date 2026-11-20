@@ -216,7 +216,7 @@ test('@auth a rejected auth callback lands on sign-in with the reason, not not-f
   await expect(page.getByText('Email link has expired')).toBeVisible({ timeout: 30_000 });
   await expect(page.getByText('Page not found')).toHaveCount(0);
   // On the sign-in screen, with a way onwards rather than a dead end.
-  await expect(page.getByLabel('Email')).toBeVisible();
+  await expect(page.getByRole('textbox', { name: 'Email or User ID', exact: true })).toBeVisible();
 });
 
 test('@auth the sign-in screen still renders when site data is blocked', async ({ page }) => {
@@ -238,6 +238,56 @@ test('@auth the sign-in screen still renders when site data is blocked', async (
   });
 
   await page.goto('/#/login');
-  await expect(page.getByLabel('Email')).toBeVisible({ timeout: 30_000 });
+  await expect(page.getByRole('textbox', { name: 'Email or User ID', exact: true })).toBeVisible({ timeout: 30_000 });
   await expect(page.getByText('This screen hit a runtime problem')).toHaveCount(0);
+});
+
+test('@auth mobile email code supports Enter and retry without a password', async ({ page }) => {
+  await page.setViewportSize({ width: 390, height: 844 });
+  let passwordRequests = 0;
+  const verifications: Array<{ email: string; token: string; type: string }> = [];
+  await page.route('https://mobile-smoke.invalid/**', async (route) => {
+    const headers = {
+      'access-control-allow-origin': '*',
+      'access-control-allow-headers': 'authorization, apikey, content-type, x-client-info, x-supabase-api-version',
+      'access-control-allow-methods': 'POST, GET, OPTIONS',
+    };
+    if (route.request().method() === 'OPTIONS') {
+      await route.fulfill({ status: 204, headers });
+      return;
+    }
+    const pathname = new URL(route.request().url()).pathname;
+    if (pathname === '/auth/v1/otp') {
+      await route.fulfill({ headers, json: {} });
+    } else if (pathname === '/auth/v1/verify') {
+      verifications.push(route.request().postDataJSON());
+      await route.fulfill({ status: 400, headers, json: { msg: 'This test code was rejected. Enter another code.' } });
+    } else {
+      if (pathname === '/auth/v1/token') passwordRequests++;
+      await route.fulfill({ status: 404, headers, json: {} });
+    }
+  });
+  await page.goto('/#/login');
+  await page.getByRole('textbox', { name: /Email/ }).fill('mobile-rider@example.invalid');
+  await page.getByRole('button', { name: 'Email me a sign-in code', exact: true }).click();
+  const code = page.getByLabel('Sign-in code', { exact: true });
+  await expect(code).toBeVisible();
+  await expect(page.getByLabel('Password', { exact: true })).toHaveValue('');
+  await code.fill('123456');
+  await code.press('Enter');
+  await expect.poll(() => verifications.length).toBe(1);
+  await expect(page.locator('.clean-auth-message[role="alert"]')).toHaveText(
+    'This test code was rejected. Enter another code.',
+  );
+  await expect(code).toHaveValue('123456');
+  await code.fill('654321');
+  await page.getByRole('button', { name: 'Sign in with code', exact: true }).click();
+  await expect.poll(() => verifications.length).toBe(2);
+  expect(verifications).toMatchObject([
+    { email: 'mobile-rider@example.invalid', token: '123456', type: 'email' },
+    { email: 'mobile-rider@example.invalid', token: '654321', type: 'email' },
+  ]);
+  expect(passwordRequests).toBe(0);
+  await expect(page).toHaveURL(/#\/login$/);
+  expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(390);
 });
