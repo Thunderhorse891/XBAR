@@ -1,0 +1,80 @@
+.ranch-copilot {
+  overflow-wrap: anywhere;
+}
+.ranch-copilot p {
+  line-height: 1.6;
+}
+.ranch-copilot .xs-toolbar {
+  flex-wrap: wrap;
+}
+.ranch-copilot__plan {
+  margin-top: 24px;
+}
+.ranch-copilot__plan ol {
+  padding-left: 24px;
+}
+.ranch-copilot__plan ol > li {
+  padding: 16px 0;
+  border-bottom: 1px solid var(--xbar-border);
+}
+.ranch-copilot h4 {
+  margin: 8px 0;
+}
+.ranch-copilot a {
+  display: inline-block;
+  margin-right: 12px;
+  text-decoration: underline;
+}
+.ranch-copilot__priority {
+  font-weight: 700;
+}
+.ranch-copilot__plan section {
+  padding: 12px;
+  scroll-margin-top: 100px;
+}
+.ranch-copilot textarea {
+  display: block;
+  width: 100%;
+  margin: 12px 0;
+  padding: 12px;
+  font: inherit;
+  line-height: 1.6;
+}
+.ranch-copilot .xs-btn {
+  min-height: 44px;
+  white-space: normal;
+  height: auto;
+}
+.ranch-copilot-demo {
+  max-width: 960px;
+  margin: auto;
+  padding: 24px 16px;
+}
+.ranch-copilot-demo__fixtures {
+  display: grid;
+  gap: 16px;
+  margin: 24px 0;
+}
+.ranch-copilot-demo__fixtures label {
+  display: grid;
+  gap: 8px;
+  font-weight: 600;
+}
+.ranch-copilot-demo__fixtures select {
+  min-height: 44px;
+  width: 100%;
+  max-width: 100%;
+  font: inherit;
+}
+.ranch-copilot-demo > h1 {
+  font-family: var(--xbar-font-display);
+  font-size: clamp(28px, 5vw, 42px);
+  line-height: 1.15;
+  font-weight: 700;
+  margin: 24px 0 16px;
+}
+.ranch-copilot__plan h3 {
+  font-size: 20px;
+  font-weight: 700;
+  margin: 24px 0 12px;
+}
