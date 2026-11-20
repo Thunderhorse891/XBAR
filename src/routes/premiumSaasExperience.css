@@ -265,7 +265,11 @@ nav[aria-label='Mobile quick navigation'] a[aria-current='page'],
   color: var(--xbar-blue-strong) !important;
 }
 
-.xbar-route-surface :is(.button, .ops-briefing-action, .public-action, .xbar-home-action) {
+.xbar-route-surface
+  :is(.button, .ops-briefing-action, .public-action, .xbar-home-action):not(
+    .hc-roster-head__actions *,
+    .horse-card__footer *
+  ) {
   border-radius: 8px !important;
   font-weight: 780 !important;
   transition:
@@ -276,7 +280,10 @@ nav[aria-label='Mobile quick navigation'] a[aria-current='page'],
 }
 
 .xbar-route-surface
-  :is(.button--primary, .ops-briefing-action--primary, .public-action--primary, .xbar-home-action--primary) {
+  :is(.button--primary, .ops-briefing-action--primary, .public-action--primary, .xbar-home-action--primary):not(
+    .hc-roster-head__actions *,
+    .horse-card__footer *
+  ) {
   border-color: rgba(30, 115, 232, 0.68) !important;
   background: var(--accent-ink) !important;
   color: #ffffff !important;
@@ -289,13 +296,17 @@ nav[aria-label='Mobile quick navigation'] a[aria-current='page'],
     .ops-briefing-action,
     .public-action:not(.public-action--primary),
     .xbar-home-action:not(.xbar-home-action--primary)
-  ) {
+  ):not(.hc-roster-head__actions *, .horse-card__footer *) {
   border-color: rgba(100, 116, 139, 0.22) !important;
   background: rgba(255, 255, 255, 0.72) !important;
   color: var(--xbar-ink-soft) !important;
 }
 
-.xbar-route-surface :is(.button, .ops-briefing-action, .public-action, .xbar-home-action):hover {
+.xbar-route-surface
+  :is(.button, .ops-briefing-action, .public-action, .xbar-home-action):not(
+    .hc-roster-head__actions *,
+    .horse-card__footer *
+  ):hover {
   transform: translateY(-1px);
   border-color: rgba(30, 115, 232, 0.46) !important;
   box-shadow: 0 18px 38px rgba(15, 23, 42, 0.1) !important;
