@@ -97,13 +97,12 @@ const REQUIRED_ANON = ['xbar_resolve_public_listing(text, text)', 'xbar_track_pu
 // reduced lists and still exited 0.
 //
 // anon is exhaustive — it must be exactly this set. The other two are minimums:
-// extra grants there are not a security problem the way an anon grant is.
+// Additional signed-in grants are checked below for the internal calculators.
 const REQUIRED_BY_ROLE = {
   authenticated: [
     'xbar_has_workspace_access(uuid)',
     'xbar_can_manage_workspace(uuid)',
-    'xbar_commercial_limits(uuid)',
-    'xbar_subscription_limits(uuid)',
+    'xbar_workspace_storage_bytes(uuid)',
     'xbar_accept_workspace_invitation(uuid, text)',
     // The horse-media write policies call it; without EXECUTE every photo
     // upload fails with "permission denied for function".
@@ -113,6 +112,8 @@ const REQUIRED_BY_ROLE = {
     'xbar_record_exists(text, uuid, text)',
   ],
   service_role: [
+    'xbar_commercial_limits(uuid)',
+    'xbar_subscription_limits(uuid)',
     'xbar_workspace_storage_bytes(uuid)',
     // Active checkout and webhook call sites need these exact overloads.
     // A legacy event signature without billing period does not satisfy the
@@ -137,6 +138,9 @@ const roleMissing = Object.entries(REQUIRED_BY_ROLE).map(([role, required]) => (
 const anonFunctions = byRole.get('anon');
 const anonExtra = anonFunctions.filter((fn) => !REQUIRED_ANON.includes(fn));
 const anonMissing = REQUIRED_ANON.filter((fn) => !anonFunctions.includes(fn));
+const authForbidden = byRole
+  .get('authenticated')
+  .filter((fn) => ['xbar_commercial_limits(uuid)', 'xbar_subscription_limits(uuid)'].includes(fn));
 
 console.log('');
 
@@ -169,7 +173,13 @@ for (const { role, missing } of roleMissing) {
 
 const anyRoleMissing = roleMissing.some(({ missing }) => missing.length > 0);
 
-if (!anonMissing.length && !anonExtra.length && !anyRoleMissing) {
+if (authForbidden.length) {
+  console.log('authenticated can directly execute internal workspace calculators:');
+  for (const fn of authForbidden) console.log(`  ${fn}`);
+  console.log('The workspace metadata RPC migration must remove these direct client grants.');
+}
+
+if (!anonMissing.length && !anonExtra.length && !anyRoleMissing && !authForbidden.length) {
   console.log('anon surface is exactly the buyer share flow, and every required grant is present.');
   process.exit(0);
 }
