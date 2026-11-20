@@ -1,6 +1,23 @@
 import { expect, test, type Page } from '@playwright/test';
 import { readFile } from 'node:fs/promises';
 
+for (const viewport of [
+  { width: 1280, height: 800 },
+  { width: 390, height: 844 },
+]) {
+  test(`backup scope is visible before export at ${viewport.width}px`, async ({ page }) => {
+    await page.setViewportSize(viewport);
+    await openSettings(page);
+    await expect(
+      page.getByText(
+        'Exports ranch records and available document, receipt and packet files. Keep a separate backup of horse-photo originals.',
+        { exact: true },
+      ),
+    ).toBeVisible();
+    await expect(page.getByRole('button', { name: 'Export backup', exact: true })).toBeEnabled();
+  });
+}
+
 test('backup carries a cloud-only original without changing the live record', async ({ page, browser }) => {
   await openSettings(page);
   const bytes = Buffer.from([0, 255, 9, 128, 3, 44]);
@@ -52,6 +69,18 @@ test('backup carries a cloud-only original without changing the live record', as
   await restoreContext.close();
 });
 
+test('a browser download handoff does not claim the backup was saved', async ({ page }) => {
+  await openSettings(page);
+  const [download] = await Promise.all([
+    page.waitForEvent('download'),
+    page.getByRole('button', { name: 'Export backup', exact: true }).click(),
+  ]);
+  await download.cancel();
+  await expect(page.getByText('Backup download started', { exact: true })).toBeVisible();
+  await expect(page.getByText(/Check your browser downloads to confirm the file finished saving/)).toBeVisible();
+  await expect(page.getByText('Backup exported', { exact: true })).toHaveCount(0);
+});
+
 test('a failed cloud original stays visible as missing after archive restore', async ({ page, browser }) => {
   await openSettings(page);
   await page.route('**/__backup-original', (route) => route.fulfill({ status: 403, body: 'unavailable' }));
@@ -64,7 +93,8 @@ test('a failed cloud original stays visible as missing after archive restore', a
   expect(archive.files).toEqual([]);
   expect(archive.omittedFiles).toHaveLength(1);
   expect(archive.omittedFiles[0].location).toBe('cloud');
-  await expect(page.getByText('Backup exported — some files not included', { exact: true })).toBeVisible();
+  await expect(page.getByText('Backup prepared — some files not included', { exact: true })).toBeVisible();
+  await expect(page.getByText(/Check your browser downloads to confirm the file finished saving/)).toBeVisible();
   const restoreContext = await browser.newContext();
   const restoredPage = await restoreContext.newPage();
   await openSettings(restoredPage);
