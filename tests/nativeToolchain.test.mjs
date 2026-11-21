@@ -62,3 +62,14 @@ test('xcode retains CommonJS UUID generation and project parse/write compatibili
     rmSync(directory, { recursive: true, force: true });
   }
 });
+
+test('local tools, package metadata, and release CI all select one Node major', () => {
+  const read = (path) => readFileSync(new URL(path, import.meta.url), 'utf8');
+  const major = read('../.nvmrc').trim();
+  assert.equal(major, '24');
+  assert.equal(JSON.parse(read('../package.json')).engines.node, major + '.x');
+  assert.equal(JSON.parse(read('../package-lock.json')).packages[''].engines.node, major + '.x');
+  for (const workflow of ['ci', 'manual-test', 'recovery-db-verification']) {
+    assert.match(read('../.github/workflows/' + workflow + '.yml'), /node-version-file: '\.nvmrc'/);
+  }
+});
