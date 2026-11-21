@@ -5,7 +5,7 @@
   "license": "UNLICENSED",
   "type": "module",
   "engines": {
-    "node": ">=20.19.0"
+    "node": "24.x"
   },
   "scripts": {
     "predev": "node scripts/prepare-ocr-assets.mjs",
