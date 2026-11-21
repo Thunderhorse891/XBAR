@@ -4,6 +4,8 @@ import { readFile } from 'node:fs/promises';
 
 import {
   MEANINGFUL_WORKSPACE_COLLECTIONS,
+  captureWorkspaceDeletionSnapshot,
+  clearCapturedWorkspaceDeletion,
   didWorkspaceReadFail,
   getWorkspacePersistReceipt,
   hasMeaningfulPersistedWorkspace,
@@ -1014,6 +1016,42 @@ test('the meaningful-workspace guard reports an unsaved receipt', async () => {
     assert.ok(blocked);
     assert.equal(await blocked.completed, false);
     await pending;
+  } finally {
+    restoreDb();
+  }
+});
+
+test('confirmed account deletion can clear its meaningful stored workspace without weakening the ordinary write guard', async () => {
+  const restoreDb = installFakeIndexedDb();
+  const name = 'xbar-live-workspace';
+  const old = JSON.stringify({ state: { horses: [{ id: 'old' }] } });
+  try {
+    await workspaceStateStorage.setItem(name, old);
+    await workspaceStateStorage.setItem(name, JSON.stringify({ state: { horses: [] } }));
+    assert.equal(await workspaceStateStorage.getItem(name), old);
+    const captured = await captureWorkspaceDeletionSnapshot();
+    assert.ok(captured);
+    assert.equal(await clearCapturedWorkspaceDeletion(captured, () => true), true);
+    assert.equal(await workspaceStateStorage.getItem(name), null);
+  } finally {
+    restoreDb();
+  }
+});
+
+test('confirmed account deletion preserves a replacement workspace and a no-longer-authorized original', async () => {
+  const restoreDb = installFakeIndexedDb();
+  const name = 'xbar-live-workspace';
+  const old = JSON.stringify({ state: { horses: [{ id: 'old' }] } });
+  const replacement = JSON.stringify({ state: { horses: [{ id: 'new' }] } });
+  try {
+    await workspaceStateStorage.setItem(name, old);
+    const captured = await captureWorkspaceDeletionSnapshot();
+    assert.ok(captured);
+    assert.equal(await clearCapturedWorkspaceDeletion(captured, () => false), false);
+    assert.equal(await workspaceStateStorage.getItem(name), old);
+    await workspaceStateStorage.setItem(name, replacement);
+    assert.equal(await clearCapturedWorkspaceDeletion(captured, () => true), false);
+    assert.equal(await workspaceStateStorage.getItem(name), replacement);
   } finally {
     restoreDb();
   }

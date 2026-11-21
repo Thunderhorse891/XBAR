@@ -359,3 +359,38 @@ test('the runbook keeps the magic link alive while adding the code', () => {
     "the runbook must keep the confirmation URL: Settings' magic link has no code input and would break",
   );
 });
+
+test('every direct and legacy native billing path mounts a status route instead of the checkout screen', () => {
+  const app = readFileSync('src/App.tsx', 'utf8');
+  assert.match(app, /path="billing"\s+element=\{isNativeApp\(\) \? <NativeBillingStatus \/> : <Subscriptions \/>\}/);
+  for (const alias of ['subscribe', 'plans', 'subscriptions']) {
+    assert.match(app, new RegExp(`path="/?${alias}" element=\\{<Navigate to=\\{billingPath\\} replace />\\}`));
+  }
+  const native = readFileSync('src/routes/NativeBillingStatus.tsx', 'utf8');
+  assert.match(native, /useXbarStore\(\(state\) => state\.subscription\)/);
+  assert.doesNotMatch(
+    native,
+    /billingApi|checkoutReturn|stripeConfig|loadSellablePrices|window\.location|href=|<button\b/,
+  );
+});
+
+test('users can open the canonical privacy policy from sign-in, workspace setup, and Settings', () => {
+  for (const file of ['Login', 'SetupWorkspace', 'Settings']) {
+    const route = readFileSync(`src/routes/${file}.tsx`, 'utf8');
+    assert.match(
+      route,
+      /<a\b[^>]*\bhref=\{publicSiteHref\('\/privacy'\)\}[^>]*>\s*Privacy Policy\s*<\/a>/,
+      `${file} does not visibly link to the public privacy policy`,
+    );
+  }
+});
+
+test('the same confirmed account deletion option is reachable before and after workspace setup', () => {
+  for (const file of ['SetupWorkspace', 'Settings']) {
+    const source = readFileSync(`src/routes/${file}.tsx`, 'utf8');
+    assert.match(source, /<AccountDeletionPanel\b/);
+  }
+  const panel = readFileSync('src/components/AccountDeletionPanel.tsx', 'utf8');
+  assert.match(panel, /Type your email to confirm/);
+  assert.match(panel, /Permanently delete my account/);
+});

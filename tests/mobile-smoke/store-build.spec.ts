@@ -60,7 +60,7 @@ async function goToRoute(page: Page, hash: string) {
 async function openBillingScreen(page: Page) {
   await createWorkspace(page);
   await goToRoute(page, '#/billing');
-  await expect(page.getByRole('heading', { name: 'Review Billing' })).toBeVisible({ timeout: 30_000 });
+  await expect(page.getByRole('heading', { name: 'Billing status' })).toBeVisible({ timeout: 30_000 });
 }
 
 test('the native workflow checklist excludes the paid-plan step and keeps its own progress total', async ({ page }) => {
@@ -77,58 +77,37 @@ test('the native workflow checklist excludes the paid-plan step and keeps its ow
   await expect(page.getByText(/\d+% set up/)).toHaveCount(0);
 
   await goToRoute(page, '#/billing');
-  await expect(page.getByRole('heading', { name: 'Review Billing', exact: true })).toBeVisible();
+  await expect(page.getByRole('heading', { name: 'Billing status', exact: true })).toBeVisible();
   await page.goBack();
   await expect(checklist).toContainText('1 of 6 steps are complete.');
   expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(390);
 });
 
-test('the store build offers no purchase path on the billing screen', async ({ page }) => {
+test('direct and legacy billing routes show plan status, not a web paywall or a checkout return', async ({ page }) => {
+  const billingRequests: string[] = [];
+  await page.route(/\/api\/stripe(?:\/|$)|\/api\/billing(?:\/|$)|stripe\.com/, async (route) => {
+    billingRequests.push(route.request().url());
+    await route.abort();
+  });
+
   await openBillingScreen(page);
-
-  // Guideline 3.1.1: no call to action for a purchase outside In-App Purchase.
-  // This build has Stripe payment links configured, so on web these buttons
-  // would render and be clickable.
-  await expect(page.getByRole('button', { name: /^Choose (Starter|Professional|Ranch Ops|Enterprise)$/ })).toHaveCount(
-    0,
-  );
-
-  // What the customer sees instead, and it must not be actionable.
-  const managed = page.getByRole('button', { name: 'Managed outside the app' }).first();
-  await expect(managed).toBeVisible();
-  await expect(managed).toBeDisabled();
-});
-
-test('the store build does not present the paywall at all', async ({ page }) => {
-  /*
-   * This replaces an assertion that could not fail.
-   *
-   * It was `expect(locator('a[href*="stripe"], a[href*="/pricing"]')).toHaveCount(0)`
-   * on the billing screen, and it passes on a WEB build too: checkout is
-   * reached through window.location.assign in a click handler, never through an
-   * anchor, so there is no such link in either bundle. The test asserted the
-   * absence of something that never exists. Verified rather than assumed --
-   * rebuilding this bundle with VITE_NATIVE_APP unset leaves it green while the
-   * other two fail.
-   *
-   * What genuinely differs is whether the paywall is DRAWN. This build has
-   * payment links configured, so on web the panel reads "Due at checkout" and
-   * renders a card-details box with card number, expiration and CVC rows.
-   * Guideline 3.1.1 forbids presenting a non-IAP purchase, not merely
-   * completing one, so a store build showing a card form is the rejection even
-   * with every button disabled.
-   */
-  await openBillingScreen(page);
-
-  await expect(page.getByText('Card details')).toHaveCount(0);
-  await expect(page.getByText('Secure checkout')).toHaveCount(0);
-  await expect(page.getByText('Due at checkout')).toHaveCount(0);
-  await expect(page.getByText('Entered on the next secure step')).toHaveCount(0);
-  await expect(page.getByText('Handled at checkout')).toHaveCount(0);
-
-  // And what it shows instead, so this cannot pass because the screen failed to
-  // render at all.
-  await expect(page.getByText('Managed outside the app').first()).toBeVisible();
+  for (const hash of [
+    '#/billing?plan=Ranch%20Ops&checkout=success',
+    '#/billing?plan=Professional&checkout=cancelled',
+    '#/subscribe',
+    '#/plans',
+    '#/subscriptions',
+  ]) {
+    await goToRoute(page, hash);
+    await expect(page).toHaveURL(/#\/billing(?:\?|$)/);
+    await expect(page.getByRole('heading', { name: 'Billing status', exact: true })).toBeVisible();
+    await expect(page.getByRole('heading', { name: 'Current workspace plan' })).toBeVisible();
+    await expect(page.getByText('Purchases and plan changes are not available in this app.')).toBeVisible();
+    await expect(page.getByRole('button', { name: /checkout|trial|choose|manage subscription/i })).toHaveCount(0);
+    await expect(page.getByRole('link', { name: /checkout|trial|choose|manage subscription/i })).toHaveCount(0);
+    await expect(page.getByText(/Secure checkout|Checkout cancelled|Due at checkout|Card details/i)).toHaveCount(0);
+  }
+  expect(billingRequests).toEqual([]);
 });
 
 test('the store build resolves marketing links to the public site, not dead paths', async ({ page }) => {
@@ -138,6 +117,22 @@ test('the store build resolves marketing links to the public site, not dead path
   // A bare "/pricing", "/privacy" or "/terms" cannot resolve inside the WebView
   // and reads as a broken link to App Review (Guideline 2.1).
   await expect(page.locator('a[href^="/pricing"], a[href^="/privacy"], a[href^="/terms"]')).toHaveCount(0);
+});
+
+test('the native privacy policy remains findable before and after ranch setup', async ({ page }) => {
+  await page.goto('/#/setup');
+  await expect(page.getByRole('heading', { name: 'Configure Workspace' })).toBeVisible();
+  const privacy = page.getByRole('link', { name: 'Privacy Policy', exact: true });
+  await expect(privacy).toBeVisible();
+  await expect(privacy).toHaveAttribute('href', /^https:\/\/[^/]+\/privacy$/);
+  const privacyUrl = await privacy.getAttribute('href');
+
+  await createWorkspace(page);
+  await goToRoute(page, '#/settings');
+  await expect(page.getByRole('heading', { name: 'Settings', exact: true })).toBeVisible();
+  expect(privacyUrl).not.toBeNull();
+  await expect(privacy).toBeVisible();
+  await expect(privacy).toHaveAttribute('href', privacyUrl!);
 });
 
 test('@auth the store build hides third-party sign-in, which cannot complete in a WebView', async ({ page }) => {
