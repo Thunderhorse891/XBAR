@@ -515,3 +515,58 @@ test('a newly adopted recovery grant clears only that screen’s previous failur
   f.render();
   assert.deepEqual(removed, ['reset-result-1'], 'unchanged grants do not repeatedly dismiss notifications');
 });
+
+test('breeding drawer never saves a deliberately cleared date and lets the user correct it', async () => {
+  const mutations = [];
+  const f = await drawer(
+    { action: 'Add Breeding Record' },
+    {
+      addBreedingEvent: (_horseId, event) => {
+        mutations.push(event);
+        return { ok: false, message: 'Synthetic save refused.' };
+      },
+    },
+  );
+  const dateField = () => nodes(f.tree, (n) => n.props.label === 'Date')[0];
+  assert.match(dateField().props.value, /^\d{4}-\d{2}-\d{2}$/);
+  field(f, 'Entry type', 'pregnancy-check');
+  field(f, 'Occurrence', 'completed');
+  field(f, 'Check result', 'open');
+  field(f, 'Title', 'Observed exam');
+  field(f, 'Notes', 'Recorded as open');
+  field(f, 'Date', '');
+  assert.equal(dateField().props.value, '');
+  await submit(f, 'Save Breeding Record');
+  f.render();
+  assert.equal(mutations.length, 0);
+  assert.equal(dateField().props.value, '');
+  assert.match(nodes(f.tree, (n) => n.props.role === 'alert')[0].props.children, /breeding record date/i);
+  assert.ok(!f.calls.some(([kind]) => kind === 'close' || kind === 'navigate'));
+
+  field(f, 'Date', '2026-10-01');
+  await submit(f, 'Save Breeding Record');
+  assert.equal(mutations.length, 1);
+  assert.equal(mutations[0].date, '2026-10-01');
+});
+
+test('breeding drawer sends the date already shown when the user leaves the default alone', async () => {
+  const mutations = [];
+  const f = await drawer(
+    { action: 'Add Breeding Record' },
+    {
+      addBreedingEvent: (_horseId, event) => {
+        mutations.push(event);
+        return { ok: false, message: 'Synthetic save refused.' };
+      },
+    },
+  );
+  field(f, 'Entry type', 'breeding');
+  field(f, 'Occurrence', 'completed');
+  field(f, 'Title', 'Observed cover');
+  field(f, 'Notes', 'Mare covered');
+  const shown = nodes(f.tree, (n) => n.props.label === 'Date')[0].props.value;
+  await submit(f, 'Save Breeding Record');
+  assert.match(shown, /^\d{4}-\d{2}-\d{2}$/);
+  assert.equal(mutations.length, 1);
+  assert.equal(mutations[0].date, shown);
+});

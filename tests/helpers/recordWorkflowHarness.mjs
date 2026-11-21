@@ -103,6 +103,7 @@ export async function renderRoute(name, changes = {}, params = '', options = {})
               code = 'export const useUiStore=(fn)=>fn(f.ui);useUiStore.getState=()=>f.ui;';
             else if (path === '@/lib/workspaceStorage') code = 'export const getWorkspacePersistReceipt=()=>f.receipt;';
             else if (path === '@/lib/recordsOwner') code = 'export const readRecordsOwner=()=>f.recordsOwner;';
+            else if (path === '@/hooks/useDayKey') code = 'export const useDayKey=()=>"2026-11-21";';
             else if (path.startsWith('@/hooks/'))
               code =
                 'export const useEffectiveSubscription=()=>f.state.subscription;export const useHorseMediaUrl=(_p,src)=>src;export const useHorsePhotoSelection=()=>({});export const useHorseArchiveActions=()=>({});';
