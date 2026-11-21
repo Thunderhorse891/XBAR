@@ -86,7 +86,8 @@ test('paid signup creates the cloud workspace before billing checkout', () => {
   assert.match(setup, /const cloudSaved = await persistCloudWorkspace\(\);/);
   assert.match(setup, /checkout needs the cloud workspace first/);
   assert.match(setup, /const cloudWorkspaceRequired = supabaseReady && status === 'signed-in' && !workspaceId;/);
-  assert.match(setup, /workspaceReady && !saving && !cloudSetupBlocked && !cloudWorkspaceRequired/);
+  // Automatic paid-plan navigation must also wait for the account-deletion result.
+  assert.match(setup, /workspaceReady && !saving && !cloudSetupBlocked && !cloudWorkspaceRequired && !deletingAccount/);
   assert.match(setup, /navigate\(postSetupPath, \{ replace: true \}\)/);
 });
 

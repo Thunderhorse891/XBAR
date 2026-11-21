@@ -290,6 +290,69 @@ async function removeIndexedValue(name: string) {
   }
 }
 
+export type WorkspaceDeletionSnapshot = {
+  indexed: string | null;
+  fallback: string | null;
+  marker: FallbackAhead;
+};
+
+export async function captureWorkspaceDeletionSnapshot(): Promise<WorkspaceDeletionSnapshot | null> {
+  const indexed =
+    typeof indexedDB === 'undefined' ? { value: null, failed: false } : await readIndexedValue(LEGACY_KEY);
+  const fallback = readLegacyValue(LEGACY_KEY);
+  const marker = fallbackAheadState(LEGACY_KEY);
+  if (indexed.failed || fallback.failed || marker === 'unknown') return null;
+  return { indexed: indexed.value ?? null, fallback: fallback.value, marker };
+}
+
+async function compareAndRemoveIndexedWorkspace(expected: string | null, authorized: () => boolean): Promise<boolean> {
+  if (typeof indexedDB === 'undefined') return expected === null && authorized();
+  const database = await openWorkspaceDatabase();
+  try {
+    return await new Promise<boolean>((resolve, reject) => {
+      const transaction = database.transaction(STORE_NAME, 'readwrite');
+      const store = transaction.objectStore(STORE_NAME);
+      const request = store.get(LEGACY_KEY);
+      let matched = false;
+      request.onsuccess = () => {
+        if (!authorized() || (request.result ?? null) !== expected) return;
+        matched = true;
+        if (expected !== null) store.delete(LEGACY_KEY);
+      };
+      request.onerror = () => reject(request.error);
+      transaction.oncomplete = () => resolve(matched);
+      transaction.onerror = () => reject(transaction.error);
+      transaction.onabort = () => reject(transaction.error);
+    });
+  } finally {
+    database.close();
+  }
+}
+
+/** Do not remove a replacement workspace written while deletion was pending. */
+export async function clearCapturedWorkspaceDeletion(
+  snapshot: WorkspaceDeletionSnapshot,
+  authorized: () => boolean,
+): Promise<boolean> {
+  try {
+    if (!authorized() || !(await compareAndRemoveIndexedWorkspace(snapshot.indexed, authorized))) return false;
+    const fallback = readLegacyValue(LEGACY_KEY);
+    if (
+      !authorized() ||
+      fallback.failed ||
+      fallback.value !== snapshot.fallback ||
+      fallbackAheadState(LEGACY_KEY) !== snapshot.marker
+    )
+      return false;
+    if (snapshot.fallback !== null) removeLegacyValue(LEGACY_KEY);
+    if (snapshot.marker === 'yes' && !markFallbackAhead(LEGACY_KEY, false)) return false;
+    const after = readLegacyValue(LEGACY_KEY);
+    return !after.failed && after.value === null && fallbackAheadState(LEGACY_KEY) === 'no';
+  } catch {
+    return false;
+  }
+}
+
 function parsePersistedState(value: string | null) {
   if (!value) return null;
 

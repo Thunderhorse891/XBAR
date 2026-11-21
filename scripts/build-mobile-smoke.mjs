@@ -27,6 +27,9 @@ const env = {
   VITE_ROUTER_MODE: 'hash',
   VITE_STATIC_TARGET: 'web',
   VITE_NATIVE_APP: 'true',
+  // The web checkout route would try to fetch its catalog if it mounted.
+  // The native smoke test aborts and records any such request.
+  VITE_MANAGED_BILLING_ENABLED: 'true',
   // Same defaults the real mobile build applies, so the smoke suite asserts
   // against the origins a release build would actually ship. Two of them: the
   // SPA lives at /app and the marketing pages at the site root, and pointing
@@ -38,18 +41,11 @@ const env = {
     ? {
         VITE_SUPABASE_URL: 'https://mobile-smoke.invalid',
         VITE_SUPABASE_ANON_KEY: 'mobile-smoke-anon-key',
-        VITE_MANAGED_BILLING_ENABLED: 'true',
       }
     : {
         VITE_SUPABASE_URL: '',
         VITE_SUPABASE_ANON_KEY: '',
         VITE_ALLOW_LOCAL_MODE: 'true',
-        // Payment links stand in for configured checkout without Supabase, so the
-        // billing screen would offer a real purchase button on web.
-        VITE_STRIPE_PAYMENT_LINK_STARTER: 'https://buy.stripe.com/test_starter',
-        VITE_STRIPE_PAYMENT_LINK_PROFESSIONAL: 'https://buy.stripe.com/test_professional',
-        VITE_STRIPE_PAYMENT_LINK_RANCH_OPS: 'https://buy.stripe.com/test_ranch_ops',
-        VITE_STRIPE_PAYMENT_LINK_ENTERPRISE: 'https://buy.stripe.com/test_enterprise',
       }),
 };
 

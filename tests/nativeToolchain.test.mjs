@@ -34,7 +34,7 @@ test('the UUID used by xcode rejects out-of-bounds name-based UUID writes', () =
 test('xcode retains CommonJS UUID generation and project parse/write compatibility', async () => {
   const directory = mkdtempSync(join(tmpdir(), 'xbar xcode '));
   try {
-    // Main does not track a native app. Exercise the project shipped in the
+    // Exercise the project shipped in the
     // pinned official CLI, using the CLI's own portable archive dependency.
     const cliPackage = require.resolve('@capacitor/cli/package.json');
     const cliRequire = createRequire(cliPackage);
@@ -60,5 +60,49 @@ test('xcode retains CommonJS UUID generation and project parse/write compatibili
     assert.equal(readFileSync(source, 'utf8'), original);
   } finally {
     rmSync(directory, { recursive: true, force: true });
+  }
+});
+
+test('the tracked Xcode project roundtrips and includes its app privacy resource and UI test target', () => {
+  const source = 'ios/App/App.xcodeproj/project.pbxproj';
+  const directory = mkdtempSync(join(tmpdir(), 'xbar tracked xcode '));
+  try {
+    const project = xcode.project(source).parseSync();
+    const output = join(directory, 'roundtrip.pbxproj');
+    writeFileSync(output, project.writeSync());
+    assert.deepEqual(xcode.project(output).parseSync().hash, project.hash);
+    const resources = project.hash.project.objects.PBXResourcesBuildPhase;
+    const appTarget = Object.values(project.hash.project.objects.PBXNativeTarget).find(
+      (target) => typeof target === 'object' && target.name === 'App',
+    );
+    assert.ok(appTarget);
+    const appResources = appTarget.buildPhases.map(({ value }) => resources[value]).find(Boolean);
+    assert.ok(appResources?.files.some(({ comment }) => comment === 'PrivacyInfo.xcprivacy in Resources'));
+    const scheme = readFileSync('ios/App/App.xcodeproj/xcshareddata/xcschemes/App.xcscheme', 'utf8');
+    assert.match(scheme, /<TestableReference skipped="NO">.*BlueprintName="AppUITests"/);
+  } finally {
+    rmSync(directory, { recursive: true, force: true });
+  }
+});
+
+test('the native app icon and splash reuse current brand bytes', () => {
+  assert.deepEqual(
+    readFileSync('ios/App/App/Assets.xcassets/AppIcon.appiconset/AppIcon-512@2x.png'),
+    readFileSync('public/brand/xbar-app-icon.png'),
+  );
+  assert.deepEqual(
+    readFileSync('ios/App/App/Assets.xcassets/Splash.imageset/xbar-report-horse.png'),
+    readFileSync('public/brand/xbar-report-horse.png'),
+  );
+});
+
+test('local tools, package metadata, and release CI all select one Node major', () => {
+  const read = (path) => readFileSync(new URL(path, import.meta.url), 'utf8');
+  const major = read('../.nvmrc').trim();
+  assert.equal(major, '24');
+  assert.equal(JSON.parse(read('../package.json')).engines.node, major + '.x');
+  assert.equal(JSON.parse(read('../package-lock.json')).packages[''].engines.node, major + '.x');
+  for (const workflow of ['ci', 'manual-test', 'recovery-db-verification', 'ios']) {
+    assert.match(read('../.github/workflows/' + workflow + '.yml'), /node-version-file: '\.nvmrc'/);
   }
 });

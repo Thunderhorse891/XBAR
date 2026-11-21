@@ -21,6 +21,7 @@ import { OwnerTestModeBar } from './components/OwnerTestModeBar';
 import { Toaster } from './components/ui/sonner';
 import { billingPath } from './lib/billingRoutes';
 import { buyerFollowUpPath } from './lib/buyerRoutes';
+import { isNativeApp } from './lib/nativePlatform';
 import { appBasePath, loginPath, passwordResetPath, usesHashRouting } from './lib/routeCanon';
 import { trackRuntimeEvent } from './lib/runtimeEvents';
 import { consumeRecoveryCallbackNavigation } from '@/lib/authCallbackArrival';
@@ -72,6 +73,7 @@ const Settings = lazy(() => import('./routes/Settings'));
 const SetupWorkspace = lazy(() => import('./routes/SetupWorkspace'));
 const SharedAccess = lazy(() => import('./routes/SharedAccess'));
 const Subscriptions = lazy(() => import('./routes/Subscriptions'));
+const NativeBillingStatus = lazy(() => import('./routes/NativeBillingStatus'));
 const Weather = lazy(() => import('./routes/Weather'));
 
 // One unique label per route: no two routes may share a user-facing name, so
@@ -300,7 +302,7 @@ export default function App() {
               }
             >
               <Route path="plans" element={<Navigate to={billingPath} replace />} />
-              <Route path="billing" element={<Subscriptions />} />
+              <Route path="billing" element={isNativeApp() ? <NativeBillingStatus /> : <Subscriptions />} />
               <Route path="subscriptions" element={<Navigate to={billingPath} replace />} />
               <Route
                 element={
