@@ -57,12 +57,6 @@ async function goToRoute(page: Page, hash: string) {
   }, hash);
 }
 
-async function openBillingScreen(page: Page) {
-  await createWorkspace(page);
-  await goToRoute(page, '#/billing');
-  await expect(page.getByRole('heading', { name: 'Billing status' })).toBeVisible({ timeout: 30_000 });
-}
-
 test('the native workflow checklist excludes the paid-plan step and keeps its own progress total', async ({ page }) => {
   await page.setViewportSize({ width: 390, height: 844 });
   await createWorkspace(page);
@@ -84,14 +78,16 @@ test('the native workflow checklist excludes the paid-plan step and keeps its ow
 });
 
 test('direct and legacy billing routes show plan status, not a web paywall or a checkout return', async ({ page }) => {
+  await page.setViewportSize({ width: 390, height: 844 });
   const billingRequests: string[] = [];
   await page.route(/\/api\/stripe(?:\/|$)|\/api\/billing(?:\/|$)|stripe\.com/, async (route) => {
     billingRequests.push(route.request().url());
     await route.abort();
   });
 
-  await openBillingScreen(page);
+  await createWorkspace(page);
   for (const hash of [
+    '#/billing',
     '#/billing?plan=Ranch%20Ops&checkout=success',
     '#/billing?plan=Professional&checkout=cancelled',
     '#/subscribe',
@@ -102,7 +98,13 @@ test('direct and legacy billing routes show plan status, not a web paywall or a 
     await expect(page).toHaveURL(/#\/billing(?:\?|$)/);
     await expect(page.getByRole('heading', { name: 'Billing status', exact: true })).toBeVisible();
     await expect(page.getByRole('heading', { name: 'Current workspace plan' })).toBeVisible();
-    await expect(page.getByText('Purchases and plan changes are not available in this app.')).toBeVisible();
+    const plan = page.locator('.panel').filter({ has: page.getByRole('heading', { name: 'Current workspace plan' }) });
+    await expect(
+      plan.getByText('Purchases and plan changes are not available in this app.', { exact: true }),
+    ).toBeVisible();
+    const status = plan.getByRole('status');
+    await expect(status).toBeVisible();
+    await expect(status).toHaveText('Starter');
     await expect(page.getByRole('button', { name: /checkout|trial|choose|manage subscription/i })).toHaveCount(0);
     await expect(page.getByRole('link', { name: /checkout|trial|choose|manage subscription/i })).toHaveCount(0);
     await expect(page.getByText(/Secure checkout|Checkout cancelled|Due at checkout|Card details/i)).toHaveCount(0);

@@ -19,10 +19,13 @@ export default function NativeBillingStatus() {
         title="Billing status"
         description="View the plan recorded for this workspace."
       />
-      <Panel title="Current workspace plan" description="Purchases and plan changes are not available in this app.">
-        <p className="panel__description" role="status">
-          {canShowPlan ? subscription.tier : 'Workspace plan not available yet.'}
-        </p>
+      <Panel title="Current workspace plan">
+        <div className="space-y-2">
+          <p className="stack-item__copy" role="status">
+            {canShowPlan ? subscription.tier : 'Workspace plan not available yet.'}
+          </p>
+          <p className="stack-item__copy">Purchases and plan changes are not available in this app.</p>
+        </div>
       </Panel>
     </>
   );
