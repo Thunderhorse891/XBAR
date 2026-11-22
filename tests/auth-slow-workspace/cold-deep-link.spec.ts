@@ -1,6 +1,13 @@
 import { fulfillRelationalFixture } from './relationalFixture.js';
 import { expect, test } from '@playwright/test';
-import { blockWebfonts, readStoredAccessToken, sessionLink, stubGoTrueUser } from '../auth-smoke/support.js';
+import {
+  blockWebfonts,
+  readStoredAccessToken,
+  RECOVERY_EMAIL,
+  refreshedSession,
+  sessionLink,
+  stubGoTrueUser,
+} from '../auth-smoke/support.js';
 
 blockWebfonts();
 
@@ -109,4 +116,41 @@ test('a cold deep link waits for the cloud instead of diverting through setup', 
     '/app/setup',
   );
   expect(new URL(page.url()).pathname).toBe('/app/settings');
+});
+
+test('ordinary password sign-in opens the returning workspace without detouring to billing', async ({ page }) => {
+  const workspaceId = '7f1d0c44-0000-4000-8000-0000000000ab';
+  const updatedAt = '2026-09-10T12:00:00Z';
+  await stubGoTrueUser(page);
+  await page.route('**/auth/v1/token*', (route) => route.fulfill({ json: refreshedSession() }));
+  await page.route('**/rest/v1/**', (route) => {
+    const table = new URL(route.request().url()).pathname.split('/').pop();
+    if (table === 'workspaces') return fulfillRelationalFixture(route, { json: { id: workspaceId } });
+    return fulfillRelationalFixture(route, {
+      json:
+        table === 'workspace_profiles'
+          ? {
+              payload: { setupCompleteAt: updatedAt, ranchName: 'Returning Ranch', businessName: 'Fixture' },
+              updated_at: updatedAt,
+            }
+          : table === 'workspace_subscription_profiles'
+            ? { payload: {}, updated_at: updatedAt }
+            : [],
+    });
+  });
+  const navigations: string[] = [];
+  page.on('framenavigated', (frame) => {
+    if (frame === page.mainFrame()) navigations.push(new URL(frame.url()).pathname);
+  });
+  await page.goto('/app/login');
+  await page.getByLabel('Email or User ID').fill(RECOVERY_EMAIL);
+  await page.getByLabel('Password', { exact: true }).fill('Existing123');
+  await page.getByRole('button', { name: 'Sign In', exact: true }).click();
+  await expect(page).toHaveURL(/\/app$/);
+  await expect(page.getByRole('heading', { name: 'Get your horse records in order.' })).toBeVisible({
+    timeout: 20_000,
+  });
+  await expect(page.getByText('Returning Ranch · Getting started', { exact: true })).toBeVisible();
+  expect(navigations).not.toContain('/app/billing');
+  expect(navigations).not.toContain('/app/setup');
 });

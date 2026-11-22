@@ -17,7 +17,7 @@ for (const password of ['Old123', 'Old1234']) {
     await page.getByLabel('Password', { exact: true }).fill(password);
     await expect(page.getByRole('button', { name: 'Sign In', exact: true })).toBeEnabled();
     await page.getByRole('button', { name: 'Sign In', exact: true }).click();
-    await expect(page).toHaveURL(/\/app\/billing(?:\?|$)/);
+    await expect(page).toHaveURL(/\/app\/setup$/);
     expect(submitted).toMatchObject({ email: RECOVERY_EMAIL, password });
     await expect.poll(() => readStoredAccessToken(page)).not.toBe('');
   });
@@ -61,3 +61,17 @@ test('switching modes preserves the eight-character minimum for new accounts', a
   await page.getByLabel('Password', { exact: true }).fill('Old1234');
   await expect(page.getByRole('button', { name: 'Sign In', exact: true })).toBeEnabled();
 });
+
+for (const [entry, arrival] of [
+  ['/app/login?plan=Professional', /\/app\/billing\?plan=Professional$/],
+  ['/app/billing', /\/app\/billing$/],
+] as const) {
+  test(`sign-in preserves the explicit purchase destination from ${entry}`, async ({ page }) => {
+    await page.route('**/auth/v1/token*', (route) => route.fulfill({ json: refreshedSession() }));
+    await page.goto(entry);
+    await page.getByLabel('Email or User ID').fill(RECOVERY_EMAIL);
+    await page.getByLabel('Password', { exact: true }).fill('Existing123');
+    await page.getByRole('button', { name: 'Sign In', exact: true }).click();
+    await expect(page).toHaveURL(arrival);
+  });
+}

@@ -68,7 +68,7 @@ export default function Login() {
     // A store build has no purchase path, so sending someone to billing the
     // moment they sign in is an arrival at a paywall they cannot act on.
     if (!canPresentPurchaseFlow()) return '/';
-    return selectedPlan ? billingPathForTier(selectedPlan) : billingPath;
+    return selectedPlan ? billingPathForTier(selectedPlan) : '/';
   }, [authMode, location.state, selectedPlan, workspaceSetupPath]);
   const supabaseReady = isSupabaseConfigured();
   // A button per provider this deployment has actually enabled in Supabase.
