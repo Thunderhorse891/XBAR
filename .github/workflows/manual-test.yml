@@ -1,35 +1,123 @@
-name: Manual verification
-
-# On-demand full verification: lint, format, typecheck, and unit tests.
-# Useful for re-running the gate against a branch without opening a PR.
+name: iOS native startup A/B (diagnostic only)
 on:
   workflow_dispatch:
 
+permissions:
+  contents: read
+concurrency:
+  group: xbar-ios-ab-${{ github.ref }}
+  cancel-in-progress: false
+
 jobs:
-  verify:
-    runs-on: ubuntu-latest
-    timeout-minutes: 20
+  native-startup:
+    if: github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/qa/ios-startup-ab-20261122' && github.event.repository.private == false
+    runs-on: macos-26-intel
+    timeout-minutes: 35
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - variant: good
+            revision: cbdc109bc40e533be11ce7ff78c159d812314ba2
+            tree: 5e266f84fb8aba2a48d400da1232f47a8fc14bfa
+          - variant: bad
+            revision: f58655c27a36d97dffbebbb8f774a48745e3ce71
+            tree: 539176ce23826f773a52daf7542c104309764a0c
+    env:
+      VITE_SUPABASE_URL: https://native-ci.invalid
+      VITE_SUPABASE_ANON_KEY: native-ci-synthetic-key
+      VITE_API_BASE_URL: https://native-ci.invalid
+      VITE_ALLOW_LOCAL_MODE: 'false'
+      VITE_MANAGED_BILLING_ENABLED: 'true'
+      VITE_SENTRY_DSN: ''
+    defaults:
+      run:
+        working-directory: source
     steps:
-      - name: Checkout
-        uses: actions/checkout@v7
-
-      - name: Setup Node
-        uses: actions/setup-node@v7
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0
         with:
-          node-version: 24
-          cache: npm
-
-      - name: Install dependencies
-        run: npm ci
-
-      - name: Lint
-        run: npm run lint
-
-      - name: Format check
-        run: npm run format:check
-
-      - name: Typecheck
-        run: npx tsc --noEmit
-
-      - name: Run tests
-        run: npm test
+          path: harness
+          persist-credentials: false
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0
+        with:
+          ref: ${{ matrix.revision }}
+          path: source
+          persist-credentials: false
+      - name: Verify the exact tested checkout
+        env:
+          EXPECTED_REVISION: ${{ matrix.revision }}
+          EXPECTED_TREE: ${{ matrix.tree }}
+        run: |
+          set -euo pipefail
+          test "$(git rev-parse HEAD)" = "$EXPECTED_REVISION"
+          test "$(git rev-parse 'HEAD^{tree}')" = "$EXPECTED_TREE"
+          git log -1 --format='%H %T'
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020
+        with:
+          node-version-file: source/.nvmrc
+      - name: Require Xcode 26 and iOS 26 SDK
+        timeout-minutes: 2
+        run: |
+          set -euo pipefail
+          xcode_path=$(find /Applications -maxdepth 1 -name 'Xcode_26*.app' | sort -V | tail -1)
+          test -n "$xcode_path"
+          sudo xcode-select -s "$xcode_path/Contents/Developer"
+          xcodebuild -version
+          xcrun --sdk iphoneos --show-sdk-version | grep '^26\.'
+      - name: Build synthetic web assets and instrument disposable output only
+        timeout-minutes: 6
+        run: |
+          set -euo pipefail
+          npm ci
+          node --test ../harness/.github/xbar-ios-ab/startup.test.mjs
+          node scripts/build-mobile.mjs
+          python3 ../harness/.github/xbar-ios-ab/install-diagnostic.py dist/index.html --synthetic-simulator-only
+          npx --no-install cap sync ios
+          node scripts/check-ios-project.mjs
+          git diff --exit-code -- ios/App/AppUITests
+      - name: Select the matching iOS Simulator
+        run: |
+          set -euo pipefail
+          # Match the installed SDK instead of selecting the first (oldest)
+          # iOS 26 runtime from the image. This runner is ephemeral; use its
+          # prepared device instead of triggering another first-boot migration.
+          export IOS_SIMULATOR_SDK=$(xcrun --sdk iphonesimulator --show-sdk-version)
+          device_id=$(xcrun simctl list -j | node scripts/select-ios-simulator.mjs "$IOS_SIMULATOR_SDK")
+          echo "IOS_SIMULATOR_ID=$device_id" >> "$GITHUB_ENV"
+          echo "Simulator SDK: $IOS_SIMULATOR_SDK"
+          echo "Selected simulator: $device_id"
+          xcrun simctl list devices available
+      - name: Build the simulator app and XCTest runner
+        timeout-minutes: 10
+        run: |
+          # Compile while the selected device is still shut down. Booting first
+          # makes Swift compilation compete with the simulator's system apps;
+          # run 36457704210 exhausted this build step before XCTest could start.
+          xcodebuild -project ios/App/App.xcodeproj -scheme App -configuration Debug \
+            -destination "platform=iOS Simulator,id=$IOS_SIMULATOR_ID" -derivedDataPath ios/DerivedData \
+            CODE_SIGN_IDENTITY=- build-for-testing
+      - name: Boot the matching iOS Simulator
+        timeout-minutes: 12
+        run: |
+          set -euo pipefail
+          xcrun simctl boot "$IOS_SIMULATOR_ID"
+          open -a Simulator
+          # Run 37069276314 finished first-boot OS migration at 6m20s, beyond
+          # the old five-minute process deadline. Bound infrastructure startup
+          # separately; a successful boot and the unchanged XCTest are required.
+          python3 -c 'import subprocess,sys; subprocess.run(["xcrun","simctl","bootstatus",sys.argv[1],"-b"],check=True,timeout=600)' "$IOS_SIMULATOR_ID"
+      - name: Exercise the real WKWebView in iOS Simulator
+        timeout-minutes: 7
+        run: |
+          # Bound any later guest-log query to this test attempt, excluding boot.
+          date -u '+%Y-%m-%d %H:%M:%S+0000' > "$RUNNER_TEMP/xbar-xctest-start.txt"
+          xcodebuild -project ios/App/App.xcodeproj -scheme App -configuration Debug \
+            -destination "platform=iOS Simulator,id=$IOS_SIMULATOR_ID" -derivedDataPath ios/DerivedData \
+            -parallel-testing-enabled NO -resultBundlePath ios/native-tests.xcresult \
+            -test-timeouts-enabled YES -maximum-test-execution-time-allowance 180 \
+            CODE_SIGN_IDENTITY=- test-without-building
+      - name: Report bounded sanitized startup markers inline
+        if: always()
+        timeout-minutes: 2
+        run: |
+          python3 ../harness/.github/xbar-ios-ab/capture.py
