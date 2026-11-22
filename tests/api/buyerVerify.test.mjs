@@ -43,8 +43,13 @@ test('summarizeSealedPacket reports unanchored when there is no server seal', ()
   });
 });
 
-test('summarizeSealedPacket returns the seal and buyer-facing facts', () => {
-  const summary = summarizeSealedPacket(sealedRow());
+test('a legacy delivery row with a server label is not protected issuance evidence', () => {
+  assert.deepEqual(summarizeSealedPacket(sealedRow()), { found: true, anchored: false });
+});
+
+test('summarizeSealedPacket returns protected issuance and buyer-facing facts', () => {
+  const row = sealedRow();
+  const summary = summarizeSealedPacket({ packet_id: row.packet_id, seal: row.payload.seal });
   assert.equal(summary.found, true);
   assert.equal(summary.anchored, true);
   assert.equal(summary.seal.anchor, 'server');
@@ -57,9 +62,9 @@ test('summarizeSealedPacket returns the seal and buyer-facing facts', () => {
   assert.deepEqual(summary.facts.documents, [{ type: 'Coggins', title: 'Coggins 2026' }]);
 });
 
-test('summarizeSealedPacket tolerates a stringified jsonb payload', () => {
+test('summarizeSealedPacket tolerates a stringified protected jsonb seal', () => {
   const row = sealedRow();
-  const stringified = { ...row, payload: JSON.stringify(row.payload) };
+  const stringified = { packet_id: row.packet_id, seal: JSON.stringify(row.payload.seal) };
   const summary = summarizeSealedPacket(stringified);
   assert.equal(summary.anchored, true);
   assert.equal(summary.facts.horseName, 'Docs Smokin Gun');
@@ -138,7 +143,7 @@ test('summarizeSealedPacket exposes the sealed seller identity', async () => {
     sealedAt: '2026-08-06T12:00:00.000Z',
     sellerIdentity: sellerIdentity(workspace),
   });
-  const summary = summarizeSealedPacket({ payload: { seal } });
+  const summary = summarizeSealedPacket({ packet_id: 'packet-xyz', seal });
   assert.equal(summary.facts.sellerBusinessName, 'Rocking R');
   assert.equal(summary.facts.sellerRanchName, 'Rocking R Ranch');
 });
@@ -160,7 +165,7 @@ test('a quick-start workspace seals and exposes no invented presenter', async ()
     sealedAt: '2026-08-06T12:00:00.000Z',
     sellerIdentity: sellerIdentity(workspace),
   });
-  const summary = summarizeSealedPacket({ payload: { seal } });
+  const summary = summarizeSealedPacket({ packet_id: 'packet-xyz', seal });
   assert.equal(summary.facts.sellerBusinessName, '');
   assert.equal(summary.facts.sellerRanchName, '');
 });

@@ -347,3 +347,22 @@
   width: 100%;
   flex: none;
 }
+
+.clean-entry-shell--brand-auth .clean-auth-footer a,
+.clean-entry-shell--brand-auth .clean-auth-footer button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 44px;
+  min-height: 44px;
+  padding: 4px;
+  font-size: 14px;
+}
+
+.clean-entry-shell--brand-auth .clean-auth-footer nav {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+}

@@ -113,3 +113,44 @@ test('planned care remains due after the day passes and clears only after operat
   await page.reload();
   expect(await status()).toBe('clear');
 });
+
+test('dedicated care form warns instead of confirming a refused device save', async ({ page }) => {
+  await bootstrapWorkspace(page);
+  await seedHorse(page, 'Refused Care Horse');
+  const horseId = new URL(page.url()).pathname.split('/').at(-1)!;
+  await page.goto(`/app/medical?horse=${horseId}&type=Deworming`);
+  await page.getByLabel('Event title', { exact: true }).fill('Refused deworming fixture');
+  await page.getByLabel('Care note', { exact: true }).fill('Synthetic persistence refusal.');
+  await page.evaluate(() => {
+    const transaction = IDBDatabase.prototype.transaction;
+    IDBDatabase.prototype.transaction = function (stores, mode, options) {
+      if (this.name === 'xbar-workspace' && mode === 'readwrite') {
+        throw new DOMException('Synthetic device write refusal', 'QuotaExceededError');
+      }
+      return transaction.call(this, stores, mode, options);
+    };
+    const setItem = Storage.prototype.setItem;
+    Storage.prototype.setItem = function (key: string, value: string) {
+      if (key === 'xbar-live-workspace') throw new DOMException('Synthetic fallback refusal', 'QuotaExceededError');
+      return setItem.call(this, key, value);
+    };
+  });
+  await page.getByRole('button', { name: 'Save care event', exact: true }).click();
+  await expect(page.getByText('Device save not confirmed', { exact: true })).toBeVisible();
+  await expect(page.getByText('Medical event added', { exact: true })).toHaveCount(0);
+  await expect(page.getByText(/Keep XBAR open and check device storage/)).toBeVisible();
+  await expect(page.getByLabel('Care note', { exact: true })).toHaveValue('');
+  const count = () =>
+    page.evaluate(async (id) => {
+      const storePath = '/src/store/useXbarStore.ts';
+      const { useXbarStore } = await import(/* @vite-ignore */ storePath);
+      return useXbarStore
+        .getState()
+        .horses.find((horse: { id: string }) => horse.id === id)
+        ?.medicalTimeline.filter((event: { title: string }) => event.title === 'Refused deworming fixture').length;
+    }, horseId);
+  expect(await count()).toBe(1);
+  await page.reload();
+  await expect(page.getByRole('button', { name: 'Save care event', exact: true })).toBeVisible();
+  expect(await count()).toBe(0);
+});

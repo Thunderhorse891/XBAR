@@ -3,6 +3,7 @@ import { readJsonBody, sendJson, getQuery } from './_lib/http.js';
 import { requireWorkspaceAccess } from './_lib/supabase-admin.js';
 import { requireRoleCapability } from './_lib/permissions.js';
 import {
+  SALE_PACKET_WINDOW_DAYS,
   checkSalePacketCapacity,
   checkStorageCapacity,
   getWorkspaceEntitlements,
@@ -344,31 +345,42 @@ export default async function handler(req, res) {
       return sendJson(res, 502, { ok: false, message: `Failed to store sale packet: ${uploadError.message}` });
     }
 
-    const { error: recordError } = await supabase.from('sale_packets').upsert({
-      workspace_id: workspaceId,
-      packet_id: packetId,
-      horse_id: horseId,
-      created_by_user_id: user.id,
-      packet_pdf_path: packetPath,
-      watermark_text: watermarkText,
-      shared_with_email: buyerEmail,
-      document_ids: includedDocs.map((doc) => doc.document_id),
-      status: 'ready',
-      size_bytes: packetSizeBytes,
-      payload: { buyerName, unavailable, attachmentCount: attachments.length, seal },
+    const { data: issued, error: recordError } = await supabase.rpc('xbar_issue_sale_packet', {
+      p_delivery: {
+        workspace_id: workspaceId,
+        packet_id: packetId,
+        horse_id: horseId,
+        created_by_user_id: user.id,
+        packet_pdf_path: packetPath,
+        watermark_text: watermarkText,
+        shared_with_email: buyerEmail,
+        document_ids: includedDocs.map((doc) => doc.document_id),
+        size_bytes: packetSizeBytes,
+        payload: { buyerName, unavailable, attachmentCount: attachments.length },
+      },
+      p_seal: seal,
     });
-    if (recordError) {
-      // Row rejected after the object was written (e.g. the storage trigger on a
-      // concurrent request that passed the preflight). Delete the orphan and
-      // report the failure instead of signing a URL to an unrecorded packet.
-      await supabase.storage.from(PACKET_BUCKET).remove([packetPath]);
-      const overLimit = /storage limit/i.test(recordError.message);
+    if (recordError || issued !== true) {
+      // A definitive PostgreSQL or missing-RPC rejection cannot have committed.
+      // An ambiguous transport response might have committed; do not delete a
+      // possibly recorded PDF or send its signed link without confirmation.
+      const errorCode = recordError?.code || '';
+      const rejected = /^(?:22|23|42|P0)[0-9A-Z]{3}$/.test(errorCode) || errorCode === 'PGRST202';
+      if (rejected) await supabase.storage.from(PACKET_BUCKET).remove([packetPath]);
+      if (errorCode === 'P0001' && recordError?.details === 'xbar_sale_packet_allowance_reached') {
+        return sendJson(res, 403, {
+          ok: false,
+          code: 'sale_packet_limit_reached',
+          message: `This packet would exceed the plan's sale packet allowance per ${SALE_PACKET_WINDOW_DAYS} days. The allowance renews as earlier packets pass ${SALE_PACKET_WINDOW_DAYS} days, and reopening or resending a packet never uses it.`,
+        });
+      }
+      const overLimit = /storage limit/i.test(recordError?.message || '');
       return sendJson(res, overLimit ? 403 : 502, {
         ok: false,
         code: overLimit ? 'storage_limit_reached' : undefined,
         message: overLimit
           ? `This sale packet would exceed the plan's ${entitlements.limits.storageLimitGb} GB storage limit. Upgrade to continue.`
-          : `Failed to record sale packet: ${recordError.message}`,
+          : `Failed to record sale packet: ${recordError?.message || 'Issuance was not confirmed.'}`,
       });
     }
 

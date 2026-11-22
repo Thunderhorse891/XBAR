@@ -12,8 +12,10 @@ async function setup(page: Page) {
   await page.evaluate(async () => {
     const storePath = '/src/store/useXbarStore.ts';
     const helpersPath = '/src/store/xbarStoreHelpers.ts';
+    const storagePath = '/src/lib/workspaceStorage.ts';
     const { useXbarStore } = await import(storePath);
     const { createHorseRecord } = await import(helpersPath);
+    const { didCommitWorkspaceWriteAfter, getWorkspacePersistReceipt } = await import(storagePath);
     const state = useXbarStore.getState();
     const horse = (id: string, name: string, segment: string) => ({
       ...createHorseRecord(
@@ -44,6 +46,7 @@ async function setup(page: Page) {
       savedListing: false,
       shareReady: false,
     });
+    const previousReceipt = getWorkspacePersistReceipt();
     useXbarStore.setState({
       horses: [horse('young', 'Young Horse', 'Young Stock'), horse('mare', 'Mare Horse', 'Broodmare')],
       documents: [],
@@ -51,6 +54,11 @@ async function setup(page: Page) {
       expenseReceipts: [],
       salesLeads: [lead('future', 'Future Buyer', '2099-01-01'), lead('due', 'Due Buyer', '2020-01-01')],
     });
+    // setState updates memory immediately; the workspace survives a real
+    // navigation only after its exact IndexedDB write (or fallback) succeeds.
+    if (!(await didCommitWorkspaceWriteAfter(previousReceipt))) {
+      throw new Error('Care task fixture did not persist before browser navigation.');
+    }
     history.pushState({}, '', '/app/today');
     dispatchEvent(new PopStateEvent('popstate'));
   });
@@ -92,6 +100,15 @@ test('Today excludes future buyers and preserves selected group across reload an
   await expect(page.getByText(/Finish ownership documents.*Mare Horse/i)).toHaveCount(0);
   await page.reload();
   await expect(page.getByRole('button', { name: 'Clear group filter', exact: true })).toBeVisible();
+  const restoredHorses = await page.evaluate(async () => {
+    const path = '/src/store/useXbarStore.ts';
+    const { useXbarStore } = await import(path);
+    return useXbarStore.getState().horses.map(({ id, segment }: { id: string; segment: string }) => ({ id, segment }));
+  });
+  expect(restoredHorses).toEqual([
+    { id: 'young', segment: 'Young Stock' },
+    { id: 'mare', segment: 'Broodmare' },
+  ]);
   await page.getByRole('button', { name: 'Clear group filter', exact: true }).click();
   await expect(page.getByText(/Finish ownership documents.*Mare Horse/i)).toBeVisible();
   await page.goBack();

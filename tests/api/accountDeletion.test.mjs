@@ -1056,3 +1056,101 @@ test('client preserves the recovery operation ID for an unknown deletion outcome
   );
   assert.equal(result.status, 0, result.stderr);
 });
+
+test('a completed deletion cannot sign out the account that replaced its caller', async () => {
+  const { spawnSync } = await import('node:child_process');
+  const result = spawnSync(
+    process.execPath,
+    [
+      '--import=tsx',
+      '--input-type=module',
+      '-e',
+      `
+    import assert from 'node:assert/strict';
+    import {supabaseConfig} from './src/lib/platformConfig.ts';
+    import {useCloudStore} from './src/store/useCloudStore.ts';
+    supabaseConfig.url='https://synthetic.invalid';supabaseConfig.anonKey='fixture';
+    const old={access_token:'old',user:{id:'old'}};
+    const replacement={access_token:'new',user:{id:'new'}};
+    useCloudStore.setState({session:old,status:'signed-in',workspaceId:'old-workspace'});
+    const requests=[];
+    globalThis.fetch=async(url,options)=>{
+      requests.push([url,options.headers.Authorization]);
+      useCloudStore.setState({session:replacement,status:'signed-in',workspaceId:'new-workspace'});
+      return new Response(JSON.stringify({ok:true,storageCleanupComplete:true}),{status:200});
+    };
+    const response=await useCloudStore.getState().deleteAccount('synthetic@example.invalid','old');
+    assert.equal(response.ok,true);
+    assert.equal(response.deviceSessionCleared,false);
+    assert.equal(useCloudStore.getState().session,replacement);
+    assert.equal(useCloudStore.getState().workspaceId,'new-workspace');
+    assert.equal(requests.length,1);
+    assert.equal(requests[0][1],'Bearer old');
+  `,
+    ],
+    { encoding: 'utf8' },
+  );
+  assert.equal(result.status, 0, result.stderr);
+});
+
+test('account deletion retires only the captured local credential and does not run ambient SDK sign-out', async () => {
+  const { spawnSync } = await import('node:child_process');
+  const result = spawnSync(
+    process.execPath,
+    [
+      '--import=tsx',
+      '--input-type=module',
+      '-e',
+      `
+    import assert from 'node:assert/strict';
+    import {supabaseConfig} from './src/lib/platformConfig.ts';
+    import {authStorageAdapter,readAuthStorage} from './src/lib/authStorage.ts';
+    import {authStorageKey,getSupabaseClient} from './src/lib/supabaseClient.ts';
+    import {useCloudStore} from './src/store/useCloudStore.ts';
+    supabaseConfig.url='https://synthetic.invalid';supabaseConfig.anonKey='fixture';
+    await getSupabaseClient().auth.getSession();
+    const future=Math.floor(Date.now()/1000)+3600;
+    const old={access_token:'old',refresh_token:'old-refresh',expires_at:future,user:{id:'old'}};
+    const replacement={access_token:'new',refresh_token:'new-refresh',expires_at:future,user:{id:'new'}};
+    const key=authStorageKey();
+    const setOld=()=>{
+      authStorageAdapter.setItem(key,JSON.stringify(old));
+      useCloudStore.setState({session:old,status:'signed-in',workspaceId:'old-workspace',autosaveReady:true,autosaveUnlocked:true});
+    };
+    for (const scenario of ['stale-confirmation','already-cached-replacement','replacement-in-storage','same-session']) {
+      setOld();
+      if (scenario==='already-cached-replacement') authStorageAdapter.setItem(key,JSON.stringify(replacement));
+      const requests=[];
+      globalThis.fetch=async (url,options)=>{
+        requests.push([url,options.headers.Authorization]);
+        if (scenario==='replacement-in-storage') authStorageAdapter.setItem(key,JSON.stringify(replacement));
+        return new Response(JSON.stringify({ok:true,storageCleanupComplete:true}),{status:200});
+      };
+      const outcome=await useCloudStore.getState().deleteAccount('old@example.invalid',scenario==='stale-confirmation'?'new':'old');
+      if(scenario==='stale-confirmation'||scenario==='already-cached-replacement'){
+        assert.equal(outcome.ok,false);
+        assert.equal(requests.length,0);
+        assert.equal(useCloudStore.getState().session,old);
+        continue;
+      }
+      assert.equal(outcome.ok,true);
+      assert.equal(requests.length,1);
+      assert.equal(requests[0][1],'Bearer old');
+      if(scenario==='replacement-in-storage'){
+        assert.equal(outcome.deviceSessionCleared,false);
+        assert.equal(readAuthStorage(key),JSON.stringify(replacement));
+        assert.equal(useCloudStore.getState().session,old);
+      } else {
+        assert.equal(outcome.deviceSessionCleared,true);
+        assert.equal(readAuthStorage(key),null);
+        assert.equal(useCloudStore.getState().session,null);
+        assert.equal(useCloudStore.getState().workspaceId,'');
+        assert.equal(useCloudStore.getState().autosaveUnlocked,false);
+      }
+    }
+  `,
+    ],
+    { encoding: 'utf8' },
+  );
+  assert.equal(result.status, 0, result.stderr);
+});

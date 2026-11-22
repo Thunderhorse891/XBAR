@@ -1,7 +1,9 @@
 import { useMemo } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { Link, useNavigate } from 'react-router-dom';
 import { CalendarPlus, Plus, Sprout } from 'lucide-react';
 import { ActionButton, Card, PageHead, StatusChip } from '@/components/saas';
+import { buildMareBreedingState, chronologicalBreedingEvents } from '@/lib/breedingIntelligence';
+import { useDayKey } from '@/hooks/useDayKey';
 import { useUiStore } from '@/store/useUiStore';
 import { useXbarStore } from '@/store/useXbarStore';
 
@@ -15,27 +17,31 @@ export default function BreedingFoaling() {
     [horses],
   );
 
+  const dayKey = useDayKey();
   const rows = useMemo(
     () =>
       mares.map((m) => {
-        // Newest event first (addBreedingEvent prepends) reflects current status.
-        const latest = m.breedingTimeline[0];
-        const statusText = latest ? `${latest.status ?? ''} ${latest.title ?? ''}`.toLowerCase() : '';
-        // Only a confirmed, still-active pregnancy counts as in foal — exclude
-        // foaling outcomes and open/negative checks (both contain "foal").
-        const inFoal =
-          /(in foal|confirmed|pregnan|positive)/.test(statusText) &&
-          !/(not in foal|open|foaled|lost|slipped|negative|weaned)/.test(statusText);
+        // Only dated, occurred evidence can describe the current breeding state.
+        const latest = chronologicalBreedingEvents(m.breedingTimeline)[0];
+        // In foal is decided where the Breeding screen decides it: the recorded
+        // result of the latest non-pending check (audit F07). This page used to
+        // keep its own word match over the latest title, so "Pregnancy check"
+        // read as in foal whatever the result said.
+        const state = buildMareBreedingState(m);
+        const inFoal = state.status === 'in-foal' || state.status === 'near-term';
         return {
           id: m.id,
           mare: m.name,
-          stage: latest?.status ?? latest?.title ?? 'No records',
+          stage: latest?.title ?? 'No occurred records',
           due: latest?.date ?? '—',
           inFoal,
+          statusLabel: state.statusLabel,
           hasRecords: m.breedingTimeline.length > 0,
         };
       }),
-    [mares],
+    // Re-evaluate due dates when the local day changes, even without new records.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [mares, dayKey],
   );
 
   const confirmedInFoal = rows.filter((r) => r.inFoal).length;
@@ -79,6 +85,7 @@ export default function BreedingFoaling() {
         subtitle="Cover dates, preg checks, foaling windows, and registration — tracked from pairing to foal."
         actions={
           <>
+            <ActionButton onClick={() => navigate('/breeding')}>Open breeding records</ActionButton>
             <ActionButton
               icon={<CalendarPlus size={15} />}
               onClick={() => openQuickCreate({ action: 'Add Breeding Record' })}
@@ -119,13 +126,15 @@ export default function BreedingFoaling() {
           </thead>
           <tbody>
             {rows.map((r) => (
-              <tr key={r.id} onClick={() => navigate(`/horses/${r.id}`)}>
-                <td style={{ fontWeight: 600 }}>{r.mare}</td>
+              <tr key={r.id}>
+                <td style={{ fontWeight: 600 }}>
+                  <Link to={`/horses/${r.id}`}>{r.mare}</Link>
+                </td>
                 <td className="xs-muted">{r.stage}</td>
                 <td className="xs-muted">{r.due}</td>
                 <td>
                   <StatusChip tone={r.inFoal ? 'success' : r.hasRecords ? 'info' : 'neutral'}>
-                    {r.inFoal ? 'In foal' : r.hasRecords ? 'In program' : 'No records'}
+                    {r.statusLabel}
                   </StatusChip>
                 </td>
               </tr>

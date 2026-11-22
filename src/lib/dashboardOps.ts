@@ -1,15 +1,6 @@
-import type {
-  DocumentRecord,
-  ExpenseCategory,
-  ExpenseReceipt,
-  HorseRecord,
-  MedicalRecordDetails,
-  OwnershipRecord,
-  TimelineEvent,
-} from '../types/xbar.js';
-import { documentExamTime } from './documentCurrency.js';
-import { addLocalCalendarDays, localCalendarDay, localIsoDate } from './format.js';
-import { careDay } from './medicalEvidence.js';
+import type { DocumentRecord, ExpenseCategory, ExpenseReceipt, HorseRecord, OwnershipRecord } from '../types/xbar.js';
+import { projectCareEvidence } from './careProjection.js';
+import { localIsoDate } from './format.js';
 
 export type CareSignalStatus = 'due' | 'watch' | 'clear';
 
@@ -52,8 +43,6 @@ export type BudgetSummary = {
   latestReceipts: ExpenseReceipt[];
 };
 
-const dayMs = 24 * 60 * 60 * 1000;
-
 function parseDate(value?: string) {
   if (!value?.trim()) {
     return null;
@@ -63,118 +52,15 @@ function parseDate(value?: string) {
   return Number.isNaN(parsed.getTime()) ? null : parsed;
 }
 
-function diffDays(from: Date, to: Date) {
-  return Math.round((localCalendarDay(to) - localCalendarDay(from)) / dayMs);
-}
-
 function buildMonthKey(date: Date) {
   return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}`;
 }
 
-/*
- * Care is what was done to the horse, on the day it was done (audit F06).
- *
- * The board used to read worming and dental dates from purchase receipts, so
- * buying a wormer marked the horse wormed -- even with a note saying it was
- * never given -- while a deworming logged through Add Health Record changed
- * nothing. It now reads the horse's own medical timeline: the latest Deworming
- * or Dental entry dated today or earlier. A receipt is spending, not care.
- */
-const CARE_EVENT: Record<'wormer' | 'dental', { status: string; recordType: MedicalRecordDetails['recordType'] }> = {
-  wormer: { status: 'Deworming', recordType: 'deworming' },
-  dental: { status: 'Dental', recordType: 'dental' },
-};
-
-function latestCompletedCare(horse: HorseRecord, kind: 'wormer' | 'dental', now: Date): TimelineEvent | undefined {
-  const match = CARE_EVENT[kind];
-  const today = localIsoDate(now);
-  return (horse.medicalTimeline ?? [])
-    .filter((event) => {
-      const details = event.details as MedicalRecordDetails | undefined;
-      const isKind = event.status === match.status || details?.recordType === match.recordType;
-      // A date still ahead is a plan, not care given; one that is not a real
-      // calendar day is no date at all.
-      const day = careDay(event.date);
-      return isKind && event.completionState === 'completed' && day !== null && day <= today;
-    })
-    .sort((left, right) => (left.date < right.date ? 1 : left.date > right.date ? -1 : 0))[0];
-}
-
-/*
- * The Coggins the board measures from is the one with a readable examination
- * date -- the same reading the sale gates use (documentCurrency.ts). A
- * certificate with no exam date is not current from the day it was uploaded:
- * the upload date says when the paper reached XBAR, not when the horse was
- * tested, and the canonical helper already refused it.
- */
-function latestCogginsExam(documents: DocumentRecord[], horseId: string, now: Date) {
-  const today = localIsoDate(now);
-  const ready = documents.filter(
-    (document) => document.horseId === horseId && document.type === 'Coggins' && document.state === 'Ready',
-  );
-  const dated = ready
-    .map((document) => {
-      const examTime = documentExamTime(document);
-      return { examDay: examTime === null ? null : new Date(examTime).toISOString().slice(0, 10) };
-    })
-    // An exam cannot have happened yet: a mistyped future year is no exam, the
-    // same refusal the canonical currency helper makes.
-    .filter((entry): entry is { examDay: string } => entry.examDay !== null && entry.examDay <= today)
-    .sort((left, right) => (left.examDay < right.examDay ? 1 : -1))[0];
-  return { examDate: dated?.examDay, undatedOnFile: !dated && ready.length > 0 };
-}
-
-function createTimedSignal(params: {
-  key: CareSignal['key'];
-  label: CareSignal['label'];
-  referenceDate?: string;
-  now: Date;
-  dueDays: number;
-  watchDays: number;
-  missingDetail: string;
-  prefix: string;
-}): CareSignal {
-  const parsed = parseDate(params.referenceDate);
-  if (!parsed) {
-    return {
-      key: params.key,
-      label: params.label,
-      status: 'due',
-      detail: `No ${params.label.toLowerCase()} on record yet`,
-    };
-  }
-
-  const ageDays = diffDays(parsed, params.now);
-  const dueDate = localIsoDate(addLocalCalendarDays(parsed, params.dueDays));
-
-  if (params.key === 'coggins' ? ageDays > params.dueDays : ageDays >= params.dueDays) {
-    return {
-      key: params.key,
-      label: params.label,
-      status: 'due',
-      detail: `${params.prefix} overdue`,
-      dueDate,
-    };
-  }
-
-  if (ageDays >= params.watchDays) {
-    return {
-      key: params.key,
-      label: params.label,
-      status: 'watch',
-      detail: `${params.prefix} soon`,
-      dueDate,
-    };
-  }
-
-  return {
-    key: params.key,
-    label: params.label,
-    status: 'clear',
-    detail: `${params.prefix} current`,
-    dueDate,
-  };
-}
+const careLabels = {
+  wormer: ['Wormer', 'Wormer'],
+  dental: ['Dental Float', 'Dental float'],
+  coggins: ['Coggins', 'Coggins'],
+} as const;
 
 export function buildTransferGapRows(
   horses: HorseRecord[],
@@ -230,48 +116,21 @@ export function buildCareBoardRows(
 ) {
   return horses
     .map((horse) => {
-      const wormer = latestCompletedCare(horse, 'wormer', now);
-      const dental = latestCompletedCare(horse, 'dental', now);
-      const coggins = latestCogginsExam(documents, horse.id, now);
-
-      const signals: CareSignal[] = [
-        createTimedSignal({
-          key: 'wormer',
-          label: 'Wormer',
-          referenceDate: careDay(wormer?.date) ?? undefined,
-          now,
-          dueDays: 90,
-          watchDays: 75,
-          missingDetail: 'Wormer missing',
-          prefix: 'Wormer',
-        }),
-        createTimedSignal({
-          key: 'dental',
-          label: 'Dental Float',
-          referenceDate: careDay(dental?.date) ?? undefined,
-          now,
-          dueDays: 365,
-          watchDays: 320,
-          missingDetail: 'Float missing',
-          prefix: 'Dental float',
-        }),
-        createTimedSignal({
-          key: 'coggins',
-          label: 'Coggins',
-          referenceDate: coggins.examDate,
-          now,
-          dueDays: 365,
-          watchDays: 320,
-          missingDetail: 'Coggins missing',
-          prefix: 'Coggins',
-        }),
-      ];
-
-      // Say why a Coggins on file does not count, rather than that none exists.
-      if (coggins.undatedOnFile) {
-        const signal = signals.find((item) => item.key === 'coggins');
-        if (signal && signal.status === 'due') signal.detail = 'Coggins on file has no valid exam date';
-      }
+      const signals: CareSignal[] = projectCareEvidence(horse, documents, localIsoDate(now)).map((item) => {
+        const [label, prefix] = careLabels[item.kind];
+        if (item.status === 'missing') {
+          return {
+            key: item.kind,
+            label,
+            status: 'due',
+            detail: item.invalidExamOnFile
+              ? 'Coggins on file has no valid exam date'
+              : `No ${label.toLowerCase()} on record yet`,
+          };
+        }
+        const suffix = item.status === 'due' ? 'overdue' : item.status === 'watch' ? 'soon' : 'current';
+        return { key: item.kind, label, status: item.status, dueDate: item.dueDay, detail: `${prefix} ${suffix}` };
+      });
 
       const priority = signals.reduce(
         (score, signal) => score + (signal.status === 'due' ? 2 : signal.status === 'watch' ? 1 : 0),

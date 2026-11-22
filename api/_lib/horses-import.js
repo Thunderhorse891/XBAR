@@ -19,6 +19,7 @@ const COLUMN_ALIASES = {
   color: ['color', 'colour'],
   birthdate: ['birthdate', 'birth date', 'foaled', 'date of birth', 'dob'],
   gender: ['gender', 'sex'],
+  segment: ['segment', 'horse segment'],
   status: ['status'],
   registration_number: ['registration number', 'registration #', 'reg number', 'reg #', 'registration'],
   registry: ['registry'],
@@ -26,6 +27,15 @@ const COLUMN_ALIASES = {
   owner_name: ['owner', 'owner name', 'legal owner'],
   barn_name: ['barn', 'barn name'],
 };
+
+// Keep the API terms in parity with HorseRecord; the CSV corpus checks each
+// of these against its canonical application type.
+export const CSV_HORSE_CLASSIFICATIONS = {
+  gender: ['Mare', 'Stud', 'Gelding', 'Filly', 'Colt'],
+  status: ['In Training', 'Broodmare Program', 'Sale Prep', 'Medical Review', 'Pasture', 'Retired'],
+  segment: ['Broodmare', 'Stud', 'Show String', 'Sale Prospect', 'Young Stock', 'Retired'],
+};
+const CLASSIFICATION_COLUMNS = { gender: 'Sex', status: 'Status', segment: 'Segment' };
 
 const RATE_LIMIT = { bucket: 'horses-import', limit: 6, windowSeconds: 60 };
 
@@ -35,34 +45,105 @@ function rowValue(row, columnMap, field) {
 
 export function buildHorseUpdateFields(row, columnMap) {
   const fields = { name: rowValue(row, columnMap, 'name') };
-  for (const field of [
-    'breed',
-    'color',
-    'gender',
-    'registration_number',
-    'registry',
-    'microchip',
-    'owner_name',
-    'barn_name',
-  ]) {
+  for (const field of ['breed', 'color', 'registration_number', 'registry', 'microchip', 'owner_name', 'barn_name']) {
     if (field in columnMap) fields[field] = rowValue(row, columnMap, field);
-  }
-  // status is asymmetric from the other columns on purpose. It drives lifecycle
-  // and filtering, and '' is not a value the rest of the app understands. The
-  // insert path defaults a blank status to 'Active' rather than writing '', so
-  // the update path must not blank an existing status either: a supplied,
-  // non-empty status is honoured, but a supplied blank preserves the stored
-  // status instead of clearing it. Every other column keeps the "supplied blank
-  // is an intentional blank" rule.
-  if ('status' in columnMap) {
-    const status = rowValue(row, columnMap, 'status');
-    if (status) fields.status = status;
   }
   if ('birthdate' in columnMap) {
     const rawBirthdate = rowValue(row, columnMap, 'birthdate');
     fields.birthdate = normalizeDate(rawBirthdate) || rawBirthdate;
   }
   return fields;
+}
+
+function classifyHorseImportRow(row, columnMap, action) {
+  const fields = {};
+  const problems = [];
+  for (const [field, choices] of Object.entries(CSV_HORSE_CLASSIFICATIONS)) {
+    const supplied = rowValue(row, columnMap, field);
+    if (!supplied && action === 'update') continue;
+    const token = supplied.toLowerCase();
+    const alias = field === 'gender' && token === 'stallion' ? 'stud' : token;
+    const matched = choices.find((choice) => choice.toLowerCase() === alias);
+    if (matched) fields[field] = matched;
+    else problems.push(`${CLASSIFICATION_COLUMNS[field]} must be one of: ${choices.join(', ')}`);
+  }
+  return problems.length ? { error: `${problems.join('; ')}.` } : { fields };
+}
+
+// The relational reader hydrates horses from payload, not the scalar columns.
+const HORSE_PAYLOAD_FIELDS = {
+  name: 'name',
+  breed: 'breed',
+  color: 'color',
+  birthdate: 'foaledOn',
+  gender: 'sex',
+  segment: 'segment',
+  status: 'status',
+  registration_number: 'registrationNumber',
+  registry: 'registry',
+  microchip: 'microchipId',
+  owner_name: 'owner',
+  barn_name: 'barnName',
+};
+
+function horseImportPayloadFields(fields) {
+  return Object.fromEntries(Object.entries(fields).map(([key, value]) => [HORSE_PAYLOAD_FIELDS[key], value]));
+}
+
+function buildImportedHorsePayload(horseId, fields, userId) {
+  return {
+    id: horseId,
+    ...horseImportPayloadFields(fields),
+    summary: '',
+    aqhaNumber: '',
+    // A CSV identifier is useful for matching, not evidence that papers were verified.
+    registered: false,
+    age: 0,
+    markings: '',
+    ownerEntity: '',
+    insuredValue: 0,
+    profileImage: '',
+    tags: ['intake-pending'],
+    bloodline: { sire: '', dam: '', family: '' },
+    location: { ranch: '', barn: '', pasture: '', stall: '' },
+    assignments: { trainer: '', ranchManager: '', veterinarian: '', farrier: '' },
+    ownership: [],
+    gallery: [],
+    sale: {
+      listingState: 'Hold',
+      askPrice: 0,
+      buyerConfidence: 0,
+      inquiryCount: 0,
+      watchlistCount: 0,
+      socialReady: false,
+    },
+    readiness: { score: 0, blockers: [], packetStatus: 'Needs Transfer Docs' },
+    medicalNotes: '',
+    lastVetVisit: '',
+    documents: [],
+    medicalTimeline: [],
+    breedingTimeline: [],
+    activity: [],
+    documentFacts: [],
+    alerts: [],
+    notes: [],
+    importedBy: userId,
+    importSource: 'csv',
+  };
+}
+
+function isHorsePayload(payload, horseId) {
+  return payload !== null && typeof payload === 'object' && !Array.isArray(payload) && payload.id === horseId;
+}
+
+function matchesHorseWrite(rows, horseId, payloadFields) {
+  return (
+    Array.isArray(rows) &&
+    rows.length === 1 &&
+    rows[0]?.horse_id === horseId &&
+    isHorsePayload(rows[0].payload, horseId) &&
+    Object.entries(payloadFields).every(([field, value]) => rows[0].payload[field] === value)
+  );
 }
 
 export function duplicateRegistrationRows(dataRows, columnMap, rows) {
@@ -215,6 +296,11 @@ export async function importHorseRows({
     const targetHorseId = registration ? existingByRegistration.get(registration) : undefined;
     const action = targetHorseId ? 'update' : 'insert';
 
+    const classifications = classifyHorseImportRow(row, columnMap, action);
+    if (classifications.error) {
+      errors.push({ row: rowIndex + 1, message: classifications.error });
+      continue;
+    }
     const decision = authorizeImportRow({ action, role, insertsSoFar: imported, insertBudget });
     if (decision.denied) {
       errors.push({ row: rowIndex + 1, message: decision.denied });
@@ -227,30 +313,47 @@ export async function importHorseRows({
 
     try {
       if (action === 'update') {
-        const fields = buildHorseUpdateFields(row, columnMap);
+        const fields = { ...buildHorseUpdateFields(row, columnMap), ...classifications.fields };
 
-        // Pin the write to the horse the preflight identified AND to the
-        // registration it held. If either has moved, this matches zero rows.
+        // The stored payload holds data that is not in this CSV. Read it
+        // deliberately, and pin the write to the revision AND payload:
+        // older writers may change the payload without moving updated_at.
+        const noMatchMessage = `Could not confirm the update for registration ${registration}; it may no longer match the targeted horse or may have changed. Review the record before retrying.`;
+        const current = await supabase
+          .from('horses')
+          .select('horse_id, payload, updated_at')
+          .eq('workspace_id', workspaceId)
+          .eq('horse_id', targetHorseId)
+          .eq('registration_number', registration);
+        if (current?.error) throw new Error(current.error.message || 'Could not read the current horse record.');
+        const previous = current?.data?.[0];
+        if (!Array.isArray(current?.data) || current.data.length !== 1 || previous?.horse_id !== targetHorseId) {
+          throw new Error(noMatchMessage);
+        }
+        const priorRevision = Date.parse(previous.updated_at);
+        if (!isHorsePayload(previous.payload, targetHorseId) || !Number.isFinite(priorRevision)) {
+          throw new Error(
+            'Current horse record has missing or invalid saved data. Review and repair it before importing.',
+          );
+        }
+        const payloadFields = horseImportPayloadFields(fields);
+        const payload = { ...previous.payload, ...payloadFields };
+        const updatedAt = new Date(Math.max(Date.now(), priorRevision + 1)).toISOString();
         const { data: updatedRows, error: updateError } = await supabase
           .from('horses')
-          .update({ ...fields, updated_at: new Date().toISOString() })
+          .update({ ...fields, payload, updated_at: updatedAt })
           .eq('workspace_id', workspaceId)
           .eq('horse_id', targetHorseId)
           .eq('registration_number', registration)
-          .select('horse_id');
+          .eq('updated_at', previous.updated_at)
+          .eq('payload', JSON.stringify(previous.payload))
+          .select('horse_id, payload');
         if (updateError) {
           errors.push({ row: rowIndex + 1, message: updateError.message || 'Horse update failed.' });
           continue;
         }
-        // Zero rows changed is a failure, not a success. It means the horse this
-        // update targeted no longer holds this registration — deleted, or the
-        // number moved to another horse — so report it for review rather than
-        // counting an update that did not happen or creating a new horse.
-        if (!Array.isArray(updatedRows) || updatedRows.length !== 1 || updatedRows[0]?.horse_id !== targetHorseId) {
-          errors.push({
-            row: rowIndex + 1,
-            message: `Could not confirm the update for registration ${registration}; it may no longer match the targeted horse. Review the record before retrying.`,
-          });
+        if (!matchesHorseWrite(updatedRows, targetHorseId, payloadFields)) {
+          errors.push({ row: rowIndex + 1, message: noMatchMessage });
           continue;
         }
         updated += 1;
@@ -279,8 +382,7 @@ export async function importHorseRows({
           breed: value('breed'),
           color: value('color'),
           birthdate: normalizeDate(value('birthdate')) || value('birthdate'),
-          gender: value('gender'),
-          status: value('status') || 'Active',
+          ...classifications.fields,
           registration_number: registration,
           registry: value('registry'),
           microchip: value('microchip'),
@@ -288,20 +390,21 @@ export async function importHorseRows({
           barn_name: value('barn_name'),
         };
         const horseId = `horse-${randomUUID()}`;
+        const payload = buildImportedHorsePayload(horseId, fields, userId);
         const { data: insertedRows, error: insertError } = await supabase
           .from('horses')
           .insert({
             workspace_id: workspaceId,
             horse_id: horseId,
             ...fields,
-            payload: { importedBy: userId, importSource: 'csv' },
+            payload,
           })
-          .select('horse_id');
+          .select('horse_id, payload');
         if (insertError) {
           errors.push({ row: rowIndex + 1, message: insertError.message || 'Horse insert failed.' });
           continue;
         }
-        if (!Array.isArray(insertedRows) || insertedRows.length !== 1 || insertedRows[0]?.horse_id !== horseId) {
+        if (!matchesHorseWrite(insertedRows, horseId, horseImportPayloadFields(fields))) {
           errors.push({ row: rowIndex + 1, message: 'Could not confirm the inserted horse. Review before retrying.' });
           continue;
         }
@@ -394,9 +497,13 @@ export default async function handler(req, res) {
     });
   }
   const existingRegistrations = new Set(existingByRegistration.keys());
-  const newRegistrationCount = csvRegistrations.filter((reg) => !existingRegistrations.has(reg)).length;
-  const noRegistrationRowCount = dataRows.filter((row) => !cellAt(row, 'registration_number')).length;
-  const plannedInserts = newRegistrationCount + noRegistrationRowCount;
+  const plannedInserts = dataRows.filter((row) => {
+    const registration = cellAt(row, 'registration_number');
+    return (
+      (!registration || !existingRegistrations.has(registration)) &&
+      !classifyHorseImportRow(row, columnMap, 'insert').error
+    );
+  }).length;
   const plannedUpdates = csvRegistrations.filter((reg) => existingRegistrations.has(reg)).length;
 
   const canCreateHorses = hasRoleCapability(access.role, 'createHorse');

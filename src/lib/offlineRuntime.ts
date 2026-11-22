@@ -1,5 +1,36 @@
 export type OfflineRuntimeStatus = 'unsupported' | 'ready' | 'registered' | 'failed';
 
+type OfflineAssetCacheStatus = OfflineRuntimeStatus | 'checking';
+type OfflineAssetCachePresentation = { label: string; tone: 'blue' | 'amber' | 'slate' };
+
+export const offlineAssetCachePresentation: Record<OfflineAssetCacheStatus, OfflineAssetCachePresentation> = {
+  checking: { label: 'Checking asset cache…', tone: 'slate' },
+  registered: { label: 'Asset cache worker registered', tone: 'blue' },
+  ready: { label: 'No asset cache worker yet', tone: 'slate' },
+  unsupported: { label: 'Asset cache not supported', tone: 'slate' },
+  failed: { label: 'Asset cache registration failed', tone: 'amber' },
+};
+
+let assetCacheStatus: OfflineAssetCacheStatus = 'checking';
+const assetCacheListeners = new Set<() => void>();
+
+export function getOfflineAssetCacheStatus() {
+  return assetCacheStatus;
+}
+
+export function subscribeOfflineAssetCacheStatus(listener: () => void) {
+  assetCacheListeners.add(listener);
+  return () => {
+    assetCacheListeners.delete(listener);
+  };
+}
+
+function setOfflineAssetCacheStatus(status: OfflineAssetCacheStatus) {
+  if (status === assetCacheStatus) return;
+  assetCacheStatus = status;
+  for (const listener of assetCacheListeners) listener();
+}
+
 const SERVICE_WORKER_URL = '/xbar-service-worker.js?v=20260630-vercel-freshness';
 let refreshQueued = false;
 
@@ -94,11 +125,19 @@ export function urlCarriesAuthCallback(href: string): boolean {
 // Module state, so a test can put the latch back the way it found it.
 export function resetOfflineRuntime(options?: { now?: () => number }) {
   refreshQueued = false;
+  setOfflineAssetCacheStatus('checking');
   clock = options?.now ?? (() => Date.now());
 }
 
 export async function registerOfflineRuntime(): Promise<OfflineRuntimeStatus> {
-  if (typeof window === 'undefined' || !('serviceWorker' in navigator)) {
+  setOfflineAssetCacheStatus('checking');
+  const status = await registerAssetCacheWorker();
+  setOfflineAssetCacheStatus(status);
+  return status;
+}
+
+async function registerAssetCacheWorker(): Promise<OfflineRuntimeStatus> {
+  if (typeof window === 'undefined' || typeof navigator === 'undefined' || !navigator.serviceWorker) {
     return 'unsupported';
   }
 
@@ -166,8 +205,15 @@ export async function registerOfflineRuntime(): Promise<OfflineRuntimeStatus> {
     });
 
     const registration = await navigator.serviceWorker.register(SERVICE_WORKER_URL, { updateViaCache: 'none' });
-    await registration.update();
-    return registration.active || registration.waiting || registration.installing ? 'registered' : 'ready';
+    const hasWorker = () => Boolean(registration.active || registration.waiting || registration.installing);
+    try {
+      await registration.update();
+    } catch {
+      // A failed update check (for example, no network) doesn't unregister
+      // an existing worker. With no worker, there's no cache to report.
+      return hasWorker() ? 'registered' : 'failed';
+    }
+    return hasWorker() ? 'registered' : 'ready';
   } catch {
     return 'failed';
   }

@@ -16,7 +16,7 @@ const { default: templateHandler } = await import('../../api/_lib/documents-gene
 const { loadHorseContext } = await import('../../api/_lib/horse-context.js');
 const { createSectionedPdf } = await import('../../api/_lib/pdf.js');
 const { buildServerSaleCredential, serverSealCode } = await import('../../api/_lib/sale-credential.js');
-const { summarizeSealedPacket } = await import('../../api/_lib/buyer-verify.js');
+const { default: buyerVerify, summarizeSealedPacket } = await import('../../api/_lib/buyer-verify.js');
 
 const WORKSPACE = '11111111-1111-4111-8111-111111111111';
 const OTHER_WORKSPACE = '22222222-2222-4222-8222-222222222222';
@@ -70,11 +70,16 @@ function install({
   role,
   attachmentBytes,
   horseFields = {},
+  issuanceResult = null,
+  proofs = [],
+  deliveryRows = [],
 } = {}) {
   const reads = [],
     writes = [],
     uploads = [],
-    downloads = [];
+    downloads = [],
+    removals = [],
+    signedPaths = [];
   const tables = {
     workspaces: [{ id: WORKSPACE, owner_user_id: allow && !role ? USER : 'someone-else' }],
     workspace_memberships: role ? [{ workspace_id: WORKSPACE, user_id: USER, role, status: 'active' }] : [],
@@ -88,7 +93,8 @@ function install({
     documents,
     document_templates: [],
     ownership_records: [],
-    sale_packets: [],
+    sale_packets: deliveryRows,
+    sale_packet_proofs: proofs,
     audit_logs: [],
   };
   const client = {
@@ -144,14 +150,28 @@ function install({
       };
       return query;
     },
-    rpc: async () => ({ data: 0, error: null }),
+    rpc: async (name, params) => {
+      if (name !== 'xbar_issue_sale_packet') return { data: 0, error: null };
+      if (issuanceResult) return issuanceResult;
+      assert.equal('seal' in params.p_delivery.payload, false);
+      writes.push({ table: 'sale_packets', row: params.p_delivery });
+      writes.push({ table: 'sale_packet_proofs', row: { seal: params.p_seal } });
+      return { data: true, error: null };
+    },
     storage: {
       from: (bucket) => ({
         upload: async (path, bytes) => {
           uploads.push({ bucket, path, bytes });
           return { error: null };
         },
-        createSignedUrl: async () => ({ data: { signedUrl: 'https://download.example.test/packet' }, error: null }),
+        createSignedUrl: async (path) => {
+          signedPaths.push(path);
+          return { data: { signedUrl: 'https://download.example.test/packet' }, error: null };
+        },
+        remove: async (paths) => {
+          removals.push(...paths);
+          return { error: null };
+        },
         download: async (path) => {
           downloads.push(path);
           if (attachmentBytes) return { data: new Blob([attachmentBytes]), error: null };
@@ -161,7 +181,7 @@ function install({
     },
   };
   __setBillingSupabase(client);
-  return { client, reads, writes, uploads, downloads };
+  return { client, reads, writes, uploads, downloads, removals, signedPaths };
 }
 
 for (const [horseFields, expected] of [
@@ -387,12 +407,81 @@ test('cloud packet uses authorized stored branding, seals all details and ignore
     assert.match(profileRead.columns, /payload/);
     assert.deepEqual(profileRead.filters, [['workspace_id', WORKSPACE]]);
     assert.equal(
-      fixture.writes.find((write) => write.table === 'sale_packets').row.payload.seal.payload,
+      fixture.writes.find((write) => write.table === 'sale_packet_proofs').row.seal.payload,
       result.body.seal.payload,
     );
   } finally {
     globalThis.fetch = savedFetch;
   }
+});
+
+for (const [name, issuanceResult, deleted] of [
+  ['uncertain response', { data: null, error: null }, false],
+  ['transport error', { data: null, error: { code: '', message: 'connection lost' } }, false],
+  ['database rejection', { data: null, error: { code: '23514', message: 'constraint failed' } }, true],
+]) {
+  test(`packet issuance does not sign a download after ${name}`, async () => {
+    const fixture = install({ issuanceResult });
+    const result = await call();
+    assert.equal(result.status, 502, result.body.message);
+    assert.equal(fixture.uploads.length, 1);
+    assert.deepEqual(fixture.signedPaths, []);
+    assert.deepEqual(fixture.removals, deleted ? [fixture.uploads[0].path] : []);
+  });
+}
+
+test('a protected issuance quota rejection still cleans up and returns the public allowance code', async () => {
+  const fixture = install({
+    issuanceResult: {
+      data: null,
+      error: { code: 'P0001', details: 'xbar_sale_packet_allowance_reached', message: 'Plan limit reached' },
+    },
+  });
+  const result = await call();
+  assert.equal(result.status, 403, result.body.message);
+  assert.equal(result.body.code, 'sale_packet_limit_reached');
+  assert.equal(fixture.uploads.length, 1);
+  assert.deepEqual(fixture.removals, [fixture.uploads[0].path]);
+  assert.deepEqual(fixture.signedPaths, []);
+});
+
+test('the public handler uses only protected issuance and does not request legacy facts', async () => {
+  const seal = buildServerSaleCredential(sealInput({}));
+  const delivery = { packet_id: 'packet-brand', payload: { seal } };
+  const legacy = install({ deliveryRows: [delivery] });
+  const unanchored = await call({ packetId: 'packet-brand' }, buyerVerify);
+  assert.equal(unanchored.status, 200);
+  assert.equal(unanchored.body.found, true);
+  assert.equal(unanchored.body.anchored, false);
+  assert.equal('facts' in unanchored.body, false);
+  assert.deepEqual(
+    legacy.reads.map(({ table, columns }) => [table, columns]),
+    [
+      ['sale_packet_proofs', 'packet_id, seal'],
+      ['sale_packets', 'packet_id'],
+    ],
+  );
+
+  const protectedFixture = install({ proofs: [{ packet_id: 'packet-brand', seal }], deliveryRows: [delivery] });
+  const anchored = await call({ packetId: 'packet-brand' }, buyerVerify);
+  assert.equal(anchored.status, 200);
+  assert.equal(anchored.body.anchored, true);
+  assert.equal(anchored.body.seal.sealCode, seal.sealCode);
+  assert.deepEqual(
+    protectedFixture.reads.map(({ table }) => table),
+    ['sale_packet_proofs'],
+  );
+});
+
+test('the public handler fails closed if protected proof cannot be read', async () => {
+  const failed = install({ readErrors: { sale_packet_proofs: { message: 'fixture unavailable' } } });
+  const blocked = await call({ packetId: 'packet-brand' }, buyerVerify);
+  assert.equal(blocked.status, 502);
+  assert.equal(blocked.body.ok, false);
+  assert.deepEqual(
+    failed.reads.map(({ table }) => table),
+    ['sale_packet_proofs'],
+  );
 });
 
 test('profile read failures fail packet creation before upload and do not change template callers', async () => {
@@ -534,7 +623,8 @@ test('every customer branding field changes the v3 seal and public verification 
   }
   const summary = summarizeSealedPacket({
     packet_id: 'packet-brand',
-    payload: { seal, seller: { name: 'LIVE OR FORGED' } },
+    seal,
+    payload: { seller: { name: 'LIVE OR FORGED' } },
   });
   assert.equal(summary.anchored, true);
   assert.equal(summary.facts.sellerName, source.defaultOwnerName);
@@ -546,7 +636,7 @@ test('every customer branding field changes the v3 seal and public verification 
   const forged = structuredClone(seal);
   forged.payload = forged.payload.replace('Taylor Seller', 'Forged Seller');
   assert.equal(
-    summarizeSealedPacket({ payload: { seal: forged } }).anchored,
+    summarizeSealedPacket({ packet_id: 'packet-brand', seal: forged }).anchored,
     false,
     'modified payload cannot pass its old digest',
   );
@@ -570,7 +660,7 @@ test('historical v1/v2 seals verify exact stored bytes without rebuilding as v3'
       sealCode: serverSealCode(digest),
       sealedAt: '2025-01-01',
     };
-    const summary = summarizeSealedPacket({ packet_id: 'old-packet', payload: { seal } });
+    const summary = summarizeSealedPacket({ packet_id: 'old-packet', seal });
     assert.equal(summary.anchored, true);
     assert.equal(summary.facts.sellerBusinessName, 'Historic LLC');
     assert.equal(summary.facts.sellerRanchName, 'Historic Ranch');
@@ -603,9 +693,9 @@ test('public seal integrity refuses mismatched code, packet identity, and malfor
   const legacyPayload = JSON.stringify({ version: 2, packetId: 'packet-one', horse: {}, workspace: {} });
   const digest = createHash('sha256').update(legacyPayload).digest('hex');
   const seal = { version: 2, anchor: 'server', payload: legacyPayload, digest, sealCode: serverSealCode(digest) };
-  assert.equal(summarizeSealedPacket({ packet_id: 'packet-two', payload: { seal } }).anchored, false);
+  assert.equal(summarizeSealedPacket({ packet_id: 'packet-two', seal }).anchored, false);
   assert.equal(
-    summarizeSealedPacket({ payload: { seal: { ...seal, sealCode: 'SEAL-0000-0000-0000' } } }).anchored,
+    summarizeSealedPacket({ packet_id: 'packet-one', seal: { ...seal, sealCode: 'SEAL-0000-0000-0000' } }).anchored,
     false,
   );
   for (const logo of ['https://remote.example/logo.png', 'data:image/svg+xml;base64,PHN2Zy8+']) {
@@ -617,7 +707,8 @@ test('public seal integrity refuses mismatched code, packet identity, and malfor
     const nextDigest = createHash('sha256').update(payload).digest('hex');
     assert.equal(
       summarizeSealedPacket({
-        payload: { seal: { ...seal, version: 3, payload, digest: nextDigest, sealCode: serverSealCode(nextDigest) } },
+        packet_id: 'packet-one',
+        seal: { ...seal, version: 3, payload, digest: nextDigest, sealCode: serverSealCode(nextDigest) },
       }).anchored,
       false,
     );

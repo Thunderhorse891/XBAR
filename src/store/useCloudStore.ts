@@ -3,7 +3,7 @@ import { create } from 'zustand';
 import type { AuthChangeEvent, Session } from '@supabase/supabase-js';
 import { loadWorkspaceAccessProfile, type CloudRecoveryContext } from '@/lib/cloudWorkspace';
 import { authStorageKey, getSupabaseClient } from '@/lib/supabaseClient';
-import { mayRejoinDurableStore, readAuthStorage } from '@/lib/authStorage';
+import { authStorageAdapter, authStorageIsShared, mayRejoinDurableStore, readAuthStorage } from '@/lib/authStorage';
 import {
   buildPasswordUpdateRequest,
   readPasswordUpdateError,
@@ -206,7 +206,10 @@ type CloudStore = {
   signInWithApple: () => Promise<CloudActionResult>;
   signOut: () => Promise<CloudActionResult>;
   /* `incomplete`: the account is gone, but some stored files are not. */
-  deleteAccount: (confirmation: string) => Promise<CloudActionResult & { incomplete?: boolean }>;
+  deleteAccount: (
+    confirmation: string,
+    expectedAccountId?: string,
+  ) => Promise<CloudActionResult & { incomplete?: boolean; deviceSessionCleared?: boolean }>;
 };
 
 /*
@@ -2177,14 +2180,26 @@ export const useCloudStore = create<CloudStore>((set, get) => ({
     });
     return { ok: true, message: 'Signed out of cloud sync.' };
   },
-  deleteAccount: async (confirmation: string) => {
+  deleteAccount: async (confirmation: string, expectedAccountId?: string) => {
     const client = getSupabaseClient();
     if (!client) {
       return { ok: false, message: 'Supabase is not configured for this build.' };
     }
-    const token = get().session?.access_token;
-    if (!token) {
+    const deletingSession = get().session;
+    const accountId = deletingSession?.user.id;
+    const token = deletingSession?.access_token;
+    if (!token || !accountId) {
       return { ok: false, message: 'You must be signed in to delete your account.' };
+    }
+
+    if (expectedAccountId && accountId !== expectedAccountId) {
+      return { ok: false, message: 'The signed-in account changed. Nothing was deleted.' };
+    }
+    const deletingGeneration = sessionGenerationOf(deletingSession);
+    const authKey = authStorageKey();
+    const storedBeforeRequest = readAuthStorage(authKey);
+    if (storedBeforeRequest && !liveSessionAgrees(storedBeforeRequest, deletingSession, sessionGenerationOf)) {
+      return { ok: false, message: 'The signed-in account changed. Nothing was deleted.' };
     }
 
     let response: Response;
@@ -2216,43 +2231,79 @@ export const useCloudStore = create<CloudStore>((set, get) => ({
       };
     }
 
-    // The server has already deleted the auth user; clear the local session so
-    // the app returns to the signed-out state. Caller purges the local workspace.
-    const recoveryFor = get().passwordRecoveryFor;
-    const deletingSession = get().session;
-    const recoveryGrant =
-      recoveryFor && recoveryFor === deletingSession?.user.id ? recoveryGrantToken(deletingSession) : '';
-    await client.auth.signOut().catch(() => {});
-    if (recoveryFor) recordSpentRecoveryUser(recoveryFor, recoveryGrant);
-    set({
-      session: null,
-      status: 'signed-out',
-      // Otherwise a later ordinary sign-in inherits a recovery that is over.
-      passwordRecoveryFor: '',
-      passwordRecoveryGrant: '',
-      workspaceId: '',
-      recoveryContext: undefined,
-      workspaceRole: 'Pending access',
-      syncState: 'idle',
-      syncMessage: '',
-      autosaveReady: false,
-      autosaveUnlocked: false,
-      stagedStorageBytes: 0,
-    });
+    // Never ask auth-js to sign out its ambient session after the network
+    // turn: that might now be a different account, including one another tab
+    // has persisted but this tab has not published yet. Account removal is
+    // confirmed server-side; only retire the original local session here.
+    const retireConfirmedSession = () => {
+      const currentSession = get().session;
+      if (!currentSession || currentSession.user.id !== accountId) return false;
+      const currentGeneration = sessionGenerationOf(currentSession);
+      if (currentSession.access_token !== token && (!deletingGeneration || currentGeneration !== deletingGeneration))
+        return false;
+      const storedSession = readAuthStorage(authKey);
+      if (storedSession && !liveSessionAgrees(storedSession, currentSession, sessionGenerationOf)) return false;
+
+      authStorageAdapter.removeItem(authKey);
+      if (readAuthStorage(authKey)) return false;
+      const recoveryFor = get().passwordRecoveryFor;
+      if (recoveryFor === accountId) recordSpentRecoveryUser(accountId, recoveryGrantToken(currentSession));
+      set({
+        session: null,
+        status: 'signed-out',
+        passwordRecoveryFor: '',
+        passwordRecoveryGrant: '',
+        workspaceId: '',
+        recoveryContext: undefined,
+        workspaceRole: 'Pending access',
+        syncState: 'idle',
+        syncMessage: '',
+        autosaveReady: false,
+        autosaveUnlocked: false,
+        stagedStorageBytes: 0,
+      });
+      return true;
+    };
+    // Shared auth storage requires the same Web Lock auth-js uses. Older
+    // engines without it get no competing durable clear. A private in-memory
+    // store can compare and remove synchronously without a cross-tab lock.
+    let deviceSessionCleared = false;
+    try {
+      if (!authStorageIsShared()) {
+        deviceSessionCleared = retireConfirmedSession();
+      } else if (typeof navigator !== 'undefined' && navigator.locks) {
+        const lockWait = new AbortController();
+        const deadline = setTimeout(() => lockWait.abort(), 4000);
+        try {
+          deviceSessionCleared = await navigator.locks.request(
+            `lock:${authKey}`,
+            { signal: lockWait.signal },
+            retireConfirmedSession,
+          );
+        } finally {
+          clearTimeout(deadline);
+        }
+      }
+    } catch {
+      // The server result remains conclusive even when device cleanup cannot
+      // share the auth lock or storage is temporarily unavailable.
+    }
     // The account is gone either way; say so when stored files are not.
     return deletedWithIncompleteOutcome
       ? {
           ok: true,
+          deviceSessionCleared,
           incomplete: true,
           message: `Your account was deleted, but cloud cleanup or its confirmation is incomplete. Email Xbarje@gmail.com${typeof payload.operationId === 'string' ? ` with operation ID ${payload.operationId}` : ''}.`,
         }
       : payload.storageCleanupComplete === false
         ? {
             ok: true,
+            deviceSessionCleared,
             incomplete: true,
             message:
               'Your account has been deleted, but some cloud files could not be erased yet. Email Xbarje@gmail.com and we will finish removing them.',
           }
-        : { ok: true, message: 'Your account and data have been deleted.' };
+        : { ok: true, deviceSessionCleared, message: 'Your cloud account and data have been deleted.' };
   },
 }));

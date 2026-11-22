@@ -167,13 +167,30 @@ test('sales renders the buyer follow-up sales surface', async ({ page }) => {
   await expect(page.getByRole('heading', { name: 'Buyer follow-up' })).toBeVisible();
 });
 
-test('billing page shows tier cards', async ({ page }) => {
+test('the account menu opens the two monthly billing options without changing local setup', async ({ page }) => {
   await bootstrapWorkspace(page);
   await page.getByRole('button', { name: 'Account menu', exact: true }).click();
   await page.getByRole('menuitem', { name: 'Billing', exact: true }).click();
   await expect(page.getByRole('menu')).toBeHidden();
   await expect(page.getByRole('heading', { name: 'Review Billing' })).toBeVisible();
-  await expect(page.locator('.checkout-plan')).toHaveCount(4);
+  await expect(page).toHaveURL(/\/app\/billing$/);
+
+  const cards = page.locator('.checkout-plan-list .checkout-plan');
+  await expect(cards).toHaveCount(2);
+  for (const [tier, price] of [
+    ['Professional', '$19.99'],
+    ['Ranch Ops', '$49.99'],
+  ]) {
+    const card = cards.filter({ has: page.getByRole('heading', { name: tier, exact: true }) });
+    await expect(card).toBeVisible();
+    await expect(card.locator('.checkout-plan__price strong')).toHaveText(price);
+    await expect(card.locator('.checkout-plan__price small')).toHaveText('/ month');
+  }
+  await expect(cards.getByRole('heading', { name: /^(Starter|Enterprise)$/ })).toHaveCount(0);
+  await expect(page.getByRole('group', { name: 'Billing period' })).toHaveCount(0);
+  await expect(page.locator('.checkout-trial').getByText('Setup active', { exact: true })).toBeVisible();
+  await expect(page.locator('.checkout-trial').getByText(/No card required/)).toBeVisible();
+  await expect(page.locator('.checkout-primary-action')).toBeDisabled();
 });
 
 test('OCR pipeline: an uploaded image is read on-device and matched to a horse by its pixels', async ({ page }) => {
@@ -1400,4 +1417,51 @@ test('a workspace round trip during raster validation cannot persist an old pack
   await expect(wizard.getByRole('alert')).toContainText('changed');
   await expect(wizard.getByRole('button', { name: 'Retry sale packet' })).toBeEnabled();
   expect(await packetPersistenceCounts(page)).toEqual(before);
+});
+
+test('mobile setup error stays recoverable through Back and first-horse reload', async ({ page }) => {
+  await page.setViewportSize({ width: 390, height: 844 });
+  await page.addInitScript(() => localStorage.setItem('xbar-command-center-entry', 'true'));
+  await page.goto('/app/setup');
+  await page.getByRole('button', { name: 'Create workspace', exact: true }).click();
+  const error = page.locator('.clean-form-error[role="alert"]');
+  await expect(error).toContainText('Business name and ranch name are required');
+  await expect(error).toBeFocused();
+  await expect(error).toBeInViewport();
+  await page.getByPlaceholder('XBAR LLC').fill('Patient Rider LLC');
+  await page.getByPlaceholder('Primary Ranch').fill('Patient Ranch');
+  await page.getByRole('button', { name: 'Create workspace', exact: true }).click();
+  await expect(page).toHaveURL(/\/app$/);
+  await page.goto('/app/horses');
+  await expect(page).toHaveURL(/\/app\/horses$/);
+  await page.goBack();
+  await expect(page).toHaveURL(/\/app$/);
+  await page.getByRole('button', { name: 'Add first horse', exact: true }).click();
+  await expect(page.getByRole('heading', { name: 'Add a horse', exact: true })).toBeVisible();
+  await page.getByLabel('Registered name', { exact: true }).fill('Patient First Horse');
+  await page.getByLabel('Barn name', { exact: true }).fill('Patient');
+  await expect(page.getByLabel('Legal owner', { exact: true })).toHaveValue('Patient Ranch');
+  await expect(page.getByLabel('Owner entity', { exact: true })).toHaveValue('Patient Rider LLC');
+  await page.getByRole('button', { name: 'Create horse record', exact: true }).click();
+  await expect(page).toHaveURL(/\/horses\/[^/]+$/);
+  const saved = await page.evaluate(async () => {
+    const path = '/src/store/useXbarStore.ts';
+    const { useXbarStore } = await import(/* @vite-ignore */ path);
+    const horses = useXbarStore.getState().horses;
+    return { id: horses[0]?.id, name: horses[0]?.name, count: horses.length };
+  });
+  expect(saved).toMatchObject({ name: 'PATIENT FIRST HORSE', count: 1 });
+  expect(saved.id).toBeTruthy();
+  await page.reload();
+  await expect
+    .poll(() =>
+      page.evaluate(async () => {
+        const path = '/src/store/useXbarStore.ts';
+        const { useXbarStore } = await import(/* @vite-ignore */ path);
+        const horses = useXbarStore.getState().horses;
+        return { id: horses[0]?.id, name: horses[0]?.name, count: horses.length };
+      }),
+    )
+    .toEqual(saved);
+  expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(390);
 });

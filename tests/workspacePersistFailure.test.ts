@@ -4,6 +4,9 @@ import { readFile } from 'node:fs/promises';
 
 import {
   MEANINGFUL_WORKSPACE_COLLECTIONS,
+  captureWorkspaceDeletionSnapshot,
+  clearCapturedWorkspaceDeletion,
+  didCommitWorkspaceWriteAfter,
   didWorkspaceReadFail,
   getWorkspacePersistReceipt,
   hasMeaningfulPersistedWorkspace,
@@ -977,6 +980,50 @@ test('a receipt belongs to its exact write and reports a committed save', async 
   }
 });
 
+test('workspace acknowledgement waits for its own durable write and rejects stale or wrong-key receipts', async () => {
+  const restoreDb = installFakeIndexedDb();
+  try {
+    const key = 'xbar-live-workspace';
+    const previous = getWorkspacePersistReceipt();
+    assert.equal(await didCommitWorkspaceWriteAfter(previous), false, 'no new device write');
+    const wrongPending = workspaceStateStorage.setItem('other-key', '{}');
+    const wrong = getWorkspacePersistReceipt();
+    assert.equal(await didCommitWorkspaceWriteAfter(previous), false, 'a new unrelated receipt');
+    await wrongPending;
+
+    const staged = JSON.stringify({ state: { horses: [{ id: 'care-horse' }] } });
+    const saved = workspaceStateStorage.setItem(key, staged);
+    let resolved = false;
+    const confirmation = didCommitWorkspaceWriteAfter(wrong).then((committed) => {
+      resolved = true;
+      return committed;
+    });
+    await Promise.resolve();
+    assert.equal(resolved, false, 'an in-memory mutation cannot report a save before device commit');
+    const later = workspaceStateStorage.setItem('other-key', '{"newer":true}');
+    assert.equal(await confirmation, true, 'the later unrelated write did not replace the captured receipt');
+    assert.equal(await workspaceStateStorage.getItem(key), staged);
+    await Promise.all([saved, later]);
+  } finally {
+    restoreDb();
+  }
+});
+
+test('a refused workspace write cannot authorize success feedback', async () => {
+  const restoreDb = installFakeIndexedDb({ failWrites: () => true });
+  const restoreWindow = installBrokenLocalStorage();
+  try {
+    const previous = getWorkspacePersistReceipt();
+    const pending = workspaceStateStorage.setItem('xbar-live-workspace', '{"state":{"horses":[{"id":"refused"}]}}');
+    assert.equal(await didCommitWorkspaceWriteAfter(previous), false);
+    await pending;
+    assert.equal(await workspaceStateStorage.getItem('xbar-live-workspace'), null);
+  } finally {
+    restoreWindow();
+    restoreDb();
+  }
+});
+
 test('a failed receipt stays failed after retry succeeds', async () => {
   const restoreBrokenDb = installFakeIndexedDb({ abortOnCommit: true });
   const restoreWindow = installBrokenLocalStorage();
@@ -1014,6 +1061,42 @@ test('the meaningful-workspace guard reports an unsaved receipt', async () => {
     assert.ok(blocked);
     assert.equal(await blocked.completed, false);
     await pending;
+  } finally {
+    restoreDb();
+  }
+});
+
+test('confirmed account deletion can clear its meaningful stored workspace without weakening the ordinary write guard', async () => {
+  const restoreDb = installFakeIndexedDb();
+  const name = 'xbar-live-workspace';
+  const old = JSON.stringify({ state: { horses: [{ id: 'old' }] } });
+  try {
+    await workspaceStateStorage.setItem(name, old);
+    await workspaceStateStorage.setItem(name, JSON.stringify({ state: { horses: [] } }));
+    assert.equal(await workspaceStateStorage.getItem(name), old);
+    const captured = await captureWorkspaceDeletionSnapshot();
+    assert.ok(captured);
+    assert.equal(await clearCapturedWorkspaceDeletion(captured, () => true), true);
+    assert.equal(await workspaceStateStorage.getItem(name), null);
+  } finally {
+    restoreDb();
+  }
+});
+
+test('confirmed account deletion preserves a replacement workspace and a no-longer-authorized original', async () => {
+  const restoreDb = installFakeIndexedDb();
+  const name = 'xbar-live-workspace';
+  const old = JSON.stringify({ state: { horses: [{ id: 'old' }] } });
+  const replacement = JSON.stringify({ state: { horses: [{ id: 'new' }] } });
+  try {
+    await workspaceStateStorage.setItem(name, old);
+    const captured = await captureWorkspaceDeletionSnapshot();
+    assert.ok(captured);
+    assert.equal(await clearCapturedWorkspaceDeletion(captured, () => false), false);
+    assert.equal(await workspaceStateStorage.getItem(name), old);
+    await workspaceStateStorage.setItem(name, replacement);
+    assert.equal(await clearCapturedWorkspaceDeletion(captured, () => true), false);
+    assert.equal(await workspaceStateStorage.getItem(name), replacement);
   } finally {
     restoreDb();
   }

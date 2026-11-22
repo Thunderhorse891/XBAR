@@ -551,6 +551,17 @@ psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f supabase/migrations/20261107170000_pr
 
 Website deployment does not execute this command. Historical metadata removal is intentional and irreversible.
 
+### Private care-source fence (review only; production approval required)
+
+The [care source fence](docs/F8-CARE-SOURCE-HANDOFF.md) does not enroll any workspace,
+queue an email or change the existing reminder job. Rehearse the database check
+in the disposable records workflow. If approved for production, apply the exact
+migration with an administrative connection; do not enroll any live workspace.
+
+```sh
+psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f supabase/migrations/20261122143000_private_care_source_revision.sql
+```
+
 ### Operations
 
 - **Health probe**: `GET /api/health` returns liveness plus subsystem-configured booleans (no secrets, no database touch). Point uptime monitors here.
@@ -660,6 +671,45 @@ by the application. See [the billing runbook](docs/OPERATOR-BILLING-RUNBOOK.md)
 for the separate Stripe verification gates. Rollback is to disable the feature
 and restore application code, preserving these additive tables and claims so
 retries, workspace deletion, or redeployment cannot reset promotion eligibility.
+
+### Rolling sale packet allowance (F6)
+
+`20261122135000_sale_packet_rolling_allowance.sql` aligns the packet database trigger with the existing 30-day API and UI allowance. It does not update or delete stored packets, change tier limits, or change role permissions.
+
+Before release, run `supabase/checks/sale-packet-rolling-allowance.sql` in a fresh disposable database named `xbar_sale_packet_allowance_fixture`, then `bash supabase/checks/sale-packet-final-slot.sh` against the same local fixture. Verify the boundary again in the integrated QA server via normal packet creation. Record owner approval before applying the production migration; once approved, monitor lock contention while the packet timestamp index is built.
+
+```bash
+psql "$STAGING_DATABASE_URL" -v ON_ERROR_STOP=1 -f supabase/migrations/20261122135000_sale_packet_rolling_allowance.sql
+# Production: only after QA and explicit migration approval.
+psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f supabase/migrations/20261122135000_sale_packet_rolling_allowance.sql
+```
+
+To roll back the quota behavior, use one transaction to replace only the `trg_sale_packets_enforce_commercial_limits` trigger on `public.sale_packets` with its previous definition from `20260611_commercial_entitlements.sql` (do not rerun that entire migration). Leave the index and customer data intact; the previous lifetime gate is a known service regression.
+
+### Protected issuance and the separate workspace-limit review (F4 and F11)
+
+This review branch includes rolling packet allowance and protected issuance.
+Rehearse those changes in that order on a verified isolated database, using the
+authorized migration owner rather than the application service role.
+
+```sh
+# Isolated QA only. Run after the rolling sale-packet allowance migration above.
+psql "$STAGING_DATABASE_URL" -v ON_ERROR_STOP=1 -f supabase/migrations/20261122142000_protected_sale_packet_proofs.sql
+psql "$STAGING_DATABASE_URL" -v ON_ERROR_STOP=1 -f tests/database/sale-packet-proof.sql
+```
+
+The issuer atomically records delivery and proof for new packets. Older packets
+do not gain retroactive provenance. Do not restore mutable proof or delete
+protected history for a rollback. Rehearse a compatible forward fix or service
+hold. The optional care source fence remains disabled.
+
+Workspace-limit authorization is tracked independently by
+[PR #395](https://github.com/Thunderhorse891/XBAR/pull/395). This review branch
+does not contain a competing implementation. Resolve and test that authorization
+boundary before calling F11 closed or approving an unrestricted release.
+
+No production SQL is run by GitHub or Vercel. Separate explicit production
+migration approval and exact catalog verification are required.
 
 ### Document approval guard (prepared; production approval required)
 

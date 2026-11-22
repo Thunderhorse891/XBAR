@@ -227,10 +227,16 @@ next run; without an email provider, reminders become in-app notifications.
 ### POST `/api/horses/import`
 
 `{ workspaceId, csv }` — bulk CSV with header mapping (Name, Breed, Color,
-Birth Date, Gender, Status, Registration Number, Registry, Microchip, Owner,
-Barn; case-insensitive, quoted fields supported). Rows with a matching
-registration number update the existing horse; others insert. Returns
-`{ imported, updated, errors[] }`.
+Birth Date, Sex/Gender, Status, Segment, Registration Number, Registry,
+Microchip, Owner, Barn; case-insensitive, quoted fields supported). A row
+with a matching registration number updates the existing horse. A new
+horse requires an explicit Sex, Status and Segment from the Horse Record
+options. For example: `Mare,Pasture,Broodmare`. Unknown and legacy labels
+such as `Active` or `Sold` need manual classification; they are not silently
+converted. `Stallion` is accepted as `Stud` for Sex. Blank classification
+cells on an update leave the existing values unchanged. A rejected
+classification produces a row error, not an incomplete horse or an update
+count. Returns `{ imported, updated, partial, errors[] }`.
 
 ### GET `/api/horses/export?workspaceId=…&horseId=…`
 

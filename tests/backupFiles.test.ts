@@ -494,14 +494,16 @@ test('a refused deletion is reported, not counted as cleared', async () => {
   }
 });
 
-test('account deletion purges the vault, not just the workspace', async () => {
-  const source = await readFile('src/routes/Settings.tsx', 'utf8');
-
+test('account deletion purges the verified vault independently of the workspace snapshot', async () => {
+  const source = await readFile('src/components/AccountDeletionPanel.tsx', 'utf8');
+  assert.match(source, /clearLocalFileVault\(\s*accountOwner,/);
   assert.match(
     source,
-    /await useXbarStore\.persist\.clearStorage\(\);[\s\S]{0,900}await clearLocalFileVault\(departingWorkspaceId, departingKeys\);/,
-    'the files are in their own database and need their own purge — scoped to the departing workspace, because the vault is origin-wide and this browser may hold another account',
+    /snapshotCleared && canClearActive\(\) && departingOwner !== accountOwner\s+\? await clearLocalFileVault\(departingOwner, fileKeys\)/,
   );
+  assert.match(source, /const departingOwner = \(!compact && cloud\.workspaceId\) \|\| accountOwner/);
+  assert.match(source, /const accountOwner = `account:\$\{accountId\}`/);
+  assert.match(source, /clearCapturedWorkspaceDeletion\(durableSnapshot, canClearActive\)/);
 });
 
 test('a structurally broken backup is refused before any blob is written', async () => {

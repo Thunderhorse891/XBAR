@@ -31,14 +31,6 @@ export function cinematicHome(plans) {
         operatingSystem: 'Web',
         url: `${SITE_ORIGIN}/`,
         publisher: { '@id': `${SITE_ORIGIN}/#organization` },
-        offers: plans.map((plan) => ({
-          '@type': 'Offer',
-          name: plan.tier,
-          price: String(plan.monthlyRate),
-          priceCurrency: 'USD',
-          category: 'subscription',
-          url: `${SITE_ORIGIN}/pricing`,
-        })),
       },
     ],
     body: `
@@ -98,7 +90,7 @@ export function cinematicHome(plans) {
 </section>
 
 <section class="landing-section landing-plans-section" aria-labelledby="plans-title">
-  <div class="wrap"><div class="landing-section-heading" data-landing-reveal><div><p class="landing-eyebrow">Room for your operation</p><h2 id="plans-title">Start with your horses.<br />Grow from there.</h2></div><p>Choose the capacity and tools your operation needs. <a href="/pricing">Compare all plan details</a>.</p></div>
+  <div class="wrap"><div class="landing-section-heading" data-landing-reveal><div><p class="landing-eyebrow">Room for your operation</p><h2 id="plans-title">Start with your horses.<br />Grow from there.</h2></div><p>Compare the planned monthly rates. Paid upgrades are not available yet. <a href="/pricing">Compare all plan details</a>.</p></div>
   <div class="landing-plans">${plans.map((plan) => `<a class="landing-plan" href="/pricing" data-landing-reveal><h3>${esc(plan.tier)}</h3><p class="landing-plan-price">$${plan.monthlyRate}<span>/month</span></p><p>${esc(plan.fit)}</p><span class="landing-plan-link">View plan <span aria-hidden="true">↗</span></span></a>`).join('')}</div></div>
 </section>
 

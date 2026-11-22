@@ -21,6 +21,8 @@ const horse = (id = 'A', reg = '111111', workspace = 'W') => ({
   name: `HORSE ${id}`,
   color: 'Bay',
   status: 'Sold',
+  updated_at: '2026-11-21T15:00:00.000Z',
+  payload: { id, name: `HORSE ${id}`, color: 'Bay', status: 'Sold', registrationNumber: reg },
 });
 
 function fakeDatabase(options) {
@@ -38,7 +40,13 @@ function fakeDatabase(options) {
       let resultPromise;
       const filters = [];
       const matches = (row) =>
-        filters.every(([key, value]) => (Array.isArray(value) ? value.includes(row[key]) : row[key] === value));
+        filters.every(([key, value]) =>
+          Array.isArray(value)
+            ? value.includes(row[key])
+            : key === 'payload'
+              ? JSON.stringify(row[key]) === value
+              : row[key] === value,
+        );
       const project = (row) =>
         projection === '*'
           ? { ...row }
@@ -179,7 +187,10 @@ async function invoke(options = {}) {
     {
       method: options.method ?? 'POST',
       headers: { authorization: 'Bearer synthetic-token' },
-      body: { workspaceId: 'W', csv: options.csv ?? 'Name,Registration Number\nNEW,111111' },
+      body: {
+        workspaceId: 'W',
+        csv: options.csv ?? 'Name,Registration Number,Sex,Status,Segment\nNEW,111111,Mare,Pasture,Broodmare',
+      },
     },
     response,
   );
@@ -306,7 +317,7 @@ test('whole-batch authorization denies a mixed insert/update before the first wr
   const result = await invoke({
     horses: [horse()],
     role: 'Owner',
-    csv: 'Name,Registration Number\nEDIT,111111\nNEW,222222',
+    csv: 'Name,Registration Number,Sex,Status,Segment\nEDIT,111111,,,,\nNEW,222222,Mare,Pasture,Broodmare',
   });
   assert.equal(result.status, 403);
   noHorseWrite(result);
@@ -317,7 +328,7 @@ test('ordinary update preserves absent columns and counts the intended horse onc
   assert.deepEqual(result.body, { ok: true, partial: false, imported: 0, updated: 1, errors: [] });
   assert.equal(result.database.table[0].name, 'NEW');
   assert.equal(result.database.table[0].color, 'Bay');
-  assert.equal(result.database.table[0].status, 'Sold');
+  assert.equal(result.database.table[0].status, 'Pasture');
 });
 
 test('blank status preserves lifecycle while explicit blank owner clears only that field', async () => {
@@ -337,8 +348,125 @@ test('an authorized new registration inserts exactly once and is counted once', 
   assert.equal(result.database.calls.inserts, 1);
 });
 
+test('insert stores the complete horse payload and mirrors the imported fields', async () => {
+  const result = await invoke({
+    csv:
+      'Name,Registration Number,Breed,Color,Sex,DOB,Registry,Owner,Barn,Chip,Status,Segment\n' +
+      'NEW,111111,Quarter Horse,Bay,Mare,2020-09-07,AQHA,Owner A,Main,CHIP1,Pasture,Broodmare',
+  });
+  assert.equal(result.body.imported, 1);
+  const [row] = result.database.table;
+  assert.equal(row.payload.id, row.horse_id);
+  assert.equal(row.payload.name, row.name);
+  assert.equal(row.payload.registrationNumber, row.registration_number);
+  assert.equal(row.payload.registered, false);
+  assert.equal(row.payload.foaledOn, row.birthdate);
+  assert.equal(row.payload.sex, row.gender);
+  assert.equal(row.payload.microchipId, row.microchip);
+  assert.equal(row.payload.owner, row.owner_name);
+  assert.equal(row.payload.barnName, row.barn_name);
+  assert.deepEqual(clone(row.payload.notes), []);
+  assert.deepEqual(clone(row.payload.ownership), []);
+});
+
+test('update stores the changed CSV fields in payload while preserving unrelated record evidence', async () => {
+  const row = { ...horse(), updated_at: '2026-11-21T15:00:00.000Z' };
+  row.payload = {
+    id: row.horse_id,
+    name: row.name,
+    registrationNumber: row.registration_number,
+    color: 'Bay',
+    owner: 'Old owner',
+    notes: [{ id: 'note', body: 'Keep me' }],
+  };
+  const result = await invoke({ horses: [row], csv: 'Name,Registration Number,Owner\nNEW,111111,' });
+  const [saved] = result.database.table;
+  assert.equal(result.body.updated, 1);
+  assert.equal(saved.payload.name, 'NEW');
+  assert.equal(saved.payload.owner, '');
+  assert.equal(saved.payload.color, 'Bay');
+  assert.deepEqual(clone(saved.payload.notes), row.payload.notes);
+});
+
+test('a concurrent revision change preserves newer data and never counts a success', async () => {
+  const result = await invoke({
+    horses: [horse()],
+    beforeUpdate: ([row]) => {
+      row.updated_at = '2026-11-21T15:00:01.000Z';
+      row.payload.notes = [{ id: 'newer-note', body: 'Keep concurrent record' }];
+    },
+  });
+  rowFailure(result);
+  assert.equal(result.database.calls.affected, 0);
+  assert.equal(result.database.table[0].payload.notes[0].id, 'newer-note');
+});
+
+test('a concurrent payload change with the same timestamp is never overwritten', async () => {
+  const result = await invoke({
+    horses: [horse()],
+    beforeUpdate: ([row]) => {
+      row.payload = { ...row.payload, notes: [{ id: 'same-revision-note', body: 'Keep newer evidence' }] };
+    },
+  });
+  rowFailure(result);
+  assert.equal(result.database.calls.affected, 0);
+  assert.equal(result.database.table[0].payload.notes[0].id, 'same-revision-note');
+});
+
+test('a pre-fix malformed import payload needs review and is not automatically replaced', async () => {
+  const result = await invoke({
+    horses: [{ ...horse(), payload: { importSource: 'csv' } }],
+  });
+  rowFailure(result);
+  assert.match(result.body.errors[0].message, /review and repair/i);
+  noHorseWrite(result);
+});
+
+test('a name-only new row reports which fields need review and never writes', async () => {
+  const result = await invoke({ csv: 'Name\nNO CLASSIFICATION' });
+  rowFailure(result);
+  assert.match(result.body.errors[0].message, /Sex.*Status.*Segment/);
+  noHorseWrite(result);
+  assert.equal(result.capacityCalls, 0);
+});
+
+test('classified rows normalize case and the Stallion alias', async () => {
+  const result = await invoke({ csv: 'Name,Sex,Status,Segment\nNEW,sTaLLiON,pAsTuRe,stud' });
+  assert.equal(result.body.imported, 1);
+  const [{ payload, gender, status, segment }] = result.database.table;
+  assert.deepEqual([payload.sex, payload.status, payload.segment], ['Stud', 'Pasture', 'Stud']);
+  assert.deepEqual([gender, status, segment], ['Stud', 'Pasture', 'Stud']);
+});
+
+test('invalid classifications do not block authorized valid updates or consume capacity', async () => {
+  const result = await invoke({
+    role: 'Owner',
+    horses: [horse()],
+    csv: 'Name,Registration Number,Sex,Status,Segment\nEDIT,111111,,,\nNEW,222222,Unknown,Active,N/A',
+  });
+  assert.equal(result.body.imported, 0);
+  assert.equal(result.body.updated, 1);
+  assert.deepEqual(
+    result.body.errors.map(({ row }) => row),
+    [3],
+  );
+  assert.equal(result.capacityCalls, 0);
+  assert.equal(result.database.table[0].payload.status, 'Sold');
+});
+
+test('an explicit unknown classification never replaces saved operational values', async () => {
+  const result = await invoke({
+    horses: [horse()],
+    csv: 'Name,Registration Number,Status\nNOT SAVED,111111,Sold',
+  });
+  rowFailure(result);
+  assert.match(result.body.errors[0].message, /Status must be one of/);
+  assert.equal(result.database.table[0].payload.name, 'HORSE A');
+  noHorseWrite(result);
+});
+
 test('records without registration retain the authorized creation path', async () => {
-  const result = await invoke({ csv: 'Name\nUNREGISTERED FOAL' });
+  const result = await invoke({ csv: 'Name,Sex,Status,Segment\nUNREGISTERED FOAL,Colt,Pasture,Young Stock' });
   assert.equal(result.body.imported, 1);
   assert.equal(result.database.calls.planning, 0);
   assert.equal(result.database.calls.rechecks, 0);
@@ -413,7 +541,7 @@ test('mixed batch preserves successes and reports only failed rows', async () =>
   const result = await invoke({
     horses: [horse('A'), horse('GONE', '222222')],
     afterPlan: (table) => table.splice(1, 1),
-    csv: 'Name,Registration Number\nEDIT,111111\nLOST,222222\nNEW,333333',
+    csv: 'Name,Registration Number,Sex,Status,Segment\nEDIT,111111,,,\nLOST,222222,,,\nNEW,333333,Mare,Pasture,Broodmare',
   });
   assert.equal(result.body.updated, 1);
   assert.equal(result.body.imported, 1);
