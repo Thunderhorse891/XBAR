@@ -1,4 +1,4 @@
-name: iOS native startup A/B (diagnostic only)
+name: iOS native exact #418 accessibility diagnostic
 on:
   workflow_dispatch:
 
@@ -13,16 +13,6 @@ jobs:
     if: github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/qa/ios-startup-ab-20261122' && github.event.repository.private == false
     runs-on: macos-26-intel
     timeout-minutes: 40
-    strategy:
-      fail-fast: false
-      matrix:
-        include:
-          - variant: good
-            revision: cbdc109bc40e533be11ce7ff78c159d812314ba2
-            tree: 5e266f84fb8aba2a48d400da1232f47a8fc14bfa
-          - variant: bad
-            revision: f58655c27a36d97dffbebbb8f774a48745e3ce71
-            tree: 539176ce23826f773a52daf7542c104309764a0c
     env:
       VITE_SUPABASE_URL: https://native-ci.invalid
       VITE_SUPABASE_ANON_KEY: native-ci-synthetic-key
@@ -40,13 +30,13 @@ jobs:
           persist-credentials: false
       - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0
         with:
-          ref: ${{ matrix.revision }}
+          ref: 35236db18840b6860eb13664ae5469b1f102bdea
           path: source
           persist-credentials: false
       - name: Verify the exact tested checkout
         env:
-          EXPECTED_REVISION: ${{ matrix.revision }}
-          EXPECTED_TREE: ${{ matrix.tree }}
+          EXPECTED_REVISION: 35236db18840b6860eb13664ae5469b1f102bdea
+          EXPECTED_TREE: d22a7147cb2abc88ae4f91379a98b50f86172f29
         run: |
           set -euo pipefail
           test "$(git rev-parse HEAD)" = "$EXPECTED_REVISION"
@@ -76,6 +66,7 @@ jobs:
           npx --no-install cap sync ios
           node scripts/check-ios-project.mjs
           git diff --exit-code -- ios/App/AppUITests
+          python3 ../harness/.github/xbar-ios-ab/prepare-ax-probe.py ios/App/AppUITests/AppUITests.swift
       - name: Select the matching iOS Simulator
         run: |
           set -euo pipefail
