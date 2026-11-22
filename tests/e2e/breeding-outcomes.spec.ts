@@ -277,20 +277,28 @@ test('both screens agree after reload when a new same-day cycle has no cover dat
       await prior.dispose();
     }
   }
-  const mare = page.locator('.stack-item--interactive').filter({ hasText: /Two Cycle Mare/i });
+  const statusPanel = page.locator('.panel').filter({
+    has: page.getByRole('heading', { name: 'Foaling forecast & program value', exact: true }),
+  });
+  const mare = statusPanel.locator('.stack-item--interactive').filter({
+    has: page.locator('.stack-item__title').filter({ hasText: /^Two Cycle Mare$/i }),
+  });
   async function assertScreens(status: string, count: number, forecast: boolean) {
     await expect(mare).toContainText(status);
-    await expect(page.getByText(`${count} confirmed in foal`, { exact: true })).toBeVisible();
+    await expect(statusPanel.getByText(`${count} confirmed in foal`, { exact: true })).toBeVisible();
     if (forecast) await expect(mare).toContainText('Estimated foaling');
     else await expect(mare).not.toContainText('Estimated foaling');
     await page.goto('/app/breeding-foaling');
     await page.reload();
-    await expect(page.getByRole('row').filter({ hasText: /Two Cycle Mare/i })).toContainText(status);
+    const overviewMare = page.getByRole('row').filter({
+      has: page.getByRole('link', { name: /^Two Cycle Mare$/i }),
+    });
+    await expect(overviewMare).toContainText(status);
     const inFoal = page.locator('.xs-card').filter({ has: page.getByText('In foal', { exact: true }) });
     await expect(inFoal).toHaveText(new RegExp(`^In foal\\s*${count}$`));
     await page.getByRole('button', { name: 'Open breeding records', exact: true }).click();
     await expect(mare).toContainText(status);
-    await expect(page.getByText(`${count} confirmed in foal`, { exact: true })).toBeVisible();
+    await expect(statusPanel.getByText(`${count} confirmed in foal`, { exact: true })).toBeVisible();
     if (forecast) await expect(mare).toContainText('Estimated foaling');
     else await expect(mare).not.toContainText('Estimated foaling');
   }
