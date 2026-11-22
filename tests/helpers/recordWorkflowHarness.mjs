@@ -108,7 +108,19 @@ export async function renderRoute(name, changes = {}, params = '', options = {})
                 'export const useCloudStore=(fn)=>fn(f.cloud);useCloudStore.getState=()=>f.cloud;useCloudStore.subscribe=()=>()=>{};export const hasValidatedPasswordRecovery=()=>Boolean(f.cloud.recoveryValid);';
             else if (path === '@/store/useUiStore')
               code = 'export const useUiStore=(fn)=>fn(f.ui);useUiStore.getState=()=>f.ui;';
-            else if (path === '@/lib/workspaceStorage') code = 'export const getWorkspacePersistReceipt=()=>f.receipt;';
+            else if (path === '@/lib/workspaceStorage')
+              code = `
+                export const getWorkspacePersistReceipt=()=>f.receipt;
+                export const deviceWorkspaceSaveUnconfirmed='Device write not confirmed in fixture';
+                export const didCommitWorkspaceWriteAfter=async(previous)=>{
+                  const receipt=f.receipt;
+                  try {
+                    return Boolean(receipt && receipt!==previous && receipt.name==='xbar-live-workspace' && (await receipt.completed));
+                  } catch {
+                    return false;
+                  }
+                };
+              `;
             else if (path === '@/lib/recordsOwner') code = 'export const readRecordsOwner=()=>f.recordsOwner;';
             else if (path === '@/hooks/useDayKey') code = 'export const useDayKey=()=>"2026-11-21";';
             else if (path.startsWith('@/hooks/'))
