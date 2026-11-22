@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import { readFileSync } from 'node:fs';
+import { readdirSync, readFileSync } from 'node:fs';
 import test from 'node:test';
 
 import { SALE_PACKET_WINDOW_DAYS, checkSalePacketCapacity } from '../../api/_lib/entitlements.js';
@@ -95,4 +95,46 @@ test('only generating a packet is metered; reading or re-signing one is not', ()
   const postOnly = route.indexOf("if (req.method !== 'POST')");
   const metered = route.indexOf('checkSalePacketCapacity(supabase');
   assert.ok(postOnly > 0 && metered > postOnly, 'the GET (re-sign) path returns before the allowance is checked');
+});
+
+test('the final database trigger uses the API window and meters only genuinely new packet identities', () => {
+  const dir = 'supabase/migrations';
+  const sql = readdirSync(dir)
+    .sort()
+    .filter((name) => name.endsWith('.sql'))
+    .map((name) => readFileSync(`${dir}/${name}`, 'utf8'))
+    .join('\n');
+  const triggers = [
+    ...sql.matchAll(
+      /create trigger trg_sale_packets_enforce_commercial_limits[\s\S]*?execute function public\.(\w+)\(\);/gi,
+    ),
+  ];
+  assert.equal(
+    triggers.at(-1)?.[1],
+    'xbar_enforce_sale_packet_rolling_allowance',
+    'the active packet trigger is still the lifetime gate',
+  );
+  const gate = sql.slice(
+    sql.lastIndexOf('create or replace function public.xbar_enforce_sale_packet_rolling_allowance()'),
+  );
+  assert.match(gate, new RegExp(`created_at >= issued_at - interval '${SALE_PACKET_WINDOW_DAYS * 24} hours'`));
+  assert.ok(
+    gate.indexOf('pg_advisory_xact_lock') < gate.indexOf('from public.sale_packets'),
+    'serialize before the first packet read',
+  );
+  assert.match(gate, /new\.created_at := existing_created_at;/);
+  assert.match(gate, /new\.created_at := issued_at;/);
+  assert.match(gate, /detail = 'xbar_sale_packet_allowance_reached'/);
+});
+
+test('an authoritative quota rejection after upload cleans up and returns the same public quota code', () => {
+  const route = readFileSync('api/sale-packets.js', 'utf8');
+  const recordFailure = route.slice(
+    route.indexOf('if (recordError || issued !== true)'),
+    route.indexOf('const { data: signed }'),
+  );
+  assert.match(recordFailure, /if \(rejected\) await supabase\.storage/, 'only definite rejections clean up');
+  assert.match(recordFailure, /remove\(\[packetPath\]\)[\s\S]+P0001[\s\S]+xbar_sale_packet_allowance_reached/);
+  assert.match(recordFailure, /sendJson\(res, 403,[\s\S]+code: 'sale_packet_limit_reached'/);
+  assert.match(recordFailure, /storage_limit_reached/, 'preserve the distinct storage error');
 });

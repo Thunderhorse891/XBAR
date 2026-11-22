@@ -1,0 +1,35 @@
+{
+  "mode": "synthetic",
+  "completeBuckets": ["horse-documents", "horse-media"],
+  "references": [
+    {
+      "source": "document",
+      "workspace": "example-workspace",
+      "bucket": "horse-documents",
+      "path": "/example-workspace/shared.pdf"
+    },
+    {
+      "source": "expense-receipt",
+      "workspace": "example-workspace",
+      "bucket": "horse-documents",
+      "path": "example-workspace/shared.pdf"
+    },
+    {
+      "source": "horse-media",
+      "workspace": "example-workspace",
+      "bucket": "horse-media",
+      "path": "example-workspace/unknown-size.jpg"
+    },
+    {
+      "source": "horse-media",
+      "workspace": "example-workspace",
+      "bucket": "horse-media",
+      "path": "example-workspace/missing.jpg"
+    }
+  ],
+  "objects": [
+    { "bucket": "horse-documents", "path": "example-workspace/shared.pdf", "bytes": 120 },
+    { "bucket": "horse-media", "path": "example-workspace/unknown-size.jpg", "bytes": null },
+    { "bucket": "horse-media", "path": "example-workspace/no-reference.jpg", "bytes": 50 }
+  ]
+}

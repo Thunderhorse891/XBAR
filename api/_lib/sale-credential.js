@@ -172,8 +172,8 @@ export function buildServerCredentialPayload({
 }
 
 /**
- * Seal a packet from server-authoritative data. Returns the seal to store on the
- * sale_packets row and return to the client. `payload` is the exact canonical
+ * Seal a packet from server-authoritative data. Returns the seal to store in the
+ * protected issuance record and return to the client. `payload` is the exact canonical
  * string that was hashed, kept so a later verification can recompute and compare.
  */
 export function buildServerSaleCredential(input) {

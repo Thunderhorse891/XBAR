@@ -13,7 +13,7 @@ import { applyCors } from './cors.js';
  *   POST /api/buyer/verify   { packetId }
  *
  * A buyer holding a sale packet (and its printed seal code) can confirm the
- * packet against XBAR's OWN record. We look up the sale_packets row by its
+ * packet against XBAR's OWN record. We look up the protected issuance record by its
  * unguessable packet id and return the server-anchored seal we computed and
  * stored at generation time, plus the buyer-facing facts it covers. Because the
  * seal was computed server-side from authoritative records — not from the
@@ -46,7 +46,8 @@ function str(value) {
 }
 
 /**
- * Turn a stored sale_packets row into the buyer-facing verification result.
+ * Turn a protected sale_packet_proofs row into the buyer-facing result.
+ * A legacy delivery row can establish existence, never provenance.
  * Pure and dependency-free so it can be unit-tested without a database.
  *
  *  - row is null / undefined         -> { found: false }
@@ -59,8 +60,7 @@ function str(value) {
 export function summarizeSealedPacket(row) {
   if (!row) return { found: false };
 
-  const payload = asObject(row.payload) || {};
-  const seal = asObject(payload.seal);
+  const seal = asObject(row.seal);
   if (!seal || seal.anchor !== 'server' || !seal.digest) {
     // Packet exists but predates server anchoring, or was a local-only build.
     return { found: true, anchored: false };
@@ -77,7 +77,8 @@ export function summarizeSealedPacket(row) {
     (sealed.version !== undefined && sealed.version !== (seal.version ?? 1)) ||
     (sealed.sealedAt !== undefined && sealed.sealedAt !== seal.sealedAt) ||
     serverSealCode(digest) !== seal.sealCode ||
-    (row.packet_id && sealed.packetId !== row.packet_id)
+    typeof row.packet_id !== 'string' ||
+    sealed.packetId !== row.packet_id
   ) {
     return { found: true, anchored: false };
   }
@@ -155,6 +156,9 @@ export default async function handler(req, res) {
     return;
   }
 
+  // Access can change; stale facts must never survive a blocked/revoked proof.
+  res.setHeader('Cache-Control', 'no-store');
+
   let packetId = resolvePacketId(req);
   if (!packetId && req.method === 'POST') {
     let body;
@@ -175,9 +179,9 @@ export default async function handler(req, res) {
     return sendJson(res, 503, { ok: false, message: 'The verification service is not configured.' });
   }
 
-  const { data, error } = await supabase
-    .from('sale_packets')
-    .select('packet_id, payload, created_at')
+  const { data: proof, error } = await supabase
+    .from('sale_packet_proofs')
+    .select('packet_id, seal')
     .eq('packet_id', packetId)
     .maybeSingle();
 
@@ -185,7 +189,21 @@ export default async function handler(req, res) {
     return sendJson(res, 502, { ok: false, message: 'Verification is temporarily unavailable. Try again.' });
   }
 
-  const summary = summarizeSealedPacket(data);
+  let summary = summarizeSealedPacket(proof);
+  if (!proof) {
+    // Legacy/local packet records can establish existence only. Never read the
+    // mutable payload or return sealed facts on this fallback.
+    const { data: legacy, error: legacyError } = await supabase
+      .from('sale_packets')
+      .select('packet_id')
+      .eq('packet_id', packetId)
+      .limit(1)
+      .maybeSingle();
+    if (legacyError) {
+      return sendJson(res, 502, { ok: false, message: 'Verification is temporarily unavailable. Try again.' });
+    }
+    summary = legacy ? { found: true, anchored: false } : { found: false };
+  }
   if (!summary.found) {
     return sendJson(res, 404, {
       ok: true,
