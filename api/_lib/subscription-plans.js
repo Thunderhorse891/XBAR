@@ -1,3 +1,4 @@
+import publicPlanCatalog from './public-plan-catalog.json' with { type: 'json' };
 import {
   BASELINE_TIER,
   billingStateForStripeStatus,
@@ -26,15 +27,15 @@ export const subscriptionPlans = {
     },
   },
   Professional: {
-    monthlyRate: 29,
+    monthlyRate: publicPlanCatalog.Professional.monthlyCents / 100,
     annualRate: 290,
     sharedAccessEnabled: true,
     featureFlags: [
-      'Everything in Starter',
+      'Horse records and document OCR',
       'Make money: watermarked sale packets and buyer folders',
       'Sale listings — publish buyer-ready horse profiles to shared access',
       '5 team seats and 10 client seats',
-      '1,000 document capacity · 100 GB storage',
+      'Up to 1,000 active documents',
     ],
     limits: {
       horseLimit: 30,
@@ -46,14 +47,14 @@ export const subscriptionPlans = {
     },
   },
   'Ranch Ops': {
-    monthlyRate: 79,
+    monthlyRate: publicPlanCatalog['Ranch Ops'].monthlyCents / 100,
     annualRate: 790,
     sharedAccessEnabled: true,
     featureFlags: [
       'Everything in Professional',
       'Run the operation: team roles, breeding program, equipment at scale',
       '20 team seats and 40 client seats',
-      '5,000 document capacity · 500 GB storage',
+      'Up to 5,000 active documents',
     ],
     limits: {
       horseLimit: 200,
@@ -93,22 +94,35 @@ export const subscriptionPlans = {
  * billing interval — one Price cannot sell both monthly and annual.
  * An unset id fails closed downstream: checkout refuses without one.
  */
-export function getStripePriceIdByTier(tier, billingPeriod = 'monthly') {
+export function getStripePriceIdByTier(tier, billingPeriod = 'monthly', env = process.env) {
   const period = billingPeriod === 'annual' ? 'annual' : 'monthly';
   const suffix = period === 'annual' ? '_ANNUAL' : '';
   // Trimmed, as /api/health reads them: a pasted newline would otherwise reach
   // Stripe as part of the id and match no incoming price either.
   const envMap = {
-    Starter: process.env[`STRIPE_PRICE_ID_STARTER${suffix}`]?.trim() || '',
-    Professional: process.env[`STRIPE_PRICE_ID_PROFESSIONAL${suffix}`]?.trim() || '',
-    'Ranch Ops': process.env[`STRIPE_PRICE_ID_RANCH_OPS${suffix}`]?.trim() || '',
-    Enterprise: process.env[`STRIPE_PRICE_ID_ENTERPRISE${suffix}`]?.trim() || '',
+    Starter: env[`STRIPE_PRICE_ID_STARTER${suffix}`]?.trim() || '',
+    Professional: env[`STRIPE_PRICE_ID_PROFESSIONAL${suffix}`]?.trim() || '',
+    'Ranch Ops': env[`STRIPE_PRICE_ID_RANCH_OPS${suffix}`]?.trim() || '',
+    Enterprise: env[`STRIPE_PRICE_ID_ENTERPRISE${suffix}`]?.trim() || '',
   };
 
   return envMap[tier] || '';
 }
 
 const PRICE_ID_SHAPE = /^price_[A-Za-z0-9_]+$/;
+export const PUBLIC_PAID_SUBSCRIPTION_TIERS = Object.freeze(Object.keys(publicPlanCatalog));
+
+export function getCheckoutPriceIdByTier(tier, billingPeriod = 'monthly', env = process.env) {
+  // Keep older mappings readable by the webhook without selling them again.
+  if (billingPeriod !== 'monthly' || !PUBLIC_PAID_SUBSCRIPTION_TIERS.includes(tier)) return '';
+  const priceId = getStripePriceIdByTier(tier, billingPeriod, env);
+  if (!PRICE_ID_SHAPE.test(priceId)) return '';
+  const currentMatches = Object.keys(subscriptionPlans).flatMap((candidate) =>
+    ['monthly', 'annual'].filter((period) => getStripePriceIdByTier(candidate, period, env) === priceId),
+  );
+  const legacy = readLegacyPriceIds(env.STRIPE_LEGACY_PRICE_IDS ?? '');
+  return currentMatches.length === 1 && !legacy.errors.length && !legacy.entries.has(priceId) ? priceId : '';
+}
 
 /**
  * Which plan and cadence pairs this deployment can actually sell: a price id
@@ -121,7 +135,7 @@ export function sellablePrices() {
   const sellable = { monthly: {}, annual: {} };
   for (const tier of Object.keys(subscriptionPlans)) {
     for (const period of ['monthly', 'annual']) {
-      sellable[period][tier] = PRICE_ID_SHAPE.test(getStripePriceIdByTier(tier, period));
+      sellable[period][tier] = Boolean(getCheckoutPriceIdByTier(tier, period));
     }
   }
   return sellable;
@@ -274,6 +288,27 @@ export function buildSubscriptionProfile(params) {
   const plan = subscriptionPlans[tier];
   const existingUsage = params.existingUsage || {};
   const renewalDate = params.renewalDate || '';
+  const listPlan = subscriptionPlans[purchasedTier];
+  // A price change only changes a new quote. On a Stripe event start with the
+  // previous same-tier recorded amounts, then trust the actual mapped line item.
+  const prior = params.existingProfile?.tier === purchasedTier ? params.existingProfile : null;
+  const storedMonthly = prior?.monthly_rate ?? prior?.payload?.monthlyRate;
+  const storedAnnual = prior?.payload?.annualRate;
+  let monthlyRate = Number.isFinite(storedMonthly) && storedMonthly > 0 ? storedMonthly : listPlan.monthlyRate;
+  let annualRate = Number.isFinite(storedAnnual) && storedAnnual > 0 ? storedAnnual : listPlan.annualRate;
+  const price = params.billedPrice;
+  if (
+    price &&
+    price.id === params.priceId &&
+    findTierByPriceId(price.id) === purchasedTier &&
+    price.currency === 'usd' &&
+    Number.isSafeInteger(price.unit_amount) &&
+    price.unit_amount > 0 &&
+    price.recurring?.interval_count === 1
+  ) {
+    if (billingPeriod === 'monthly' && price.recurring.interval === 'month') monthlyRate = price.unit_amount / 100;
+    if (billingPeriod === 'annual' && price.recurring.interval === 'year') annualRate = price.unit_amount / 100;
+  }
 
   return {
     tier,
@@ -286,11 +321,11 @@ export function buildSubscriptionProfile(params) {
     // reading as a $29/mo one; quoting Starter's rate to a canceled Enterprise
     // workspace would imply a charge that is not happening, and billingState
     // is what says whether anything is being billed at all.
-    monthlyRate: subscriptionPlans[purchasedTier].monthlyRate,
+    monthlyRate,
     // The amount charged when billingPeriod is 'annual', carried alongside
     // monthlyRate so a billing screen never has to re-derive the price from
     // the tier and the period.
-    annualRate: subscriptionPlans[purchasedTier].annualRate,
+    annualRate,
     // 'monthly' | 'annual' for a purchase whose Stripe price id this
     // deployment recognizes; null when the period is not known (a row written
     // before the period was recorded, or an unrecognized price id).

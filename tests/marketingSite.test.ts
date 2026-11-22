@@ -15,7 +15,6 @@ const load = (relPath: string) => import(pathToFileURL(path.join(repoRoot, relPa
 type MarketingPlan = {
   tier: string;
   monthlyRate: number;
-  annualRate: number;
   fit: string;
   features: string[];
   limits: Record<string, number>;
@@ -34,18 +33,17 @@ test('published pricing exactly matches the tier configuration the app enforces'
     marketingPlans: MarketingPlan[];
   };
 
-  const tiers = Object.keys(subscriptionTierConfig);
+  const tiers = ['Professional', 'Ranch Ops'];
   assert.deepEqual(
     marketingPlans.map((plan) => plan.tier),
     tiers,
-    'marketing must publish every tier, in the same order',
+    'marketing must publish the public pair in the same order',
   );
 
   for (const plan of marketingPlans) {
     const config = subscriptionTierConfig[plan.tier as keyof typeof subscriptionTierConfig];
     assert.ok(config, `unknown marketing tier ${plan.tier}`);
     assert.equal(plan.monthlyRate, config.monthlyRate, `${plan.tier} price drifted from the app`);
-    assert.equal(plan.annualRate, config.annualRate, `${plan.tier} annual price drifted from the app`);
     assert.deepEqual(plan.features, config.featureFlags, `${plan.tier} feature list drifted from the app`);
     assert.deepEqual(plan.limits, config.limits, `${plan.tier} limits drifted from the app`);
   }
@@ -253,25 +251,21 @@ test('the homepage retains approved artwork, accurate prices, and static signup 
   );
 });
 
-test('public pricing publishes approved monthly and annual totals without promising checkout readiness', async () => {
+test('public pricing publishes only the approved USD monthly rates', async () => {
   const { marketingPages } = (await load('scripts/marketing/pages.mjs')) as { marketingPages: MarketingPage[] };
-  const { marketingPlans } = (await load('scripts/marketing/pricing-data.mjs')) as { marketingPlans: MarketingPlan[] };
-  const pricing = marketingPages.find((page) => page.path === '/pricing')!;
-  assert.match(pricing.body, /Review the billing options available to your workspace inside XBAR/);
-  assert.match(pricing.body, /Annual prices are the total billed each year/);
-  assert.doesNotMatch(
-    pricing.body,
-    /Annual billing is not currently offered|Monthly billing is available|2 months free/,
-  );
-  for (const plan of marketingPlans) {
-    const amount = plan.annualRate.toLocaleString('en-US');
-    assert.ok(pricing.body.includes(`$${plan.monthlyRate}<small>/month</small>`), `${plan.tier}: monthly card price`);
-    assert.ok(pricing.body.includes(`$${amount}/year, billed annually`), `${plan.tier}: annual card total`);
-    assert.ok(pricing.body.includes(`<td>$${amount}/year</td>`), `${plan.tier}: annual comparison total`);
+  const pricing = marketingPages.find((page) => page.path === '/pricing');
+  assert.ok(pricing);
+  assert.match(pricing.body, /Planned new subscriptions are monthly, in USD per workspace/);
+  assert.match(pricing.body, /Existing subscriptions keep their current terms/);
+  for (const [tier, rate] of [
+    ['Professional', '19.99'],
+    ['Ranch Ops', '49.99'],
+  ]) {
+    assert.ok(pricing.body.includes(`$${rate}<small>/month</small>`), `${tier}: advertised price`);
+    assert.ok(pricing.body.includes(`<td>$${rate}</td>`), `${tier}: comparison price`);
   }
-  assert.doesNotMatch(pricing.body, /before cloud sync is configured|before enabling cloud services/);
+  assert.doesNotMatch(pricing.body, /billed annually|Annual price|Choose Starter|Choose Enterprise|[0-9] GB/);
 });
-
 test('the ungated tour distinguishes example screens from account signup', async () => {
   const { marketingPages } = (await load('scripts/marketing/pages.mjs')) as { marketingPages: MarketingPage[] };
   const demo = marketingPages.find((page) => page.path === '/demo')!;
@@ -486,4 +480,26 @@ test('all public routes show the complete original B artwork without traced subs
       assert.doesNotMatch(svg, /<path\b|<text\b|xbar-signature__trace/);
     }
   }
+});
+
+test('public pages do not promise an unverified purchase or attach a paid plan to generic signup', async () => {
+  const { marketingPages } = (await load('scripts/marketing/pages.mjs')) as { marketingPages: MarketingPage[] };
+  for (const page of marketingPages) {
+    assert.doesNotMatch(
+      page.body,
+      /href="[^" ]*(?:&amp;|&)plan=/,
+      `${page.path}: public signup must not imply a purchase`,
+    );
+    assert.doesNotMatch(
+      page.body,
+      />Choose (?:Professional|Ranch Ops)</,
+      `${page.path}: no unverified purchase action`,
+    );
+  }
+  const pricing = marketingPages.find((page) => page.path === '/pricing')!;
+  assert.match(pricing.body, /Paid upgrades are not available yet/);
+  assert.doesNotMatch(
+    pricing.body,
+    /set up your workspace without a card|completes the plan change through secure Stripe checkout/,
+  );
 });

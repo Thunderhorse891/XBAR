@@ -8,6 +8,40 @@ const NETWORK_FIRST_ASSET_PATHS = [
   /^\/site\.webmanifest$/,
 ];
 
+// Match only entry points tested for recovery. Never render a generic page
+// over explicit auth, account, share, or query-bearing destinations.
+const RECOVERABLE_NAVIGATION_PATHS = new Set(['/app', '/app/', '/app/horses', '/app/horses/']);
+
+function offlineRecoveryResponse() {
+  // Generated locally from literals, not persisted in Cache Storage and never
+  // populated from the requested URL, an account, or a cached application page.
+  return new Response(
+    `<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Connection needed | XBAR</title>
+</head>
+<body>
+<main>
+<h1>Connection needed</h1>
+<p>XBAR could not reach the server. Horse records are unavailable offline.</p>
+<p>Reconnect and reload this page to continue.</p>
+</main>
+</body>
+</html>`,
+    {
+      status: 503,
+      headers: {
+        'Content-Type': 'text/html; charset=utf-8',
+        'Cache-Control': 'no-store',
+        'Content-Security-Policy': "default-src 'none'; base-uri 'none'; form-action 'none'; frame-ancestors 'none'",
+      },
+    },
+  );
+}
+
 self.addEventListener('install', (event) => {
   event.waitUntil(self.skipWaiting());
 });
@@ -35,7 +69,12 @@ self.addEventListener('fetch', (event) => {
   if (url.origin !== self.location.origin) return;
 
   if (request.mode === 'navigate') {
-    event.respondWith(fetch(request, { cache: 'no-store' }));
+    const network = fetch(request, { cache: 'no-store' });
+    // A service worker cannot reliably inspect URL fragments. The static notice
+    // therefore runs no application/auth scripts and does not redirect or reload.
+    event.respondWith(
+      !url.search && RECOVERABLE_NAVIGATION_PATHS.has(url.pathname) ? network.catch(offlineRecoveryResponse) : network,
+    );
     return;
   }
 

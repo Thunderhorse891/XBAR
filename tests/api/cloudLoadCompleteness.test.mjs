@@ -12,8 +12,14 @@ registerHooks({
 const { setCloudSubscriptionClient } = await import('./fixtures/cloudSubscriptionClient.mjs');
 const { supabaseConfig } = await import('../../src/lib/platformConfig.ts');
 const { loadWorkspaceBackupFromCloud } = await import('../../src/lib/cloudWorkspace.ts');
-const { createEmptyWorkspaceState, restorePersistedState, selectPersistedState, alignRelationalRecoveryMetadata } =
-  await import('../../src/store/xbarStoreHelpers.ts');
+const { importHorseRows } = await import('../../api/_lib/horses-import.js');
+const {
+  createEmptyWorkspaceState,
+  restorePersistedState,
+  canRestorePersistedState,
+  selectPersistedState,
+  alignRelationalRecoveryMetadata,
+} = await import('../../src/store/xbarStoreHelpers.ts');
 const { decideCloudReconciliation, hasMeaningfulWorkspace, serializeWorkspaceBackup } =
   await import('../../src/lib/cloudSyncPolicy.ts');
 const { mergeCloudSubscription, withCloudSubscription } = await import('../../src/lib/cloudSubscription.ts');
@@ -53,7 +59,7 @@ function fixture(o = {}) {
       setupCompleteAt: stamp,
     };
   const tables = Object.fromEntries(Object.keys(ids).map((t) => [t, []]));
-  tables.horses = horses.map((payload) => ({ horse_id: payload.id, payload, updated_at: stamp }));
+  tables.horses = o.horseRows ?? horses.map((payload) => ({ horse_id: payload.id, payload, updated_at: stamp }));
   if (o.legacyMembership || o.missingMemberDate || o.payloadlessMembership)
     tables.workspace_memberships = [
       {
@@ -348,6 +354,92 @@ test('actual load -> restore -> export reconnects without a false conflict', asy
   local.workspace.horses[0].sale.askPrice = 500;
   assert.equal(decideCloudReconciliation({ local, remote: r.backup }), 'conflict-lock');
 });
+test('CSV insert and update round-trip through cloud hydration and backup validation', async () => {
+  const horseRows = [];
+  const supabase = {
+    from(table) {
+      assert.equal(table, 'horses');
+      const filters = [];
+      let insert;
+      let patch;
+      const builder = {
+        select() {
+          return builder;
+        },
+        eq(key, value) {
+          filters.push([key, value]);
+          return builder;
+        },
+        insert(row) {
+          insert = row;
+          return builder;
+        },
+        update(row) {
+          patch = row;
+          return builder;
+        },
+        then(resolve, reject) {
+          return Promise.resolve()
+            .then(() => {
+              if (insert) {
+                const stored = { ...insert, updated_at: stamp };
+                horseRows.push(stored);
+                return { data: [structuredClone(stored)], error: null };
+              }
+              const matches = horseRows.filter((row) =>
+                filters.every(([key, value]) => (key === 'payload' ? JSON.stringify(row[key]) : row[key]) === value),
+              );
+              if (patch) for (const row of matches) Object.assign(row, patch);
+              return { data: structuredClone(matches), error: null };
+            })
+            .then(resolve, reject);
+        },
+      };
+      return builder;
+    },
+  };
+  const importRows = (columns, row, snapshot = []) =>
+    importHorseRows({
+      supabase,
+      workspaceId: 'ws-owner',
+      userId: 'user-owner',
+      rows: [Object.keys(columns), row],
+      columnMap: columns,
+      existingByRegistration: new Map(snapshot),
+      role: 'Admin',
+      insertBudget: 10,
+    });
+
+  const inserted = await importRows(
+    { name: 0, registration_number: 1, birthdate: 2, breed: 3, gender: 4, status: 5, segment: 6 },
+    ['Imported horse', 'A123', '09/07/2020', 'Quarter Horse', 'Mare', 'Pasture', 'Broodmare'],
+  );
+  assert.deepEqual(inserted, { imported: 1, updated: 0, errors: [] });
+  fixture({ horseRows });
+  const loaded = await loadWorkspaceBackupFromCloud();
+  assert.equal(loaded.ok, true, loaded.message);
+  assert.ok(canRestorePersistedState(loaded.backup.workspace));
+  const [original] = loaded.backup.workspace.horses;
+  assert.equal(original.id, horseRows[0].horse_id);
+  assert.equal(original.foaledOn, '2020-09-07');
+  assert.equal(original.segment, 'Broodmare');
+
+  const updated = await importRows(
+    { name: 0, registration_number: 1, status: 2, color: 3 },
+    ['Renamed horse', 'A123', '', 'Bay'],
+    [['A123', original.id]],
+  );
+  assert.deepEqual(updated, { imported: 0, updated: 1, errors: [] });
+  const reloaded = await loadWorkspaceBackupFromCloud();
+  assert.equal(reloaded.ok, true, reloaded.message);
+  assert.ok(canRestorePersistedState(reloaded.backup.workspace));
+  const exported = JSON.parse(serializeWorkspaceBackup(reloaded.backup)).horses;
+  assert.deepEqual(
+    exported.map(({ id, name, breed, sex, status, color }) => [id, name, breed, sex, status, color]),
+    [[original.id, 'Renamed horse', 'Quarter Horse', 'Mare', 'Pasture', 'Bay']],
+  );
+});
+
 test('every collection is counted and ordered below a smaller server cap', async () => {
   fixture({ count: 1203, cap: 137 });
   const r = await loadWorkspaceBackupFromCloud();

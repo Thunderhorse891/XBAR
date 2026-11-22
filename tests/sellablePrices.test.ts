@@ -5,10 +5,8 @@ import { loadSellablePrices } from '../src/lib/billingApi.js';
 
 /*
  * Production offered annual billing with no annual price set (2026-10-02):
- * the toggle keyed off "managed billing is on", and a buyer who chose annual
- * was refused at the moment of paying. The billing screen now offers a cadence
- * only when the server confirms it can sell it, and anything short of a clear
- * answer offers monthly alone.
+ * the toggle keyed off "managed billing is on". The billing screen now requires
+ * explicit server availability for the approved monthly choices only.
  */
 
 type FetchStub = (input: unknown, init?: unknown) => Promise<Response>;
@@ -62,18 +60,9 @@ test('anything short of a clear answer offers nothing beyond monthly', async () 
   assert.deepEqual(loose, { managed: false, monthly: { Starter: false }, annual: { Starter: false } });
 });
 
-test("the billing screen offers annual only on the server's word, and quotes only what it can sell", async () => {
+test('billing requires a concrete server answer and never sells new annual plans', async () => {
   const screen = await readFile('src/routes/Subscriptions.tsx', 'utf8');
-  // Managed billing being on is no longer enough on its own.
-  assert.doesNotMatch(screen, /const annualAvailable = billingEnabled \|\|/);
-  assert.match(
-    screen,
-    /const annualManaged =\s*billingEnabled && Boolean\(sellable\?\.managed && tiers\.some\(\(tier\) => sellable\.annual\[tier\] === true\)\);/,
-  );
-  // Every price, label and checkout reads the derived cadence.
-  assert.match(screen, /const billingPeriod: 'monthly' \| 'annual' = annualAvailable \? chosenPeriod : 'monthly';/);
-  assert.match(
-    screen,
-    /void loadSellablePrices\(\)\.then\(\(prices\) => \{\s*if \(!cancelled\) setSellable\(prices\);/,
-  );
+  assert.match(screen, /sellable\?\.managed && sellable\.monthly\[tier\]/);
+  assert.match(screen, /const billingPeriod = 'monthly' as const;/);
+  assert.doesNotMatch(screen, /annualAvailable|annualManaged|setBillingPeriod|checkout-billing-toggle/);
 });

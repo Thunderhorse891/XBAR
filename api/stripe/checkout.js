@@ -1,7 +1,11 @@
-import { serverManagedBillingEnabled, serverStripeModeReady, stripeAccountIdReady } from '../_lib/managed-billing.js';
+import {
+  serverCheckoutAccountPinReady,
+  serverManagedBillingEnabled,
+  serverStripeModeReady,
+} from '../_lib/managed-billing.js';
 import Stripe from 'stripe';
 import { readJsonBody, sendJson } from '../_lib/http.js';
-import { buildSubscriptionProfile, getStripePriceIdByTier, sellablePrices } from '../_lib/subscription-plans.js';
+import { buildSubscriptionProfile, getCheckoutPriceIdByTier, sellablePrices } from '../_lib/subscription-plans.js';
 import { verifyCheckoutPrice } from '../_lib/checkout-price.js';
 import { checkoutBlockReason } from '../_lib/subscription-status.js';
 import {
@@ -28,6 +32,7 @@ const stripe = stripeSecretKey ? new Stripe(stripeSecretKey, { apiVersion: '2026
 const managedBillingEnabled = serverManagedBillingEnabled();
 // Pin validation to the same import-time environment as the Stripe client.
 const stripeModeReady = serverStripeModeReady();
+const stripeAccountPinReady = serverCheckoutAccountPinReady();
 const expectedAccountId = process.env.STRIPE_ACCOUNT_ID?.trim() || '';
 const expectedLivemode = process.env.VERCEL_ENV === 'production' || /^(sk|rk)_live_/.test(stripeSecretKey);
 
@@ -80,7 +85,7 @@ export default async function handler(req, res) {
     res.setHeader('Cache-Control', 'no-store, max-age=0');
     return sendJson(res, 200, {
       ok: true,
-      managed: managedBillingEnabled && Boolean(stripe) && stripeModeReady && stripeAccountIdReady(expectedAccountId),
+      managed: managedBillingEnabled && Boolean(stripe) && stripeModeReady && stripeAccountPinReady,
       sellable: sellablePrices(),
     });
   }
@@ -109,11 +114,11 @@ export default async function handler(req, res) {
     return sendJson(res, 503, { ok: false, message: 'Stripe server billing is not configured.' });
   }
 
-  if (!stripeModeReady) {
+  if (!stripeModeReady || !stripeAccountPinReady) {
     return sendJson(res, 503, {
       ok: false,
       code: 'price_unavailable',
-      message: 'Production checkout is unavailable while live billing is configured. No payment session was created.',
+      message: 'Checkout is unavailable while its Stripe configuration is verified. No payment session was created.',
     });
   }
 
@@ -124,9 +129,9 @@ export default async function handler(req, res) {
   const { tier, workspaceId } = parsed.data;
   const billingPeriod = parsed.data.billingPeriod === 'annual' ? 'annual' : 'monthly';
   const returnUrl = getTrustedReturnUrl(parsed.data.returnUrl);
-  const requestedSeatCount = Number(parsed.data.seatCount || 1);
-  const seatCount = Number.isInteger(requestedSeatCount) ? Math.min(100, Math.max(1, requestedSeatCount)) : 1;
-  const priceId = getStripePriceIdByTier(tier, billingPeriod);
+  // A workspace plan includes seats. Client-supplied quantity cannot change the charge.
+  const seatCount = 1;
+  const priceId = getCheckoutPriceIdByTier(tier, billingPeriod);
 
   if (!workspaceId) {
     return sendJson(res, 400, { ok: false, message: 'Workspace id is required.' });

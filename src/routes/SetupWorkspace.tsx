@@ -1,5 +1,6 @@
-import { type FormEvent, useMemo, useState } from 'react';
+import { type FormEvent, useEffect, useMemo, useRef, useState } from 'react';
 import { Navigate, useLocation, useNavigate, useSearchParams } from 'react-router-dom';
+import { AccountDeletionPanel } from '@/components/AccountDeletionPanel';
 import { XbarMark } from '@/components/BrandMark';
 import { billingPathForTier } from '@/lib/billingRoutes';
 import { applyWorkspaceProfileDefaults } from '@/lib/workspaceSetupDefaults';
@@ -9,7 +10,7 @@ import { useCloudStore } from '@/store/useCloudStore';
 import { useUiStore } from '@/store/useUiStore';
 import { useWorkspaceHydrated, useWorkspaceReady, useXbarStore } from '@/store/useXbarStore';
 import './cleanEntryExperience.css';
-import { canPresentPurchaseFlow } from '@/lib/nativePlatform';
+import { canPresentPurchaseFlow, publicSiteHref } from '@/lib/nativePlatform';
 
 const setupStages = [
   { label: 'Ranch identity', value: 'Business and ranch name' },
@@ -37,8 +38,13 @@ export default function SetupWorkspace() {
   const pushToast = useUiStore((state) => state.pushToast);
   const [saving, setSaving] = useState(false);
   const [signingOut, setSigningOut] = useState(false);
+  const [deletingAccount, setDeletingAccount] = useState(false);
   const [signOutError, setSignOutError] = useState('');
   const [formError, setFormError] = useState('');
+  const formErrorRef = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    if (formError) formErrorRef.current?.focus();
+  }, [formError]);
   const [cloudSetupBlocked, setCloudSetupBlocked] = useState(false);
   const [form, setForm] = useState({
     businessName: workspaceProfile.businessName,
@@ -89,7 +95,7 @@ export default function SetupWorkspace() {
     return <div className="app-loading-shell">Loading ranch workspace...</div>;
   }
 
-  if (workspaceReady && !saving && !cloudSetupBlocked && !cloudWorkspaceRequired) {
+  if (workspaceReady && !saving && !cloudSetupBlocked && !cloudWorkspaceRequired && !deletingAccount) {
     return <Navigate to={postSetupPath} replace />;
   }
 
@@ -120,8 +126,9 @@ export default function SetupWorkspace() {
 
   const handleSubmit = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
-    if (signingOut || saving) return;
+    if (signingOut || saving || deletingAccount) return;
     setSaving(true);
+    setFormError('');
     setCloudSetupBlocked(false);
 
     const result = initializeWorkspace(applyWorkspaceProfileDefaults(form));
@@ -153,7 +160,7 @@ export default function SetupWorkspace() {
   };
 
   const handleQuickStart = () => {
-    if (signingOut || saving) return;
+    if (signingOut || saving || deletingAccount) return;
     const businessName = form.businessName.trim() || 'My Ranch LLC';
     const ranchName = form.ranchName.trim() || 'Main Ranch';
     /*
@@ -187,7 +194,7 @@ export default function SetupWorkspace() {
   };
 
   const handleSignOut = async () => {
-    if (saving || signingOut) return;
+    if (saving || signingOut || deletingAccount) return;
     setSigningOut(true);
     setSignOutError('');
     try {
@@ -224,7 +231,7 @@ export default function SetupWorkspace() {
               <button
                 className="clean-secondary-button"
                 type="button"
-                disabled={saving || signingOut}
+                disabled={saving || signingOut || deletingAccount}
                 onClick={handleSignOut}
               >
                 {signingOut ? 'Signing out...' : 'Sign out'}
@@ -252,6 +259,15 @@ export default function SetupWorkspace() {
               </li>
             ))}
           </ol>
+          <a
+            className="clean-secondary-button"
+            href={publicSiteHref('/privacy')}
+            target="_blank"
+            rel="noopener noreferrer"
+          >
+            Privacy Policy
+          </a>
+          <AccountDeletionPanel compact disabled={saving || signingOut} onBusyChange={setDeletingAccount} />
         </section>
 
         <section className="clean-auth-card clean-auth-card--wide" aria-label="Create workspace">
@@ -330,17 +346,21 @@ export default function SetupWorkspace() {
               </label>
             </div>
 
-            {formError ? <div className="clean-form-error">{formError}</div> : null}
+            {formError ? (
+              <div ref={formErrorRef} className="clean-form-error" role="alert" tabIndex={-1}>
+                {formError}
+              </div>
+            ) : null}
 
             <div className="clean-action-stack">
-              <button className="clean-primary-button" type="submit" disabled={saving || signingOut}>
+              <button className="clean-primary-button" type="submit" disabled={saving || signingOut || deletingAccount}>
                 {saving ? 'Creating workspace...' : 'Create workspace'}
               </button>
               {canQuickStart ? (
                 <button
                   className="clean-secondary-button"
                   type="button"
-                  disabled={saving || signingOut}
+                  disabled={saving || signingOut || deletingAccount}
                   onClick={handleQuickStart}
                 >
                   Use preview defaults

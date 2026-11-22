@@ -9,7 +9,8 @@ import { cinematicHome } from './home.mjs';
 
 export const CONTENT_UPDATED = '2026-10-02';
 
-const signup = (plan) => `${APP_SIGNUP}${plan ? `&plan=${encodeURIComponent(plan)}` : ''}`;
+const signup = () => APP_SIGNUP;
+const publicPlanSummary = marketingPlans.map((plan) => `${plan.tier} $${plan.monthlyRate}`).join(' and ');
 
 /* --------------------------------------------------------------- shared */
 
@@ -19,7 +20,7 @@ function ctaBlock(heading, copy) {
     <h2>${esc(heading)}</h2>
     <p class="intro" style="margin-inline:auto">${esc(copy)}</p>
     <div class="hero-actions">
-      <a class="btn btn--primary" href="${signup('Professional')}" rel="nofollow">Create your workspace</a>
+      <a class="btn btn--primary" href="${signup()}" rel="nofollow">Create your workspace</a>
       <a class="btn" href="/demo">Take the product tour</a>
     </div>
   </div>
@@ -193,9 +194,8 @@ ${ctaBlock('See the workflow end to end.', 'The product tour walks the document 
 
 const pricing = {
   path: '/pricing',
-  title: 'XBAR Pricing — Starter $12, Professional $29, Ranch Ops $79, Enterprise $199',
-  description:
-    'Transparent XBAR pricing. Starter $12/mo, Professional $29/mo, Ranch Ops $79/mo, Enterprise $199/mo — with published horse, seat, document, sale-packet, and storage limits for every plan.',
+  title: `XBAR Pricing | ${publicPlanSummary} monthly`,
+  description: `Planned XBAR monthly plans in USD: ${publicPlanSummary}. Paid upgrades are not available yet. Compare plan details and explore the public tour.`,
   changefreq: 'monthly',
   priority: '0.9',
   jsonLd: [
@@ -205,14 +205,6 @@ const pricing = {
       name: 'XBAR',
       description: 'Horse records, ownership integrity, and sale-readiness software.',
       brand: { '@type': 'Brand', name: 'XBAR' },
-      offers: marketingPlans.map((plan) => ({
-        '@type': 'Offer',
-        name: plan.tier,
-        price: String(plan.monthlyRate),
-        priceCurrency: 'USD',
-        url: `${SITE_ORIGIN}/pricing`,
-        availability: 'https://schema.org/InStock',
-      })),
     },
     {
       '@context': 'https://schema.org',
@@ -239,7 +231,7 @@ const pricing = {
           name: 'How does checkout work?',
           acceptedAnswer: {
             '@type': 'Answer',
-            text: 'A workspace owner reviews the plan inside XBAR and completes the plan change through secure Stripe checkout.',
+            text: 'Paid upgrades are not available yet. Creating an account does not start a subscription. Existing subscriptions keep their current terms.',
           },
         },
       ],
@@ -250,13 +242,14 @@ const pricing = {
   <div>
     <p class="kicker">Pricing</p>
     <h1>Simple plans. Published limits. No hidden capacity math.</h1>
-    <p class="lead">Every plan protects the core horse record. Higher tiers add collaboration, buyer sharing, and more document and storage capacity — and the limits below are the same ones the application enforces.</p>
+    <p class="lead">Every plan protects the core horse record. Higher tiers add collaboration, buyer sharing, and more document capacity. File storage is shared and subject to availability.</p>
   </div>
 </section>
 
 <section class="section section--flush">
   <div class="wrap">
-    <p class="intro">Compare monthly and annual plan rates below. Annual prices are the total billed each year. Review the billing options available to your workspace inside XBAR. Prices are in USD; confirm the total and recurring billing details in Stripe before subscribing.</p>
+    <p class="intro">Planned new subscriptions are monthly, in USD per workspace. Existing subscriptions keep their current terms.</p>
+    <p class="callout" role="status">Paid upgrades are not available yet. These are the planned monthly rates. Creating an account does not start a subscription. Explore the <a href="/demo">public product tour</a> while paid checkout is being verified.</p>
     <div class="plans">
       ${marketingPlans
         .map(
@@ -265,9 +258,8 @@ const pricing = {
         <h2 style="font-family:var(--font-ui);font-size:20px">${esc(plan.tier)}</h2>
         <p class="plan__fit">${esc(plan.fit)}</p>
         <p class="plan__price">$${plan.monthlyRate}<small>/month</small></p>
-        <p class="plan__fit">or $${plan.annualRate.toLocaleString('en-US')}/year, billed annually</p>
         <ul>${plan.features.map((feature) => `<li>${esc(feature)}</li>`).join('')}</ul>
-        <a class="btn${plan.featured ? ' btn--primary' : ''}" href="${signup(plan.tier)}" rel="nofollow">Choose ${esc(plan.tier)}</a>
+        <a class="btn${plan.featured ? ' btn--primary' : ''}" href="${signup()}" rel="nofollow">Create an account</a>
       </article>`,
         )
         .join('\n      ')}
@@ -284,13 +276,11 @@ const pricing = {
         <thead><tr><th scope="col">Capacity</th>${marketingPlans.map((plan) => `<th scope="col">${esc(plan.tier)}</th>`).join('')}</tr></thead>
         <tbody>
           <tr><th scope="row">Monthly price</th>${marketingPlans.map((plan) => `<td>$${plan.monthlyRate}</td>`).join('')}</tr>
-          <tr><th scope="row">Annual price (billed yearly)</th>${marketingPlans.map((plan) => `<td>$${plan.annualRate.toLocaleString('en-US')}/year</td>`).join('')}</tr>
           <tr><th scope="row">Horses</th>${marketingPlans.map((plan) => `<td>${plan.limits.horseLimit.toLocaleString('en-US')}</td>`).join('')}</tr>
           <tr><th scope="row">Team seats</th>${marketingPlans.map((plan) => `<td>${plan.limits.seatLimit}</td>`).join('')}</tr>
           <tr><th scope="row">Client seats</th>${marketingPlans.map((plan) => `<td>${plan.limits.sharedAccessSeatLimit}</td>`).join('')}</tr>
           <tr><th scope="row">Documents</th>${marketingPlans.map((plan) => `<td>${plan.limits.documentLimit.toLocaleString('en-US')}</td>`).join('')}</tr>
           <tr><th scope="row">Sale packets</th>${marketingPlans.map((plan) => `<td>${plan.limits.salePacketLimit.toLocaleString('en-US')}</td>`).join('')}</tr>
-          <tr><th scope="row">Storage</th>${marketingPlans.map((plan) => `<td>${plan.limits.storageLimitGb.toLocaleString('en-US')} GB</td>`).join('')}</tr>
         </tbody>
       </table>
     </div>
@@ -303,8 +293,8 @@ const pricing = {
     <div class="faq" style="margin-top:22px">
       <details><summary>Do I need an account to use XBAR?</summary><p>Yes. Create an XBAR account and complete workspace setup to use the hosted app. You can view the <a href="/demo">product tour</a> and fictional sample sale packet without an account.</p></details>
       <details><summary>What happens to my records if I change plans?</summary><p>Your records stay intact. Plans change capacity and collaboration access; they do not erase the operating history you built.</p></details>
-      <details><summary>Is XBAR only for large operations?</summary><p>No. Starter is designed for a smaller records-driven operation. Professional and Ranch Ops add the collaboration, sale-readiness, and capacity larger programs need.</p></details>
-      <details><summary>How does checkout work?</summary><p>A workspace owner reviews the plan inside XBAR and completes the plan change through secure Stripe checkout.</p></details>
+      <details><summary>Is XBAR only for large operations?</summary><p>No. Explore the public product tour and fictional sample packet without an account. Existing no-charge access is unchanged; account creation does not start a subscription.</p></details>
+      <details><summary>How does checkout work?</summary><p>Paid upgrades are not available yet. Creating an account does not start a subscription. Existing subscriptions keep their current terms.</p></details>
     </div>
   </div>
 </section>
@@ -333,7 +323,7 @@ function solutionPage({ path, slug, title, description, h1, lead, sections, faq 
     <h1>${esc(h1)}</h1>
     <p class="lead">${esc(lead)}</p>
     <div class="hero-actions">
-      <a class="btn btn--primary" href="${signup('Professional')}" rel="nofollow">Create your workspace</a>
+      <a class="btn btn--primary" href="${signup()}" rel="nofollow">Create your workspace</a>
       <a class="btn" href="/demo">Take the product tour</a>
     </div>
   </div>

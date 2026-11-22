@@ -34,9 +34,8 @@ GitHub checks for the actual integration commit.
 - #173: TypeScript 7.0.2 is outside typescript-eslint 8.70.0's declared
   peer range (>=4.8.4 <6.1.0), verified against npm package metadata.
   Retain TypeScript 5.9.3 until the lint toolchain supports version 7.
-- #174: Node 26 types exceed both the deployed Node 24 runtime and the
-  declared Node 20.19 minimum. Retain the existing types until a separately
-  verified runtime-baseline migration is ready.
+- #174: Node 26 types exceed the intended Node 24 release runtime. Retain the
+  existing types until a separate, verified types update is ready.
 
 These proposals should be closed with their compatibility reasons, rather
 than forced into the release or left as unresolved merge conflicts.

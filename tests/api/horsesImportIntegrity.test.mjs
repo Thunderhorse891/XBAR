@@ -6,6 +6,7 @@ import { fileURLToPath } from 'node:url';
 
 import {
   authorizeImportRow,
+  CSV_HORSE_CLASSIFICATIONS,
   buildHorseUpdateFields,
   duplicateRegistrationRows,
   importHorseRows,
@@ -56,10 +57,18 @@ test('an explicitly present blank remains an intentional blank on update, except
   assert.equal('status' in fields, false);
 });
 
-test('a supplied non-empty status is still written on update', () => {
-  const header = { name: 0, status: 1 };
-  const fields = buildHorseUpdateFields(['STAR', 'Sold'], header);
-  assert.equal(fields.status, 'Sold');
+test('CSV classification options match the HorseRecord unions', async () => {
+  const source = await readFile(new URL('../../src/types/xbar.ts', import.meta.url), 'utf8');
+  for (const [field, type] of [
+    ['gender', 'HorseSex'],
+    ['status', 'HorseStatus'],
+    ['segment', 'HorseSegment'],
+  ]) {
+    const declaration = source.match(new RegExp(`export type ${type} = ([^;]+);`));
+    assert.ok(declaration, type);
+    const values = [...declaration[1].matchAll(/'([^']+)'/g)].map(([, value]) => value);
+    assert.deepEqual([...CSV_HORSE_CLASSIFICATIONS[field]].sort(), values.sort(), field);
+  }
 });
 
 test('birthdate is normalized only when the birthdate column is supplied', () => {
@@ -137,8 +146,8 @@ test('the handler pins each write to authorizeImportRow, the original target, an
   // no-op as success.
   assert.match(source, /\.eq\('horse_id', targetHorseId\)/);
   assert.match(source, /\.eq\('registration_number', registration\)/);
-  assert.match(source, /\.select\('horse_id'\)/);
-  assert.match(source, /updatedRows\.length !== 1/);
+  assert.match(source, /\.select\('horse_id, payload'\)/);
+  assert.match(source, /matchesHorseWrite\(updatedRows, targetHorseId, payloadFields\)/);
 
   const updateError = source.indexOf('if (updateError)');
   const insertError = source.indexOf('if (insertError)');
@@ -155,7 +164,11 @@ test('the handler pins each write to authorizeImportRow, the original target, an
 // The table reflects CURRENT reality; the preflight snapshot is passed in
 // separately, so a divergence between the two is modelled directly.
 function makeSupabase(initialHorses) {
-  const horses = initialHorses.map((h) => ({ ...h }));
+  const horses = initialHorses.map((h) => ({
+    updated_at: '2026-11-21T15:00:00.000Z',
+    payload: { id: h.horse_id, name: h.name, registrationNumber: h.registration_number },
+    ...h,
+  }));
   const calls = { inserts: [], updates: [] };
 
   function makeBuilder() {
@@ -165,19 +178,25 @@ function makeSupabase(initialHorses) {
     let insertRow = null;
     let wantRows = false;
 
-    const matches = (h) => filters.every(([kind, col, val]) => (kind === 'in' ? val.includes(h[col]) : h[col] === val));
+    const matches = (h) =>
+      filters.every(([kind, col, val]) =>
+        kind === 'in' ? val.includes(h[col]) : col === 'payload' ? JSON.stringify(h[col]) === val : h[col] === val,
+      );
 
     async function exec() {
       if (op === 'update') {
         const matched = horses.filter(matches);
         for (const h of matched) Object.assign(h, patch);
         calls.updates.push({ patch, matchedIds: matched.map((h) => h.horse_id) });
-        return { data: wantRows ? matched.map((h) => ({ horse_id: h.horse_id })) : null, error: null };
+        return {
+          data: wantRows ? matched.map((h) => ({ horse_id: h.horse_id, payload: h.payload })) : null,
+          error: null,
+        };
       }
       if (op === 'insert') {
         horses.push({ ...insertRow });
         calls.inserts.push(insertRow);
-        return { data: wantRows ? [{ horse_id: insertRow.horse_id }] : null, error: null };
+        return { data: wantRows ? [{ horse_id: insertRow.horse_id, payload: insertRow.payload }] : null, error: null };
       }
       const data = horses.filter(matches);
       return { data, error: null };
@@ -240,6 +259,7 @@ function runImport({ horses, snapshot, role = 'Admin', insertBudget = 100, rows,
 }
 
 const REG_COLS = { name: 0, registration_number: 1 };
+const CLASSIFIED = { ...REG_COLS, gender: 2, status: 3, segment: 4 };
 
 test('a normal update changes the targeted horse and counts once', async () => {
   const { result, supabase } = await runImport({
@@ -318,9 +338,9 @@ test('a genuinely new registration inserts once for a creator role', async () =>
     role: 'Admin',
     rows: [
       ['Name', 'Registration Number'],
-      ['FRESH', 'REG9'],
+      ['FRESH', 'REG9', 'Mare', 'Pasture', 'Broodmare'],
     ],
-    columnMap: REG_COLS,
+    columnMap: CLASSIFIED,
   });
   assert.equal(result.imported, 1);
   assert.equal(result.updated, 0);
@@ -335,9 +355,9 @@ test('a new registration is refused for a role without createHorse, with no writ
     role: 'Owner',
     rows: [
       ['Name', 'Registration Number'],
-      ['FRESH', 'REG9'],
+      ['FRESH', 'REG9', 'Mare', 'Pasture', 'Broodmare'],
     ],
-    columnMap: REG_COLS,
+    columnMap: CLASSIFIED,
   });
   assert.equal(result.imported, 0);
   assert.equal(supabase.calls.inserts.length, 0);
@@ -353,9 +373,9 @@ test('a mixed import reports exact successes and failures without cross-contamin
       ['Name', 'Registration Number'],
       ['UPDATED', 'REG1'], // real update
       ['LOST', 'REG2'], // update whose target vanished -> error
-      ['BRAND NEW', 'REG3'], // insert
+      ['BRAND NEW', 'REG3', 'Mare', 'Pasture', 'Broodmare'], // insert
     ],
-    columnMap: REG_COLS,
+    columnMap: CLASSIFIED,
   });
   assert.equal(result.updated, 1);
   assert.equal(result.imported, 1);

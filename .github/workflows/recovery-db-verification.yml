@@ -38,7 +38,7 @@ jobs:
       - uses: actions/checkout@v7
       - uses: actions/setup-node@v7
         with:
-          node-version: 24
+          node-version-file: '.nvmrc'
       - name: Prepare the repository's current schema
         run: node scripts/prepare-supabase-schema.mjs
       - name: Run isolated real-PostgreSQL role and rollback checks

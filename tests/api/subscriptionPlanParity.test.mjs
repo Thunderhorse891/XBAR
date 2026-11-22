@@ -3,7 +3,7 @@ import test from 'node:test';
 import { readFileSync } from 'node:fs';
 import path from 'node:path';
 
-import { subscriptionPlans } from '../../api/_lib/subscription-plans.js';
+import { PUBLIC_PAID_SUBSCRIPTION_TIERS, subscriptionPlans } from '../../api/_lib/subscription-plans.js';
 import { marketingPlans } from '../../scripts/marketing/pricing-data.mjs';
 
 /*
@@ -33,11 +33,11 @@ function appTierConfigSource() {
 const marketingByTier = Object.fromEntries(marketingPlans.map((plan) => [plan.tier, plan]));
 const TIERS = ['Starter', 'Professional', 'Ranch Ops', 'Enterprise'];
 
-test('all three sources define exactly the same tiers', () => {
+test('legacy entitlements stay defined but only the public pair is marketed', () => {
   assert.deepEqual(Object.keys(subscriptionPlans), TIERS);
   assert.deepEqual(
     marketingPlans.map((plan) => plan.tier),
-    TIERS,
+    PUBLIC_PAID_SUBSCRIPTION_TIERS,
   );
 
   const source = appTierConfigSource();
@@ -47,7 +47,7 @@ test('all three sources define exactly the same tiers', () => {
   }
 });
 
-for (const tier of TIERS) {
+for (const tier of PUBLIC_PAID_SUBSCRIPTION_TIERS) {
   test(`${tier}: server price and limits match the published ones`, () => {
     const server = subscriptionPlans[tier];
     const marketing = marketingByTier[tier];
@@ -57,12 +57,6 @@ for (const tier of TIERS) {
       marketing.monthlyRate,
       `${tier} is billed at ${server.monthlyRate} but advertised at ${marketing.monthlyRate}`,
     );
-    assert.equal(
-      server.annualRate,
-      marketing.annualRate,
-      `${tier} annual is billed at ${server.annualRate} but advertised at ${marketing.annualRate}`,
-    );
-
     // deepEqual both ways: a limit present on one side and absent on the other
     // is drift too, not just a differing number.
     assert.deepEqual(server.limits, marketing.limits, `${tier} server limits differ from the ones on the pricing page`);
@@ -86,7 +80,6 @@ for (const tier of TIERS) {
 
     const advertised = [
       [limits.documentLimit, 'document limit'],
-      [limits.storageLimitGb, 'storage limit'],
       [limits.seatLimit, 'team seat limit'],
     ];
 
@@ -224,4 +217,18 @@ test('accepting a reserved seat consumes the reservation instead of counting it 
     /perform pg_advisory_xact_lock\(hashtextextended\('xbar-seats:' \|\| target_workspace_id::text, 0\)\);/,
     'seat checks are serialized per workspace, so concurrent acceptances cannot overfill',
   );
+});
+
+test('one shared integer-cent catalog supplies every new-sale monthly price and tier', async () => {
+  const { default: catalog } = await import('../../api/_lib/public-plan-catalog.json', { with: { type: 'json' } });
+  assert.deepEqual(catalog, { Professional: { monthlyCents: 1999 }, 'Ranch Ops': { monthlyCents: 4999 } });
+  assert.deepEqual(PUBLIC_PAID_SUBSCRIPTION_TIERS, Object.keys(catalog));
+  for (const [tier, { monthlyCents }] of Object.entries(catalog)) {
+    assert.ok(Number.isSafeInteger(monthlyCents));
+    assert.equal(subscriptionPlans[tier].monthlyRate, monthlyCents / 100);
+    assert.equal(marketingByTier[tier].monthlyRate, monthlyCents / 100);
+  }
+  for (const file of ['src/lib/xbarRuntime.ts', 'src/routes/Subscriptions.tsx', 'scripts/marketing/pricing-data.mjs']) {
+    assert.match(readFileSync(path.join(repoRoot, file), 'utf8'), /import publicPlanCatalog from/);
+  }
 });
