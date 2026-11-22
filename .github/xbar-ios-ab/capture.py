@@ -2,7 +2,6 @@
 import json
 import os
 import re
-import subprocess
 import sys
 
 device = os.environ.get("IOS_SIMULATOR_ID")
@@ -10,7 +9,7 @@ if not device:
     print("No simulator selected; startup markers unavailable.")
     sys.exit(0)
 
-phases = {"html-script", "script-error", "resource-error", "unhandled-rejection",
+phases = {"native-document-start", "html-script", "script-error", "resource-error", "unhandled-rejection",
           "dom-ready", "root-missing", "root-populated", "root-still-empty"}
 errors = {"Error", "TypeError", "SyntaxError", "ReferenceError", "RangeError",
           "SecurityError", "NetworkError", "AbortError"}
@@ -38,25 +37,11 @@ def consume(data):
             seen.add(normalized)
             print("XBAR_BOOT " + normalized, flush=True)
 
-try:
-    result = subprocess.run(
-        ["xcrun", "simctl", "spawn", device, "log", "show", "--last", "12m",
-         "--style", "compact", "--predicate", 'eventMessage CONTAINS "XBAR_BOOT"'],
-        capture_output=True, text=True, timeout=17)
-    consume(result.stdout)
-except (subprocess.TimeoutExpired, OSError) as exc:
-    consume(getattr(exc, "stdout", None))
+from pathlib import Path
 
+path = Path(os.environ["RUNNER_TEMP"]) / "xbar-first-launch.log"
+if path.is_file():
+    with path.open("rb") as stream:
+        consume(stream.read(131072))
 if not seen:
-    try:
-        subprocess.run(["xcrun", "simctl", "terminate", device, "com.xbar.ranch"],
-                       capture_output=True, timeout=8)
-        result = subprocess.run(["xcrun", "simctl", "launch", "--console-pty", device,
-                                 "com.xbar.ranch"], stdout=subprocess.PIPE,
-                                stderr=subprocess.STDOUT, timeout=25)
-        consume(result.stdout)
-    except (subprocess.TimeoutExpired, OSError) as exc:
-        consume(getattr(exc, "stdout", None))
-
-if not seen:
-    print("No validated markers; this does not establish JavaScript startup success or failure.")
+    print("No validated first-launch markers; results remain inconclusive.")

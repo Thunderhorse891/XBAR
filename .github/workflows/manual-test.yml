@@ -12,7 +12,7 @@ jobs:
   native-startup:
     if: github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/qa/ios-startup-ab-20261122' && github.event.repository.private == false
     runs-on: macos-26-intel
-    timeout-minutes: 35
+    timeout-minutes: 40
     strategy:
       fail-fast: false
       matrix:
@@ -72,6 +72,7 @@ jobs:
           node --test ../harness/.github/xbar-ios-ab/startup.test.mjs
           node scripts/build-mobile.mjs
           python3 ../harness/.github/xbar-ios-ab/install-diagnostic.py dist/index.html --synthetic-simulator-only
+          python3 ../harness/.github/xbar-ios-ab/prepare-native-probe.py ios/App/App/SceneDelegate.swift dist/xbar-ci-boot-diagnostic.js
           npx --no-install cap sync ios
           node scripts/check-ios-project.mjs
           git diff --exit-code -- ios/App/AppUITests
@@ -107,10 +108,15 @@ jobs:
           # separately; a successful boot and the unchanged XCTest are required.
           python3 -c 'import subprocess,sys; subprocess.run(["xcrun","simctl","bootstatus",sys.argv[1],"-b"],check=True,timeout=600)' "$IOS_SIMULATOR_ID"
       - name: Exercise the real WKWebView in iOS Simulator
-        timeout-minutes: 7
+        timeout-minutes: 11
         run: |
           # Bound any later guest-log query to this test attempt, excluding boot.
           date -u '+%Y-%m-%d %H:%M:%S+0000' > "$RUNNER_TEMP/xbar-xctest-start.txt"
+          log_path="$RUNNER_TEMP/xbar-first-launch.log"
+          xcrun simctl spawn "$IOS_SIMULATOR_ID" log stream --level debug --style compact \
+            --predicate 'eventMessage CONTAINS "XBAR_BOOT"' > "$log_path" 2>/dev/null &
+          marker_pid=$!
+          trap 'kill "$marker_pid" 2>/dev/null || true' EXIT
           xcodebuild -project ios/App/App.xcodeproj -scheme App -configuration Debug \
             -destination "platform=iOS Simulator,id=$IOS_SIMULATOR_ID" -derivedDataPath ios/DerivedData \
             -parallel-testing-enabled NO -resultBundlePath ios/native-tests.xcresult \
