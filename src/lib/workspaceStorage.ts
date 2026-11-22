@@ -529,6 +529,19 @@ export function getWorkspacePersistReceipt(): WorkspacePersistReceipt | null {
   return latestPersistReceipt;
 }
 
+/** Call immediately after the synchronous store mutation, before another write can run. */
+export async function didCommitWorkspaceWriteAfter(previous: WorkspacePersistReceipt | null): Promise<boolean> {
+  const receipt = getWorkspacePersistReceipt();
+  try {
+    return Boolean(receipt && receipt !== previous && receipt.name === LEGACY_KEY && (await receipt.completed));
+  } catch {
+    return false;
+  }
+}
+
+export const deviceWorkspaceSaveUnconfirmed =
+  'This change may exist only in this session. Keep XBAR open and check device storage before reloading or repeating the action.';
+
 async function persistWorkspaceValue(name: string, value: string): Promise<boolean> {
   if (name === LEGACY_KEY) {
     const indexed = await readIndexedValue(name);

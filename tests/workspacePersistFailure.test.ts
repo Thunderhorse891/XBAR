@@ -6,6 +6,7 @@ import {
   MEANINGFUL_WORKSPACE_COLLECTIONS,
   captureWorkspaceDeletionSnapshot,
   clearCapturedWorkspaceDeletion,
+  didCommitWorkspaceWriteAfter,
   didWorkspaceReadFail,
   getWorkspacePersistReceipt,
   hasMeaningfulPersistedWorkspace,
@@ -975,6 +976,50 @@ test('a receipt belongs to its exact write and reports a committed save', async 
     assert.equal(await second.completed, true);
     await Promise.all([pending, later]);
   } finally {
+    restoreDb();
+  }
+});
+
+test('workspace acknowledgement waits for its own durable write and rejects stale or wrong-key receipts', async () => {
+  const restoreDb = installFakeIndexedDb();
+  try {
+    const key = 'xbar-live-workspace';
+    const previous = getWorkspacePersistReceipt();
+    assert.equal(await didCommitWorkspaceWriteAfter(previous), false, 'no new device write');
+    const wrongPending = workspaceStateStorage.setItem('other-key', '{}');
+    const wrong = getWorkspacePersistReceipt();
+    assert.equal(await didCommitWorkspaceWriteAfter(previous), false, 'a new unrelated receipt');
+    await wrongPending;
+
+    const staged = JSON.stringify({ state: { horses: [{ id: 'care-horse' }] } });
+    const saved = workspaceStateStorage.setItem(key, staged);
+    let resolved = false;
+    const confirmation = didCommitWorkspaceWriteAfter(wrong).then((committed) => {
+      resolved = true;
+      return committed;
+    });
+    await Promise.resolve();
+    assert.equal(resolved, false, 'an in-memory mutation cannot report a save before device commit');
+    const later = workspaceStateStorage.setItem('other-key', '{"newer":true}');
+    assert.equal(await confirmation, true, 'the later unrelated write did not replace the captured receipt');
+    assert.equal(await workspaceStateStorage.getItem(key), staged);
+    await Promise.all([saved, later]);
+  } finally {
+    restoreDb();
+  }
+});
+
+test('a refused workspace write cannot authorize success feedback', async () => {
+  const restoreDb = installFakeIndexedDb({ failWrites: () => true });
+  const restoreWindow = installBrokenLocalStorage();
+  try {
+    const previous = getWorkspacePersistReceipt();
+    const pending = workspaceStateStorage.setItem('xbar-live-workspace', '{"state":{"horses":[{"id":"refused"}]}}');
+    assert.equal(await didCommitWorkspaceWriteAfter(previous), false);
+    await pending;
+    assert.equal(await workspaceStateStorage.getItem('xbar-live-workspace'), null);
+  } finally {
+    restoreWindow();
     restoreDb();
   }
 });

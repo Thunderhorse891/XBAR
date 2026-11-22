@@ -9,6 +9,11 @@ import { MetricCard, Panel, Pill } from '@/components/app-ui';
 import { DotsIcon } from '@/components/icons';
 import { addLocalCalendarDays, formatDateLabel, localIsoDate } from '@/lib/format';
 import { useUiStore } from '@/store/useUiStore';
+import {
+  deviceWorkspaceSaveUnconfirmed,
+  didCommitWorkspaceWriteAfter,
+  getWorkspacePersistReceipt,
+} from '@/lib/workspaceStorage';
 import { useCloudStore } from '@/store/useCloudStore';
 import { useCurrentRoleCapability, useXbarStore } from '@/store/useXbarStore';
 import type { MedicalEventType } from '@/types/xbar';
@@ -71,6 +76,45 @@ export default function Medical() {
     () => medicalEventTypes.find((type) => type === searchParams.get('type')) ?? 'Vet visit',
   );
   const [completionState, setCompletionState] = useState<'completed' | 'planned'>('completed');
+  const careWritePending = useRef(false);
+  const [savingCare, setSavingCare] = useState(false);
+  const saveCare = async (
+    mutate: () => { ok: boolean; message: string },
+    success: string,
+    blocked: string,
+    onApplied?: () => void,
+  ) => {
+    if (careWritePending.current) return;
+    careWritePending.current = true;
+    setSavingCare(true);
+    const { session, workspaceId } = useCloudStore.getState();
+    try {
+      const previous = getWorkspacePersistReceipt();
+      const result = mutate();
+      if (!result.ok) {
+        pushToast({ title: blocked, message: result.message, tone: 'error' });
+        return;
+      }
+      const committed = didCommitWorkspaceWriteAfter(previous);
+      // Already applied in memory; close or clear the submitted draft even
+      // on a refusal, so repeating the action cannot create a second event.
+      onApplied?.();
+      const persisted = await committed;
+      const currentCloud = useCloudStore.getState();
+      if (currentCloud.session?.user.id !== session?.user.id || currentCloud.workspaceId !== workspaceId) return;
+      pushToast({
+        title: persisted ? success : 'Device save not confirmed',
+        message: persisted
+          ? `Saved on this device.${session?.user ? ' Cloud sync runs separately; check Cloud status.' : ''}`
+          : deviceWorkspaceSaveUnconfirmed,
+        tone: persisted ? 'success' : 'warning',
+        ...(persisted ? {} : { duration: Infinity }),
+      });
+    } finally {
+      careWritePending.current = false;
+      setSavingCare(false);
+    }
+  };
   const [eventError, setEventError] = useState('');
   const [timelineQuery, setTimelineQuery] = useState('');
   const [editingEventId, setEditingEventId] = useState<string | null>(null);
@@ -408,27 +452,25 @@ export default function Medical() {
                   return;
                 }
 
-                const result = addMedicalEvent(selectedHorseId, {
-                  title: eventTitle,
-                  body: eventBody,
-                  author: currentUserName,
-                  date: eventDate,
-                  type: eventType,
-                  completionState,
-                });
-
-                pushToast({
-                  title: result.ok ? 'Medical event added' : 'Medical event blocked',
-                  message: result.message,
-                  tone: result.ok ? 'success' : 'error',
-                });
-
-                if (result.ok) {
-                  setEventBody('');
-                  setEventError('');
-                }
+                void saveCare(
+                  () =>
+                    addMedicalEvent(selectedHorseId, {
+                      title: eventTitle,
+                      body: eventBody,
+                      author: currentUserName,
+                      date: eventDate,
+                      type: eventType,
+                      completionState,
+                    }),
+                  'Medical event added',
+                  'Medical event blocked',
+                  () => {
+                    setEventBody('');
+                    setEventError('');
+                  },
+                );
               }}
-              disabled={!canManageMedical}
+              disabled={savingCare || !canManageMedical}
             >
               Save care event
             </button>
@@ -465,14 +507,19 @@ export default function Medical() {
                           className="button button--primary button--compact"
                           type="button"
                           onClick={() => {
-                            const result = updateMedicalEvent(event.horseId, event.id, {
-                              title: editForm.title,
-                              summary: editForm.body,
-                              date: editForm.date,
-                            });
-                            if (result.ok) setEditingEventId(null);
-                            else pushToast({ title: 'Update blocked', message: result.message, tone: 'error' });
+                            void saveCare(
+                              () =>
+                                updateMedicalEvent(event.horseId, event.id, {
+                                  title: editForm.title,
+                                  summary: editForm.body,
+                                  date: editForm.date,
+                                }),
+                              'Medical event updated',
+                              'Update blocked',
+                              () => setEditingEventId(null),
+                            );
                           }}
+                          disabled={savingCare}
                         >
                           Save
                         </button>
@@ -601,16 +648,14 @@ export default function Medical() {
                               type="button"
                               onClick={(click) => {
                                 click.stopPropagation();
-                                const result = updateMedicalEvent(event.horseId, event.id, {
-                                  completionState: 'completed',
-                                });
-                                pushToast({
-                                  title: result.ok ? 'Care confirmed completed' : 'Completion blocked',
-                                  message: result.message,
-                                  tone: result.ok ? 'success' : 'error',
-                                });
+                                void saveCare(
+                                  () => updateMedicalEvent(event.horseId, event.id, { completionState: 'completed' }),
+                                  'Care confirmed completed',
+                                  'Completion blocked',
+                                );
                               }}
                               onKeyDown={(key) => key.stopPropagation()}
+                              disabled={savingCare}
                             >
                               Confirm care completed
                             </button>

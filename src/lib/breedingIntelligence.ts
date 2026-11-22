@@ -657,7 +657,11 @@ const STATUS_LABELS: Record<MareStatus, string> = {
 
 export function buildMareBreedingState(horse: HorseRecord, now: Date = new Date()): MareBreedingState {
   const events = occurredBreedingEvents(horse.breedingTimeline ?? [], now);
-  const breeding = latestByRecordType(events, 'breeding');
+  const covers = newestEvidence(events.filter((event) => resolveRecordType(event) === 'breeding'));
+  // The original newest-first record order breaks a written same-day tie.
+  // Different written days with no proved order cannot establish an episode.
+  const ambiguousCover = covers.some((cover) => eventDay(cover) !== eventDay(covers[0]!));
+  const breeding = ambiguousCover ? undefined : covers[0];
   const breedingDetail = breeding ? breedingDetails(breeding) : undefined;
   const bredOn = toDate(breeding?.date);
 
@@ -687,6 +691,51 @@ export function buildMareBreedingState(horse: HorseRecord, now: Date = new Date(
       statusLabel: STATUS_LABELS['not-breeding'],
       ...guaranteeFor(horse, events, undefined, 'not-breeding', now),
       actionLabel: '',
+      actionRoute: '/breeding',
+    };
+  }
+
+  if (ambiguousCover) {
+    const isAfter = (event: TimelineEvent, boundary: TimelineEvent) =>
+      fallsAfter(event, boundary, events.indexOf(event), events.indexOf(boundary));
+    // Neither a check nor a birth can establish the current outcome unless
+    // it follows every possible current cover. A later check must also be
+    // distinguishable from the records of a potentially completed pregnancy.
+    const possibleBirths = newestEvidence(
+      events.filter(
+        (event) => resolveRecordType(event) === 'foaling' && !covers.every((cover) => isAfter(cover, event)),
+      ),
+    );
+    const currentEvents = events.filter(
+      (event) =>
+        covers.every((cover) => isAfter(event, cover)) && possibleBirths.every((birth) => isAfter(event, birth)),
+    );
+    const pregnancy = currentPregnancyOutcome(currentEvents, '', now);
+    let status: MareStatus = 'pregnancy-unknown';
+    if (pregnancy === 'positive') status = 'in-foal';
+    else if (pregnancy === 'negative') status = 'open';
+    else if (
+      !currentEvents.some((event) => resolveRecordType(event) === 'pregnancy-check') &&
+      possibleBirths.length &&
+      possibleBirths.every((birth) => covers.every((cover) => isAfter(birth, cover)))
+    ) {
+      const outcomes = possibleBirths.map(foalingOutcome);
+      status = outcomes.every((outcome) => outcome === 'live')
+        ? 'foaled-live'
+        : outcomes.every((outcome) => outcome === 'loss')
+          ? 'foaled-loss'
+          : 'foaling-unknown';
+    }
+
+    return {
+      ...base,
+      status,
+      statusLabel: STATUS_LABELS[status],
+      ...(status === 'open' ? { openCheckRecorded: true as const } : {}),
+      projectedFoalValue: 0,
+      projectedFoalMargin: 0,
+      ...guaranteeFor(horse, events, undefined, 'not-breeding', now),
+      actionLabel: `Review the recorded cover dates for ${horse.name}`,
       actionRoute: '/breeding',
     };
   }

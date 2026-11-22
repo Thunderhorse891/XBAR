@@ -23,6 +23,11 @@ import { useCurrentRoleCapability, useXbarStore } from '@/store/useXbarStore';
 import { useDayKey } from '@/hooks/useDayKey';
 import { useEffectiveSubscription } from '@/hooks/useOwnerPreview';
 import { canPresentPurchaseFlow } from '@/lib/nativePlatform';
+import {
+  deviceWorkspaceSaveUnconfirmed,
+  didCommitWorkspaceWriteAfter,
+  getWorkspacePersistReceipt,
+} from '@/lib/workspaceStorage';
 
 export default function Breeding() {
   const navigate = useNavigate();
@@ -80,6 +85,8 @@ export default function Breeding() {
   const [eventResult, setEventResult] = useState('');
   const [eventCompletionState, setEventCompletionState] = useState('');
   const [eventError, setEventError] = useState('');
+  const eventWritePending = useRef(false);
+  const [savingEvent, setSavingEvent] = useState(false);
   const [milestoneQuery, setMilestoneQuery] = useState('');
   const [pendingDelete, setPendingDelete] = useState<{ horseId: string; eventId: string; horseName: string } | null>(
     null,
@@ -502,7 +509,7 @@ export default function Breeding() {
                 onChange={(event) => {
                   selectHorse(event.target.value);
                 }}
-                disabled={!canManageBreeding}
+                disabled={!canManageBreeding || savingEvent}
               >
                 <option value="">Select horse</option>
                 {breedingHorses.map((horse) => (
@@ -519,7 +526,7 @@ export default function Breeding() {
                 type="date"
                 value={eventDate}
                 onChange={(event) => setEventDate(event.target.value)}
-                disabled={!canManageBreeding}
+                disabled={!canManageBreeding || savingEvent}
               />
             </label>
             <label className="field-stack">
@@ -532,7 +539,7 @@ export default function Breeding() {
                   setEventResult('');
                   setEventError('');
                 }}
-                disabled={!canManageBreeding}
+                disabled={!canManageBreeding || savingEvent}
               >
                 <option value="">Choose…</option>
                 {BREEDING_ENTRY_KINDS.map((kind) => (
@@ -552,7 +559,7 @@ export default function Breeding() {
                   setEventResult('');
                   setEventError('');
                 }}
-                disabled={!canManageBreeding}
+                disabled={!canManageBreeding || savingEvent}
               >
                 <option value="">Choose…</option>
                 {BREEDING_COMPLETION_STATES.map((option) => (
@@ -572,7 +579,7 @@ export default function Breeding() {
                     setEventResult(event.target.value);
                     setEventError('');
                   }}
-                  disabled={!canManageBreeding}
+                  disabled={!canManageBreeding || savingEvent}
                 >
                   <option value="">Choose…</option>
                   {(eventKind === 'foaling' ? FOALING_RESULTS : PREGNANCY_RESULTS).map((result) => (
@@ -592,7 +599,7 @@ export default function Breeding() {
                   setEventTitle(event.target.value);
                   setEventError('');
                 }}
-                disabled={!canManageBreeding}
+                disabled={!canManageBreeding || savingEvent}
               />
             </label>
             <div className="field-stack field-stack--wide">
@@ -608,7 +615,7 @@ export default function Breeding() {
                   setEventBody(event.target.value);
                   setEventError('');
                 }}
-                disabled={!canManageBreeding}
+                disabled={!canManageBreeding || savingEvent}
               />
             </div>
           </div>
@@ -617,39 +624,57 @@ export default function Breeding() {
             <button
               className="button button--primary button--compact"
               type="button"
-              onClick={() => {
+              onClick={async () => {
+                if (eventWritePending.current) return;
                 if (!selectedHorse || !eventTitle.trim() || !eventBody.trim() || !eventDate.trim()) {
                   setEventError('Horse, date, milestone, and note are required.');
                   return;
                 }
 
-                const result = addBreedingEvent(selectedHorseId, {
-                  title: eventTitle,
-                  body: eventBody,
-                  author: currentUserName,
-                  date: eventDate,
-                  kind: eventKind,
-                  result: eventResult,
-                  completionState: eventCompletionState,
-                });
-
-                pushToast({
-                  title: result.ok ? 'Breeding event added' : 'Breeding event blocked',
-                  message: result.message,
-                  tone: result.ok ? 'success' : 'error',
-                });
-
-                if (result.ok) {
+                eventWritePending.current = true;
+                setSavingEvent(true);
+                const { session: submitSession, workspaceId } = useCloudStore.getState();
+                try {
+                  const previous = getWorkspacePersistReceipt();
+                  const result = addBreedingEvent(selectedHorseId, {
+                    title: eventTitle,
+                    body: eventBody,
+                    author: currentUserName,
+                    date: eventDate,
+                    kind: eventKind,
+                    result: eventResult,
+                    completionState: eventCompletionState,
+                  });
+                  if (!result.ok) {
+                    setEventError(result.message);
+                    pushToast({ title: 'Breeding event blocked', message: result.message, tone: 'error' });
+                    return;
+                  }
+                  const persisted = await didCommitWorkspaceWriteAfter(previous);
+                  const current = useCloudStore.getState();
+                  if (current.session?.user.id !== submitSession?.user.id || current.workspaceId !== workspaceId)
+                    return;
+                  // The event already exists in memory. Consume this submitted
+                  // draft after the write settles, even if the device refuses it.
                   setEventBody('');
                   setEventResult('');
                   setEventError('');
-                } else {
-                  setEventError(result.message);
+                  pushToast({
+                    title: persisted ? 'Breeding event added' : 'Device save not confirmed',
+                    message: persisted
+                      ? `Saved on this device.${submitSession?.user ? ' Cloud sync runs separately; check Cloud status.' : ''}`
+                      : deviceWorkspaceSaveUnconfirmed,
+                    tone: persisted ? 'success' : 'warning',
+                    ...(persisted ? {} : { duration: Infinity }),
+                  });
+                } finally {
+                  eventWritePending.current = false;
+                  setSavingEvent(false);
                 }
               }}
-              disabled={!canManageBreeding}
+              disabled={!canManageBreeding || savingEvent}
             >
-              Save breeding event
+              {savingEvent ? 'Saving breeding event…' : 'Save breeding event'}
             </button>
           </div>
         </Panel>

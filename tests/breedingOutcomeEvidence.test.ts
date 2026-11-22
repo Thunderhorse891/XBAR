@@ -229,3 +229,66 @@ test('unresolved written and UTC order cannot let one conflicting birth override
     assert.equal(buildMareBreedingState(mare([...births, cover]), now).status, 'foaling-unknown');
   }
 });
+
+test('incomparable covers never borrow dates, sires or episode outcomes from display ordering', () => {
+  const cover = (id: string, date: string, mateName: string): TimelineEvent => ({
+    ...event(id, date, 'breeding'),
+    details: { recordType: 'breeding', mateName },
+  });
+  const a = cover('a', '2026-01-02', 'Stallion A');
+  const b = cover('b', '2026-01-03T00:01:00+14:00', 'Stallion B');
+  const check = event('check', '2026-01-01T23:00:00-12:00', 'pregnancy-check', 'in-foal');
+  const later = event('later', '2026-01-05T00:00:00-06:00', 'pregnancy-check', 'in-foal');
+  const clear = cover('clear', '2026-01-04T00:30:00-06:00', 'Stallion C');
+  const rows = [a, b, check];
+  for (const order of [
+    [0, 1, 2],
+    [0, 2, 1],
+    [1, 0, 2],
+    [1, 2, 0],
+    [2, 0, 1],
+    [2, 1, 0],
+  ]) {
+    const timeline = order.map((index) => rows[index]!);
+    for (const [events, status] of [
+      [timeline, 'pregnancy-unknown'],
+      [[later, ...timeline], 'in-foal'],
+      [[event('late-open', later.date, 'pregnancy-check', 'open'), ...timeline], 'open'],
+    ] as const) {
+      const state = buildMareBreedingState(mare([...events]), now);
+      assert.equal(state.status, status, String(order));
+      assert.equal(state.bredOn, undefined);
+      assert.equal(state.mateName, undefined);
+      assert.equal(state.expectedFoalingDate, undefined);
+      assert.equal(state.guarantee, 'not-recorded');
+    }
+    const resolved = buildMareBreedingState(mare([later, clear, ...timeline]), now);
+    assert.equal(resolved.status, 'in-foal');
+    assert.equal(resolved.bredOn, '2026-01-04');
+    assert.equal(resolved.mateName, 'Stallion C');
+    assert.ok(resolved.expectedFoalingDate);
+  }
+  const sameDay = event('same-day', '2026-01-02T12:00:00Z', 'pregnancy-check', 'in-foal');
+  assert.equal(buildMareBreedingState(mare([a, sameDay, b]), now).status, 'pregnancy-unknown');
+  const withRecordedOrder = buildMareBreedingState(mare([sameDay, a, b]), now);
+  assert.equal(withRecordedOrder.status, 'in-foal');
+  assert.equal(withRecordedOrder.mateName, undefined);
+});
+
+test('incomparable covers keep unanimous later births and do not revive a pre-birth check', () => {
+  const first = event('date-cover', '2026-01-02', 'breeding');
+  const second = event('exact-cover', '2026-01-03T00:01:00+14:00', 'breeding');
+  const check = event('positive', '2026-01-05T10:00:00Z', 'pregnancy-check', 'in-foal');
+  const births = [
+    event('birth-day', '2026-02-02', 'foaling', 'live'),
+    event('birth-time', '2026-02-03T00:01:00+14:00', 'foaling', 'live'),
+  ];
+  for (const covers of [
+    [first, second],
+    [second, first],
+  ]) {
+    assert.equal(buildMareBreedingState(mare([...births, check, ...covers]), now).status, 'foaled-live');
+    const conflict = [births[0]!, event('different-birth', births[1]!.date, 'foaling', 'loss')];
+    assert.equal(buildMareBreedingState(mare([...conflict, check, ...covers]), now).status, 'foaling-unknown');
+  }
+});

@@ -230,3 +230,91 @@ for (const route of ['breeding', 'breeding-foaling']) {
     await expect(page.getByText('Near term', { exact: true })).toBeVisible();
   });
 }
+
+test('both screens agree after reload when a new same-day cycle has no cover date', async ({ page }) => {
+  await page.clock.setFixedTime(new Date('2026-10-05T12:00:00Z'));
+  await bootstrapWorkspace(page);
+  const horseId = await seedHorse(page, 'Two Cycle Mare');
+  await page.goto('/app/breeding');
+  await page.getByRole('combobox', { name: 'Horse', exact: true }).selectOption(horseId);
+
+  const dateField = page.getByLabel('Event date', { exact: true });
+  const noteField = page.getByLabel('Breeding note', { exact: true });
+  const submit = page.getByRole('button', { name: 'Save breeding event', exact: true });
+  async function fillEntry(kind: string, date: string, title: string, result?: string) {
+    await page.getByRole('combobox', { name: 'Entry type', exact: true }).selectOption(kind);
+    await page.getByRole('combobox', { name: 'Occurrence', exact: true }).selectOption('completed');
+    if (result) {
+      await page
+        .getByRole('combobox', { name: kind === 'foaling' ? 'Foaling outcome' : 'Check result', exact: true })
+        .selectOption(result);
+    }
+    await dateField.fill(date);
+    await page.getByLabel('Milestone', { exact: true }).fill(title);
+    await noteField.fill('Synthetic cycle parity fixture');
+  }
+  async function save() {
+    const storagePath = '/src/lib/workspaceStorage.ts';
+    const prior = await page.evaluateHandle(async (path) => {
+      const { getWorkspacePersistReceipt } = await import(/* @vite-ignore */ path);
+      return getWorkspacePersistReceipt();
+    }, storagePath);
+    try {
+      await submit.click();
+      await expect(noteField).toHaveValue('');
+      const committed = await page.evaluate(
+        async ({ prior, storagePath }) => {
+          const { getWorkspacePersistReceipt } = await import(/* @vite-ignore */ storagePath);
+          const receipt = getWorkspacePersistReceipt();
+          return Boolean(
+            receipt && receipt !== prior && receipt.name === 'xbar-live-workspace' && (await receipt.completed),
+          );
+        },
+        { prior, storagePath },
+      );
+      expect(committed, 'this submit must produce a new committed device write before navigation').toBe(true);
+    } finally {
+      await prior.dispose();
+    }
+  }
+  const mare = page.locator('.stack-item--interactive').filter({ hasText: /Two Cycle Mare/i });
+  async function assertScreens(status: string, count: number, forecast: boolean) {
+    await expect(mare).toContainText(status);
+    await expect(page.getByText(`${count} confirmed in foal`, { exact: true })).toBeVisible();
+    if (forecast) await expect(mare).toContainText('Estimated foaling');
+    else await expect(mare).not.toContainText('Estimated foaling');
+    await page.goto('/app/breeding-foaling');
+    await page.reload();
+    await expect(page.getByRole('row').filter({ hasText: /Two Cycle Mare/i })).toContainText(status);
+    const inFoal = page.locator('.xs-card').filter({ has: page.getByText('In foal', { exact: true }) });
+    await expect(inFoal).toHaveText(new RegExp(`^In foal\\s*${count}$`));
+    await page.getByRole('button', { name: 'Open breeding records', exact: true }).click();
+    await expect(mare).toContainText(status);
+    await expect(page.getByText(`${count} confirmed in foal`, { exact: true })).toBeVisible();
+    if (forecast) await expect(mare).toContainText('Estimated foaling');
+    else await expect(mare).not.toContainText('Estimated foaling');
+  }
+
+  await fillEntry('breeding', '2025-11-01', 'Cycle one cover');
+  await save();
+  await fillEntry('pregnancy-check', '2025-12-01', 'Cycle one positive', 'in-foal');
+  await save();
+  await assertScreens('Near term', 1, true);
+
+  await page.getByRole('combobox', { name: 'Horse', exact: true }).selectOption(horseId);
+  await fillEntry('foaling', '2026-10-01', 'Cycle one birth', 'live');
+  await save();
+  await fillEntry('pregnancy-check', '', 'Cycle two positive', 'in-foal');
+  await submit.click();
+  await expect(page.getByText('Horse, date, milestone, and note are required.', { exact: true })).toBeVisible();
+  await expect(noteField).toHaveValue('Synthetic cycle parity fixture');
+  await expect(mare).toContainText('Foaled — live');
+  await dateField.fill('2026-10-01');
+  await save();
+  await assertScreens('Confirmed in foal', 1, false);
+
+  await page.getByRole('combobox', { name: 'Horse', exact: true }).selectOption(horseId);
+  await fillEntry('pregnancy-check', '2026-10-04', 'Cycle two open recheck', 'open');
+  await save();
+  await assertScreens('Open — ready to breed', 0, false);
+});
