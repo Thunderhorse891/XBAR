@@ -267,32 +267,82 @@ function eventInstant(event: TimelineEvent): number | undefined {
   return breedingInstant(event.date);
 }
 
-function compareEventTime(left: TimelineEvent, right: TimelineEvent): number {
+function utcDay(instant: number): number {
+  return Math.floor(instant / DAY_MS) * DAY_MS;
+}
+
+// A day-only record has no offset or clock time. A mixed pair can establish
+// different-day order only when both the recorded dates and UTC dates agree
+// on that order. Every strict mixed comparison therefore moves to a different
+// UTC day, so it cannot cycle with an exact comparison. Null is unresolved
+// across different written days; zero preserves the established same-day tie.
+function compareEvidenceTime(left: string, right: string): number | null {
+  const leftInstant = breedingInstant(left);
+  const rightInstant = breedingInstant(right);
+  if (leftInstant !== undefined && rightInstant !== undefined) return leftInstant - rightInstant;
+  const leftDay = toDate(left)?.getTime() ?? Number.NEGATIVE_INFINITY;
+  const rightDay = toDate(right)?.getTime() ?? Number.NEGATIVE_INFINITY;
+  if (leftDay === rightDay) return 0;
+  const writtenOrder = Math.sign(leftDay - rightDay);
+  const utcOrder = Math.sign(
+    (leftInstant === undefined ? leftDay : utcDay(leftInstant)) -
+      (rightInstant === undefined ? rightDay : utcDay(rightInstant)),
+  );
+  return writtenOrder === utcOrder ? writtenOrder : null;
+}
+
+function isProvedLater(left: TimelineEvent, right: TimelineEvent): boolean {
+  return (compareEvidenceTime(left.date, right.date) ?? 0) > 0;
+}
+
+function newestEvidence(events: TimelineEvent[]): TimelineEvent[] {
+  return events.filter((event) => !events.some((other) => isProvedLater(other, event)));
+}
+
+// Keep display sorting separate: a deterministic UTC-day group and identity
+// tie-break do not supply a time for a day-only record or establish its outcome.
+function compareForDisplay(left: TimelineEvent, right: TimelineEvent): number {
   const leftInstant = eventInstant(left);
   const rightInstant = eventInstant(right);
-  return leftInstant !== undefined && rightInstant !== undefined
-    ? leftInstant - rightInstant
-    : eventDay(left) - eventDay(right);
+  const leftDay = leftInstant === undefined ? eventDay(left) : utcDay(leftInstant);
+  const rightDay = rightInstant === undefined ? eventDay(right) : utcDay(rightInstant);
+  if (leftDay !== rightDay) return rightDay - leftDay;
+  if (leftInstant !== undefined && rightInstant !== undefined && leftInstant !== rightInstant)
+    return rightInstant - leftInstant;
+  if (leftInstant !== undefined && rightInstant === undefined) return -1;
+  if (rightInstant !== undefined && leftInstant === undefined) return 1;
+  const leftId = String(left.id ?? '');
+  const rightId = String(right.id ?? '');
+  return leftId < rightId ? -1 : leftId > rightId ? 1 : 0;
 }
 
 function latestByRecordType(
   events: TimelineEvent[],
   recordType: BreedingRecordDetails['recordType'],
 ): TimelineEvent | undefined {
-  return events.filter((event) => resolveRecordType(event) === recordType).sort((a, b) => compareEventTime(b, a))[0];
+  const latest = newestEvidence(events.filter((event) => resolveRecordType(event) === recordType));
+  // Only a recorded same-day tie may preserve the timeline's existing order.
+  return latest.length > 1 && latest.every((event) => eventDay(event) === eventDay(latest[0]!))
+    ? latest[0]
+    : latest.sort(compareForDisplay)[0];
 }
 
-// A date-only boundary must also respect newest-first insertion order. Earlier
-// same-day evidence belongs to the previous cycle, for both covers and foalings.
+function fallsAfter(event: TimelineEvent, boundary: TimelineEvent, eventOrder: number, boundaryOrder: number): boolean {
+  const comparison = compareEvidenceTime(event.date, boundary.date);
+  return (
+    (comparison ?? 0) > 0 ||
+    (comparison === 0 &&
+      (eventInstant(event) === undefined || eventInstant(boundary) === undefined) &&
+      eventOrder < boundaryOrder)
+  );
+}
+
+// A date-only boundary uses the original newest-first recorded order on the
+// same day. Neither display order nor ambiguous different-day pairs prove
+// that a check or foaling belongs to a new cycle.
 function eventsAfter(events: TimelineEvent[], boundary: TimelineEvent): TimelineEvent[] {
   const boundaryOrder = events.indexOf(boundary);
-  return events.filter(
-    (event, order) =>
-      compareEventTime(event, boundary) > 0 ||
-      (compareEventTime(event, boundary) === 0 &&
-        (eventInstant(event) === undefined || eventInstant(boundary) === undefined) &&
-        order < boundaryOrder),
-  );
+  return events.filter((event, order) => fallsAfter(event, boundary, order, boundaryOrder));
 }
 
 /*
@@ -475,29 +525,18 @@ export function currentPregnancyOutcome(
   afterISO: string,
   now = new Date(),
 ): PregnancyCheckOutcome {
-  const boundaryInstant = breedingInstant(afterISO);
-  const atOrAfterBoundary = (event: TimelineEvent) => {
-    const instant = eventInstant(event);
-    return instant !== undefined && boundaryInstant !== undefined
-      ? instant >= boundaryInstant
-      : eventDay(event) >= (toDate(afterISO)?.getTime() ?? Number.NEGATIVE_INFINITY);
-  };
-  const checks = chronologicalBreedingEvents(events, now)
-    .map((event, order) => ({ event, order }))
-    .filter(
-      ({ event }) =>
-        resolveRecordType(event) === 'pregnancy-check' && Number.isFinite(eventDay(event)) && atOrAfterBoundary(event),
-    )
-    .sort((a, b) => eventDay(b.event) - eventDay(a.event) || a.order - b.order);
-  const nonPending = checks
-    .map(({ event }) => event)
-    .filter((event) => {
-      const result = breedingDetails(event)?.result;
-      return typeof result !== 'string' || result.trim().toLowerCase() !== 'pending';
-    });
+  const nonPending = occurredBreedingEvents(events, now).filter((event) => {
+    if (resolveRecordType(event) !== 'pregnancy-check') return false;
+    if (afterISO) {
+      const afterBoundary = compareEvidenceTime(event.date, afterISO);
+      if (afterBoundary === null || afterBoundary < 0) return false;
+    }
+    const result = breedingDetails(event)?.result;
+    return typeof result !== 'string' || result.trim().toLowerCase() !== 'pending';
+  });
   // Keep every observation that cannot be proved older than another. A real
   // timestamp orders same-day checks; a day-only conflict must be reviewed.
-  const latest = nonPending.filter((event) => !nonPending.some((other) => compareEventTime(other, event) > 0));
+  const latest = newestEvidence(nonPending);
   if (!latest.length) return 'unknown';
   const outcomes = latest.map(pregnancyCheckOutcome);
   return outcomes.every((outcome) => outcome === outcomes[0]) ? outcomes[0]! : 'unknown';
@@ -530,16 +569,18 @@ export function foalingOutcome(event: TimelineEvent): 'live' | 'loss' | 'unknown
   return live && loss ? 'unknown' : loss ? 'loss' : live ? 'live' : 'unknown';
 }
 
+function occurredBreedingEvents(events: TimelineEvent[], now: Date): TimelineEvent[] {
+  return events.filter((event) => {
+    if (!isOccurredBreedingEvent(event)) return false;
+    const date = toDate(event.date);
+    if (!date) return false;
+    const instant = eventInstant(event);
+    return instant !== undefined ? instant <= now.getTime() : isoDate(date) <= localIsoDate(now);
+  });
+}
+
 export function chronologicalBreedingEvents(events: TimelineEvent[], now = new Date()): TimelineEvent[] {
-  return events
-    .filter((event) => {
-      if (!isOccurredBreedingEvent(event)) return false;
-      const date = toDate(event.date);
-      if (!date) return false;
-      const instant = eventInstant(event);
-      return instant !== undefined ? instant <= now.getTime() : isoDate(date) <= localIsoDate(now);
-    })
-    .sort((left, right) => compareEventTime(right, left));
+  return occurredBreedingEvents(events, now).sort(compareForDisplay);
 }
 
 // Contract records are evidence to review, never an automatically adjudicated
@@ -569,7 +610,9 @@ function guaranteeFor(
   );
   if (!linked.length) return result(contracts.length ? 'unconfirmed' : 'not-recorded');
   // Equally dated amendments need a person to select the authoritative terms.
-  const contract = linked[0]!;
+  const candidates = newestEvidence(linked);
+  if (candidates.length !== 1) return result('unconfirmed');
+  const contract = candidates[0]!;
   if (linked.some((event) => event !== contract && eventDay(event) === eventDay(contract)))
     return result('unconfirmed');
   const details = breedingDetails(contract)!;
@@ -613,7 +656,7 @@ const STATUS_LABELS: Record<MareStatus, string> = {
 };
 
 export function buildMareBreedingState(horse: HorseRecord, now: Date = new Date()): MareBreedingState {
-  const events = chronologicalBreedingEvents(horse.breedingTimeline ?? [], now);
+  const events = occurredBreedingEvents(horse.breedingTimeline ?? [], now);
   const breeding = latestByRecordType(events, 'breeding');
   const breedingDetail = breeding ? breedingDetails(breeding) : undefined;
   const bredOn = toDate(breeding?.date);
@@ -651,12 +694,7 @@ export function buildMareBreedingState(horse: HorseRecord, now: Date = new Date(
   const foaling = latestByRecordType(events, 'foaling');
   // Day-only dates need the timeline's newest-first order to separate cycles.
   const completedCycle =
-    foaling &&
-    (!breeding ||
-      compareEventTime(foaling, breeding) > 0 ||
-      (compareEventTime(foaling, breeding) === 0 &&
-        (eventInstant(foaling) === undefined || eventInstant(breeding) === undefined) &&
-        events.indexOf(foaling) < events.indexOf(breeding)));
+    foaling && (!breeding || fallsAfter(foaling, breeding, events.indexOf(foaling), events.indexOf(breeding)));
 
   if (!breeding || !bredOn || completedCycle) {
     // A mare can arrive already in foal: a positive check with no cover on file
@@ -701,7 +739,7 @@ export function buildMareBreedingState(horse: HorseRecord, now: Date = new Date(
     if (foaling && completedCycle) {
       const episode = breeding ? eventsAfter(events, breeding) : events;
       const births = episode.filter((event) => resolveRecordType(event) === 'foaling');
-      const latestBirths = births.filter((event) => !births.some((other) => compareEventTime(other, event) > 0));
+      const latestBirths = newestEvidence(births);
       const outcomes = latestBirths.map(foalingOutcome);
       const outcome = outcomes.length && outcomes.every((value) => value === outcomes[0]) ? outcomes[0]! : 'unknown';
       const status: MareStatus =

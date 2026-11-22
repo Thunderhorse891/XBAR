@@ -173,3 +173,59 @@ test('modal and anticipated wording stays uncertain across both outcome classifi
     'unknown',
   );
 });
+
+test('mixed recorded days and offset instants cannot cycle or discard unanimous evidence', async () => {
+  const { chronologicalBreedingEvents, currentPregnancyOutcome } = await import('../src/lib/breedingIntelligence.js');
+  const dates = ['2026-01-01T23:59:00-12:00', '2026-01-02', '2026-01-03T00:01:00+14:00'];
+  const permutations = [
+    [0, 1, 2],
+    [0, 2, 1],
+    [1, 0, 2],
+    [1, 2, 0],
+    [2, 0, 1],
+    [2, 1, 0],
+  ];
+  for (const order of permutations) {
+    const rows = order.map((index) => event(String(index), dates[index]!, 'pregnancy-check', 'in-foal'));
+    assert.equal(currentPregnancyOutcome(rows, '', now), 'positive', String(order));
+    assert.equal(buildMareBreedingState(mare(rows), now).status, 'in-foal', String(order));
+    assert.deepEqual(
+      chronologicalBreedingEvents(rows, now).map(({ id }) => id),
+      ['0', '2', '1'],
+    );
+    assert.equal(
+      currentPregnancyOutcome(
+        rows.map((row) => (row.id === '1' ? event('1', dates[1]!, 'pregnancy-check', 'open') : row)),
+        '',
+        now,
+      ),
+      'unknown',
+      String(order),
+    );
+  }
+});
+
+test('a cross-offset check cannot prove it followed an adjacent written-day cover', () => {
+  const cover = event('cover', '2026-01-02', 'breeding');
+  const unclearCheck = event('ambiguous-check', '2026-01-03T00:01:00+14:00', 'pregnancy-check', 'in-foal');
+  const laterCheck = event('later-check', '2026-01-04T00:01:00+14:00', 'pregnancy-check', 'in-foal');
+  for (const timeline of [
+    [unclearCheck, cover],
+    [cover, unclearCheck],
+  ]) {
+    assert.equal(buildMareBreedingState(mare(timeline), now).status, 'bred-awaiting-check');
+    assert.equal(buildMareBreedingState(mare([...timeline, laterCheck]), now).status, 'in-foal');
+  }
+});
+
+test('unresolved written and UTC order cannot let one conflicting birth override the other', () => {
+  const cover = event('cover', '2025-03-01', 'breeding');
+  const loss = event('loss', '2026-01-02', 'foaling', 'loss');
+  const live = event('live', '2026-01-03T00:01:00+14:00', 'foaling', 'live');
+  for (const births of [
+    [loss, live],
+    [live, loss],
+  ]) {
+    assert.equal(buildMareBreedingState(mare([...births, cover]), now).status, 'foaling-unknown');
+  }
+});

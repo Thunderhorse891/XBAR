@@ -1,5 +1,10 @@
 {
   "trailingSlash": false,
+  "git": {
+    "deploymentEnabled": {
+      "codex/xbar-release-review-20261122": false
+    }
+  },
   "headers": [
     {
       "source": "/(.*)",
