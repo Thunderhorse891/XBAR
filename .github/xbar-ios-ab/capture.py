@@ -9,11 +9,7 @@ if not device:
     print("No simulator selected; startup markers unavailable.")
     sys.exit(0)
 
-phases = {"native-document-start", "html-script", "script-error", "resource-error", "unhandled-rejection",
-          "dom-ready", "root-missing", "root-populated", "root-still-empty"}
-errors = {"Error", "TypeError", "SyntaxError", "ReferenceError", "RangeError",
-          "SecurityError", "NetworkError", "AbortError"}
-asset = re.compile(r"[A-Za-z0-9_-]{1,96}\.(?:js|css)(?::\d{1,7}:\d{1,7})?")
+summary_pattern = re.compile(r"(local|about|other)(-[01]){5}-(none|script|module|rejection)")
 seen = set()
 
 def consume(data):
@@ -26,11 +22,9 @@ def consume(data):
             continue
         if not isinstance(rec, dict) or set(rec) != {"phase", "kind", "asset"}:
             continue
-        if not isinstance(rec["phase"], str) or rec["phase"] not in phases:
+        if rec["phase"] != "lifecycle-summary" or rec["kind"] is not None:
             continue
-        if rec["kind"] is not None and not (isinstance(rec["kind"], str) and rec["kind"] in errors):
-            continue
-        if rec["asset"] is not None and not (isinstance(rec["asset"], str) and asset.fullmatch(rec["asset"])):
+        if not isinstance(rec["asset"], str) or not summary_pattern.fullmatch(rec["asset"]):
             continue
         normalized = json.dumps(rec, sort_keys=True)
         if normalized not in seen and len(seen) < 12:

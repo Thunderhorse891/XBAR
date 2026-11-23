@@ -59,14 +59,12 @@ jobs:
         run: |
           set -euo pipefail
           npm ci
-          node --test ../harness/.github/xbar-ios-ab/startup.test.mjs
+          node --test ../harness/.github/xbar-ios-ab/lifecycle.test.mjs
+          python3 ../harness/.github/xbar-ios-ab/prepare-native-probe.py src/main.tsx ios/App/App/SceneDelegate.swift ../harness/.github/xbar-ios-ab/lifecycle.js
           node scripts/build-mobile.mjs
-          python3 ../harness/.github/xbar-ios-ab/install-diagnostic.py dist/index.html --synthetic-simulator-only
-          python3 ../harness/.github/xbar-ios-ab/prepare-native-probe.py ios/App/App/SceneDelegate.swift dist/xbar-ci-boot-diagnostic.js
           npx --no-install cap sync ios
           node scripts/check-ios-project.mjs
           git diff --exit-code -- ios/App/AppUITests
-          python3 ../harness/.github/xbar-ios-ab/prepare-ax-probe.py ios/App/AppUITests/AppUITests.swift
       - name: Select the matching iOS Simulator
         run: |
           set -euo pipefail
