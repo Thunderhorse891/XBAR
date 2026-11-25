@@ -11,7 +11,7 @@ import {
 } from '@/lib/ownershipDocumentReview';
 import { ConfirmActionDialog } from '@/components/ConfirmActionDialog';
 import { documentDuplicateNeedsReview } from '@/lib/documentDuplicates';
-import { CommandBrief } from '@/components/CommandBrief';
+import { DocumentDossier } from '@/components/DocumentDossier';
 import { ContextMenu } from '@/components/ContextMenu';
 import { Panel, Pill } from '@/components/app-ui';
 import { EmptyState } from '@/components/EmptyState';
@@ -35,8 +35,6 @@ import { canPresentPurchaseFlow } from '@/lib/nativePlatform';
 import {
   PIPELINE_STAGES,
   buildProofLinks,
-  computeHeroRisks,
-  computeHeroStatus,
   computeStageBuckets,
   computeStageCounts,
   stageFromParam,
@@ -195,27 +193,11 @@ export default function Documents() {
     () => computeStageBuckets(scopedDocuments, horses, intakeBatches),
     [scopedDocuments, horses, intakeBatches],
   );
-  const {
-    queuedDocuments,
-    reviewQueue,
-    readyDocuments,
-    proofDocuments,
-    duplicates,
-    buyerSafeDocuments,
-    processingBatches,
-  } = stageBuckets;
+  const { queuedDocuments, reviewQueue, readyDocuments, proofDocuments, duplicates, processingBatches } = stageBuckets;
 
   // Proof chain context: which documents already back an ownership requirement.
   const proofLinksByDocumentId = useMemo(() => buildProofLinks(ownershipRecords), [ownershipRecords]);
-  const proofLinkedCount = scopedDocuments.filter((document) => proofLinksByDocumentId.has(document.id)).length;
-
   const stageCounts: Record<PipelineStage, number> = computeStageCounts(scopedDocuments, stageBuckets);
-
-  const heroStatus = scopedDocuments.length
-    ? computeHeroStatus(stageBuckets)
-    : { label: 'No documents yet', tone: 'blue' as const };
-
-  const heroRisks = computeHeroRisks(stageBuckets);
 
   const applyExtractedFacts = (document: DocumentRecord) => {
     const targetId = reviewAssignments[document.id] ?? document.horseId ?? '';
@@ -687,26 +669,25 @@ export default function Documents() {
           ) : null}
         </div>
       ) : null}
-      <CommandBrief
-        eyebrow="Documents"
-        entity="Your Documents"
-        status={heroStatus}
-        summary="Every file moves through one path: upload, text extraction, human review, ownership support, then watermarked sharing."
-        evidence={[
-          { label: 'Uploaded total', value: String(scopedDocuments.length) },
-          { label: 'Processing', value: String(queuedDocuments.length) },
-          { label: 'Needs review', value: String(reviewQueue.length) },
-          { label: 'Ownership-linked', value: String(proofLinkedCount) },
-          { label: 'Share-ready', value: String(buyerSafeDocuments.length) },
-        ]}
-        risks={heroRisks}
-        nextAction={
-          reviewQueue.length
-            ? { label: `Open review queue (${reviewQueue.length})`, onClick: () => goToStage('Review') }
-            : { label: 'Upload documents', onClick: () => goToStage('Upload') }
-        }
-        secondaryActions={[{ label: 'Open Shared Access workspace', to: SHARED_ACCESS_PATH }]}
-        variant="wide"
+      <DocumentDossier
+        horse={requestedHorse}
+        documents={documents}
+        horses={horses}
+        canUpload={canUploadDocuments}
+        canReview={canReviewDocuments}
+        onUpload={() => goToStage('Upload')}
+        onReview={() => goToStage('Review')}
+        onBrowse={() => goToStage('Library')}
+        onHorseChange={(id) => {
+          const next = new URLSearchParams(searchParams);
+          if (id) next.set('horse', id);
+          else {
+            next.delete('horse');
+            next.delete('from');
+            next.delete('requirement');
+          }
+          setSearchParams(next, { preventScrollReset: true });
+        }}
       />
 
       <section className="surface-panel">
@@ -738,6 +719,7 @@ export default function Documents() {
       {activeStage === 'Library' ? (
         <DocumentLibrary
           documents={scopedDocuments}
+          canReview={canReviewDocuments}
           horses={horses}
           openingDocumentId={openingDocumentId}
           onOpen={(document) => void openDocument(document)}

@@ -1,3 +1,4 @@
+import './documentDossier.css';
 import { useState } from 'react';
 import { Panel, Pill } from '@/components/app-ui';
 import { EmptyState } from '@/components/EmptyState';
@@ -12,7 +13,9 @@ export function DocumentLibrary({
   onOpen,
   onDownload,
   onReview,
+  canReview = true,
 }: {
+  canReview?: boolean;
   documents: DocumentRecord[];
   horses: HorseRecord[];
   openingDocumentId: string;
@@ -47,60 +50,62 @@ export function DocumentLibrary({
         </p>
       ) : null}
       {visible.length ? (
-        <div className="table-shell">
-          <table className="data-table">
-            <thead>
-              <tr>
-                <th>Document</th>
-                <th>Horse</th>
-                <th>Status</th>
-                <th>Actions</th>
-              </tr>
-            </thead>
-            <tbody>
-              {visible.map((document) => (
-                <tr key={document.id} aria-label={`${document.title} library actions`}>
-                  <td>
-                    {document.title}
-                    <div className="stack-item__copy">{storedFileLabel(document)}</div>
-                  </td>
-                  <td>{horses.find((horse) => horse.id === document.horseId)?.name ?? 'Unassigned'}</td>
-                  <td>
-                    <Pill tone="slate">{document.state}</Pill>
-                  </td>
-                  <td>
-                    <div className="inline-actions inline-actions--card">
-                      {hasStoredFile(document) ? (
-                        <button
-                          className="button button--ghost button--compact"
-                          disabled={Boolean(openingDocumentId)}
-                          onClick={() => onOpen(document)}
-                        >
-                          {openingDocumentId === document.id ? 'Opening...' : 'Open file'}
-                        </button>
-                      ) : (
-                        <span>No original file attached</span>
-                      )}
-                      {onDownload && hasStoredFile(document) ? (
-                        <button
-                          className="button button--ghost button--compact"
-                          disabled={Boolean(openingDocumentId)}
-                          onClick={() => onDownload(document)}
-                        >
-                          Download original
-                        </button>
-                      ) : null}
-                      {!archived ? (
-                        <button className="button button--ghost button--compact" onClick={() => onReview(document)}>
-                          Review
-                        </button>
-                      ) : null}
-                    </div>
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
+        <div className="document-file-grid" aria-label="Original documents">
+          {visible.map((document) => (
+            <article
+              className="document-file-card"
+              role="group"
+              key={document.id}
+              aria-label={`${document.title} library actions`}
+            >
+              <div className="document-file-cover" aria-label={`${document.type} file summary`}>
+                <span>ORIGINAL DOCUMENT</span>
+                <strong>{document.type}</strong>
+                <small>
+                  <span>{document.mimeType?.split('/')[1]?.toUpperCase() ?? 'FILE'}</span> ·{' '}
+                  <span>{storedFileLabel(document)}</span>
+                </small>
+              </div>
+              <div className="document-file-body">
+                <h3>{document.title}</h3>
+                <div className="document-file-meta">
+                  <span>{horses.find((horse) => horse.id === document.horseId)?.name ?? 'Unassigned'}</span>
+                  <span>{document.fileName || 'Original filename unavailable'}</span>
+                  <Pill tone={document.state === 'Needs Review' || document.state === 'Matched' ? 'amber' : 'slate'}>
+                    {document.state === 'Queued' ? 'Reading file' : document.state}
+                  </Pill>
+                </div>
+                <div className="document-file-actions">
+                  {hasStoredFile(document) ? (
+                    <button
+                      className="button button--primary button--compact"
+                      disabled={Boolean(openingDocumentId)}
+                      aria-busy={openingDocumentId === document.id}
+                      onClick={() => onOpen(document)}
+                    >
+                      {openingDocumentId === document.id ? 'Opening...' : 'Open file'}
+                    </button>
+                  ) : (
+                    <span>No original file attached</span>
+                  )}
+                  {onDownload && hasStoredFile(document) ? (
+                    <button
+                      className="button button--ghost button--compact"
+                      disabled={Boolean(openingDocumentId)}
+                      onClick={() => onDownload(document)}
+                    >
+                      Download original
+                    </button>
+                  ) : null}
+                  {!archived && canReview ? (
+                    <button className="button button--ghost button--compact" onClick={() => onReview(document)}>
+                      Review
+                    </button>
+                  ) : null}
+                </div>
+              </div>
+            </article>
+          ))}
         </div>
       ) : (
         <EmptyState

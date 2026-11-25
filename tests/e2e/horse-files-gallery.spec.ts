@@ -123,7 +123,7 @@ test('horse Documents shows linked files without extracted facts and downloads t
     useXbarStore.setState({ documents: [doc], horses: [{ ...horse, documentFacts: [], documents: ['original'] }] });
   });
   await page.getByRole('button', { name: 'Documents', exact: true }).click();
-  const row = page.getByRole('row', { name: 'Horse original library actions' });
+  const row = page.getByRole('group', { name: 'Horse original library actions' });
   await expect(row).toBeVisible();
   await expect(row.getByText('On this device', { exact: true })).toBeVisible();
   await expect(row.getByText('Needs Review', { exact: true })).toBeVisible();
@@ -139,6 +139,6 @@ test('horse Documents shows linked files without extracted facts and downloads t
     fullPage: true,
     animations: 'disabled',
   });
-  await page.getByRole('button', { name: /Upload document for/i }).click();
+  await page.getByRole('button', { name: 'Upload Doc', exact: true }).click();
   await expect(page).toHaveURL(/horse=.*upload=1/);
 });

@@ -132,7 +132,9 @@ test('documents shows an empty state on a fresh workspace', async ({ page }) => 
   // someone a clear queue they never filled reads as a dead end. This asserted
   // the pre-d9717cc landing stage and went unnoticed because CI does not run
   // this suite.
-  await expect(page.getByText('No documents yet')).toBeVisible();
+  await expect(
+    page.getByRole('region', { name: 'Document overview' }).getByRole('button', { name: 'Add the first document' }),
+  ).toBeVisible();
   await expect(page.getByRole('tab', { name: /Upload/ })).toHaveAttribute('aria-selected', 'true');
   // The review stage still says plainly that nothing is waiting there.
   await page.getByRole('tab', { name: /Review/ }).click();
@@ -1087,7 +1089,7 @@ test('archived library keeps the actual original readable after archive and relo
   await page.getByRole('tab', { name: /^Library/ }).click();
   await expect(page.getByRole('button', { name: /^Active \(0\)/ })).toBeVisible();
   await page.getByRole('button', { name: /^Archived \(1\)/ }).click();
-  const row = page.getByRole('row', { name: 'library-original library actions' });
+  const row = page.getByRole('group', { name: 'library-original library actions' });
   await expect(row).toContainText('Archived');
   await expect(row.getByRole('button', { name: 'Restore', exact: true })).toHaveCount(0);
   await expect(row.getByRole('button', { name: 'Move', exact: true })).toHaveCount(0);
@@ -1106,7 +1108,7 @@ test('archived library keeps the actual original readable after archive and relo
   await expect(reloaded.getByRole('tab', { name: 'Library (1)', exact: true })).toBeVisible();
   await expect(reloaded.getByRole('button', { name: 'Back to horse', exact: true })).toBeVisible();
   await reloaded.getByRole('button', { name: /^Archived \(1\)/ }).click();
-  const retained = reloaded.getByRole('row', { name: 'library-original library actions' });
+  const retained = reloaded.getByRole('group', { name: 'library-original library actions' });
   await expect(retained).toContainText('On this device');
   const reopened = context.waitForEvent('page');
   await retained.getByRole('button', { name: 'Open file', exact: true }).click();

@@ -361,7 +361,9 @@ export default function AnimalProfile() {
         </div>
       </div>
 
-      <HorsePhotoGallery key={animal.id} horse={animal} onAdd={openPhotoSource} uploading={uploadingPhoto} />
+      {tab !== 'Documents' ? (
+        <HorsePhotoGallery key={animal.id} horse={animal} onAdd={openPhotoSource} uploading={uploadingPhoto} />
+      ) : null}
 
       <div className="xs-tabbar">
         {TABS.map((t) => (

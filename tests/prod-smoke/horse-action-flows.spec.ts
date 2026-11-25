@@ -146,7 +146,7 @@ test('changing the contextual upload horse keeps the banner, scope, and saved ta
   await page.getByRole('button', { name: 'Add docs', exact: true }).click();
   await expect(page.getByRole('status').filter({ hasText: 'Intake finished' })).toContainText('1 file entered');
   await page.getByRole('tab', { name: /Library/ }).click();
-  await expect(page.getByRole('row', { name: /Copper-Canyon-registration.*library actions/ })).toContainText(
+  await expect(page.getByRole('group', { name: /Copper-Canyon-registration.*library actions/ })).toContainText(
     second.name,
   );
   await page.getByRole('tab', { name: /Upload/ }).click();
@@ -187,5 +187,5 @@ test('a delayed duplicate upload cannot replace a newer Library stage selection'
   await page.evaluate(() => (window as Window & { releaseIntakeRead?: () => void }).releaseIntakeRead?.());
   await expect(page.getByRole('status').filter({ hasText: 'Intake finished' })).toContainText('duplicate warning');
   await expect(library).toHaveAttribute('aria-selected', 'true');
-  await expect(page.getByRole('row', { name: /Blue-Dolly-registration.*library actions/ })).toHaveCount(2);
+  await expect(page.getByRole('group', { name: /Blue-Dolly-registration.*library actions/ })).toHaveCount(2);
 });

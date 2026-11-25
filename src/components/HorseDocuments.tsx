@@ -4,7 +4,7 @@ import { isSupabaseConfigured } from '@/lib/platformConfig';
 import { useEffect, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { DocumentLibrary } from '@/components/DocumentLibrary';
-import { ActionButton } from '@/components/saas';
+import { DocumentDossier } from '@/components/DocumentDossier';
 import { openStoredFileInTab } from '@/lib/openStoredFile';
 import { downloadStoredFile } from '@/lib/downloadStoredFile';
 import { documentWithFreshSource, documentIdentityCacheNeedsReview } from '@/lib/ownershipDocumentReview';
@@ -17,6 +17,7 @@ export function HorseDocuments({ horse }: { horse: HorseRecord }) {
   const navigate = useNavigate();
   const allDocuments = useXbarStore((s) => s.documents);
   const canUpload = useCurrentRoleCapability('uploadDocuments');
+  const canReview = useCurrentRoleCapability('reviewDocuments');
   const pushToast = useUiStore((s) => s.pushToast);
   const [busyId, setBusyId] = useState('');
   const pending = useRef(false);
@@ -114,19 +115,21 @@ export function HorseDocuments({ horse }: { horse: HorseRecord }) {
   };
   return (
     <>
-      {canUpload ? (
-        <div className="inline-actions" style={{ marginBottom: 12 }}>
-          <ActionButton
-            onClick={() =>
-              navigate(`/documents?${new URLSearchParams({ horse: horse.id, from: 'profile', upload: '1' })}`)
-            }
-          >
-            Upload document for {horse.name}
-          </ActionButton>
-        </div>
-      ) : null}
+      <DocumentDossier
+        horse={horse}
+        documents={documents}
+        canUpload={canUpload}
+        canReview={canReview}
+        onUpload={() =>
+          navigate(`/documents?${new URLSearchParams({ horse: horse.id, from: 'profile', upload: '1' })}`)
+        }
+        onReview={() =>
+          navigate(`/documents?${new URLSearchParams({ horse: horse.id, from: 'profile', stage: 'Review' })}`)
+        }
+      />
       <DocumentLibrary
         documents={documents}
+        canReview={canReview}
         horses={[horse]}
         openingDocumentId={busyId}
         onOpen={(doc) => void open(doc, false)}
