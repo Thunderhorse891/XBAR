@@ -17,6 +17,8 @@ Active milestone: an **installable, verified TestFlight candidate**. This worksh
 
 Apple currently requires an iOS build made with Xcode 26 or later and identifies Account Holder, Admin, App Manager and Developer as upload-capable roles. See [Apple's upload requirements](https://developer.apple.com/help/app-store-connect/manage-builds/upload-builds). An unsigned `.app` from CI is not a TestFlight artifact. Upload does not establish processing, tester availability or successful installation.
 
+Latest exact-candidate native result: [45891750409](https://github.com/Thunderhorse891/XBAR/actions/runs/45891750409) on `057fbed` failed during XCTest runner initialization with `Timed out waiting for AX loaded notification`, before application assertions. Device/simulator compilation and boot passed. Its only retained PNG shows simulator Home after the attempt; no matching XCTest attachments were exported. This leaves the earlier empty-email/keyboard hypothesis unverified and cannot be represented as an app/selector defect or a native sign-in pass. The release ledger links the actual artifact and raw log.
+
 ## Native acceptance to retain
 
 Run on the actual bundled app with an authorized disposable account and isolated backend. The browser Documents cases are useful comparison evidence, not a substitute.
@@ -45,6 +47,8 @@ The checked-in `ios/App/App/PrivacyInfo.xcprivacy` is a baseline. Do not copy it
 | OCR                                             | Client PDF.js/Tesseract; optional AWS Textract only when server configuration enables it                                      | Actual release OCR/provider configuration and disclosure; no invented AI provider                                                 |
 | Diagnostics                                     | Runtime monitoring defaults enabled unless configured otherwise; payload sanitization precedes Supabase/API transport         | Final flags, collected usage/diagnostic categories, retention, and whether answers/manifest require changes                       |
 | Permissions/SDKs                                | App Info.plist has camera/photo/location purpose strings; Capacitor, Filesystem and Share are bundled                         | Permission denial paths and archived SDK required-reason manifests; package checks alone do not certify privacy                   |
+
+Provider readback on November 26: [Open-Meteo terms/privacy](https://open-meteo.com/en/terms) say API troubleshooting logs may include coordinates and are deleted after 90 days. Its free endpoint is for non-commercial use; subscriptions are listed as commercial. The candidate calls `api.open-meteo.com` and its geocoding endpoint directly. Verify XBAR's permitted commercial route/entitlement and reconcile disclosures before distribution; no provider subscription, payment or settings change was made. This confirms why a no-retention claim is inappropriate, but does not establish the final App Store collection/linkage answers.
 
 The icon source is 1024×1024 with fully opaque pixels. Final compiled-asset and Apple validation remain required. Preserve the supplied artwork; no replacement mark is authorized.
 
