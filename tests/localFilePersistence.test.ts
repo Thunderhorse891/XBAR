@@ -9,7 +9,8 @@ import test from 'node:test';
  * did nothing. `const localFileUrl = undefined;` sat directly under
  * `console.error('Cloud upload failed; storing file locally instead.')`, so
  * every unit test of the surrounding function passed while the file's bytes
- * were discarded. Nothing short of reading the call site catches that.
+ * were discarded. These source guards complement the live store recovery
+ * tests in tests/api/storageUploadPreflight.test.mjs.
  */
 
 test('a document the cloud did not take is stored on this device', async () => {
@@ -22,8 +23,19 @@ test('a document the cloud did not take is stored on this device', async () => {
   );
   assert.match(
     source,
-    /if \(!uploadedAsset\) \{\s*try \{\s*localFileKey = await storeLocalFile\(file, file\.name, file\.type, vaultOwnerId\(\)\)/,
-    'a document the cloud declined must have its bytes written to the on-device vault, tagged with the workspace that owns it',
+    /if \(!uploadedAsset\) \{\s*try \{\s*localFileKey = await storeLocalFile\(file, file\.name, file\.type, intakeVaultOwner\)/,
+    'a document the cloud declined must have its bytes written to the vault under the owner captured when intake began',
+  );
+  const intake = source.slice(source.indexOf('createDocumentIntake:'), source.indexOf('reviewDocument:'));
+  const capturedOwner = intake.indexOf('const intakeVaultOwner = vaultOwnerId();');
+  assert.ok(
+    capturedOwner >= 0 && capturedOwner < intake.indexOf('await '),
+    'fallback ownership must be pinned before any asynchronous work can switch accounts or ranches',
+  );
+  assert.doesNotMatch(
+    intake,
+    /storeLocalFile\(file, file\.name, file\.type, vaultOwnerId\(\)\)/,
+    'a failed upload must never tag the original with the replacement workspace at fallback time',
   );
   assert.match(
     source,

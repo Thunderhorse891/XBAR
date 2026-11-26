@@ -143,38 +143,22 @@ test('a transport failure is not evidence that a second subscription is safe', a
   assert.doesNotMatch(client, /isBillingPolicyRefusal/, 'the blocklist predicate must be gone');
 });
 
-test('a local-only workspace can still buy a plan', async () => {
+test('a local-only workspace is refused until it has a managed identity', async () => {
   const client = await readFile('src/lib/billingApi.ts', 'utf8');
 
-  // Without a workspace id and access token the endpoint cannot be called, so
-  // no billing row can be found and none can be duplicated. That path is how a
-  // workspace with no cloud session legitimately reaches Stripe, and it has to
-  // stay open — which is exactly why it is CODED rather than left uncoded and
-  // indistinguishable from a fetch that threw.
-  // `[^}]` already matches a newline, so the `(?:[^}]|\n)` this replaced gave
-  // the engine two ways to consume the same character — ambiguity a lazy
-  // quantifier turns into exponential backtracking, which is what CodeQL
-  // flagged. One unambiguous class does the same job in linear time.
+  // Sign-in remains required for the server to verify the workspace and price.
   assert.match(
     client,
     /if \(!params\.workspaceId \|\| !params\.accessToken\) \{\s*return \{\s*ok: false,[^}]*?code: NO_MANAGED_IDENTITY,/,
-    'the no-identity path must carry the one code that permits a fallback',
+    'the no-identity path retains its diagnostic code, not permission for fallback',
   );
 });
 
-test('hosted-link-only billing reaches its payment link without calling the disabled endpoint', () => {
-  /*
-   * The documented link-only configuration: VITE_STRIPE_PAYMENT_LINK_* set,
-   * managed billing off. api/stripe/checkout.js answers 503 before it reads a
-   * billing row, so that refusal carries no code, so `canUsePaymentLinkFallback`
-   * declines to follow it — and the only checkout route the deployment has was
-   * suppressed. Every purchase ended in an error toast while `/api/health`
-   * reported the billing configuration healthy, which for link-only billing it
-   * is. The route has to be chosen from configuration, before the request.
-   */
+test('hosted-link-only billing cannot bypass the verified managed route', () => {
+  // The old link-only configuration must not sell an unverified legacy rate.
   assert.equal(
     checkoutRouteFor({ managedBillingEnabled: false, paymentLink: 'https://buy.stripe.com/test_link' }),
-    'payment_link',
+    'managed',
   );
 });
 
@@ -204,8 +188,8 @@ test('the hosted-only bypass reads the managed-billing flag, not a failure code'
   assert.equal(checkoutRouteFor({ managedBillingEnabled: false, paymentLink: '' }), 'managed');
   assert.equal(checkoutRouteFor({ managedBillingEnabled: true, paymentLink: '' }), 'managed');
 
-  // And the allowlist itself is untouched by any of this.
+  // No error code authorizes a static checkout.
   assert.equal(canUsePaymentLinkFallback(undefined), false);
   assert.equal(canUsePaymentLinkFallback('billing_unavailable'), false);
-  assert.equal(canUsePaymentLinkFallback(NO_MANAGED_IDENTITY), true);
+  assert.equal(canUsePaymentLinkFallback(NO_MANAGED_IDENTITY), false);
 });

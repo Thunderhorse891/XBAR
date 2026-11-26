@@ -533,8 +533,8 @@ test('GET says which plans and cadences can be sold, and names no price id', asy
   assert.equal(response.statusCode, 200);
   assert.equal(response.body.managed, true);
   assert.deepEqual(response.body.sellable, {
-    monthly: { Starter: false, Professional: true, 'Ranch Ops': true, Enterprise: false },
-    annual: { Starter: false, Professional: false, 'Ranch Ops': false, Enterprise: false },
+    monthly: { Free: false, Starter: false, Professional: true, 'Ranch Ops': true, Enterprise: false },
+    annual: { Free: false, Starter: false, Professional: false, 'Ranch Ops': false, Enterprise: false },
   });
   assert.doesNotMatch(JSON.stringify(response.body), /price_/, 'price ids stay on the server');
   assert.equal(response.headers['cache-control'], 'no-store, max-age=0');

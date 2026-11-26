@@ -1,3 +1,4 @@
+import { uploadReservedBuffer, assertStorageFileSize, uploadErrorResult } from './storage-upload.js';
 import { createHash, randomUUID } from 'node:crypto';
 import { readJsonBody, sendJson } from './http.js';
 import { requireWorkspaceAccess } from './supabase-admin.js';
@@ -175,7 +176,7 @@ export default async function handler(req, res) {
       return sendJson(res, result.ok ? 200 : result.status || 400, result);
     }
 
-    const result = await processBatch({ supabase, workspaceId, user, body, mode });
+    const result = await processBatch({ access, supabase, workspaceId, user, body, mode });
     return sendJson(res, result.ok ? 200 : result.status || 400, result);
   } catch {
     return sendJson(res, 500, {
@@ -186,7 +187,17 @@ export default async function handler(req, res) {
   }
 }
 
-async function processBatch({ supabase, workspaceId, user, body, mode }) {
+async function processBatch({ access, supabase, workspaceId, user, body, mode }) {
+  const entitlements = await getWorkspaceEntitlements(supabase, workspaceId, user?.email);
+  if (!entitlements.ok) return { ok: false, status: entitlements.status, message: entitlements.message };
+  if (entitlements.effectiveTier === 'Free') {
+    return {
+      ok: false,
+      status: 403,
+      code: 'paid_ocr_required',
+      message: 'OCR document intake is available on Starter and higher plans. Your saved records remain available.',
+    };
+  }
   const inputFiles = Array.isArray(body.files) ? body.files : [];
   if (!inputFiles.length) {
     return { ok: false, status: 400, message: 'files[] is required for preview/auto ingestion.' };
@@ -256,9 +267,12 @@ async function processBatch({ supabase, workspaceId, user, body, mode }) {
     return { ok: false, status: 400, message: `Batches are limited to ${MAX_FILES_PER_BATCH} files per request.` };
   }
 
-  const entitlements = await getWorkspaceEntitlements(supabase, workspaceId, user?.email);
-  if (!entitlements.ok) {
-    return { ok: false, status: entitlements.status, message: entitlements.message };
+  // Check each new original before the batch inventory or any object is written.
+  // Existing stored originals are not new uploads and keep their current access.
+  try {
+    for (const file of expanded) if (!file.storagePath && file.content) assertStorageFileSize(fileByteSize(file));
+  } catch (error) {
+    return { ...uploadErrorResult(error), status: error.status || 503 };
   }
 
   const capacity = await checkDocumentCapacity(supabase, workspaceId, expanded.length, entitlements.limits);
@@ -271,7 +285,7 @@ async function processBatch({ supabase, workspaceId, user, body, mode }) {
 
   // Storage gate: reject the whole batch before uploading anything if the
   // combined byte size would exceed the plan's storage cap.
-  const incomingStorageBytes = expanded.reduce((sum, file) => sum + fileByteSize(file), 0);
+  const incomingStorageBytes = expanded.reduce((sum, file) => sum + (file.storagePath ? 0 : fileByteSize(file)), 0);
   const storage = await checkStorageCapacity(supabase, workspaceId, incomingStorageBytes, entitlements.limits);
   if (!storage.ok) {
     return { ok: false, status: storage.status ?? 403, message: storage.message };
@@ -308,6 +322,7 @@ async function processBatch({ supabase, workspaceId, user, body, mode }) {
           file.storagePath ||
           (file.content ? documentObjectPath({ workspaceId, documentId, fileName: file.fileName }) : ''),
         uploaded: false,
+        uploadOutcome: file.storagePath ? 'preexisting' : 'not-started',
         documentSaved: false,
         jobSaved: false,
       };
@@ -345,11 +360,28 @@ async function processBatch({ supabase, workspaceId, user, body, mode }) {
       const storagePath = receipt.storagePath;
 
       if (!file.storagePath && file.content) {
-        const { data: uploaded, error: uploadError } = await supabase.storage
-          .from(DOCUMENT_BUCKET)
-          .upload(storagePath, file.content, { contentType: file.mimeType, upsert: true });
-        if (uploadError || uploaded?.path !== storagePath) throw new PersistenceError('original-upload');
+        receipt.uploadOutcome = 'unconfirmed';
+        const { data: uploaded, error: uploadError } = await uploadReservedBuffer({
+          access,
+          requestId: documentId.slice(4),
+          bucket: DOCUMENT_BUCKET,
+          storagePath,
+          bytes: file.content,
+          contentType: file.mimeType,
+        });
+        if (uploadError || uploaded?.path !== storagePath) {
+          const failure = new PersistenceError('original-upload');
+          if (uploadError?.uploadOutcome === 'not_started' && uploadError.needsRecovery === false) {
+            receipt.uploadOutcome = 'not_started';
+            receipt.uploadErrorCode = uploadError.code;
+            failure.message = uploadError.message;
+            failure.status = uploadError.status;
+            failure.code = uploadError.code;
+          }
+          throw failure;
+        }
         receipt.uploaded = true;
+        receipt.uploadOutcome = 'confirmed';
       }
 
       const ocr = await runOcr({
@@ -391,43 +423,17 @@ async function processBatch({ supabase, workspaceId, user, body, mode }) {
         },
       };
 
-      try {
-        await saveRows(supabase.from('documents').insert(documentRow), {
-          context,
-          phase: 'document-save',
-          key: 'document_id',
-          ids: [documentId],
-          fields: { workspace_id: workspaceId, storage_path: documentRow.storage_path },
-        });
-      } catch (error) {
-        // Only a definitive SQL rejection plus a confirmed absent row permits
-        // cleanup. Timeouts/lost acknowledgments may already reference these
-        // bytes: preserve them and the batch inventory for recovery.
-        if (receipt.uploaded && /^(?:23\w{3}|42\w{3}|P0001)$/.test(error.databaseCode || '')) {
-          try {
-            const stored = await readRows(
-              supabase
-                .from('documents')
-                .select('document_id')
-                .eq('workspace_id', workspaceId)
-                .eq('document_id', documentId)
-                .maybeSingle(),
-              'document-cleanup-read',
-            );
-            if (!stored) {
-              const { data: removed, error: removeError } = await supabase.storage
-                .from(DOCUMENT_BUCKET)
-                .remove([storagePath]);
-              receipt.originalRemoved =
-                !removeError && Array.isArray(removed) && removed.some((item) => item.name === storagePath);
-              if (receipt.originalRemoved) receipt.uploaded = false;
-            }
-          } catch {
-            /* Keep the original inventory and report the failed operation. */
-          }
-        }
-        throw error;
-      }
+      // The batch inventory is a recovery reference to these bytes. Never
+      // delete the original on record rejection: a payload-only document or
+      // concurrent recovery may also refer to it, and a read cannot fence that
+      // race. Retained objects remain charged by the authoritative byte total.
+      await saveRows(supabase.from('documents').insert(documentRow), {
+        context,
+        phase: 'document-save',
+        key: 'document_id',
+        ids: [documentId],
+        fields: { workspace_id: workspaceId, storage_path: documentRow.storage_path },
+      });
       receipt.documentSaved = true;
       documents.push(summarizeDocument(documentRow));
 
@@ -625,7 +631,8 @@ async function processBatch({ supabase, workspaceId, user, body, mode }) {
         skipped,
         recovery: { ...recovery, horseId: context.horseId },
       }),
-      status: 409,
+      status: error.status || 409,
+      ...(error.code ? { code: error.code } : {}),
       partial: context.writeAttempted,
     };
   }

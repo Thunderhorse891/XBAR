@@ -44,8 +44,7 @@ test('server subscription prices match advertised production tiers', async () =>
   assert.equal(subscriptionPlans.Professional.monthlyRate, 19.99);
   assert.equal(subscriptionPlans['Ranch Ops'].monthlyRate, 49.99);
   assert.match(plansSource, /Enterprise:[\s\S]*monthlyRate: 199/);
-  // Annual is 10x monthly (2 months free) and must be pinned too — an
-  // unadvertised annual price is a billing dispute waiting to happen.
+  // Historical annual rates remain recognizable; new annual checkout is disabled.
   assert.match(plansSource, /Starter:[\s\S]*annualRate: 120/);
   assert.match(plansSource, /Professional:[\s\S]*annualRate: 290/);
   assert.match(plansSource, /'Ranch Ops':[\s\S]*annualRate: 790/);

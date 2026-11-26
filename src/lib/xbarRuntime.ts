@@ -32,6 +32,28 @@ export const subscriptionTierConfig: Record<
     >;
   }
 > = {
+  // Initial conservative ancillary limits; owner review required before launch.
+  Free: {
+    monthlyRate: 0,
+    annualRate: 0,
+    sharedAccessEnabled: false,
+    featureFlags: [
+      '2 horses and 1 user',
+      'Manual document upload',
+      '1 seat, 10 documents',
+      'Limited cloud storage shared across XBAR at launch',
+      'No card required',
+      'No OCR or shared sale packets',
+    ],
+    limits: {
+      horseLimit: 2,
+      seatLimit: 1,
+      documentLimit: 10,
+      salePacketLimit: 0,
+      storageLimitGb: 1,
+      sharedAccessSeatLimit: 0,
+    },
+  },
   Starter: {
     monthlyRate: 12,
     annualRate: 120,
@@ -40,7 +62,8 @@ export const subscriptionTierConfig: Record<
       'Keep clean records — horses, care, documents, expenses, reminders',
       'Documents with OCR intake and review',
       '1 seat — just you',
-      '250 documents and 25 GB storage',
+      '250 documents',
+      'Limited cloud storage shared across XBAR at launch',
     ],
     limits: {
       horseLimit: 5,
@@ -56,11 +79,13 @@ export const subscriptionTierConfig: Record<
     annualRate: 290,
     sharedAccessEnabled: true,
     featureFlags: [
-      'Horse records and document OCR',
+      'Horse records with OCR intake and review',
+      'Reports calculated automatically from records; export PDF or CSV manually',
       'Share approved sale packets and keep buyer follow-up in one place',
       'Sale listings for buyer-ready horse profiles',
       '5 team seats and 10 client seats',
-      'Up to 1,000 active documents',
+      '1,000 documents',
+      'Limited cloud storage shared across XBAR at launch',
     ],
     limits: {
       horseLimit: 30,
@@ -79,7 +104,8 @@ export const subscriptionTierConfig: Record<
       'Everything in Professional',
       'Run the operation: team roles, breeding, equipment, and supplies',
       '20 team seats and 40 client seats',
-      'Up to 5,000 active documents',
+      '5,000 documents',
+      'Limited cloud storage shared across XBAR at launch',
     ],
     limits: {
       horseLimit: 200,
@@ -98,7 +124,8 @@ export const subscriptionTierConfig: Record<
       'Everything in Ranch Ops',
       'Scale and control for large rosters and teams',
       '60 team seats and 200 client seats',
-      '20,000 documents and 2,500 GB storage',
+      '20,000 documents',
+      'Limited cloud storage shared across XBAR at launch',
     ],
     limits: {
       horseLimit: 2000,
@@ -209,7 +236,7 @@ function includesNormalized(haystack: string, needle: string) {
 
 export function estimateStorageGb(files: File[]) {
   const totalBytes = files.reduce((sum, file) => sum + file.size, 0);
-  return normalizeStorage(totalBytes / GIGABYTE);
+  return totalBytes / GIGABYTE;
 }
 
 export function guessDocumentType(fileName: string): DocumentType {
@@ -543,9 +570,11 @@ export async function buildDocumentRecord(params: {
   selectedHorse?: HorseRecord;
   horses: HorseRecord[];
   existingDocuments: DocumentRecord[];
+  allowOcr?: boolean;
 }) {
   const { file, uploadedBy, source, selectedHorse, horses, existingDocuments } = params;
-  const { text: previewText, coverage } = await readFileTextSnippet(file);
+  const { text: previewText, coverage } =
+    params.allowOcr === false ? { text: '', coverage: fullCoverage() } : await readFileTextSnippet(file);
   const typeReview = inferDocumentType(file.name, previewText);
   const inferredType = typeReview.type;
   const { identityReviewRequired, ...extractedEntities } = extractDocumentEntities({
@@ -555,7 +584,7 @@ export async function buildDocumentRecord(params: {
   });
   const bestMatch = selectedHorse
     ? { horse: selectedHorse, confidence: 0.99, reason: 'Document was manually attached during upload' }
-    : identityReviewRequired
+    : identityReviewRequired || params.allowOcr === false
       ? undefined
       : resolveDocumentHorseMatch(horses, `${file.name} ${previewText}`, extractedEntities).match;
   const matchedHorse = bestMatch?.horse;
@@ -565,7 +594,7 @@ export async function buildDocumentRecord(params: {
 
   // These are facts read from this document. Copying missing fields from the
   // matched profile made review claim the scan contained facts it never read.
-  const entities: DocumentEntities = extractedEntities;
+  const entities: DocumentEntities = params.allowOcr === false ? {} : extractedEntities;
   const entityCount = Object.values(entities).filter(Boolean).length;
 
   let confidence = bestMatch?.confidence ?? 0.54;
@@ -604,7 +633,9 @@ export async function buildDocumentRecord(params: {
     // Empty unless the reader stopped short of the whole file.
     identityReviewRequired,
     processingNote: [
-      describeDocumentCoverage(coverage),
+      params.allowOcr === false
+        ? 'Manual upload on Free. OCR requires Professional or Ranch Ops.'
+        : describeDocumentCoverage(coverage),
       typeReview.ambiguous ? 'Multiple document types were read. Upload separate sources for each requirement.' : '',
       identityReviewRequired ? documentIdentityReviewNote : '',
     ]

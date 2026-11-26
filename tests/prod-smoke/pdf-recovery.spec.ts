@@ -1,5 +1,7 @@
 import { expect, test, type Page } from '@playwright/test';
 import { PDFDocument, StandardFonts } from 'pdf-lib';
+import { buildSubscriptionForTier } from '../../src/lib/xbarRuntime.js';
+import type { SubscriptionProfile } from '../../src/types/xbar.js';
 
 test.use({ serviceWorkers: 'block', actionTimeout: 20_000 });
 
@@ -22,6 +24,7 @@ async function workspace(page: Page) {
       };
     });
     return JSON.parse(raw).state as {
+      subscription: SubscriptionProfile;
       documents: Array<{
         fileName: string;
         processingNote?: string;
@@ -32,6 +35,54 @@ async function workspace(page: Page) {
       horses: Array<{ name: string; registrationNumber?: string }>;
     };
   });
+}
+
+async function enablePaidOcrFixture(page: Page) {
+  // Fresh workspaces are Free. This disposable local fixture must have OCR
+  // access before testing a reader failure; otherwise intake correctly stops
+  // at the plan gate without requesting either PDF module.
+  const current = await workspace(page);
+  expect(current.subscription.tier).toBe('Free');
+  const subscription = {
+    ...buildSubscriptionForTier(current.subscription, 'Professional', { billingState: 'Active' }),
+    purchasedTier: 'Professional' as const,
+  };
+  await page.evaluate(
+    (paidSubscription) =>
+      new Promise<void>((resolve, reject) => {
+        const open = indexedDB.open('xbar-workspace', 1);
+        open.onerror = () => reject(open.error);
+        open.onsuccess = () => {
+          const db = open.result;
+          const transaction = db.transaction('persist', 'readwrite');
+          const store = transaction.objectStore('persist');
+          const request = store.get('xbar-live-workspace');
+          request.onsuccess = () => {
+            const saved = JSON.parse(request.result as string);
+            saved.state.subscription = paidSubscription;
+            store.put(JSON.stringify(saved), 'xbar-live-workspace');
+          };
+          transaction.oncomplete = () => {
+            db.close();
+            resolve();
+          };
+          transaction.onerror = () => {
+            db.close();
+            reject(transaction.error);
+          };
+          transaction.onabort = () => {
+            db.close();
+            reject(new Error('Paid OCR fixture transaction aborted'));
+          };
+        };
+      }),
+    subscription,
+  );
+  // Hydrate the fixture before inducing the failure. No reload is allowed
+  // between the failed module request and the recovery uploads below.
+  await page.reload();
+  await expect(page.getByRole('button', { name: 'Create', exact: true })).toBeVisible();
+  expect((await workspace(page)).subscription).toMatchObject({ tier: 'Professional', billingState: 'Active' });
 }
 
 async function upload(page: Page, name: string, buffer: Buffer, count: number) {
@@ -90,6 +141,7 @@ for (const failure of ['library', 'worker'] as const) {
     await page.getByLabel('Ranch name').fill('Recovery Ranch');
     await page.getByRole('button', { name: 'Create workspace', exact: true }).click();
     await expect(page.getByRole('button', { name: 'Create', exact: true })).toBeVisible();
+    await enablePaidOcrFixture(page);
 
     const pdf = await PDFDocument.create();
     const font = await pdf.embedFont(StandardFonts.Helvetica);

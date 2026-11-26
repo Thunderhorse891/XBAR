@@ -234,7 +234,7 @@ export async function startWorkspaceTrial(supabase, workspaceId, nowMs = Date.no
     // trial record rides on a baseline row so every reader sees one shape.
     const { error: insertError } = await supabase.from('workspace_subscription_profiles').insert({
       workspace_id: workspaceId,
-      tier: 'Starter',
+      tier: 'Free',
       billing_state: 'Inactive',
       monthly_rate: 0,
       payload: nextPayload,

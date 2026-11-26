@@ -242,13 +242,13 @@ const pricing = {
   <div>
     <p class="kicker">Pricing</p>
     <h1>Simple plans. Published limits. No hidden capacity math.</h1>
-    <p class="lead">Every plan protects the core horse record. Higher tiers add collaboration, buyer sharing, and more document capacity. File storage is shared and subject to availability.</p>
+    <p class="lead">Every plan protects the core horse record. Higher tiers add collaboration, buyer sharing, and more document capacity. Cloud storage is limited and shared across XBAR at launch.</p>
   </div>
 </section>
 
 <section class="section section--flush">
   <div class="wrap">
-    <p class="intro">Planned new subscriptions are monthly, in USD per workspace. Existing subscriptions keep their current terms.</p>
+    <p class="intro">Start Free with 2 horses and 1 user, no card required. Planned new subscriptions are monthly, in USD per workspace. New annual subscriptions are not available. Existing subscriptions keep their current terms.</p>
     <p class="callout" role="status">Paid upgrades are not available yet. These are the planned monthly rates. Creating an account does not start a subscription. Explore the <a href="/demo">public product tour</a> while paid checkout is being verified.</p>
     <div class="plans">
       ${marketingPlans
@@ -270,9 +270,10 @@ const pricing = {
 <section class="section">
   <div class="wrap">
     <h2>Plan limits, side by side</h2>
+    <p class="intro">Cloud storage is shared across XBAR at launch. New launch plans do not include a dedicated storage allowance; uploads depend on available capacity.</p>
     <div class="table-scroll" role="region" aria-label="Plan capacity comparison" tabindex="0">
       <table class="limits">
-        <caption>These limits are enforced by the application — the same numbers appear in your workspace usage meter.</caption>
+        <caption>Plan record limits and shared launch storage availability.</caption>
         <thead><tr><th scope="col">Capacity</th>${marketingPlans.map((plan) => `<th scope="col">${esc(plan.tier)}</th>`).join('')}</tr></thead>
         <tbody>
           <tr><th scope="row">Monthly price</th>${marketingPlans.map((plan) => `<td>$${plan.monthlyRate}</td>`).join('')}</tr>
@@ -281,6 +282,7 @@ const pricing = {
           <tr><th scope="row">Client seats</th>${marketingPlans.map((plan) => `<td>${plan.limits.sharedAccessSeatLimit}</td>`).join('')}</tr>
           <tr><th scope="row">Documents</th>${marketingPlans.map((plan) => `<td>${plan.limits.documentLimit.toLocaleString('en-US')}</td>`).join('')}</tr>
           <tr><th scope="row">Sale packets</th>${marketingPlans.map((plan) => `<td>${plan.limits.salePacketLimit.toLocaleString('en-US')}</td>`).join('')}</tr>
+          <tr><th scope="row">Storage</th>${marketingPlans.map(() => '<td>Limited cloud storage shared across XBAR at launch</td>').join('')}</tr>
         </tbody>
       </table>
     </div>

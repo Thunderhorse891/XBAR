@@ -29,6 +29,7 @@ export async function renderRoute(name, changes = {}, params = '', options = {})
     params,
     calls: [],
     cloud: { session: null, workspaceId: null, workspaceRole: 'Admin', ...options.cloud },
+    dayKey: '2026-11-12',
     receipt: null,
     recordsOwner: options.recordsOwner ?? '',
     location: { key: 'initial', pathname: '/equipment' },
@@ -125,7 +126,7 @@ export async function renderRoute(name, changes = {}, params = '', options = {})
             else if (path === '@/hooks/useDayKey') code = 'export const useDayKey=()=>"2026-11-21";';
             else if (path.startsWith('@/hooks/'))
               code =
-                'export const useEffectiveSubscription=()=>f.state.subscription;export const useHorseMediaUrl=(_p,src)=>src;export const useHorsePhotoSelection=()=>({});export const useHorseArchiveActions=()=>({});';
+                'export const useDayKey=()=>f.dayKey;export const useEffectiveSubscription=()=>f.state.subscription;export const useHorseMediaUrl=(_p,src)=>src;export const useHorsePhotoSelection=()=>({});export const useHorseArchiveActions=()=>({});';
             else
               code = [...componentNames]
                 .filter((x) => x !== 'default')

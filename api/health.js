@@ -70,12 +70,14 @@ export default function handler(req, res) {
     stripeWebhook: Boolean(process.env.STRIPE_WEBHOOK_SECRET),
     stripePriceIds,
     stripeAnnualPriceIds: annualPriceIds,
+    newAnnualCheckout: false,
     // Whether the secret key is a LIVE key. Not a secret, and exactly what an
     // operator needs to see: stripeBilling true with this false is a test key.
     stripeLiveKey: stripeMode === 'live',
     managedBilling,
     clientManagedBilling,
-    paymentLinks,
+    paymentLinks: false,
+    legacyPaymentLinksConfigured: paymentLinks,
     email: isEmailConfigured(),
     remindersCron: Boolean(process.env.CRON_SECRET),
   };
@@ -100,7 +102,7 @@ export default function handler(req, res) {
   const reasons = [];
   const warnings = [];
 
-  if (subsystems.paymentLinks) {
+  if (paymentLinks) {
     warnings.push('Legacy hosted Stripe payment links are configured but not offered by this app.');
   }
 

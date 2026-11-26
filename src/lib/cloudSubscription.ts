@@ -24,7 +24,7 @@ export function subscriptionFromCloudRow(
     row.billing_state === 'Active' || row.billing_state === 'Manual Billing' || row.billing_state === 'Past Due'
       ? row.billing_state
       : 'Inactive';
-  const tier = isEntitledBillingState(billingState) ? purchasedTier : 'Starter';
+  const tier = isEntitledBillingState(billingState) ? purchasedTier : 'Free';
   const config = subscriptionTierConfig[tier];
   const payload = record(row.payload);
   const usage = record(payload.usage);
@@ -70,8 +70,8 @@ export function subscriptionFromCloudRow(
     },
   };
 
-  // An active trial grants Professional on top of whatever the billing state
-  // says; an expired or absent one leaves the profile exactly as computed.
+  // An active trial grants Professional only to an unentitled or Free account.
+  // An entitled paid tier retains its purchased access.
   return applyTrialToProfile(profile);
 }
 
@@ -103,5 +103,5 @@ export function withCloudSubscription<T>(backup: T, subscription: SubscriptionPr
 
 /** No canonical row is the ordinary unpaid setup state, never a snapshot grant. */
 export function baselineCloudSubscription(): SubscriptionProfile {
-  return subscriptionFromCloudRow({ tier: 'Starter', billing_state: 'Manual Billing', monthly_rate: 0 })!;
+  return subscriptionFromCloudRow({ tier: 'Free', billing_state: 'Inactive', monthly_rate: 0 })!;
 }

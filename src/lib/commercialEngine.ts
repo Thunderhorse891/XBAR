@@ -1,16 +1,17 @@
 import type { SubscriptionProfile, SubscriptionTier } from '../types/xbar.js';
 
 export type CommercialFeature =
-  'buyerDealRoom' | 'packetExport' | 'teamInvites' | 'profitIntelligence' | 'breedingRevenue' | 'ranchOps';
+  'buyerDealRoom' | 'packetExport' | 'teamInvites' | 'profitIntelligence' | 'reports' | 'breedingRevenue' | 'ranchOps';
 
 export type UsagePressure = 'clear' | 'warning' | 'upgrade' | 'blocked';
 
-const planOrder: SubscriptionTier[] = ['Starter', 'Professional', 'Ranch Ops', 'Enterprise'];
+const planOrder: SubscriptionTier[] = ['Free', 'Starter', 'Professional', 'Ranch Ops', 'Enterprise'];
 const minimumPlanByFeature: Record<CommercialFeature, SubscriptionTier> = {
   buyerDealRoom: 'Professional',
   packetExport: 'Professional',
   teamInvites: 'Professional',
   profitIntelligence: 'Ranch Ops',
+  reports: 'Professional',
   breedingRevenue: 'Ranch Ops',
   ranchOps: 'Ranch Ops',
 };
@@ -30,6 +31,7 @@ export function featureLabel(feature: CommercialFeature) {
   if (feature === 'buyerDealRoom') return 'buyer follow-up';
   if (feature === 'packetExport') return 'sale document export';
   if (feature === 'teamInvites') return 'team invitations';
+  if (feature === 'reports') return 'ranch reports';
   if (feature === 'profitIntelligence') return 'profit intelligence';
   if (feature === 'breedingRevenue') return 'breeding revenue workflows';
   return 'Ranch Ops workflows';
@@ -47,4 +49,8 @@ export function usageGate(label: string, used: number, limit: number, incoming =
   return used + incoming <= limit
     ? null
     : `${label} limit reached (${used}/${limit}). Upgrade to unlock more capacity.`;
+}
+
+export function canUseOcr(subscription: SubscriptionProfile): boolean {
+  return planRank(subscription.tier) >= planRank('Starter');
 }

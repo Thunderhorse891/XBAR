@@ -549,7 +549,10 @@ for (const variant of ['empty-server-usage', 'stale-server-usage', 'plan-downgra
       assert.equal(f.backup.workspace.horses.length, 2);
       assert.equal(f.backup.workspace.subscription.usage.horsesUsed, 2);
       assert.deepEqual(f.backup.workspace.auditEvents, local.workspace.auditEvents);
-      assert.equal(f.backup.workspace.subscription.tier, options.subscriptionRow.tier);
+      assert.equal(
+        f.backup.workspace.subscription.tier,
+        variant === 'plan-downgrade' ? 'Free' : options.subscriptionRow.tier,
+      );
       assert.equal(f.backup.workspace.subscription.billingState, options.subscriptionRow.billing_state);
       if (variant === 'plan-downgrade')
         assert.ok(
@@ -685,7 +688,7 @@ for (const identity of [
       calls.some((call) => call.table === supabaseConfig.workspaceTable),
       false,
     );
-    assert.equal(loaded.authoritativeSubscription.tier, 'Starter');
+    assert.equal(loaded.authoritativeSubscription.tier, 'Free');
   });
 }
 test('empty authoritative ranch never resurrects a same-ranch recovery snapshot', async () => {

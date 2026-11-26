@@ -1,17 +1,49 @@
-// Supported public plans and monthly amounts come from the checkout catalog.
-// Legacy entitlements remain in subscription-plans; they are not new-sale offers.
 import publicPlanCatalog from '../../api/_lib/public-plan-catalog.json' with { type: 'json' };
+// Public pricing data rendered on the static marketing site.
+//
+// This mirrors `subscriptionTierConfig` in src/lib/xbarRuntime.ts (the tier
+// config cannot be imported here because its module graph uses .js-suffixed
+// TS imports that Node cannot resolve outside the bundler). The unit test
+// tests/marketingSite.test.ts fails the build if the two ever drift, so the
+// numbers published on /pricing are always the numbers the app enforces.
 
-const details = {
-  Professional: {
+export const marketingPlans = [
+  {
+    tier: 'Free',
+    monthlyRate: 0,
+    annualRate: 0,
+    fit: 'For a private owner starting with 2 horses and 1 user.',
+    features: [
+      '2 horses and 1 user',
+      'Manual document upload',
+      '1 seat, 10 documents',
+      'Limited cloud storage shared across XBAR at launch',
+      'No card required',
+      'No OCR or shared sale packets',
+    ],
+    limits: {
+      horseLimit: 2,
+      seatLimit: 1,
+      documentLimit: 10,
+      salePacketLimit: 0,
+      storageLimitGb: 1,
+      sharedAccessSeatLimit: 0,
+    },
+  },
+  {
+    tier: 'Professional',
+    monthlyRate: publicPlanCatalog.Professional.monthlyCents / 100,
+    annualRate: 290,
     featured: true,
     fit: 'For active breeding and sale businesses that need stronger workflows.',
     features: [
-      'Horse records and document OCR',
+      'Horse records with OCR intake and review',
+      'Reports calculated automatically from records; export PDF or CSV manually',
       'Share approved sale packets and keep buyer follow-up in one place',
       'Sale listings for buyer-ready horse profiles',
       '5 team seats and 10 client seats',
-      'Up to 1,000 active documents',
+      '1,000 documents',
+      'Limited cloud storage shared across XBAR at launch',
     ],
     limits: {
       horseLimit: 30,
@@ -22,13 +54,17 @@ const details = {
       sharedAccessSeatLimit: 10,
     },
   },
-  'Ranch Ops': {
+  {
+    tier: 'Ranch Ops',
+    monthlyRate: publicPlanCatalog['Ranch Ops'].monthlyCents / 100,
+    annualRate: 790,
     fit: 'For multi-user operations with significant record volume.',
     features: [
       'Everything in Professional',
       'Run the operation: team roles, breeding, equipment, and supplies',
       '20 team seats and 40 client seats',
-      'Up to 5,000 active documents',
+      '5,000 documents',
+      'Limited cloud storage shared across XBAR at launch',
     ],
     limits: {
       horseLimit: 200,
@@ -39,10 +75,4 @@ const details = {
       sharedAccessSeatLimit: 40,
     },
   },
-};
-
-export const marketingPlans = Object.entries(publicPlanCatalog).map(([tier, { monthlyCents }]) => ({
-  ...details[tier],
-  tier,
-  monthlyRate: monthlyCents / 100,
-}));
+];

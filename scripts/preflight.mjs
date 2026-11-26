@@ -41,8 +41,17 @@ const groups = [
       { name: 'STRIPE_PRICE_ID_PROFESSIONAL', note: 'approved monthly price for new checkout' },
       { name: 'STRIPE_PRICE_ID_RANCH_OPS', note: 'approved monthly price for new checkout' },
     ],
-    optional: [{ name: 'STRIPE_LEGACY_PRICE_IDS', note: 'must retain any replaced IDs for existing subscribers' }],
+    optional: [
+      { name: 'STRIPE_LEGACY_PRICE_IDS', note: 'must retain any replaced IDs for existing subscribers' },
+      { name: 'STRIPE_PRICE_ID_STARTER', note: 'legacy subscriber recognition only' },
+      { name: 'STRIPE_PRICE_ID_ENTERPRISE', note: 'legacy subscriber recognition only' },
+      ...['STARTER', 'PROFESSIONAL', 'RANCH_OPS', 'ENTERPRISE'].map((tier) => ({
+        name: `STRIPE_PRICE_ID_${tier}_ANNUAL`,
+        note: 'legacy annual subscriber recognition only',
+      })),
+    ],
     extra: [
+      'New sales are Free, Professional $19.99/month and Ranch Ops $49.99/month. New annual checkout is disabled; preserve historical annual IDs for existing subscribers.',
       `VITE_MANAGED_BILLING_ENABLED is ${flagOn('VITE_MANAGED_BILLING_ENABLED') ? 'ON — the app shows online checkout' : 'OFF — the app shows the manual-billing panel'}. Flip it to true only after every Stripe value above is set (billing also requires Supabase).`,
     ],
   },

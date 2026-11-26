@@ -57,11 +57,12 @@ const existingFeatures: CommercialFeature[] = [
   'packetExport',
   'teamInvites',
   'profitIntelligence',
+  'reports',
   'breedingRevenue',
   'ranchOps',
 ];
 for (const feature of existingFeatures) {
-  for (const tier of ['Starter', 'Professional', 'Ranch Ops', 'Enterprise'] as const) {
+  for (const tier of ['Free', 'Starter', 'Professional', 'Ranch Ops', 'Enterprise'] as const) {
     assert.equal(
       featureGate({ tier } as SubscriptionProfile, feature) === null,
       planRank(tier) >= planRank(UPGRADE_FEATURES[feature].tier),
@@ -69,4 +70,7 @@ for (const feature of existingFeatures) {
     );
   }
 }
+assert.equal(UPGRADE_FEATURES.reports.tier, 'Professional');
+assert.equal(UPGRADE_FEATURES.reportPresentation.tier, 'Ranch Ops');
+assert.equal(UPGRADE_FEATURES.reportWhiteLabel.tier, 'Ranch Ops');
 console.log('Upgrade offer: quote validation and first-period disclosure passed.');

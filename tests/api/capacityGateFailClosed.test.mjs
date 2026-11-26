@@ -115,7 +115,10 @@ test('a healthy gate still enforces the limit it is given', async () => {
 
   const overLimit = await checkStorageCapacity(healthy, 'ws-1', (limits.storageLimitGb + 1) * 1024 ** 3, limits);
   assert.equal(overLimit.ok, false);
-  assert.match(overLimit.message, /Upgrade to continue/);
+  assert.match(overLimit.message, /would exceed the workspace storage limit/);
+  assert.match(overLimit.message, /Cloud storage is limited and shared across XBAR at launch/);
+  assert.match(overLimit.message, /Contact support before uploading more/);
+  assert.doesNotMatch(overLimit.message, /upgrade/i);
   assert.notEqual(overLimit.status, 503, 'a genuine limit breach is not a service outage');
 });
 

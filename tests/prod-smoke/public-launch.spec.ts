@@ -8,8 +8,9 @@ for (const width of [1440, 390]) {
     await expect(page.getByRole('status').filter({ hasText: 'Paid upgrades are not available yet' })).toBeVisible();
     await expect(page.getByRole('rowheader', { name: 'Annual price (billed yearly)', exact: true })).toHaveCount(0);
     const plans = page.locator('.plan');
-    await expect(plans).toHaveCount(2);
+    await expect(plans).toHaveCount(3);
     for (const [tier, expectedPrice] of [
+      ['Free', '$0/month'],
       ['Professional', '$19.99/month'],
       ['Ranch Ops', '$49.99/month'],
     ]) {

@@ -1,0 +1,11 @@
+path,sha256,lines,review_status,scope
+src/components/UpgradePrompt.tsx,fc02ff9633fc69abd68ed3b4e40f41f881fba5d29e1f1c60d9fb4ddd825f1f0a,243,reviewed,batch 5 manual line review; browser/device acceptance separate
+src/store/useUpgradeStore.ts,fa3db8c6501b97803a8e9fad5b8cd4e47d53900763dc4065e45a179a6a7cef37,32,reviewed,batch 5 manual line review; browser/device acceptance separate
+src/lib/upgradeOffer.ts,9a9deaa538c76ce514b84b9062f1fbed8e7fababaf1343b7425e1c678fe4d56c,119,reviewed,batch 5 manual line review; browser/device acceptance separate
+src/components/upgradePrompt.css,2d81a0200ae444ea887d9fd72b53b2591c94db19d459d19e71f6277ae43b2003,81,reviewed,batch 5 manual line review; browser/device acceptance separate
+src/components/ui/dialog.tsx,4ff691e5f72b5eca4030262234a2a8f6b2c448de97e1c057d2cf247f6dbd2a4c,95,reviewed,batch 5 manual line review; browser/device acceptance separate
+tests/publicPlanCatalog.test.ts,f19586b4d5baae0a1348c882bfeab065e0c7cc967c0186159fe5920bb6dd4f3d,132,reviewed,batch 5 manual line review; browser/device acceptance separate
+tests/freeTier.test.ts,46b5938e00de59746c77d7240043e1e0634b6949ab206db4e4f4b31506b5d855,89,reviewed,batch 5 manual line review; browser/device acceptance separate
+src/lib/workspaceSetupDefaults.ts,cd06e2ed6a2048bd69e107d609c769129af2a284c4b9f376993a0528175dcd56,70,reviewed,batch 5 manual line review; browser/device acceptance separate
+src/lib/workspaceSetupGate.ts,3964b9a86f6b3813e5ce99813e1e17846fb48f6cbfded0f831165f978363ecb3,49,reviewed,batch 5 manual line review; browser/device acceptance separate
+src/lib/publicPlanCatalog.ts,7ff849ddc337c9be99d184892eb91d1e7233d8169071ac5c67adc7ec0b4ab05b,10,reviewed,batch 5 manual line review; browser/device acceptance separate

@@ -47,7 +47,13 @@ import type { SubscriptionTier } from '../types/xbar.js';
 import { compConfig, ownerPreviewConfig } from './platformConfig.js';
 import { emailInAllowlist } from './compAccess.js';
 
-export const PREVIEWABLE_TIERS: readonly SubscriptionTier[] = ['Starter', 'Professional', 'Ranch Ops', 'Enterprise'];
+export const PREVIEWABLE_TIERS: readonly SubscriptionTier[] = [
+  'Free',
+  'Starter',
+  'Professional',
+  'Ranch Ops',
+  'Enterprise',
+];
 
 /** Where the authorization to preview came from, or why there is none. */
 export type OwnerPreviewAuthorization =

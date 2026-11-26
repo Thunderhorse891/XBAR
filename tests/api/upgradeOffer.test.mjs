@@ -772,9 +772,33 @@ test('annual upgrade offers remain unavailable even with a configured annual pri
   assert.equal(result.body.offer.firstPeriodAmountCents, null);
 });
 
-test('Ranch Ops quote retains exact $49.99 cents and rounds its one-period discount to cents', async () => {
+test('Professional reports and Ranch Ops ranch-first styling do not offer or create another purchase', async () => {
+  for (const [feature, tiers] of [
+    ['reports', ['Professional', 'Ranch Ops', 'Enterprise']],
+    ['reportWhiteLabel', ['Ranch Ops', 'Enterprise']],
+  ]) {
+    for (const tier of tiers) {
+      const s = scenario();
+      s.effectiveTier = tier;
+      assert.deepEqual((await s.request({ feature })).body, { ok: true, allowed: true, offer: null });
+      assert.equal(s.attempts.size, 0);
+      assert.equal(s.created('checkout').length, 0);
+    }
+  }
+});
+
+test('Free report upgrade targets the verified $19.99 Professional monthly plan', async () => {
   const s = scenario();
-  const result = await s.discountAttempt({ feature: 'breedingRevenue' });
+  s.effectiveTier = 'Free';
+  const result = await s.request({ feature: 'reports' });
+  assert.equal(result.status, 200);
+  assert.equal(result.body.offer.targetTier, 'Professional');
+  assert.equal(result.body.offer.regularAmountCents, 1999);
+});
+
+test('Ranch Ops offer retains exact $49.99 cents and rounds its one-period discount to cents', async () => {
+  const s = scenario();
+  const result = await s.discountAttempt({ feature: 'reportWhiteLabel' });
   assert.equal(result.body.offer.targetTier, 'Ranch Ops');
   assert.equal(result.body.offer.regularAmountCents, 4999);
   assert.equal(result.body.offer.firstPeriodAmountCents, 4499);

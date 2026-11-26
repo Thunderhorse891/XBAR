@@ -4,7 +4,7 @@ import { useNavigate, useSearchParams } from 'react-router-dom';
 import { loadSellablePrices, requestTrialStart, startManagedCheckout, type SellablePrices } from '@/lib/billingApi';
 import { parseCheckoutReturn, stripCheckoutReturnParam, watchCheckoutConfirmation } from '@/lib/checkoutReturn';
 import { refreshWorkspaceSubscriptionProfile } from '@/lib/cloudWorkspace';
-import { formatCurrencyCents } from '@/lib/format';
+import { formatCurrencyCents, formatSubscriptionPrice } from '@/lib/format';
 import { isNativeApp } from '@/lib/nativePlatform';
 import {
   clearPendingHostedPurchase,
@@ -27,6 +27,7 @@ import {
   recommendedTier,
 } from '@/lib/subscriptionDecision';
 import { subscriptionPlans } from '@/lib/subscriptionPlans';
+import { isPublicPaidPlan } from '@/lib/publicPlanCatalog';
 import { canStartTrial, getTrialState, trialDaysRemaining, trialStatusCopy } from '@/lib/trialSubscription';
 import { useCloudStore } from '@/store/useCloudStore';
 import { useUiStore } from '@/store/useUiStore';
@@ -119,7 +120,10 @@ export default function Subscriptions() {
   // Only when the workspace is not currently entitled. An active or comped
   // workspace has purchasedTier === tier, and there the upgrade recommendation
   // is exactly what the screen should lead with.
-  const lapsedTier = isEntitledBillingState(subscription.billingState) ? undefined : subscription.purchasedTier;
+  const lapsedTier =
+    isEntitledBillingState(subscription.billingState) || !isPublicPaidPlan(subscription.purchasedTier)
+      ? undefined
+      : subscription.purchasedTier;
   const firstAvailableTier = lapsedTier ?? recommendedTier(subscription.tier);
   const defaultDecisionTier = requestedTier ?? (tiers.includes(firstAvailableTier) ? firstAvailableTier : tiers[0]);
   const [selectedTier, setSelectedTier] = useState<SubscriptionTier>(defaultDecisionTier);
@@ -178,7 +182,7 @@ export default function Subscriptions() {
    * bought behind it.
    */
   const selectedCheckoutConfigured = !nativeApp && canSellTier(decisionTier);
-  const starterSetup = subscription.tier === 'Starter' && subscription.monthlyRate === 0;
+  const starterSetup = subscription.tier === 'Free';
   // A workspace whose Stripe subscription can still bill it. Buying here would
   // open a second one beside it, so every checkout path is blocked.
   //
@@ -437,6 +441,7 @@ export default function Subscriptions() {
       setPendingPurchase(readPendingHostedPurchase(workspaceId));
       return;
     }
+    if (!isPublicPaidPlan(tier)) return;
     clearCheckoutError();
     selectTier(tier);
     const errorAttempt = { tier, billingPeriod, workspaceId, userId: session?.user.id };
@@ -524,7 +529,7 @@ export default function Subscriptions() {
       return;
     }
     // Everyone who cannot start a trial (no billing permission, native app,
-    // already on a paid plan) keeps the old behavior: continue on the Starter
+    // already on a paid plan) keeps the old behavior: continue on the workspace
     // path. The button says so; it must not silently do nothing.
     if (!trialCanStart || trialStarting) {
       navigate(continuePath);
@@ -619,7 +624,7 @@ export default function Subscriptions() {
           <li>{formatLimit(config.limits.horseLimit, 'horses')}</li>
           <li>{formatLimit(config.limits.salePacketLimit, 'sale packets')}</li>
         </ul>
-        {/* Seat, document and storage quotas are already included in this
+        {/* Seat and document quotas and shared storage availability are included in this
             canonical feature copy; show each once in the comparison card.
             What the tier includes, not just how much of it. Rendered whatever
             the billing configuration is: being unable to buy a plan is no
@@ -712,11 +717,32 @@ export default function Subscriptions() {
             </div>
           )}
 
+          <article className="checkout-plan" aria-label="Free plan">
+            <h3>Free</h3>
+            <strong>$0</strong>
+            <p>2 horses · 1 user · No card required</p>
+            <p>Manual document upload. OCR and shared sale packets require a paid plan.</p>
+            <button type="button" onClick={() => navigate(workspaceReady ? '/' : '/setup')}>
+              {subscription.tier === 'Free' ? 'Continue with Free' : 'Continue to workspace'}
+            </button>
+          </article>
+          {hasActivePaidPlan(subscription) && (
+            <p role="status">
+              Current subscription: {subscription.purchasedTier ?? subscription.tier} ·{' '}
+              {subscription.billingPeriod === 'annual'
+                ? subscription.annualRate
+                  ? `${formatSubscriptionPrice(subscription.annualRate)} / year`
+                  : 'Annual billing (rate unavailable)'
+                : subscription.billingPeriod === 'monthly'
+                  ? `${formatSubscriptionPrice(subscription.monthlyRate)} / month`
+                  : 'Billing cadence unavailable'}
+            </p>
+          )}
           <div className="checkout-trial">
             <div>
               {!workspaceReady ? (
                 <>
-                  <span>Starter setup</span>
+                  <span>Free plan</span>
                   <h2>Start with XBAR</h2>
                   <p>No payment is collected in this local setup flow. Paid plans require completed checkout.</p>
                 </>
@@ -755,8 +781,8 @@ export default function Subscriptions() {
                 : trialState === 'active'
                   ? `${trialDaysLeft} of 14 days left · full Professional access`
                   : trialState === 'expired'
-                    ? 'Pick a plan below to keep going'
-                    : `${formatLimit(subscriptionPlans.Starter.limits.horseLimit, 'horses')} and ${formatLimit(subscriptionPlans.Starter.limits.documentLimit, 'documents')}`}
+                    ? 'Continue Free or choose a paid plan below'
+                    : `${formatLimit(subscriptionPlans.Free.limits.horseLimit, 'horses')} and ${formatLimit(subscriptionPlans.Free.limits.documentLimit, 'documents')}`}
             </small>
           </div>
 
@@ -788,12 +814,12 @@ export default function Subscriptions() {
             <div className="checkout-card-box" aria-label="Billing details">
               <div className="checkout-card-box__top">
                 <span>Billing</span>
-                <strong>Billing not configured yet</strong>
+                <strong>{subscriptionActive ? 'Existing subscription' : 'Managed checkout unavailable'}</strong>
               </div>
               <p>
-                Payment is not set up for this deployment, so no plan can be purchased here and no payment details are
-                collected. Every tier below is still shown in full so you can compare what they include. Your workspace
-                and current plan are unchanged.
+                {subscriptionActive
+                  ? selectedReadiness.reason
+                  : 'New plans require verified managed checkout. Static payment links are not offered because their prices cannot be verified here. Your workspace and current plan are unchanged.'}
               </p>
             </div>
           ) : selectedReadiness.mode === 'external' ? (
@@ -924,7 +950,7 @@ export default function Subscriptions() {
                   ? trialStarting
                     ? 'Starting trial…'
                     : 'Start 14-day Professional trial instead'
-                  : 'Continue with Starter setup'}
+                  : 'Continue with Free plan'}
           </button>
           {/*
             Said plainly, because the alternative is a customer staring at a

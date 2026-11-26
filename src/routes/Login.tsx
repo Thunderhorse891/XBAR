@@ -65,6 +65,7 @@ export default function Login() {
     if (authMode === 'signup') return workspaceSetupPath;
     const from = (location.state as { from?: string } | null)?.from;
     if (from) return from;
+    if (selectedPlan === 'Free') return '/';
     // A store build has no purchase path, so sending someone to billing the
     // moment they sign in is an arrival at a paywall they cannot act on.
     if (!canPresentPurchaseFlow()) return '/';
@@ -263,6 +264,10 @@ export default function Login() {
   const openBrowserWorkspace = () => {
     markLocalWorkspaceIntent();
     setUpWorkspace({ businessName: 'XBAR Ranch', ranchName: 'XBAR Ranch' });
+    if (selectedPlan === 'Free') {
+      navigate('/', { replace: true });
+      return;
+    }
     navigate(canPresentPurchaseFlow() ? (selectedPlan ? billingPathForTier(selectedPlan) : billingPath) : '/', {
       replace: true,
     });
@@ -409,9 +414,11 @@ export default function Login() {
   const description =
     authMode === 'signin'
       ? 'Sign in to your workspace.'
-      : selectedPlan
-        ? `Create an account and set up your workspace. Your interest in ${selectedPlan} does not start a subscription.`
-        : 'Create a sign-in for your XBAR workspace. Creating an account does not start a subscription.';
+      : selectedPlan === 'Free'
+        ? 'Create your sign-in, then set up your Free workspace. No card required. A trial starts only when you choose it.'
+        : selectedPlan
+          ? `Create an account and set up your workspace. Your interest in ${selectedPlan} does not start a subscription.`
+          : 'Create a sign-in for your XBAR workspace. Creating an account does not start a subscription.';
 
   return (
     <main className="clean-entry-shell clean-entry-shell--brand-auth">

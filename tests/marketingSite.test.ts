@@ -1,3 +1,4 @@
+import { publicPlanTiers } from '../src/lib/publicPlanCatalog.js';
 import assert from 'node:assert/strict';
 import path from 'node:path';
 import { readFile } from 'node:fs/promises';
@@ -33,11 +34,11 @@ test('published pricing exactly matches the tier configuration the app enforces'
     marketingPlans: MarketingPlan[];
   };
 
-  const tiers = ['Professional', 'Ranch Ops'];
+  const tiers = [...publicPlanTiers];
   assert.deepEqual(
     marketingPlans.map((plan) => plan.tier),
     tiers,
-    'marketing must publish the public pair in the same order',
+    'marketing must publish exactly the current public tiers, in the same order',
   );
 
   for (const plan of marketingPlans) {
@@ -258,6 +259,7 @@ test('public pricing publishes only the approved USD monthly rates', async () =>
   assert.match(pricing.body, /Planned new subscriptions are monthly, in USD per workspace/);
   assert.match(pricing.body, /Existing subscriptions keep their current terms/);
   for (const [tier, rate] of [
+    ['Free', '0'],
     ['Professional', '19.99'],
     ['Ranch Ops', '49.99'],
   ]) {

@@ -91,7 +91,10 @@ test('checkout refusal stays visible after the toast expires and clears while re
 
 for (const change of ['plan', 'workspace', 'account', 'permission'] as const) {
   test(`a checkout error clears after a ${change} change`, async ({ page }) => {
-    await stubCheckout(page, refused);
+    let attempts = 0;
+    await stubCheckout(page, (route) => {
+      if (++attempts === 1) return refused(route);
+    });
     await openBilling(page);
     await page.getByRole('button', { name: 'Continue to secure checkout' }).click();
     await expect(errorNotice(page)).toBeVisible();
@@ -153,3 +156,30 @@ test('refreshing a token for the same identity preserves the checkout error', as
   });
   await expect(errorNotice(page)).toBeVisible();
 });
+
+for (const cadence of ['monthly', 'annual', 'unknown'] as const) {
+  test(`existing purchased rate is shown truthfully for ${cadence} billing`, async ({ page }) => {
+    await stubCheckout(page, refused);
+    await openBilling(page);
+    await page.evaluate(async (cadence) => {
+      const storePath = '/src/store/useXbarStore.ts';
+      const { useXbarStore } = await import(storePath);
+      useXbarStore.setState({
+        subscription: {
+          ...useXbarStore.getState().subscription,
+          tier: 'Starter',
+          purchasedTier: 'Starter',
+          billingState: 'Active',
+          monthlyRate: 12,
+          annualRate: 120,
+          billingPeriod: cadence === 'unknown' ? undefined : cadence,
+        },
+      });
+    }, cadence);
+    const summary = page.getByRole('status').filter({ hasText: 'Current subscription:' });
+    await expect(summary).toContainText(
+      cadence === 'annual' ? '$120 / year' : cadence === 'monthly' ? '$12 / month' : 'Billing cadence unavailable',
+    );
+    if (cadence === 'unknown') await expect(summary).not.toContainText('/ month');
+  });
+}

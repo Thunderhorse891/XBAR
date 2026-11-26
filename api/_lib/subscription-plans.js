@@ -7,6 +7,26 @@ import {
 } from './subscription-status.js';
 
 export const subscriptionPlans = {
+  Free: {
+    monthlyRate: 0,
+    annualRate: 0,
+    sharedAccessEnabled: false,
+    featureFlags: [
+      'Keep basic horse, care, expense and reminder records',
+      '2 horses and 1 seat — just you',
+      '10 document capacity',
+      'Limited cloud storage shared across XBAR at launch',
+      'Manual document records; OCR and sale sharing require a paid plan',
+    ],
+    limits: {
+      horseLimit: 2,
+      seatLimit: 1,
+      documentLimit: 10,
+      salePacketLimit: 0,
+      storageLimitGb: 1,
+      sharedAccessSeatLimit: 0,
+    },
+  },
   Starter: {
     monthlyRate: 12,
     annualRate: 120,
@@ -15,7 +35,8 @@ export const subscriptionPlans = {
       'Keep clean records — horses, care, documents, expenses, reminders',
       'Proof vault with OCR intake and review',
       '1 seat — just you',
-      '250 document capacity · 25 GB storage',
+      '250 document capacity',
+      'Limited cloud storage shared across XBAR at launch',
     ],
     limits: {
       horseLimit: 5,
@@ -31,11 +52,13 @@ export const subscriptionPlans = {
     annualRate: 290,
     sharedAccessEnabled: true,
     featureFlags: [
-      'Horse records and document OCR',
+      'Everything in Free, plus OCR document intake and review',
+      'Reports automatically calculated from your records; PDF and spreadsheet export',
       'Make money: watermarked sale packets and buyer folders',
       'Sale listings — publish buyer-ready horse profiles to shared access',
       '5 team seats and 10 client seats',
-      'Up to 1,000 active documents',
+      '1,000 document capacity',
+      'Limited cloud storage shared across XBAR at launch',
     ],
     limits: {
       horseLimit: 30,
@@ -54,7 +77,8 @@ export const subscriptionPlans = {
       'Everything in Professional',
       'Run the operation: team roles, breeding program, equipment at scale',
       '20 team seats and 40 client seats',
-      'Up to 5,000 active documents',
+      '5,000 document capacity',
+      'Limited cloud storage shared across XBAR at launch',
     ],
     limits: {
       horseLimit: 200,
@@ -73,7 +97,8 @@ export const subscriptionPlans = {
       'Everything in Ranch Ops',
       'Scale and control for large rosters and teams',
       '60 team seats and 200 client seats',
-      '20,000 document capacity · 2,500 GB storage',
+      '20,000 document capacity',
+      'Limited cloud storage shared across XBAR at launch',
     ],
     limits: {
       horseLimit: 2000,
@@ -109,6 +134,11 @@ export function getStripePriceIdByTier(tier, billingPeriod = 'monthly', env = pr
   return envMap[tier] || '';
 }
 
+// Existing annual and legacy IDs remain recognizable for subscribers. They are
+// intentionally separate from what NEW checkout may sell while annual terms
+// and the billing-account catalog are awaiting approval.
+export const PAID_SUBSCRIPTION_TIERS = Object.freeze(['Starter', 'Professional', 'Ranch Ops', 'Enterprise']);
+export const PUBLIC_SUBSCRIPTION_TIERS = Object.freeze(['Free', 'Professional', 'Ranch Ops']);
 const PRICE_ID_SHAPE = /^price_[A-Za-z0-9_]+$/;
 export const PUBLIC_PAID_SUBSCRIPTION_TIERS = Object.freeze(Object.keys(publicPlanCatalog));
 
@@ -135,7 +165,7 @@ export function sellablePrices() {
   const sellable = { monthly: {}, annual: {} };
   for (const tier of Object.keys(subscriptionPlans)) {
     for (const period of ['monthly', 'annual']) {
-      sellable[period][tier] = Boolean(getCheckoutPriceIdByTier(tier, period));
+      sellable[period][tier] = PRICE_ID_SHAPE.test(getCheckoutPriceIdByTier(tier, period));
     }
   }
   return sellable;
@@ -174,7 +204,7 @@ export function readLegacyPriceIds(raw = process.env.STRIPE_LEGACY_PRICE_IDS) {
     }
     const [, priceId, rawTier, period] = match;
     const tier = rawTier.trim();
-    if (!isKnownTier(tier)) {
+    if (!PAID_SUBSCRIPTION_TIERS.includes(tier)) {
       errors.push(`"${entry}" names an unknown tier "${tier}".`);
       continue;
     }
@@ -209,7 +239,7 @@ export function findTierByPriceId(priceId) {
   const normalized = String(priceId ?? '').trim();
   if (!normalized) return null;
   return (
-    Object.keys(subscriptionPlans).find(
+    PAID_SUBSCRIPTION_TIERS.find(
       (tier) =>
         getStripePriceIdByTier(tier, 'monthly') === normalized || getStripePriceIdByTier(tier, 'annual') === normalized,
     ) ||
@@ -233,7 +263,7 @@ export function findTierByPriceId(priceId) {
 export function findBillingPeriodByPriceId(priceId) {
   const normalized = String(priceId ?? '').trim();
   if (!normalized) return null;
-  for (const tier of Object.keys(subscriptionPlans)) {
+  for (const tier of PAID_SUBSCRIPTION_TIERS) {
     if (getStripePriceIdByTier(tier, 'monthly') === normalized) return 'monthly';
     if (getStripePriceIdByTier(tier, 'annual') === normalized) return 'annual';
   }
@@ -245,7 +275,7 @@ export function normalizeBillingState(status) {
   return billingStateForStripeStatus(status);
 }
 
-/** True when `tier` is a plan this build actually sells. */
+/** True when `tier` is a known entitlement tier, including the unsold Free tier. */
 export function isKnownTier(tier) {
   return typeof tier === 'string' && Object.prototype.hasOwnProperty.call(subscriptionPlans, tier);
 }

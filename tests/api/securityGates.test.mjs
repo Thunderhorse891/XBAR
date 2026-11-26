@@ -178,7 +178,7 @@ test('disabled legacy payment links are not reported as an outage or a purchase 
   assert.equal(response.body.ok, true);
   assert.equal(response.body.status, 'healthy');
   assert.equal(response.body.checks.billingReady, true);
-  assert.equal(response.body.subsystems.paymentLinks, true);
+  assert.equal(response.body.subsystems.paymentLinks, false);
   assert.equal('reasons' in response.body, false, 'a complete configuration must not be given remediation steps');
 
   assert.match(response.body.warnings.join(' '), /payment links are configured but not offered/i);

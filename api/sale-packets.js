@@ -1,3 +1,4 @@
+import { uploadReservedBuffer } from './_lib/storage-upload.js';
 import { randomUUID } from 'node:crypto';
 import { readJsonBody, sendJson, getQuery } from './_lib/http.js';
 import { requireWorkspaceAccess } from './_lib/supabase-admin.js';
@@ -327,7 +328,7 @@ export default async function handler(req, res) {
     if (!storage.ok) {
       // Propagate the gate's own status and code. A refusal because usage could
       // not be read is a retryable 503, not a quota violation — reporting it as
-      // storage_limit_reached tells the customer to upgrade over a transient
+      // storage_limit_reached would misreport a transient
       // database error, and stops clients treating it as retryable.
       return sendJson(res, storage.status ?? 403, {
         ok: false,
@@ -338,11 +339,43 @@ export default async function handler(req, res) {
       });
     }
 
-    const { error: uploadError } = await supabase.storage
-      .from(PACKET_BUCKET)
-      .upload(packetPath, Buffer.from(packetBytes), { contentType: 'application/pdf', upsert: true });
-    if (uploadError) {
-      return sendJson(res, 502, { ok: false, message: `Failed to store sale packet: ${uploadError.message}` });
+    let uploadResult;
+    try {
+      uploadResult = await uploadReservedBuffer({
+        access,
+        requestId: packetId.slice(7),
+        bucket: PACKET_BUCKET,
+        storagePath: packetPath,
+        bytes: Buffer.from(packetBytes),
+        contentType: 'application/pdf',
+        kind: 'packet',
+      });
+    } catch {
+      // Storage may have committed before the transport response was lost.
+      uploadResult = { error: { message: 'upload result could not be confirmed' } };
+    }
+    const { data: uploaded, error: uploadError } = uploadResult ?? {};
+    if (uploadError || uploaded?.path !== packetPath) {
+      if (uploadError?.uploadOutcome === 'not_started' && uploadError.needsRecovery === false) {
+        return sendJson(res, uploadError.status || 413, {
+          ok: false,
+          packetId,
+          requestId: uploadError.requestId,
+          code: uploadError.code,
+          maxFileBytes: uploadError.maxFileBytes,
+          needsRecovery: false,
+          uploadOutcome: 'not_started',
+          message: `Failed to store sale packet: ${uploadError.message}`,
+        });
+      }
+      return sendJson(res, 502, {
+        ok: false,
+        packetId,
+        packetPdfPath: packetPath,
+        needsRecovery: true,
+        uploadOutcome: 'unconfirmed',
+        message: `Failed to store sale packet: ${uploadError?.message || 'upload acknowledgment missing'}`,
+      });
     }
 
     const { data: issued, error: recordError } = await supabase.rpc('xbar_issue_sale_packet', {
@@ -377,9 +410,12 @@ export default async function handler(req, res) {
       const overLimit = /storage limit/i.test(recordError?.message || '');
       return sendJson(res, overLimit ? 403 : 502, {
         ok: false,
+        packetId,
+        packetPdfPath: packetPath,
+        needsRecovery: true,
         code: overLimit ? 'storage_limit_reached' : undefined,
         message: overLimit
-          ? `This sale packet would exceed the plan's ${entitlements.limits.storageLimitGb} GB storage limit. Upgrade to continue.`
+          ? 'This sale packet would exceed the workspace storage limit. Cloud storage is limited and shared across XBAR at launch. Contact support before uploading more.'
           : `Failed to record sale packet: ${recordError?.message || 'Issuance was not confirmed.'}`,
       });
     }

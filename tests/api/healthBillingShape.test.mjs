@@ -213,3 +213,18 @@ test('hosted checkout requires a valid account pin and rejects live Stripe keys 
     assert.doesNotMatch(JSON.stringify(response.body), /acct_bad value|not-an-account/);
   }
 });
+
+test('new three-tier billing readiness does not require retired or annual sale prices', async () => {
+  const response = await health({
+    ...READY,
+    STRIPE_PRICE_ID_STARTER: '',
+    STRIPE_PRICE_ID_ENTERPRISE: '',
+    STRIPE_PRICE_ID_STARTER_ANNUAL: '',
+    STRIPE_PRICE_ID_PROFESSIONAL_ANNUAL: '',
+    STRIPE_PRICE_ID_RANCH_OPS_ANNUAL: '',
+    STRIPE_PRICE_ID_ENTERPRISE_ANNUAL: '',
+  });
+  assert.equal(response.statusCode, 200, reasons(response));
+  assert.equal(response.body.subsystems.stripePriceIds, true);
+  assert.equal(response.body.subsystems.newAnnualCheckout, false);
+});

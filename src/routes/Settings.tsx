@@ -9,6 +9,7 @@ import { useLocation, useNavigate } from 'react-router-dom';
 import { PageHeader, Panel, Pill } from '@/components/app-ui';
 import { AccountDeletionPanel } from '@/components/AccountDeletionPanel';
 import { ConfirmActionDialog } from '@/components/ConfirmActionDialog';
+import { UploadRecoveryPanel } from '@/components/UploadRecoveryPanel';
 import { formatDateLabel } from '@/lib/format';
 import { clearCloudDeletions } from '@/lib/cloudDeletionQueue';
 import { loadWorkspaceBackupFromCloud, saveWorkspaceBackupToCloud } from '@/lib/cloudWorkspace';
@@ -1573,6 +1574,7 @@ export default function Settings() {
         </div>
       </Panel>
 
+      <UploadRecoveryPanel />
       <AccountDeletionPanel />
       <ConfirmActionDialog
         open={pushConfirmOpen}

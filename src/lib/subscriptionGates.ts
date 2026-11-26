@@ -46,3 +46,8 @@ export function breedingRevenueGate(subscription: SubscriptionProfile) {
 export function profitIntelligenceGate(subscription: SubscriptionProfile) {
   return featureGate(subscription, 'profitIntelligence');
 }
+
+/** Standard reports are separate from the Ranch Ops decision-support tools. */
+export function reportsGate(subscription: SubscriptionProfile) {
+  return featureGate(subscription, 'reports');
+}

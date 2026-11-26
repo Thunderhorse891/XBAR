@@ -21,7 +21,8 @@ function runPreflight(env) {
 test('monthly launch checkout needs only the two approved new-sale prices and account pin', () => {
   const output = runPreflight(REQUIRED);
   assert.match(output, /Online billing \(Stripe\) — CONFIGURED \(UNVERIFIED\)/);
-  assert.doesNotMatch(output, /STRIPE_PRICE_ID_.*_ANNUAL/);
+  assert.doesNotMatch(output, /missing\s+STRIPE_PRICE_ID_.*_ANNUAL/);
+  assert.match(output, /unset\s+STRIPE_PRICE_ID_PROFESSIONAL_ANNUAL/);
   for (const value of Object.values(REQUIRED)) assert.ok(!output.includes(value));
 });
 

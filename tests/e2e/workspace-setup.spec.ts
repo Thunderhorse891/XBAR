@@ -1,6 +1,7 @@
 import { expect, test, type Page } from '@playwright/test';
 import { readFile } from 'node:fs/promises';
 import { PDFDocument } from 'pdf-lib';
+import type { DocumentRecord } from '../../src/types/xbar.js';
 
 async function bootstrapWorkspace(page: Page) {
   await page.addInitScript(async () => {
@@ -63,6 +64,22 @@ async function seedHorse(page: Page, name = 'Test Prospect') {
   await drawer.getByPlaceholder('e.g. THR Copper Canyon').fill(name);
   await drawer.getByRole('button', { name: 'Add Horse' }).click();
   await expect(page).toHaveURL(/\/horses\//, { timeout: 15_000 });
+}
+
+// OCR and document identity cases explicitly use a paid tier; new signup is Free.
+async function bootstrapPaidWorkspace(page: Page) {
+  await bootstrapWorkspace(page);
+  await page.evaluate(async () => {
+    const storePath = '/src/store/useXbarStore.ts';
+    const runtimePath = '/src/lib/xbarRuntime.ts';
+    const { useXbarStore } = await import(storePath);
+    const { buildSubscriptionForTier } = await import(runtimePath);
+    useXbarStore.setState({
+      subscription: buildSubscriptionForTier(useXbarStore.getState().subscription, 'Professional', {
+        billingState: 'Active',
+      }),
+    });
+  });
 }
 
 test('creates a workspace and lands on the getting-started dashboard', async ({ page }) => {
@@ -197,7 +214,7 @@ test('the account menu opens the two monthly billing options without changing lo
 
 test('OCR pipeline: an uploaded image is read on-device and matched to a horse by its pixels', async ({ page }) => {
   test.setTimeout(180_000);
-  await bootstrapWorkspace(page);
+  await bootstrapPaidWorkspace(page);
   await seedHorse(page, 'Ocr Test Horse');
 
   // Generate a scan-like PNG in the browser. The filename is deliberately
@@ -237,12 +254,35 @@ test('OCR pipeline: an uploaded image is read on-device and matched to a horse b
   // (the filename carries no horse signal and no horse was selected).
   const row = page.locator('tr', { hasText: 'scan-001' }).first();
   await expect(row).toBeVisible({ timeout: 30_000 });
-  await expect(row.getByText('Ocr Test Horse').first()).toBeVisible();
+  // Source details may contain the same name while deliberately collapsed.
+  // Check the visible Current horse cell, not the first text match in the row.
+  const currentHorse = row.locator('td').nth(1).locator('.table-cell__stack > span').first();
+  await expect(currentHorse).toBeVisible();
+  await expect(currentHorse).toHaveText(/^ocr test horse$/i);
+  await expect(row.locator('details')).not.toHaveAttribute('open');
+  const matched = await page.evaluate(async () => {
+    const storePath = '/src/store/useXbarStore.ts';
+    const { useXbarStore } = await import(storePath);
+    const state = useXbarStore.getState();
+    const document = state.documents.find((item: DocumentRecord) => item.fileName === 'scan-001.png');
+    return {
+      horseCount: state.horses.length,
+      horseId: state.horses[0]?.id,
+      documentHorseId: document?.horseId,
+      extractedText: document?.extractedTextPreview,
+      reviewState: document?.state,
+    };
+  });
+  expect(matched.horseCount).toBe(1);
+  expect(matched.horseId).toBeTruthy();
+  expect(matched.documentHorseId).toBe(matched.horseId);
+  expect(matched.extractedText).toMatch(/OCR TEST HORSE/i);
+  expect(matched.reviewState).toBe('Matched');
 });
 
 test('registration intake extracts sex, color, sire and dam into a new horse profile', async ({ page }) => {
   test.setTimeout(120_000);
-  await bootstrapWorkspace(page);
+  await bootstrapPaidWorkspace(page);
 
   // A registration certificate as flat text (a .txt is read directly, so this
   // asserts the field extraction + profile threading without OCR variance —
@@ -354,7 +394,7 @@ test('registration intake extracts sex, color, sire and dam into a new horse pro
 });
 
 test('unreadable paper cannot invent a horse or approve a document', async ({ page }) => {
-  await bootstrapWorkspace(page);
+  await bootstrapPaidWorkspace(page);
   await page.getByRole('button', { name: 'Create', exact: true }).click();
   await page.getByRole('menuitem', { name: 'Upload Document' }).click();
   const drawer = page.getByRole('dialog', { name: 'Upload Document' });
@@ -376,7 +416,7 @@ test('unreadable paper cannot invent a horse or approve a document', async ({ pa
 
 test('a multi-file batch upload creates one horse per registration paper', async ({ page }) => {
   test.setTimeout(120_000);
-  await bootstrapWorkspace(page);
+  await bootstrapPaidWorkspace(page);
 
   const paper = (name: string, reg: string, color: string) =>
     [
@@ -415,7 +455,7 @@ test('a multi-file batch upload creates one horse per registration paper', async
 
 test('a Needs-Review document can spawn a new horse from the review stage', async ({ page }) => {
   test.setTimeout(120_000);
-  await bootstrapWorkspace(page);
+  await bootstrapPaidWorkspace(page);
 
   const registration = [
     'AMERICAN QUARTER HORSE ASSOCIATION CERTIFICATE OF REGISTRATION',
@@ -454,7 +494,7 @@ test('a Needs-Review document can spawn a new horse from the review stage', asyn
 
 test('review-stage "New horse" attaches to an existing match instead of duplicating', async ({ page }) => {
   test.setTimeout(120_000);
-  await bootstrapWorkspace(page);
+  await bootstrapPaidWorkspace(page);
 
   const registration = [
     'AMERICAN QUARTER HORSE ASSOCIATION CERTIFICATE OF REGISTRATION',
@@ -507,7 +547,7 @@ test('review-stage "New horse" attaches to an existing match instead of duplicat
 });
 
 test('panel sheen overlays stay inside their cards (no sidebar wash)', async ({ page }) => {
-  await bootstrapWorkspace(page);
+  await bootstrapPaidWorkspace(page);
   // Full reloads of pages built on .panel components used to let the
   // decorative ::after gradient anchor to the viewport, washing out the
   // sidebar. The host must establish its own positioning context.
@@ -532,7 +572,7 @@ test('panel sheen overlays stay inside their cards (no sidebar wash)', async ({ 
 });
 
 test('a damaged PDF in a batch reports failure without losing the readable registration', async ({ page }) => {
-  await bootstrapWorkspace(page);
+  await bootstrapPaidWorkspace(page);
   await page.getByRole('button', { name: 'Create', exact: true }).click();
   await page.getByRole('menuitem', { name: 'Upload Document' }).click();
   const drawer = page.getByRole('dialog', { name: 'Upload Document' });
@@ -588,7 +628,7 @@ test('OCR identity: pixels naming a new subject cannot attach its paper to an ex
   context,
 }) => {
   test.setTimeout(180_000);
-  await bootstrapWorkspace(page);
+  await bootstrapPaidWorkspace(page);
   await seedHorse(page, 'SHINING SPARK');
   const scan = await page.evaluate(() => {
     const canvas = document.createElement('canvas');
@@ -651,7 +691,7 @@ test('OCR identity: pixels naming a new subject cannot attach its paper to an ex
 test('OCR identity: conflicting review action refuses and a retry uses the corrected current herd', async ({
   page,
 }) => {
-  await bootstrapWorkspace(page);
+  await bootstrapPaidWorkspace(page);
   await seedHorse(page, 'BLUE MOON');
   const setRegistration = async (value: string) => {
     await page.getByRole('button', { name: 'Edit details' }).click();
@@ -718,6 +758,7 @@ test('OCR identity: conflicting review action refuses and a retry uses the corre
 test('packet repair guidance targets the selected horse and retains buyer inputs through a repair', async ({
   page,
 }) => {
+  // This repair flow ends by proving the Free-plan packet generation denial.
   await bootstrapWorkspace(page);
   await seedHorse(page, 'Packet Repair Horse');
   await page.getByRole('link', { name: 'Sale Packets', exact: true }).click();
@@ -835,7 +876,7 @@ test('packet repair guidance targets the selected horse and retains buyer inputs
 });
 
 test('ownership repair offers a replacement upload for an approved but ineligible original', async ({ page }) => {
-  await bootstrapWorkspace(page);
+  await bootstrapPaidWorkspace(page);
   await seedHorse(page, 'Source Repair Horse');
   const horseId = await page.evaluate(async () => {
     const modulePath = '/src/store/useXbarStore.ts';
@@ -888,7 +929,7 @@ test('ownership repair offers a replacement upload for an approved but ineligibl
 });
 
 test('ownership packet repair starts the requested horse record without opening another horse', async ({ page }) => {
-  await bootstrapWorkspace(page);
+  await bootstrapPaidWorkspace(page);
   await seedHorse(page, 'Existing Ownership Horse');
   await seedHorse(page, 'Missing Ownership Horse');
   const before = await page.evaluate(async () => {
@@ -931,7 +972,7 @@ test('ownership packet repair starts the requested horse record without opening 
 test('renamed batch duplicates require comparison acknowledgment and keeping a copy preserves both files', async ({
   page,
 }) => {
-  await bootstrapWorkspace(page);
+  await bootstrapPaidWorkspace(page);
   await seedHorse(page, 'Duplicate Review Horse');
   await page.getByRole('button', { name: 'Create', exact: true }).click();
   await page.getByRole('menuitem', { name: 'Upload Document' }).click();
@@ -987,7 +1028,7 @@ test('complementary source papers create one durable horse record without copyin
   page,
   context,
 }) => {
-  await bootstrapWorkspace(page);
+  await bootstrapPaidWorkspace(page);
   await page.getByRole('button', { name: 'Create', exact: true }).click();
   await page.getByRole('menuitem', { name: 'Upload Document' }).click();
   const drawer = page.getByRole('dialog', { name: 'Upload Document' });
@@ -1064,7 +1105,7 @@ test('archived library keeps the actual original readable after archive and relo
   page,
   context,
 }) => {
-  await bootstrapWorkspace(page);
+  await bootstrapPaidWorkspace(page);
   await seedHorse(page, 'Library Horse');
   const libraryHorseId = new URL(page.url()).pathname.split('/').at(-1)!;
   await page.getByRole('button', { name: 'Create', exact: true }).click();
@@ -1124,7 +1165,7 @@ test('archived library keeps the actual original readable after archive and relo
 for (const conflict of ['cross-file', 'single-file'] as const) {
   for (const surface of ['drawer', 'documents'] as const) {
     test(`mixed valid and ${conflict} identity conflicts prioritize review from the ${surface}`, async ({ page }) => {
-      await bootstrapWorkspace(page);
+      await bootstrapPaidWorkspace(page);
       const sourceText = (name: string, registration: string) =>
         `CERTIFICATE OF REGISTRATION\nRegistered Name: ${name}\nRegistration Number: ${registration}`;
       const sources =
@@ -1196,7 +1237,7 @@ for (const conflict of ['cross-file', 'single-file'] as const) {
 }
 
 test('unknown microchip text allows facts and approval while preserving the recorded identifier', async ({ page }) => {
-  await bootstrapWorkspace(page);
+  await bootstrapPaidWorkspace(page);
   await seedHorse(page, 'Chip Review Horse');
   const horseId = await page.evaluate(async () => {
     const modulePath = '/src/store/useXbarStore.ts';
@@ -1247,7 +1288,7 @@ test('unknown microchip text allows facts and approval while preserving the reco
 });
 
 test('a second chip in a source list blocks facts and approval without altering the horse', async ({ page }) => {
-  await bootstrapWorkspace(page);
+  await bootstrapPaidWorkspace(page);
   await seedHorse(page, 'Chip List Horse');
   const horseId = await page.evaluate(async () => {
     const modulePath = '/src/store/useXbarStore.ts';
@@ -1296,7 +1337,7 @@ test('a second chip in a source list blocks facts and approval without altering 
 });
 
 async function readyLocalPacketWizard(page: Page, logo = '') {
-  await bootstrapWorkspace(page);
+  await bootstrapPaidWorkspace(page);
   await seedHorse(page, 'Branded Packet Horse');
   await page.evaluate(async (logo) => {
     const modulePath = '/src/store/useXbarStore.ts';
@@ -1466,4 +1507,55 @@ test('mobile setup error stays recoverable through Back and first-horse reload',
     )
     .toEqual(saved);
   expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(390);
+});
+
+test('Free signup offers two horses, one user, manual upload and monthly Professional at nineteen dollars and ninety-nine cents', async ({
+  page,
+}) => {
+  await bootstrapWorkspace(page);
+  const result = await page.evaluate(async () => {
+    const storePath = '/src/store/useXbarStore.ts';
+    const { useXbarStore } = await import(storePath);
+    const store = () => useXbarStore.getState();
+    const initial = structuredClone(store().subscription);
+    const input = {
+      name: 'Free Horse',
+      barnName: 'Free Horse',
+      sex: 'Mare',
+      segment: 'Sale Prospect',
+      status: 'Sale Prep',
+      owner: 'Test Owner',
+      ownerEntity: 'Test Ranch',
+      barn: 'Barn A',
+      pasture: '',
+    };
+    const first = store().addHorse({ ...input, name: 'Free Horse One' });
+    const second = store().addHorse({ ...input, name: 'Free Horse Two' });
+    const third = store().addHorse({ ...input, name: 'Free Horse Three' });
+    const upload = await store().createDocumentIntake({
+      files: [new File(['Horse Name: DO NOT EXTRACT'], 'manual-free.txt', { type: 'text/plain' })],
+      source: 'Manual Upload',
+      uploadedBy: 'Test Owner',
+      horseId: first.id,
+    });
+    const document = store().documents[0];
+    return { initial, first, second, third, upload, document, count: store().horses.length };
+  });
+  expect(result.initial.tier).toBe('Free');
+  expect(result.initial.usage.horseLimit).toBe(2);
+  expect(result.initial.usage.seatLimit).toBe(1);
+  expect(result.first.ok).toBe(true);
+  expect(result.second.ok).toBe(true);
+  expect(result.third.ok).toBe(false);
+  expect(result.count).toBe(2);
+  expect(result.upload.ok).toBe(true);
+  expect(result.document.extractedTextPreview).toBe('');
+  expect(result.document.entities).toEqual({});
+  await page.getByRole('button', { name: 'Account menu', exact: true }).click();
+  await page.getByRole('menuitem', { name: 'Billing', exact: true }).click();
+  await expect(page.getByRole('article', { name: 'Free plan' })).toContainText('No card required');
+  await expect(
+    page.locator('.checkout-plan').filter({ has: page.getByRole('heading', { name: 'Professional', exact: true }) }),
+  ).toContainText('$19.99');
+  await expect(page.getByRole('button', { name: /Annual/ })).toHaveCount(0);
 });

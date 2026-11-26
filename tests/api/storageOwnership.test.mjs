@@ -507,8 +507,11 @@ test('the photo uploader files under the batch workspace, only for the account t
   const body = uploader.slice(start, uploader.indexOf('\n}\n', start));
   assert.match(body, /target: IntakeIdentity/);
   assert.match(body, /!isWorkspaceStorageKey\(target\.workspaceId\) \|\| session\.user\.id !== target\.userId/);
-  assert.match(body, /buildMediaStoragePath\(\{\s*workspaceId: target\.workspaceId,/);
-  assert.match(body, /if \(!path\) \{\s*return null;/);
+  assert.match(body, /startReservedUpload\(\s*\{/);
+  assert.match(body, /target,[\s\S]*kind: 'media'/);
+  assert.doesNotMatch(body, /\.storage[\s\S]*\.upload\(/);
+  assert.match(uploader, /before\.workspaceId !== current\.workspaceId/);
+  assert.match(uploader, /session\.user\.id !== current\.session\?\.user\.id/);
   // One workspace lookup per batch, not one per file.
   assert.ok(!body.includes('loadWorkspaceAccessProfile('), 'the uploader re-resolves the workspace per file');
 
@@ -517,7 +520,7 @@ test('the photo uploader files under the batch workspace, only for the account t
   const resolved = media.indexOf('const uploadTarget = readIntakeIdentity();');
   const notReady = media.indexOf('if (uploadTarget.userId && !uploadTarget.workspaceId)');
   const uploads = media.indexOf('uploadMediaAssetToCloud({ file, horseId, target: uploadTarget })');
-  const recheck = media.indexOf('if (photoBatchIdentityChanged(uploadTarget, readIntakeIdentity()))');
+  const recheck = media.indexOf('if (photoBatchIdentityChanged(uploadTarget, readIntakeIdentity()))', uploads);
   const commit = media.indexOf('const uploadedResults = results.filter');
   assert.ok(resolved > -1 && notReady > resolved && uploads > notReady, 'resolve once, refuse honestly, then upload');
   assert.ok(recheck > uploads && commit > recheck, 'the account is re-checked before photos are attached');

@@ -534,15 +534,15 @@ test('the billing screen reads the profile flag rather than testing Past Due', a
  * subscription so owner preview still works, and neither export can run while
  * locked.
  */
-test('the reports screen gates profit intelligence behind the same feature check', async () => {
+test('the reports screen gates calculated reports and exports behind the same Professional feature check', async () => {
   const source = await readFile(path.join(process.cwd(), 'src/routes/Reports.tsx'), 'utf8');
 
-  assert.match(source, /profitIntelligenceGate/, 'the screen must consult the gate');
+  assert.match(source, /reportsGate/, 'the screen must consult the gate');
 
   // Effective, not real. A screen that gates a feature reads the preview, so an
   // allowlisted owner previewing Ranch Ops sees what a Ranch Ops customer sees.
   assert.match(source, /const subscription = useEffectiveSubscription\(\);/);
-  assert.match(source, /const locked = profitIntelligenceGate\(subscription\);/);
+  assert.match(source, /const locked = reportsGate\(subscription\);/);
 
   // Both exports refuse on their own rather than trusting a disabled button.
   // The export IS the paid capability — a file that leaves the app is the thing
