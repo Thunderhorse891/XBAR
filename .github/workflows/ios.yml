@@ -93,6 +93,26 @@ jobs:
             -parallel-testing-enabled NO -resultBundlePath ios/native-tests.xcresult \
             -test-timeouts-enabled YES -maximum-test-execution-time-allowance 180 \
             CODE_SIGN_IDENTITY=- test-without-building
+      - name: Capture simulator screen before failure diagnostics relaunch
+        if: failure() && env.IOS_SIMULATOR_ID != ''
+        timeout-minutes: 1
+        run: |
+          # Run 45077133941 never finalized xcresult, so its attachment export
+          # lost the only visual evidence. Capture the actual simulator screen
+          # independently, before the diagnostic launch changes its state.
+          python3 - <<'PY'
+          from pathlib import Path
+          import os, subprocess
+          target = Path('ios/native-diagnostics/simulator-after-xctest.png')
+          target.parent.mkdir(parents=True, exist_ok=True)
+          try:
+              result = subprocess.run(['xcrun', 'simctl', 'io', os.environ['IOS_SIMULATOR_ID'],
+                                       'screenshot', '--type=png', str(target)],
+                                      timeout=20, check=False)
+              print(f'Simulator screenshot exit: {result.returncode}; native check remains failed.')
+          except (subprocess.TimeoutExpired, OSError) as error:
+              print(f'Simulator screenshot unavailable: {error}; native check remains failed.')
+          PY
       - name: Native test diagnostics
         if: failure() || cancelled()
         timeout-minutes: 2
