@@ -105,6 +105,18 @@ export function packetHoldAction(reason: string, horse: HorseRecord, documents: 
 
 export type PacketFailureGuidance = { message: string; help: string; action?: PacketRepairAction };
 
+function nativePlanFailureMessage(message: string): string {
+  // Remove only the known purchase invitations from plan failures. Keep the
+  // server's counts, renewal window and support instructions intact.
+  const neutral = message
+    .replace(/\s*Upgrade (?:for more|to continue|to keep this workflow moving|to unlock more capacity)\.\s*$/i, '')
+    .replace(
+      /^Professional unlocks sale document export\./,
+      'Sale document export is unavailable with the current workspace plan.',
+    );
+  return neutral || 'The current workspace plan or usage does not allow this packet.';
+}
+
 export function packetFailureGuidance(
   failure: { message: string; status?: number; code?: string; tierBlock?: { requiredPlan: string } },
   canPresentPurchaseFlow: () => boolean,
@@ -115,7 +127,7 @@ export function packetFailureGuidance(
     ['tier_required', 'sale_packet_limit_reached', 'storage_limit_reached'].includes(failure.code ?? '')
   ) {
     return {
-      message: failure.message,
+      message: canPurchase ? failure.message : nativePlanFailureMessage(failure.message),
       help: canPurchase
         ? 'Review your current plan and usage in Billing. If a plan you already have is missing, refresh the cloud connection before trying again. Your packet details are kept while you stay in XBAR.'
         : 'Ask your workspace administrator to review the plan and usage. Your packet details are kept here.',

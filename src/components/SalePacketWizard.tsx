@@ -41,6 +41,7 @@ import { useUiStore } from '@/store/useUiStore';
 import { useXbarStore } from '@/store/useXbarStore';
 import './confirmActionDialog.css';
 import { canPresentPurchaseFlow, isNativeApp } from '@/lib/nativePlatform';
+import { PacketFailureNotice } from './PacketFailureNotice';
 
 /*
  * The core paid workflow: select horse → release gate (title/transfer is a
@@ -977,22 +978,7 @@ export function SalePacketWizard({
                       { message: planBlock!, code: 'sale_packet_limit_reached' },
                       canPresentPurchaseFlow,
                     );
-                  return (
-                    <div role="alert" className="confirm-dialog__proof">
-                      <strong>Packet needs attention</strong>
-                      <p>{failure.message}</p>
-                      <p>{failure.help}</p>
-                      {failure.action && (
-                        <button
-                          type="button"
-                          className="button button--ghost button--compact"
-                          onClick={() => goToRepair(failure.action!.to)}
-                        >
-                          {failure.action.label}
-                        </button>
-                      )}
-                    </div>
-                  );
+                  return <PacketFailureNotice failure={failure} onRepair={goToRepair} />;
                 })()}
               <ul className="confirm-dialog__consequences">
                 <li>

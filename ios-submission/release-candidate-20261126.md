@@ -1,6 +1,6 @@
 # XBAR TestFlight candidate — November 26
 
-Active milestone: an **installable, verified TestFlight candidate**. This worksheet records preparation and outstanding evidence, not release approval. Follow the [existing runbook](README.md), [integrated release ledger](../docs/reviews/premium-release-20261126.md), and [canonical contract section 26](https://github.com/Thunderhorse891/XBAR/blob/6dbaaa3fb9b87749c045271449af9df520185ec2/docs/PRODUCTION-ENGINEERING-CONTRACT.md#26-xbar-milestone-completion-rule).
+Active milestone: an **installable, verified TestFlight candidate**. This worksheet records preparation and outstanding evidence, not release approval. Follow the [existing runbook](README.md), [integrated release ledger](../docs/reviews/premium-release-20261126.md), and [canonical contract section 26](https://github.com/Thunderhorse891/XBAR/blob/6dbaaa3fb9b87749c045271449af9df520185ec2/docs/PRODUCTION-ENGINEERING-CONTRACT.md#26-xbar-milestone-completion-rule). Current follow-through: [production target and support publication gate](web-release-checkpoint-20261126.md), [SDK/privacy reconciliation](privacy-sdk-reconciliation-20261126.md), and [reviewer access, enrollment alternatives and unsent support draft](review-access-and-enrollment-20261126.md).
 
 ## Identity and build custody
 
@@ -74,4 +74,4 @@ Continue independent native recovery and packaging while Apple access is resolve
 
 If validation or upload fails, retain the signed artifact and Apple's exact error; do not create another app, invent a higher build number, change customer entitlements, revoke credentials or alter production configuration as a workaround. TestFlight availability must be verified after Apple's processing and then through an actual iPhone installation. See [Apple's TestFlight process](https://developer.apple.com/help/app-store-connect/test-a-beta-version/testflight-overview/).
 
-No merge, production deployment, migration, customer-data/settings change, charge or public App Store submission is authorized by this worksheet.
+This worksheet grants no release approval. Erin has requested support publication subject to the existing gates; the production checkpoint records why the integrated draft is not independently eligible. Account deletion is scoped to an isolated disposable account on an explicitly authorized backend with server readback, which is not yet available. No merge, production deployment, migration, customer-data/settings change, charge, Apple account action or public App Store submission has been performed.

@@ -52,6 +52,14 @@ jobs:
             -destination 'generic/platform=iOS' -derivedDataPath ios/DerivedData \
             CODE_SIGNING_ALLOWED=NO build
           node scripts/check-ios-project.mjs ios/DerivedData/Build/Products/Release-iphoneos/App.app
+      - name: Retain actual compiled SDK and privacy inventory
+        run: python3 scripts/ios-build-inventory.py ios/DerivedData/Build/Products/Release-iphoneos/App.app > ios/native-build-inventory.json
+      - uses: actions/upload-artifact@v4
+        with:
+          name: native-build-inventory
+          path: ios/native-build-inventory.json
+          if-no-files-found: error
+          retention-days: 7
       - name: Select the matching iOS Simulator
         run: |
           set -euo pipefail
