@@ -124,7 +124,7 @@ test('sale packets opens the real packet generator once a horse exists', async (
   await seedHorse(page, 'Packet Horse');
   await page.getByRole('link', { name: 'Sale Packets', exact: true }).click();
   await expect(page.getByRole('heading', { name: 'Sale Packets' })).toBeVisible();
-  await expect(page.getByText('Horse readiness')).toBeVisible();
+  await expect(page.getByText('Readiness review', { exact: true })).toBeVisible();
   await page
     .locator('.xs-mrow')
     .filter({ hasText: /packet horse/i })

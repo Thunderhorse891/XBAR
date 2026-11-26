@@ -35,6 +35,7 @@ final class AppUITests: XCTestCase {
         XCTAssertFalse(webView.buttons["Google"].exists)
         XCTAssertFalse(webView.buttons["Facebook"].exists)
         email.tap()
+        XCTAssertTrue(app.keyboards.firstMatch.waitForExistence(timeout: 10), "The on-device keyboard must be ready before typing")
         email.typeText("native-smoke@example.invalid")
         // WKWebView can publish an intermediate accessibility value after
         // typeText returns. Require the complete value within a bounded wait;

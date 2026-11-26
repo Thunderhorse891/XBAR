@@ -3,7 +3,7 @@
 // no invented customers, testimonials, or statistics. Product imagery is real:
 // screenshots captured from the running app with explicitly fictional fixtures.
 
-import { esc, APP_LOGIN, APP_SIGNUP, SITE_ORIGIN } from './render.mjs';
+import { esc, APP_LOGIN, APP_SIGNUP, SITE_ORIGIN, SUPPORT_EMAIL } from './render.mjs';
 import { marketingPlans } from './pricing-data.mjs';
 import { cinematicHome } from './home.mjs';
 
@@ -883,6 +883,40 @@ const demo = {
 ${ctaBlock('Ready to use your own records?', 'Create an account to set up your workspace and review the available plans.')}`,
 };
 
+/* ----------------------------------------------------------- support */
+
+const support = {
+  path: '/support',
+  title: 'XBAR Support | Account, Records and Files',
+  description:
+    'Get help with XBAR account access, horse records and files. Find the support contact, useful troubleshooting details, and privacy information without signing in.',
+  changefreq: 'monthly',
+  priority: '0.5',
+  body: `
+<section class="hero hero--solo wrap section--flush">
+  <div>
+    <p class="kicker">Help &amp; support</p>
+    <h1>Help with XBAR.</h1>
+    <p class="lead">Tell us what happened and where you got stuck. Keep your original records and files while we help.</p>
+    <div class="hero-actions"><a class="btn btn--primary" href="mailto:${SUPPORT_EMAIL}">Email support</a></div>
+  </div>
+</section>
+<section class="section">
+  <div class="wrap grid grid--3">
+    <div class="card"><h2>Account access</h2><p>Include the sign-in method you used and the exact error. Never send passwords or sign-in codes. If you cannot sign in, you can still email us from this page.</p></div>
+    <div class="card"><h2>Records and files</h2><p>Keep your original files and saved copies. Describe whether you were uploading, reviewing, generating, opening, or sharing a file. Do not clear app or browser storage while a save or recovery is unresolved.</p></div>
+    <div class="card"><h2>Useful details</h2><p>Include your device, operating system, browser or app version, and the steps that led to the problem. Crop or hide private information in screenshots. Send source documents only when requested and when you intend to share them.</p></div>
+  </div>
+</section>
+<section class="section">
+  <div class="wrap">
+    <h2>Your account and privacy</h2>
+    <p>Account deletion is available from Settings after sign-in, and from workspace setup before creating a ranch. Read the confirmation and any shared-workspace restrictions before continuing. If you cannot reach those controls, contact <a href="mailto:${SUPPORT_EMAIL}">${SUPPORT_EMAIL}</a>.</p>
+    <p>Read the <a href="/privacy">Privacy Policy</a> and <a href="/terms">Terms of Service</a>, or visit the <a href="/resources">records guides</a>.</p>
+  </div>
+</section>`,
+};
+
 /* ------------------------------------------------------------- legal */
 
 export function legalPage(doc, path) {
@@ -945,4 +979,5 @@ export const marketingPages = [
   saleReadyGuide,
   transferChecklist,
   demo,
+  support,
 ];

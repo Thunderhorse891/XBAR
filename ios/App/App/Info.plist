@@ -71,7 +71,7 @@
     <key>NSPhotoLibraryUsageDescription</key>
     <string>XBAR needs access to your photos so you can attach existing horse pictures and documents to a record.</string>
     <key>NSLocationWhenInUseUsageDescription</key>
-    <string>XBAR uses your location once to show local weather for planning ranch work. Your location is not stored.</string>
+    <string>XBAR uses your location to request a local weather forecast for planning ranch work.</string>
     <key>ITSAppUsesNonExemptEncryption</key>
     <false/>
   </dict>

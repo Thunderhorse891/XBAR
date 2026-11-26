@@ -1,0 +1,71 @@
+# XBAR TestFlight candidate — November 26
+
+Active milestone: an **installable, verified TestFlight candidate**. This worksheet records preparation and outstanding evidence, not release approval. Follow the [existing runbook](README.md), [integrated release ledger](../docs/reviews/premium-release-20261126.md), and [canonical contract section 26](https://github.com/Thunderhorse891/XBAR/blob/6dbaaa3fb9b87749c045271449af9df520185ec2/docs/PRODUCTION-ENGINEERING-CONTRACT.md#26-xbar-milestone-completion-rule).
+
+## Identity and build custody
+
+| Item                             | Observed state                                                                                                                                                 | Required next evidence                                                                                                                                 |
+| -------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| Native project                   | `ios/App/App.xcodeproj`, shared scheme `App`, Capacitor 8.5.1                                                                                                  | Exact-source macOS build and actual WKWebView acceptance                                                                                               |
+| Bundle ID                        | `com.xbar.ranch`                                                                                                                                               | Match the existing App Store Connect record; do not create a duplicate                                                                                 |
+| Source version/build             | `1.0 (1)`                                                                                                                                                      | Read Apple's uploaded-build inventory before selecting a new number; this is not an uploaded version                                                   |
+| Candidate                        | Draft [PR #420](https://github.com/Thunderhorse891/XBAR/pull/420), initial pushed head `a0a0d3cfe08740868ac84169b1a5921db2890885`                              | Final-head reviews, tests and approvals                                                                                                                |
+| Native reproduction              | [45886153206](https://github.com/Thunderhorse891/XBAR/actions/runs/45886153206), failed on synthetic email entry after the actual form and controls were found | Verify the separate keyboard-readiness hypothesis with all complete-value and state assertions intact                                                  |
+| Apple membership/app record/role | Not verified from this environment                                                                                                                             | Existing authorized Apple session; verify team, app access and upload role without exposing credentials                                                |
+| Signing                          | No development team configured in the source project; repository secret and variable inventories empty                                                         | Existing distribution certificate/private-key custody, matching provisioning profile and permitted signing/upload executor; no new credentials assumed |
+| Archive, IPA, upload, install    | None produced or verified                                                                                                                                      | Record actual archive/IPA path and hash, version/build, signing team, validation result, Apple processing result and tester install route              |
+
+Apple currently requires an iOS build made with Xcode 26 or later and identifies Account Holder, Admin, App Manager and Developer as upload-capable roles. See [Apple's upload requirements](https://developer.apple.com/help/app-store-connect/manage-builds/upload-builds). An unsigned `.app` from CI is not a TestFlight artifact. Upload does not establish processing, tester availability or successful installation.
+
+## Native acceptance to retain
+
+Run on the actual bundled app with an authorized disposable account and isolated backend. The browser Documents cases are useful comparison evidence, not a substitute.
+
+| Journey                 | Required retained evidence                                                                                                          | Current limit                                                                                                                                       |
+| ----------------------- | ----------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Sign-in                 | Correct controls; email-code and password paths; failed request/retry; session after terminate/relaunch; sign-out/re-login          | Native controls rendered/found; text-entry gate failed; no real provider sign-in established                                                        |
+| Records and cloud       | Create/edit, confirmed device save, relaunch, second-session cloud retrieval and tenant/role refusal                                | Documents browser device persistence passed; isolated backend prerequisites remain in the release ledger                                            |
+| Document intake         | Original selection, extraction/review, assignment, original bytes after relaunch, upload refusal/recovery                           | Synthetic browser originals/review attestations only                                                                                                |
+| Buyer packet and report | Saved fields → buyer-safe originals → preview → actual PDF → opening and native share sheet; cancellation and missing-file behavior | Actual browser PDFs retained; native opening now uses bounded Filesystem/Share with 16 focused fixture cases; actual iOS sharing remains unverified |
+| Account controls        | Recovery and both account-deletion entry points, shared-workspace restrictions and verified cleanup receipts                        | No actual account deletion authorized or performed here                                                                                             |
+| Accessibility/mobile    | Keyboard and VoiceOver labels/focus, enlarged text, safe areas, rotation, file/permission failures on supported iPhone/iPad         | Emulated Chrome screenshots are explicitly separate                                                                                                 |
+
+Keep the existing sign-in assertions, release thresholds, tenant checks and approval gates. A simulator infrastructure timeout is a failed/incomplete run, not a product pass. Failure screenshots now have an independent `simctl` capture before diagnostic relaunch, because run 45077133941 never finalized its xcresult attachments.
+
+## Privacy and provider reconciliation
+
+The checked-in `ios/App/App/PrivacyInfo.xcprivacy` is a baseline. Do not copy it into App Store Connect as approved answers. Reconcile the signed archive's aggregated privacy report with the selected runtime configuration and actual provider retention before distribution.
+
+| Data path                                       | Source evidence                                                                                                               | Still to verify                                                                                                                   |
+| ----------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------- |
+| Account/session                                 | Supabase client and account APIs use account identity, email and session credentials                                          | Intended release backend, auth email/code template, retention, deletion and actual provider behavior                              |
+| Horse/ownership/financial records and originals | Workspace sync, private storage and controlled upload paths; buyer generator allowlists selected public-safe record types     | Isolated cloud save/retrieval, access policies, storage/provider retention and deletion scope                                     |
+| Device data and exports                         | IndexedDB/local-file vault; native export writes bounded chunks to cache and invokes Filesystem/Share, reporting cancellation | Actual signed-device persistence, share completion/cancellation and cache cleanup                                                 |
+| Location/weather                                | `Weather.tsx` requests current location only on its button; `weather.ts` sends coordinates or place searches to Open-Meteo    | Provider collection/retention and App Store linkage classification; do not equate no XBAR persistence with no provider collection |
+| OCR                                             | Client PDF.js/Tesseract; optional AWS Textract only when server configuration enables it                                      | Actual release OCR/provider configuration and disclosure; no invented AI provider                                                 |
+| Diagnostics                                     | Runtime monitoring defaults enabled unless configured otherwise; payload sanitization precedes Supabase/API transport         | Final flags, collected usage/diagnostic categories, retention, and whether answers/manifest require changes                       |
+| Permissions/SDKs                                | App Info.plist has camera/photo/location purpose strings; Capacitor, Filesystem and Share are bundled                         | Permission denial paths and archived SDK required-reason manifests; package checks alone do not certify privacy                   |
+
+The icon source is 1024×1024 with fully opaque pixels. Final compiled-asset and Apple validation remain required. Preserve the supplied artwork; no replacement mark is authorized.
+
+## Metadata and review access
+
+- Privacy destination: `/privacy` on the approved public origin. Candidate preview returned 200; verify the actual public URL and native opening behavior from the signed candidate. Privacy accuracy remains a review gate.
+- Support: candidate `/support` returned 404 at `a0a0d3c`. A real static support page is being prepared with the existing `xbarje@gmail.com` contact, safe troubleshooting and privacy/account links. It requires exact-head preview verification and an authorized public deployment before it can be supplied as a public review URL. Do not use a protected QA URL as an App Store support URL.
+- Reviewer access: provision only an authorized dedicated synthetic workspace/account after backend prerequisites and email/code delivery are verified. Keep credentials in the approved secure delivery channel, not this repository or screenshots. Record the actual login steps, feature access and any required disposable account behavior.
+- Screenshots: capture the running candidate on supported iPhone and iPad using [Apple's current screenshot specifications](https://developer.apple.com/help/app-store-connect/reference/app-information/screenshot-specifications/). Existing 390px/1440px Chrome captures are not native submission screenshots. No screenshots are represented as App Store-ready yet.
+- Beta metadata, age rating, encryption/export compliance and final privacy answers must match the actual binary and reviewed facts; no account-level answers have been submitted.
+
+## iOS subscription behavior
+
+`NativeBillingStatus.tsx` is read-only. Native direct/legacy routes do not offer Stripe checkout, web plan changes, trials or payment-management links. There is no StoreKit purchasing/restore implementation or verified Apple product inventory in this candidate. Hiding payment buttons alone does not establish compliance.
+
+The intended distribution/access model must be reviewed against [Apple's payment rules](https://developer.apple.com/app-store/review/guidelines/#payments). If in-app purchase is required, use verified products from the existing app record, server-verified entitlements, restoration and renewal/revocation handling, then retain actual sandbox purchase/failure/restore results. A companion-app exception must be established for this app; it is not assumed. Existing web pricing or entitlements must not be silently rewritten to simulate Apple approval.
+
+## Safe handoff and upload gate
+
+Continue independent native recovery and packaging while Apple access is resolved. Before a permitted upload, assemble the final SHA, native journey evidence, reviewed privacy/subscription decisions, verified existing app/team/role, allocated version/build, signed artifact/hash, validation output and exact tester destination for the applicable approval decision.
+
+If validation or upload fails, retain the signed artifact and Apple's exact error; do not create another app, invent a higher build number, change customer entitlements, revoke credentials or alter production configuration as a workaround. TestFlight availability must be verified after Apple's processing and then through an actual iPhone installation. See [Apple's TestFlight process](https://developer.apple.com/help/app-store-connect/test-a-beta-version/testflight-overview/).
+
+No merge, production deployment, migration, customer-data/settings change, charge or public App Store submission is authorized by this worksheet.

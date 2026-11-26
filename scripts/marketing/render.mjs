@@ -34,7 +34,7 @@ export function esc(value) {
 const NAV_LINKS = [
   { href: '/features', label: 'Features' },
   { href: '/pricing', label: 'Pricing' },
-  { href: `mailto:${SUPPORT_EMAIL}`, label: 'Help & support' },
+  { href: '/support', label: 'Help & support' },
 ];
 const NAV_MENUS = [
   {

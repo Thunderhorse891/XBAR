@@ -40,7 +40,7 @@ import { useCloudStore } from '@/store/useCloudStore';
 import { useUiStore } from '@/store/useUiStore';
 import { useXbarStore } from '@/store/useXbarStore';
 import './confirmActionDialog.css';
-import { canPresentPurchaseFlow } from '@/lib/nativePlatform';
+import { canPresentPurchaseFlow, isNativeApp } from '@/lib/nativePlatform';
 
 /*
  * The core paid workflow: select horse → release gate (title/transfer is a
@@ -515,8 +515,15 @@ export function SalePacketWizard({
        * that was never opened — the same defect as the blocked-popup case this
        * variable was introduced for, arriving by a different route.
        */
-      let packetDelivery: 'tab' | 'download' | 'none' = 'none';
-      if (downloadUrl && typeof window !== 'undefined') {
+      let packetDelivery: 'tab' | 'download' | 'share-sheet' | 'none' = 'none';
+      if (isNativeApp() && (downloadUrl || localFileKey)) {
+        const opened = await openStoredFileInTab(
+          { ...build.packet, ...(downloadUrl ? { fileUrl: downloadUrl, fileName: 'buyer-sale-packet.pdf' } : {}) },
+          current,
+        );
+        packetDelivery = opened.ok ? opened.delivery : 'none';
+        if (!opened.ok) pushToast({ title: 'Packet was not shared', message: opened.message, tone: 'warning' });
+      } else if (downloadUrl && typeof window !== 'undefined') {
         /*
          * The cloud path had the same defect the local path was fixed for.
          *
@@ -578,16 +585,15 @@ export function SalePacketWizard({
              * is the reassuring one. Two toasts, one of them false, about whether
              * the buyer packet is on screen.
              *
-             * Two outcomes rather than the local branch's three: this path only
-             * ever sets 'tab' or 'none', because `window.open` cannot report a
-             * download.
+             * Native reports the completed share handoff separately; a browser
+             * popup is not evidence of a native file delivery.
              */
-            `Watermarked PDF ${packetDelivery === 'tab' ? 'opened in a new tab' : 'is ready — use the download button below to open it'}.${remoteUnavailable.length ? ` Not included: ${remoteUnavailable.join(', ')}.` : ''} Buyer activity is now tracked in Buyer follow-up.`
+            `Watermarked PDF ${packetDelivery === 'share-sheet' ? 'shared from this app' : packetDelivery === 'tab' ? 'opened in a new tab' : 'is ready — use the download button below to open it'}.${remoteUnavailable.length ? ` Not included: ${remoteUnavailable.join(', ')}.` : ''} Buyer activity is now tracked in Buyer follow-up.`
           : localFileKey
             ? // Says what is in it. A count the seller can check against what they
               // selected is the difference between finding a missing Coggins now
               // and the buyer finding it.
-              `${localPacket?.attachedFiles ?? 0} of ${docSelection.length} document${docSelection.length === 1 ? '' : 's'} embedded in the packet, saved on this device${packetDelivery === 'tab' ? ' and opened in a new tab' : packetDelivery === 'download' ? ' and downloaded to this device' : ' — open it from Sale packets when you are ready'}.${localPacket?.unattachedDocuments.length ? ` Not included: ${localPacket.unattachedDocuments.map((item) => item.title).join(', ')}.` : ''}`
+              `${localPacket?.attachedFiles ?? 0} of ${docSelection.length} document${docSelection.length === 1 ? '' : 's'} embedded in the packet, saved on this device${packetDelivery === 'share-sheet' ? ' and shared from this app' : packetDelivery === 'tab' ? ' and opened in a new tab' : packetDelivery === 'download' ? ' and downloaded to this device' : ' — open it from Sale packets when you are ready'}.${localPacket?.unattachedDocuments.length ? ` Not included: ${localPacket.unattachedDocuments.map((item) => item.title).join(', ')}.` : ''}`
             : `${build.message} The packet could not be saved on this device, so only the record was kept. Buyer follow-up is tracking this buyer either way.`,
         /*
          * A packet nothing could open is not a success, on either path. Both

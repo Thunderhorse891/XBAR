@@ -1,7 +1,7 @@
 import { expect, test } from '@playwright/test';
 
 for (const width of [1440, 390]) {
-  test(`public launch paths are truthful and usable at ${width}px`, async ({ page }) => {
+  test(`public launch paths are truthful and usable at ${width}px`, async ({ page }, info) => {
     await page.setViewportSize({ width, height: 900 });
     await page.goto('/pricing');
     await expect(page.getByText(/Planned new subscriptions are monthly, in USD per workspace/)).toBeVisible();
@@ -31,10 +31,23 @@ for (const width of [1440, 390]) {
     await expect(page.locator('header').getByRole('link', { name: 'Help & support', exact: true })).toBeInViewport();
     await expect(page.locator('header').getByRole('link', { name: 'Help & support', exact: true })).toHaveAttribute(
       'href',
+      '/support',
+    );
+    await page.locator('header').getByRole('link', { name: 'Help & support', exact: true }).click();
+    await expect(page).toHaveURL(/\/support$/);
+    await expect(page.getByRole('heading', { name: 'Help with XBAR.', exact: true })).toBeVisible();
+    await expect(page.getByRole('link', { name: 'Email support', exact: true })).toHaveAttribute(
+      'href',
       'mailto:xbarje@gmail.com',
     );
-    if (width === 390) await page.locator('.landing-mobile-nav > summary').click();
+    await expect(page.locator('main')).toContainText('Never send passwords or sign-in codes');
+    await expect(page.locator('main').getByRole('link', { name: 'Privacy Policy', exact: true })).toHaveAttribute(
+      'href',
+      '/privacy',
+    );
+    await expect(page.locator('form')).toHaveCount(0);
     expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
+    await page.screenshot({ path: info.outputPath(`support-${width}.png`), fullPage: true });
 
     await page.goto('/demo');
     await expect(page.getByText('No account is needed to view this tour.', { exact: false })).toBeVisible();

@@ -77,6 +77,11 @@ jobs:
         timeout-minutes: 12
         run: |
           set -euo pipefail
+          # Native run 45886153206 found the controls but typed no email;
+          # its failure tree/screenshot had no software keyboard. Exercise the
+          # on-device keyboard rather than inheriting a hardware-keyboard state.
+          defaults write com.apple.iphonesimulator ConnectHardwareKeyboard -bool false
+          test "$(defaults read com.apple.iphonesimulator ConnectHardwareKeyboard)" = 0
           xcrun simctl boot "$IOS_SIMULATOR_ID"
           open -a Simulator
           # Run 37069276314 finished first-boot OS migration at 6m20s, beyond

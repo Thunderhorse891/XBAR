@@ -1,6 +1,80 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import { downloadStoredFile } from '../../src/lib/downloadStoredFile.ts';
+
+for (const outcome of [
+  { ok: true, via: 'share-sheet' },
+  { ok: true, via: 'browser' },
+  { ok: false, message: 'Export cancelled - nothing was saved.' },
+  { ok: false, message: 'The original file could not be read.' },
+])
+  test(`native file opening uses the saved-original handoff and reports ${outcome.ok ? outcome.via : outcome.message}`, async () => {
+    const { build } = await import('esbuild');
+    const { createRequire } = await import('node:module');
+    const require = createRequire(import.meta.url);
+    const record = { localFileKey: 'synthetic-saved-original' };
+    let reads = 0;
+    let popups = 0;
+    const current = () => true;
+    globalThis.__nativeOpenRead = async (actual, guard) => {
+      reads++;
+      assert.equal(actual, record);
+      assert.equal(guard, current);
+      return outcome;
+    };
+    const bundle = await build({
+      entryPoints: ['src/lib/openStoredFile.ts'],
+      bundle: true,
+      write: false,
+      format: 'cjs',
+      platform: 'node',
+      packages: 'external',
+      plugins: [
+        {
+          name: 'native-file-boundary',
+          setup(b) {
+            b.onResolve({ filter: /cloudWorkspace|downloadStoredFile|nativePlatform/ }, (args) => ({
+              path: args.path,
+              namespace: 'native-fixture',
+            }));
+            b.onLoad({ filter: /.*/, namespace: 'native-fixture' }, (args) => ({
+              contents: args.path.includes('nativePlatform')
+                ? 'export const isNativeApp=()=>true;'
+                : args.path.includes('downloadStoredFile')
+                  ? 'export const downloadStoredFile=(...args)=>globalThis.__nativeOpenRead(...args);'
+                  : 'export const getDocumentAccessUrl=async()=>({ok:false,message:"A native open must not use browser navigation"});',
+            }));
+          },
+        },
+      ],
+    });
+    const mod = { exports: {} };
+    new Function('require', 'module', 'exports', bundle.outputFiles[0].text)(require, mod, mod.exports);
+    const prior = globalThis.window;
+    globalThis.window = {
+      open: () => {
+        popups++;
+        return null;
+      },
+    };
+    try {
+      const result = await mod.exports.openStoredFileInTab(record, current);
+      assert.deepEqual(
+        result,
+        outcome.ok
+          ? outcome.via === 'share-sheet'
+            ? { ok: true, delivery: 'share-sheet' }
+            : { ok: false, message: 'The native file handoff did not complete. Try again.' }
+          : outcome,
+      );
+      assert.equal(reads, 1, 'resolve and share the canonical saved original');
+      assert.equal(popups, 0, 'native file handling must not create browser tabs');
+    } finally {
+      globalThis.window = prior;
+      delete globalThis.__nativeOpenRead;
+    }
+  });
+
 function fixture() {
   const f = { releases: 0, saves: [], fetches: [], current: true };
   f.deps = {

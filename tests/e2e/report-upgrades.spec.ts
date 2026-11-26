@@ -28,7 +28,15 @@ async function openReports(page: Page, tier = 'Starter', cloud = true, withRecor
         currentRole: 'Admin',
         ...(withRecords
           ? {
-              documents: [{ id: 'report-document', type: 'Registration', state: 'Needs Review', entities: {} }],
+              documents: [
+                {
+                  id: 'report-document',
+                  title: 'Synthetic registration awaiting review',
+                  type: 'Registration',
+                  state: 'Needs Review',
+                  entities: {},
+                },
+              ],
               expenseReceipts: [
                 {
                   id: 'report-receipt',
@@ -224,7 +232,11 @@ for (const tier of ['Free', 'Starter']) {
     await expect(page.getByRole('button', { name: 'Export spreadsheet' })).toHaveCount(0);
     await expect(page.getByLabel('Money summary')).toHaveCount(0);
     await expect(page.getByRole('heading', { name: 'Record readiness', exact: true })).toBeVisible();
-    await expect(page.getByRole('button', { name: '1 document to review', exact: true })).toBeVisible();
+    await page.getByRole('button', { name: '1 awaiting review / 0 processing', exact: true }).click();
+    await expect(page).toHaveURL(/\/app\/documents$/);
+    await expect(page.getByText('Synthetic registration awaiting review', { exact: true }).first()).toBeVisible();
+    await page.goBack();
+    await expect(page.getByRole('heading', { name: 'Record readiness', exact: true })).toBeVisible();
     await expect(page.getByRole('button', { name: 'Unlock with Professional' })).toBeVisible();
     await page.getByRole('button', { name: 'Unlock with Professional' }).click();
     await expect(page.getByRole('dialog', { name: 'Ranch reports' })).toContainText('Included with Professional');

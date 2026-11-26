@@ -13,6 +13,20 @@ import { subscriptionTierConfig } from '../src/lib/xbarRuntime.js';
 const repoRoot = process.cwd();
 const load = (relPath: string) => import(pathToFileURL(path.join(repoRoot, relPath)).href);
 
+test('support has a public HTTPS destination with the existing contact and safe troubleshooting', async () => {
+  const { marketingPages } = await load('scripts/marketing/pages.mjs');
+  const { renderPage, SUPPORT_EMAIL } = await load('scripts/marketing/render.mjs');
+  const page = marketingPages.find((item: { path: string }) => item.path === '/support');
+  assert.ok(page, 'App Store support must have a real public page');
+  const html = renderPage(page);
+  assert.match(html, /href="https:\/\/[^"]+\/support"/, 'support has a canonical HTTPS destination');
+  assert.ok(html.includes(`href="mailto:${SUPPORT_EMAIL}"`), 'reuse the verified support contact');
+  assert.match(page.body, /passwords or sign-in codes/i);
+  assert.match(page.body, /original files/i);
+  assert.match(page.body, /href="\/privacy"/);
+  assert.doesNotMatch(page.body, /<form\b|type="password"|guaranteed|24\/7/i);
+});
+
 test('public entry heroes are concise and present one primary next step', async () => {
   const { marketingPages } = await load('scripts/marketing/pages.mjs');
   const paths = [
@@ -37,7 +51,8 @@ test('public entry heroes are concise and present one primary next step', async 
     assert.ok(
       lead &&
         lead
-          .replace(/<[^>]+>/g, '')
+          // Word count only: keep a boundary instead of joining text fragments.
+          .replace(/<[^>]+>/g, ' ')
           .trim()
           .split(/\s+/).length <= 30,
       `${path}: concise lead`,
@@ -201,7 +216,7 @@ test('marketing, legal, and 404 pages share the same native mobile navigation an
   const expectedLinks = [
     '/features',
     '/pricing',
-    'mailto:xbarje@gmail.com',
+    '/support',
     '/solutions',
     '/resources',
     '/demo',
@@ -323,7 +338,7 @@ test('every public page exposes the approved support contact in navigation and f
   );
   for (const page of marketingPages) {
     const html = renderPage(page);
-    assert.match(html, /<header[\s\S]*?href="mailto:xbarje@gmail.com"[^>]*>Help &amp; support/);
+    assert.match(html, /<header[\s\S]*?href="\/support"[^>]*>Help &amp; support/);
     assert.match(html, /<footer[\s\S]*?href="mailto:xbarje@gmail.com"/);
   }
 });
