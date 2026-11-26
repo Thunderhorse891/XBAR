@@ -306,10 +306,7 @@ export default function Reports() {
           <div>
             <div className="ops-kicker">Ranch reporting</div>
             <h1 id="reports-title">Know what the herd is worth</h1>
-            <p>
-              Reports automatically calculated from your records, with PDF and spreadsheet export. Cost per horse,
-              break-even, document blockers and recorded spend in one place.
-            </p>
+            <p>Capital, margins, and sale blockers from your saved records. Export a PDF or spreadsheet.</p>
           </div>
         </section>
         {presentationStudio}
@@ -334,10 +331,7 @@ export default function Reports() {
         <div>
           <div className="ops-kicker">Ranch reporting</div>
           <h1 id="reports-title">Know what the herd is worth</h1>
-          <p>
-            Reports automatically calculated from your records, with PDF and spreadsheet export. Cost per horse,
-            break-even, document blockers and recorded spend in one place.
-          </p>
+          <p>Capital, margins, and sale blockers from your saved records. Export a PDF or spreadsheet.</p>
           <div className="ops-hero__actions">
             {locked ? (
               // Guideline 3.1.1 forbids the call to action, not just the
@@ -413,8 +407,6 @@ export default function Reports() {
           </div>
         )}
       </section>
-      {presentationStudio}
-
       {locked ? (
         <Panel
           className="ops-panel"
@@ -736,6 +728,7 @@ export default function Reports() {
           </div>
         </Panel>
       ) : null}
+      {presentationStudio}
     </div>
   );
 }

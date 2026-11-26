@@ -113,10 +113,12 @@ test('the billing section states what happens with Stripe absent', () => {
  * steps it actually executes, one file per runner step.
  */
 function executedSuites(): { files: Set<string>; crowdedSteps: string[] } {
-  const script = JSON.parse(read('package.json')).scripts.test as string;
+  const pkg = JSON.parse(read('package.json'));
+  assert.equal(pkg.scripts.test, 'node scripts/run-tests.mjs');
+  assert.ok(Array.isArray(pkg.xbarTestCommands) && pkg.xbarTestCommands.length > 0);
   const files = new Set<string>();
   const crowdedSteps: string[] = [];
-  for (const step of script.split('&&').map((part) => part.trim())) {
+  for (const step of pkg.xbarTestCommands as string[]) {
     const words = step.split(/\s+/);
     const runner = words[0] === 'node' || (words[0] === 'tsx' && words.includes('--test'));
     if (!runner) continue;

@@ -420,3 +420,35 @@
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 }
+
+/* Keep the phone report focused on saved numbers and actions. */
+@media (max-width: 720px) {
+  .reports-experience.ops-experience .ops-hero {
+    min-height: 0;
+    gap: 0;
+  }
+  .reports-experience.ops-experience .ops-hero h1 {
+    font-size: 2rem;
+    line-height: 1.1;
+    margin-top: 10px;
+  }
+  .reports-experience.ops-experience .ops-hero p {
+    margin-top: 12px;
+  }
+  .reports-experience .ops-hero__actions {
+    margin-top: 18px;
+  }
+  .reports-experience .ops-hero__mini-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    margin-top: 8px;
+  }
+  .reports-experience .ops-hero__ledger strong {
+    font-size: 2rem;
+  }
+  .reports-experience .ops-hero__ledger small {
+    font-size: 0.75rem;
+    font-weight: 500;
+    letter-spacing: 0;
+    text-transform: none;
+  }
+}

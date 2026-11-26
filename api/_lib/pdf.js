@@ -553,7 +553,7 @@ export async function createSectionedPdf(input) {
     // business name, so without a reserved gap a long legal name runs straight
     // through "Page N of M" and neither is readable. A 90-character name
     // overlapped by 27pt.
-    const stamp = `Page ${index + 1} of ${pages.length}`;
+    const stamp = `${toDrawableText(input.pageLabel || 'Page')} ${index + 1} of ${pages.length}`;
     const stampWidth = font.widthOfTextAtSize(stamp, 8);
     footerPage.drawText(stamp, {
       x: PAGE_WIDTH - MARGIN - stampWidth,
@@ -658,6 +658,7 @@ export async function applyWatermark(pdf, watermarkText) {
 // Assembles a sale packet: cover sheet first, then every attachment (PDFs are
 // merged page-by-page, JPEG/PNG become full pages, anything else is listed on
 // an appendix note). The watermark is stamped on every page at the end.
+/** @param {{coverBytes?: Uint8Array, attachments?: Array<{bytes: Uint8Array, mimeType?: string, label?: string}>, watermarkText?: string}} input */
 export async function assemblePacketPdf({ coverBytes, attachments = [], watermarkText = '' }) {
   const pdf = await PDFDocument.create();
   const fallbackNotes = [];

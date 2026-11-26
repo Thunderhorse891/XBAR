@@ -127,14 +127,15 @@ test('the final database trigger uses the API window and meters only genuinely n
   assert.match(gate, /detail = 'xbar_sale_packet_allowance_reached'/);
 });
 
-test('an authoritative quota rejection after upload cleans up and returns the same public quota code', () => {
+test('an authoritative quota rejection after upload retains recovery bytes and returns the same public quota code', () => {
   const route = readFileSync('api/sale-packets.js', 'utf8');
   const recordFailure = route.slice(
     route.indexOf('if (recordError || issued !== true)'),
     route.indexOf('const { data: signed }'),
   );
-  assert.match(recordFailure, /if \(rejected\) await supabase\.storage/, 'only definite rejections clean up');
-  assert.match(recordFailure, /remove\(\[packetPath\]\)[\s\S]+P0001[\s\S]+xbar_sale_packet_allowance_reached/);
+  assert.doesNotMatch(recordFailure, /\.remove\(/, 'no row rejection authorizes deleting an original');
+  assert.match(recordFailure, /P0001[\s\S]+xbar_sale_packet_allowance_reached/);
+  assert.match(recordFailure, /needsRecovery: true/);
   assert.match(recordFailure, /sendJson\(res, 403,[\s\S]+code: 'sale_packet_limit_reached'/);
   assert.match(recordFailure, /storage_limit_reached/, 'preserve the distinct storage error');
 });

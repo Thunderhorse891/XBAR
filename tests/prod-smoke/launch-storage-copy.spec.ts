@@ -71,7 +71,7 @@ for (const width of [1440, 390]) {
     await page.goto('/pricing');
     const hero = page.locator('.hero.hero--solo.wrap');
     const heading = hero.getByRole('heading', {
-      name: 'Simple plans. Published limits. No hidden capacity math.',
+      name: 'Start Free. Grow with your operation.',
       exact: true,
     });
     await expect(heading).toBeVisible();

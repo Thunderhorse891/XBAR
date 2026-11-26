@@ -40,12 +40,11 @@ export function cinematicHome(plans) {
     <div class="landing-hero-copy">
       <p class="landing-eyebrow" data-hero-reveal>For the business of horses</p>
       <h1 id="landing-title"><span data-hero-reveal>Every horse.</span> <span data-hero-reveal>One clear picture.</span></h1>
-      <p class="landing-lead" data-hero-reveal>Your horses, paperwork, and next decisions. Bring them together in a workspace built around the way you run your operation.</p>
+      <p class="landing-lead" data-hero-reveal>Keep horse records, ownership, and buyer-ready paperwork together.</p>
       <div class="landing-actions" data-hero-reveal>
-        <a class="btn btn--primary landing-primary" href="${APP_SIGNUP}" rel="nofollow" data-magnetic><span>Create your workspace</span></a>
-        <a class="landing-text-link" href="#inside-xbar">Explore XBAR <span aria-hidden="true">↘</span></a>
+        <a class="btn btn--primary landing-primary" href="${APP_SIGNUP}" rel="nofollow" data-magnetic><span>Start free</span></a>
       </div>
-      <p class="landing-note" data-hero-reveal>Records. Ownership. Care. Sale readiness.</p>
+      <p class="landing-note" data-hero-reveal>2 horses. No card required. A separate 14-day Professional trial is optional.</p>
     </div>
     <div class="landing-art" data-parallax>
       <div class="landing-art-plane">

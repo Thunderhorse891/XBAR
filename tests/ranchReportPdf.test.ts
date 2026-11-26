@@ -90,6 +90,21 @@ test('document queue separates processing from review without counting either as
   await assertFits(bytes);
 });
 
+test('malformed acquisition values cannot create capital absent from the horse register', () => {
+  const input = fixture(2);
+  input.horses[0].costBasis = '9000' as unknown as number;
+  const report = buildRanchReport(input, now);
+  assert.equal(report.money.acquisitionCost, 4225);
+  assert.equal(
+    report.money.investedInHorses,
+    report.horses.reduce((sum, row) => sum + row.investedToDate, 0),
+  );
+  assert.equal(
+    report.money.investedToDate,
+    report.money.investedInHorses + report.money.unallocatedToDate + report.money.unmatchedHorseSpend,
+  );
+});
+
 // Inspect actual PDF operators: no external rasterizer needed in CI.
 function drawn(bytes: Uint8Array) {
   const raw = Buffer.from(bytes).toString('latin1');

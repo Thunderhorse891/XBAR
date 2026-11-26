@@ -173,11 +173,18 @@ test('mobile has no horizontal overflow and app routes load no landing code', as
 });
 
 test('plan hover remains available after its entrance animation finishes', async ({ page }) => {
+  await page.addInitScript(() => {
+    const animate = Element.prototype.animate;
+    Element.prototype.animate = function (keyframes, options) {
+      if (this.matches('.landing-plan')) this.setAttribute('data-test-entrance-seen', 'true');
+      return animate.call(this, keyframes, options);
+    };
+  });
   await page.goto('/');
   await expect(page.getByRole('button', { name: 'Pause motion' })).toBeVisible();
   const plan = page.locator('.landing-plan').first();
   await plan.scrollIntoViewIfNeeded();
-  await expect.poll(() => plan.evaluate((el) => el.getAnimations().length)).toBeGreaterThan(0);
+  await expect(plan).toHaveAttribute('data-test-entrance-seen', 'true');
   await expect.poll(() => plan.evaluate((el) => el.getAnimations().length)).toBe(0);
   const resting = await plan.boundingBox();
   expect(resting).not.toBeNull();
@@ -244,7 +251,7 @@ test('homepage motion executes under the production content security policy', as
   });
   await page.goto('/');
   await expect(page.getByRole('button', { name: 'Pause motion' })).toBeVisible();
-  await page.getByRole('link', { name: 'Explore XBAR' }).click();
+  await page.getByRole('link', { name: 'Meet your workspace' }).click();
   await expect(page).toHaveURL(/#inside-xbar$/);
   await expect(page.getByRole('heading', { name: 'The whole story. Right where you need it.' })).toBeVisible();
   expect(errors).toEqual([]);

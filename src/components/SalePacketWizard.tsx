@@ -441,6 +441,7 @@ export function SalePacketWizard({
           ownershipRecord: ownershipRecords.find((record) => record.horseId === horse.id),
           profile: workspaceProfile,
           attachments: resolved.attachments,
+          documents,
           watermark: effectiveWatermark,
           buyerName,
         });
@@ -1000,15 +1001,6 @@ export function SalePacketWizard({
                 </li>
                 <li>The build and buyer attribution are written to the audit log.</li>
               </ul>
-              <button
-                className="confirm-dialog__confirm confirm-dialog__confirm--legal"
-                type="button"
-                style={{ width: '100%', marginTop: 14 }}
-                disabled={isGenerating}
-                onClick={() => void generate()}
-              >
-                {isGenerating ? 'Assembling packet…' : generationFailure ? 'Retry sale packet' : 'Generate sale packet'}
-              </button>
             </div>
           )}
 
@@ -1204,6 +1196,16 @@ export function SalePacketWizard({
           >
             {step === 0 || generated ? 'Close' : 'Back'}
           </button>
+          {step === 4 && !generated && horse && (
+            <button
+              className="confirm-dialog__confirm confirm-dialog__confirm--legal"
+              type="button"
+              disabled={isGenerating}
+              onClick={() => void generate()}
+            >
+              {isGenerating ? 'Assembling packet…' : generationFailure ? 'Retry sale packet' : 'Generate sale packet'}
+            </button>
+          )}
           {step < 4 && (
             <button
               className="confirm-dialog__confirm confirm-dialog__confirm--legal"

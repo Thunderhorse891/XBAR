@@ -138,9 +138,7 @@ for (const pathname of publicPaths) {
       );
       await menu.getByRole('link', { name: 'Pricing', exact: true }).click();
       await expect(page).toHaveURL(/\/pricing$/);
-      await expect(
-        page.getByRole('heading', { name: 'Simple plans. Published limits. No hidden capacity math.' }),
-      ).toBeVisible();
+      await expect(page.getByRole('heading', { name: 'Start Free. Grow with your operation.' })).toBeVisible();
     } finally {
       await context.close();
     }

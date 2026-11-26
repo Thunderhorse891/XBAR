@@ -283,7 +283,10 @@ test('one shared integer-cent catalog supplies every new-sale monthly price and 
     assert.equal(subscriptionPlans[tier].monthlyRate, monthlyCents / 100);
     assert.equal(marketingByTier[tier].monthlyRate, monthlyCents / 100);
   }
-  for (const file of ['src/lib/xbarRuntime.ts', 'src/routes/Subscriptions.tsx', 'scripts/marketing/pricing-data.mjs']) {
+  for (const file of ['src/lib/xbarRuntime.ts', 'src/lib/publicPlanCatalog.ts', 'scripts/marketing/pricing-data.mjs']) {
     assert.match(readFileSync(path.join(repoRoot, file), 'utf8'), /import publicPlanCatalog from/);
   }
+  const billing = readFileSync(path.join(repoRoot, 'src/routes/Subscriptions.tsx'), 'utf8');
+  assert.match(billing, /import \{ isPublicPaidPlan, publicPaidPlanTiers \} from '@\/lib\/publicPlanCatalog'/);
+  assert.match(billing, /const tiers = publicPaidPlanTiers/);
 });

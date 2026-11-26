@@ -3,6 +3,7 @@ import { useNavigate, useSearchParams } from 'react-router-dom';
 import { FileText, Plus } from 'lucide-react';
 import { ActionButton, Card, PageHead, StatusChip } from '@/components/saas';
 import { SalePacketWizard } from '@/components/SalePacketWizard';
+import { SavedPacketDownload } from '@/components/SavedPacketDownload';
 import { useXbarStore } from '@/store/useXbarStore';
 import { useUiStore } from '@/store/useUiStore';
 import { openStoredFileInTab } from '@/lib/openStoredFile';
@@ -21,7 +22,7 @@ function formatDate(value: string) {
 
 export default function SalePacketStudio() {
   const navigate = useNavigate();
-  const [params] = useSearchParams();
+  const [params, setParams] = useSearchParams();
   const horses = useXbarStore((s) => s.horses);
   const documents = useXbarStore((s) => s.documents);
   const salePacketBuilds = useXbarStore((s) => s.salePacketBuilds);
@@ -202,6 +203,7 @@ export default function SalePacketStudio() {
                       {openingPacketId === packet.id ? 'Opening...' : 'Open'}
                     </button>
                   ) : null}
+                  {packet.localFileKey ? <SavedPacketDownload packet={packet} className="xs-btn xs-btn--sm" /> : null}
                 </div>
               );
             })}
@@ -220,6 +222,12 @@ export default function SalePacketStudio() {
         onClose={() => {
           setWizardOpen(false);
           setWizardHorseId(null);
+          if (params.has('horse') || params.has('resume')) {
+            const next = new URLSearchParams(params);
+            next.delete('horse');
+            next.delete('resume');
+            setParams(next, { replace: true });
+          }
         }}
       />
     </>

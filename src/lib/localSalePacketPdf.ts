@@ -3,10 +3,11 @@ import { createSectionedPdf, assemblePacketPdf } from '../../api/_lib/pdf.js';
 import { normalizePacketBranding } from '../../api/_lib/packet-branding.js';
 import { toPacketDisclosure } from './salePacketDisclosure.js';
 import { base64ToBytes } from './localFileVault.js';
+import { CURRENT_COGGINS_DAYS, hasCurrentReadyDocument } from './documentCurrency.js';
 import { loadReportBranding, type ReportBranding } from './reportBranding.js';
 import type { LocalSalePacket } from './localSalePacketGenerator.js';
 import type { LocalPacketAttachment } from './localPacketAttachments.js';
-import type { HorseRecord, OwnershipRecord, WorkspaceProfile } from '../types/xbar.js';
+import type { DocumentRecord, HorseRecord, OwnershipRecord, WorkspaceProfile } from '../types/xbar.js';
 
 /** The device packet uses the same PDF assembly as cloud packets. Keep its
  * interactive sealed HTML and exact originals inside the single saved PDF. */
@@ -16,6 +17,7 @@ export async function renderLocalSalePacketPdf(input: {
   ownershipRecord?: OwnershipRecord;
   profile: WorkspaceProfile;
   attachments: LocalPacketAttachment[];
+  documents: DocumentRecord[];
   watermark: string;
   buyerName?: string;
   branding?: ReportBranding;
@@ -38,6 +40,7 @@ export async function renderLocalSalePacketPdf(input: {
     customerLogoDataUrl: seller.logoDataUrl,
     branding: input.branding ?? (await loadReportBranding()),
     continuationHeaders: true,
+    pageLabel: 'Summary page',
     reference: packet.credential.sealCode,
     sections: [
       {
@@ -58,7 +61,8 @@ export async function renderLocalSalePacketPdf(input: {
           `Owner entity: ${shown.ownership.ownerEntity || 'Not provided'}`,
           `Seller-recorded transfer status: ${shown.ownership.transferStatus}`,
           `Pending documents: ${shown.ownership.pendingDocuments.join(', ') || 'None recorded'}`,
-          `Contact: ${[seller.name, seller.email, seller.phone, seller.website].filter(Boolean).join(' / ') || 'Not provided'}`,
+          `Seller: ${seller.name || 'Not provided'}`,
+          `Contact: ${[seller.email, seller.phone, seller.website].filter(Boolean).join(' / ') || 'Not provided'}`,
           `Prepared for: ${input.buyerName?.trim() || 'Prospective buyer'}`,
           `Prepared on: ${packet.credential.sealedAt.slice(0, 10)}`,
         ],
@@ -68,6 +72,16 @@ export async function renderLocalSalePacketPdf(input: {
         lines: [
           `Recorded status: ${shown.care.status || 'Not provided'}`,
           `Last vet visit: ${shown.care.lastVetVisit || 'Not provided'}`,
+          hasCurrentReadyDocument(
+            input.documents.filter((document) => document.horseId === input.horse.id && document.type === 'Coggins'),
+            CURRENT_COGGINS_DAYS,
+            new Date(packet.credential.sealedAt),
+          )
+            ? 'Coggins: a current reviewed record is on file at generation. Read the original for its exam date and limitations.'
+            : 'Coggins: no current reviewed record is on file. Confirm requirements before transport.',
+          ...(shown.care.status === 'Medical Review'
+            ? ['Active medical review: discuss the care disclosures with the seller before purchase.']
+            : []),
           'Read the selected veterinary records and Coggins. This summary does not establish health, travel clearance or fitness for a purpose.',
         ],
       },

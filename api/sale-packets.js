@@ -12,6 +12,7 @@ import {
 } from './_lib/entitlements.js';
 import { loadHorseContext } from './_lib/horse-context.js';
 import { createSectionedPdf, assemblePacketPdf } from './_lib/pdf.js';
+import { loadServerPdfBranding } from './_lib/pdf-branding.js';
 import { sendEmail } from './_lib/email.js';
 import { recordAuditEvent } from './_lib/audit.js';
 import { buildServerSaleCredential, ownershipReviewSummary } from './_lib/sale-credential.js';
@@ -263,7 +264,9 @@ export default async function handler(req, res) {
       title: `Sale Packet: ${context.horse.name}`,
       letterhead: packetBranding.displayName,
       customerLogoDataUrl: packetBranding.logoDataUrl,
+      branding: await loadServerPdfBranding(),
       continuationHeaders: true,
+      pageLabel: 'Summary page',
       sections: [
         {
           heading: 'Horse Summary',
@@ -394,15 +397,17 @@ export default async function handler(req, res) {
       p_seal: seal,
     });
     if (recordError || issued !== true) {
-      // A definitive PostgreSQL or missing-RPC rejection cannot have committed.
-      // An ambiguous transport response might have committed; do not delete a
-      // possibly recorded PDF or send its signed link without confirmation.
+      // Preserve the reserved upload and its recovery identity on every failed
+      // issuance. A separate reference-safe retirement operation is required to
+      // remove bytes; a rejected row alone does not authorize deleting a file.
+      // Never send a signed link without confirmed protected issuance.
       const errorCode = recordError?.code || '';
-      const rejected = /^(?:22|23|42|P0)[0-9A-Z]{3}$/.test(errorCode) || errorCode === 'PGRST202';
-      if (rejected) await supabase.storage.from(PACKET_BUCKET).remove([packetPath]);
       if (errorCode === 'P0001' && recordError?.details === 'xbar_sale_packet_allowance_reached') {
         return sendJson(res, 403, {
           ok: false,
+          packetId,
+          packetPdfPath: packetPath,
+          needsRecovery: true,
           code: 'sale_packet_limit_reached',
           message: `This packet would exceed the plan's sale packet allowance per ${SALE_PACKET_WINDOW_DAYS} days. The allowance renews as earlier packets pass ${SALE_PACKET_WINDOW_DAYS} days, and reopening or resending a packet never uses it.`,
         });

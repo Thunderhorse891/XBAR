@@ -1,4 +1,3 @@
-import publicPlanCatalog from '../../api/_lib/public-plan-catalog.json' with { type: 'json' };
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { loadSellablePrices, requestTrialStart, startManagedCheckout, type SellablePrices } from '@/lib/billingApi';
@@ -27,7 +26,7 @@ import {
   recommendedTier,
 } from '@/lib/subscriptionDecision';
 import { subscriptionPlans } from '@/lib/subscriptionPlans';
-import { isPublicPaidPlan } from '@/lib/publicPlanCatalog';
+import { isPublicPaidPlan, publicPaidPlanTiers } from '@/lib/publicPlanCatalog';
 import { canStartTrial, getTrialState, trialDaysRemaining, trialStatusCopy } from '@/lib/trialSubscription';
 import { useCloudStore } from '@/store/useCloudStore';
 import { useUiStore } from '@/store/useUiStore';
@@ -35,7 +34,7 @@ import { useCurrentRoleCapability, useWorkspaceReady, useXbarStore } from '@/sto
 import type { SubscriptionProfile, SubscriptionTier } from '@/types/xbar';
 import './checkoutExperience.css';
 
-const tiers = Object.keys(publicPlanCatalog) as SubscriptionTier[];
+const tiers = publicPaidPlanTiers;
 const billingPeriod = 'monthly' as const;
 
 type CheckoutErrorContext = {

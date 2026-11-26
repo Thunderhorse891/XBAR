@@ -51,25 +51,20 @@ for (const width of [390, 1440]) {
     await expect(art).toHaveAttribute('src', '/brand/xbar-report-horse.png');
     await art.evaluate((image: HTMLImageElement) => image.decode());
     const primary = page.locator('.landing-actions .landing-primary');
-    const secondary = page.locator('.landing-actions .landing-text-link');
-    for (const control of [primary, secondary]) {
-      const box = (await control.boundingBox())!;
-      expect(box.height).toBeGreaterThanOrEqual(48);
-      expect(box.width).toBeGreaterThanOrEqual(48);
-    }
-    if (width === 390) {
-      const a = (await primary.boundingBox())!,
-        b = (await secondary.boundingBox())!;
-      expect(a.width).toBeCloseTo(b.width, 0);
-      expect(b.y - a.y - a.height).toBeGreaterThanOrEqual(10);
-    }
+    await expect(page.locator('.landing-actions a')).toHaveCount(1);
+    await expect(primary).toHaveText('Start free');
+    await expect(primary).toHaveAttribute('href', '/app/login?mode=signup');
+    const box = (await primary.boundingBox())!;
+    expect(box.height).toBeGreaterThanOrEqual(48);
+    expect(box.width).toBeGreaterThanOrEqual(48);
     await readablePrimary(primary);
     await primary.focus();
+    await page.keyboard.press('Shift+Tab');
     await page.keyboard.press('Tab');
-    await expect(secondary).toBeFocused();
-    await expect(secondary).toHaveCSS('outline-style', 'solid');
+    await expect(primary).toBeFocused();
+    await expect(primary).toHaveCSS('outline-style', 'solid');
     expect(
-      await secondary.evaluate((element) => parseFloat(getComputedStyle(element).outlineWidth)),
+      await primary.evaluate((element) => parseFloat(getComputedStyle(element).outlineWidth)),
     ).toBeGreaterThanOrEqual(2);
     await noOverflow(page, width);
     await page.screenshot({ path: info.outputPath(`workspace-polish-hero-${width}.png`), fullPage: false });

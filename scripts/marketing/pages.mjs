@@ -20,8 +20,7 @@ function ctaBlock(heading, copy) {
     <h2>${esc(heading)}</h2>
     <p class="intro" style="margin-inline:auto">${esc(copy)}</p>
     <div class="hero-actions">
-      <a class="btn btn--primary" href="${signup()}" rel="nofollow">Create your workspace</a>
-      <a class="btn" href="/demo">Take the product tour</a>
+      <a class="btn btn--primary" href="${signup()}" rel="nofollow">Start free</a>
     </div>
   </div>
 </section>`;
@@ -112,8 +111,9 @@ const features = {
 <section class="hero hero--solo wrap section--flush">
   <div>
     <p class="kicker">Features</p>
-    <h1>Every module answers a real operating question.</h1>
-    <p class="lead">XBAR is organized around the moments that decide whether a horse can be trusted, transferred, shown, or sold — not around generic dashboards.</p>
+    <h1>Keep the record with the horse.</h1>
+    <p class="lead">Documents, ownership, care, costs, and buyer packets in one workspace.</p>
+    <div class="hero-actions"><a class="btn btn--primary" href="${signup()}" rel="nofollow">Start free</a></div>
   </div>
 </section>
 
@@ -241,8 +241,9 @@ const pricing = {
 <section class="hero hero--solo wrap section--flush">
   <div>
     <p class="kicker">Pricing</p>
-    <h1>Simple plans. Published limits. No hidden capacity math.</h1>
-    <p class="lead">Every plan protects the core horse record. Higher tiers add collaboration, buyer sharing, and more document capacity. Cloud storage is limited and shared across XBAR at launch.</p>
+    <h1>Start Free. Grow with your operation.</h1>
+    <p class="lead">2 horses and 1 user. No card required. Review paid plans before upgrading.</p>
+    <div class="hero-actions"><a class="btn btn--primary" href="${signup()}" rel="nofollow">Start free</a></div>
   </div>
 </section>
 
@@ -325,8 +326,7 @@ function solutionPage({ path, slug, title, description, h1, lead, sections, faq 
     <h1>${esc(h1)}</h1>
     <p class="lead">${esc(lead)}</p>
     <div class="hero-actions">
-      <a class="btn btn--primary" href="${signup()}" rel="nofollow">Create your workspace</a>
-      <a class="btn" href="/demo">Take the product tour</a>
+      <a class="btn btn--primary" href="${signup()}" rel="nofollow">Start free</a>
     </div>
   </div>
 </section>
@@ -365,15 +365,16 @@ const solutionsIndex = {
 <section class="hero hero--solo wrap section--flush">
   <div>
     <p class="kicker">Solutions</p>
-    <h1>Built for the operations where documents decide the deal.</h1>
-    <p class="lead">From a single broodmare program to a multi-rider barn, XBAR gives every horse one record your team and your buyers can trust. Pick the path that matches your operation.</p>
+    <h1>Built around your operation.</h1>
+    <p class="lead">Find the record workflow for your breeding program, sale barn, training barn, or ranch.</p>
+    <div class="hero-actions"><a class="btn btn--primary" href="#solution-workflows">Find your workflow</a></div>
   </div>
 </section>
 <section class="section section--flush">
   <div class="wrap">
-    <div class="grid grid--2">
+    <div class="grid grid--2" id="solution-workflows">
       <div class="card"><h3><a href="/solutions/breeding-programs">Breeding &amp; broodmare programs</a></h3><p>Registration papers, foaling history, breeding events, and ownership structure attached to each horse — so breeding decisions and transfers never stall on missing documents.</p></div>
-      <div class="card"><h3><a href="/solutions/sale-barns">Sale barns &amp; consignors</a></h3><p>Turn approved records into watermarked, buyer-ready sale packets and shared profiles — documentation that closes faster and protects your reputation.</p></div>
+      <div class="card"><h3><a href="/solutions/sale-barns">Sale barns &amp; consignors</a></h3><p>Turn approved records into watermarked, buyer-ready sale packets and shared profiles — a clear handoff from the records you reviewed.</p></div>
       <div class="card"><h3><a href="/solutions/trainers">Trainers &amp; show barns</a></h3><p>Care status, documents, expenses, and owner-ready records for every horse in the barn, without folders and group texts.</p></div>
       <div class="card"><h3><a href="/solutions/ranch-operations">Ranch operations</a></h3><p>Herd groups, pastures, feed, equipment, and the operating ledger beside trusted horse records — one system for the whole outfit.</p></div>
     </div>
@@ -388,8 +389,8 @@ const solutionBreeders = solutionPage({
   title: 'Horse Breeding Program Software — Records, Foaling & Ownership | XBAR',
   description:
     'XBAR for breeding and broodmare programs: registration papers, breeding and foaling events, co-owner structures, and transfer-ready documentation for every mare, stallion, and foal.',
-  h1: 'Breeding records that hold up from cover to transfer.',
-  lead: 'A breeding program lives and dies on documentation: papers, breeding dates, foaling outcomes, and clean transfers. XBAR keeps all of it attached to the horse it belongs to.',
+  h1: 'From breeding dates to foaling records.',
+  lead: 'Keep breeding dates, recorded outcomes, papers, and transfer details with each horse.',
   sections: [
     {
       heading: 'The record follows the horse — including the foal',
@@ -446,8 +447,8 @@ const solutionSaleBarns = solutionPage({
   title: 'Sale Barn & Consignment Software — Buyer-Ready Horse Packets | XBAR',
   description:
     'XBAR for sale barns and consignors: watermarked sale packets from verified records, release gates that catch missing documents, buyer follow-up tracking, and shared profiles that protect internal notes.',
-  h1: 'Documentation that closes sales — and protects your name.',
-  lead: 'Serious buyers ask for proof. XBAR turns each consignment’s verified records into a watermarked, buyer-ready packet, and flags what is missing before the buyer finds it.',
+  h1: 'Prepare a clearer buyer handoff.',
+  lead: 'Select approved records, review sale blockers, and prepare a watermarked buyer packet.',
   sections: [
     {
       heading: 'From intake to buyer packet in one pipeline',
@@ -498,8 +499,8 @@ const solutionTrainers = solutionPage({
   title: 'Trainer & Show Barn Software — Care, Records & Owner Reporting | XBAR',
   description:
     'XBAR for trainers and show barns: care boards for every horse in the barn, health and farrier records, expense tracking per horse, and clean documentation when a client horse sells.',
-  h1: 'Every horse in the barn, one trustworthy record.',
-  lead: 'Client horses arrive with partial paperwork and leave with your reputation attached. XBAR keeps care, documents, and costs straight for every stall.',
+  h1: 'One working record for every stall.',
+  lead: 'Keep client horse records, care, documents, and costs together for the next handoff.',
   sections: [
     {
       heading: 'Daily care you can defend',
@@ -550,8 +551,8 @@ const solutionRanch = solutionPage({
   title: 'Ranch Management Software — Horses, Herds, Pastures & Ledger | XBAR',
   description:
     'XBAR for working ranch operations: herd groups, pasture assignments, feed and supply tracking, equipment condition, expense ledger, and trusted per-horse records in one system.',
-  h1: 'Run the outfit from one system, not five.',
-  lead: 'Horses, herds, pastures, feed, equipment, and money — XBAR keeps the operating picture beside the horse records instead of scattered across apps.',
+  h1: 'Keep the operating picture together.',
+  lead: 'Connect horse records with herds, pastures, feed, equipment, and recorded costs.',
   sections: [
     {
       heading: 'The operating picture',
@@ -600,13 +601,14 @@ const resourcesIndex = {
 <section class="hero hero--solo wrap section--flush">
   <div>
     <p class="kicker">Resources</p>
-    <h1>Operational guides for horse records and sale readiness.</h1>
-    <p class="lead">Written by the team that builds XBAR’s record workflows. Practical, checklist-driven, and honest about what software can and cannot verify for you.</p>
+    <h1>Practical guides for horse records.</h1>
+    <p class="lead">Steps for organizing papers, reviewing ownership, and preparing buyer packets.</p>
+    <div class="hero-actions"><a class="btn btn--primary" href="#record-guides">Browse guides</a></div>
   </div>
 </section>
 <section class="section section--flush">
   <div class="wrap">
-    <div class="grid grid--3">
+    <div class="grid grid--3" id="record-guides">
       <div class="card"><h3><a href="/resources/horse-records-checklist">The complete horse records checklist</a></h3><p>Every document a well-run operation keeps per horse — identity, health, ownership, and financial — and why each one matters when it’s missing.</p></div>
       <div class="card"><h3><a href="/resources/sale-ready-horse-documentation">Sale-ready documentation buyers trust</a></h3><p>What serious buyers ask for, the order they ask in, and how to assemble a packet that answers before they ask.</p></div>
       <div class="card"><h3><a href="/resources/equine-ownership-transfer-checklist">The equine ownership transfer checklist</a></h3><p>A step-by-step walkthrough of a clean transfer: bill of sale, registry transfer, health papers, and the records both sides should keep.</p></div>
@@ -824,11 +826,10 @@ const demo = {
 <section class="hero hero--solo wrap section--flush">
   <div>
     <p class="kicker">Product tour</p>
-    <h1>Inspect the product before you register.</h1>
-    <p class="lead">No account is needed to view this tour. Explore example screens and a fictional sale packet below. To use the hosted app with your own records, create an XBAR account and complete workspace setup.</p>
+    <h1>See XBAR at work.</h1>
+    <p class="lead">No account is needed to view this tour. Explore actual screens and a fictional buyer packet.</p>
     <div class="hero-actions">
-      <a class="btn btn--primary" href="${APP_SIGNUP}" rel="nofollow">Create an account</a>
-      <a class="btn" href="/samples/sample-sale-packet.html">View the sample sale packet</a>
+      <a class="btn btn--primary" href="/samples/sample-sale-packet.html">Open the sample packet</a>
     </div>
   </div>
 </section>
@@ -871,7 +872,7 @@ const demo = {
 <section class="section">
   <div class="wrap">
     <h2>5 · Then try it with your own records</h2>
-    <p class="intro">Create an account, complete workspace setup, then review the access and plan options shown in the app. When your workspace is ready, add a horse and upload a document for review.</p>
+    <p class="intro">To use your own records, create an XBAR account and complete workspace setup. Review Free and optional trial access before adding documents.</p>
     <div class="grid grid--3">
       <div class="card"><h3>Create an account &amp; workspace</h3><p>Sign up with your email, follow any confirmation instructions, and complete workspace setup.</p></div>
       <div class="card"><h3>Add a horse &amp; upload a document</h3><p>Watch OCR extract details and the review queue ask for your confirmation.</p></div>

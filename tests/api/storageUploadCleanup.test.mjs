@@ -115,7 +115,14 @@ for (const name of [
     assert.match(source, /uploadReservedBuffer\(/, 'originals must use the reserved, non-overwriting transport');
     assert.doesNotMatch(source, /\.upload\(/, 'direct storage writes cannot bypass the reservation');
     assert.doesNotMatch(source, /\.remove\(/, 'failed writes retain originals for recovery');
-    if (!name.includes('bulk')) assert.match(source, /recordNewStoredObject\(/);
+    if (name === 'api/sale-packets.js') {
+      assert.match(
+        source,
+        /rpc\('xbar_issue_sale_packet'/,
+        'packet facts and delivery must use protected atomic issuance',
+      );
+      assert.match(source, /needsRecovery: true/, 'unconfirmed issuance preserves a recovery identity');
+    } else if (!name.includes('bulk')) assert.match(source, /recordNewStoredObject\(/);
   });
 
 test('a payload-only synced reference cannot authorize deletion of its original', async () => {

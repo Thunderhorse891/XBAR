@@ -60,6 +60,7 @@ test('saved buyer PDF retains readable source pages, exact originals and its int
     horse,
     profile,
     attachments,
+    documents: [],
     watermark: 'SYNTHETIC BUYER',
     branding: await branding(),
   });
@@ -72,7 +73,7 @@ test('saved buyer PDF retains readable source pages, exact originals and its int
     .lookup(PDFName.of('Names'), PDFArray);
   assert.equal(files.size(), 4, 'one interactive HTML and one exact original');
   const extract = (index: number) => {
-    const file = files.lookup(index, PDFDict).lookup(PDFName.of('EF'), PDFDict).lookup(PDFName.of('F'), PDFRawStream);
+    const file = files.lookup(index, PDFDict).lookup(PDFName.of('EF'), PDFDict).lookup(PDFName.of('F')) as PDFRawStream;
     return file.dict.get(PDFName.of('Filter'))?.toString() === '/FlateDecode'
       ? inflateSync(file.contents)
       : file.contents;
@@ -95,6 +96,7 @@ test('unreadable attachment encoding refuses PDF creation', async () => {
       packet,
       horse,
       profile,
+      documents: [],
       attachments: [
         {
           id: 'bad',

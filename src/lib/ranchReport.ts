@@ -1,4 +1,4 @@
-import { recordedOfferPrice } from './financialPrices.js';
+import { positiveRecordedPrice, recordedOfferPrice } from './financialPrices.js';
 import type { DocumentRecord, ExpenseReceipt, HorseRecord, OwnershipRecord, SalesLead } from '../types/xbar.js';
 import {
   assessRevenueAtRisk,
@@ -362,7 +362,7 @@ export function buildRanchReport(input: RanchReportInput, now: Date = new Date()
   // What the horses cost to buy. Real money the operation has put in, and
   // invisible until now: a horse bought for $10,000 with no receipts against it
   // reported $0 invested in the UI, the CSV and the banker-facing PDF alike.
-  const acquisitionCost = sum(horses.map((horse) => Math.max(0, horse.costBasis ?? 0)));
+  const acquisitionCost = sum(horses.map((horse) => positiveRecordedPrice(horse.costBasis)));
 
   const activeRows = horseRows.filter((horse) => horse.financialStatus !== 'sold');
   const scores = activeRows.map((horse) => horse.readinessScore);

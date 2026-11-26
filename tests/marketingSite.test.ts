@@ -13,6 +13,38 @@ import { subscriptionTierConfig } from '../src/lib/xbarRuntime.js';
 const repoRoot = process.cwd();
 const load = (relPath: string) => import(pathToFileURL(path.join(repoRoot, relPath)).href);
 
+test('public entry heroes are concise and present one primary next step', async () => {
+  const { marketingPages } = await load('scripts/marketing/pages.mjs');
+  const paths = [
+    '/',
+    '/features',
+    '/pricing',
+    '/solutions',
+    '/solutions/breeding-programs',
+    '/solutions/sale-barns',
+    '/solutions/trainers',
+    '/solutions/ranch-operations',
+    '/resources',
+    '/demo',
+  ];
+  for (const path of paths) {
+    const body = marketingPages.find((page: { path: string }) => page.path === path)?.body;
+    assert.ok(body, `Missing entry page ${path}`);
+    const hero = body.match(/<section class="(?:landing-hero|hero\b)[\s\S]*?<\/section>/)?.[0];
+    assert.ok(hero, `${path} is missing its entry hero`);
+    assert.equal(hero.match(/class="[^"]*btn--primary[^"]*"/g)?.length, 1, `${path}: one primary action`);
+    const lead = hero.match(/<p class="(?:landing-lead|lead)"[^>]*>([\s\S]*?)<\/p>/)?.[1];
+    assert.ok(
+      lead &&
+        lead
+          .replace(/<[^>]+>/g, '')
+          .trim()
+          .split(/\s+/).length <= 30,
+      `${path}: concise lead`,
+    );
+  }
+});
+
 type MarketingPlan = {
   tier: string;
   monthlyRate: number;
@@ -273,7 +305,7 @@ test('the ungated tour distinguishes example screens from account signup', async
   const demo = marketingPages.find((page) => page.path === '/demo')!;
   assert.match(demo.body, /No account is needed to view this tour/);
   assert.match(demo.body, /create an XBAR account/);
-  assert.match(demo.body, /href="\/app\/login\?mode=signup"[^>]*>Create an account/);
+  assert.match(demo.body, /href="\/app\/login\?mode=signup"[^>]*>Start free/);
   assert.doesNotMatch(
     demo.body,
     /requires no cloud account|no cloud account required|Open a local-first workspace|One click, runs in your browser/,

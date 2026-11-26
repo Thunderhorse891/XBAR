@@ -172,27 +172,42 @@ test('authenticated annual amount and legacy annual mapping survive disabled new
 });
 
 test('historical Professional, Ranch Ops and Enterprise rates survive public repricing', () => {
-  for (const [tier, monthly, annual] of [
-    ['Professional', 29, 290],
-    ['Ranch Ops', 79, 790],
-    ['Enterprise', 199, 1990],
-  ]) {
-    const stored = { tier, monthly_rate: monthly, payload: { monthlyRate: monthly, annualRate: annual } };
-    const profile = buildSubscriptionProfile({ tier, billingStatus: 'active', existingProfile: stored });
-    assert.equal(profile.monthlyRate, monthly);
-    assert.equal(profile.annualRate, annual);
-    assert.equal(profile.tier, tier);
-    assert.equal(
-      buildSubscriptionProfile({
-        tier,
-        billingStatus: 'active',
-        billedPrice: {
-          currency: 'usd',
-          unit_amount: monthly * 100,
-          recurring: { interval: 'month', interval_count: 1 },
-        },
-      }).monthlyRate,
-      monthly,
-    );
+  const previousLegacyIds = process.env.STRIPE_LEGACY_PRICE_IDS;
+  process.env.STRIPE_LEGACY_PRICE_IDS =
+    'price_historic_pro=Professional:monthly,price_historic_ranch=Ranch Ops:monthly,price_historic_enterprise=Enterprise:monthly';
+  try {
+    for (const [tier, monthly, annual] of [
+      ['Professional', 29, 290],
+      ['Ranch Ops', 79, 790],
+      ['Enterprise', 199, 1990],
+    ]) {
+      const priceId = {
+        Professional: 'price_historic_pro',
+        'Ranch Ops': 'price_historic_ranch',
+        Enterprise: 'price_historic_enterprise',
+      }[tier];
+      const stored = { tier, monthly_rate: monthly, payload: { monthlyRate: monthly, annualRate: annual } };
+      const profile = buildSubscriptionProfile({ tier, billingStatus: 'active', existingProfile: stored });
+      assert.equal(profile.monthlyRate, monthly);
+      assert.equal(profile.annualRate, annual);
+      assert.equal(profile.tier, tier);
+      assert.equal(
+        buildSubscriptionProfile({
+          tier,
+          billingStatus: 'active',
+          priceId,
+          billedPrice: {
+            id: priceId,
+            currency: 'usd',
+            unit_amount: monthly * 100,
+            recurring: { interval: 'month', interval_count: 1 },
+          },
+        }).monthlyRate,
+        monthly,
+      );
+    }
+  } finally {
+    if (previousLegacyIds === undefined) delete process.env.STRIPE_LEGACY_PRICE_IDS;
+    else process.env.STRIPE_LEGACY_PRICE_IDS = previousLegacyIds;
   }
 });

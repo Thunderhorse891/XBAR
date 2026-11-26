@@ -1437,5 +1437,5 @@ test('the Reports route uses the report-specific gate for analytics and both exp
   assert.match(source, /const handlePdf = async \(\) => \{[\s\S]*?if \(locked\) return;/);
   assert.match(source, /const handleCsv = async \(\) => \{[\s\S]*?if \(locked\) return;/);
   assert.match(source, /requestFeatureUpgrade\('reports'\)/);
-  assert.match(source, /Reports automatically calculated from your records, with PDF and spreadsheet export\./);
+  assert.match(source, /Capital, margins, and sale blockers from your saved records\. Export a PDF or spreadsheet\./);
 });

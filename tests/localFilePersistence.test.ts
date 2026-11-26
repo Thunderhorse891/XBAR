@@ -105,7 +105,7 @@ test('a workspace with no cloud identity still produces a packet', async () => {
   );
   assert.match(
     source,
-    /storeLocalFile\(\s*new Blob\(\[localPacket\.html\], \{ type: 'text\/html' \}\)/,
+    /storeLocalFile\(\s*new Blob\(\[new Uint8Array\(localPdf\.bytes\)\], \{ type: 'application\/pdf' \}\)/,
     'the generated packet must be kept on this device, not only as an object URL',
   );
   assert.doesNotMatch(

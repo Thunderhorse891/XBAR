@@ -659,7 +659,7 @@ export async function renderReportPdf(
     540,
     7.5,
   );
-  paragraph(
+  const definitionsHeight = paragraph(
     'Break-even = recorded acquisition + linked spend. Profit = asking - break-even; margin = profit / asking. Floor = break-even + 15%, rounded up to $100, matching Sales. No future carry is assumed. Horse figures exclude unallocated overhead. Margin bands: High 30% or more, Medium 15-29%, Low under 15%.',
     36,
     analysisY + 148,
@@ -667,17 +667,27 @@ export async function renderReportPdf(
     7.5,
   );
 
-  // Complete detail is retained for large workspaces instead of silently dropping rows.
-  if (report.categories.length > 3 || decision.actions.length > 3 || extendedActions || report.anomalies.length) {
-    newPage('Action & spending detail', 'Workspace-derived follow-through');
-    let y = 130;
-    for (const [i, action] of decision.actions.entries()) {
+  // Continue only the actions not already shown in full on the dashboard.
+  // Use the available economics-page space before adding another sheet.
+  const detailActions = decision.actions
+    .map((action, index) => ({ action, index }))
+    .filter(({ action, index }) => index >= 3 || wrap(action, 505, 9).length > 2);
+  if (report.categories.length > 3 || detailActions.length || report.anomalies.length) {
+    let y = analysisY + 148 + definitionsHeight + 24;
+    if (y > 640) {
+      newPage('Action & spending detail', 'Workspace-derived follow-through');
+      y = 130;
+    } else {
+      heading('Action & spending detail', 36, y);
+      y += 24;
+    }
+    for (const { index, action } of detailActions) {
       const height = wrap(action, 510, 9).length * 12 + 12;
       if (y + height > 700) {
         newPage('Action detail', 'Continued');
         y = 130;
       }
-      y += paragraph(`${i + 1}. ${action}`, 36, y, 540, 9, ink) + 12;
+      y += paragraph(`${index + 1}. ${action}`, 36, y, 540, 9, ink) + 12;
     }
     const extraRows =
       report.categories.length > 3

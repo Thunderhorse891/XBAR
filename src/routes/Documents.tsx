@@ -17,6 +17,7 @@ import { ContextMenu } from '@/components/ContextMenu';
 import { Panel, Pill } from '@/components/app-ui';
 import { EmptyState } from '@/components/EmptyState';
 import { SalePacketWizard } from '@/components/SalePacketWizard';
+import { SavedPacketDownload } from '@/components/SavedPacketDownload';
 import { billingPath, billingPathForTier } from '@/lib/billingRoutes';
 import { openStoredFileInTab } from '@/lib/openStoredFile';
 import { hasStoredFile, storedFileLabel } from '@/lib/storedFiles';
@@ -1526,6 +1527,7 @@ export default function Documents() {
                               {openingPacketId === packet.id ? 'Opening...' : 'Open packet'}
                             </button>
                           ) : null}
+                          {packet.localFileKey ? <SavedPacketDownload packet={packet} /> : null}
                           <Pill
                             tone={
                               packet.status === 'shared' ? 'blue' : packet.status === 'generated' ? 'blue' : 'amber'

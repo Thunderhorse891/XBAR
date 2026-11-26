@@ -15,7 +15,8 @@ test('cancel is only available for confirmed incomplete uploads before any compl
 test('Settings adds bounded recovery without replacing existing settings or touching heroes', () => {
   const settings = readFileSync('src/routes/Settings.tsx', 'utf8');
   assert.equal(settings.match(/<UploadRecoveryPanel \/>/g)?.length, 1);
-  assert(settings.includes('Delete account'));
+  assert(settings.includes('<AccountDeletionPanel />'));
+  assert(readFileSync('src/components/AccountDeletionPanel.tsx', 'utf8').includes('Delete account'));
   assert(settings.includes('Export backup'));
   const ui = readFileSync('src/components/UploadRecoveryPanel.tsx', 'utf8');
   assert.match(ui, /listReservedUploadRecovery\(target\)/);
