@@ -33,6 +33,11 @@ declare module '*/api/_lib/pdf.js' {
   }): Promise<Uint8Array>;
 
   export function asField(part: string): { label: string; value: string } | null;
+  export function assemblePacketPdf(input: {
+    coverBytes: Uint8Array;
+    attachments?: { bytes: Uint8Array; mimeType: string; label: string }[];
+    watermarkText?: string;
+  }): Promise<Uint8Array>;
   export function fieldsInLine(line: string): { label: string; value: string }[] | null;
   export function wrapLine(text: string, font: unknown, size: number, maxWidth: number): string[];
 }

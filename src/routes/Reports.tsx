@@ -471,6 +471,31 @@ export default function Reports() {
             />
           </div>
 
+          <Panel
+            className="ops-panel"
+            title="Reconcile your capital"
+            description="Horse-level investment + unallocated overhead + unmatched receipt links = total invested. Horse margins exclude overhead and unmatched costs."
+          >
+            <dl className="report-reconciliation">
+              <div>
+                <dt>Horse-level investment</dt>
+                <dd>{formatCurrency(report.money.investedInHorses)}</dd>
+              </div>
+              <div>
+                <dt>Unallocated overhead</dt>
+                <dd>{formatCurrency(report.money.unallocatedToDate)}</dd>
+              </div>
+              <div>
+                <dt>Unmatched horse links</dt>
+                <dd>{formatCurrency(report.money.unmatchedHorseSpend)}</dd>
+              </div>
+              <div>
+                <dt>Total invested</dt>
+                <dd>{formatCurrency(report.money.investedToDate)}</dd>
+              </div>
+            </dl>
+          </Panel>
+
           {report.risk.items.length > 0 ? (
             <Panel
               className="ops-panel"
@@ -662,7 +687,7 @@ export default function Reports() {
           </div>
           {report.documentsToReview > 0 ? (
             <button className="button button--ghost button--block" type="button" onClick={() => navigate('/documents')}>
-              {report.documentsToReview} document{report.documentsToReview === 1 ? '' : 's'} to review
+              {report.documentsAwaitingReview} awaiting review / {report.documentsProcessing} processing
             </button>
           ) : null}
         </Panel>

@@ -38,6 +38,58 @@ const branding = async () => ({
   watermark: await readFile('public/brand/xbar-report-watermark.png'),
 });
 
+test('capital reconciles horse rows, unallocated overhead and unmatched receipt links', async () => {
+  const input = fixture(2);
+  input.expenseReceipts.push(
+    ...([
+      { id: 'ranch-overhead', amount: 900, category: 'Feed', receiptDate: '2026-08-02' },
+      { id: 'unmatched-link', horseId: 'absent-horse', amount: 200, category: 'Feed', receiptDate: '2026-09-02' },
+    ] as unknown as RanchReportInput['expenseReceipts']),
+  );
+  const report = buildRanchReport(input, now);
+  assert.equal(report.money.unallocatedToDate, 900);
+  assert.equal(report.money.unmatchedHorseSpend, 200);
+  assert.equal(
+    report.money.investedInHorses,
+    report.horses.reduce((sum, row) => sum + row.investedToDate, 0),
+  );
+  assert.equal(
+    report.money.investedToDate,
+    report.money.investedInHorses + report.money.unallocatedToDate + report.money.unmatchedHorseSpend,
+  );
+  const bytes = await renderReportPdf(report, 'Synthetic accounting fixture', await branding());
+  const text = drawn(bytes)
+    .map((item) => item.text)
+    .join(' ');
+  assert.match(text, /CAPITAL RECONCILIATION/);
+  assert.match(text, /Unallocated overhead/);
+  assert.match(text, /Unmatched horse links/);
+  assert.match(text, /\$900/);
+  assert.match(text, /\$200/);
+  await assertFits(bytes);
+});
+
+test('document queue separates processing from review without counting either as missing', async () => {
+  const input = fixture(1);
+  input.documents = [
+    { id: 'queued', type: 'Registration', state: 'Queued' },
+    { id: 'review', type: 'Registration', state: 'Needs Review' },
+    { id: 'matched', type: 'Vet Record', state: 'Matched' },
+    { id: 'archived', type: 'Registration', state: 'Archived' },
+  ] as RanchReportInput['documents'];
+  const report = buildRanchReport(input, now);
+  assert.equal(report.documentsProcessing, 1);
+  assert.equal(report.documentsAwaitingReview, 2);
+  assert.equal(report.documentsToReview, report.documentsProcessing + report.documentsAwaitingReview);
+  const bytes = await renderReportPdf(report, 'Synthetic document queue', await branding());
+  const text = drawn(bytes)
+    .map((item) => item.text)
+    .join(' ');
+  assert.match(text, /2 files awaiting review/);
+  assert.match(text, /1 file processing/);
+  await assertFits(bytes);
+});
+
 // Inspect actual PDF operators: no external rasterizer needed in CI.
 function drawn(bytes: Uint8Array) {
   const raw = Buffer.from(bytes).toString('latin1');

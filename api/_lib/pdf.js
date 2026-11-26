@@ -344,12 +344,12 @@ export async function createSectionedPdf(input) {
   const brandWatermark = input.branding ? await pdf.embedPng(input.branding.watermark) : null;
   const decoratePage = (target) => {
     if (!brandWatermark) return;
-    const size = brandWatermark.scaleToFit(440, 280);
+    const size = brandWatermark.scaleToFit(130, 70);
     target.drawImage(brandWatermark, {
-      x: (PAGE_WIDTH - size.width) / 2,
-      y: (PAGE_HEIGHT - size.height) / 2,
+      x: PAGE_WIDTH - MARGIN - size.width,
+      y: PAGE_HEIGHT - MARGIN - size.height,
       ...size,
-      opacity: 0.065,
+      opacity: 0.025,
     });
   };
 
@@ -403,10 +403,9 @@ export async function createSectionedPdf(input) {
     y -= 8;
   };
 
-  if (brandLogo) {
+  if (brandLogo && !customerImage) {
     const size = brandLogo.scaleToFit(120, 55);
     page.drawImage(brandLogo, { x: MARGIN, y: y - size.height, ...size });
-    page.drawText('XBAR™', { x: MARGIN + size.width + 14, y: y - 20, size: 13, font: bold, color: ACCENT });
     y -= size.height + 8;
   }
 

@@ -84,6 +84,7 @@ export default function Documents() {
   const updateHorse = useXbarStore((state) => state.updateHorse);
   const recordAuditEvent = useXbarStore((state) => state.recordAuditEvent);
   const pushToast = useUiStore((state) => state.pushToast);
+  const openQuickCreate = useUiStore((state) => state.openQuickCreate);
   const canUploadDocuments = useCurrentRoleCapability('uploadDocuments');
   const canReviewDocuments = useCurrentRoleCapability('reviewDocuments');
   // Applying OCR facts writes to the horse record (updateHorse → editHorse),
@@ -689,6 +690,47 @@ export default function Documents() {
           setSearchParams(next, { preventScrollReset: true });
         }}
       />
+
+      <section className="document-workbench" aria-labelledby="document-handoff-title">
+        <div>
+          <h2 id="document-handoff-title">Prepare the handoff</h2>
+          <p>
+            {requestedHorse
+              ? `Check ${requestedHorse.name}'s saved fields, then choose the records to share.`
+              : 'Choose a horse above to edit its fields and prepare a buyer packet.'}
+          </p>
+        </div>
+        <div className="document-workbench__actions">
+          {requestedHorse && canEditHorses ? (
+            <button
+              className="button button--ghost"
+              type="button"
+              onClick={() => openQuickCreate({ action: 'Edit Horse', horseId: requestedHorse.id })}
+            >
+              Edit horse fields
+            </button>
+          ) : !horses.length && canCreateHorses ? (
+            <button
+              className="button button--ghost"
+              type="button"
+              onClick={() => openQuickCreate({ action: 'Add Horse' })}
+            >
+              Add a horse
+            </button>
+          ) : null}
+          <button
+            className="button button--primary"
+            type="button"
+            disabled={!requestedHorse}
+            onClick={() => requestedHorse && setPacketBuildingHorseId(requestedHorse.id)}
+          >
+            Prepare buyer packet
+          </button>
+          <button className="button button--ghost" type="button" onClick={() => navigate('/reports')}>
+            Ranch report
+          </button>
+        </div>
+      </section>
 
       <section className="surface-panel">
         <div

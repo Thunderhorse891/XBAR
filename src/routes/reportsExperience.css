@@ -398,3 +398,25 @@
     grid-template-columns: 1fr;
   }
 }
+.report-reconciliation {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 16px;
+  margin: 0;
+}
+.report-reconciliation dt {
+  color: var(--xbar-steel);
+  font-size: 14px;
+}
+.report-reconciliation dd {
+  color: var(--xbar-graphite);
+  margin: 8px 0 0;
+  font-size: 24px;
+  font-weight: 700;
+  overflow-wrap: anywhere;
+}
+@media (max-width: 720px) {
+  .report-reconciliation {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}

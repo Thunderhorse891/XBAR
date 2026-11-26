@@ -1,7 +1,7 @@
 import { ASSET_CATEGORIES, HORSE_SEGMENTS } from '@/lib/recordOptions';
 import { documentIntakeDisclosure } from '@/features/documents/constants';
 import type { ReactNode } from 'react';
-import { useEffect, useLayoutEffect, useRef, useState } from 'react';
+import { useEffect, useId, useLayoutEffect, useRef, useState } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { FileUp } from 'lucide-react';
 import { ActionButton, SlideOverDrawer } from '@/components/saas';
@@ -46,17 +46,27 @@ export function Text({
   hint?: string;
   type?: 'text' | 'date';
 }) {
+  const fieldId = useId();
   return (
-    <label>
-      <span className="xs-field-label">{label}</span>
+    <label htmlFor={fieldId}>
+      <span id={`${fieldId}-label`} className="xs-field-label">
+        {label}
+      </span>
       <input
+        id={fieldId}
+        aria-labelledby={`${fieldId}-label`}
+        aria-describedby={hint ? `${fieldId}-hint` : undefined}
         className="xs-input"
         type={type}
         placeholder={placeholder}
         value={value}
         onChange={(e) => onChange(e.target.value)}
       />
-      {hint ? <span className="xs-field-hint">{hint}</span> : null}
+      {hint ? (
+        <span id={`${fieldId}-hint`} className="xs-field-hint">
+          {hint}
+        </span>
+      ) : null}
     </label>
   );
 }
@@ -94,11 +104,20 @@ export function Pick({
   onChange: (v: string) => void;
   options: readonly string[] | { value: string; label: string }[];
 }) {
+  const fieldId = useId();
   const normalized = options.map((option) => (typeof option === 'string' ? { value: option, label: option } : option));
   return (
-    <label>
-      <span className="xs-field-label">{label}</span>
-      <select className="xs-select" value={value} onChange={(e) => onChange(e.target.value)}>
+    <label htmlFor={fieldId}>
+      <span id={`${fieldId}-label`} className="xs-field-label">
+        {label}
+      </span>
+      <select
+        id={fieldId}
+        aria-labelledby={`${fieldId}-label`}
+        className="xs-select"
+        value={value}
+        onChange={(e) => onChange(e.target.value)}
+      >
         {normalized.map((option) => (
           <option key={option.value} value={option.value}>
             {option.label}

@@ -50,6 +50,8 @@ export function ranchReportToCsv(report: RanchReport, ranchName = ''): string {
   lines.push(csvRow(['Of that, purchase prices', report.money.acquisitionCost]));
   lines.push(csvRow(['Of that, recorded spend', report.money.receiptSpend]));
   lines.push(csvRow(['Invested in horses', report.money.investedInHorses]));
+  lines.push(csvRow(['Unallocated overhead to date', report.money.unallocatedToDate]));
+  lines.push(csvRow(['Unmatched horse receipt links', report.money.unmatchedHorseSpend]));
   lines.push(csvRow(['Invested this month', report.money.investedThisMonth]));
   lines.push(csvRow(['Unallocated overhead this month', report.money.unallocatedThisMonth]));
   lines.push(
@@ -74,6 +76,8 @@ export function ranchReportToCsv(report: RanchReport, ranchName = ''): string {
   );
   lines.push(csvRow(['Deposits held', report.money.depositsHeld]));
   lines.push(csvRow(['Documents to review', report.documentsToReview]));
+  lines.push(csvRow(['Existing files awaiting review', report.documentsAwaitingReview]));
+  lines.push(csvRow(['Existing files processing', report.documentsProcessing]));
   lines.push('');
 
   lines.push(csvRow(['Horse economics']));

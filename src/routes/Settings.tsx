@@ -117,6 +117,11 @@ export default function Settings() {
   const signOutCloud = useCloudStore((state) => state.signOut);
   const navigate = useNavigate();
   const location = useLocation();
+  const requestedPacketReturn = new URLSearchParams(location.search).get('returnTo');
+  const packetReturn =
+    requestedPacketReturn && /^\/sale-packets\?horse=[^&?#]+&resume=1$/.test(requestedPacketReturn)
+      ? requestedPacketReturn
+      : '';
   const pushToast = useUiStore((state) => state.pushToast);
   const canManageSettings = useCurrentRoleCapability('manageSettings');
   const canSyncCloud = useCurrentRoleCapability('syncCloud');
@@ -1210,6 +1215,16 @@ export default function Settings() {
           </div>
         </Panel>
 
+        {packetReturn ? (
+          <button
+            className="button button--ghost"
+            type="button"
+            disabled={profileSaving || logoLoading}
+            onClick={() => navigate(packetReturn)}
+          >
+            Return to packet
+          </button>
+        ) : null}
         <Panel eyebrow="Ranch access" title="Access">
           <div className="stack-list">
             <div className="stack-item">
