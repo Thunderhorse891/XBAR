@@ -33,6 +33,8 @@ test('horse file inventory follows real local records, async state and review pe
   await page.getByRole('menuitem', { name: 'Add Horse', exact: true }).click();
   const drawer = page.getByRole('dialog', { name: 'Add Horse' });
   await drawer.getByPlaceholder('e.g. THR Copper Canyon').fill('Copper Creek Fictional');
+  await drawer.getByLabel('Sex', { exact: true }).selectOption('Mare');
+  await drawer.getByLabel('Segment', { exact: true }).selectOption('Sale Prospect');
   await drawer.getByRole('button', { name: 'Add Horse', exact: true }).click();
   await page.waitForURL(/\/horses\//);
   await page.evaluate(async () => {

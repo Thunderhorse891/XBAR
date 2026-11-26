@@ -82,6 +82,8 @@ for (const width of [390, 1440]) {
     await page.getByRole('menuitem', { name: 'Add Horse', exact: true }).click();
     const drawer = page.getByRole('dialog', { name: 'Add Horse', exact: true });
     await drawer.getByPlaceholder('e.g. THR Copper Canyon').fill('Copper Canyon');
+    await drawer.getByLabel('Sex', { exact: true }).selectOption('Mare');
+    await drawer.getByLabel('Segment', { exact: true }).selectOption('Sale Prospect');
     await drawer.getByRole('button', { name: 'Add Horse', exact: true }).click();
     await expect(page).toHaveURL(/\/horses\//);
     await page.goto('/app/horses');

@@ -16,6 +16,7 @@ async function addHorse(page: Page, name = 'Young Test Horse', segment = 'Young 
   await page.getByRole('menuitem', { name: 'Add Horse' }).click();
   const drawer = page.getByRole('dialog', { name: 'Add Horse' });
   await drawer.getByPlaceholder('e.g. THR Copper Canyon').fill(name);
+  await drawer.getByLabel('Sex', { exact: true }).selectOption('Mare');
   await drawer.getByLabel('Segment').selectOption(segment);
   await drawer.getByRole('button', { name: 'Add Horse', exact: true }).click();
   await expect(page).toHaveURL(/\/horses\//);

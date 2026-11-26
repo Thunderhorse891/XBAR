@@ -18,6 +18,8 @@ async function createTestHorse(page: Page) {
   await page.getByRole('menuitem', { name: 'Add Horse' }).click();
   const drawer = page.getByRole('dialog', { name: 'Add Horse' });
   await drawer.getByPlaceholder('e.g. THR Copper Canyon').fill('Archive Test Horse');
+  await drawer.getByLabel('Sex', { exact: true }).selectOption('Mare');
+  await drawer.getByLabel('Segment', { exact: true }).selectOption('Sale Prospect');
   await drawer.getByRole('button', { name: 'Add Horse', exact: true }).click();
   await expect(page).toHaveURL(/\/horses\//);
   const profileUrl = page.url();

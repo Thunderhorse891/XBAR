@@ -62,6 +62,8 @@ async function seedHorse(page: Page, name = 'Test Prospect') {
   const drawer = page.getByRole('dialog', { name: 'Add Horse' });
   await expect(drawer).toBeVisible();
   await drawer.getByPlaceholder('e.g. THR Copper Canyon').fill(name);
+  await drawer.getByLabel('Sex', { exact: true }).selectOption('Mare');
+  await drawer.getByLabel('Segment', { exact: true }).selectOption('Sale Prospect');
   await drawer.getByRole('button', { name: 'Add Horse' }).click();
   await expect(page).toHaveURL(/\/horses\//, { timeout: 15_000 });
 }

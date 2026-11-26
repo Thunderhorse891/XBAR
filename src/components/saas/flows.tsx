@@ -412,7 +412,15 @@ export function GlobalCreateDrawer() {
       reportError('Enter a name to add the horse.');
       return;
     }
-    const segment = (f.segment as HorseSegment) ?? 'Sale Prospect';
+    if (!HORSE_SEGMENTS.includes(f.segment as HorseSegment)) {
+      reportError('Choose a record group before adding the horse.');
+      return;
+    }
+    if (!SEX_OPTIONS.includes(f.sex as HorseSex)) {
+      reportError("Choose the horse's sex before adding the horse.");
+      return;
+    }
+    const segment = f.segment as HorseSegment;
     const owner =
       (f.owner ?? '').trim() || workspaceProfile.defaultOwnerName || workspaceProfile.businessName || 'Ranch owner';
     const ownerEntity = workspaceProfile.defaultOwnerEntity || workspaceProfile.businessName || owner;
@@ -421,7 +429,7 @@ export function GlobalCreateDrawer() {
       barnName: (f.barnName ?? '').trim() || name,
       segment,
       status: SEGMENT_STATUS[segment] ?? 'In Training',
-      sex: (f.sex as HorseSex) ?? 'Mare',
+      sex: f.sex as HorseSex,
       owner,
       ownerEntity,
       barn: (f.loc ?? '').trim() || defaultBarn,
@@ -651,11 +659,19 @@ export function GlobalCreateDrawer() {
           <Text label="Name" placeholder="e.g. THR Copper Canyon" value={f.name ?? ''} onChange={set('name')} />
           <Pick
             label="Segment"
-            value={f.segment ?? 'Sale Prospect'}
+            value={f.segment ?? ''}
             onChange={set('segment')}
-            options={HORSE_SEGMENTS}
+            options={[
+              { value: '', label: 'Choose record group' },
+              ...HORSE_SEGMENTS.map((value) => ({ value, label: value })),
+            ]}
           />
-          <Pick label="Sex" value={f.sex ?? 'Mare'} onChange={set('sex')} options={SEX_OPTIONS} />
+          <Pick
+            label="Sex"
+            value={f.sex ?? ''}
+            onChange={set('sex')}
+            options={[{ value: '', label: 'Choose sex' }, ...SEX_OPTIONS.map((value) => ({ value, label: value }))]}
+          />
           <Text
             label="Owner"
             placeholder={workspaceProfile.defaultOwnerName || 'Legal owner'}

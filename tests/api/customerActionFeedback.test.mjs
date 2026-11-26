@@ -23,6 +23,33 @@ function submit(f, label = 'Add Equipment') {
 const tick = () => new Promise((resolve) => setImmediate(resolve));
 const toasts = (f) => f.calls.filter(([kind]) => kind === 'toast').map(([, value]) => value);
 
+test('a horse name cannot silently become a mare or a sale prospect; explicit choices retain the draft', async () => {
+  const stored = [];
+  const f = await drawer({ action: 'Add Horse' });
+  f.state.addHorse = (input) => {
+    stored.push(input);
+    f.receipt = { name: 'xbar-live-workspace', completed: Promise.resolve(true) };
+    return { ok: true, id: 'new-horse', message: 'Horse added.' };
+  };
+  field(f, 'Name', 'Copper Fictional');
+  await submit(f, 'Add Horse');
+  f.render();
+  assert.equal(stored.length, 0);
+  assert.equal(nodes(f.tree, (n) => n.props.label === 'Name')[0].props.value, 'Copper Fictional');
+  assert.match(nodes(f.tree, (n) => n.props.role === 'alert')[0].props.children, /record group/);
+  field(f, 'Segment', 'Sale Prospect');
+  await submit(f, 'Add Horse');
+  f.render();
+  assert.equal(stored.length, 0);
+  assert.match(nodes(f.tree, (n) => n.props.role === 'alert')[0].props.children, /sex/);
+  field(f, 'Sex', 'Gelding');
+  await submit(f, 'Add Horse');
+  assert.equal(stored.length, 1);
+  assert.equal(stored[0].sex, 'Gelding');
+  assert.equal(stored[0].segment, 'Sale Prospect');
+  assert.equal(stored[0].status, 'Sale Prep');
+});
+
 test('create validation stays visible in the form instead of disappearing with its toast', async () => {
   const f = await drawer();
   await submit(f);

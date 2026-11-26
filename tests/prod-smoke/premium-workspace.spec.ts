@@ -24,6 +24,8 @@ async function addHorse(page: Page) {
   await page.getByRole('menuitem', { name: 'Add Horse' }).click();
   const drawer = page.getByRole('dialog', { name: 'Add Horse' });
   await drawer.getByPlaceholder('e.g. THR Copper Canyon').fill('Copper Canyon');
+  await drawer.getByLabel('Sex', { exact: true }).selectOption('Mare');
+  await drawer.getByLabel('Segment', { exact: true }).selectOption('Sale Prospect');
   await drawer.getByRole('button', { name: 'Add Horse', exact: true }).click();
   await expect(page.locator('.xs-objhead__name')).toHaveText(/copper canyon/i);
   await expect(page.locator('.xs-objhead__meta')).toContainText('Age not recorded');

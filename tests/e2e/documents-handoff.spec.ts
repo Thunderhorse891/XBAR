@@ -173,6 +173,12 @@ for (const width of [390, 1440]) {
     await page.getByRole('button', { name: 'Add a horse', exact: true }).click();
     let drawer = page.getByRole('dialog', { name: 'Add Horse' });
     await drawer.getByPlaceholder('e.g. THR Copper Canyon').fill('Copper Creek Fictional');
+    await drawer.getByRole('button', { name: 'Add Horse', exact: true }).click();
+    await expect(drawer).toContainText('Choose a record group before adding the horse.');
+    await expect(drawer.getByPlaceholder('e.g. THR Copper Canyon')).toHaveValue('Copper Creek Fictional');
+    await drawer.getByLabel('Segment', { exact: true }).selectOption('Sale Prospect');
+    await drawer.getByRole('button', { name: 'Add Horse', exact: true }).click();
+    await expect(drawer).toContainText("Choose the horse's sex before adding the horse.");
     await drawer.getByLabel('Sex', { exact: true }).selectOption('Gelding');
     await drawer.getByRole('button', { name: 'Add Horse', exact: true }).click();
     await expect(page).toHaveURL(/\/horses\//);
@@ -293,6 +299,16 @@ for (const width of [390, 1440]) {
     await settleDeviceWrite(page);
     await page.reload();
     await expect(page.getByRole('heading', { name: 'Sale Packets', exact: true })).toBeVisible();
+    const savedRow = page.locator('.sale-packet-row').filter({
+      has: page.getByRole('button', { name: 'Download saved packet', exact: true }),
+    });
+    expect((await savedRow.locator('.xs-mrow__main').boundingBox())!.width).toBeGreaterThanOrEqual(
+      Math.min(300, width * 0.6),
+    );
+    if (width === 390)
+      expect(
+        (await savedRow.getByRole('button', { name: 'Download saved packet', exact: true }).boundingBox())!.height,
+      ).toBeGreaterThanOrEqual(44);
     const savedDownloadPromise = page.waitForEvent('download');
     await page.getByRole('button', { name: 'Download saved packet', exact: true }).click();
     const savedDownload = await savedDownloadPromise;

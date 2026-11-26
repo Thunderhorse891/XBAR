@@ -18,6 +18,8 @@ async function setupHorse(page: Page) {
   await page.getByRole('menuitem', { name: 'Add Horse', exact: true }).click();
   const drawer = page.getByRole('dialog', { name: 'Add Horse', exact: true });
   await drawer.getByPlaceholder('e.g. THR Copper Canyon').fill('Blue Dolly');
+  await drawer.getByLabel('Sex', { exact: true }).selectOption('Mare');
+  await drawer.getByLabel('Segment', { exact: true }).selectOption('Sale Prospect');
   await drawer.getByRole('button', { name: 'Add Horse', exact: true }).click();
   await expect(page.locator('.xs-objhead__name')).toHaveText('BLUE DOLLY');
 }

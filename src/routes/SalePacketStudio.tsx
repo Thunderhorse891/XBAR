@@ -12,6 +12,7 @@ import { isNavigableFileUrl } from '@/lib/navigableFileUrl';
 import { buildSaleReadinessScore } from '@/lib/saleReadinessScore';
 import { packetReadinessAction } from '@/lib/salePacketGuidance';
 import { buildBuyerPacketReleaseGate } from '@/lib/buyerPacketReleaseGate';
+import './salePacketStudio.css';
 
 function formatDate(value: string) {
   const date = new Date(value);
@@ -130,7 +131,7 @@ export default function SalePacketStudio() {
       <Card title="Horse readiness">
         <div className="xs-mlist">
           {readiness.map(({ horse, blockers, state, readyDocs, repairs }) => (
-            <div key={horse.id} className="xs-mrow">
+            <div key={horse.id} className="xs-mrow sale-packet-row">
               <span className="xs-mrow__main" style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
                 <span className="xs-mrow__title">{horse.name}</span>
                 <span className="xs-mrow__meta">
@@ -168,7 +169,7 @@ export default function SalePacketStudio() {
             {salePacketBuilds.map((packet) => {
               const horse = horses.find((h) => h.id === packet.horseId);
               return (
-                <div key={packet.id} className="xs-mrow">
+                <div key={packet.id} className="xs-mrow sale-packet-row">
                   <span className="xs-mrow__main" style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
                     <span className="xs-mrow__title">
                       {horse?.name ?? 'Horse record removed'} · {formatDate(packet.createdAt)}
