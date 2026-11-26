@@ -280,6 +280,7 @@ test('setup cloud failure is announced, retains details and offers an independen
   f.state.initializeWorkspace = (profile) => {
     originals.push(profile);
     f.state.workspaceProfile = { ...profile, setupCompleteAt: 'synthetic-time' };
+    f.receipt = { name: 'xbar-live-workspace', completed: Promise.resolve(true) };
     return { ok: true, message: 'Created on this device.' };
   };
   f.state.exportWorkspaceBackup = () => ({ workspace: f.state.workspaceProfile });
@@ -308,6 +309,7 @@ test('setup cloud failure is announced, retains details and offers an independen
       release = done;
     });
   const retry = submit();
+  await new Promise((done) => setImmediate(done));
   f.render();
   assert.equal(
     nodes(f.tree, (n) => n.props.role === 'alert').length,

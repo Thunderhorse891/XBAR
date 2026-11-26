@@ -5,6 +5,12 @@ import { XbarMark } from '@/components/BrandMark';
 import { billingPathForTier } from '@/lib/billingRoutes';
 import { applyWorkspaceProfileDefaults } from '@/lib/workspaceSetupDefaults';
 import { saveWorkspaceBackupToCloud } from '@/lib/cloudWorkspace';
+import {
+  deviceWorkspaceSaveUnconfirmed,
+  didCommitWorkspaceWriteAfter,
+  getWorkspacePersistReceipt,
+  type WorkspacePersistReceipt,
+} from '@/lib/workspaceStorage';
 import { isStaticPreviewHost, isSupabaseConfigured } from '@/lib/platformConfig';
 import { useCloudStore } from '@/store/useCloudStore';
 import { useUiStore } from '@/store/useUiStore';
@@ -125,6 +131,28 @@ export default function SetupWorkspace() {
     return saved;
   };
 
+  const confirmDeviceCreation = async (previous: WorkspacePersistReceipt | null) => {
+    const identity = useCloudStore.getState();
+    const committed = await didCommitWorkspaceWriteAfter(previous);
+    const current = useCloudStore.getState();
+    const identityChanged =
+      identity.status !== current.status ||
+      identity.session?.user.id !== current.session?.user.id ||
+      identity.workspaceId !== current.workspaceId;
+    if (committed && !identityChanged) return true;
+
+    const message = identityChanged
+      ? 'The account or ranch changed while setup was saving. Reopen the intended workspace before continuing.'
+      : `Your ranch could not be saved on this device. ${deviceWorkspaceSaveUnconfirmed}`;
+    setFormError(message);
+    // The in-memory profile is complete, so keep the automatic setup redirect
+    // blocked until this exact write is confirmed or the customer retries.
+    setCloudSetupBlocked(true);
+    setSaving(false);
+    pushToast({ title: 'Workspace setup not confirmed', message, tone: 'error' });
+    return false;
+  };
+
   const handleSubmit = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     if (signingOut || saving || deletingAccount) return;
@@ -132,18 +160,18 @@ export default function SetupWorkspace() {
     setFormError('');
     setCloudSetupBlocked(false);
 
+    const previous = getWorkspacePersistReceipt();
     const result = initializeWorkspace(applyWorkspaceProfileDefaults(form));
-    pushToast({
-      title: result.ok ? 'Ranch created' : 'Setup blocked',
-      message: result.message,
-      tone: result.ok ? 'success' : 'error',
-    });
 
     if (!result.ok) {
+      pushToast({ title: 'Setup blocked', message: result.message, tone: 'error' });
       setFormError(result.message);
       setSaving(false);
       return;
     }
+
+    if (!(await confirmDeviceCreation(previous))) return;
+    pushToast({ title: 'Ranch created', message: result.message, tone: 'success' });
 
     const cloudSaved = await persistCloudWorkspace();
     if (!cloudSaved.ok) {
@@ -160,8 +188,11 @@ export default function SetupWorkspace() {
     navigate(postSetupPath, { replace: true });
   };
 
-  const handleQuickStart = () => {
+  const handleQuickStart = async () => {
     if (signingOut || saving || deletingAccount) return;
+    setSaving(true);
+    setFormError('');
+    setCloudSetupBlocked(false);
     const businessName = form.businessName.trim() || 'My Ranch LLC';
     const ranchName = form.ranchName.trim() || 'Main Ranch';
     /*
@@ -171,6 +202,7 @@ export default function SetupWorkspace() {
      * form's own submit cannot manufacture a ranch manager or an operations
      * email for a customer who simply left them blank.
      */
+    const previous = getWorkspacePersistReceipt();
     const result = initializeWorkspace(
       applyWorkspaceProfileDefaults({
         ...form,
@@ -183,15 +215,16 @@ export default function SetupWorkspace() {
       }),
     );
 
-    pushToast({
-      title: result.ok ? 'Ranch ready' : 'Setup blocked',
-      message: result.ok ? 'Opening your ranch.' : result.message,
-      tone: result.ok ? 'success' : 'error',
-    });
-
-    if (result.ok) {
-      navigate(postSetupPath, { replace: true });
+    if (!result.ok) {
+      setFormError(result.message);
+      setSaving(false);
+      pushToast({ title: 'Setup blocked', message: result.message, tone: 'error' });
+      return;
     }
+    if (!(await confirmDeviceCreation(previous))) return;
+    pushToast({ title: 'Ranch ready', message: 'Opening your ranch.', tone: 'success' });
+    setSaving(false);
+    navigate(postSetupPath, { replace: true });
   };
 
   const handleSignOut = async () => {

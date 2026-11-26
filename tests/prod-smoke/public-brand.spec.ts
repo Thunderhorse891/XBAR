@@ -11,7 +11,7 @@ const publicPaths = [...marketingPages.map((page) => page.path), '/terms', '/pri
 const mobileDestinations = [
   '/features',
   '/pricing',
-  'mailto:xbarje@gmail.com',
+  '/support',
   '/solutions',
   '/resources',
   '/demo',
@@ -132,10 +132,15 @@ for (const pathname of publicPaths) {
       await page.locator('.landing-mobile-nav > summary').click();
       const menu = page.getByRole('navigation', { name: 'Mobile primary', exact: true });
       await expect(menu.getByRole('link', { name: 'Sign in', exact: true })).toBeVisible();
-      await expect(menu.getByRole('link', { name: 'Help & support', exact: true })).toHaveAttribute(
+      await expect(menu.getByRole('link', { name: 'Help & support', exact: true })).toHaveAttribute('href', '/support');
+      await menu.getByRole('link', { name: 'Help & support', exact: true }).click();
+      await expect(page).toHaveURL(/\/support$/);
+      await expect(page.getByRole('heading', { name: 'Help with XBAR.', exact: true })).toBeVisible();
+      await expect(page.getByRole('link', { name: 'Email support', exact: true })).toHaveAttribute(
         'href',
         'mailto:xbarje@gmail.com',
       );
+      await page.locator('.landing-mobile-nav > summary').click();
       await menu.getByRole('link', { name: 'Pricing', exact: true }).click();
       await expect(page).toHaveURL(/\/pricing$/);
       await expect(page.getByRole('heading', { name: 'Start Free. Grow with your operation.' })).toBeVisible();
