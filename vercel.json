@@ -152,6 +152,10 @@
   ],
   "rewrites": [
     {
+      "source": "/api/storage/uploads",
+      "destination": "/api/documents/storage-uploads"
+    },
+    {
       "source": "/app",
       "destination": "/app.html"
     },
@@ -169,5 +173,13 @@
       "path": "/api/reminders/trial-reminders",
       "schedule": "0 13 * * *"
     }
-  ]
+  ],
+  "functions": {
+    "api/sale-packets.js": {
+      "includeFiles": "public/brand/{xbar-report-horse.png,xbar-original-lockup-480.png,xbar-report-watermark.png}"
+    },
+    "api/documents/*.js": {
+      "includeFiles": "public/brand/{xbar-report-horse.png,xbar-original-lockup-480.png,xbar-report-watermark.png}"
+    }
+  }
 }

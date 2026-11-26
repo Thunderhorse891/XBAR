@@ -14,6 +14,8 @@ async function openHorse(page: Page) {
   await page.getByRole('menuitem', { name: 'Add Horse' }).click();
   const drawer = page.getByRole('dialog', { name: 'Add Horse' });
   await drawer.getByPlaceholder('e.g. THR Copper Canyon').fill('Gallery Test Horse');
+  await drawer.getByLabel('Sex', { exact: true }).selectOption('Mare');
+  await drawer.getByLabel('Segment', { exact: true }).selectOption('Sale Prospect');
   await drawer.getByRole('button', { name: 'Add Horse', exact: true }).click();
   await expect(page).toHaveURL(/\/horses\//);
 }
@@ -123,7 +125,7 @@ test('horse Documents shows linked files without extracted facts and downloads t
     useXbarStore.setState({ documents: [doc], horses: [{ ...horse, documentFacts: [], documents: ['original'] }] });
   });
   await page.getByRole('button', { name: 'Documents', exact: true }).click();
-  const row = page.getByRole('row', { name: 'Horse original library actions' });
+  const row = page.getByRole('group', { name: 'Horse original library actions' });
   await expect(row).toBeVisible();
   await expect(row.getByText('On this device', { exact: true })).toBeVisible();
   await expect(row.getByText('Needs Review', { exact: true })).toBeVisible();
@@ -139,6 +141,6 @@ test('horse Documents shows linked files without extracted facts and downloads t
     fullPage: true,
     animations: 'disabled',
   });
-  await page.getByRole('button', { name: /Upload document for/i }).click();
+  await page.getByRole('button', { name: 'Upload Doc', exact: true }).click();
   await expect(page).toHaveURL(/horse=.*upload=1/);
 });

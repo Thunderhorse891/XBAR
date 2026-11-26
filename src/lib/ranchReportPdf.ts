@@ -223,7 +223,9 @@ export async function renderReportPdf(
             ? 'Prices and costs unknown'
             : 'Partial / prices + costs unknown'
           : 'Partial / unknown prices excluded'
-        : 'Unknown if any priced horse lacks costs',
+        : hasMissingListedCosts
+          ? 'Costs unknown'
+          : 'Before overhead, fees + taxes',
       decision.potentialMargin !== null && decision.potentialMargin < 0 ? red : green,
     ],
     [
@@ -237,7 +239,7 @@ export async function renderReportPdf(
   card(
     'Sale-ready value',
     dollars(money.readyValue),
-    money.unpricedListedCount ? 'Known-price subtotal only' : 'No recorded sale blockers',
+    money.unpricedListedCount ? 'Known-price subtotal only' : 'Horses without recorded blockers',
     36,
     209,
     172,
@@ -328,27 +330,39 @@ export async function renderReportPdf(
     258,
     green,
   );
-  heading('What matters now', 36, 464);
+  heading('CAPITAL RECONCILIATION', 36, 464);
+  const reconciliation = [
+    ['Horse-level investment', money.investedInHorses],
+    ['Unallocated overhead', money.unallocatedToDate],
+    ['Unmatched horse links', money.unmatchedHorseSpend],
+    ['Total invested', money.investedToDate],
+  ] as const;
+  reconciliation.forEach(([label, value], index) => {
+    const x = 36 + index * 138;
+    text(label, x, 485, 8, muted);
+    text(dollars(value), x, 498, 12, index === 3 ? ink : muted, true);
+  });
   paragraph(
-    `${dollars(money.valueAtRisk)} of ${askingValuesComplete ? 'listed asking value' : 'known listed asking value (partial subtotal)'} is held behind recorded sale requirements. Current-month receipts total ${dollars(money.investedThisMonth)}; ${dollars(money.unallocatedThisMonth)} is unallocated overhead. No comparison baseline is on file, so period-over-period change is not shown.`,
+    `Horse rows + unallocated overhead + unmatched links = total invested. This month: ${dollars(money.investedThisMonth)} receipts, including ${dollars(money.unallocatedThisMonth)} unallocated. Horse margins exclude overhead and unmatched costs.${askingValuesComplete ? '' : ' Asking totals show known listed asking value (partial subtotal).'}`,
     36,
-    484,
+    518,
     540,
-    9,
+    8,
     ink,
   );
-  heading('TOP ACTIONS / FROM RANCH RECORDS', 36, 541);
-  let actionY = 563;
+  heading('TOP ACTIONS / FROM RANCH RECORDS', 36, 559);
+  let actionY = 581;
   let extendedActions = false;
   for (const [i, action] of decision.actions.slice(0, 3).entries()) {
     rect(36, actionY, 20, 20, blue);
     text(String(i + 1), 42, actionY + 4, 9, white, true);
     const lines = wrap(action, 505, 9);
-    extendedActions ||= lines.length > 3;
-    const shown = lines.length > 3 ? [...lines.slice(0, 2), '(continued on next page)'] : lines;
+    extendedActions ||= lines.length > 2;
+    const shown = lines.slice(0, 2);
     shown.forEach((s, j) => text(s, 67, actionY + j * 12, 9, ink));
     actionY += Math.max(28, shown.length * 12 + 10);
   }
+  if (extendedActions) text('Full action text continues in Action & spending detail.', 36, actionY + 2, 8, muted);
   paragraph(
     '*Sale-ready reflects recorded ownership, reviewed/current Coggins and medical-review gates, not a guaranteed closing. Potential margin = asking less horse break-even; excludes unallocated overhead, fees and taxes. Estimates are based on recorded data, not an appraisal or audit.',
     36,
@@ -430,7 +444,7 @@ export async function renderReportPdf(
     'Sale readiness & blockers',
     `Known-value subtotals / ${money.unpricedListedCount} listed prices unknown / ${money.unpricedOfferCount} offer prices unknown`,
   );
-  rect(36, 130, 540, 42, pale);
+  rect(36, 130, 540, 48, pale);
   text(
     `${reportCount(decision.blocked.length, 'horse')} blocked  /  ${dollars(money.valueAtRisk)} ${askingValuesComplete ? 'blocked asking value' : 'known blocked asking value'}`,
     47,
@@ -440,16 +454,23 @@ export async function renderReportPdf(
     true,
   );
   text(
-    `${reportCount(decision.missingOwnership.length, 'missing ownership record')}  /  ${reportCount(decision.missingCoggins.length, 'missing Coggins')}  /  ${reportCount(report.documentsToReview, 'file')} awaiting review`,
+    `${reportCount(decision.missingOwnership.length, 'missing ownership record')}  /  ${reportCount(decision.missingCoggins.length, 'missing Coggins')}`,
     47,
     157,
+    8,
+    muted,
+  );
+  text(
+    `${reportCount(report.documentsAwaitingReview, 'file')} awaiting review  /  ${reportCount(report.documentsProcessing, 'file')} processing / existing files, not missing`,
+    47,
+    168,
     8,
     muted,
   );
   paragraph(
     `Average profile readiness ${report.readiness.average}% is computed from current records, not sale clearance. Review each horse profile for the missing evidence. Sale gates below are assessed separately and can block all listed value regardless of that score.`,
     36,
-    184,
+    189,
     540,
     8,
   );
@@ -489,7 +510,7 @@ export async function renderReportPdf(
     'No horses in sale inventory.',
   );
   paragraph(
-    'Missing = no file recorded. Not started = no ownership record. Awaiting review = an existing file in Queued, Matched or Needs Review. Counts overlap across horses; do not add blocked dollars twice. Ready* means no recorded sale blockers, not a guaranteed sale.',
+    'Missing = no file recorded. Not started = no ownership record. Awaiting review = Matched or Needs Review; processing = Queued. These are existing files. Counts overlap across horses; do not add blocked dollars twice. Ready* means no recorded sale blockers, not a guaranteed sale.',
     36,
     end + 12,
     540,
@@ -613,7 +634,7 @@ export async function renderReportPdf(
       analysisY + 23 + i * 29,
       252,
       [green, amber, red][i],
-      `${band.count} horses`,
+      `${band.count} ${band.count === 1 ? 'horse' : 'horses'}`,
     ),
   );
   const spendRows = report.categories.slice(0, 3);
@@ -638,7 +659,7 @@ export async function renderReportPdf(
     540,
     7.5,
   );
-  paragraph(
+  const definitionsHeight = paragraph(
     'Break-even = recorded acquisition + linked spend. Profit = asking - break-even; margin = profit / asking. Floor = break-even + 15%, rounded up to $100, matching Sales. No future carry is assumed. Horse figures exclude unallocated overhead. Margin bands: High 30% or more, Medium 15-29%, Low under 15%.',
     36,
     analysisY + 148,
@@ -646,17 +667,27 @@ export async function renderReportPdf(
     7.5,
   );
 
-  // Complete detail is retained for large workspaces instead of silently dropping rows.
-  if (report.categories.length > 3 || decision.actions.length > 3 || extendedActions || report.anomalies.length) {
-    newPage('Action & spending detail', 'Workspace-derived follow-through');
-    let y = 130;
-    for (const [i, action] of decision.actions.entries()) {
+  // Continue only the actions not already shown in full on the dashboard.
+  // Use the available economics-page space before adding another sheet.
+  const detailActions = decision.actions
+    .map((action, index) => ({ action, index }))
+    .filter(({ action, index }) => index >= 3 || wrap(action, 505, 9).length > 2);
+  if (report.categories.length > 3 || detailActions.length || report.anomalies.length) {
+    let y = analysisY + 148 + definitionsHeight + 24;
+    if (y > 640) {
+      newPage('Action & spending detail', 'Workspace-derived follow-through');
+      y = 130;
+    } else {
+      heading('Action & spending detail', 36, y);
+      y += 24;
+    }
+    for (const { index, action } of detailActions) {
       const height = wrap(action, 510, 9).length * 12 + 12;
       if (y + height > 700) {
         newPage('Action detail', 'Continued');
         y = 130;
       }
-      y += paragraph(`${i + 1}. ${action}`, 36, y, 540, 9, ink) + 12;
+      y += paragraph(`${index + 1}. ${action}`, 36, y, 540, 9, ink) + 12;
     }
     const extraRows =
       report.categories.length > 3

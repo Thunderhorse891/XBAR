@@ -21,6 +21,7 @@ import { OwnerTestModeBar } from './components/OwnerTestModeBar';
 import { Toaster } from './components/ui/sonner';
 import { billingPath } from './lib/billingRoutes';
 import { buyerFollowUpPath } from './lib/buyerRoutes';
+import { isNativeApp } from './lib/nativePlatform';
 import { appBasePath, loginPath, passwordResetPath, usesHashRouting } from './lib/routeCanon';
 import { trackRuntimeEvent } from './lib/runtimeEvents';
 import { consumeRecoveryCallbackNavigation } from '@/lib/authCallbackArrival';
@@ -72,6 +73,7 @@ const Settings = lazy(() => import('./routes/Settings'));
 const SetupWorkspace = lazy(() => import('./routes/SetupWorkspace'));
 const SharedAccess = lazy(() => import('./routes/SharedAccess'));
 const Subscriptions = lazy(() => import('./routes/Subscriptions'));
+const NativeBillingStatus = lazy(() => import('./routes/NativeBillingStatus'));
 const Weather = lazy(() => import('./routes/Weather'));
 
 // One unique label per route: no two routes may share a user-facing name, so
@@ -127,9 +129,14 @@ function routeTitle(path: string) {
 // The SPA only serves the authenticated application (plus the noindex login
 // and buyer-share views); all indexable pages are prerendered static HTML on
 // the marketing site, so the app shell just keeps the tab title accurate.
-function applyRouteMeta(path: string) {
+function applyRouteMeta(path: string, search: string) {
   if (typeof document === 'undefined') return;
-  document.title = path === '/login' ? 'Sign in | XBAR' : routeTitle(path);
+  document.title =
+    path === '/login'
+      ? new URLSearchParams(search).get('mode') === 'signup'
+        ? 'Create account | XBAR'
+        : 'Sign in | XBAR'
+      : routeTitle(path);
 }
 
 // Operator comp access is no longer a bridge that writes to the store.
@@ -159,8 +166,8 @@ function RouteTelemetry() {
   }, [location.pathname, location.search, workspaceId]);
 
   useEffect(() => {
-    applyRouteMeta(location.pathname);
-  }, [location.pathname]);
+    applyRouteMeta(location.pathname, location.search);
+  }, [location.pathname, location.search]);
 
   return null;
 }
@@ -300,7 +307,7 @@ export default function App() {
               }
             >
               <Route path="plans" element={<Navigate to={billingPath} replace />} />
-              <Route path="billing" element={<Subscriptions />} />
+              <Route path="billing" element={isNativeApp() ? <NativeBillingStatus /> : <Subscriptions />} />
               <Route path="subscriptions" element={<Navigate to={billingPath} replace />} />
               <Route
                 element={

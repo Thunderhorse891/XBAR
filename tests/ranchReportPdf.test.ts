@@ -38,6 +38,73 @@ const branding = async () => ({
   watermark: await readFile('public/brand/xbar-report-watermark.png'),
 });
 
+test('capital reconciles horse rows, unallocated overhead and unmatched receipt links', async () => {
+  const input = fixture(2);
+  input.expenseReceipts.push(
+    ...([
+      { id: 'ranch-overhead', amount: 900, category: 'Feed', receiptDate: '2026-08-02' },
+      { id: 'unmatched-link', horseId: 'absent-horse', amount: 200, category: 'Feed', receiptDate: '2026-09-02' },
+    ] as unknown as RanchReportInput['expenseReceipts']),
+  );
+  const report = buildRanchReport(input, now);
+  assert.equal(report.money.unallocatedToDate, 900);
+  assert.equal(report.money.unmatchedHorseSpend, 200);
+  assert.equal(
+    report.money.investedInHorses,
+    report.horses.reduce((sum, row) => sum + row.investedToDate, 0),
+  );
+  assert.equal(
+    report.money.investedToDate,
+    report.money.investedInHorses + report.money.unallocatedToDate + report.money.unmatchedHorseSpend,
+  );
+  const bytes = await renderReportPdf(report, 'Synthetic accounting fixture', await branding());
+  const text = drawn(bytes)
+    .map((item) => item.text)
+    .join(' ');
+  assert.match(text, /CAPITAL RECONCILIATION/);
+  assert.match(text, /Unallocated overhead/);
+  assert.match(text, /Unmatched horse links/);
+  assert.match(text, /\$900/);
+  assert.match(text, /\$200/);
+  await assertFits(bytes);
+});
+
+test('document queue separates processing from review without counting either as missing', async () => {
+  const input = fixture(1);
+  input.documents = [
+    { id: 'queued', type: 'Registration', state: 'Queued' },
+    { id: 'review', type: 'Registration', state: 'Needs Review' },
+    { id: 'matched', type: 'Vet Record', state: 'Matched' },
+    { id: 'archived', type: 'Registration', state: 'Archived' },
+  ] as RanchReportInput['documents'];
+  const report = buildRanchReport(input, now);
+  assert.equal(report.documentsProcessing, 1);
+  assert.equal(report.documentsAwaitingReview, 2);
+  assert.equal(report.documentsToReview, report.documentsProcessing + report.documentsAwaitingReview);
+  const bytes = await renderReportPdf(report, 'Synthetic document queue', await branding());
+  const text = drawn(bytes)
+    .map((item) => item.text)
+    .join(' ');
+  assert.match(text, /2 files awaiting review/);
+  assert.match(text, /1 file processing/);
+  await assertFits(bytes);
+});
+
+test('malformed acquisition values cannot create capital absent from the horse register', () => {
+  const input = fixture(2);
+  input.horses[0].costBasis = '9000' as unknown as number;
+  const report = buildRanchReport(input, now);
+  assert.equal(report.money.acquisitionCost, 4225);
+  assert.equal(
+    report.money.investedInHorses,
+    report.horses.reduce((sum, row) => sum + row.investedToDate, 0),
+  );
+  assert.equal(
+    report.money.investedToDate,
+    report.money.investedInHorses + report.money.unallocatedToDate + report.money.unmatchedHorseSpend,
+  );
+});
+
 // Inspect actual PDF operators: no external rasterizer needed in CI.
 function drawn(bytes: Uint8Array) {
   const raw = Buffer.from(bytes).toString('latin1');
@@ -344,22 +411,41 @@ test('premium report cover retains every original register and source attributio
   await assertFits(premium);
 });
 
-test('Enterprise removes decorative images, never source notes or report records', async () => {
-  const report = buildRanchReport(fixture(18), now);
-  const bytes = await renderReportPdf(report, 'Cedar Ridge Ranch', await branding(), {
-    tier: 'Enterprise',
-    options: { whiteLabel: true, layout: 'cover' },
+for (const tier of ['Ranch Ops', 'Enterprise'] as const) {
+  test(`${tier} removes decorative images, never source notes or report records`, async () => {
+    const report = buildRanchReport(fixture(18), now);
+    const bytes = await renderReportPdf(report, 'Cedar Ridge Ranch', await branding(), {
+      tier,
+      options: { whiteLabel: true, layout: 'cover' },
+    });
+    const text = drawn(bytes)
+      .map((item) => item.text)
+      .join(' ');
+    assert.ok(text.includes('Prepared with XBAR'));
+    assert.ok(text.includes('Unaudited management estimates'));
+    assert.ok(text.includes('Synthetic Ranch Horse 18 - Blocked'));
+    const doc = await PDFDocument.load(bytes);
+    for (const page of doc.getPages())
+      assert.equal(page.node.Resources()?.lookupMaybe(PDFName.of('XObject'), PDFDict)?.keys().length ?? 0, 0);
+    await assertFits(bytes);
   });
-  const text = drawn(bytes)
-    .map((item) => item.text)
-    .join(' ');
-  assert.ok(text.includes('Prepared with XBAR'));
-  assert.ok(text.includes('Unaudited management estimates'));
-  assert.ok(text.includes('Synthetic Ranch Horse 18 - Blocked'));
-  const doc = await PDFDocument.load(bytes);
-  for (const page of doc.getPages())
-    assert.equal(page.node.Resources()?.lookupMaybe(PDFName.of('XObject'), PDFDict)?.keys().length ?? 0, 0);
-  await assertFits(bytes);
+}
+
+test('Professional exports the full standard report without premium styling', async () => {
+  const report = buildRanchReport(fixture(18), now);
+  const assets = await branding();
+  const ordinary = await renderReportPdf(report, 'Cedar Ridge Ranch', assets);
+  const professional = await renderReportPdf(report, 'Cedar Ridge Ranch', assets, {
+    tier: 'Professional',
+    options: { whiteLabel: true, layout: 'cover', accent: '#000000' },
+  });
+  const professionalDoc = await PDFDocument.load(professional);
+  assert.equal(professionalDoc.getPageCount(), (await PDFDocument.load(ordinary)).getPageCount());
+  assert.deepEqual(drawn(professional), drawn(ordinary), 'the standard report keeps all records and source notes');
+  for (const page of professionalDoc.getPages()) {
+    assert.ok((page.node.Resources()?.lookupMaybe(PDFName.of('XObject'), PDFDict)?.keys().length ?? 0) > 0);
+  }
+  await assertFits(professional);
 });
 
 test('report cover contains an exceptionally long ranch name without pushing data into the footer', async () => {

@@ -199,7 +199,7 @@ test('welcome email states what XBAR is, the first three steps, and support', ()
     assert.match(body, /Upload a document/);
     assert.match(body, /Set one reminder/);
     assert.match(body, new RegExp(SUPPORT_EMAIL.replace('.', '\\.')));
-    assert.match(body, /14-day Professional trial/);
+    assert.doesNotMatch(body, /trial is running/);
     assert.match(body, /no card/);
   }
   assert.match(email.html, /Still Haven/);
@@ -232,7 +232,7 @@ test('trial-expired email says records are safe and names the baseline', () => {
   for (const body of [email.text, email.html]) {
     assert.match(body, /free baseline/);
     assert.match(body, /Nothing you entered is gone/);
-    assert.match(body, /5 horses, 250 documents/);
+    assert.match(body, /Free limits \(2 horses, 10 active documents, 1 user\)/);
     assert.match(body, new RegExp(SUPPORT_EMAIL.replace('.', '\\.')));
   }
 });
@@ -877,4 +877,21 @@ test('failed conflict reads never release an existing claim', async () => {
   await sendWelcomeForUser({ supabase, user, sendEmailFn: async () => ({ ok: false }) });
   await assert.rejects(sendWelcomeForUser({ supabase, user, sendEmailFn: okSender }), /verify/);
   assert.equal(supabase.claims.size, 1);
+});
+
+test('welcome copy does not invent a workspace, running trial or automatic OCR match', () => {
+  const email = buildWelcomeEmail();
+  for (const body of [email.text, email.html]) {
+    assert.doesNotMatch(body, /trial is running|workspace is set up|reads it and attaches it/i);
+    assert.match(body, /2 horses, 10 active documents, 1 user/);
+    assert.match(body, /no card required/);
+  }
+});
+
+test('expired trial copy names the actual Free limits and preserves access to existing records', () => {
+  const email = buildTrialExpiredEmail();
+  for (const body of [email.text, email.html]) {
+    assert.match(body, /Free limits \(2 horses, 10 active documents, 1 user\)/);
+    assert.doesNotMatch(body, /Starter limits|5 horses, 250 documents|comes back in full the moment/);
+  }
 });

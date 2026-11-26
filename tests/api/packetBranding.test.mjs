@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 import { createHash } from 'node:crypto';
 import { Readable } from 'node:stream';
-import { register } from 'node:module';
+import { register, registerHooks } from 'node:module';
 import { readFile, writeFile } from 'node:fs/promises';
 import { deflateSync, inflateSync } from 'node:zlib';
 import { PDFDocument, PDFName, StandardFonts } from 'pdf-lib';
@@ -11,12 +11,23 @@ process.env.SUPABASE_URL = 'https://packet-branding-test.supabase.co';
 process.env.SUPABASE_SERVICE_ROLE_KEY = 'synthetic-key';
 register(new URL('./fixtures/billingLoader.mjs', import.meta.url));
 const { __setBillingSupabase } = await import('./fixtures/billingSupabaseStub.mjs');
+// This suite exercises PDF/row/recovery behavior. The controlled transport's
+// authorization, reservation and provider contract is tested in reservedUploads.
+registerHooks({
+  resolve(specifier, context, next) {
+    if (specifier.endsWith('/storage-upload.js')) {
+      const source = 'export const uploadReservedBuffer = (...args) => globalThis.__packetReservedUpload(...args);';
+      return { url: `data:text/javascript;base64,${Buffer.from(source).toString('base64')}`, shortCircuit: true };
+    }
+    return next(specifier, context);
+  },
+});
 const { default: handler } = await import('../../api/sale-packets.js');
 const { default: templateHandler } = await import('../../api/_lib/documents-generate-template.js');
 const { loadHorseContext } = await import('../../api/_lib/horse-context.js');
 const { createSectionedPdf } = await import('../../api/_lib/pdf.js');
 const { buildServerSaleCredential, serverSealCode } = await import('../../api/_lib/sale-credential.js');
-const { summarizeSealedPacket } = await import('../../api/_lib/buyer-verify.js');
+const { default: buyerVerify, summarizeSealedPacket } = await import('../../api/_lib/buyer-verify.js');
 
 const WORKSPACE = '11111111-1111-4111-8111-111111111111';
 const OTHER_WORKSPACE = '22222222-2222-4222-8222-222222222222';
@@ -70,11 +81,16 @@ function install({
   role,
   attachmentBytes,
   horseFields = {},
+  issuanceResult = null,
+  proofs = [],
+  deliveryRows = [],
 } = {}) {
   const reads = [],
     writes = [],
     uploads = [],
-    downloads = [];
+    downloads = [],
+    removals = [],
+    signedPaths = [];
   const tables = {
     workspaces: [{ id: WORKSPACE, owner_user_id: allow && !role ? USER : 'someone-else' }],
     workspace_memberships: role ? [{ workspace_id: WORKSPACE, user_id: USER, role, status: 'active' }] : [],
@@ -88,7 +104,8 @@ function install({
     documents,
     document_templates: [],
     ownership_records: [],
-    sale_packets: [],
+    sale_packets: deliveryRows,
+    sale_packet_proofs: proofs,
     audit_logs: [],
   };
   const client = {
@@ -136,7 +153,7 @@ function install({
           const rows = tables[table].filter((row) => filters.every(([key, value]) => row[key] === value));
           const error = readErrors[table] || (table === 'workspace_profiles' ? profileError : null);
           return Promise.resolve({
-            data: values ? null : error ? null : single ? (rows[0] ?? null) : rows,
+            data: error ? null : values ? (single ? values : [values]) : single ? (rows[0] ?? null) : rows,
             error,
             count: count ? rows.length : undefined,
           }).then(resolve, reject);
@@ -144,14 +161,28 @@ function install({
       };
       return query;
     },
-    rpc: async () => ({ data: 0, error: null }),
+    rpc: async (name, params) => {
+      if (name !== 'xbar_issue_sale_packet') return { data: 0, error: null };
+      if (issuanceResult) return issuanceResult;
+      assert.equal('seal' in params.p_delivery.payload, false);
+      writes.push({ table: 'sale_packets', row: params.p_delivery });
+      writes.push({ table: 'sale_packet_proofs', row: { seal: params.p_seal } });
+      return { data: true, error: null };
+    },
     storage: {
       from: (bucket) => ({
         upload: async (path, bytes) => {
           uploads.push({ bucket, path, bytes });
+          return { data: { path }, error: null };
+        },
+        createSignedUrl: async (path) => {
+          signedPaths.push(path);
+          return { data: { signedUrl: 'https://download.example.test/packet' }, error: null };
+        },
+        remove: async (paths) => {
+          removals.push(...paths);
           return { error: null };
         },
-        createSignedUrl: async () => ({ data: { signedUrl: 'https://download.example.test/packet' }, error: null }),
         download: async (path) => {
           downloads.push(path);
           if (attachmentBytes) return { data: new Blob([attachmentBytes]), error: null };
@@ -160,8 +191,14 @@ function install({
       }),
     },
   };
+  globalThis.__packetReservedUpload = ({ access, requestId, bucket, storagePath, bytes, contentType }) => {
+    assert.equal(access.workspaceId, WORKSPACE);
+    assert.equal(access.user.id, USER);
+    assert.ok(storagePath.includes(requestId), 'recovery identity must match the reserved original');
+    return client.storage.from(bucket).upload(storagePath, bytes, { contentType, upsert: false });
+  };
   __setBillingSupabase(client);
-  return { client, reads, writes, uploads, downloads };
+  return { client, reads, writes, uploads, downloads, removals, signedPaths };
 }
 
 for (const [horseFields, expected] of [
@@ -380,19 +417,92 @@ test('cloud packet uses authorized stored branding, seals all details and ignore
       assert.ok(parsed.text.includes(text), `PDF missing ${text}`);
     assert.ok(parsed.text.includes('/app/verify/'));
     assert.ok(!parsed.text.includes('Forged Ranch'));
-    assert.equal(parsed.images.length, 1, 'customer logo must be embedded once on cover');
-    assert.ok(parsed.images[0].width <= 180 && parsed.images[0].height <= 72);
-    assert.equal(parsed.images[0].width / parsed.images[0].height, 4);
+    const customerLogos = parsed.images.filter((image) => image.width / image.height === 4);
+    assert.equal(customerLogos.length, 1, 'customer logo must be embedded once on cover');
+    assert.ok(customerLogos[0].width <= 180 && customerLogos[0].height <= 72);
+    assert.ok(parsed.images.length >= 3, 'XBAR attribution artwork remains separate from customer letterhead');
     const profileRead = fixture.reads.find((read) => read.table === 'workspace_profiles');
     assert.match(profileRead.columns, /payload/);
     assert.deepEqual(profileRead.filters, [['workspace_id', WORKSPACE]]);
     assert.equal(
-      fixture.writes.find((write) => write.table === 'sale_packets').row.payload.seal.payload,
+      fixture.writes.find((write) => write.table === 'sale_packet_proofs').row.seal.payload,
       result.body.seal.payload,
     );
   } finally {
     globalThis.fetch = savedFetch;
   }
+});
+
+for (const [name, issuanceResult] of [
+  ['uncertain response', { data: null, error: null }],
+  ['transport error', { data: null, error: { code: '', message: 'connection lost' } }],
+  ['database rejection', { data: null, error: { code: '23514', message: 'constraint failed' } }],
+]) {
+  test(`packet issuance does not sign a download after ${name}`, async () => {
+    const fixture = install({ issuanceResult });
+    const result = await call();
+    assert.equal(result.status, 502, result.body.message);
+    assert.equal(fixture.uploads.length, 1);
+    assert.deepEqual(fixture.signedPaths, []);
+    assert.deepEqual(fixture.removals, [], 'failed issuance retains the original for reference-safe recovery');
+    assert.equal(result.body.needsRecovery, true);
+  });
+}
+
+test('a protected issuance quota rejection retains recovery bytes and returns the public allowance code', async () => {
+  const fixture = install({
+    issuanceResult: {
+      data: null,
+      error: { code: 'P0001', details: 'xbar_sale_packet_allowance_reached', message: 'Plan limit reached' },
+    },
+  });
+  const result = await call();
+  assert.equal(result.status, 403, result.body.message);
+  assert.equal(result.body.code, 'sale_packet_limit_reached');
+  assert.equal(fixture.uploads.length, 1);
+  assert.deepEqual(fixture.removals, []);
+  assert.equal(result.body.needsRecovery, true);
+  assert.equal(result.body.packetPdfPath, fixture.uploads[0].path);
+  assert.deepEqual(fixture.signedPaths, []);
+});
+
+test('the public handler uses only protected issuance and does not request legacy facts', async () => {
+  const seal = buildServerSaleCredential(sealInput({}));
+  const delivery = { packet_id: 'packet-brand', payload: { seal } };
+  const legacy = install({ deliveryRows: [delivery] });
+  const unanchored = await call({ packetId: 'packet-brand' }, buyerVerify);
+  assert.equal(unanchored.status, 200);
+  assert.equal(unanchored.body.found, true);
+  assert.equal(unanchored.body.anchored, false);
+  assert.equal('facts' in unanchored.body, false);
+  assert.deepEqual(
+    legacy.reads.map(({ table, columns }) => [table, columns]),
+    [
+      ['sale_packet_proofs', 'packet_id, seal'],
+      ['sale_packets', 'packet_id'],
+    ],
+  );
+
+  const protectedFixture = install({ proofs: [{ packet_id: 'packet-brand', seal }], deliveryRows: [delivery] });
+  const anchored = await call({ packetId: 'packet-brand' }, buyerVerify);
+  assert.equal(anchored.status, 200);
+  assert.equal(anchored.body.anchored, true);
+  assert.equal(anchored.body.seal.sealCode, seal.sealCode);
+  assert.deepEqual(
+    protectedFixture.reads.map(({ table }) => table),
+    ['sale_packet_proofs'],
+  );
+});
+
+test('the public handler fails closed if protected proof cannot be read', async () => {
+  const failed = install({ readErrors: { sale_packet_proofs: { message: 'fixture unavailable' } } });
+  const blocked = await call({ packetId: 'packet-brand' }, buyerVerify);
+  assert.equal(blocked.status, 502);
+  assert.equal(blocked.body.ok, false);
+  assert.deepEqual(
+    failed.reads.map(({ table }) => table),
+    ['sale_packet_proofs'],
+  );
 });
 
 test('profile read failures fail packet creation before upload and do not change template callers', async () => {
@@ -413,7 +523,7 @@ test('unauthorized workspace access never reads profile branding or stores a pac
   assert.ok(!fixture.reads.some((read) => read.table === 'workspace_profiles'));
 });
 
-test('legacy and removed logos yield a usable unbranded packet without fabricated identity', async () => {
+test('legacy and removed logos yield deliberate XBAR fallback without fabricated ranch identity', async () => {
   for (const profile of [
     null,
     { ...PROFILE, payload: {} },
@@ -431,7 +541,7 @@ test('legacy and removed logos yield a usable unbranded packet without fabricate
     const result = await call();
     assert.equal(result.status, 200, result.body.message);
     const parsed = await inspectPdf(fixture.uploads[0].bytes);
-    assert.equal(parsed.images.length, 0);
+    assert.ok(parsed.images.length >= 3, 'bundled XBAR header, watermark and footer are present');
     assert.match(parsed.text, /XBAR Verification Seal/);
     for (const fake of ['Main Ranch', 'My Ranch LLC', 'Operations Lead', 'owner@ranch.local'])
       assert.ok(!parsed.text.includes(fake));
@@ -534,7 +644,8 @@ test('every customer branding field changes the v3 seal and public verification 
   }
   const summary = summarizeSealedPacket({
     packet_id: 'packet-brand',
-    payload: { seal, seller: { name: 'LIVE OR FORGED' } },
+    seal,
+    payload: { seller: { name: 'LIVE OR FORGED' } },
   });
   assert.equal(summary.anchored, true);
   assert.equal(summary.facts.sellerName, source.defaultOwnerName);
@@ -546,7 +657,7 @@ test('every customer branding field changes the v3 seal and public verification 
   const forged = structuredClone(seal);
   forged.payload = forged.payload.replace('Taylor Seller', 'Forged Seller');
   assert.equal(
-    summarizeSealedPacket({ payload: { seal: forged } }).anchored,
+    summarizeSealedPacket({ packet_id: 'packet-brand', seal: forged }).anchored,
     false,
     'modified payload cannot pass its old digest',
   );
@@ -570,7 +681,7 @@ test('historical v1/v2 seals verify exact stored bytes without rebuilding as v3'
       sealCode: serverSealCode(digest),
       sealedAt: '2025-01-01',
     };
-    const summary = summarizeSealedPacket({ packet_id: 'old-packet', payload: { seal } });
+    const summary = summarizeSealedPacket({ packet_id: 'old-packet', seal });
     assert.equal(summary.anchored, true);
     assert.equal(summary.facts.sellerBusinessName, 'Historic LLC');
     assert.equal(summary.facts.sellerRanchName, 'Historic Ranch');
@@ -589,23 +700,36 @@ test('JPEG customer logos embed at their actual aspect ratio and remain separate
     mark: await readFile(new URL('../../public/brand/xbar-original-lockup-480.png', import.meta.url)),
     watermark: await readFile(new URL('../../public/brand/xbar-report-watermark.png', import.meta.url)),
   };
-  const bytes = await createSectionedPdf({ title: 'Seller Packet', customerLogoDataUrl: logo, branding, sections: [] });
+  const bytes = await createSectionedPdf({
+    title: 'Seller Packet',
+    customerLogoDataUrl: logo,
+    branding,
+    footer: 'Generated by XBAR LLC',
+    sections: [],
+  });
   const parsed = await inspectPdf(bytes);
-  assert.ok(parsed.text.includes('XBAR'), 'customer artwork cannot replace the XBAR identity label');
-  // Customer image follows the XBAR page watermark and header artwork.
-  const image = parsed.images[2];
+  assert.ok(parsed.text.includes('Generated by XBAR LLC'), 'the generating platform remains identified in the footer');
+  // The workspace owns the letterhead; XBAR retains the watermark and footer artwork.
+  const image = parsed.images[1];
   assert.ok(image && image.width <= 180 && image.height <= 72);
   assert.ok(Math.abs(image.width / image.height - dimensions.width / dimensions.height) < 0.00001);
-  assert.equal(parsed.images.length, 4, 'customer, XBAR header, watermark, and footer are all present');
+  assert.equal(
+    parsed.images.length,
+    3,
+    'customer letterhead, XBAR watermark, and footer are present without duplicate headers',
+  );
+  const fallback = await inspectPdf(await createSectionedPdf({ title: 'No ranch logo', branding, sections: [] }));
+  assert.equal(fallback.images.length, 3, 'XBAR header artwork is the deliberate fallback without a workspace logo');
+  assert.ok(fallback.images[1].width <= 120 && fallback.images[1].height <= 55);
 });
 
 test('public seal integrity refuses mismatched code, packet identity, and malformed logo snapshots', () => {
   const legacyPayload = JSON.stringify({ version: 2, packetId: 'packet-one', horse: {}, workspace: {} });
   const digest = createHash('sha256').update(legacyPayload).digest('hex');
   const seal = { version: 2, anchor: 'server', payload: legacyPayload, digest, sealCode: serverSealCode(digest) };
-  assert.equal(summarizeSealedPacket({ packet_id: 'packet-two', payload: { seal } }).anchored, false);
+  assert.equal(summarizeSealedPacket({ packet_id: 'packet-two', seal }).anchored, false);
   assert.equal(
-    summarizeSealedPacket({ payload: { seal: { ...seal, sealCode: 'SEAL-0000-0000-0000' } } }).anchored,
+    summarizeSealedPacket({ packet_id: 'packet-one', seal: { ...seal, sealCode: 'SEAL-0000-0000-0000' } }).anchored,
     false,
   );
   for (const logo of ['https://remote.example/logo.png', 'data:image/svg+xml;base64,PHN2Zy8+']) {
@@ -617,7 +741,8 @@ test('public seal integrity refuses mismatched code, packet identity, and malfor
     const nextDigest = createHash('sha256').update(payload).digest('hex');
     assert.equal(
       summarizeSealedPacket({
-        payload: { seal: { ...seal, version: 3, payload, digest: nextDigest, sealCode: serverSealCode(nextDigest) } },
+        packet_id: 'packet-one',
+        seal: { ...seal, version: 3, payload, digest: nextDigest, sealCode: serverSealCode(nextDigest) },
       }).anchored,
       false,
     );
@@ -906,3 +1031,91 @@ test('contradictory mirror identities cannot supply health facts while matching 
     }
   }
 });
+
+for (const [label, endpoint, body, idField, pathField] of [
+  ['template', templateHandler, { templateId: 'bill-of-sale', output: 'pdf' }, 'documentId', 'storagePath'],
+  ['packet', handler, {}, 'packetId', 'packetPdfPath'],
+]) {
+  for (const mode of ['missing acknowledgment', 'lost response'])
+    test(`${label} preserves recovery identity when upload has ${mode}`, async () => {
+      const f = install();
+      const from = f.client.storage.from;
+      f.client.storage.from = (bucket) => {
+        const storage = from(bucket);
+        return {
+          ...storage,
+          async upload(...args) {
+            await storage.upload(...args);
+            if (mode === 'lost response') throw new Error('response lost after upload');
+            return { data: null, error: null };
+          },
+        };
+      };
+      const result = await call(body, endpoint);
+      assert.equal(result.status, 502);
+      assert.equal(result.body.ok, false);
+      assert.equal(result.body.needsRecovery, true);
+      assert.equal(result.body.uploadOutcome, 'unconfirmed');
+      assert.equal(result.body[pathField], f.uploads[0].path);
+      assert.ok(result.body[idField]);
+      assert.equal(f.writes.length, 0, 'unconfirmed upload cannot become a saved document or packet');
+    });
+}
+
+for (const [label, endpoint, body] of [
+  ['template', templateHandler, { templateId: 'bill-of-sale', output: 'pdf' }],
+  ['packet', handler, {}],
+])
+  test(`${label} reports a per-file admission refusal as not started without row writes or cleanup`, async () => {
+    const f = install();
+    globalThis.__packetReservedUpload = async ({ requestId }) => ({
+      data: null,
+      error: {
+        status: 413,
+        code: 'upload_file_too_large',
+        maxFileBytes: 50_000_000,
+        requestId,
+        uploadOutcome: 'not_started',
+        needsRecovery: false,
+        message: 'This file exceeds the current cloud upload limit. Keep the original file.',
+      },
+    });
+    const result = await call(body, endpoint);
+    assert.equal(result.status, 413);
+    assert.equal(result.body.code, 'upload_file_too_large');
+    assert.equal(result.body.needsRecovery, false);
+    assert.equal(result.body.uploadOutcome, 'not_started');
+    assert.equal(result.body.maxFileBytes, 50_000_000);
+    assert.equal(result.body.storagePath, undefined);
+    assert.equal(result.body.packetPdfPath, undefined);
+    assert.deepEqual(f.uploads, []);
+    assert.deepEqual(f.writes, []);
+  });
+
+for (const [label, endpoint, body] of [
+  ['template', templateHandler, { templateId: 'bill-of-sale', output: 'pdf' }],
+  ['packet', handler, {}],
+])
+  test(`${label} preserves confirmed shared-budget refusal without claiming recovery or recording a file`, async () => {
+    const f = install();
+    globalThis.__packetReservedUpload = async ({ requestId }) => ({
+      data: null,
+      error: {
+        status: 507,
+        code: 'upload_shared_capacity_reached',
+        requestId,
+        uploadOutcome: 'not_started',
+        needsRecovery: false,
+        message: 'The shared cloud storage limit would be exceeded. Keep the original file.',
+      },
+    });
+    const result = await call(body, endpoint);
+    assert.equal(result.status, 507);
+    assert.equal(result.body.code, 'upload_shared_capacity_reached');
+    assert.equal(result.body.uploadOutcome, 'not_started');
+    assert.equal(result.body.needsRecovery, false);
+    assert.equal(result.body.storagePath, undefined);
+    assert.equal(result.body.packetPdfPath, undefined);
+    assert.deepEqual(f.uploads, []);
+    assert.deepEqual(f.writes, []);
+  });

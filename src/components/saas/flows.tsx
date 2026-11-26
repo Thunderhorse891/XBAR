@@ -1,10 +1,16 @@
 import { ASSET_CATEGORIES, HORSE_SEGMENTS } from '@/lib/recordOptions';
 import { documentIntakeDisclosure } from '@/features/documents/constants';
 import type { ReactNode } from 'react';
-import { useEffect, useLayoutEffect, useRef, useState } from 'react';
+import { useEffect, useId, useLayoutEffect, useRef, useState } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { FileUp } from 'lucide-react';
 import { ActionButton, SlideOverDrawer } from '@/components/saas';
+import {
+  BREEDING_COMPLETION_STATES,
+  BREEDING_ENTRY_KINDS,
+  FOALING_RESULTS,
+  PREGNANCY_RESULTS,
+} from '@/lib/breedingEntry';
 import { buyerFollowUpPath } from '@/lib/buyerRoutes';
 import { localIsoDate } from '@/lib/format';
 import { useUiStore, type QuickCreateRequest } from '@/store/useUiStore';
@@ -40,17 +46,27 @@ export function Text({
   hint?: string;
   type?: 'text' | 'date';
 }) {
+  const fieldId = useId();
   return (
-    <label>
-      <span className="xs-field-label">{label}</span>
+    <label htmlFor={fieldId}>
+      <span id={`${fieldId}-label`} className="xs-field-label">
+        {label}
+      </span>
       <input
+        id={fieldId}
+        aria-labelledby={`${fieldId}-label`}
+        aria-describedby={hint ? `${fieldId}-hint` : undefined}
         className="xs-input"
         type={type}
         placeholder={placeholder}
         value={value}
         onChange={(e) => onChange(e.target.value)}
       />
-      {hint ? <span className="xs-field-hint">{hint}</span> : null}
+      {hint ? (
+        <span id={`${fieldId}-hint`} className="xs-field-hint">
+          {hint}
+        </span>
+      ) : null}
     </label>
   );
 }
@@ -88,11 +104,20 @@ export function Pick({
   onChange: (v: string) => void;
   options: readonly string[] | { value: string; label: string }[];
 }) {
+  const fieldId = useId();
   const normalized = options.map((option) => (typeof option === 'string' ? { value: option, label: option } : option));
   return (
-    <label>
-      <span className="xs-field-label">{label}</span>
-      <select className="xs-select" value={value} onChange={(e) => onChange(e.target.value)}>
+    <label htmlFor={fieldId}>
+      <span id={`${fieldId}-label`} className="xs-field-label">
+        {label}
+      </span>
+      <select
+        id={fieldId}
+        aria-labelledby={`${fieldId}-label`}
+        className="xs-select"
+        value={value}
+        onChange={(e) => onChange(e.target.value)}
+      >
         {normalized.map((option) => (
           <option key={option.value} value={option.value}>
             {option.label}
@@ -387,7 +412,15 @@ export function GlobalCreateDrawer() {
       reportError('Enter a name to add the horse.');
       return;
     }
-    const segment = (f.segment as HorseSegment) ?? 'Sale Prospect';
+    if (!HORSE_SEGMENTS.includes(f.segment as HorseSegment)) {
+      reportError('Choose a record group before adding the horse.');
+      return;
+    }
+    if (!SEX_OPTIONS.includes(f.sex as HorseSex)) {
+      reportError("Choose the horse's sex before adding the horse.");
+      return;
+    }
+    const segment = f.segment as HorseSegment;
     const owner =
       (f.owner ?? '').trim() || workspaceProfile.defaultOwnerName || workspaceProfile.businessName || 'Ranch owner';
     const ownerEntity = workspaceProfile.defaultOwnerEntity || workspaceProfile.businessName || owner;
@@ -396,7 +429,7 @@ export function GlobalCreateDrawer() {
       barnName: (f.barnName ?? '').trim() || name,
       segment,
       status: SEGMENT_STATUS[segment] ?? 'In Training',
-      sex: (f.sex as HorseSex) ?? 'Mare',
+      sex: f.sex as HorseSex,
       owner,
       ownerEntity,
       barn: (f.loc ?? '').trim() || defaultBarn,
@@ -433,7 +466,9 @@ export function GlobalCreateDrawer() {
       sire: f.sire ?? editHorse.bloodline.sire,
       dam: f.dam ?? editHorse.bloodline.dam,
     });
-    return finish(result, result.ok ? `/horses/${editHorse.id}` : undefined);
+    // Editing from Documents must retain its horse filter and packet workflow.
+    // Profile edits already start on the horse profile; both stay at their opener.
+    return finish(result);
   };
 
   const submitExpense = async () => {
@@ -510,6 +545,9 @@ export function GlobalCreateDrawer() {
     return finish(result.ok ? { ok: true, message: 'Health record added to the horse timeline' } : result, '/medical');
   };
 
+  // Share the displayed default with submit. An empty string is a deliberate
+  // clear, not permission to substitute today's date for a recorded event.
+  const breedingDate = f.date ?? todayIso();
   const submitBreedingRecord = () => {
     const title = (f.title ?? '').trim();
     const notes = (f.notes ?? '').trim();
@@ -517,11 +555,19 @@ export function GlobalCreateDrawer() {
       reportError('Pick a horse, then enter a title and a short note.');
       return;
     }
+    const date = breedingDate.trim();
+    if (!date) {
+      reportError('Enter a breeding record date.');
+      return;
+    }
     const result = addBreedingEvent(selectedHorseId, {
       title,
       body: notes,
       author: actor,
-      date: (f.date ?? '').trim() || todayIso(),
+      date,
+      kind: f.kind ?? '',
+      result: f.result ?? '',
+      completionState: f.completionState ?? '',
     });
     return finish(
       result.ok ? { ok: true, message: 'Breeding record added to the horse timeline' } : result,
@@ -615,11 +661,19 @@ export function GlobalCreateDrawer() {
           <Text label="Name" placeholder="e.g. THR Copper Canyon" value={f.name ?? ''} onChange={set('name')} />
           <Pick
             label="Segment"
-            value={f.segment ?? 'Sale Prospect'}
+            value={f.segment ?? ''}
             onChange={set('segment')}
-            options={HORSE_SEGMENTS}
+            options={[
+              { value: '', label: 'Choose record group' },
+              ...HORSE_SEGMENTS.map((value) => ({ value, label: value })),
+            ]}
           />
-          <Pick label="Sex" value={f.sex ?? 'Mare'} onChange={set('sex')} options={SEX_OPTIONS} />
+          <Pick
+            label="Sex"
+            value={f.sex ?? ''}
+            onChange={set('sex')}
+            options={[{ value: '', label: 'Choose sex' }, ...SEX_OPTIONS.map((value) => ({ value, label: value }))]}
+          />
           <Text
             label="Owner"
             placeholder={workspaceProfile.defaultOwnerName || 'Legal owner'}
@@ -723,8 +777,31 @@ export function GlobalCreateDrawer() {
       body = (
         <div className="xs-form">
           {horsePicker}
+          <Pick
+            label="Entry type"
+            value={f.kind ?? ''}
+            onChange={(kind) => setF((cur) => ({ ...cur, kind, result: '' }))}
+            options={[{ value: '', label: 'Choose…' }, ...BREEDING_ENTRY_KINDS]}
+          />
+          <Pick
+            label="Occurrence"
+            value={f.completionState ?? ''}
+            onChange={(completionState) => setF((cur) => ({ ...cur, completionState, result: '' }))}
+            options={[{ value: '', label: 'Choose…' }, ...BREEDING_COMPLETION_STATES]}
+          />
+          {f.completionState === 'completed' && (f.kind === 'pregnancy-check' || f.kind === 'foaling') ? (
+            <Pick
+              label={f.kind === 'foaling' ? 'Foaling outcome' : 'Check result'}
+              value={f.result ?? ''}
+              onChange={set('result')}
+              options={[
+                { value: '', label: 'Choose…' },
+                ...(f.kind === 'foaling' ? FOALING_RESULTS : PREGNANCY_RESULTS),
+              ]}
+            />
+          ) : null}
           <Text label="Title" placeholder="e.g. Preg check — 45 days" value={f.title ?? ''} onChange={set('title')} />
-          <Text label="Date" type="date" value={f.date ?? todayIso()} onChange={set('date')} />
+          <Text label="Date" type="date" value={breedingDate} onChange={set('date')} />
           <Area
             label="Notes"
             placeholder="Stallion, result, vet, next step…"

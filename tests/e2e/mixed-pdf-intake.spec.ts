@@ -41,6 +41,19 @@ async function bootstrapWorkspace(page: Page) {
   await page.getByPlaceholder('Pasture 1').fill('North Pasture');
   await page.getByRole('button', { name: 'Create workspace' }).click();
   await expect(page).toHaveURL(/\/app$/, { timeout: 15_000 });
+  // Fresh signup is Free. These reader tests require the current paid OCR
+  // entitlement, rather than testing the automatic-intake plan refusal.
+  await page.evaluate(async () => {
+    const storePath = '/src/store/useXbarStore.ts';
+    const runtimePath = '/src/lib/xbarRuntime.ts';
+    const { useXbarStore } = await import(/* @vite-ignore */ storePath);
+    const { buildSubscriptionForTier } = await import(/* @vite-ignore */ runtimePath);
+    useXbarStore.setState({
+      subscription: buildSubscriptionForTier(useXbarStore.getState().subscription, 'Professional', {
+        billingState: 'Active',
+      }),
+    });
+  });
 }
 
 /*

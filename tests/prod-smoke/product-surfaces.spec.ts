@@ -64,14 +64,32 @@ test('documents pipeline renders five workflow stages and the read-only library'
   expect(errors, `runtime errors on /documents:\n${errors.join('\n')}`).toEqual([]);
 });
 
-test('billing page renders every advertised subscription tier', async ({ page }) => {
+test('billing keeps local setup and offers only the two approved monthly paid plans', async ({ page }) => {
   const errors = collectPageErrors(page);
   await completeLocalOnboarding(page);
   await goToRoute(page, '/app/billing');
+  await expect(page.getByRole('heading', { name: 'Review Billing', exact: true })).toBeVisible();
 
-  for (const tier of ['Starter', 'Professional', 'Ranch Ops', 'Enterprise']) {
-    await expect(page.getByText(tier).first()).toBeVisible({ timeout: 15_000 });
+  const cards = page.locator('.checkout-plan-list .checkout-plan');
+  await expect(cards).toHaveCount(2);
+  for (const [tier, price] of [
+    ['Professional', '$19.99'],
+    ['Ranch Ops', '$49.99'],
+  ]) {
+    const card = cards.filter({ has: page.getByRole('heading', { name: tier, exact: true }) });
+    await expect(card).toBeVisible();
+    await expect(card.locator('.checkout-plan__price strong')).toHaveText(price);
+    await expect(card.locator('.checkout-plan__price small')).toHaveText('/ month');
   }
+  for (const tier of ['Starter', 'Enterprise']) {
+    await expect(cards.getByRole('heading', { name: tier, exact: true })).toHaveCount(0);
+    await expect(page.getByRole('button', { name: `Choose ${tier}`, exact: true })).toHaveCount(0);
+  }
+  await expect(page.getByRole('group', { name: 'Billing period' })).toHaveCount(0);
+  const setup = page.locator('.checkout-trial');
+  await expect(setup.getByText('Setup active', { exact: true })).toBeVisible();
+  await expect(setup.getByText(/No card required/)).toBeVisible();
+  await expect(page.getByRole('button', { name: 'Billing not configured yet', exact: true })).toBeDisabled();
   expect(errors, `runtime errors on /billing:\n${errors.join('\n')}`).toEqual([]);
 });
 

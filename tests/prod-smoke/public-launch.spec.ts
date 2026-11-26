@@ -1,38 +1,62 @@
 import { expect, test } from '@playwright/test';
 
 for (const width of [1440, 390]) {
-  test(`public launch paths are truthful and usable at ${width}px`, async ({ page }) => {
+  test(`public launch paths are truthful and usable at ${width}px`, async ({ page }, info) => {
     await page.setViewportSize({ width, height: 900 });
     await page.goto('/pricing');
-    await expect(
-      page.getByText('Review the billing options available to your workspace inside XBAR.', { exact: false }),
-    ).toBeVisible();
-    await expect(page.getByRole('rowheader', { name: 'Annual price (billed yearly)', exact: true })).toBeVisible();
-    for (const amount of ['120', '290', '790', '1,990']) {
-      await expect(page.getByText(`$${amount}/year, billed annually`, { exact: false })).toBeVisible();
+    await expect(page.getByText(/Planned new subscriptions are monthly, in USD per workspace/)).toBeVisible();
+    await expect(page.getByRole('status').filter({ hasText: 'Paid upgrades are not available yet' })).toBeVisible();
+    await expect(page.getByRole('rowheader', { name: 'Annual price (billed yearly)', exact: true })).toHaveCount(0);
+    const plans = page.locator('.plan');
+    await expect(plans).toHaveCount(3);
+    for (const [tier, expectedPrice] of [
+      ['Free', '$0/month'],
+      ['Professional', '$19.99/month'],
+      ['Ranch Ops', '$49.99/month'],
+    ]) {
+      const card = plans.filter({ has: page.getByRole('heading', { name: tier, exact: true }) });
+      await expect(card).toBeVisible();
+      await expect(card.locator('.plan__price')).toHaveText(expectedPrice);
+      await expect(card.getByRole('link', { name: 'Create an account', exact: true })).toHaveAttribute(
+        'href',
+        '/app/login?mode=signup',
+      );
     }
-    await expect(page.getByText('Annual billing is not currently offered.', { exact: false })).toHaveCount(0);
-    await expect(page.getByRole('rowheader', { name: 'Annual price (2 months free)' })).toHaveCount(0);
+    for (const tier of ['Starter', 'Enterprise']) {
+      await expect(plans.getByRole('link', { name: `Choose ${tier}`, exact: true })).toHaveCount(0);
+    }
     // Public pages share the homepage's native mobile Menu. Prove support
     // is reachable there rather than assuming the retired horizontal rail.
     if (width === 390) await page.locator('.landing-mobile-nav > summary').click();
     await expect(page.locator('header').getByRole('link', { name: 'Help & support', exact: true })).toBeInViewport();
     await expect(page.locator('header').getByRole('link', { name: 'Help & support', exact: true })).toHaveAttribute(
       'href',
+      '/support',
+    );
+    await page.locator('header').getByRole('link', { name: 'Help & support', exact: true }).click();
+    await expect(page).toHaveURL(/\/support$/);
+    await expect(page.getByRole('heading', { name: 'Help with XBAR.', exact: true })).toBeVisible();
+    await expect(page.getByRole('link', { name: 'Email support', exact: true })).toHaveAttribute(
+      'href',
       'mailto:xbarje@gmail.com',
     );
-    if (width === 390) await page.locator('.landing-mobile-nav > summary').click();
+    await expect(page.locator('main')).toContainText('Never send passwords or sign-in codes');
+    await expect(page.locator('main').getByRole('link', { name: 'Privacy Policy', exact: true })).toHaveAttribute(
+      'href',
+      '/privacy',
+    );
+    await expect(page.locator('form')).toHaveCount(0);
     expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
-    await page.screenshot({ path: `test-results/public-pricing-${width}.png`, animations: 'disabled' });
+    await page.screenshot({ path: info.outputPath(`support-${width}.png`), fullPage: true });
 
     await page.goto('/demo');
     await expect(page.getByText('No account is needed to view this tour.', { exact: false })).toBeVisible();
-    await page.getByRole('link', { name: 'View the sample sale packet', exact: true }).click();
+    await page.locator('.hero').getByRole('link', { name: 'Open the sample packet', exact: true }).click();
     await expect(page).toHaveURL(/\/samples\/sample-sale-packet\.html$/);
     await expect(page.getByText('Every name, number, and record below is fictional.', { exact: false })).toBeVisible();
     await page.goBack();
     await expect(page).toHaveURL(/\/demo$/);
-    await page.getByRole('link', { name: 'Create an account', exact: true }).click();
+    await page.locator('.cta').getByRole('link', { name: 'Start free', exact: true }).click();
     await expect(page).toHaveURL(/\/app\/login\?mode=signup$/);
     await expect(page.getByRole('heading', { name: 'Create Account', exact: true })).toBeVisible();
 
@@ -52,7 +76,7 @@ for (const width of [1440, 390]) {
       await expect(page.getByLabel('Email or User ID')).toHaveValue('prospective@xbar.test');
       await expect(page).toHaveURL(/\/app\/login\?mode=signup$/);
     }
-    await page.screenshot({ path: `test-results/public-signup-${width}.png`, fullPage: true });
+
     await expect(legal.getByRole('link', { name: 'Help & support' })).toHaveAttribute(
       'href',
       'mailto:Xbarje@gmail.com',

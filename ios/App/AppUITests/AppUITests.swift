@@ -1,0 +1,70 @@
+import XCTest
+
+final class AppUITests: XCTestCase {
+    override func record(_ issue: XCTIssue) {
+        // Retain the page for every failing assertion, including controls that
+        // appear after the email field. This app uses synthetic CI data only.
+        let app = XCUIApplication()
+        print("XBAR native failure accessibility tree:\n\(app.debugDescription)")
+        let screenshot = XCTAttachment(screenshot: app.screenshot())
+        screenshot.name = "XBAR-native-failure"
+        screenshot.lifetime = .keepAlways
+        add(screenshot)
+        super.record(issue)
+    }
+
+    func testBundledSignInScreen() {
+        continueAfterFailure = false
+        let app = XCUIApplication()
+        app.launch()
+        let webView = app.webViews.firstMatch
+        XCTAssertTrue(webView.waitForExistence(timeout: 30), "The bundled WKWebView must load")
+        let email = webView.textFields["Email or User ID"]
+        let emailRendered = email.waitForExistence(timeout: 30)
+        XCTAssertTrue(emailRendered, "The real sign-in form must render")
+        let password = webView.secureTextFields["Password"]
+        XCTAssertTrue(password.exists)
+        // WKWebView exposes the CSS-transformed uppercase label. The captured
+        // native accessibility tree confirms this exact button, not a missing form.
+        let signIn = webView.buttons["SIGN IN"]
+        let emailCode = webView.buttons["Email me a sign-in code"]
+        XCTAssertTrue(signIn.exists)
+        XCTAssertTrue(emailCode.exists)
+        XCTAssertFalse(signIn.isEnabled)
+        XCTAssertFalse(emailCode.isEnabled)
+        XCTAssertFalse(webView.buttons["Google"].exists)
+        XCTAssertFalse(webView.buttons["Facebook"].exists)
+        // The retained native entry capture on f3e2e41 clipped this action
+        // below the initial phone viewport. Require it before keyboard scroll.
+        XCTAssertGreaterThanOrEqual(signIn.frame.height, 44, "Password sign-in must retain a full-size touch target")
+        XCTAssertLessThanOrEqual(signIn.frame.maxY, webView.frame.maxY, "The complete sign-in action must fit before scrolling")
+        let entryScreenshot = XCTAttachment(screenshot: app.screenshot())
+        entryScreenshot.name = "XBAR-native-entry-before-keyboard"
+        entryScreenshot.lifetime = .keepAlways
+        add(entryScreenshot)
+        email.tap()
+        XCTAssertTrue(app.keyboards.firstMatch.waitForExistence(timeout: 10), "The on-device keyboard must be ready before typing")
+        email.typeText("native-smoke@example.invalid")
+        // WKWebView can publish an intermediate accessibility value after
+        // typeText returns. Require the complete value within a bounded wait;
+        // never retype missing characters or accept a truncated address.
+        expectation(for: NSPredicate(format: "value == %@", "native-smoke@example.invalid"), evaluatedWith: email)
+        waitForExpectations(timeout: 10)
+        XCTAssertEqual(email.value as? String, "native-smoke@example.invalid")
+        expectation(for: NSPredicate(format: "enabled == true"), evaluatedWith: emailCode)
+        waitForExpectations(timeout: 10)
+        XCTAssertFalse(signIn.isEnabled, "Email alone must not enable password sign-in")
+        password.tap()
+        // Run 45895470985 entered the full email, then focused an empty secure
+        // field with no keyboard in its failure tree. Verify this handoff too.
+        XCTAssertTrue(app.keyboards.firstMatch.waitForExistence(timeout: 10), "The secure-entry keyboard must be ready before typing")
+        password.typeText("native-smoke-password")
+        expectation(for: NSPredicate(format: "enabled == true"), evaluatedWith: signIn)
+        waitForExpectations(timeout: 10)
+        // No submit: CI uses synthetic configuration and must never create an account.
+        let screenshot = XCTAttachment(screenshot: app.screenshot())
+        screenshot.name = "XBAR-native-sign-in"
+        screenshot.lifetime = .keepAlways
+        add(screenshot)
+    }
+}

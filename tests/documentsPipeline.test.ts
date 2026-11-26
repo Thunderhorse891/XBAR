@@ -1,3 +1,4 @@
+import { documentOverview } from '../src/lib/documentOverview.js';
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import {
@@ -200,4 +201,29 @@ test('archived duplicate sources are retained in the library without polluting a
   assert.equal(buckets.readyDocuments.length, 0);
   assert.equal(computeStageCounts([archived], buckets).Library, 1);
   assert.equal(stageFromParam('Library'), 'Library');
+});
+
+test('document inventory distinguishes missing files, review and reading without inventing readiness', () => {
+  const input = [
+    makeDocument({ id: 'reg', horseId: 'a', state: 'Needs Review' }),
+    makeDocument({ id: 'health', horseId: 'a', type: 'Vet Record', state: 'Queued' }),
+    makeDocument({ id: 'other', horseId: 'b', type: 'Transfer Packet', state: 'Ready' }),
+    makeDocument({ id: 'archived', horseId: 'a', type: 'Transfer Packet', state: 'Archived' }),
+  ];
+  assert.deepEqual(
+    documentOverview(input, 'a').map(({ label, count, status }) => ({ label, count, status })),
+    [
+      { label: 'Registration', count: 1, status: 'Needs review' },
+      { label: 'Transfer', count: 0, status: 'Not on file' },
+      { label: 'Health', count: 1, status: 'Reading file' },
+    ],
+  );
+  assert.ok(documentOverview([], 'a').every((slot) => slot.count === 0 && slot.status === 'Not on file'));
+  const done = input.map((doc) => (doc.id === 'health' ? { ...doc, state: 'Ready' as const } : doc));
+  assert.equal(documentOverview(done, 'a')[2].status, 'On file');
+  assert.equal(
+    documentOverview([...input, makeDocument({ id: 'unassigned', type: 'Transfer Packet', state: 'Ready' })], 'a')[1]
+      .count,
+    0,
+  );
 });

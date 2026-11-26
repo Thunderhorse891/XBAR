@@ -1,3 +1,4 @@
+import { isPublicPaidPlan } from '../src/lib/publicPlanCatalog.js';
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import { readFile } from 'node:fs/promises';
@@ -58,12 +59,12 @@ test('canonical cancellation overrides a stale paid payload without losing usage
       usage: { horsesUsed: 23, horseLimit: 2000 },
     },
   });
-  assert.equal(canceled?.tier, 'Starter');
+  assert.equal(canceled?.tier, 'Free');
   assert.equal(canceled?.purchasedTier, 'Professional');
   assert.equal(canceled?.billingState, 'Inactive');
   assert.equal(canceled?.monthlyRate, 79);
   assert.equal(canceled?.usage.horsesUsed, 23);
-  assert.equal(canceled?.usage.horseLimit, 5);
+  assert.equal(canceled?.usage.horseLimit, 2);
   assert.equal(canceled?.renewalDate, '2026-10-01');
   assert.equal(canceled?.subscriptionRecoverable, true);
 });
@@ -75,7 +76,7 @@ test('unknown cloud values cannot reuse a privileged payload or permit duplicate
     monthly_rate: -1,
     payload: { tier: 'Enterprise', billingState: 'Active', subscriptionRecoverable: 'false' },
   });
-  assert.equal(unknown?.tier, 'Starter');
+  assert.equal(unknown?.tier, 'Free');
   assert.equal(unknown?.billingState, 'Inactive');
   assert.equal(unknown?.monthlyRate, 0);
   assert.equal(unknown?.subscriptionRecoverable, true);
@@ -91,7 +92,7 @@ test('relational subscription loading selects canonical access fields and uses t
   assert.match(source, /subscription: subscriptionFromCloudRow\(subscriptionResult.data\)/);
 });
 
-test('hosted payment links keep checkout available when managed billing is paused', () => {
+test('unverified payment links cannot bypass unavailable managed checkout', () => {
   const result = getCheckoutReadiness({
     billingEnabled: false,
     canManageBilling: true,
@@ -99,8 +100,8 @@ test('hosted payment links keep checkout available when managed billing is pause
     hasPaymentLink: true,
     checkoutInProgress: false,
   });
-  assert.equal(result.ready, true);
-  assert.match(result.reason, /Secure checkout opens next/);
+  assert.equal(result.ready, false);
+  assert.match(result.reason, /Managed checkout is unavailable/);
 });
 test('checkout is unavailable without billing permission', () => {
   const result = getCheckoutReadiness({
@@ -125,7 +126,7 @@ test('checkout is unavailable when neither managed billing nor a payment link ca
   assert.equal(result.mode, 'manual');
   // Deliberately not "contact support / manual billing": with Stripe absent
   // there is no route the customer can take, so the copy says so plainly.
-  assert.match(result.reason, /Billing is not configured yet/);
+  assert.match(result.reason, /Managed checkout is unavailable/);
   assert.doesNotMatch(result.reason, /manual billing/i);
 });
 test('local managed checkout still needs sign-in when no payment link exists', () => {
@@ -139,7 +140,7 @@ test('local managed checkout still needs sign-in when no payment link exists', (
   assert.equal(result.ready, false);
   assert.match(result.reason, /Sign in/);
 });
-test('managed identity or a payment link makes checkout available', () => {
+test('managed identity is required even with a configured payment link', () => {
   assert.equal(
     getCheckoutReadiness({
       billingEnabled: true,
@@ -158,19 +159,19 @@ test('managed identity or a payment link makes checkout available', () => {
       hasPaymentLink: true,
       checkoutInProgress: false,
     }).ready,
-    true,
+    false,
   );
 });
 test('recommendation moves one operating level at a time and respects selection', () => {
   assert.equal(recommendedTier('Starter'), 'Professional');
-  assert.equal(recommendedTier('Enterprise'), 'Enterprise');
+  assert.equal(recommendedTier('Enterprise'), 'Ranch Ops');
   assert.equal(recommendedTier('Starter', 'Ranch Ops'), 'Ranch Ops');
   assert.match(planOutcomes['Ranch Ops'].join(' '), /one rhythm/);
 });
 test('subscription prices stay aligned to the current approved pricing table', () => {
   assert.equal(subscriptionPlans.Starter.monthlyRate, 12);
-  assert.equal(subscriptionPlans.Professional.monthlyRate, 29);
-  assert.equal(subscriptionPlans['Ranch Ops'].monthlyRate, 79);
+  assert.equal(subscriptionPlans.Professional.monthlyRate, 19.99);
+  assert.equal(subscriptionPlans['Ranch Ops'].monthlyRate, 49.99);
   assert.equal(subscriptionPlans.Enterprise.monthlyRate, 199);
   assert.equal(subscriptionPlans.Starter.annualRate, 120);
   assert.equal(subscriptionPlans.Professional.annualRate, 290);
@@ -204,7 +205,7 @@ test('no configuration produces a purchasable path when Stripe is absent', () =>
   }
 });
 
-test('a configured payment link is still purchasable', () => {
+test('a configured static link is not proof of a sellable price', () => {
   // Guards the fix: the assertion above must not be satisfiable by a decision
   // function that simply never reports ready.
   const result = getCheckoutReadiness({
@@ -214,8 +215,8 @@ test('a configured payment link is still purchasable', () => {
     hasManagedIdentity: true,
     checkoutInProgress: false,
   });
-  assert.equal(result.ready, true);
-  assert.equal(result.mode, 'checkout');
+  assert.equal(result.ready, false);
+  assert.equal(result.mode, 'manual');
 });
 
 /*
@@ -257,9 +258,9 @@ test('a freshly seeded workspace has not bought Starter', () => {
   // subscriptionSeed is Starter / 'Manual Billing' / rate 0. That is a setup
   // state, not a purchase: treating it as one labels Starter "Current plan" on
   // a brand-new workspace and disables the checkout, so it can never be bought.
-  const seeded = subscriptionFixture({ tier: 'Starter', monthlyRate: 0, billingState: 'Manual Billing' });
+  const seeded = subscriptionFixture({ tier: 'Free', monthlyRate: 0, billingState: 'Inactive' });
 
-  assert.equal(isEntitledBillingState(seeded.billingState), true, 'precondition: the seed state is entitled');
+  assert.equal(isEntitledBillingState(seeded.billingState), false, 'Free is not a paid entitlement');
   assert.equal(isCurrentPaidPlan(seeded, 'Starter'), false, 'an unpaid setup must stay purchasable');
 });
 
@@ -352,9 +353,9 @@ test('a stored payload is clamped to what its billing state supports', () => {
     }),
   );
 
-  assert.equal(lapsed.tier, 'Starter', 'a lapsed payload must not keep the tier the gates read');
+  assert.equal(lapsed.tier, 'Free', 'a lapsed payload must not keep the tier the gates read');
   assert.equal(lapsed.sharedAccessEnabled, false);
-  assert.equal(lapsed.usage.horseLimit, 5);
+  assert.equal(lapsed.usage.horseLimit, 2);
   assert.equal(lapsed.usage.seatLimit, 1);
 
   // What was bought survives, so the billing screen can still name it.
@@ -394,7 +395,7 @@ test('a past-due payload drops to the baseline but keeps the account', () => {
     }),
   );
 
-  assert.equal(pastDue.tier, 'Starter');
+  assert.equal(pastDue.tier, 'Free');
   assert.equal(pastDue.purchasedTier, 'Ranch Ops');
   // Past Due is not the same as gone: the record of what they had is intact, so
   // recovering billing restores the tier rather than re-purchasing it.
@@ -411,9 +412,9 @@ test('a past-due payload drops to the baseline but keeps the account', () => {
  * progress and hiding a real setup step.
  */
 test('an unconfigured workspace has not completed billing setup', () => {
-  const seeded = subscriptionFixture({ tier: 'Starter', monthlyRate: 0, billingState: 'Manual Billing' });
+  const seeded = subscriptionFixture({ tier: 'Free', monthlyRate: 0, billingState: 'Inactive' });
 
-  assert.equal(isEntitledBillingState(seeded.billingState), true, 'precondition: the seed state is entitled');
+  assert.equal(isEntitledBillingState(seeded.billingState), false, 'Free is not a paid entitlement');
   assert.equal(hasActivePaidPlan(seeded), false, 'a zero-rate seed is a setup state, not a purchase');
 });
 
@@ -588,17 +589,16 @@ test('a stored flag always wins over the fallback', () => {
  * Enterprise, where the clamp hides the advance — and Enterprise is the single
  * case I reasoned about. Every tier is covered here for that reason.
  */
-test('a lapsed plan defaults to the tier that lapsed, at every tier', () => {
+test('lapsed public plans can be restored while retired plans never become new sale offers', () => {
   for (const tier of ['Starter', 'Professional', 'Ranch Ops', 'Enterprise'] as const) {
-    const lapsed = subscriptionFixture({
-      tier: 'Starter', // the baseline it fell back to
-      purchasedTier: tier,
-      billingState: 'Inactive',
-      monthlyRate: 0,
-    });
-
-    const lapsedTier = isEntitledBillingState(lapsed.billingState) ? undefined : lapsed.purchasedTier;
-    assert.equal(lapsedTier, tier, `a lapsed ${tier} should offer ${tier} back, not the next plan up`);
+    const lapsed = subscriptionFixture({ tier: 'Free', purchasedTier: tier, billingState: 'Inactive', monthlyRate: 0 });
+    const lapsedTier =
+      isEntitledBillingState(lapsed.billingState) || !isPublicPaidPlan(lapsed.purchasedTier)
+        ? undefined
+        : lapsed.purchasedTier;
+    const offered = lapsedTier ?? recommendedTier(lapsed.tier);
+    assert.equal(offered, isPublicPaidPlan(tier) ? tier : 'Professional');
+    assert.equal(isPublicPaidPlan(offered), true);
   }
 });
 
@@ -641,18 +641,18 @@ test('the billing screen selects the lapsed tier rather than recommending from i
  * one that was reported is how the rest would have survived.
  */
 test('an unknown tier decays to the baseline rather than to a paid plan', () => {
-  assert.equal(normalizeTier('Platinum Elite'), 'Starter');
-  assert.equal(normalizeTier(''), 'Starter');
-  assert.equal(normalizeTier(undefined), 'Starter');
-  assert.equal(normalizeTier(null), 'Starter');
-  assert.equal(normalizeTier(42), 'Starter');
-  assert.equal(normalizeTier({ tier: 'Enterprise' }), 'Starter');
+  assert.equal(normalizeTier('Platinum Elite'), 'Free');
+  assert.equal(normalizeTier(''), 'Free');
+  assert.equal(normalizeTier(undefined), 'Free');
+  assert.equal(normalizeTier(null), 'Free');
+  assert.equal(normalizeTier(42), 'Free');
+  assert.equal(normalizeTier({ tier: 'Enterprise' }), 'Free');
 
   // Prototype keys are not tiers. `subscriptionPlans['constructor']` is truthy
   // through the prototype chain, so a naive `in` or truthiness check would
   // accept it and hand the screen an object that is not a plan.
-  assert.equal(normalizeTier('constructor'), 'Starter');
-  assert.equal(normalizeTier('toString'), 'Starter');
+  assert.equal(normalizeTier('constructor'), 'Free');
+  assert.equal(normalizeTier('toString'), 'Free');
 
   // Real tiers pass through untouched.
   for (const tier of Object.keys(subscriptionPlans) as SubscriptionTier[]) {
@@ -1082,68 +1082,13 @@ test('the pending marker stops applying once the workspace is entitled', async (
   );
 });
 
-test('every payment-link redirect goes through the pending-purchase guard', async () => {
+test('billing redirects only to the portal or a managed checkout result', async () => {
   const screen = await readFile(path.join(process.cwd(), 'src/routes/Subscriptions.tsx'), 'utf8');
-
-  /*
-   * There are two routes to a payment link — the hosted-only primary route and
-   * the `no_managed_identity` fallback — and they are the same act with the
-   * same consequence: a static link that cannot associate its subscription
-   * with a workspace, in a deployment with no webhook to confirm it. The guard
-   * shipped on one branch and not the other, so this pins the shape that makes
-   * that impossible rather than the two call sites.
-   */
-  const helperAt = screen.indexOf('const followPaymentLink = async (');
-  assert.ok(helperAt > -1, 'the single payment-link redirect must be findable');
-  const helper = screen.slice(helperAt, screen.indexOf('const openBillingPortal', helperAt));
-
-  /*
-   * One CLAIM, not a read followed by a write. Re-reading storage instead of a
-   * cached snapshot fixed the tab that decided from stale state, but two tabs
-   * clicking at once can both finish a read before either writes, and a
-   * check-then-set they both pass guards nothing. The claim puts the read and
-   * the write inside one cross-tab lock; splitting them again reopens the
-   * window, and the marker's workspace stamp is carried into it here — a
-   * marker written under the local scope while a cloud workspace is open never
-   * matches on read, which loses the guard with the suite still green.
-   */
-  assert.match(
-    helper,
-    /const claim = await claimPendingHostedPurchase\(\s*\{ tier, startedAt: new Date\(\)\.toISOString\(\), workspaceId \},\s*new Date\(\),\s*!subscriptionActive,\s*\);/,
-    'the redirect must claim the purchase under the lock, stamped with its workspace',
-  );
-  assert.match(helper, /if \(!claim\.claimed\)/, 'and refuse when the claim is refused');
-  assert.doesNotMatch(
-    helper,
-    /readPendingHostedPurchase|writePendingHostedPurchase/,
-    'reading or writing the marker beside the claim is the check-then-set that was removed',
-  );
-  const claimAt = helper.indexOf('claimPendingHostedPurchase(');
-  const assignAt = helper.indexOf('window.location.assign(link)');
-  assert.ok(claimAt > -1 && assignAt > claimAt, 'and it must claim before it leaves the page');
-  assert.match(
-    screen,
-    /isPendingHostedPurchase\(pendingPurchase, new Date\(\), workspaceId\)/,
-    'and it must be read back against the workspace being viewed, not the one on the marker',
-  );
-  assert.match(helper, /window\.location\.assign\(link\)/, 'before leaving the page');
-
-  /*
-   * And nothing else may follow a link. Three redirects exist — the guarded
-   * payment link, the billing portal, and a managed checkout session, neither
-   * of which is a static link — so a FOURTH is the thing to catch: it is how a
-   * new route would skip this guard, exactly as the fallback did.
-   */
-  const assigned = [...screen.matchAll(/window\.location\.assign\(([^)]+)\)/g)].map(([, expression]) => expression);
   assert.deepEqual(
-    assigned.sort(),
-    ['billingPortalAction.url', 'link', 'managed.url'],
-    'a new redirect must be routed through followPaymentLink, not added beside it',
+    [...screen.matchAll(/window\.location\.assign\(([^)]+)\)/g)].map((match) => match[1]),
+    ['billingPortalAction.url', 'managed.url'],
   );
-
-  // Both call sites must actually use the helper rather than reimplementing it.
-  assert.match(screen, /await followPaymentLink\(tier, hostedOnlyLink\);/, 'the hosted-only route');
-  assert.match(screen, /await followPaymentLink\(tier, fallback, managed\.message\);/, 'and the no-identity fallback');
+  assert.doesNotMatch(screen, /getStripePaymentLink|followPaymentLink|canUsePaymentLinkFallback/);
 });
 
 test('a second billing tab learns about the first tab’s purchase', async () => {
@@ -1416,18 +1361,12 @@ test('an active subscriber is not blocked by their own pending marker', async ()
   }
 });
 
-test('the billing screen claims the purchase rather than reading and writing it', async () => {
+test('billing rechecks legacy hosted payment recovery before opening managed Stripe checkout', async () => {
   const screen = await readFile(path.join(process.cwd(), 'src/routes/Subscriptions.tsx'), 'utf8');
-
-  assert.match(screen, /const claim = await claimPendingHostedPurchase\(/, 'the redirect must claim');
-  assert.doesNotMatch(
-    screen,
-    /writePendingHostedPurchase/,
-    'writing the marker outside the claim reopens the check-then-set window',
-  );
-
-  const assigned = [...screen.matchAll(/await followPaymentLink\(/g)];
-  assert.equal(assigned.length, 2, 'both payment-link routes must await the claim before redirecting');
+  const action = screen.slice(screen.indexOf('const beginCheckout ='));
+  assert.match(action, /isPendingHostedPurchase\(readPendingHostedPurchase\(workspaceId\)/);
+  assert.ok(action.indexOf('isPendingHostedPurchase') < action.indexOf('startManagedCheckout'));
+  assert.doesNotMatch(screen, /writePendingHostedPurchase|claimPendingHostedPurchase/);
 });
 
 /*

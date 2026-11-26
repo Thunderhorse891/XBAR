@@ -1,6 +1,6 @@
 import { HORSE_SEGMENTS } from '@/lib/recordOptions';
-import { useEffect, useMemo, useState } from 'react';
-import { Link, useNavigate, useSearchParams } from 'react-router-dom';
+import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
+import { Link, useLocation, useNavigate, useSearchParams } from 'react-router-dom';
 import { ContextMenu } from '@/components/ContextMenu';
 import { ActionMenuButton } from '@/components/InteractionSystem';
 import { EmptyState } from '@/components/EmptyState';
@@ -11,6 +11,12 @@ import { DotsIcon } from '@/components/icons';
 import { buildPublicShareUrl } from '@/lib/facebookSharing';
 import { formatCompactCurrency, formatPercent } from '@/lib/format';
 import { useUiStore } from '@/store/useUiStore';
+import { useCloudStore } from '@/store/useCloudStore';
+import {
+  deviceWorkspaceSaveUnconfirmed,
+  didCommitWorkspaceWriteAfter,
+  getWorkspacePersistReceipt,
+} from '@/lib/workspaceStorage';
 import { buildHorsePacketCompleteness, scoreTone } from '@/lib/xbarPhaseTwo';
 import { useCurrentRoleCapability, useXbarStore } from '@/store/useXbarStore';
 import type { HorseSegment, HorseSex, HorseStatus } from '@/types/xbar';
@@ -20,6 +26,7 @@ import { buildSaleReadinessScore } from '@/lib/saleReadinessScore';
 import { buildBuyerPacketReleaseGate } from '@/lib/buyerPacketReleaseGate';
 import { buildHorseDocumentActions, horseAgeLabel } from '@/lib/horseDocumentActions';
 import { useHorseArchiveActions } from '@/hooks/useHorseArchiveActions';
+import { useDayKey } from '@/hooks/useDayKey';
 import './horsesCommand.css';
 import './horseActionFlows.css';
 
@@ -114,14 +121,31 @@ export default function Horses() {
     }),
   );
 
+  const creationPending = useRef(false);
+  const [creatingHorse, setCreatingHorse] = useState(false);
+  const { key: routeKey } = useLocation();
+  // Back then Forward can return to the same URL and location key. Once the
+  // user leaves, a pending save no longer owns navigation.
+  const createRouteEpoch = useRef(0);
+  useLayoutEffect(
+    () => () => {
+      createRouteEpoch.current += 1;
+    },
+    [routeKey],
+  );
+
   const createOpen = searchParams.get('new') === '1';
   const showingArchived = searchParams.get('archived') === '1';
   const archivedCount = horses.filter((horse) => Boolean(horse.archive)).length;
-  const activeSharedHorseIds = new Set(
-    sharedListings.filter((listing) => listing.state !== 'Archived').map((listing) => listing.horseId),
+  const liveSharedHorseIds = new Set(
+    sharedListings.filter((listing) => listing.state === 'Live').map((listing) => listing.horseId),
   );
+  // A Coggins or health record can expire without a workspace edit. Keep the
+  // roster's memoized scores and document actions in step with the local day.
+  const dayKey = useDayKey();
 
   const setNewHorseParam = (open: boolean) => {
+    if (creationPending.current) return;
     const nextParams = new URLSearchParams(searchParams);
     if (open) nextParams.set('new', '1');
     else nextParams.delete('new');
@@ -142,12 +166,22 @@ export default function Horses() {
           });
           return [
             horse.id,
-            buildSaleReadinessScore({ horse, documents, receipts: expenseReceipts, ownershipRecord, releaseGate })
-              .score,
+            {
+              score: buildSaleReadinessScore({
+                horse,
+                documents,
+                receipts: expenseReceipts,
+                ownershipRecord,
+                releaseGate,
+              }).score,
+              releaseAllowed: releaseGate.allowed,
+            },
           ] as const;
         }),
       ),
-    [horses, documents, expenseReceipts, ownershipRecords],
+    // The canonical scoring functions read the current date.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [horses, documents, expenseReceipts, ownershipRecords, dayKey],
   );
   const documentActionsById = useMemo(
     () =>
@@ -161,7 +195,8 @@ export default function Horses() {
           ),
         ]),
       ),
-    [horses, documents, ownershipRecords],
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [horses, documents, ownershipRecords, dayKey],
   );
   const horsesWithDocumentGaps = horses.filter((horse) => documentActionsById.get(horse.id)?.length);
 
@@ -198,7 +233,7 @@ export default function Horses() {
       ownershipRecords.find((record) => record.horseId === horse.id),
     ),
   }));
-  const readyToListCount = horses.filter((horse) => horse.readiness.packetStatus === 'Ready').length;
+  const readyToListCount = [...saleReadinessById.values()].filter((readiness) => readiness.releaseAllowed).length;
   // A sale-track horse is blocked when it is on medical review or its sale
   // packet still has unmet document slots.
   const blockedFromSaleCount = commandPackets.filter(
@@ -207,7 +242,7 @@ export default function Horses() {
       (horse.status === 'Medical Review' || packet.saleSlots.some((slot) => slot.status !== 'ready')),
   ).length;
   const missingDocumentCount = [...documentActionsById.values()].reduce((sum, actions) => sum + actions.length, 0);
-  const buyerPacketsLiveCount = activeSharedHorseIds.size;
+  const buyerPacketsLiveCount = liveSharedHorseIds.size;
 
   const handleSavedHorseToggle = async (horseId: string) => {
     setTogglingListingId(horseId);
@@ -273,7 +308,7 @@ export default function Horses() {
         { label: 'Legal owner', value: horse.owner },
         { label: 'Location', value: `${horse.location.barn} | ${horse.location.pasture}` },
         { label: 'Registration', value: horse.aqhaNumber || horse.registrationNumber || 'Pending' },
-        { label: 'Sale readiness', value: formatPercent(saleReadinessById.get(horse.id) ?? 0) },
+        { label: 'Sale readiness', value: formatPercent(saleReadinessById.get(horse.id)?.score ?? 0) },
       ],
       actions: [
         { label: 'Open horse record', path: `/horses/${horse.id}` },
@@ -352,18 +387,28 @@ export default function Horses() {
         ]
       : [];
 
-  const handleCreateHorse = () => {
+  const handleCreateHorse = async () => {
+    if (creationPending.current) return;
     const nextErrors = horseCreateFieldErrors(form);
     setFormErrors(nextErrors);
     if (Object.keys(nextErrors).length) return;
 
-    const result = addHorse(form);
-    pushToast({
-      title: result.ok ? 'Horse record created' : 'Horse record blocked',
-      message: result.message,
-      tone: result.ok ? 'success' : 'error',
-    });
-    if (result.ok && result.id) {
+    creationPending.current = true;
+    setCreatingHorse(true);
+    const { session, workspaceId } = useCloudStore.getState();
+    const location = window.location.href;
+    const routeEpoch = createRouteEpoch.current;
+    try {
+      const previous = getWorkspacePersistReceipt();
+      const result = addHorse(form);
+      if (!result.ok || !result.id) {
+        pushToast({ title: 'Horse record blocked', message: result.message, tone: 'error' });
+        return;
+      }
+
+      const receipt = didCommitWorkspaceWriteAfter(previous);
+      // This exact draft already became a horse in memory. Do not leave a
+      // resubmittable draft if the user navigates away while the receipt settles.
       setForm(
         createHorseFormDefaults({
           defaultOwnerName: workspaceProfile.defaultOwnerName,
@@ -372,8 +417,24 @@ export default function Horses() {
           defaultPasture: workspaceProfile.defaultPasture,
         }),
       );
+      const persisted = await receipt;
+      const currentCloud = useCloudStore.getState();
+      if (currentCloud.session?.user.id !== session?.user.id || currentCloud.workspaceId !== workspaceId) return;
+      pushToast({
+        title: persisted ? 'Horse record created' : 'Device save not confirmed',
+        message: persisted
+          ? `Saved on this device.${session?.user ? ' Cloud sync runs separately; check Cloud status.' : ''}`
+          : deviceWorkspaceSaveUnconfirmed,
+        tone: persisted ? 'success' : 'warning',
+        ...(persisted ? {} : { duration: Infinity }),
+      });
+      if (window.location.href !== location || createRouteEpoch.current !== routeEpoch) return;
+      creationPending.current = false;
       setNewHorseParam(false);
       navigate(`/horses/${result.id}`);
+    } finally {
+      creationPending.current = false;
+      setCreatingHorse(false);
     }
   };
 
@@ -420,7 +481,7 @@ export default function Horses() {
               className="button button--primary button--compact"
               type="button"
               onClick={() => setNewHorseParam(true)}
-              disabled={!canCreateHorse}
+              disabled={creatingHorse || !canCreateHorse}
             >
               Add Horse
             </button>
@@ -535,10 +596,12 @@ export default function Horses() {
               className="button button--ghost button--compact"
               type="button"
               onClick={() => setNewHorseParam(false)}
+              disabled={creatingHorse}
             >
               Close
             </button>
           </div>
+          {creatingHorse ? <p role="status">Saving horse to this device…</p> : null}
           <div className="form-grid">
             <label className="field-stack">
               <span className="field-label">Registered name</span>
@@ -549,7 +612,7 @@ export default function Horses() {
                   setForm((current) => ({ ...current, name: event.target.value }));
                   setFormErrors((current) => ({ ...current, name: undefined }));
                 }}
-                disabled={!canCreateHorse}
+                disabled={creatingHorse || !canCreateHorse}
               />
               {formErrors.name ? <span className="field-error">{formErrors.name}</span> : null}
             </label>
@@ -562,7 +625,7 @@ export default function Horses() {
                   setForm((current) => ({ ...current, barnName: event.target.value }));
                   setFormErrors((current) => ({ ...current, barnName: undefined }));
                 }}
-                disabled={!canCreateHorse}
+                disabled={creatingHorse || !canCreateHorse}
               />
               {formErrors.barnName ? <span className="field-error">{formErrors.barnName}</span> : null}
             </label>
@@ -574,7 +637,7 @@ export default function Horses() {
                 onChange={(event) =>
                   setForm((current) => ({ ...current, segment: event.target.value as HorseSegment }))
                 }
-                disabled={!canCreateHorse}
+                disabled={creatingHorse || !canCreateHorse}
               >
                 {horseSegments.map((segment) => (
                   <option key={segment} value={segment}>
@@ -589,7 +652,7 @@ export default function Horses() {
                 className="field-input"
                 value={form.status}
                 onChange={(event) => setForm((current) => ({ ...current, status: event.target.value as HorseStatus }))}
-                disabled={!canCreateHorse}
+                disabled={creatingHorse || !canCreateHorse}
               >
                 {horseStatuses.map((status) => (
                   <option key={status} value={status}>
@@ -604,7 +667,7 @@ export default function Horses() {
                 className="field-input"
                 value={form.sex}
                 onChange={(event) => setForm((current) => ({ ...current, sex: event.target.value as HorseSex }))}
-                disabled={!canCreateHorse}
+                disabled={creatingHorse || !canCreateHorse}
               >
                 {horseSexes.map((sex) => (
                   <option key={sex} value={sex}>
@@ -622,7 +685,7 @@ export default function Horses() {
                   setForm((current) => ({ ...current, owner: event.target.value }));
                   setFormErrors((current) => ({ ...current, owner: undefined }));
                 }}
-                disabled={!canCreateHorse}
+                disabled={creatingHorse || !canCreateHorse}
               />
               {formErrors.owner ? <span className="field-error">{formErrors.owner}</span> : null}
             </label>
@@ -635,7 +698,7 @@ export default function Horses() {
                   setForm((current) => ({ ...current, ownerEntity: event.target.value }));
                   setFormErrors((current) => ({ ...current, ownerEntity: undefined }));
                 }}
-                disabled={!canCreateHorse}
+                disabled={creatingHorse || !canCreateHorse}
               />
               {formErrors.ownerEntity ? <span className="field-error">{formErrors.ownerEntity}</span> : null}
             </label>
@@ -645,7 +708,7 @@ export default function Horses() {
                 className="field-input"
                 value={form.aqhaNumber}
                 onChange={(event) => setForm((current) => ({ ...current, aqhaNumber: event.target.value }))}
-                disabled={!canCreateHorse}
+                disabled={creatingHorse || !canCreateHorse}
               />
             </label>
             <label className="field-stack">
@@ -654,7 +717,7 @@ export default function Horses() {
                 className="field-input"
                 value={form.registrationNumber}
                 onChange={(event) => setForm((current) => ({ ...current, registrationNumber: event.target.value }))}
-                disabled={!canCreateHorse}
+                disabled={creatingHorse || !canCreateHorse}
               />
             </label>
             <label className="field-stack">
@@ -666,7 +729,7 @@ export default function Horses() {
                   setForm((current) => ({ ...current, barn: event.target.value }));
                   setFormErrors((current) => ({ ...current, barn: undefined }));
                 }}
-                disabled={!canCreateHorse}
+                disabled={creatingHorse || !canCreateHorse}
               />
               {formErrors.barn ? <span className="field-error">{formErrors.barn}</span> : null}
             </label>
@@ -679,7 +742,7 @@ export default function Horses() {
                   setForm((current) => ({ ...current, pasture: event.target.value }));
                   setFormErrors((current) => ({ ...current, pasture: undefined }));
                 }}
-                disabled={!canCreateHorse}
+                disabled={creatingHorse || !canCreateHorse}
               />
               {formErrors.pasture ? <span className="field-error">{formErrors.pasture}</span> : null}
             </label>
@@ -697,7 +760,7 @@ export default function Horses() {
                   pasture: workspaceProfile.defaultPasture,
                 }))
               }
-              disabled={!canCreateHorse}
+              disabled={creatingHorse || !canCreateHorse}
             >
               Use ranch defaults
             </button>
@@ -705,7 +768,7 @@ export default function Horses() {
               className="button button--primary"
               type="button"
               onClick={handleCreateHorse}
-              disabled={!canCreateHorse || !canSubmitHorseCreate(form)}
+              disabled={creatingHorse || !canCreateHorse || !canSubmitHorseCreate(form)}
             >
               Create horse record
             </button>
@@ -718,11 +781,16 @@ export default function Horses() {
           <span className="hc-onboard__eyebrow">Start here</span>
           <h2 className="hc-onboard__title">Build your first sale-ready horse record.</h2>
           <p className="hc-onboard__copy">
-            XBAR is more than a records shelf. Bring in a horse&apos;s documents and it assembles the profile, checks
-            the sale packet for missing documents, and keeps the horse ready to show to buyers.
+            Keep horse details, original documents, and ownership history together. Review record gaps before preparing
+            a sale.
           </p>
           <div className="hc-onboard__paths">
-            <button className="hc-path" type="button" onClick={() => setNewHorseParam(true)} disabled={!canCreateHorse}>
+            <button
+              className="hc-path"
+              type="button"
+              onClick={() => setNewHorseParam(true)}
+              disabled={creatingHorse || !canCreateHorse}
+            >
               <span className="hc-path__step">Start fast</span>
               <strong>Add a horse</strong>
               <p>Name, owner, and barn is enough. The sale-readiness checklist appears on the record immediately.</p>
@@ -732,8 +800,8 @@ export default function Horses() {
               <span className="hc-path__step">Start from documents</span>
               <strong>Upload documents</strong>
               <p>
-                Drop registration papers, Coggins, and vet records. XBAR reads them and files each one toward a
-                horse&apos;s sale packet.
+                Upload registration papers, Coggins, and vet records. Link originals to the right horse; review
+                extracted details when OCR is available.
               </p>
               <em>Upload Documents →</em>
             </Link>
@@ -851,9 +919,10 @@ export default function Horses() {
             filtered.length ? (
               <div className="horse-grid">
                 {filtered.map((horse) => {
-                  const saved = sharedListings.some(
+                  const listing = sharedListings.find(
                     (listing) => listing.horseId === horse.id && listing.state !== 'Archived',
                   );
+                  const saved = Boolean(listing);
                   const toggling = togglingListingId === horse.id;
                   const packet = buildHorsePacketCompleteness(
                     horse,
@@ -861,10 +930,11 @@ export default function Horses() {
                     ownershipRecords.find((record) => record.horseId === horse.id),
                   );
                   const valueLabel = horse.segment === 'Sale Prospect' && horse.sale.askPrice ? 'Ask' : 'Insured';
-                  const accessLabel = saved ? 'Released' : 'Private';
+                  const accessLabel = listing?.state === 'Live' ? 'Released' : saved ? 'Draft' : 'Private';
                   const showSaleSignals = horse.segment === 'Sale Prospect' || horse.status === 'Sale Prep';
                   const openProofSlots = documentActionsById.get(horse.id)?.length ?? 0;
-                  const readiness = saleReadinessById.get(horse.id) ?? 0;
+                  const readiness = saleReadinessById.get(horse.id)?.score ?? 0;
+                  const releaseAllowed = saleReadinessById.get(horse.id)?.releaseAllowed ?? false;
                   const primaryMedia = primaryHorseMedia(horse);
                   return (
                     <div
@@ -897,7 +967,21 @@ export default function Horses() {
                             <Pill tone={statusTone[horse.status]}>
                               {horse.status === 'Sale Prep' ? 'Buyer Prep' : horse.status}
                             </Pill>
-                            <Pill tone={packet.buyerProfileTone}>{packet.buyerProfileStatus}</Pill>
+                            <Pill
+                              tone={
+                                releaseAllowed
+                                  ? 'emerald'
+                                  : packet.buyerProfileStatus === 'Live'
+                                    ? 'amber'
+                                    : packet.buyerProfileTone
+                              }
+                            >
+                              {releaseAllowed
+                                ? 'Release clear'
+                                : packet.buyerProfileStatus === 'Live'
+                                  ? 'Needs Review'
+                                  : packet.buyerProfileStatus}
+                            </Pill>
                           </div>
                           <ActionMenuButton
                             className="icon-button icon-button--compact"
@@ -939,7 +1023,9 @@ export default function Horses() {
                           </div>
                           <div className="horse-card__metric">
                             <span>{valueLabel}</span>
-                            <strong>{formatCompactCurrency(horse.sale.askPrice || horse.insuredValue)}</strong>
+                            <strong>
+                              {formatCompactCurrency(valueLabel === 'Ask' ? horse.sale.askPrice : horse.insuredValue)}
+                            </strong>
                           </div>
                           <div className="horse-card__metric">
                             <span>Release</span>
@@ -989,7 +1075,9 @@ export default function Horses() {
                         <div className="horse-card__footer">
                           <div className="status-inline">
                             {saved ? (
-                              <Pill tone="blue">Buyer packet live</Pill>
+                              <Pill tone="blue">
+                                {listing?.state === 'Live' ? 'Buyer packet released' : 'Buyer packet staged'}
+                              </Pill>
                             ) : (
                               <Pill tone={openProofSlots ? 'amber' : 'emerald'}>
                                 {openProofSlots ? `${openProofSlots} document gaps` : 'Documents clear'}
@@ -1057,7 +1145,7 @@ export default function Horses() {
                     className="button button--primary button--compact"
                     type="button"
                     onClick={() => setNewHorseParam(true)}
-                    disabled={!canCreateHorse}
+                    disabled={creatingHorse || !canCreateHorse}
                   >
                     Create horse record
                   </button>
@@ -1115,7 +1203,7 @@ export default function Horses() {
                         {horse.location.barn} · {horse.location.pasture}
                       </td>
                       <td>{horse.documents.length}</td>
-                      <td>{saleReadinessById.get(horse.id) ?? '—'}</td>
+                      <td>{saleReadinessById.get(horse.id)?.score ?? '—'}</td>
                       <td>
                         <Pill tone={statusTone[horse.status]}>
                           {horse.status === 'Sale Prep' ? 'Buyer Prep' : horse.status}
@@ -1145,7 +1233,7 @@ export default function Horses() {
                   className="button button--primary button--compact"
                   type="button"
                   onClick={() => setNewHorseParam(true)}
-                  disabled={!canCreateHorse}
+                  disabled={creatingHorse || !canCreateHorse}
                 >
                   Create horse record
                 </button>

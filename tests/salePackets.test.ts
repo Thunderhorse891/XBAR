@@ -656,6 +656,96 @@ test('packet failures retain precise messages and offer safe billing, sign-in, o
   }
 });
 
+test('native packet failure rendering preserves server facts without purchase invitations', async () => {
+  const { createElement } = await import('react');
+  const { renderToStaticMarkup } = await import('react-dom/server');
+  const { PacketFailureNotice } = await import('../src/components/PacketFailureNotice.js');
+  const { packetFailureGuidance } = await import('../src/lib/salePacketGuidance.js');
+  const { resolve } = await import('node:path');
+  const { pathToFileURL } = await import('node:url');
+  const serverModule = pathToFileURL(resolve('api/_lib/entitlements.js')).href;
+  const { checkSalePacketCapacity, SALE_PACKET_WINDOW_DAYS } = await import(serverModule);
+  const query = {
+    select: () => query,
+    eq: () => query,
+    gte: async () => ({ count: 5, error: null }),
+  };
+  const capacity = await checkSalePacketCapacity(
+    { from: () => query },
+    'synthetic-workspace',
+    1,
+    { salePacketLimit: 5 },
+    new Date('2026-11-26T12:00:00Z'),
+  );
+  assert.equal(capacity.ok, false);
+  const days = SALE_PACKET_WINDOW_DAYS;
+  const capacityFacts = `This packet would exceed the plan's 5 sale packets per ${days} days (5 generated in the last ${days} days). The allowance renews as earlier packets pass ${days} days, and reopening or resending a packet never uses it.`;
+  assert.equal(capacity.message, `${capacityFacts} Upgrade for more.`);
+  const cases = [
+    { code: 'sale_packet_limit_reached', message: capacity.message!, native: capacityFacts },
+    {
+      code: 'sale_packet_limit_reached',
+      message: 'Sale packet limit reached (5/5). Upgrade to continue.',
+      native: 'Sale packet limit reached (5/5).',
+    },
+    {
+      code: 'sale_packet_limit_reached',
+      message: 'Sale packet limit reached (5/5). Upgrade to unlock more capacity.',
+      native: 'Sale packet limit reached (5/5).',
+    },
+    {
+      code: 'tier_required',
+      message: 'Professional unlocks sale document export. Upgrade to keep this workflow moving.',
+      native: 'Sale document export is unavailable with the current workspace plan.',
+    },
+    {
+      code: 'tier_required',
+      message: 'Sale packet assembly requires the Professional plan (current effective plan: Free).',
+      native: 'Sale packet assembly requires the Professional plan (current effective plan: Free).',
+    },
+    {
+      code: 'storage_limit_reached',
+      message:
+        'This upload would exceed the workspace storage limit (1.0 GB in use). Cloud storage is limited and shared across XBAR at launch. Contact support before uploading more.',
+      native:
+        'This upload would exceed the workspace storage limit (1.0 GB in use). Cloud storage is limited and shared across XBAR at launch. Contact support before uploading more.',
+    },
+  ];
+  const paragraph = (message: string) => renderToStaticMarkup(createElement('p', null, message));
+  for (const row of cases) {
+    const render = (canPurchase: boolean) =>
+      renderToStaticMarkup(
+        createElement(PacketFailureNotice, {
+          failure: packetFailureGuidance(row, () => canPurchase),
+          onRepair: () => {},
+        }),
+      );
+    const native = render(false);
+    assert.match(native, /role="alert"/);
+    assert.doesNotMatch(native, /Upgrade|unlocks|Review plan and usage|\/billing|<button/i);
+    assert.ok(
+      native.includes(paragraph(row.native)),
+      'native rendering retains the actual restriction and usage facts',
+    );
+    const web = render(true);
+    assert.ok(web.includes(paragraph(row.message)), 'web retains the exact existing server/client message');
+    assert.match(web, /Review plan and usage/);
+  }
+  const unavailable =
+    'Current sale packet count could not be verified, so this action was not applied. Try again in a moment.';
+  const service = renderToStaticMarkup(
+    createElement(PacketFailureNotice, {
+      failure: packetFailureGuidance({ message: unavailable, status: 503, code: 'usage_unavailable' }, () => false),
+      onRepair: () => {},
+    }),
+  );
+  assert.ok(
+    service.includes(paragraph(unavailable)),
+    'unknown usage remains a service error, never a plan-limit claim',
+  );
+  assert.match(service, /Check cloud connection/);
+});
+
 test('packet guidance sends queued and stale approved health files to screens where they can be fixed', async () => {
   const { packetDocumentAction } = await import('../src/lib/salePacketGuidance.js');
   const document = {

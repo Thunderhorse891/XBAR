@@ -7,6 +7,7 @@ on:
       - 'supabase/checks/storage-fixture-schema.sql'
       - 'supabase/checks/records-fixture-schema.sql'
       - 'supabase/checks/staff-writes.sql'
+      - 'supabase/checks/care-source-revision.sql'
       - 'supabase/checks/media-approval-writes.sql'
 
       - 'supabase/checks/document-review-writes.sql'
@@ -18,6 +19,7 @@ on:
       - 'supabase/checks/storage-fixture-schema.sql'
       - 'supabase/checks/records-fixture-schema.sql'
       - 'supabase/checks/staff-writes.sql'
+      - 'supabase/checks/care-source-revision.sql'
       - 'supabase/checks/media-approval-writes.sql'
 
       - 'supabase/checks/document-review-writes.sql'
@@ -109,3 +111,8 @@ jobs:
           psql -v ON_ERROR_STOP=1 -f supabase/migrations/20261107160000_guard_document_approval.sql
           psql -v ON_ERROR_STOP=1 -f supabase/checks/document-review-writes.sql
           psql -v ON_ERROR_STOP=1 -f supabase/checks/staff-writes.sql
+
+      - name: Verify private care source fence on committed record writes
+        run: |
+          psql -v ON_ERROR_STOP=1 -f supabase/migrations/20261122143000_private_care_source_revision.sql
+          psql -v ON_ERROR_STOP=1 -f supabase/checks/care-source-revision.sql

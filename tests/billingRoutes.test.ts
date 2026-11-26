@@ -86,7 +86,8 @@ test('paid signup creates the cloud workspace before billing checkout', () => {
   assert.match(setup, /const cloudSaved = await persistCloudWorkspace\(\);/);
   assert.match(setup, /checkout needs the cloud workspace first/);
   assert.match(setup, /const cloudWorkspaceRequired = supabaseReady && status === 'signed-in' && !workspaceId;/);
-  assert.match(setup, /workspaceReady && !saving && !cloudSetupBlocked && !cloudWorkspaceRequired/);
+  // Automatic paid-plan navigation must also wait for the account-deletion result.
+  assert.match(setup, /workspaceReady && !saving && !cloudSetupBlocked && !cloudWorkspaceRequired && !deletingAccount/);
   assert.match(setup, /navigate\(postSetupPath, \{ replace: true \}\)/);
 });
 
@@ -123,39 +124,11 @@ test('upgrade links use canonical billing path instead of legacy billing routes'
   }
 });
 
-test('only a missing managed identity may fall back to a payment link', async () => {
+test('managed refusals preserve their codes and never open a static payment link', async () => {
   const client = await readFile('src/lib/billingApi.ts', 'utf8');
   const screen = await readFile('src/routes/Subscriptions.tsx', 'utf8');
-
-  /*
-   * The payment link is a `mode: 'subscription'` checkout that never consults
-   * the workspace's billing row. Following it after the endpoint refused
-   * reinstated the duplicate-charge path the refusal exists to close.
-   *
-   * Blocking a LIST of refusal codes was not enough, which is why this is an
-   * allowlist now: `fetch` rejecting or a malformed body yields an UNCODED
-   * failure, and those are exactly the cases where the endpoint guard never
-   * ran — so a workspace with a live subscription still reached the link.
-   */
-  assert.match(client, /code: payload\.code,/, 'the server refusal code must survive the client boundary');
-  assert.match(
-    client,
-    /export function canUsePaymentLinkFallback\(code\?: string\): boolean \{\s*return code === NO_MANAGED_IDENTITY;/,
-    'the fallback must be an allowlist of one, not a blocklist of known refusals',
-  );
-  assert.match(
-    screen,
-    /const fallback = canUsePaymentLinkFallback\(managed\.code\) \? getStripePaymentLink\(tier, billingPeriod\) : '';/,
-    'the screen must reach the payment link only for the no-identity case',
-  );
-  // The fallback must honor the selected billing period. Reaching for the
-  // monthly link here would silently sell monthly to a buyer who chose
-  // annual — the wrong charge with a correct-looking receipt.
-  assert.doesNotMatch(
-    screen,
-    /const fallback = canUsePaymentLinkFallback\(managed\.code\) \? getStripePaymentLink\(tier\) : '';/,
-    'the payment-link fallback must not drop the billing period',
-  );
+  assert.match(client, /code: payload\.code,/);
+  assert.doesNotMatch(screen, /canUsePaymentLinkFallback|getStripePaymentLink/);
 });
 
 test('a transport failure is not evidence that a second subscription is safe', async () => {
@@ -170,52 +143,31 @@ test('a transport failure is not evidence that a second subscription is safe', a
   assert.doesNotMatch(client, /isBillingPolicyRefusal/, 'the blocklist predicate must be gone');
 });
 
-test('a local-only workspace can still buy a plan', async () => {
+test('a local-only workspace is refused until it has a managed identity', async () => {
   const client = await readFile('src/lib/billingApi.ts', 'utf8');
 
-  // Without a workspace id and access token the endpoint cannot be called, so
-  // no billing row can be found and none can be duplicated. That path is how a
-  // workspace with no cloud session legitimately reaches Stripe, and it has to
-  // stay open — which is exactly why it is CODED rather than left uncoded and
-  // indistinguishable from a fetch that threw.
-  // `[^}]` already matches a newline, so the `(?:[^}]|\n)` this replaced gave
-  // the engine two ways to consume the same character — ambiguity a lazy
-  // quantifier turns into exponential backtracking, which is what CodeQL
-  // flagged. One unambiguous class does the same job in linear time.
+  // Sign-in remains required for the server to verify the workspace and price.
   assert.match(
     client,
     /if \(!params\.workspaceId \|\| !params\.accessToken\) \{\s*return \{\s*ok: false,[^}]*?code: NO_MANAGED_IDENTITY,/,
-    'the no-identity path must carry the one code that permits a fallback',
+    'the no-identity path retains its diagnostic code, not permission for fallback',
   );
 });
 
-test('hosted-link-only billing reaches its payment link without calling the disabled endpoint', () => {
-  /*
-   * The documented link-only configuration: VITE_STRIPE_PAYMENT_LINK_* set,
-   * managed billing off. api/stripe/checkout.js answers 503 before it reads a
-   * billing row, so that refusal carries no code, so `canUsePaymentLinkFallback`
-   * declines to follow it — and the only checkout route the deployment has was
-   * suppressed. Every purchase ended in an error toast while `/api/health`
-   * reported the billing configuration healthy, which for link-only billing it
-   * is. The route has to be chosen from configuration, before the request.
-   */
+test('hosted-link-only billing cannot bypass the verified managed route', () => {
+  // The old link-only configuration must not sell an unverified legacy rate.
   assert.equal(
     checkoutRouteFor({ managedBillingEnabled: false, paymentLink: 'https://buy.stripe.com/test_link' }),
-    'payment_link',
+    'managed',
   );
 });
 
-test('the billing screen decides the route before it calls the endpoint', async () => {
+test('managed Stripe checkout remains behind server catalog and workspace readiness', async () => {
   const screen = await readFile('src/routes/Subscriptions.tsx', 'utf8');
-
-  // Order is the property, not the presence of a call: deciding the route
-  // AFTER the endpoint answered would be the fallback again, and the fallback
-  // is what suppresses the link in this configuration.
-  const routeAt = screen.indexOf('checkoutRouteFor({');
-  const managedAt = screen.indexOf('await startManagedCheckout(');
-  assert.ok(routeAt >= 0, 'the screen must choose a checkout route from configuration');
-  assert.ok(managedAt >= 0, 'the screen must still call the managed endpoint');
-  assert.ok(routeAt < managedAt, 'the route must be chosen before the managed endpoint is called');
+  const action = screen.slice(screen.indexOf('const beginCheckout ='));
+  assert.match(action, /billingEnabled: canSellTier\(tier\)/);
+  assert.ok(action.indexOf('if (!readiness.ready)') < action.indexOf('await startManagedCheckout('));
+  assert.doesNotMatch(action, /checkoutRouteFor|followPaymentLink/);
 });
 
 test('the hosted-only bypass reads the managed-billing flag, not a failure code', () => {
@@ -236,8 +188,8 @@ test('the hosted-only bypass reads the managed-billing flag, not a failure code'
   assert.equal(checkoutRouteFor({ managedBillingEnabled: false, paymentLink: '' }), 'managed');
   assert.equal(checkoutRouteFor({ managedBillingEnabled: true, paymentLink: '' }), 'managed');
 
-  // And the allowlist itself is untouched by any of this.
+  // No error code authorizes a static checkout.
   assert.equal(canUsePaymentLinkFallback(undefined), false);
   assert.equal(canUsePaymentLinkFallback('billing_unavailable'), false);
-  assert.equal(canUsePaymentLinkFallback(NO_MANAGED_IDENTITY), true);
+  assert.equal(canUsePaymentLinkFallback(NO_MANAGED_IDENTITY), false);
 });

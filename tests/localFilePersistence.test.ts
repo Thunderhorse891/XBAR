@@ -9,7 +9,8 @@ import test from 'node:test';
  * did nothing. `const localFileUrl = undefined;` sat directly under
  * `console.error('Cloud upload failed; storing file locally instead.')`, so
  * every unit test of the surrounding function passed while the file's bytes
- * were discarded. Nothing short of reading the call site catches that.
+ * were discarded. These source guards complement the live store recovery
+ * tests in tests/api/storageUploadPreflight.test.mjs.
  */
 
 test('a document the cloud did not take is stored on this device', async () => {
@@ -22,8 +23,19 @@ test('a document the cloud did not take is stored on this device', async () => {
   );
   assert.match(
     source,
-    /if \(!uploadedAsset\) \{\s*try \{\s*localFileKey = await storeLocalFile\(file, file\.name, file\.type, vaultOwnerId\(\)\)/,
-    'a document the cloud declined must have its bytes written to the on-device vault, tagged with the workspace that owns it',
+    /if \(!uploadedAsset\) \{\s*try \{\s*localFileKey = await storeLocalFile\(file, file\.name, file\.type, intakeVaultOwner\)/,
+    'a document the cloud declined must have its bytes written to the vault under the owner captured when intake began',
+  );
+  const intake = source.slice(source.indexOf('createDocumentIntake:'), source.indexOf('reviewDocument:'));
+  const capturedOwner = intake.indexOf('const intakeVaultOwner = vaultOwnerId();');
+  assert.ok(
+    capturedOwner >= 0 && capturedOwner < intake.indexOf('await '),
+    'fallback ownership must be pinned before any asynchronous work can switch accounts or ranches',
+  );
+  assert.doesNotMatch(
+    intake,
+    /storeLocalFile\(file, file\.name, file\.type, vaultOwnerId\(\)\)/,
+    'a failed upload must never tag the original with the replacement workspace at fallback time',
   );
   assert.match(
     source,
@@ -68,8 +80,13 @@ test('the vault is consulted before cloud storage when opening a file', async ()
   );
   assert.match(
     resolver,
-    /saved on a different device or browser/,
+    /This file is not available on this device/,
     'a key with no bytes behind it must say so rather than showing a broken link',
+  );
+  assert.doesNotMatch(
+    resolver,
+    /was saved on a different device/,
+    'missing bytes do not establish where a file was saved',
   );
 });
 
@@ -93,7 +110,7 @@ test('a workspace with no cloud identity still produces a packet', async () => {
   );
   assert.match(
     source,
-    /storeLocalFile\(\s*new Blob\(\[localPacket\.html\], \{ type: 'text\/html' \}\)/,
+    /storeLocalFile\(\s*new Blob\(\[new Uint8Array\(localPdf\.bytes\)\], \{ type: 'application\/pdf' \}\)/,
     'the generated packet must be kept on this device, not only as an object URL',
   );
   assert.doesNotMatch(
@@ -357,35 +374,19 @@ test('the packet summary does not claim a tab that never opened', async () => {
 });
 
 test('a refused file-vault purge is not reported as a completed deletion', async () => {
-  const source = await readFile('src/routes/Settings.tsx', 'utf8');
-
-  /*
-   * The capture has to precede both state-clearing steps. `deleteAccount`
-   * clears the cloud workspace id and `resetWorkspace` erases the records, so
-   * reading either afterwards answered for a workspace that no longer existed:
-   * every cloud deletion purged as 'local' with an empty key list, leaving the
-   * deleted account's files behind and deleting the local-only workspace's
-   * instead.
-   */
-  const capture = source.indexOf('const departingWorkspaceId = vaultOwnerId();');
-  const del = source.indexOf('await deleteAccount(deleteConfirm)');
+  const source = await readFile('src/components/AccountDeletionPanel.tsx', 'utf8');
+  const capture = source.indexOf('const departingOwner =');
+  const del = source.indexOf('await cloud.deleteAccount(email, accountId)');
   const reset = source.indexOf('resetWorkspace();');
-  assert.ok(capture > -1, 'the departing workspace must be captured');
-  assert.ok(capture < del, 'before the account is deleted');
-  assert.ok(capture < reset, 'and before the workspace is reset');
-
-  // Scoped to this workspace now: the vault is origin-wide, so dropping the
-  // database would take a second account's documents with it.
-  assert.match(
-    source,
-    /const \{ cleared \} = await clearLocalFileVault\(departingWorkspaceId, departingKeys\);/,
-    'the purge result must be read, and scoped to the workspace captured BEFORE deletion cleared it',
+  assert.ok(
+    capture > -1 && del > capture && reset > del,
+    'capture the original owner before awaiting deletion and reset',
   );
-  assert.match(
-    source,
-    /cleared \? 'Account deleted' : 'Account deleted — files still on this device'/,
-    'files left on the device must not be described as permanently deleted',
-  );
+  assert.match(source, /readRecordsOwner\(\) === departingOwner/);
+  assert.match(source, /if \(safeToClearActive && durableSnapshot\) \{/);
+  assert.match(source, /snapshotCleared &&\s+accountFiles\.cleared &&\s+workspaceFiles\.cleared/);
+  assert.match(source, /cleared \? 'Account deleted' : 'Account deleted; device cleanup needs attention'/);
+  assert.doesNotMatch(source, /persist\.clearStorage/);
 });
 
 test('a throwing file lookup becomes a result, not an escaping rejection', async () => {
@@ -450,7 +451,7 @@ test('the cloud packet never claims a tab the browser refused', async () => {
   const wizardCode = wizard.replace(/\/\*[\s\S]*?\*\//g, '').replace(/\/\/[^\n]*/g, '');
   assert.match(
     wizardCode,
-    /Watermarked PDF \$\{packetDelivery === 'tab' \? 'opened in a new tab' : 'is ready — use the download button below to open it'\}/,
+    /Watermarked PDF \$\{packetDelivery === 'share-sheet' \? 'shared from this app' : packetDelivery === 'tab' \? 'opened in a new tab' : 'is ready — use the download button below to open it'\}/,
     'the cloud summary must describe the delivery that actually happened',
   );
   assert.doesNotMatch(

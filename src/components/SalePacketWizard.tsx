@@ -2,6 +2,7 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { useForm } from 'react-hook-form';
 import { useNavigate } from 'react-router-dom';
 import { Checkbox } from '@/components/ui/checkbox';
+import { SalePacketPreview } from '@/components/SalePacketPreview';
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Form, FormControl, FormDescription, FormField, FormItem, FormLabel } from '@/components/ui/form';
 import { Input } from '@/components/ui/input';
@@ -16,6 +17,7 @@ import {
 import { resolvePacketAttachments } from '@/lib/localPacketAttachments';
 import { beginVaultWrite, endVaultWrite, storeLocalFile } from '@/lib/localFileVault';
 import { openStoredFileInTab } from '@/lib/openStoredFile';
+import { downloadStoredFile } from '@/lib/downloadStoredFile';
 import { vaultOwnerId } from '@/lib/vaultOwner';
 import { readRecordsOwner } from '@/lib/recordsOwner';
 import type { DocumentRecord, SaleCredentialSeal } from '@/types/xbar';
@@ -38,7 +40,8 @@ import { useCloudStore } from '@/store/useCloudStore';
 import { useUiStore } from '@/store/useUiStore';
 import { useXbarStore } from '@/store/useXbarStore';
 import './confirmActionDialog.css';
-import { canPresentPurchaseFlow } from '@/lib/nativePlatform';
+import { canPresentPurchaseFlow, isNativeApp } from '@/lib/nativePlatform';
+import { PacketFailureNotice } from './PacketFailureNotice';
 
 /*
  * The core paid workflow: select horse → release gate (title/transfer is a
@@ -62,7 +65,7 @@ function packetIdentityKey() {
   ]);
 }
 
-const STEPS = ['Horse', 'Release gate', 'Documents', 'Buyer', 'Generate'] as const;
+const STEPS = ['Horse', 'Release gate', 'Documents', 'Buyer', 'Preview'] as const;
 
 type BuyerPacketForm = {
   buyerName: string;
@@ -365,6 +368,7 @@ export function SalePacketWizard({
       let localPacket: LocalSalePacket | undefined;
       let localSeal: SaleCredentialSeal | undefined;
       let localFileKey: string | undefined;
+      let localFileName: string | undefined;
       /*
        * What the cloud left out, which was previously thrown away.
        *
@@ -431,15 +435,28 @@ export function SalePacketWizard({
         });
         if (!current()) return;
         localSeal = { ...localPacket.credential, anchor: 'local' as const };
+        const { renderLocalSalePacketPdf } = await import('@/lib/localSalePacketPdf');
+        const localPdf = await renderLocalSalePacketPdf({
+          packet: localPacket,
+          horse,
+          ownershipRecord: ownershipRecords.find((record) => record.horseId === horse.id),
+          profile: workspaceProfile,
+          attachments: resolved.attachments,
+          documents,
+          watermark: effectiveWatermark,
+          buyerName,
+        });
+        if (!current()) return;
+        localFileName = localPdf.fileName;
 
         // Kept in the on-device vault rather than only as an object URL: a
         // `blob:` address dies with the page, so the packet the seller went back
         // to send the next morning was a dead link.
         try {
           localFileKey = await storeLocalFile(
-            new Blob([localPacket.html], { type: 'text/html' }),
-            localPacket.fileName,
-            'text/html',
+            new Blob([new Uint8Array(localPdf.bytes)], { type: 'application/pdf' }),
+            localPdf.fileName,
+            'application/pdf',
             ownerAtStart,
             // XBAR wrote this file, so it may open as a document and run the
             // verifier the CSP allows. An uploaded .html never gets that.
@@ -464,7 +481,7 @@ export function SalePacketWizard({
         serverSeal,
         localSeal,
         localFileKey,
-        fileName: localPacket?.fileName,
+        fileName: localFileName,
       });
       publishing.current = false;
       setIsGenerating(false);
@@ -499,8 +516,15 @@ export function SalePacketWizard({
        * that was never opened — the same defect as the blocked-popup case this
        * variable was introduced for, arriving by a different route.
        */
-      let packetDelivery: 'tab' | 'download' | 'none' = 'none';
-      if (downloadUrl && typeof window !== 'undefined') {
+      let packetDelivery: 'tab' | 'download' | 'share-sheet' | 'none' = 'none';
+      if (isNativeApp() && (downloadUrl || localFileKey)) {
+        const opened = await openStoredFileInTab(
+          { ...build.packet, ...(downloadUrl ? { fileUrl: downloadUrl, fileName: 'buyer-sale-packet.pdf' } : {}) },
+          current,
+        );
+        packetDelivery = opened.ok ? opened.delivery : 'none';
+        if (!opened.ok) pushToast({ title: 'Packet was not shared', message: opened.message, tone: 'warning' });
+      } else if (downloadUrl && typeof window !== 'undefined') {
         /*
          * The cloud path had the same defect the local path was fixed for.
          *
@@ -562,16 +586,15 @@ export function SalePacketWizard({
              * is the reassuring one. Two toasts, one of them false, about whether
              * the buyer packet is on screen.
              *
-             * Two outcomes rather than the local branch's three: this path only
-             * ever sets 'tab' or 'none', because `window.open` cannot report a
-             * download.
+             * Native reports the completed share handoff separately; a browser
+             * popup is not evidence of a native file delivery.
              */
-            `Watermarked PDF ${packetDelivery === 'tab' ? 'opened in a new tab' : 'is ready — use the download button below to open it'}.${remoteUnavailable.length ? ` Not included: ${remoteUnavailable.join(', ')}.` : ''} Buyer activity is now tracked in Buyer follow-up.`
+            `Watermarked PDF ${packetDelivery === 'share-sheet' ? 'shared from this app' : packetDelivery === 'tab' ? 'opened in a new tab' : 'is ready — use the download button below to open it'}.${remoteUnavailable.length ? ` Not included: ${remoteUnavailable.join(', ')}.` : ''} Buyer activity is now tracked in Buyer follow-up.`
           : localFileKey
             ? // Says what is in it. A count the seller can check against what they
               // selected is the difference between finding a missing Coggins now
               // and the buyer finding it.
-              `${localPacket?.attachedFiles ?? 0} of ${docSelection.length} document${docSelection.length === 1 ? '' : 's'} embedded in the packet, saved on this device${packetDelivery === 'tab' ? ' and opened in a new tab' : packetDelivery === 'download' ? ' and downloaded to this device' : ' — open it from Sale packets when you are ready'}.${localPacket?.unattachedDocuments.length ? ` Not included: ${localPacket.unattachedDocuments.map((item) => item.title).join(', ')}.` : ''}`
+              `${localPacket?.attachedFiles ?? 0} of ${docSelection.length} document${docSelection.length === 1 ? '' : 's'} embedded in the packet, saved on this device${packetDelivery === 'share-sheet' ? ' and shared from this app' : packetDelivery === 'tab' ? ' and opened in a new tab' : packetDelivery === 'download' ? ' and downloaded to this device' : ' — open it from Sale packets when you are ready'}.${localPacket?.unattachedDocuments.length ? ` Not included: ${localPacket.unattachedDocuments.map((item) => item.title).join(', ')}.` : ''}`
             : `${build.message} The packet could not be saved on this device, so only the record was kept. Buyer follow-up is tracking this buyer either way.`,
         /*
          * A packet nothing could open is not a success, on either path. Both
@@ -611,7 +634,7 @@ export function SalePacketWizard({
         if (!nextOpen && !isGenerating) close();
       }}
     >
-      <DialogContent className="confirm-dialog" style={{ width: 'min(640px, 100%)' }}>
+      <DialogContent className="confirm-dialog sale-packet-dialog" style={{ width: 'min(640px, 100%)' }}>
         <DialogHeader>
           <DialogTitle className="confirm-dialog__title">Sale packet generator</DialogTitle>
           <DialogDescription>
@@ -639,7 +662,7 @@ export function SalePacketWizard({
           ))}
         </div>
 
-        <div style={{ marginTop: 16, minHeight: 220 }}>
+        <div className="sale-packet-dialog__body">
           {step === 0 && (
             <div className="confirm-dialog__acks">
               <Select
@@ -933,6 +956,14 @@ export function SalePacketWizard({
 
           {step === 4 && !generated && horse && (
             <div>
+              <SalePacketPreview
+                horse={horse}
+                ownership={ownershipRecords.find((record) => record.horseId === horse.id)}
+                profile={workspaceProfile}
+                documents={readyDocs.filter((document) => docSelection.includes(document.id))}
+                watermark={effectiveWatermark}
+                onBranding={() => goToRepair('/settings')}
+              />
               {(ownershipBlockers.length > 0 || staleSelectedDocIds.length > 0) && (
                 <p role="alert">
                   The records changed while you were preparing this packet. Generate will return you to the requirements
@@ -947,22 +978,7 @@ export function SalePacketWizard({
                       { message: planBlock!, code: 'sale_packet_limit_reached' },
                       canPresentPurchaseFlow,
                     );
-                  return (
-                    <div role="alert" className="confirm-dialog__proof">
-                      <strong>Packet needs attention</strong>
-                      <p>{failure.message}</p>
-                      <p>{failure.help}</p>
-                      {failure.action && (
-                        <button
-                          type="button"
-                          className="button button--ghost button--compact"
-                          onClick={() => goToRepair(failure.action!.to)}
-                        >
-                          {failure.action.label}
-                        </button>
-                      )}
-                    </div>
-                  );
+                  return <PacketFailureNotice failure={failure} onRepair={goToRepair} />;
                 })()}
               <ul className="confirm-dialog__consequences">
                 <li>
@@ -977,15 +993,6 @@ export function SalePacketWizard({
                 </li>
                 <li>The build and buyer attribution are written to the audit log.</li>
               </ul>
-              <button
-                className="confirm-dialog__confirm confirm-dialog__confirm--legal"
-                type="button"
-                style={{ width: '100%', marginTop: 14 }}
-                disabled={isGenerating}
-                onClick={() => void generate()}
-              >
-                {isGenerating ? 'Assembling packet…' : generationFailure ? 'Retry sale packet' : 'Generate sale packet'}
-              </button>
             </div>
           )}
 
@@ -1009,8 +1016,8 @@ export function SalePacketWizard({
                   </div>
                   <div style={{ fontSize: 12, color: 'var(--xbar-text-muted, #526273)', marginTop: 2 }}>
                     {generated.sealAnchor === 'server'
-                      ? 'Verifiable seal — sealed by XBAR from your records and stored on our servers, so it is tamper-proof. Give this code to your buyer to verify against XBAR.'
-                      : 'Verifiable seal — fingerprints every fact in this packet. Give this code to your buyer; if the packet is ever altered, the seal no longer matches. (Sign in to the cloud to have XBAR anchor it server-side.)'}
+                      ? 'Server-anchored record fingerprint. Compare the packet with its XBAR verification record. This does not establish that the seller’s information is true.'
+                      : 'Device record fingerprint. The PDF contains an attached interactive copy for checking its record and original-file hashes. The printed code alone does not verify the PDF. Give the buyer the seal code separately.'}
                   </div>
                   {generated.verifyUrl && (
                     <div style={{ marginTop: 10 }}>
@@ -1083,6 +1090,27 @@ export function SalePacketWizard({
                     }}
                   >
                     Open packet
+                  </button>
+                ) : null}
+                {generated.localFileKey ? (
+                  <button
+                    className="button button--ghost button--compact"
+                    type="button"
+                    onClick={() => {
+                      const expected = packetIdentityKey();
+                      void downloadStoredFile(
+                        { localFileKey: generated.localFileKey },
+                        () =>
+                          packetIdentityKey() === expected &&
+                          selection.current.open &&
+                          selection.current.horseId === horse.id,
+                      ).then((result) => {
+                        if (!result.ok)
+                          pushToast({ title: 'Packet was not downloaded', message: result.message, tone: 'error' });
+                      });
+                    }}
+                  >
+                    Download packet PDF
                   </button>
                 ) : null}
                 <button
@@ -1160,6 +1188,16 @@ export function SalePacketWizard({
           >
             {step === 0 || generated ? 'Close' : 'Back'}
           </button>
+          {step === 4 && !generated && horse && (
+            <button
+              className="confirm-dialog__confirm confirm-dialog__confirm--legal"
+              type="button"
+              disabled={isGenerating}
+              onClick={() => void generate()}
+            >
+              {isGenerating ? 'Assembling packet…' : generationFailure ? 'Retry sale packet' : 'Generate sale packet'}
+            </button>
+          )}
           {step < 4 && (
             <button
               className="confirm-dialog__confirm confirm-dialog__confirm--legal"

@@ -3,6 +3,7 @@ import { useNavigate, useSearchParams } from 'react-router-dom';
 import { FileText, Plus } from 'lucide-react';
 import { ActionButton, Card, PageHead, StatusChip } from '@/components/saas';
 import { SalePacketWizard } from '@/components/SalePacketWizard';
+import { SavedPacketDownload } from '@/components/SavedPacketDownload';
 import { useXbarStore } from '@/store/useXbarStore';
 import { useUiStore } from '@/store/useUiStore';
 import { openStoredFileInTab } from '@/lib/openStoredFile';
@@ -11,6 +12,9 @@ import { isNavigableFileUrl } from '@/lib/navigableFileUrl';
 import { buildSaleReadinessScore } from '@/lib/saleReadinessScore';
 import { packetReadinessAction } from '@/lib/salePacketGuidance';
 import { buildBuyerPacketReleaseGate } from '@/lib/buyerPacketReleaseGate';
+import { isBuyerSafeDocumentType } from '@/lib/localSalePacketGenerator';
+import { useDayKey } from '@/hooks/useDayKey';
+import './salePacketStudio.css';
 
 function formatDate(value: string) {
   const date = new Date(value);
@@ -21,7 +25,7 @@ function formatDate(value: string) {
 
 export default function SalePacketStudio() {
   const navigate = useNavigate();
-  const [params] = useSearchParams();
+  const [params, setParams] = useSearchParams();
   const horses = useXbarStore((s) => s.horses);
   const documents = useXbarStore((s) => s.documents);
   const salePacketBuilds = useXbarStore((s) => s.salePacketBuilds);
@@ -34,6 +38,7 @@ export default function SalePacketStudio() {
   const [wizardOpen, setWizardOpen] = useState<boolean>(Boolean(requestedHorseId));
   const [openingPacketId, setOpeningPacketId] = useState('');
   const pushToast = useUiStore((state) => state.pushToast);
+  const dayKey = useDayKey();
 
   const openPacket = async (packet: SalePacketBuild) => {
     setOpeningPacketId(packet.id);
@@ -48,13 +53,12 @@ export default function SalePacketStudio() {
   const readiness = useMemo(
     () =>
       horses.map((horse) => {
-        const readyDocs = documents.filter((d) => d.horseId === horse.id && d.state === 'Ready');
-        // The computed sale readiness score decides the row, the same answer the
-        // horse profile gives: its verdict is the release gate the generated
-        // packet prints. The stored `readiness.blockers` are set when a horse is
-        // created and never cleared, so every horse read as blocked; a separate
-        // checklist here disagreed with the gate (it wanted a bill of sale the
-        // gate doesn't, and the wizard can draft), so there is none.
+        const readyDocs = documents.filter(
+          (d) => d.horseId === horse.id && d.state === 'Ready' && isBuyerSafeDocumentType(d.type),
+        );
+        // Preserve the established computed readiness thresholds and release
+        // checks. Packet preparation can retain required disclosures while the
+        // readiness review still identifies incomplete source records.
         const ownershipRecord = ownershipRecords.find((record) => record.horseId === horse.id);
         const releaseGate = buildBuyerPacketReleaseGate({
           horse,
@@ -69,14 +73,17 @@ export default function SalePacketStudio() {
           releaseGate,
         });
         const blockers = score.proofPacketBlocker ? [score.proofPacketBlocker] : [];
+        const displayedBlocker = releaseGate.blockers[0] ?? score.actions[0]?.label;
         const state: 'Ready' | 'Blocked' = score.proofPacketReady ? 'Ready' : 'Blocked';
         const repairs = [
           ...score.actions.map((action) => ({ reason: action.label, ...packetReadinessAction(action, horse.id) })),
           ...releaseGate.remediations,
         ];
-        return { horse, readyDocs, blockers, state, repairs };
+        return { horse, readyDocs, blockers, displayedBlocker, score: score.score, state, repairs };
       }),
-    [horses, documents, expenseReceipts, ownershipRecords],
+    // Both assessments read date-sensitive care and document expiry.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [horses, documents, expenseReceipts, ownershipRecords, dayKey],
   );
 
   const readyCount = readiness.filter((r) => r.state === 'Ready').length;
@@ -118,7 +125,7 @@ export default function SalePacketStudio() {
       <PageHead
         eyebrow="Selling"
         title="Sale Packets"
-        subtitle={`${readyCount} of ${horses.length} horses are ready for a proof packet${blockedCount ? ` · ${blockedCount} blocked` : ''}.`}
+        subtitle={`${readyCount} of ${horses.length} horses have complete readiness checks${blockedCount ? ` · ${blockedCount} need review` : ''}.`}
         actions={
           <ActionButton variant="primary" icon={<Plus size={15} />} onClick={() => openWizard()}>
             Build packet
@@ -126,18 +133,24 @@ export default function SalePacketStudio() {
         }
       />
 
-      <Card title="Horse readiness">
+      <p className="xs-muted">
+        Prepare a packet from the records you choose. Review outstanding checks and the packet's disclosures before
+        sharing.
+      </p>
+      <Card title="Readiness review">
         <div className="xs-mlist">
-          {readiness.map(({ horse, blockers, state, readyDocs, repairs }) => (
-            <div key={horse.id} className="xs-mrow">
+          {readiness.map(({ horse, blockers, displayedBlocker, score, state, readyDocs, repairs }) => (
+            <div key={horse.id} className="xs-mrow sale-packet-row">
               <span className="xs-mrow__main" style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
                 <span className="xs-mrow__title">{horse.name}</span>
                 <span className="xs-mrow__meta">
-                  {readyDocs.length} approved document{readyDocs.length === 1 ? '' : 's'}
-                  {blockers.length ? ` · ${blockers[0]}` : ' · ready for a proof packet'}
+                  {readyDocs.length} reviewed buyer record{readyDocs.length === 1 ? '' : 's'} · Readiness {score}/100
                 </span>
+                {blockers.length && displayedBlocker ? <span className="xs-mrow__meta">{displayedBlocker}</span> : null}
               </span>
-              <StatusChip tone={state === 'Ready' ? 'success' : 'danger'}>{state}</StatusChip>
+              <StatusChip tone={state === 'Ready' ? 'success' : 'danger'}>
+                {state === 'Ready' ? 'Checks complete' : 'Needs review'}
+              </StatusChip>
               {state === 'Blocked' ? (
                 <details style={{ maxWidth: 360 }}>
                   <summary className="xs-btn xs-btn--sm">What needs fixing ({repairs.length})</summary>
@@ -167,7 +180,7 @@ export default function SalePacketStudio() {
             {salePacketBuilds.map((packet) => {
               const horse = horses.find((h) => h.id === packet.horseId);
               return (
-                <div key={packet.id} className="xs-mrow">
+                <div key={packet.id} className="xs-mrow sale-packet-row">
                   <span className="xs-mrow__main" style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
                     <span className="xs-mrow__title">
                       {horse?.name ?? 'Horse record removed'} · {formatDate(packet.createdAt)}
@@ -202,6 +215,7 @@ export default function SalePacketStudio() {
                       {openingPacketId === packet.id ? 'Opening...' : 'Open'}
                     </button>
                   ) : null}
+                  {packet.localFileKey ? <SavedPacketDownload packet={packet} className="xs-btn xs-btn--sm" /> : null}
                 </div>
               );
             })}
@@ -220,6 +234,12 @@ export default function SalePacketStudio() {
         onClose={() => {
           setWizardOpen(false);
           setWizardHorseId(null);
+          if (params.has('horse') || params.has('resume')) {
+            const next = new URLSearchParams(params);
+            next.delete('horse');
+            next.delete('resume');
+            setParams(next, { replace: true });
+          }
         }}
       />
     </>

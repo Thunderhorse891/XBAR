@@ -1,3 +1,4 @@
+import publicPlanCatalog from '../../api/_lib/public-plan-catalog.json' with { type: 'json' };
 // Public pricing data rendered on the static marketing site.
 //
 // This mirrors `subscriptionTierConfig` in src/lib/xbarRuntime.ts (the tier
@@ -8,37 +9,41 @@
 
 export const marketingPlans = [
   {
-    tier: 'Starter',
-    monthlyRate: 12,
-    annualRate: 120,
-    fit: 'For smaller records-driven operations getting out of spreadsheets.',
+    tier: 'Free',
+    monthlyRate: 0,
+    annualRate: 0,
+    fit: 'For a private owner starting with 2 horses and 1 user.',
     features: [
-      'Keep clean records — horses, care, documents, expenses, reminders',
-      'Documents with OCR intake and review',
-      '1 seat — just you',
-      '250 documents and 25 GB storage',
+      '2 horses and 1 user',
+      'Manual document upload',
+      '1 seat, 10 documents',
+      'Limited cloud storage shared across XBAR at launch',
+      'No card required',
+      'No OCR or shared sale packets',
     ],
     limits: {
-      horseLimit: 5,
+      horseLimit: 2,
       seatLimit: 1,
-      documentLimit: 250,
-      salePacketLimit: 2,
-      storageLimitGb: 25,
+      documentLimit: 10,
+      salePacketLimit: 0,
+      storageLimitGb: 1,
       sharedAccessSeatLimit: 0,
     },
   },
   {
     tier: 'Professional',
-    monthlyRate: 29,
+    monthlyRate: publicPlanCatalog.Professional.monthlyCents / 100,
     annualRate: 290,
     featured: true,
     fit: 'For active breeding and sale businesses that need stronger workflows.',
     features: [
-      'Everything in Starter',
+      'Horse records with OCR intake and review',
+      'Reports calculated automatically from records; export PDF or CSV manually',
       'Share approved sale packets and keep buyer follow-up in one place',
       'Sale listings for buyer-ready horse profiles',
       '5 team seats and 10 client seats',
-      '1,000 documents and 100 GB storage',
+      '1,000 documents',
+      'Limited cloud storage shared across XBAR at launch',
     ],
     limits: {
       horseLimit: 30,
@@ -51,14 +56,15 @@ export const marketingPlans = [
   },
   {
     tier: 'Ranch Ops',
-    monthlyRate: 79,
+    monthlyRate: publicPlanCatalog['Ranch Ops'].monthlyCents / 100,
     annualRate: 790,
     fit: 'For multi-user operations with significant record volume.',
     features: [
       'Everything in Professional',
       'Run the operation: team roles, breeding, equipment, and supplies',
       '20 team seats and 40 client seats',
-      '5,000 documents and 500 GB storage',
+      '5,000 documents',
+      'Limited cloud storage shared across XBAR at launch',
     ],
     limits: {
       horseLimit: 200,
@@ -67,26 +73,6 @@ export const marketingPlans = [
       salePacketLimit: 250,
       storageLimitGb: 500,
       sharedAccessSeatLimit: 40,
-    },
-  },
-  {
-    tier: 'Enterprise',
-    monthlyRate: 199,
-    annualRate: 1990,
-    fit: 'For larger businesses that need the highest operating capacity.',
-    features: [
-      'Everything in Ranch Ops',
-      'Scale and control for large rosters and teams',
-      '60 team seats and 200 client seats',
-      '20,000 documents and 2,500 GB storage',
-    ],
-    limits: {
-      horseLimit: 2000,
-      seatLimit: 60,
-      documentLimit: 20000,
-      salePacketLimit: 2000,
-      storageLimitGb: 2500,
-      sharedAccessSeatLimit: 200,
     },
   },
 ];

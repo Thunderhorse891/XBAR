@@ -180,9 +180,9 @@ test('document intake checks authoritative cloud capacity before uploading', asy
 
   assert.match(cloud, /client\.rpc\('xbar_workspace_storage_bytes'/);
   const intake = store.slice(store.indexOf('createDocumentIntake:'), store.indexOf('reviewDocument:'));
-  assert.match(intake, /await loadWorkspaceStorageBytes\(\)/);
+  assert.match(intake, /await loadWorkspaceStorageBytes\(intakeIdentity\)/);
   assert.ok(
-    intake.indexOf('await loadWorkspaceStorageBytes()') < intake.indexOf('uploadDocumentAssetToCloud({'),
+    intake.indexOf('await loadWorkspaceStorageBytes(intakeIdentity)') < intake.indexOf('uploadDocumentAssetToCloud({'),
     'capacity must be verified before object bytes leave the browser',
   );
   /*
@@ -263,7 +263,7 @@ test('document quota charges cloud bytes with a project and device bytes without
   );
   assert.match(
     intake,
-    /storageUsedGb: normalizeUsage\(current\.subscription\.usage\.storageUsedGb \+ chargedStorageGb\)/,
+    /storageUsedGb: current\.subscription\.usage\.storageUsedGb \+ chargedStorageGb/,
     'the accumulated usage must be the charged amount',
   );
 });
@@ -306,27 +306,15 @@ test('personal workspace bootstrap gives its verified creator the Admin seat', a
 });
 
 test('a second batch is measured against bytes already uploaded, not just persisted rows', async () => {
-  /*
-   * `xbar_workspace_storage_bytes` sums `documents` AND `sale_packets` ROWS. A
-   * row lands about 1.6 seconds after its object does — CloudBootstrap's
-   * autosave debounce — so a batch started inside that window was measured
-   * against a total that predated the previous one, and both could pass just
-   * under the cap. The later upsert is then rejected by the storage trigger,
-   * which is the wedge this gate exists to prevent.
-   *
-   * Staged bytes are ADDED to the server total, never compared with it. A local
-   * document total carries no sale packets, so taking the greater of the two
-   * compared quantities of different scope: in a workspace holding more packet
-   * bytes than staged document bytes, the server total won and the staged files
-   * dropped out of the sum entirely.
-   */
+  // Object accounting includes uploads before their document rows autosave.
+  // Adding the legacy staged counter would charge those same bytes twice.
   const store = await readFile('src/store/useXbarStore.ts', 'utf8');
   const intake = store.slice(store.indexOf('createDocumentIntake:'), store.indexOf('reviewDocument:'));
 
   assert.match(
     intake,
-    /const knownBytes = storedBytes \+ useCloudStore\.getState\(\)\.stagedStorageBytes/,
-    'staged bytes must be added to the authoritative total, not compared with it',
+    /const knownBytes = storedBytes;/,
+    'object bytes already include staged originals and must be charged once',
   );
   assert.ok(
     !/Math\.max\(storedBytes/.test(intake),
@@ -366,8 +354,10 @@ test('a second batch is measured against bytes already uploaded, not just persis
    * ordering -- only that the check has not been moved after the commit or
    * deleted.
    */
-  const identityCheck = intake.indexOf('intakeIdentityChanged(');
   const reservation = intake.indexOf('noteStagedStorageBytes(cloudStoredBytes)');
+  // Earlier preflight checks may precede uploads. This invariant concerns the
+  // final check immediately before the synchronous record installation.
+  const identityCheck = intake.lastIndexOf('intakeIdentityChanged(', reservation);
   assert.ok(identityCheck > -1, 'an intake must check that the account it started as is still the account here');
   assert.ok(
     identityCheck < reservation,
@@ -405,7 +395,10 @@ test('a second batch is measured against bytes already uploaded, not just persis
   );
   assert.ok(
     upload.indexOf('intakeIdentityChanged(params.expectedIdentity') <
-      upload.indexOf('client.storage.from(supabaseConfig.documentBucket).upload('),
+      upload.indexOf(
+        'return startReservedUpload(',
+        upload.indexOf('export async function uploadDocumentAssetToCloud('),
+      ),
     'the refusal must come before the bytes leave the browser, not after',
   );
 

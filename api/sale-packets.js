@@ -1,8 +1,10 @@
+import { uploadReservedBuffer } from './_lib/storage-upload.js';
 import { randomUUID } from 'node:crypto';
 import { readJsonBody, sendJson, getQuery } from './_lib/http.js';
 import { requireWorkspaceAccess } from './_lib/supabase-admin.js';
 import { requireRoleCapability } from './_lib/permissions.js';
 import {
+  SALE_PACKET_WINDOW_DAYS,
   checkSalePacketCapacity,
   checkStorageCapacity,
   getWorkspaceEntitlements,
@@ -10,6 +12,7 @@ import {
 } from './_lib/entitlements.js';
 import { loadHorseContext } from './_lib/horse-context.js';
 import { createSectionedPdf, assemblePacketPdf } from './_lib/pdf.js';
+import { loadServerPdfBranding } from './_lib/pdf-branding.js';
 import { sendEmail } from './_lib/email.js';
 import { recordAuditEvent } from './_lib/audit.js';
 import { buildServerSaleCredential, ownershipReviewSummary } from './_lib/sale-credential.js';
@@ -261,7 +264,9 @@ export default async function handler(req, res) {
       title: `Sale Packet: ${context.horse.name}`,
       letterhead: packetBranding.displayName,
       customerLogoDataUrl: packetBranding.logoDataUrl,
+      branding: await loadServerPdfBranding(),
       continuationHeaders: true,
+      pageLabel: 'Summary page',
       sections: [
         {
           heading: 'Horse Summary',
@@ -326,7 +331,7 @@ export default async function handler(req, res) {
     if (!storage.ok) {
       // Propagate the gate's own status and code. A refusal because usage could
       // not be read is a retryable 503, not a quota violation — reporting it as
-      // storage_limit_reached tells the customer to upgrade over a transient
+      // storage_limit_reached would misreport a transient
       // database error, and stops clients treating it as retryable.
       return sendJson(res, storage.status ?? 403, {
         ok: false,
@@ -337,38 +342,86 @@ export default async function handler(req, res) {
       });
     }
 
-    const { error: uploadError } = await supabase.storage
-      .from(PACKET_BUCKET)
-      .upload(packetPath, Buffer.from(packetBytes), { contentType: 'application/pdf', upsert: true });
-    if (uploadError) {
-      return sendJson(res, 502, { ok: false, message: `Failed to store sale packet: ${uploadError.message}` });
+    let uploadResult;
+    try {
+      uploadResult = await uploadReservedBuffer({
+        access,
+        requestId: packetId.slice(7),
+        bucket: PACKET_BUCKET,
+        storagePath: packetPath,
+        bytes: Buffer.from(packetBytes),
+        contentType: 'application/pdf',
+        kind: 'packet',
+      });
+    } catch {
+      // Storage may have committed before the transport response was lost.
+      uploadResult = { error: { message: 'upload result could not be confirmed' } };
+    }
+    const { data: uploaded, error: uploadError } = uploadResult ?? {};
+    if (uploadError || uploaded?.path !== packetPath) {
+      if (uploadError?.uploadOutcome === 'not_started' && uploadError.needsRecovery === false) {
+        return sendJson(res, uploadError.status || 413, {
+          ok: false,
+          packetId,
+          requestId: uploadError.requestId,
+          code: uploadError.code,
+          maxFileBytes: uploadError.maxFileBytes,
+          needsRecovery: false,
+          uploadOutcome: 'not_started',
+          message: `Failed to store sale packet: ${uploadError.message}`,
+        });
+      }
+      return sendJson(res, 502, {
+        ok: false,
+        packetId,
+        packetPdfPath: packetPath,
+        needsRecovery: true,
+        uploadOutcome: 'unconfirmed',
+        message: `Failed to store sale packet: ${uploadError?.message || 'upload acknowledgment missing'}`,
+      });
     }
 
-    const { error: recordError } = await supabase.from('sale_packets').upsert({
-      workspace_id: workspaceId,
-      packet_id: packetId,
-      horse_id: horseId,
-      created_by_user_id: user.id,
-      packet_pdf_path: packetPath,
-      watermark_text: watermarkText,
-      shared_with_email: buyerEmail,
-      document_ids: includedDocs.map((doc) => doc.document_id),
-      status: 'ready',
-      size_bytes: packetSizeBytes,
-      payload: { buyerName, unavailable, attachmentCount: attachments.length, seal },
+    const { data: issued, error: recordError } = await supabase.rpc('xbar_issue_sale_packet', {
+      p_delivery: {
+        workspace_id: workspaceId,
+        packet_id: packetId,
+        horse_id: horseId,
+        created_by_user_id: user.id,
+        packet_pdf_path: packetPath,
+        watermark_text: watermarkText,
+        shared_with_email: buyerEmail,
+        document_ids: includedDocs.map((doc) => doc.document_id),
+        size_bytes: packetSizeBytes,
+        payload: { buyerName, unavailable, attachmentCount: attachments.length },
+      },
+      p_seal: seal,
     });
-    if (recordError) {
-      // Row rejected after the object was written (e.g. the storage trigger on a
-      // concurrent request that passed the preflight). Delete the orphan and
-      // report the failure instead of signing a URL to an unrecorded packet.
-      await supabase.storage.from(PACKET_BUCKET).remove([packetPath]);
-      const overLimit = /storage limit/i.test(recordError.message);
+    if (recordError || issued !== true) {
+      // Preserve the reserved upload and its recovery identity on every failed
+      // issuance. A separate reference-safe retirement operation is required to
+      // remove bytes; a rejected row alone does not authorize deleting a file.
+      // Never send a signed link without confirmed protected issuance.
+      const errorCode = recordError?.code || '';
+      if (errorCode === 'P0001' && recordError?.details === 'xbar_sale_packet_allowance_reached') {
+        return sendJson(res, 403, {
+          ok: false,
+          packetId,
+          packetPdfPath: packetPath,
+          needsRecovery: true,
+          code: 'sale_packet_limit_reached',
+          message: `This packet would exceed the plan's sale packet allowance per ${SALE_PACKET_WINDOW_DAYS} days. The allowance renews as earlier packets pass ${SALE_PACKET_WINDOW_DAYS} days, and reopening or resending a packet never uses it.`,
+        });
+      }
+      const overLimit = /storage limit/i.test(recordError?.message || '');
       return sendJson(res, overLimit ? 403 : 502, {
         ok: false,
+        packetId,
+        packetPdfPath: packetPath,
+        needsRecovery: true,
         code: overLimit ? 'storage_limit_reached' : undefined,
         message: overLimit
-          ? `This sale packet would exceed the plan's ${entitlements.limits.storageLimitGb} GB storage limit. Upgrade to continue.`
-          : `Failed to record sale packet: ${recordError.message}`,
+          ? 'This sale packet would exceed the workspace storage limit. Cloud storage is limited and shared across XBAR at launch. Contact support before uploading more.'
+          : `Failed to record sale packet: ${recordError?.message || 'Issuance was not confirmed.'}`,
       });
     }
 

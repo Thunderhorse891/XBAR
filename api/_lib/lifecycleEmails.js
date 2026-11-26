@@ -1,6 +1,8 @@
+import { subscriptionPlans } from './subscription-plans.js';
+
 // Lifecycle email content and trigger-window logic for XBAR.
 //
-// This module is intentionally pure and dependency-free: templates and window
+// This module is pure and uses the canonical plan configuration: templates and window
 // decisions take explicit params and touch no network, database, or env. The
 // DB-touching orchestration (claims, recipient lookup, sending) lives in
 // ./lifecycleTriggers.js; the HTTP wrappers are api/account/[action].js
@@ -165,40 +167,45 @@ function formatLongDate(isoDate) {
   return parsed.toLocaleDateString('en-US', { timeZone: 'UTC', month: 'long', day: 'numeric', year: 'numeric' });
 }
 
+const freeLimits = subscriptionPlans.Free.limits;
+const freeLimitCopy = `${freeLimits.horseLimit} horses, ${freeLimits.documentLimit} active documents, ${freeLimits.seatLimit} user`;
+
 export function buildWelcomeEmail({ recipientName = '', ranchName = '' } = {}) {
   const greetingHtml = recipientName ? `Hi ${escapeHtml(recipientName)},` : 'Hi,';
   const greetingText = recipientName ? `Hi ${recipientName},` : 'Hi,';
-  const ranchLine = ranchName
-    ? `Your ranch workspace, <strong style="color:#f5f2ec;">${escapeHtml(ranchName)}</strong>, is set up and your 14-day Professional trial is running — the full plan, no card required.`
-    : 'Your ranch workspace is set up and your 14-day Professional trial is running — the full plan, no card required.';
+  const nextStep = ranchName
+    ? `Open <strong style="color:#f5f2ec;">${escapeHtml(ranchName)}</strong> to continue your horse records.`
+    : 'Create or open your ranch workspace to get started.';
+  const freeCopy = `Start Free with ${freeLimitCopy}, no card required. Your current plan and any trial status are shown in Billing.`;
   const body = paragraphs([
     `${greetingHtml} welcome to XBAR.`,
-    'XBAR keeps one trustworthy record per horse — documents, ownership, care, and sale readiness — so the records behind your money decisions are the ones you can prove.',
-    ranchLine,
-    'Three things worth doing first:',
-    '1. <strong style="color:#f5f2ec;">Add your first horse.</strong> Name, registration, and the basics — it takes a minute.<br>' +
-      '2. <strong style="color:#f5f2ec;">Upload a document.</strong> A Coggins, registration paper, or bill of sale — XBAR reads it and attaches it to the right horse.<br>' +
-      '3. <strong style="color:#f5f2ec;">Set one reminder.</strong> Vaccination, farrier, or Coggins renewal — due dates stop living in your head.',
-    'When the trial ends you keep every record you entered. The workspace simply moves to the free baseline until you pick a plan.',
+    'XBAR keeps one trustworthy record per horse — documents, ownership, care, and sale readiness.',
+    nextStep,
+    freeCopy,
+    'Three things to do first:',
+    '1. <strong style="color:#f5f2ec;">Add your first horse.</strong> Start with its name and basic details.<br>' +
+      '2. <strong style="color:#f5f2ec;">Upload a document.</strong> Link a Coggins, registration paper, or bill of sale to the right horse. Manual uploads work on Free; when OCR is available, review extracted details before applying them.<br>' +
+      '3. <strong style="color:#f5f2ec;">Set one reminder.</strong> Add a vaccination, farrier, or Coggins due date.',
+    'Existing records stay available if your plan changes. Higher limits and paid features require the appropriate plan.',
   ]);
-  const text =
-    `${greetingText} welcome to XBAR.\n\n` +
-    `XBAR keeps one trustworthy record per horse — documents, ownership, care, and sale readiness.\n\n` +
-    `Your ranch workspace${ranchName ? ` (${ranchName})` : ''} is set up and your 14-day Professional trial is running — the full plan, no card required.\n\n` +
-    `Three things worth doing first:\n` +
-    `1. Add your first horse — name, registration, and the basics.\n` +
-    `2. Upload a document — a Coggins, registration paper, or bill of sale; XBAR reads it and attaches it to the right horse.\n` +
-    `3. Set one reminder — vaccination, farrier, or Coggins renewal.\n\n` +
-    `When the trial ends you keep every record you entered. The workspace simply moves to the free baseline until you pick a plan.\n\n` +
-    `Open XBAR: ${appUrl()}\n\nQuestions? Reply to this email or write to ${SUPPORT_EMAIL}.`;
   return {
-    subject: 'Welcome to XBAR — your ranch workspace is ready',
-    text,
+    subject: 'Welcome to XBAR — start your horse records',
+    text:
+      `${greetingText} welcome to XBAR.\n\n` +
+      `XBAR keeps one trustworthy record per horse — documents, ownership, care, and sale readiness.\n\n` +
+      `${ranchName ? `Open ${ranchName} to continue your horse records.` : 'Create or open your ranch workspace to get started.'}\n\n` +
+      `${freeCopy}\n\n` +
+      'Three things to do first:\n' +
+      '1. Add your first horse — start with its name and basic details.\n' +
+      '2. Upload a document — link it to the right horse. Manual uploads work on Free; when OCR is available, review extracted details before applying them.\n' +
+      '3. Set one reminder — add a vaccination, farrier, or Coggins due date.\n\n' +
+      'Existing records stay available if your plan changes. Higher limits and paid features require the appropriate plan.\n\n' +
+      `Open XBAR: ${appUrl()}\n\nQuestions? Reply to this email or write to ${SUPPORT_EMAIL}.`,
     html: emailShell({
-      preheader: 'Your 14-day Professional trial is running. Three first steps inside.',
+      preheader: 'Start Free, add your first horse, and keep its records together.',
       heading: 'Welcome to XBAR',
       bodyHtml: body,
-      cta: { label: 'Open your workspace', url: appUrl() },
+      cta: { label: 'Open XBAR', url: appUrl() },
     }),
   };
 }
@@ -231,16 +238,16 @@ export function buildTrialEndingEmail({ ranchName = '', trialEndDate, daysLeft }
 export function buildTrialExpiredEmail({ ranchName = '' } = {}) {
   const body = paragraphs([
     `Your 14-day Professional trial${ranchName ? ` for <strong style="color:#f5f2ec;">${escapeHtml(ranchName)}</strong>` : ''} has ended.`,
-    'The workspace is now on the free baseline. Nothing you entered is gone — every horse, document, expense, and reminder is still there, and it all comes back in full the moment you pick a plan.',
-    'What changed: the workspace is back to Starter limits (5 horses, 250 documents, 1 seat), and sale packets, shared sale listings, and the other Professional features are paused.',
+    'The workspace is now on the free baseline. Nothing you entered is gone — every horse, document, expense, and reminder is still there, and existing records remain available.',
+    `What changed: the workspace is on Free limits (${freeLimitCopy}), and sale packets, shared sale listings, and the other Professional features are paused. Existing records above these limits are preserved; new additions must fit your plan.`,
     'If you were in the middle of something — a sale packet, a listing, a stack of intake — upgrading restores it exactly where you left it.',
   ]);
   return {
     subject: 'Your XBAR trial has ended — your records are safe',
     text:
       `Your 14-day Professional trial${ranchName ? ` for ${ranchName}` : ''} has ended.\n\n` +
-      `The workspace is now on the free baseline. Nothing you entered is gone — every horse, document, expense, and reminder is still there, and it all comes back in full the moment you pick a plan.\n\n` +
-      `What changed: the workspace is back to Starter limits (5 horses, 250 documents, 1 seat), and sale packets, shared sale listings, and the other Professional features are paused.\n\n` +
+      `The workspace is now on the free baseline. Nothing you entered is gone — every horse, document, expense, and reminder is still there, and existing records remain available.\n\n` +
+      `What changed: the workspace is on Free limits (${freeLimitCopy}), and sale packets, shared sale listings, and the other Professional features are paused. Existing records above these limits are preserved; new additions must fit your plan.\n\n` +
       `If you were in the middle of something — a sale packet, a listing, a stack of intake — upgrading restores it exactly where you left it.\n\n` +
       `See plans: ${billingUrl()}\n\nQuestions? Reply to this email or write to ${SUPPORT_EMAIL}.`,
     html: emailShell({

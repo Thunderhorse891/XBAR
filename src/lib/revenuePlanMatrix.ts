@@ -12,6 +12,11 @@ export type RevenuePlanProfile = {
 };
 
 export const revenuePlanMatrix: Record<SubscriptionTier, RevenuePlanProfile> = {
+  Free: {
+    fit: 'For a private owner starting with 2 horses and 1 user.',
+    revenueRole: 'No card required.',
+    features: [{ label: 'Horse records', detail: 'Keep essential records with manual document upload.' }],
+  },
   Starter: {
     fit: 'For a private owner or small barn getting out of spreadsheets.',
     revenueRole:

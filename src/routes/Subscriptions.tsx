@@ -1,26 +1,18 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
-import {
-  canUsePaymentLinkFallback,
-  checkoutRouteFor,
-  loadSellablePrices,
-  requestTrialStart,
-  startManagedCheckout,
-  type SellablePrices,
-} from '@/lib/billingApi';
+import { loadSellablePrices, requestTrialStart, startManagedCheckout, type SellablePrices } from '@/lib/billingApi';
 import { parseCheckoutReturn, stripCheckoutReturnParam, watchCheckoutConfirmation } from '@/lib/checkoutReturn';
 import { refreshWorkspaceSubscriptionProfile } from '@/lib/cloudWorkspace';
-import { formatCurrency } from '@/lib/format';
+import { formatCurrencyCents, formatSubscriptionPrice } from '@/lib/format';
 import { isNativeApp } from '@/lib/nativePlatform';
 import {
-  claimPendingHostedPurchase,
   clearPendingHostedPurchase,
   isPendingHostedPurchase,
   pendingHostedPurchaseKey,
   pendingHostedPurchaseNotice,
   readPendingHostedPurchase,
 } from '@/lib/pendingHostedPurchase';
-import { getStripePaymentLink, stripeConfig } from '@/lib/platformConfig';
+import { stripeConfig } from '@/lib/platformConfig';
 import { productEvent, productEventNames } from '@/lib/productEvents';
 import { revenuePlanMatrix } from '@/lib/revenuePlanMatrix';
 import { trackRuntimeEvent } from '@/lib/runtimeEvents';
@@ -34,6 +26,7 @@ import {
   recommendedTier,
 } from '@/lib/subscriptionDecision';
 import { subscriptionPlans } from '@/lib/subscriptionPlans';
+import { isPublicPaidPlan, publicPaidPlanTiers } from '@/lib/publicPlanCatalog';
 import { canStartTrial, getTrialState, trialDaysRemaining, trialStatusCopy } from '@/lib/trialSubscription';
 import { useCloudStore } from '@/store/useCloudStore';
 import { useUiStore } from '@/store/useUiStore';
@@ -41,7 +34,8 @@ import { useCurrentRoleCapability, useWorkspaceReady, useXbarStore } from '@/sto
 import type { SubscriptionProfile, SubscriptionTier } from '@/types/xbar';
 import './checkoutExperience.css';
 
-const tiers: SubscriptionTier[] = ['Starter', 'Professional', 'Ranch Ops', 'Enterprise'];
+const tiers = publicPaidPlanTiers;
+const billingPeriod = 'monthly' as const;
 
 type CheckoutErrorContext = {
   tier: SubscriptionTier;
@@ -99,16 +93,7 @@ export default function Subscriptions() {
     };
   }, [clearCheckoutError]);
   const [trialStarting, setTrialStarting] = useState(false);
-  // Billing period for plan display and checkout. Annual is 10x monthly (2
-  // months free). The server fails closed when an annual price id is not
-  // configured, so selecting annual before Stripe is set up cannot sell the
-  // wrong period — checkout refuses instead.
-  //
-  // It opens on the cadence the workspace already pays (audit F14): an annual
-  // subscriber who lands here is shown annual prices, not monthly ones.
-  const [chosenPeriod, setBillingPeriod] = useState<'monthly' | 'annual'>(subscription.billingPeriod ?? 'monthly');
-  // What the server can sell, read before a cadence is offered. Null until it
-  // answers, and null if it never does -- either way only monthly is offered.
+  // Wait for the server to confirm which monthly prices are configured.
   const [sellable, setSellable] = useState<SellablePrices | null>(null);
   useEffect(() => {
     if (!stripeConfig.managedBillingEnabled) return;
@@ -134,8 +119,12 @@ export default function Subscriptions() {
   // Only when the workspace is not currently entitled. An active or comped
   // workspace has purchasedTier === tier, and there the upgrade recommendation
   // is exactly what the screen should lead with.
-  const lapsedTier = isEntitledBillingState(subscription.billingState) ? undefined : subscription.purchasedTier;
-  const defaultDecisionTier = requestedTier ?? lapsedTier ?? recommendedTier(subscription.tier);
+  const lapsedTier =
+    isEntitledBillingState(subscription.billingState) || !isPublicPaidPlan(subscription.purchasedTier)
+      ? undefined
+      : subscription.purchasedTier;
+  const firstAvailableTier = lapsedTier ?? recommendedTier(subscription.tier);
+  const defaultDecisionTier = requestedTier ?? (tiers.includes(firstAvailableTier) ? firstAvailableTier : tiers[0]);
   const [selectedTier, setSelectedTier] = useState<SubscriptionTier>(defaultDecisionTier);
   const decisionTier = selectedTier;
   const decisionConfig = subscriptionPlans[decisionTier];
@@ -165,18 +154,8 @@ export default function Subscriptions() {
       cancelled = true;
     };
   }, [hasManagedIdentity, workspaceId, subscription, session?.access_token]);
-  const billingEnabled = stripeConfig.managedBillingEnabled;
-  // Annual is offered only where it can actually be bought: an annual price the
-  // server confirms it holds, or an annual payment link. Managed billing being
-  // on is not that -- production offered annual with no annual price set, and a
-  // buyer who chose it got a refusal at the moment of paying.
-  const annualManaged =
-    billingEnabled && Boolean(sellable?.managed && tiers.some((tier) => sellable.annual[tier] === true));
-  const annualAvailable = annualManaged || tiers.some((tier) => Boolean(getStripePaymentLink(tier, 'annual')));
-  // The cadence every price, label and checkout below uses: the one chosen when
-  // it can be sold, monthly otherwise, so no screen quotes a price nobody can pay.
-  const billingPeriod: 'monthly' | 'annual' = annualAvailable ? chosenPeriod : 'monthly';
-  const selectedPaymentLink = Boolean(getStripePaymentLink(decisionTier, billingPeriod));
+  const canSellTier = (tier: SubscriptionTier) =>
+    stripeConfig.managedBillingEnabled && Boolean(sellable?.managed && sellable.monthly[tier]);
   /*
    * Read once per render and passed to every billing decision below.
    *
@@ -201,8 +180,8 @@ export default function Subscriptions() {
    * the price "due at checkout" is the rejection even though nothing can be
    * bought behind it.
    */
-  const selectedCheckoutConfigured = !nativeApp && (billingEnabled || selectedPaymentLink);
-  const starterSetup = subscription.tier === 'Starter' && subscription.monthlyRate === 0;
+  const selectedCheckoutConfigured = !nativeApp && canSellTier(decisionTier);
+  const starterSetup = subscription.tier === 'Free';
   // A workspace whose Stripe subscription can still bill it. Buying here would
   // open a second one beside it, so every checkout path is blocked.
   //
@@ -248,20 +227,8 @@ export default function Subscriptions() {
       (checkoutError && !checkoutErrorIsCurrent)
     )
       clearCheckoutError();
-  }, [
-    checkoutError,
-    checkoutErrorIsCurrent,
-    decisionTier,
-    billingPeriod,
-    workspaceId,
-    session?.user.id,
-    clearCheckoutError,
-  ]);
+  }, [checkoutError, checkoutErrorIsCurrent, decisionTier, workspaceId, session?.user.id, clearCheckoutError]);
 
-  const selectBillingPeriod = (period: 'monthly' | 'annual') => {
-    if (period !== billingPeriod) clearCheckoutError();
-    setBillingPeriod(period);
-  };
   /*
    * Trial state: 'none' | 'active' | 'expired', computed from the profile's
    * recorded trial start. Native apps never get the trial CTA — Apple treats
@@ -314,15 +281,35 @@ export default function Subscriptions() {
     subscriptionRecoverable,
     nativeApp,
   });
+  // Preserve recovery messaging for payments started through retired static links.
+  const [pendingPurchase, setPendingPurchase] = useState(() => readPendingHostedPurchase(workspaceId));
+
+  // Refresh the pending notice if another tab clears it.
+  useEffect(() => {
+    const syncFromStorage = (event: StorageEvent) => {
+      // A null key means the whole store was cleared, which is also our answer.
+      if (event.key && event.key !== pendingHostedPurchaseKey(workspaceId)) return;
+      setPendingPurchase(readPendingHostedPurchase(workspaceId));
+    };
+    window.addEventListener('storage', syncFromStorage);
+    return () => window.removeEventListener('storage', syncFromStorage);
+  }, [workspaceId]);
+  const purchaseAwaitingActivation =
+    isPendingHostedPurchase(pendingPurchase, new Date(), workspaceId) && !subscriptionActive;
+  const forgetPendingPurchase = () => {
+    clearPendingHostedPurchase(workspaceId);
+    setPendingPurchase(null);
+  };
+
   const continuePath = workspaceReady ? '/' : '/setup';
   const checkoutReadinessLabel = selectedCheckoutConfigured
     ? 'Secure checkout opens next.'
     : 'Billing is not configured yet, so plans cannot be purchased in the app.';
   const selectedReadiness = getCheckoutReadiness({
-    billingEnabled,
+    billingEnabled: canSellTier(decisionTier) && !purchaseAwaitingActivation,
     canManageBilling,
     hasManagedIdentity,
-    hasPaymentLink: selectedPaymentLink,
+    hasPaymentLink: false,
     checkoutInProgress: checkoutTier !== null,
     subscriptionRecoverable,
     // The third call site. Without it the prominent CTA promised secure
@@ -352,41 +339,6 @@ export default function Subscriptions() {
   useEffect(() => {
     setSelectedTier(defaultDecisionTier);
   }, [defaultDecisionTier]);
-
-  /*
-   * A hosted purchase this deployment cannot confirm.
-   *
-   * With managed billing off there is no webhook, so completing a payment link
-   * changes nothing the app can see. The customer comes back from Stripe to a
-   * page that still says Starter with the buttons still enabled, does the
-   * obvious thing, and is charged twice. See `pendingHostedPurchase`.
-   */
-  const [pendingPurchase, setPendingPurchase] = useState(() => readPendingHostedPurchase(workspaceId));
-
-  /*
-   * Another tab may have started the purchase.
-   *
-   * This state is a cache, and it was read once. Two billing tabs open at the
-   * same time both began with nothing pending, so after the first redirected
-   * the second still showed an enabled button. The redirect itself re-reads
-   * storage — that is the guard — and this keeps what the customer is LOOKING
-   * at honest, so they are not invited to click something that will be refused.
-   */
-  useEffect(() => {
-    const syncFromStorage = (event: StorageEvent) => {
-      // A null key means the whole store was cleared, which is also our answer.
-      if (event.key && event.key !== pendingHostedPurchaseKey(workspaceId)) return;
-      setPendingPurchase(readPendingHostedPurchase(workspaceId));
-    };
-    window.addEventListener('storage', syncFromStorage);
-    return () => window.removeEventListener('storage', syncFromStorage);
-  }, [workspaceId]);
-  const purchaseAwaitingActivation =
-    isPendingHostedPurchase(pendingPurchase, new Date(), workspaceId) && !subscriptionActive;
-  const forgetPendingPurchase = () => {
-    clearPendingHostedPurchase(workspaceId);
-    setPendingPurchase(null);
-  };
 
   /*
    * A return from Stripe's hosted checkout.
@@ -466,59 +418,6 @@ export default function Subscriptions() {
     });
   }, [checkoutReturnState, workspaceId, emit, pushToast]);
 
-  /*
-   * THE only way this screen follows a payment link.
-   *
-   * There are two routes to one — the hosted-only primary route, and the
-   * `no_managed_identity` fallback — and they are the same act with the same
-   * consequence: a static link that cannot associate its subscription with a
-   * workspace, in a deployment with no webhook to confirm it. Guarding one and
-   * not the other is exactly the mistake that shipped, so there is no second
-   * `assign` to forget: both go through here.
-   */
-  const followPaymentLink = async (tier: SubscriptionTier, link: string, managedFailure?: string) => {
-    /*
-     * Nothing here knows whether the last payment went through — that is what
-     * the missing webhook was for. It does know one was started, and that is
-     * enough to stop offering the same purchase again.
-     */
-    /*
-     * CLAIM the purchase; do not read and then write.
-     *
-     * Reading storage instead of this tab's cached state fixed the tab that
-     * decided from a stale snapshot, but it left a narrower window open: two
-     * tabs clicking at the same moment can both finish the read before either
-     * writes, and a check-then-set that both sides pass guards nothing. The
-     * claim does the read and the write inside one cross-tab lock, so the
-     * second tab looks only after the first has finished writing.
-     */
-    const claim = await claimPendingHostedPurchase(
-      { tier, startedAt: new Date().toISOString(), workspaceId },
-      new Date(),
-      !subscriptionActive,
-    );
-    if (!claim.claimed) {
-      setPendingPurchase(claim.blockedBy);
-      emit(productEventNames.checkoutFailed, { tier, reason: 'hosted_purchase_pending' }, 'warning');
-      pushToast({
-        title: 'A purchase is already waiting to be activated',
-        message: pendingHostedPurchaseNotice(claim.blockedBy),
-        tone: 'warning',
-      });
-      setCheckoutTier(null);
-      return;
-    }
-
-    setPendingPurchase(claim.pending);
-
-    if (managedFailure) {
-      emit(productEventNames.checkoutRedirected, { tier, method: 'payment_link', managedFailure }, 'warning');
-    } else {
-      emit(productEventNames.checkoutRedirected, { tier, method: 'payment_link' });
-    }
-    window.location.assign(link);
-  };
-
   const openBillingPortal = () => {
     if (!billingPortalAction) return;
     emit(productEventNames.checkoutRedirected, { tier: subscription.tier, method: 'billing_portal' });
@@ -534,6 +433,14 @@ export default function Subscriptions() {
   };
 
   const beginCheckout = async (tier: SubscriptionTier) => {
+    if (
+      isPendingHostedPurchase(readPendingHostedPurchase(workspaceId), new Date(), workspaceId) &&
+      !subscriptionActive
+    ) {
+      setPendingPurchase(readPendingHostedPurchase(workspaceId));
+      return;
+    }
+    if (!isPublicPaidPlan(tier)) return;
     clearCheckoutError();
     selectTier(tier);
     const errorAttempt = { tier, billingPeriod, workspaceId, userId: session?.user.id };
@@ -546,10 +453,10 @@ export default function Subscriptions() {
     });
 
     const readiness = getCheckoutReadiness({
-      billingEnabled,
+      billingEnabled: canSellTier(tier) && !purchaseAwaitingActivation,
       canManageBilling,
       hasManagedIdentity,
-      hasPaymentLink: Boolean(getStripePaymentLink(tier, billingPeriod)),
+      hasPaymentLink: false,
       checkoutInProgress: false,
       subscriptionRecoverable,
       subscriptionActive,
@@ -580,21 +487,6 @@ export default function Subscriptions() {
       return;
     }
 
-    /*
-     * A hosted-link-only deployment never calls the managed endpoint at all.
-     *
-     * Not a fallback — the primary route. With managed billing off the
-     * endpoint refuses with no code before reading any billing row, and the
-     * allowlist below then rightly declines to follow it, which suppressed the
-     * one checkout route such a deployment has. See `checkoutRouteFor` for why
-     * skipping the request costs no protection.
-     */
-    const hostedOnlyLink = getStripePaymentLink(tier, billingPeriod);
-    if (checkoutRouteFor({ managedBillingEnabled: billingEnabled, paymentLink: hostedOnlyLink }) === 'payment_link') {
-      await followPaymentLink(tier, hostedOnlyLink);
-      return;
-    }
-
     const managed = await startManagedCheckout({
       tier,
       workspaceId,
@@ -604,39 +496,6 @@ export default function Subscriptions() {
     if (managed.ok) {
       emit(productEventNames.checkoutRedirected, { tier, method: 'managed' });
       window.location.assign(managed.url);
-      return;
-    }
-
-    /*
-     * The payment link is reached only when there was no identity to check.
-     *
-     * It is an unguarded `mode: 'subscription'` checkout that consults no
-     * billing row, so following it after the endpoint refused undid the refusal
-     * completely — the customer saw an ordinary Stripe page and paid twice.
-     * Blocking a list of refusal codes was not enough: `fetch` rejecting or a
-     * malformed body produces an UNCODED failure, and in exactly those cases the
-     * endpoint's guard never ran, so a workspace with a live subscription still
-     * got the link. A network error says nothing about whether a customer
-     * already pays us.
-     *
-     * So the rule is an allowlist. Only `no_managed_identity` — no workspace id,
-     * no access token, therefore no billing row that could hold a subscription —
-     * falls back, which is how a local-only workspace legitimately buys a plan.
-     */
-    // The fallback honors the selected billing period: with no annual link
-    // configured there is no fallback, which is what keeps an annual
-    // selection from silently buying the monthly link.
-    const fallback = canUsePaymentLinkFallback(managed.code) ? getStripePaymentLink(tier, billingPeriod) : '';
-    if (fallback) {
-      /*
-       * The same guard as the hosted-only route, because this is the same act.
-       * A static link cannot tell Stripe which workspace it belongs to, and
-       * there is no webhook to confirm it either way — so returning to this
-       * page after paying left checkout enabled and bought a second
-       * subscription. It shipped guarded on one branch and not the other,
-       * which is why both now go through `followPaymentLink`.
-       */
-      await followPaymentLink(tier, fallback, managed.message);
       return;
     }
 
@@ -669,7 +528,7 @@ export default function Subscriptions() {
       return;
     }
     // Everyone who cannot start a trial (no billing permission, native app,
-    // already on a paid plan) keeps the old behavior: continue on the Starter
+    // already on a paid plan) keeps the old behavior: continue on the workspace
     // path. The button says so; it must not silently do nothing.
     if (!trialCanStart || trialStarting) {
       navigate(continuePath);
@@ -720,13 +579,12 @@ export default function Subscriptions() {
     const profile = revenuePlanMatrix[tier];
     const highlighted = tier === decisionTier;
     const paidCurrent = isCurrentPaidPlan(subscription, tier);
-    const setupCurrent = tier === 'Starter' && starterSetup;
     const busy = checkoutTier === tier;
     const readiness = getCheckoutReadiness({
-      billingEnabled,
+      billingEnabled: canSellTier(tier) && !purchaseAwaitingActivation,
       canManageBilling,
       hasManagedIdentity,
-      hasPaymentLink: Boolean(getStripePaymentLink(tier, billingPeriod)),
+      hasPaymentLink: false,
       checkoutInProgress: checkoutTier !== null,
       subscriptionRecoverable,
       subscriptionActive,
@@ -735,7 +593,7 @@ export default function Subscriptions() {
     });
     const chooseTier = () => {
       selectTier(tier);
-      if (paidCurrent || setupCurrent) return;
+      if (paidCurrent) return;
       if (!readiness.ready) {
         // A subscription already exists, so this cannot open checkout — but it
         // can open the place where that subscription is actually changed.
@@ -749,7 +607,7 @@ export default function Subscriptions() {
     return (
       <article
         id={planAnchor(tier)}
-        className={`checkout-plan${highlighted ? ' checkout-plan--selected' : ''}${paidCurrent || setupCurrent ? ' checkout-plan--active' : ''}`}
+        className={`checkout-plan${highlighted ? ' checkout-plan--selected' : ''}${paidCurrent ? ' checkout-plan--active' : ''}`}
         key={tier}
       >
         <div>
@@ -758,14 +616,14 @@ export default function Subscriptions() {
           <p>{profile.fit}</p>
         </div>
         <div className="checkout-plan__price">
-          <strong>{formatCurrency(billingPeriod === 'annual' ? config.annualRate : config.monthlyRate)}</strong>
-          <small>{billingPeriod === 'annual' ? '/ year · 2 months free' : '/ month'}</small>
+          <strong>{formatCurrencyCents(config.monthlyRate)}</strong>
+          <small>/ month</small>
         </div>
         <ul>
           <li>{formatLimit(config.limits.horseLimit, 'horses')}</li>
-          <li>{formatLimit(config.limits.salePacketLimit, 'sale packets')} every 30 days</li>
+          <li>{formatLimit(config.limits.salePacketLimit, 'sale packets')}</li>
         </ul>
-        {/* Seat, document and storage quotas are already included in this
+        {/* Seat and document quotas and shared storage availability are included in this
             canonical feature copy; show each once in the comparison card.
             What the tier includes, not just how much of it. Rendered whatever
             the billing configuration is: being unable to buy a plan is no
@@ -775,14 +633,9 @@ export default function Subscriptions() {
             <li key={feature}>{feature}</li>
           ))}
         </ul>
-        {paidCurrent || setupCurrent ? (
-          <button
-            type="button"
-            disabled={checkoutTier !== null}
-            title={`View ${paidCurrent ? 'current plan' : 'Starter setup'} details`}
-            onClick={chooseTier}
-          >
-            {paidCurrent ? 'View current plan' : 'View Starter setup'}
+        {paidCurrent ? (
+          <button type="button" disabled={checkoutTier !== null} title="View current plan details" onClick={chooseTier}>
+            View current plan
           </button>
         ) : (
           <button
@@ -800,13 +653,7 @@ export default function Subscriptions() {
                   : `Choose ${tier}`}
           </button>
         )}
-        <small>
-          {paidCurrent
-            ? 'Your active paid capacity.'
-            : setupCurrent
-              ? 'No paid Starter subscription is active yet.'
-              : readiness.reason}
-        </small>
+        <small>{paidCurrent ? 'Your active paid capacity.' : readiness.reason}</small>
       </article>
     );
   };
@@ -869,11 +716,32 @@ export default function Subscriptions() {
             </div>
           )}
 
+          <article className="checkout-plan" aria-label="Free plan">
+            <h3>Free</h3>
+            <strong>$0</strong>
+            <p>2 horses · 1 user · No card required</p>
+            <p>Manual document upload. OCR and shared sale packets require a paid plan.</p>
+            <button type="button" onClick={() => navigate(workspaceReady ? '/' : '/setup')}>
+              {subscription.tier === 'Free' ? 'Continue with Free' : 'Continue to workspace'}
+            </button>
+          </article>
+          {hasActivePaidPlan(subscription) && (
+            <p role="status">
+              Current subscription: {subscription.purchasedTier ?? subscription.tier} ·{' '}
+              {subscription.billingPeriod === 'annual'
+                ? subscription.annualRate
+                  ? `${formatSubscriptionPrice(subscription.annualRate)} / year`
+                  : 'Annual billing (rate unavailable)'
+                : subscription.billingPeriod === 'monthly'
+                  ? `${formatSubscriptionPrice(subscription.monthlyRate)} / month`
+                  : 'Billing cadence unavailable'}
+            </p>
+          )}
           <div className="checkout-trial">
             <div>
               {!workspaceReady ? (
                 <>
-                  <span>Starter setup</span>
+                  <span>Free plan</span>
                   <h2>Start with XBAR</h2>
                   <p>No payment is collected in this local setup flow. Paid plans require completed checkout.</p>
                 </>
@@ -912,31 +780,10 @@ export default function Subscriptions() {
                 : trialState === 'active'
                   ? `${trialDaysLeft} of 14 days left · full Professional access`
                   : trialState === 'expired'
-                    ? 'Pick a plan below to keep going'
-                    : `${formatLimit(subscriptionPlans.Starter.limits.horseLimit, 'horses')} and ${formatLimit(subscriptionPlans.Starter.limits.documentLimit, 'documents')}`}
+                    ? 'Continue Free or choose a paid plan below'
+                    : `${formatLimit(subscriptionPlans.Free.limits.horseLimit, 'horses')} and ${formatLimit(subscriptionPlans.Free.limits.documentLimit, 'documents')}`}
             </small>
           </div>
-
-          {annualAvailable && (
-            <div className="checkout-billing-toggle" role="group" aria-label="Billing period">
-              <button
-                type="button"
-                aria-pressed={billingPeriod === 'monthly'}
-                className={billingPeriod === 'monthly' ? 'checkout-billing-toggle--active' : ''}
-                onClick={() => selectBillingPeriod('monthly')}
-              >
-                Monthly
-              </button>
-              <button
-                type="button"
-                aria-pressed={billingPeriod === 'annual'}
-                className={billingPeriod === 'annual' ? 'checkout-billing-toggle--active' : ''}
-                onClick={() => selectBillingPeriod('annual')}
-              >
-                Annual <small>2 months free</small>
-              </button>
-            </div>
-          )}
 
           <div className="checkout-plan-list" aria-label="Paid plans">
             {tiers.map(renderPaidPlan)}
@@ -948,38 +795,30 @@ export default function Subscriptions() {
             <p>Billing summary</p>
             <h2>{decisionTier}</h2>
             <span>{decisionProfile.fit}</span>
+            {subscriptionActive && subscription.billingPeriod === 'monthly' && (
+              <span>Recorded plan rate: {formatCurrencyCents(subscription.monthlyRate)} per month</span>
+            )}
+            {subscriptionActive && subscription.billingPeriod === 'annual' && (subscription.annualRate ?? 0) > 0 && (
+              <span>Recorded plan rate: {formatCurrencyCents(subscription.annualRate!)} per year</span>
+            )}
           </div>
 
           <div className="checkout-total">
-            <span>
-              {selectedCheckoutConfigured
-                ? 'Due at checkout'
-                : billingPeriod === 'annual'
-                  ? 'Annual price'
-                  : 'Monthly price'}
-            </span>
-            <strong>
-              {formatCurrency(billingPeriod === 'annual' ? decisionConfig.annualRate : decisionConfig.monthlyRate)}
-            </strong>
-            <small>
-              {selectedCheckoutConfigured
-                ? billingPeriod === 'annual'
-                  ? 'then annually'
-                  : 'then monthly'
-                : 'not charged in app'}
-            </small>
+            <span>Monthly plan price</span>
+            <strong>{formatCurrencyCents(decisionConfig.monthlyRate)}</strong>
+            <small>{selectedCheckoutConfigured ? 'USD per workspace' : 'not charged in app'}</small>
           </div>
 
           {selectedReadiness.mode === 'manual' ? (
             <div className="checkout-card-box" aria-label="Billing details">
               <div className="checkout-card-box__top">
                 <span>Billing</span>
-                <strong>Billing not configured yet</strong>
+                <strong>{subscriptionActive ? 'Existing subscription' : 'Managed checkout unavailable'}</strong>
               </div>
               <p>
-                Payment is not set up for this deployment, so no plan can be purchased here and no payment details are
-                collected. Every tier below is still shown in full so you can compare what they include. Your workspace
-                and current plan are unchanged.
+                {subscriptionActive
+                  ? selectedReadiness.reason
+                  : 'New plans require verified managed checkout. Static payment links are not offered because their prices cannot be verified here. Your workspace and current plan are unchanged.'}
               </p>
             </div>
           ) : selectedReadiness.mode === 'external' ? (
@@ -1001,7 +840,7 @@ export default function Subscriptions() {
                 and your workspace and current plan are unchanged.
               </p>
             </div>
-          ) : (
+          ) : !selectedReadiness.ready ? null : (
             <div className="checkout-card-box" aria-label="Secure payment details">
               <div className="checkout-card-box__top">
                 <span>Card details</span>
@@ -1030,7 +869,7 @@ export default function Subscriptions() {
               <>
                 <div>
                   <span>Billing</span>
-                  <strong>{billingPeriod === 'annual' ? 'Annual' : 'Monthly'}</strong>
+                  <strong>Monthly</strong>
                 </div>
                 <div>
                   <span>Payment</span>
@@ -1091,7 +930,9 @@ export default function Subscriptions() {
                     ? 'Managed outside the app'
                     : selectedReadiness.mode === 'manual'
                       ? 'Billing not configured yet'
-                      : 'Continue to secure checkout'}
+                      : !selectedReadiness.ready
+                        ? 'Checkout unavailable'
+                        : 'Continue to secure checkout'}
             </button>
           )}
           <button
@@ -1108,7 +949,7 @@ export default function Subscriptions() {
                   ? trialStarting
                     ? 'Starting trial…'
                     : 'Start 14-day Professional trial instead'
-                  : 'Continue with Starter setup'}
+                  : 'Continue with Free plan'}
           </button>
           {/*
             Said plainly, because the alternative is a customer staring at a

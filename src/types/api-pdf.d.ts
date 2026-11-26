@@ -30,9 +30,16 @@ declare module '*/api/_lib/pdf.js' {
     continuationHeaders?: boolean;
     branding?: { logo: Uint8Array; mark: Uint8Array; watermark: Uint8Array };
     reference?: string;
+    /** Distinguish a multi-page summary from originals appended afterward. */
+    pageLabel?: string;
   }): Promise<Uint8Array>;
 
   export function asField(part: string): { label: string; value: string } | null;
+  export function assemblePacketPdf(input: {
+    coverBytes: Uint8Array;
+    attachments?: { bytes: Uint8Array; mimeType: string; label: string }[];
+    watermarkText?: string;
+  }): Promise<Uint8Array>;
   export function fieldsInLine(line: string): { label: string; value: string }[] | null;
   export function wrapLine(text: string, font: unknown, size: number, maxWidth: number): string[];
 }

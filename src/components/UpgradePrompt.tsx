@@ -124,7 +124,10 @@ function PromptContent({ prompt }: { prompt: UpgradePromptRequest }) {
       return;
     checkoutPending.current = false;
     setCheckingOut(false);
-    if (result.ok && result.url) window.location.assign(result.url);
+    if (result.ok && result.allowed) {
+      setAlreadyIncluded(true);
+      setOffer(null);
+    } else if (result.ok && result.url) window.location.assign(result.url);
     else if (!result.ok) setError(result.message);
   };
 

@@ -151,7 +151,7 @@ export default function MainLayout() {
   const notifications = pendingReview + pendingTransfers + careDueCount + expiringForBell;
 
   const ranchName = workspaceProfile.ranchName || workspaceProfile.businessName || 'Your ranch';
-  const planTier = subscription?.tier || 'Starter';
+  const planTier = subscription?.tier || 'Free';
   const accountInitials = (cloudSession?.user?.email ?? currentRole ?? 'XB')
     .replace(/@.*/, '')
     .slice(0, 2)

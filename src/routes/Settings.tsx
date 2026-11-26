@@ -1,12 +1,15 @@
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState, useSyncExternalStore } from 'react';
 import { validatePacketLogo, validatePacketProfile } from '../../api/_lib/packet-branding.js';
 import { validatePacketLogoRaster } from '../../api/_lib/packet-branding-raster.js';
 import { readRanchLogo } from '@/lib/ranchLogoUpload';
 import { hasRoleCapability } from '@/lib/permissions';
 import { readRecordsOwner } from '@/lib/recordsOwner';
+import { publicSiteHref } from '@/lib/nativePlatform';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { PageHeader, Panel, Pill } from '@/components/app-ui';
+import { AccountDeletionPanel } from '@/components/AccountDeletionPanel';
 import { ConfirmActionDialog } from '@/components/ConfirmActionDialog';
+import { UploadRecoveryPanel } from '@/components/UploadRecoveryPanel';
 import { formatDateLabel } from '@/lib/format';
 import { clearCloudDeletions } from '@/lib/cloudDeletionQueue';
 import { loadWorkspaceBackupFromCloud, saveWorkspaceBackupToCloud } from '@/lib/cloudWorkspace';
@@ -17,7 +20,12 @@ import {
   isSupabaseConfigured,
   isSnapshotFallbackEnabled,
 } from '@/lib/platformConfig';
-import { isBrowserOnline } from '@/lib/offlineRuntime';
+import {
+  getOfflineAssetCacheStatus,
+  isBrowserOnline,
+  offlineAssetCachePresentation,
+  subscribeOfflineAssetCacheStatus,
+} from '@/lib/offlineRuntime';
 import { getWorkspacePersistReceipt, workspaceStorageDriverLabel } from '@/lib/workspaceStorage';
 import { useCloudStore } from '@/store/useCloudStore';
 import { useUiStore } from '@/store/useUiStore';
@@ -27,7 +35,6 @@ import { canRestorePersistedState } from '@/store/xbarStoreHelpers';
 import {
   type PortableLocalFile,
   type UnbackedUpFile,
-  clearLocalFileVault,
   exportLocalFiles,
   importLocalFiles,
   listLocalFiles,
@@ -96,7 +103,6 @@ export default function Settings() {
   const removeWorkspaceMember = useXbarStore((state) => state.removeWorkspaceMember);
   const exportWorkspaceBackup = useXbarStore((state) => state.exportWorkspaceBackup);
   const importWorkspaceBackup = useXbarStore((state) => state.importWorkspaceBackup);
-  const resetWorkspace = useXbarStore((state) => state.resetWorkspace);
   const cloudStatus = useCloudStore((state) => state.status);
   const cloudSession = useCloudStore((state) => state.session);
   const workspaceId = useCloudStore((state) => state.workspaceId);
@@ -110,9 +116,13 @@ export default function Settings() {
   const sendMagicLink = useCloudStore((state) => state.sendMagicLink);
   const signInWithFacebook = useCloudStore((state) => state.signInWithFacebook);
   const signOutCloud = useCloudStore((state) => state.signOut);
-  const deleteAccount = useCloudStore((state) => state.deleteAccount);
   const navigate = useNavigate();
   const location = useLocation();
+  const requestedPacketReturn = new URLSearchParams(location.search).get('returnTo');
+  const packetReturn =
+    requestedPacketReturn && /^\/sale-packets\?horse=[^&?#]+&resume=1$/.test(requestedPacketReturn)
+      ? requestedPacketReturn
+      : '';
   const pushToast = useUiStore((state) => state.pushToast);
   const canManageSettings = useCurrentRoleCapability('manageSettings');
   const canSyncCloud = useCurrentRoleCapability('syncCloud');
@@ -147,8 +157,6 @@ export default function Settings() {
   const [inviteRole, setInviteRole] = useState<UserRole>('Owner');
   const [cloudBusy, setCloudBusy] = useState(false);
   const [pushConfirmOpen, setPushConfirmOpen] = useState(false);
-  const [deleteConfirm, setDeleteConfirm] = useState('');
-  const [deleting, setDeleting] = useState(false);
   const [exportingBackup, setExportingBackup] = useState(false);
   const exportInFlight = useRef(false);
   const [importingBackup, setImportingBackup] = useState(false);
@@ -199,6 +207,8 @@ export default function Settings() {
   const activeMembers = workspaceMembers.filter((member) => member.status === 'Active');
   const pendingInvites = workspaceInvitations.filter((invite) => invite.status === 'Pending');
   const online = isBrowserOnline();
+  const assetCacheStatus = useSyncExternalStore(subscribeOfflineAssetCacheStatus, getOfflineAssetCacheStatus);
+  const assetCache = offlineAssetCachePresentation[assetCacheStatus];
 
   useEffect(() => {
     profileMounted.current = true;
@@ -390,76 +400,6 @@ export default function Settings() {
       exportInFlight.current = false;
       setExportingBackup(false);
     }
-  };
-
-  const accountEmail = cloudSession?.user?.email ?? '';
-  const canConfirmDelete =
-    accountEmail.length > 0 && deleteConfirm.trim().toLowerCase() === accountEmail.trim().toLowerCase();
-
-  const handleDeleteAccount = async () => {
-    if (!canConfirmDelete || deleting) return;
-
-    /*
-     * Captured BEFORE anything is cleared, and that ordering is the whole fix.
-     *
-     * `deleteAccount` clears the cloud workspace id and `resetWorkspace` erases
-     * the records, so reading either afterwards answered for a workspace that
-     * no longer existed: every successful cloud deletion purged as `'local'`
-     * with an empty key list. The deleted account's files stayed on the device,
-     * and this browser's LOCAL-only workspace had its files deleted instead —
-     * wrong in both directions at once.
-     */
-    const departingWorkspaceId = vaultOwnerId();
-    const departing = exportWorkspaceBackup().workspace as {
-      documents?: { localFileKey?: string }[];
-      expenseReceipts?: { localFileKey?: string }[];
-      salePacketBuilds?: { localFileKey?: string }[];
-    };
-    const departingKeys = referencedVaultKeys(
-      departing.documents ?? [],
-      departing.expenseReceipts ?? [],
-      departing.salePacketBuilds ?? [],
-    );
-
-    setDeleting(true);
-    const result = await deleteAccount(deleteConfirm);
-    setDeleting(false);
-    if (!result.ok) {
-      pushToast({ title: 'Deletion failed', message: result.message, tone: 'error' });
-      return;
-    }
-    // Purge the on-device workspace copy so no data lingers after the account is
-    // gone server-side. Reset the in-memory state FIRST so a later store write
-    // (e.g. CloudBootstrap adjusting the role on sign-out) can't re-persist the
-    // deleted user's data, then clear the backing storage.
-    resetWorkspace();
-    try {
-      await useXbarStore.persist.clearStorage();
-    } catch {
-      // best effort — the account is already deleted on the server
-    }
-    // The files live in their own database, which `persist.clearStorage` knows
-    // nothing about. Without this, registration papers, receipts and generated
-    // packets stayed on the device while the UI reported the account
-    // permanently deleted.
-    // Scoped to the workspace being deleted, plus whatever its own records
-    // pointed at — both captured at the top, while they still existed. The
-    // vault is origin-wide: dropping the database would take a second account's
-    // documents with it, and this browser may well hold one.
-    const { cleared } = await clearLocalFileVault(departingWorkspaceId, departingKeys);
-    setDeleteConfirm('');
-    // The server side is done either way — the account is gone. But if this
-    // browser refused to drop the file database, the proof documents are still
-    // on this machine, and "permanently deleted" would be false about the part
-    // the person can still see.
-    pushToast({
-      title: cleared ? 'Account deleted' : 'Account deleted — files still on this device',
-      message: cleared
-        ? result.message
-        : `${result.message} This browser would not remove the files stored on this device; close other XBAR tabs and clear this site's data to finish removing them.`,
-      tone: cleared && !result.incomplete ? 'success' : 'warning',
-    });
-    navigate('/login', { replace: true });
   };
 
   const handleImport = async (file?: File) => {
@@ -916,7 +856,20 @@ export default function Settings() {
 
   return (
     <>
-      <PageHeader eyebrow="Settings" title="Settings" />
+      <PageHeader
+        eyebrow="Settings"
+        title="Settings"
+        actions={
+          <a
+            className="button button--ghost button--compact"
+            href={publicSiteHref('/privacy')}
+            target="_blank"
+            rel="noopener noreferrer"
+          >
+            Privacy Policy
+          </a>
+        }
+      />
 
       <div className="dashboard-grid dashboard-grid--primary">
         <Panel eyebrow="Access model" title="Commercial barn permissions">
@@ -934,12 +887,12 @@ export default function Settings() {
             </div>
             <div className="stack-item">
               <div className="stack-item__top">
-                <div className="stack-item__title">Offline-capable browser workspace</div>
+                <div className="stack-item__title">Working with a weak connection</div>
                 <Pill tone={online ? 'emerald' : 'amber'}>{online ? 'Online' : 'Offline'}</Pill>
               </div>
               <div className="stack-item__copy">
-                The app registers an offline shell and keeps local workspace data available in the browser. Barn staff
-                can keep working through poor signal, then use cloud sync when service is available.
+                An open tab can still display records it has already loaded. Refreshing or reopening XBAR requires an
+                internet connection. Cloud sync also requires a connection.
               </div>
             </div>
           </div>
@@ -1263,6 +1216,16 @@ export default function Settings() {
           </div>
         </Panel>
 
+        {packetReturn ? (
+          <button
+            className="button button--ghost"
+            type="button"
+            disabled={profileSaving || logoLoading}
+            onClick={() => navigate(packetReturn)}
+          >
+            Return to packet
+          </button>
+        ) : null}
         <Panel eyebrow="Ranch access" title="Access">
           <div className="stack-list">
             <div className="stack-item">
@@ -1552,7 +1515,7 @@ export default function Settings() {
               {cloudSession ? 'Cloud session live' : 'Local session'}
             </Pill>
             <Pill tone={online ? 'emerald' : 'amber'}>{online ? 'Browser online' : 'Browser offline'}</Pill>
-            <Pill tone="blue">Offline shell registered</Pill>
+            <Pill tone={assetCache.tone}>{assetCache.label}</Pill>
             <Pill tone={isRelationalCloudEnabled() ? 'emerald' : 'slate'}>
               {isRelationalCloudEnabled() ? 'Relational sync on' : 'Snapshot-only sync'}
             </Pill>
@@ -1611,42 +1574,8 @@ export default function Settings() {
         </div>
       </Panel>
 
-      {isSupabaseConfigured() && cloudSession ? (
-        <Panel
-          eyebrow="Danger zone"
-          title="Delete account"
-          description="Permanently delete your XBAR account and the data you own. This cannot be undone."
-        >
-          <p className="settings-danger-note">
-            Deleting your account removes your login and permanently erases every workspace you solely own — horses,
-            documents, sale packets, and receipts. If you own a workspace with other members, deletion is blocked until
-            a reviewed ownership handoff protects its shared records and files.
-          </p>
-          <div className="settings-danger-confirm">
-            <label className="field">
-              <span className="field__label">Type your email to confirm</span>
-              <input
-                className="field-input"
-                type="email"
-                autoComplete="off"
-                spellCheck={false}
-                placeholder={accountEmail}
-                value={deleteConfirm}
-                onChange={(event) => setDeleteConfirm(event.target.value)}
-                aria-label="Type your account email to confirm account deletion"
-              />
-            </label>
-            <button
-              className="button button--danger button--compact"
-              type="button"
-              onClick={() => void handleDeleteAccount()}
-              disabled={!canConfirmDelete || deleting}
-            >
-              {deleting ? 'Deleting…' : 'Permanently delete my account'}
-            </button>
-          </div>
-        </Panel>
-      ) : null}
+      <UploadRecoveryPanel />
+      <AccountDeletionPanel />
       <ConfirmActionDialog
         open={pushConfirmOpen}
         title="Replace the cloud copy with this device"

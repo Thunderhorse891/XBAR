@@ -11,7 +11,7 @@ import { useUiStore } from '@/store/useUiStore';
 import { useXbarStore } from '@/store/useXbarStore';
 import './cleanEntryExperience.css';
 import './loginHero.css';
-import { canPresentThirdPartySignIn, canPresentPurchaseFlow, publicSiteHref } from '@/lib/nativePlatform';
+import { canPresentThirdPartySignIn, canPresentPurchaseFlow, publicSiteHref, isNativeApp } from '@/lib/nativePlatform';
 import { presentableOAuthProviders } from '@/lib/authProviders';
 import { readBrowserStorage, removeBrowserStorage, writeBrowserStorage } from '@/lib/browserStorage';
 import { markCommandCenterEntry } from '@/lib/commandCenterEntry';
@@ -27,6 +27,7 @@ export default function Login() {
   const [params, setParams] = useSearchParams();
   const emailId = useId();
   const passwordId = useId();
+  const emailCodeId = useId();
   const pushToast = useUiStore((state) => state.pushToast);
   const cloud = useCloudStore();
   const setUpWorkspace = useXbarStore((state) => state.initializeWorkspace);
@@ -64,10 +65,11 @@ export default function Login() {
     if (authMode === 'signup') return workspaceSetupPath;
     const from = (location.state as { from?: string } | null)?.from;
     if (from) return from;
+    if (selectedPlan === 'Free') return '/';
     // A store build has no purchase path, so sending someone to billing the
     // moment they sign in is an arrival at a paywall they cannot act on.
     if (!canPresentPurchaseFlow()) return '/';
-    return selectedPlan ? billingPathForTier(selectedPlan) : billingPath;
+    return selectedPlan ? billingPathForTier(selectedPlan) : '/';
   }, [authMode, location.state, selectedPlan, workspaceSetupPath]);
   const supabaseReady = isSupabaseConfigured();
   // A button per provider this deployment has actually enabled in Supabase.
@@ -262,6 +264,10 @@ export default function Login() {
   const openBrowserWorkspace = () => {
     markLocalWorkspaceIntent();
     setUpWorkspace({ businessName: 'XBAR Ranch', ranchName: 'XBAR Ranch' });
+    if (selectedPlan === 'Free') {
+      navigate('/', { replace: true });
+      return;
+    }
     navigate(canPresentPurchaseFlow() ? (selectedPlan ? billingPathForTier(selectedPlan) : billingPath) : '/', {
       replace: true,
     });
@@ -403,16 +409,22 @@ export default function Login() {
     </p>
   );
 
-  const label = authMode === 'signin' ? 'System access' : selectedPlan ? `${selectedPlan} tier` : 'New workspace';
+  const label = authMode === 'signin' ? 'System access' : selectedPlan ? `${selectedPlan} interest` : 'New workspace';
   const title = authMode === 'signin' ? 'Sign In' : 'Create Account';
-  const description = selectedPlan
-    ? `Create credentials, set up your workspace, then continue to the ${selectedPlan} plan.`
-    : authMode === 'signin'
+  const description =
+    authMode === 'signin'
       ? 'Sign in to your workspace.'
-      : 'Create a sign-in for your XBAR workspace.';
+      : selectedPlan === 'Free'
+        ? 'Create your sign-in, then set up your Free workspace. No card required. A trial starts only when you choose it.'
+        : selectedPlan
+          ? `Create an account and set up your workspace. Your interest in ${selectedPlan} does not start a subscription.`
+          : 'Create a sign-in for your XBAR workspace. Creating an account does not start a subscription.';
 
   return (
-    <main className="clean-entry-shell clean-entry-shell--brand-auth">
+    <main
+      className="clean-entry-shell clean-entry-shell--brand-auth"
+      data-native-entry={isNativeApp() ? 'true' : undefined}
+    >
       <section
         ref={entryPanel}
         className={`clean-login-layout${confirmationEmail ? ' clean-login-layout--confirmation' : ''}`}
@@ -536,66 +548,91 @@ export default function Login() {
               {messagePanel}
             </div>
           ) : (
-            <form className="clean-form" onSubmit={submit} aria-busy={busy !== ''}>
-              <div className="clean-field">
-                <label htmlFor={emailId}>Email or User ID</label>
-                <input
-                  id={emailId}
-                  type="email"
-                  value={email}
-                  onChange={(event) => {
-                    setEmail(event.target.value);
-                    if (formMessage?.tone === 'error') setFormMessage(null);
-                  }}
-                  autoComplete="email"
-                  required
-                />
-              </div>
-              <div className="clean-field">
-                <label htmlFor={passwordId}>Password</label>
-                <div className="clean-password-field">
+            <>
+              <form className="clean-form" onSubmit={submit} aria-busy={busy !== ''}>
+                <div className="clean-field">
+                  <label htmlFor={emailId}>Email or User ID</label>
                   <input
-                    id={passwordId}
-                    type={showPassword ? 'text' : 'password'}
-                    value={password}
+                    id={emailId}
+                    type="email"
+                    value={email}
                     onChange={(event) => {
-                      setPassword(event.target.value);
+                      setEmail(event.target.value);
                       if (formMessage?.tone === 'error') setFormMessage(null);
                     }}
-                    autoComplete={authMode === 'signin' ? 'current-password' : 'new-password'}
-                    minLength={minimumPasswordLength}
+                    autoComplete="email"
                     required
                   />
-                  <button
-                    type="button"
-                    onClick={() => setShowPassword((value) => !value)}
-                    aria-label={showPassword ? 'Hide entered value' : 'Show entered value'}
-                  >
-                    {showPassword ? 'Hide' : 'Show'}
-                  </button>
                 </div>
-              </div>
-              <div className="clean-auth-options">
-                <label>
-                  <input type="checkbox" checked={remember} onChange={(event) => setRemember(event.target.checked)} />{' '}
-                  Remember me
-                </label>
-                {authMode === 'signin' && supabaseReady && (
-                  <button type="button" disabled={!email || busy !== ''} onClick={reset}>
-                    {busy === 'reset' ? 'Sending...' : 'Forgot password?'}
-                  </button>
+                <div className="clean-field">
+                  <label htmlFor={passwordId}>Password</label>
+                  <div className="clean-password-field">
+                    <input
+                      id={passwordId}
+                      type={showPassword ? 'text' : 'password'}
+                      value={password}
+                      onChange={(event) => {
+                        setPassword(event.target.value);
+                        if (formMessage?.tone === 'error') setFormMessage(null);
+                      }}
+                      autoComplete={authMode === 'signin' ? 'current-password' : 'new-password'}
+                      minLength={minimumPasswordLength}
+                      required
+                    />
+                    <button
+                      type="button"
+                      onClick={() => setShowPassword((value) => !value)}
+                      aria-label={showPassword ? 'Hide entered value' : 'Show entered value'}
+                    >
+                      {showPassword ? 'Hide' : 'Show'}
+                    </button>
+                  </div>
+                </div>
+                <div className="clean-auth-options">
+                  <label>
+                    <input type="checkbox" checked={remember} onChange={(event) => setRemember(event.target.checked)} />{' '}
+                    Remember me
+                  </label>
+                  {authMode === 'signin' && supabaseReady && (
+                    <button type="button" disabled={!email || busy !== ''} onClick={reset}>
+                      {busy === 'reset' ? 'Sending...' : 'Forgot password?'}
+                    </button>
+                  )}
+                </div>
+                <button
+                  className="clean-primary-button"
+                  type="submit"
+                  disabled={!email || password.length < minimumPasswordLength || busy !== ''}
+                >
+                  {busy === 'password' ? 'Authenticating...' : authMode === 'signin' ? 'Sign In' : 'Create Account'}
+                </button>
+                {messagePanel}
+                {supabaseReady && oauthProviders.length > 0 && (
+                  <>
+                    <div className="clean-divider">
+                      <span>or continue with</span>
+                    </div>
+                    <div className="clean-social-grid">
+                      {oauthProviders.map((provider) => (
+                        <button key={provider} type="button" disabled={busy !== ''} onClick={() => oauth(provider)}>
+                          {provider[0].toUpperCase() + provider.slice(1)}
+                        </button>
+                      ))}
+                    </div>
+                  </>
                 )}
-              </div>
-              <button
-                className="clean-primary-button"
-                type="submit"
-                disabled={!email || password.length < minimumPasswordLength || busy !== ''}
-              >
-                {busy === 'password' ? 'Authenticating...' : authMode === 'signin' ? 'Sign In' : 'Create Account'}
-              </button>
-              {messagePanel}
+              </form>
               {supabaseReady && !canPresentThirdPartySignIn() && authMode === 'signin' && (
-                <>
+                <form
+                  className="clean-form"
+                  aria-label="Email code sign-in"
+                  aria-busy={busy !== ''}
+                  onSubmit={(event) => {
+                    event.preventDefault();
+                    if (busy !== '' || !email.trim() || !emailCode.trim()) return;
+                    void submitEmailCode();
+                  }}
+                >
                   <div className="clean-divider">
                     <span>or</span>
                   </div>
@@ -604,19 +641,19 @@ export default function Login() {
                   </button>
                   {codeSent && (
                     <>
+                      <label htmlFor={emailCodeId}>Sign-in code</label>
                       <input
+                        id={emailCodeId}
                         className="field-input"
                         inputMode="numeric"
+                        enterKeyHint="go"
+                        required
                         autoComplete="one-time-code"
                         placeholder="6-digit code"
                         value={emailCode}
                         onChange={(event) => setEmailCode(event.target.value)}
                       />
-                      <button
-                        type="button"
-                        disabled={busy !== '' || !emailCode.trim()}
-                        onClick={() => void submitEmailCode()}
-                      >
+                      <button type="submit" disabled={busy !== '' || !emailCode.trim()}>
                         {busy === 'verify' ? 'Checking...' : 'Sign in with code'}
                       </button>
                     </>
@@ -631,23 +668,9 @@ export default function Login() {
                     If you first signed up with Google, Apple or Facebook, use this — those buttons cannot complete
                     sign-in inside the app.
                   </p>
-                </>
+                </form>
               )}
-              {supabaseReady && oauthProviders.length > 0 && (
-                <>
-                  <div className="clean-divider">
-                    <span>or continue with</span>
-                  </div>
-                  <div className="clean-social-grid">
-                    {oauthProviders.map((provider) => (
-                      <button key={provider} type="button" disabled={busy !== ''} onClick={() => oauth(provider)}>
-                        {provider[0].toUpperCase() + provider.slice(1)}
-                      </button>
-                    ))}
-                  </div>
-                </>
-              )}
-            </form>
+            </>
           )}
 
           <div className="clean-auth-footer">

@@ -1,0 +1,27 @@
+.sale-packet-row > .xs-mrow__main {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+@media (max-width: 720px) {
+  .xs-mrow.sale-packet-row {
+    flex-wrap: wrap;
+    gap: 12px;
+    align-items: flex-start;
+  }
+
+  .sale-packet-row > .xs-mrow__main {
+    flex: 1 0 100%;
+    width: 100%;
+  }
+
+  .sale-packet-row > details {
+    flex-basis: 100%;
+    min-width: 0;
+  }
+
+  .sale-packet-row .xs-btn {
+    min-height: 48px;
+    white-space: normal;
+  }
+}

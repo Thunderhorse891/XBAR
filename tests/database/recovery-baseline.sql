@@ -122,3 +122,5 @@ end;
 $$;
 rollback;
 select 'Synthetic RLS, role and rollback baseline passed; no production data used.' as result;
+
+\ir sale-packet-proof.sql

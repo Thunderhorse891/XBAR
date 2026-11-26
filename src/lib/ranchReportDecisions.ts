@@ -102,11 +102,19 @@ export function reportDecisions(report: RanchReport) {
     actions.push(`Review the Coggins test date and approval status for ${reportCount(reviewCoggins, 'horse')}.`);
   const medical = blocked.filter((h) => h.blockers.some((s) => s.startsWith('Active medical'))).length;
   if (medical) actions.push(`Resolve medical review and buyer disclosure for ${reportCount(medical, 'horse')}.`);
-  if (report.documentsToReview)
-    actions.push(`Review ${reportCount(report.documentsToReview, 'existing file')} in the document queue.`);
-  if (report.money.unallocatedThisMonth > 0)
+  if (report.documentsAwaitingReview)
+    actions.push(`Review ${reportCount(report.documentsAwaitingReview, 'existing file')} in the document queue.`);
+  if (report.documentsProcessing)
     actions.push(
-      `Review ${reportDollars(report.money.unallocatedThisMonth)} of current-month unallocated overhead before assessing horse profitability.`,
+      `Check processing for ${reportCount(report.documentsProcessing, 'existing file')}; review the extracted facts when ready.`,
+    );
+  if (report.money.unmatchedHorseSpend > 0)
+    actions.push(
+      `Resolve ${reportDollars(report.money.unmatchedHorseSpend)} in receipts linked to horses absent from this report. Those costs are excluded from horse margins.`,
+    );
+  if (report.money.unallocatedToDate > 0)
+    actions.push(
+      `Review ${reportDollars(report.money.unallocatedToDate)} of all-time unallocated overhead (${reportDollars(report.money.unallocatedThisMonth)} this month) before assessing horse profitability.`,
     );
   const best = ranked.find(
     (h) => h.saleInventory && h.askPrice > 0 && h.projectedMargin !== null && h.projectedMargin > 0,

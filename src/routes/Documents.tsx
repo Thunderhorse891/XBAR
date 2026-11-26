@@ -4,6 +4,7 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import type { MouseEvent } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { DocumentLibrary } from '@/components/DocumentLibrary';
+import { DocumentExtractionPreview } from '@/components/DocumentExtractionPreview';
 import {
   documentWithFreshSource,
   documentIdentityCacheNeedsReview,
@@ -11,15 +12,17 @@ import {
 } from '@/lib/ownershipDocumentReview';
 import { ConfirmActionDialog } from '@/components/ConfirmActionDialog';
 import { documentDuplicateNeedsReview } from '@/lib/documentDuplicates';
-import { CommandBrief } from '@/components/CommandBrief';
+import { DocumentDossier } from '@/components/DocumentDossier';
 import { ContextMenu } from '@/components/ContextMenu';
 import { Panel, Pill } from '@/components/app-ui';
 import { EmptyState } from '@/components/EmptyState';
 import { SalePacketWizard } from '@/components/SalePacketWizard';
+import { SavedPacketDownload } from '@/components/SavedPacketDownload';
 import { billingPath, billingPathForTier } from '@/lib/billingRoutes';
 import { openStoredFileInTab } from '@/lib/openStoredFile';
 import { hasStoredFile, storedFileLabel } from '@/lib/storedFiles';
 import { formatDateTimeLabel } from '@/lib/format';
+import { normalizeStorage } from '@/lib/xbarRuntime';
 import { downloadLegalHtml, legalDocuments, openPrintableLegalDocument } from '@/lib/legalDocuments';
 import { buildDocumentTrustProfile } from '@/lib/xbarPhaseTwo';
 import { useUiStore } from '@/store/useUiStore';
@@ -35,8 +38,6 @@ import { canPresentPurchaseFlow } from '@/lib/nativePlatform';
 import {
   PIPELINE_STAGES,
   buildProofLinks,
-  computeHeroRisks,
-  computeHeroStatus,
   computeStageBuckets,
   computeStageCounts,
   stageFromParam,
@@ -86,6 +87,7 @@ export default function Documents() {
   const updateHorse = useXbarStore((state) => state.updateHorse);
   const recordAuditEvent = useXbarStore((state) => state.recordAuditEvent);
   const pushToast = useUiStore((state) => state.pushToast);
+  const openQuickCreate = useUiStore((state) => state.openQuickCreate);
   const canUploadDocuments = useCurrentRoleCapability('uploadDocuments');
   const canReviewDocuments = useCurrentRoleCapability('reviewDocuments');
   // Applying OCR facts writes to the horse record (updateHorse → editHorse),
@@ -195,27 +197,11 @@ export default function Documents() {
     () => computeStageBuckets(scopedDocuments, horses, intakeBatches),
     [scopedDocuments, horses, intakeBatches],
   );
-  const {
-    queuedDocuments,
-    reviewQueue,
-    readyDocuments,
-    proofDocuments,
-    duplicates,
-    buyerSafeDocuments,
-    processingBatches,
-  } = stageBuckets;
+  const { queuedDocuments, reviewQueue, readyDocuments, proofDocuments, duplicates, processingBatches } = stageBuckets;
 
   // Proof chain context: which documents already back an ownership requirement.
   const proofLinksByDocumentId = useMemo(() => buildProofLinks(ownershipRecords), [ownershipRecords]);
-  const proofLinkedCount = scopedDocuments.filter((document) => proofLinksByDocumentId.has(document.id)).length;
-
   const stageCounts: Record<PipelineStage, number> = computeStageCounts(scopedDocuments, stageBuckets);
-
-  const heroStatus = scopedDocuments.length
-    ? computeHeroStatus(stageBuckets)
-    : { label: 'No documents yet', tone: 'blue' as const };
-
-  const heroRisks = computeHeroRisks(stageBuckets);
 
   const applyExtractedFacts = (document: DocumentRecord) => {
     const targetId = reviewAssignments[document.id] ?? document.horseId ?? '';
@@ -687,27 +673,67 @@ export default function Documents() {
           ) : null}
         </div>
       ) : null}
-      <CommandBrief
-        eyebrow="Documents"
-        entity="Your Documents"
-        status={heroStatus}
-        summary="Every file moves through one path: upload, text extraction, human review, ownership support, then watermarked sharing."
-        evidence={[
-          { label: 'Uploaded total', value: String(scopedDocuments.length) },
-          { label: 'Processing', value: String(queuedDocuments.length) },
-          { label: 'Needs review', value: String(reviewQueue.length) },
-          { label: 'Ownership-linked', value: String(proofLinkedCount) },
-          { label: 'Share-ready', value: String(buyerSafeDocuments.length) },
-        ]}
-        risks={heroRisks}
-        nextAction={
-          reviewQueue.length
-            ? { label: `Open review queue (${reviewQueue.length})`, onClick: () => goToStage('Review') }
-            : { label: 'Upload documents', onClick: () => goToStage('Upload') }
-        }
-        secondaryActions={[{ label: 'Open Shared Access workspace', to: SHARED_ACCESS_PATH }]}
-        variant="wide"
+      <DocumentDossier
+        horse={requestedHorse}
+        documents={documents}
+        horses={horses}
+        canUpload={canUploadDocuments}
+        canReview={canReviewDocuments}
+        onUpload={() => goToStage('Upload')}
+        onReview={() => goToStage('Review')}
+        onBrowse={() => goToStage('Library')}
+        onHorseChange={(id) => {
+          const next = new URLSearchParams(searchParams);
+          if (id) next.set('horse', id);
+          else {
+            next.delete('horse');
+            next.delete('from');
+            next.delete('requirement');
+          }
+          setSearchParams(next, { preventScrollReset: true });
+        }}
       />
+
+      <section className="document-workbench" aria-labelledby="document-handoff-title">
+        <div>
+          <h2 id="document-handoff-title">Prepare the handoff</h2>
+          <p>
+            {requestedHorse
+              ? `Check ${requestedHorse.name}'s saved fields, then choose the records to share.`
+              : 'Choose a horse above to edit its fields and prepare a buyer packet.'}
+          </p>
+        </div>
+        <div className="document-workbench__actions">
+          {requestedHorse && canEditHorses ? (
+            <button
+              className="button button--ghost"
+              type="button"
+              onClick={() => openQuickCreate({ action: 'Edit Horse', horseId: requestedHorse.id })}
+            >
+              Edit horse fields
+            </button>
+          ) : !horses.length && canCreateHorses ? (
+            <button
+              className="button button--ghost"
+              type="button"
+              onClick={() => openQuickCreate({ action: 'Add Horse' })}
+            >
+              Add a horse
+            </button>
+          ) : null}
+          <button
+            className="button button--primary"
+            type="button"
+            disabled={!requestedHorse}
+            onClick={() => requestedHorse && setPacketBuildingHorseId(requestedHorse.id)}
+          >
+            Prepare buyer packet
+          </button>
+          <button className="button button--ghost" type="button" onClick={() => navigate('/reports')}>
+            Ranch report
+          </button>
+        </div>
+      </section>
 
       <section className="surface-panel">
         <div
@@ -738,6 +764,7 @@ export default function Documents() {
       {activeStage === 'Library' ? (
         <DocumentLibrary
           documents={scopedDocuments}
+          canReview={canReviewDocuments}
           horses={horses}
           openingDocumentId={openingDocumentId}
           onOpen={(document) => void openDocument(document)}
@@ -756,15 +783,17 @@ export default function Documents() {
             title="Stage 1 · Upload"
             action={
               <Pill tone={uploadOpen ? 'blue' : 'slate'}>
-                {uploadOpen
-                  ? 'Top-bar launch'
-                  : `${subscription.usage.storageUsedGb}/${subscription.usage.storageLimitGb} GB used`}
+                {uploadOpen ? 'Top-bar launch' : `${normalizeStorage(subscription.usage.storageUsedGb)} GB used`}
               </Pill>
             }
             className="cursor-context-menu"
             onContextMenu={(event) => openSurfaceMenu('intake', event)}
           >
             <p className="stack-item__copy">{documentIntakeDisclosure}</p>
+            <p className="stack-item__copy">
+              Cloud storage is shared across XBAR at launch. New launch plans do not include a dedicated storage
+              allowance; uploads depend on available capacity.
+            </p>
             <fieldset id="documents-intake" className="form-grid hc-upload-fields" disabled={isSubmitting}>
               <label className="field-stack">
                 <span className="field-label">Batch label</span>
@@ -872,7 +901,11 @@ export default function Documents() {
 
           <Panel
             title="Recent intake batches"
-            description="Each upload lands as a batch and feeds the OCR stage."
+            description={
+              subscription.tier === 'Free'
+                ? 'Manual uploads on Free. Professional unlocks OCR intake.'
+                : 'Each upload lands as a batch and feeds the OCR stage.'
+            }
             className="cursor-context-menu"
             onContextMenu={(event) => openSurfaceMenu('batches', event)}
           >
@@ -907,7 +940,11 @@ export default function Documents() {
               <EmptyState
                 compact
                 title="No document uploads yet"
-                description="Add files above to start the pipeline — OCR picks them up automatically."
+                description={
+                  subscription.tier === 'Free'
+                    ? 'Add files above, then assign and review them manually. Professional unlocks OCR.'
+                    : 'Add files above to start the pipeline — OCR picks them up automatically.'
+                }
               />
             )}
           </Panel>
@@ -967,7 +1004,9 @@ export default function Documents() {
                       </div>
                     ) : (
                       <div className="stack-item__copy">
-                        No fields extracted yet — this file is still in the OCR queue.
+                        {subscription.tier === 'Free'
+                          ? 'Manual upload on Free. Professional unlocks text extraction.'
+                          : 'No fields extracted yet — this file is still in the OCR queue.'}
                       </div>
                     )}
                   </div>
@@ -978,7 +1017,11 @@ export default function Documents() {
             <EmptyState
               compact
               title="Nothing is processing"
-              description="OCR is idle. Upload documents in stage 1 to feed the queue."
+              description={
+                subscription.tier === 'Free'
+                  ? 'Free uses manual document review. Professional unlocks OCR.'
+                  : 'OCR is idle. Upload documents in stage 1 to feed the queue.'
+              }
               action={
                 <button
                   className="button button--ghost button--compact"
@@ -1090,6 +1133,7 @@ export default function Documents() {
                                     : ''}
                                 </span>
                               ) : null}
+                              <DocumentExtractionPreview document={document} />
                             </div>
                           </td>
                           <td>
@@ -1383,10 +1427,9 @@ export default function Documents() {
             className="cursor-context-menu"
             onContextMenu={(event) => openSurfaceMenu('buyer', event)}
           >
-            {subscription.tier === 'Starter' ? (
+            {!subscription.sharedAccessEnabled ? (
               <p className="panel__description" style={{ marginBottom: 12 }}>
-                Starter records the packet build. Upgrading to Professional unlocks the watermarked PDF and Buyer
-                follow-up.{' '}
+                Professional unlocks shared sale packets, the watermarked PDF and Buyer follow-up.{' '}
                 {canPresentPurchaseFlow() ? (
                   <button
                     className="button button--ghost button--compact"
@@ -1484,6 +1527,7 @@ export default function Documents() {
                               {openingPacketId === packet.id ? 'Opening...' : 'Open packet'}
                             </button>
                           ) : null}
+                          {packet.localFileKey ? <SavedPacketDownload packet={packet} /> : null}
                           <Pill
                             tone={
                               packet.status === 'shared' ? 'blue' : packet.status === 'generated' ? 'blue' : 'amber'

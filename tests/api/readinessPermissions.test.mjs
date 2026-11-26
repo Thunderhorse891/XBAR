@@ -36,7 +36,7 @@ async function load(file) {
     if (url.pathname.endsWith('/rate-limit.js'))
       return 'from "data:text/javascript,export const enforceRateLimit=async()=>true"';
     if (url.pathname.endsWith('/entitlements.js'))
-      return `from "data:text/javascript,export const getWorkspaceEntitlements=async()=>({ok:false,status:418,message:'reached entitlement gate'});export const checkSalePacketCapacity=()=>{};export const checkStorageCapacity=()=>{};export const checkDocumentCapacity=()=>{};export const checkHorseCapacity=()=>{};export const tierIncludesPlan=()=>true"`;
+      return `from "data:text/javascript,export const SALE_PACKET_WINDOW_DAYS=30;export const getWorkspaceEntitlements=async()=>({ok:false,status:418,message:'reached entitlement gate'});export const checkSalePacketCapacity=()=>{};export const checkStorageCapacity=()=>{};export const checkDocumentCapacity=()=>{};export const checkHorseCapacity=()=>{};export const tierIncludesPlan=()=>true"`;
     return `from '${url.href}'`;
   });
   return (await import(`data:text/javascript;base64,${Buffer.from(source).toString('base64')}`)).default;

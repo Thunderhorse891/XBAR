@@ -31,14 +31,6 @@ export function cinematicHome(plans) {
         operatingSystem: 'Web',
         url: `${SITE_ORIGIN}/`,
         publisher: { '@id': `${SITE_ORIGIN}/#organization` },
-        offers: plans.map((plan) => ({
-          '@type': 'Offer',
-          name: plan.tier,
-          price: String(plan.monthlyRate),
-          priceCurrency: 'USD',
-          category: 'subscription',
-          url: `${SITE_ORIGIN}/pricing`,
-        })),
       },
     ],
     body: `
@@ -48,12 +40,11 @@ export function cinematicHome(plans) {
     <div class="landing-hero-copy">
       <p class="landing-eyebrow" data-hero-reveal>For the business of horses</p>
       <h1 id="landing-title"><span data-hero-reveal>Every horse.</span> <span data-hero-reveal>One clear picture.</span></h1>
-      <p class="landing-lead" data-hero-reveal>Your horses, paperwork, and next decisions. Bring them together in a workspace built around the way you run your operation.</p>
+      <p class="landing-lead" data-hero-reveal>Keep horse records, ownership, and buyer-ready paperwork together.</p>
       <div class="landing-actions" data-hero-reveal>
-        <a class="btn btn--primary landing-primary" href="${APP_SIGNUP}" rel="nofollow" data-magnetic><span>Create your workspace</span></a>
-        <a class="landing-text-link" href="#inside-xbar">Explore XBAR <span aria-hidden="true">↘</span></a>
+        <a class="btn btn--primary landing-primary" href="${APP_SIGNUP}" rel="nofollow" data-magnetic><span>Start free</span></a>
       </div>
-      <p class="landing-note" data-hero-reveal>Records. Ownership. Care. Sale readiness.</p>
+      <p class="landing-note" data-hero-reveal>2 horses. No card required. A separate 14-day Professional trial is optional.</p>
     </div>
     <div class="landing-art" data-parallax>
       <div class="landing-art-plane">
@@ -98,7 +89,7 @@ export function cinematicHome(plans) {
 </section>
 
 <section class="landing-section landing-plans-section" aria-labelledby="plans-title">
-  <div class="wrap"><div class="landing-section-heading" data-landing-reveal><div><p class="landing-eyebrow">Room for your operation</p><h2 id="plans-title">Start with your horses.<br />Grow from there.</h2></div><p>Choose the capacity and tools your operation needs. <a href="/pricing">Compare all plan details</a>.</p></div>
+  <div class="wrap"><div class="landing-section-heading" data-landing-reveal><div><p class="landing-eyebrow">Room for your operation</p><h2 id="plans-title">Start with your horses.<br />Grow from there.</h2></div><p>Compare the planned monthly rates. Paid upgrades are not available yet. <a href="/pricing">Compare all plan details</a>.</p></div>
   <div class="landing-plans">${plans.map((plan) => `<a class="landing-plan" href="/pricing" data-landing-reveal><h3>${esc(plan.tier)}</h3><p class="landing-plan-price">$${plan.monthlyRate}<span>/month</span></p><p>${esc(plan.fit)}</p><span class="landing-plan-link">View plan <span aria-hidden="true">↗</span></span></a>`).join('')}</div></div>
 </section>
 

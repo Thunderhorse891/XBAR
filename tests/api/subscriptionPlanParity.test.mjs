@@ -3,7 +3,11 @@ import test from 'node:test';
 import { readFileSync } from 'node:fs';
 import path from 'node:path';
 
-import { subscriptionPlans } from '../../api/_lib/subscription-plans.js';
+import {
+  subscriptionPlans,
+  PUBLIC_SUBSCRIPTION_TIERS,
+  PUBLIC_PAID_SUBSCRIPTION_TIERS,
+} from '../../api/_lib/subscription-plans.js';
 import { marketingPlans } from '../../scripts/marketing/pricing-data.mjs';
 
 /*
@@ -31,13 +35,13 @@ function appTierConfigSource() {
 }
 
 const marketingByTier = Object.fromEntries(marketingPlans.map((plan) => [plan.tier, plan]));
-const TIERS = ['Starter', 'Professional', 'Ranch Ops', 'Enterprise'];
+const TIERS = ['Free', 'Starter', 'Professional', 'Ranch Ops', 'Enterprise'];
 
-test('all three sources define exactly the same tiers', () => {
+test('public pricing shows exactly three tiers while legacy entitlement configs remain', () => {
   assert.deepEqual(Object.keys(subscriptionPlans), TIERS);
   assert.deepEqual(
     marketingPlans.map((plan) => plan.tier),
-    TIERS,
+    [...PUBLIC_SUBSCRIPTION_TIERS],
   );
 
   const source = appTierConfigSource();
@@ -47,7 +51,7 @@ test('all three sources define exactly the same tiers', () => {
   }
 });
 
-for (const tier of TIERS) {
+for (const tier of PUBLIC_SUBSCRIPTION_TIERS) {
   test(`${tier}: server price and limits match the published ones`, () => {
     const server = subscriptionPlans[tier];
     const marketing = marketingByTier[tier];
@@ -86,7 +90,6 @@ for (const tier of TIERS) {
 
     const advertised = [
       [limits.documentLimit, 'document limit'],
-      [limits.storageLimitGb, 'storage limit'],
       [limits.seatLimit, 'team seat limit'],
     ];
 
@@ -114,7 +117,10 @@ test('every limit the server enforces is a positive number', () => {
 
       // sharedAccessSeatLimit is deliberately 0 on Starter: that tier includes
       // no Horse Owner / Client accounts at all.
-      if (!(tier === 'Starter' && name === 'sharedAccessSeatLimit')) {
+      if (!(
+        (['Free', 'Starter'].includes(tier) && name === 'sharedAccessSeatLimit') ||
+        (tier === 'Free' && name === 'salePacketLimit')
+      )) {
         assert.ok(value > 0, `${tier}.${name} is ${value}`);
       }
     }
@@ -224,4 +230,63 @@ test('accepting a reserved seat consumes the reservation instead of counting it 
     /perform pg_advisory_xact_lock\(hashtextextended\('xbar-seats:' \|\| target_workspace_id::text, 0\)\);/,
     'seat checks are serialized per workspace, so concurrent acceptances cannot overfill',
   );
+});
+
+test('launch pricing discloses shared storage without dedicated GB promises', async () => {
+  const { marketingPages } = await import('../../scripts/marketing/pages.mjs');
+  const pricing = marketingPages.find((page) => page.path === '/pricing');
+  assert.ok(pricing);
+  const appSource = appTierConfigSource().split('export function buildSubscriptionForTier')[0];
+  const appCopy = [...appSource.matchAll(/featureFlags: \[([\s\S]*?)\]/g)].map((match) => match[1]);
+  const allCopy = [
+    ...Object.values(subscriptionPlans).map((plan) => plan.featureFlags.join(' ')),
+    ...marketingPlans.map((plan) => plan.features.join(' ')),
+    ...appCopy,
+    pricing.body,
+  ];
+  for (const copy of allCopy) {
+    assert.doesNotMatch(copy, /[\d,]+\s*GB/i, 'launch copy must not promise a dedicated GB allowance');
+    assert.match(copy, /limited cloud storage shared across XBAR at launch/i);
+  }
+  assert.match(
+    pricing.body,
+    /New launch plans do not include a dedicated storage allowance; uploads depend on available capacity/,
+  );
+  assert.doesNotMatch(pricing.description, /storage limits/);
+  const documents = readFileSync(path.join(repoRoot, 'src/routes/Documents.tsx'), 'utf8');
+  assert.doesNotMatch(documents, /subscription\.usage\.storageLimitGb/);
+  assert.match(
+    documents.replace(/\s+/g, ' '),
+    /New launch plans do not include a dedicated storage allowance; uploads depend on available capacity/,
+  );
+});
+
+test('storage capacity errors never sell a plan upgrade as more hosted space', () => {
+  for (const file of [
+    'src/store/useXbarStore.ts',
+    'api/_lib/entitlements.js',
+    'api/sale-packets.js',
+    'api/_lib/documents-generate-template.js',
+  ]) {
+    const source = readFileSync(path.join(repoRoot, file), 'utf8');
+    assert.doesNotMatch(source, /storage limit[^\n]*(?:Upgrade|upgrade)/);
+    assert.doesNotMatch(source, /\$\{[^}]*storageLimitGb\} GB storage limit/);
+  }
+});
+
+test('one shared integer-cent catalog supplies every new-sale monthly price and tier', async () => {
+  const { default: catalog } = await import('../../api/_lib/public-plan-catalog.json', { with: { type: 'json' } });
+  assert.deepEqual(catalog, { Professional: { monthlyCents: 1999 }, 'Ranch Ops': { monthlyCents: 4999 } });
+  assert.deepEqual(PUBLIC_PAID_SUBSCRIPTION_TIERS, Object.keys(catalog));
+  for (const [tier, { monthlyCents }] of Object.entries(catalog)) {
+    assert.ok(Number.isSafeInteger(monthlyCents));
+    assert.equal(subscriptionPlans[tier].monthlyRate, monthlyCents / 100);
+    assert.equal(marketingByTier[tier].monthlyRate, monthlyCents / 100);
+  }
+  for (const file of ['src/lib/xbarRuntime.ts', 'src/lib/publicPlanCatalog.ts', 'scripts/marketing/pricing-data.mjs']) {
+    assert.match(readFileSync(path.join(repoRoot, file), 'utf8'), /import publicPlanCatalog from/);
+  }
+  const billing = readFileSync(path.join(repoRoot, 'src/routes/Subscriptions.tsx'), 'utf8');
+  assert.match(billing, /import \{ isPublicPaidPlan, publicPaidPlanTiers \} from '@\/lib\/publicPlanCatalog'/);
+  assert.match(billing, /const tiers = publicPaidPlanTiers/);
 });

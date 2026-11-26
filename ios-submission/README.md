@@ -6,39 +6,36 @@ what the code in this repo actually does — no placeholder claims.
 
 XBAR ships as a [Capacitor](https://capacitorjs.com) app: the same Vite/React
 bundle that runs on the web is wrapped in a native WKWebView shell. The web
-foundation is already App-Store-shaped; the remaining work is the parts that
-**require a Mac with Xcode** and an Apple Developer account, which cannot be
-done on Linux/CI.
+foundation and native shell can be checked without Apple credentials. Real iOS
+compilation and Simulator testing require macOS/Xcode. Signing, upload and
+distribution are separate. This branch is for unsigned packaging and synthetic
+smoke testing only; **do not distribute its CI build**.
 
 ---
 
-## Ready in this repo (no Mac needed)
+## Ready in this repository
 
-- **App identity** — `capacitor.config.ts`: `appId: com.xbar.ranch`, `appName: XBAR`,
-  dark launch background (`#05070A`) so a cold start doesn't flash white.
-- **Mobile web build** — `npm run mobile:sync` / `mobile:copy` build the bundle
-  with the hash router (no server to rewrite `/app/*` inside the WebView) and skip
-  the marketing-site post-build. Verified: `dist/index.html` is the SPA app shell.
-- **Icons & PWA metadata** — `public/brand/` has `apple-touch-icon.png`,
-  `icon-192.png`, `icon-512.png`, `icon-512-maskable.png`; `index.html` carries the
-  viewport (`viewport-fit=cover`), `theme-color`, and `apple-mobile-web-app-*` meta;
-  `site.webmanifest` is complete (standalone display, maskable icon).
-- **Privacy manifest** — [`PrivacyInfo.xcprivacy`](./PrivacyInfo.xcprivacy),
-  required by Apple. Add it to the App target.
-- **Info.plist permission strings** —
-  [`Info.plist.additions.plist`](./Info.plist.additions.plist). Merge into the
-  generated `Info.plist`. These are **not optional**: the code uses the camera,
-  photo library, and geolocation (see mapping below), and iOS crashes / App Review
-  rejects a build that touches those without a purpose string.
+- **App identity:** `capacitor.config.ts` uses `com.xbar.ranch` and XBAR.
+  The native app icon and splash use the checked-in brand artwork unchanged.
+- **Mobile web build:** `npm run mobile:sync:ios` builds the bundled hash-router
+  SPA, synchronizes the tracked project, and checks its packaged configuration.
+- **Canonical native metadata:** the [app privacy manifest](../ios/App/App/PrivacyInfo.xcprivacy)
+  is an App target resource, and the [app Info.plist](../ios/App/App/Info.plist)
+  holds the integration's permission strings. Do not maintain separate copies.
+- **Privacy is not signed off:** the imported manifest is a packaging baseline,
+  not a complete disclosure. Before any distribution, reconcile data collection,
+  telemetry, SDK privacy reports, actual cloud/email/weather provider practices
+  and retention, release policy, and App Store Connect answers. Review the
+  location wording and linkage classification against the actual weather
+  provider. No release should be cut using these unverified declarations.
 
 ### Capability → permission mapping (why each string is required)
 
-| Capability             | Where in code                                                                   | iOS key                               |
-| ---------------------- | ------------------------------------------------------------------------------- | ------------------------------------- |
-| Camera capture         | `src/routes/AnimalProfile.tsx` `<input accept="image/*" capture="environment">` | `NSCameraUsageDescription`            |
-| Choose existing photo  | same picker (library fallback)                                                  | `NSPhotoLibraryUsageDescription`      |
-| Save export to library | packet/photo export (future-safe)                                               | `NSPhotoLibraryAddUsageDescription`   |
-| Local weather          | `src/routes/Weather.tsx` `navigator.geolocation.getCurrentPosition`             | `NSLocationWhenInUseUsageDescription` |
+| Capability            | Where in code                                                                   | iOS key                               |
+| --------------------- | ------------------------------------------------------------------------------- | ------------------------------------- |
+| Camera capture        | `src/routes/AnimalProfile.tsx` `<input accept="image/*" capture="environment">` | `NSCameraUsageDescription`            |
+| Choose existing photo | same picker (library fallback)                                                  | `NSPhotoLibraryUsageDescription`      |
+| Local weather         | `src/routes/Weather.tsx` `navigator.geolocation.getCurrentPosition`             | `NSLocationWhenInUseUsageDescription` |
 
 ---
 
@@ -67,41 +64,51 @@ separate reviewed configuration change.
 
 **Synthetic transport tests are not physical-device acceptance.** Validate
 real sign-in, server requests and safe account deletion on an authorized test
-account in the actual WKWebView before distribution. The native Xcode project is
-still not checked into main; held readiness PR #265 is not part of this fix.
+account in the actual WKWebView before distribution. The shell extraction does not change CORS or backend policy.
 
 ## Steps that require a Mac + Xcode
 
-1. **Generate the native project** (first time only):
+1. **Build and synchronize** the tracked project with Node from `.nvmrc`:
    ```bash
    npm ci
-   npm run mobile:add:ios      # npx cap add ios
-   npm run mobile:sync         # build web + npx cap sync
+   npm run mobile:sync:ios
    ```
-2. **Add the submission assets** to `ios/App/App/`:
-   - Drag `ios-submission/PrivacyInfo.xcprivacy` into the **App** target
-     (Copy Bundle Resources).
-   - Merge the keys from `ios-submission/Info.plist.additions.plist` into
-     `ios/App/App/Info.plist`.
-3. **App icon & launch screen** — generate the icon set from `public/brand/icon-512.png`
-   (1024×1024 master required by Apple; upscale/redraw if needed — do **not** ship a
-   transparent or rounded icon, Apple requires opaque square). Set the launch screen
-   background to `#05070A` to match the config.
-4. **Signing** — open `ios/App/App.xcworkspace` in Xcode, select your Team,
-   set the bundle id to `com.xbar.ranch`, enable automatic signing.
-5. **Version/build** — set marketing version and build number.
-6. **Archive & upload** — Product ▸ Archive ▸ Distribute App ▸ App Store Connect.
+2. **Unsigned device and Simulator gates:** see the [native workflow](../.github/workflows/ios.yml).
+   On macOS it builds Release without distribution signing and tests the
+   bundled WKWebView with synthetic credentials without submitting them.
+   An old workflow result does not establish an exact-head pass.
+3. **Real-device behavior:** verify login and recovery, navigation, workspace
+   persistence, photos/documents, save/share flows, and safe account deletion
+   with an authorized disposable account. Do not submit a synthetic build.
+4. **Signing:** only for an authorized release, open
+   `ios/App/App.xcodeproj`, select the responsible Apple team, verify
+   `com.xbar.ranch`, and set version/build number. Archive/upload only after
+   privacy, signing, device, and release approvals.
+
+## Apple access and first setup
+
+Use the [existing-team or first-setup worksheet](apple-setup.md) before creating
+any identifier, app record, signing credential or tester group. Account state is
+unverified; failed sign-in handoffs are not evidence of missing membership.
+Owner identity, agreements and payments remain owner actions. The worksheet
+contains draft record fields and protected signing/upload prerequisites only.
 
 ## App Store Connect metadata (done in the browser, not code)
 
 - App name, subtitle, category (Business / Productivity), age rating.
-- **Privacy policy URL** (required) and support URL.
-- **Privacy "Nutrition Label"** questionnaire — must match
-  `PrivacyInfo.xcprivacy`: Email (linked, app functionality), Photos/Videos
-  (linked, app functionality), Other user content (linked), Precise Location
-  (not linked, app functionality, **not** used for tracking).
-- Screenshots for required device sizes (6.7" and 6.5" iPhone, 12.9" iPad if you
-  ship iPad). Capture from the running app.
+- **Privacy policy URL** (required) and support URL. The app includes the same
+  canonical privacy destination on Sign In, Workspace Setup, and Settings.
+  Open each from the signed native build with the intended production origin;
+  confirm the destination loads without authentication and matches the URL
+  entered in App Store Connect. This addresses link discoverability
+  ([Guideline 5.1.1(i)](https://developer.apple.com/app-store/review/guidelines/#privacy)),
+  not the accuracy of the disclosures or packaging.
+- **Privacy "Nutrition Label"** questionnaire: reconcile it with the packaged
+  manifest after a complete disclosure and provider review. Do not reuse the
+  baseline declarations as approved privacy answers.
+- Capture screenshots from the running app and use the current
+  [Apple screenshot specifications](https://developer.apple.com/help/app-store-connect/reference/app-information/screenshot-specifications/)
+  for both iPhone and iPad, which this project supports.
 - Sign-in demo account for App Review (the app is behind auth).
 
 ## Required Supabase configuration (before the first store build)
@@ -140,12 +147,24 @@ Set it in Supabase → Authentication → Email Templates → Magic Link.
 
 ## Known App Review risk areas for this app
 
-- **Account deletion** — apps with account creation must offer in-app account
-  deletion (Guideline 5.1.1(v)). Confirm this exists or add it before submitting.
-- **Purchases** — subscriptions are sold via Stripe (web checkout). Selling
-  digital subscriptions **inside** the iOS app requires Apple In-App Purchase
-  (Guideline 3.1.1). Keep the iOS build's paywall as an external/managed-on-web
-  flow, or add StoreKit IAP — this is a product decision to make before review.
+- **Account deletion** — on the signed-in Workspace Setup screen, expand
+  **Delete account** without creating a ranch, or use **Settings → Delete account**
+  after setup. Verify both routes on the signed device build with expendable,
+  authorized QA accounts, matching-email confirmation and protected shared ranch
+  states. Check backend disposition receipts and scope of on-device cleanup.
+  Synthetic tests do not verify device behavior or App Review acceptance
+  ([Guideline 5.1.1(v)](https://developer.apple.com/help/app-review/guideline-reference/5-1-1-account-deletion)).
+- **Purchases** — Stripe is web-only in this build. The native Billing page is
+  read-only, including direct and legacy routes; the store app does not offer a
+  purchase, trial, or payment-management link. This is conservative app behavior,
+  not App Review clearance. Review [Apple's payment guidelines](https://developer.apple.com/app-store/review/guidelines/#payments)
+  for the intended storefront and access model before submission. Guideline
+  3.1.1(a) treats U.S. storefront links differently and limits other external
+  purchase links by storefront and entitlement. Guideline 3.1.3(b) generally
+  requires items accessed across platforms to also be offered via in-app
+  purchase. Do not assume that accepting existing web subscriptions without
+  payment buttons fits an exception; no StoreKit or storefront-specific purchase
+  path is implemented here.
 - **Purpose strings** — keep each usage description specific to the real use.
 
 ---

@@ -1,15 +1,22 @@
-import { type FormEvent, useMemo, useState } from 'react';
+import { type FormEvent, useEffect, useMemo, useRef, useState } from 'react';
 import { Navigate, useLocation, useNavigate, useSearchParams } from 'react-router-dom';
+import { AccountDeletionPanel } from '@/components/AccountDeletionPanel';
 import { XbarMark } from '@/components/BrandMark';
 import { billingPathForTier } from '@/lib/billingRoutes';
 import { applyWorkspaceProfileDefaults } from '@/lib/workspaceSetupDefaults';
 import { saveWorkspaceBackupToCloud } from '@/lib/cloudWorkspace';
+import {
+  deviceWorkspaceSaveUnconfirmed,
+  didCommitWorkspaceWriteAfter,
+  getWorkspacePersistReceipt,
+  type WorkspacePersistReceipt,
+} from '@/lib/workspaceStorage';
 import { isStaticPreviewHost, isSupabaseConfigured } from '@/lib/platformConfig';
 import { useCloudStore } from '@/store/useCloudStore';
 import { useUiStore } from '@/store/useUiStore';
 import { useWorkspaceHydrated, useWorkspaceReady, useXbarStore } from '@/store/useXbarStore';
 import './cleanEntryExperience.css';
-import { canPresentPurchaseFlow } from '@/lib/nativePlatform';
+import { canPresentPurchaseFlow, publicSiteHref } from '@/lib/nativePlatform';
 
 const setupStages = [
   { label: 'Ranch identity', value: 'Business and ranch name' },
@@ -37,8 +44,13 @@ export default function SetupWorkspace() {
   const pushToast = useUiStore((state) => state.pushToast);
   const [saving, setSaving] = useState(false);
   const [signingOut, setSigningOut] = useState(false);
+  const [deletingAccount, setDeletingAccount] = useState(false);
   const [signOutError, setSignOutError] = useState('');
   const [formError, setFormError] = useState('');
+  const formErrorRef = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    if (formError) formErrorRef.current?.focus();
+  }, [formError]);
   const [cloudSetupBlocked, setCloudSetupBlocked] = useState(false);
   const [form, setForm] = useState({
     businessName: workspaceProfile.businessName,
@@ -63,6 +75,7 @@ export default function SetupWorkspace() {
    * unreachable.
    */
   const postSetupPath = useMemo(() => {
+    if (selectedPlan === 'Free') return '/';
     if (selectedPlan && canPresentPurchaseFlow()) return billingPathForTier(selectedPlan);
     // The setup guard can run before cloud hydration restores a configured
     // ranch. Return to that requested screen instead of losing its deep link.
@@ -81,7 +94,7 @@ export default function SetupWorkspace() {
   const cloudWorkspaceRequired = supabaseReady && status === 'signed-in' && !workspaceId;
 
   const accessLabel = useMemo(() => {
-    if (!supabaseReady) return 'Browser trial';
+    if (!supabaseReady) return 'Device-only setup';
     return status === 'signed-in' ? 'Cloud ready' : 'Sign-in pending';
   }, [status, supabaseReady]);
 
@@ -89,7 +102,7 @@ export default function SetupWorkspace() {
     return <div className="app-loading-shell">Loading ranch workspace...</div>;
   }
 
-  if (workspaceReady && !saving && !cloudSetupBlocked && !cloudWorkspaceRequired) {
+  if (workspaceReady && !saving && !cloudSetupBlocked && !cloudWorkspaceRequired && !deletingAccount) {
     return <Navigate to={postSetupPath} replace />;
   }
 
@@ -118,24 +131,47 @@ export default function SetupWorkspace() {
     return saved;
   };
 
+  const confirmDeviceCreation = async (previous: WorkspacePersistReceipt | null) => {
+    const identity = useCloudStore.getState();
+    const committed = await didCommitWorkspaceWriteAfter(previous);
+    const current = useCloudStore.getState();
+    const identityChanged =
+      identity.status !== current.status ||
+      identity.session?.user.id !== current.session?.user.id ||
+      identity.workspaceId !== current.workspaceId;
+    if (committed && !identityChanged) return true;
+
+    const message = identityChanged
+      ? 'The account or ranch changed while setup was saving. Reopen the intended workspace before continuing.'
+      : `Your ranch could not be saved on this device. ${deviceWorkspaceSaveUnconfirmed}`;
+    setFormError(message);
+    // The in-memory profile is complete, so keep the automatic setup redirect
+    // blocked until this exact write is confirmed or the customer retries.
+    setCloudSetupBlocked(true);
+    setSaving(false);
+    pushToast({ title: 'Workspace setup not confirmed', message, tone: 'error' });
+    return false;
+  };
+
   const handleSubmit = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
-    if (signingOut || saving) return;
+    if (signingOut || saving || deletingAccount) return;
     setSaving(true);
+    setFormError('');
     setCloudSetupBlocked(false);
 
+    const previous = getWorkspacePersistReceipt();
     const result = initializeWorkspace(applyWorkspaceProfileDefaults(form));
-    pushToast({
-      title: result.ok ? 'Ranch created' : 'Setup blocked',
-      message: result.message,
-      tone: result.ok ? 'success' : 'error',
-    });
 
     if (!result.ok) {
+      pushToast({ title: 'Setup blocked', message: result.message, tone: 'error' });
       setFormError(result.message);
       setSaving(false);
       return;
     }
+
+    if (!(await confirmDeviceCreation(previous))) return;
+    pushToast({ title: 'Ranch created', message: result.message, tone: 'success' });
 
     const cloudSaved = await persistCloudWorkspace();
     if (!cloudSaved.ok) {
@@ -152,8 +188,11 @@ export default function SetupWorkspace() {
     navigate(postSetupPath, { replace: true });
   };
 
-  const handleQuickStart = () => {
-    if (signingOut || saving) return;
+  const handleQuickStart = async () => {
+    if (signingOut || saving || deletingAccount) return;
+    setSaving(true);
+    setFormError('');
+    setCloudSetupBlocked(false);
     const businessName = form.businessName.trim() || 'My Ranch LLC';
     const ranchName = form.ranchName.trim() || 'Main Ranch';
     /*
@@ -163,6 +202,7 @@ export default function SetupWorkspace() {
      * form's own submit cannot manufacture a ranch manager or an operations
      * email for a customer who simply left them blank.
      */
+    const previous = getWorkspacePersistReceipt();
     const result = initializeWorkspace(
       applyWorkspaceProfileDefaults({
         ...form,
@@ -175,19 +215,20 @@ export default function SetupWorkspace() {
       }),
     );
 
-    pushToast({
-      title: result.ok ? 'Ranch ready' : 'Setup blocked',
-      message: result.ok ? 'Opening your ranch.' : result.message,
-      tone: result.ok ? 'success' : 'error',
-    });
-
-    if (result.ok) {
-      navigate(postSetupPath, { replace: true });
+    if (!result.ok) {
+      setFormError(result.message);
+      setSaving(false);
+      pushToast({ title: 'Setup blocked', message: result.message, tone: 'error' });
+      return;
     }
+    if (!(await confirmDeviceCreation(previous))) return;
+    pushToast({ title: 'Ranch ready', message: 'Opening your ranch.', tone: 'success' });
+    setSaving(false);
+    navigate(postSetupPath, { replace: true });
   };
 
   const handleSignOut = async () => {
-    if (saving || signingOut) return;
+    if (saving || signingOut || deletingAccount) return;
     setSigningOut(true);
     setSignOutError('');
     try {
@@ -224,7 +265,7 @@ export default function SetupWorkspace() {
               <button
                 className="clean-secondary-button"
                 type="button"
-                disabled={saving || signingOut}
+                disabled={saving || signingOut || deletingAccount}
                 onClick={handleSignOut}
               >
                 {signingOut ? 'Signing out...' : 'Sign out'}
@@ -252,6 +293,15 @@ export default function SetupWorkspace() {
               </li>
             ))}
           </ol>
+          <a
+            className="clean-secondary-button"
+            href={publicSiteHref('/privacy')}
+            target="_blank"
+            rel="noopener noreferrer"
+          >
+            Privacy Policy
+          </a>
+          <AccountDeletionPanel compact disabled={saving || signingOut} onBusyChange={setDeletingAccount} />
         </section>
 
         <section className="clean-auth-card clean-auth-card--wide" aria-label="Create workspace">
@@ -330,17 +380,21 @@ export default function SetupWorkspace() {
               </label>
             </div>
 
-            {formError ? <div className="clean-form-error">{formError}</div> : null}
+            {formError ? (
+              <div ref={formErrorRef} className="clean-form-error" role="alert" tabIndex={-1}>
+                {formError}
+              </div>
+            ) : null}
 
             <div className="clean-action-stack">
-              <button className="clean-primary-button" type="submit" disabled={saving || signingOut}>
+              <button className="clean-primary-button" type="submit" disabled={saving || signingOut || deletingAccount}>
                 {saving ? 'Creating workspace...' : 'Create workspace'}
               </button>
               {canQuickStart ? (
                 <button
                   className="clean-secondary-button"
                   type="button"
-                  disabled={saving || signingOut}
+                  disabled={saving || signingOut || deletingAccount}
                   onClick={handleQuickStart}
                 >
                   Use preview defaults

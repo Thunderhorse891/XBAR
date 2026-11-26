@@ -131,7 +131,7 @@ Required for managed Stripe billing and webhook reconciliation:
 - `STRIPE_PRICE_ID_PROFESSIONAL`
 - `STRIPE_PRICE_ID_RANCH_OPS`
 - `STRIPE_PRICE_ID_ENTERPRISE`
-- `STRIPE_PRICE_ID_*_ANNUAL` (one per tier, e.g. `STRIPE_PRICE_ID_STARTER_ANNUAL`) — annual billing; checkout refuses annual until these are set
+- `STRIPE_PRICE_ID_*_ANNUAL` (one per tier, e.g. `STRIPE_PRICE_ID_STARTER_ANNUAL`) — historical annual subscription recognition only; new annual checkout remains disabled
 - `PUBLIC_APP_URL`
 
 Owner/QA access (all optional, all off by default):
@@ -551,6 +551,17 @@ psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f supabase/migrations/20261107170000_pr
 
 Website deployment does not execute this command. Historical metadata removal is intentional and irreversible.
 
+### Private care-source fence (review only; production approval required)
+
+The [care source fence](docs/F8-CARE-SOURCE-HANDOFF.md) does not enroll any workspace,
+queue an email or change the existing reminder job. Rehearse the database check
+in the disposable records workflow. If approved for production, apply the exact
+migration with an administrative connection; do not enroll any live workspace.
+
+```sh
+psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f supabase/migrations/20261122143000_private_care_source_revision.sql
+```
+
 ### Operations
 
 - **Health probe**: `GET /api/health` returns liveness plus subsystem-configured booleans (no secrets, no database touch). Point uptime monitors here.
@@ -597,14 +608,11 @@ Then apply `supabase/production-schema.generated.sql` in the Supabase SQL editor
 
 ### Stripe Go-Live
 
-1. Create recurring Stripe prices for each tier — **eight prices total**: one monthly and one annual per tier (annual = 10× monthly = 2 months free). Amounts:
-   - Starter: `$12`/mo and `$120`/yr
-   - Professional: `$29`/mo and `$290`/yr
-   - Ranch Ops: `$79`/mo and `$790`/yr
-   - Enterprise: `$199`/mo and `$1,990`/yr
-2. Set each corresponding `STRIPE_PRICE_ID_*` variable in Vercel Preview and Production, plus `STRIPE_PRICE_ID_*_ANNUAL` for the annual prices (see `.env.example` for the full list).
-3. Configure `/api/stripe/webhook` for `checkout.session.completed`, `customer.subscription.updated`, and `customer.subscription.deleted`.
-4. Set `STRIPE_WEBHOOK_SECRET` and verify a test-mode checkout before enabling live mode.
+1. New public plans are Free (2 horses / 1 user), Professional `$19.99` per month (30 / 5), and Ranch Ops `$49.99` per month (200 / 20). Create only the two paid monthly prices. Annual pricing is not approved; Starter and Enterprise remain legacy entitlements only.
+2. Preserve the original Stripe account and existing subscribers. Before replacing `STRIPE_PRICE_ID_PROFESSIONAL` or `STRIPE_PRICE_ID_RANCH_OPS`, append their old IDs to `STRIPE_LEGACY_PRICE_IDS`. Keep historical annual and retired-tier IDs for webhook recognition.
+3. Configure `/api/stripe/webhook` for `checkout.session.completed`, `customer.subscription.created`, `customer.subscription.updated`, and `customer.subscription.deleted`. Verify signed test fixtures and an approved controlled checkout before enabling public billing.
+4. Review old external Payment Links, open checkout sessions and portal offers. The app disables unverified static-link fallback; old shared URLs need separate authorized retirement. Existing subscription records must not be repriced or deleted.
+5. Apply the prepared Free-tier migration only after isolated database rehearsal and explicit production approval. Run the quota/RLS tests described below. See [the operator runbook](docs/OPERATOR-BILLING-RUNBOOK.md) for preservation and rollout details.
 
 Managed checkout is restricted to workspace admins and only returns customers to trusted XBAR origins.
 
@@ -661,6 +669,45 @@ for the separate Stripe verification gates. Rollback is to disable the feature
 and restore application code, preserving these additive tables and claims so
 retries, workspace deletion, or redeployment cannot reset promotion eligibility.
 
+### Rolling sale packet allowance (F6)
+
+`20261122135000_sale_packet_rolling_allowance.sql` aligns the packet database trigger with the existing 30-day API and UI allowance. It does not update or delete stored packets, change tier limits, or change role permissions.
+
+Before release, run `supabase/checks/sale-packet-rolling-allowance.sql` in a fresh disposable database named `xbar_sale_packet_allowance_fixture`, then `bash supabase/checks/sale-packet-final-slot.sh` against the same local fixture. Verify the boundary again in the integrated QA server via normal packet creation. Record owner approval before applying the production migration; once approved, monitor lock contention while the packet timestamp index is built.
+
+```bash
+psql "$STAGING_DATABASE_URL" -v ON_ERROR_STOP=1 -f supabase/migrations/20261122135000_sale_packet_rolling_allowance.sql
+# Production: only after QA and explicit migration approval.
+psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f supabase/migrations/20261122135000_sale_packet_rolling_allowance.sql
+```
+
+To roll back the quota behavior, use one transaction to replace only the `trg_sale_packets_enforce_commercial_limits` trigger on `public.sale_packets` with its previous definition from `20260611_commercial_entitlements.sql` (do not rerun that entire migration). Leave the index and customer data intact; the previous lifetime gate is a known service regression.
+
+### Protected issuance and the separate workspace-limit review (F4 and F11)
+
+This review branch includes rolling packet allowance and protected issuance.
+Rehearse those changes in that order on a verified isolated database, using the
+authorized migration owner rather than the application service role.
+
+```sh
+# Isolated QA only. Run after the rolling sale-packet allowance migration above.
+psql "$STAGING_DATABASE_URL" -v ON_ERROR_STOP=1 -f supabase/migrations/20261122142000_protected_sale_packet_proofs.sql
+psql "$STAGING_DATABASE_URL" -v ON_ERROR_STOP=1 -f tests/database/sale-packet-proof.sql
+```
+
+The issuer atomically records delivery and proof for new packets. Older packets
+do not gain retroactive provenance. Do not restore mutable proof or delete
+protected history for a rollback. Rehearse a compatible forward fix or service
+hold. The optional care source fence remains disabled.
+
+Workspace-limit authorization is tracked independently by
+[PR #395](https://github.com/Thunderhorse891/XBAR/pull/395). This review branch
+does not contain a competing implementation. Resolve and test that authorization
+boundary before calling F11 closed or approving an unrestricted release.
+
+No production SQL is run by GitHub or Vercel. Separate explicit production
+migration approval and exact catalog verification are required.
+
 ### Document approval guard (prepared; production approval required)
 
 `20261107160000_guard_document_approval.sql` separates document upload from approval
@@ -674,3 +721,80 @@ psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f supabase/migrations/20261107160000_gu
 ```
 
 Merging this code or deploying the website does not execute this command.
+
+### Distinct Free tier (prepared; production approval required)
+
+`20261112120000_distinct_free_tier.sql` gives unentitled workspaces a Free baseline:
+2 horses, 1 user, 10 active documents, 1 GiB of recorded storage, and no new sale
+packets or shared-owner seats. Existing paid and Manual Billing profiles are not
+rewritten. Existing above-cap records remain readable, and unchanged upserts and
+non-growth edits remain available after downgrade. New growth is checked under
+workspace locks. Trial access remains Professional only for unentitled workspaces
+within the existing trial window.
+
+Before production, review the final migration and matching application changes,
+run `supabase/checks/run-distinct-free-tier.mjs` with an optional local PGlite
+installation, and run `supabase/checks/distinct-free-tier.sql` only against its
+minimal disposable fixture schema. The PGlite runner supports `--baseline` to
+confirm the new contract fails against the previous implementation. It does not
+prove multi-connection races or production RLS: separately verify concurrent
+quota-boundary writes and signed-in permissions on a disposable full-schema
+database. Do not create paid Supabase branches or run fixture checks in production.
+
+After those checks and Erin's explicit production migration approval:
+
+```sh
+psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f supabase/migrations/20261112120000_distinct_free_tier.sql
+```
+
+Merging or deploying application code does not apply this migration. Preserve
+existing records during rollback: restore the previous helper/trigger definitions
+and subscription-column defaults from preceding migrations, coordinated with the
+application rollback. Do not delete Free profiles, trial history, or above-cap
+records. Review that rollback separately before applying it to production.
+
+### Storage object accounting (prepared; production approval required)
+
+`20261112130000_storage_object_accounting.sql` counts measured document, media,
+receipt and unreferenced object bytes, avoids object/record double-charging,
+and fails closed on unknown sizes or ambiguous legacy references. It does not
+add Storage-table triggers or claim atomic enforcement of concurrent uploads.
+Read [the accounting contract and remaining release gates](docs/STORAGE-QUOTA-ROLLOUT.md).
+After disposable full-schema checks, legacy inventory, final review and Erin's
+explicit migration approval:
+
+```sh
+psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f supabase/migrations/20261112130000_storage_object_accounting.sql
+```
+
+Preserve all objects, existing records and recovery copies during rollout or
+rollback. Restore prior function definitions and matching application behavior
+for rollback; do not delete customer data.
+
+### Reserved Storage uploads (prepared coordinated release; approval required)
+
+`20261112140000_reserved_storage_uploads.sql` adds service-only durable multipart
+reservations, exact-byte admission and restrictive direct-write policies for the
+three app buckets. Read [the coordinated upload contract](docs/RESERVED-STORAGE-UPLOADS.md)
+and pass its native/database/provider tests before rollout. Server endpoints and
+separately approved S3 credentials must be ready before restricting old uploads.
+Only after explicit production migration approval:
+
+```sh
+psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f supabase/migrations/20261112140000_reserved_storage_uploads.sql
+```
+
+Never release unresolved reservations by timeout or delete them during rollback.
+Existing files, over-cap records and recovery snapshots must remain available.
+
+`20261112150000_project_storage_budget.sql` adds a private project-wide
+900,000,000-byte new-upload budget without changing workspace entitlements or
+removing existing data. Apply after 140000 only with separate production approval,
+provider inventory and the coordinated API/cutover gates in
+[Reserved Storage uploads](docs/RESERVED-STORAGE-UPLOADS.md). Native cross-workspace
+race and recovery tests must pass first. Rollback must stop new admission and
+preserve all objects/reservations; removing only the guard is unsafe.
+
+```sh
+psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f supabase/migrations/20261112150000_project_storage_budget.sql
+```

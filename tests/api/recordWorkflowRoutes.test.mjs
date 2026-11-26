@@ -183,3 +183,149 @@ test('breeding empty or removed selection never silently saves another horse', a
   f.render();
   assert.equal(nodes(f.tree, (n) => n.props.children === 'Save revenue model').length, 0);
 });
+
+async function nativeCodeLogin() {
+  const f = await renderRoute('Login', {}, '', {
+    cloud: {
+      status: 'signed-out',
+      sendEmailCode: async () => ({ ok: true, message: 'Check your email for a sign-in code.' }),
+      verifyEmailCode: async () => ({ ok: false, message: 'Synthetic code rejected.' }),
+    },
+    modules: {
+      '@/store/useCloudStore':
+        'export const useCloudStore=(fn)=>fn?fn(f.cloud):f.cloud;useCloudStore.getState=()=>f.cloud;',
+      '@/hooks/useOwnerAccess': 'export const useOwnerAccess=()=>"denied";',
+      '@/lib/platformConfig': 'export const isSupabaseConfigured=()=>true;',
+      '@/lib/nativePlatform':
+        'export const isNativeApp=()=>true;export const canPresentThirdPartySignIn=()=>false;export const canPresentPurchaseFlow=()=>false;export const publicSiteHref=(p)=>p;',
+      '@/lib/runtimeEvents': 'export const trackRuntimeEvent=async()=>{};',
+      '@/lib/authProviders': 'export const presentableOAuthProviders=()=>[];',
+    },
+  });
+  nodes(f.tree, (n) => n.type === 'input' && n.props.type === 'email')[0].props.onChange({
+    target: { value: 'rider@example.invalid' },
+  });
+  f.render();
+  await nodes(f.tree, (n) => n.props.children === 'Email me a sign-in code')[0].props.onClick();
+  await new Promise((done) => setImmediate(done));
+  f.render();
+  return f;
+}
+
+test('native code sign-in submits independently of the required password and stays recoverable on refusal', async () => {
+  const f = await nativeCodeLogin();
+  const codeForm = () => nodes(f.tree, (n) => n.type === 'form' && n.props['aria-label'] === 'Email code sign-in')[0];
+  assert.ok(codeForm(), 'code verification needs its own submit path, outside password validation');
+  assert.equal(nodes(codeForm(), (n) => n.type === 'input' && n.props.type === 'password').length, 0);
+  const input = () => nodes(codeForm(), (n) => n.type === 'input' && n.props.autoComplete === 'one-time-code')[0];
+  const label = nodes(codeForm(), (n) => n.type === 'label')[0];
+  assert.equal(label.props.htmlFor, input().props.id);
+  const submitted = [];
+  let resolve;
+  f.cloud.verifyEmailCode = (email, token) => {
+    submitted.push([email, token]);
+    return new Promise((done) => {
+      resolve = done;
+    });
+  };
+  let prevented = 0;
+  codeForm().props.onSubmit({
+    preventDefault() {
+      prevented++;
+    },
+  });
+  assert.equal(submitted.length, 0, 'empty code must not start verification');
+  input().props.onChange({ target: { value: '123456' } });
+  f.render();
+  codeForm().props.onSubmit({
+    preventDefault() {
+      prevented++;
+    },
+  });
+  f.render();
+  codeForm().props.onSubmit({
+    preventDefault() {
+      prevented++;
+    },
+  });
+  assert.equal(prevented, 3);
+  assert.deepEqual(submitted, [['rider@example.invalid', '123456']], 'busy submit must not duplicate verification');
+  resolve({ ok: false, message: 'Synthetic code rejected.' });
+  await new Promise((done) => setImmediate(done));
+  f.render();
+  assert.equal(input().props.value, '123456', 'refusal keeps the entered code available to correct');
+  assert.equal(nodes(f.tree, (n) => n.props.role === 'alert')[0].props.children, 'Synthetic code rejected.');
+  assert.equal(nodes(codeForm(), (n) => n.type === 'button' && n.props.type === 'submit')[0].props.disabled, false);
+});
+
+test('setup cloud failure is announced, retains details and offers an independent retry', async () => {
+  const f = await renderRoute('SetupWorkspace', {}, 'plan=Professional', {
+    cloud: {
+      status: 'signed-in',
+      session: { user: { id: 'synthetic-rider' } },
+      workspaceId: null,
+      setSyncState() {},
+      setLastSyncAt() {},
+      setWorkspaceAccessProfile() {},
+      saveWorkspace: async () => ({ ok: false, message: 'Synthetic connection interrupted.' }),
+    },
+    modules: {
+      '@/store/useXbarStore':
+        'export const useXbarStore=(fn)=>fn(f.state); export const useWorkspaceHydrated=()=>true;export const useWorkspaceReady=()=>Boolean(f.state.workspaceProfile.setupCompleteAt);',
+      '@/lib/platformConfig': 'export const isSupabaseConfigured=()=>true;export const isStaticPreviewHost=()=>false;',
+      '@/lib/cloudWorkspace': 'export const saveWorkspaceBackupToCloud=()=>f.cloud.saveWorkspace();',
+    },
+  });
+  const originals = [];
+  f.state.initializeWorkspace = (profile) => {
+    originals.push(profile);
+    f.state.workspaceProfile = { ...profile, setupCompleteAt: 'synthetic-time' };
+    f.receipt = { name: 'xbar-live-workspace', completed: Promise.resolve(true) };
+    return { ok: true, message: 'Created on this device.' };
+  };
+  f.state.exportWorkspaceBackup = () => ({ workspace: f.state.workspaceProfile });
+  f.render();
+  const field = (placeholder) => nodes(f.tree, (n) => n.type === 'input' && n.props.placeholder === placeholder)[0];
+  field('XBAR LLC').props.onChange({ target: { value: 'Patient Rider LLC' } });
+  f.render();
+  field('Primary Ranch').props.onChange({ target: { value: 'Patient Ranch' } });
+  f.render();
+  const submit = () => nodes(f.tree, (n) => n.type === 'form')[0].props.onSubmit({ preventDefault() {} });
+  await submit();
+  f.render();
+  const alert = nodes(f.tree, (n) => n.props.role === 'alert' && n.props.className === 'clean-form-error')[0];
+  assert.ok(alert, 'setup failure must be announced in its persistent form, not just a toast');
+  assert.match(alert.props.children, /Synthetic connection interrupted/);
+  assert.equal(alert.props.tabIndex, -1, 'the failure summary must be focusable without adding a tab stop');
+  assert.equal(field('XBAR LLC').props.value, 'Patient Rider LLC');
+  assert.equal(field('Primary Ranch').props.value, 'Patient Ranch');
+  assert.equal(
+    f.calls.some((c) => c[0] === 'navigate'),
+    false,
+  );
+  let release;
+  f.cloud.saveWorkspace = () =>
+    new Promise((done) => {
+      release = done;
+    });
+  const retry = submit();
+  await new Promise((done) => setImmediate(done));
+  f.render();
+  assert.equal(
+    nodes(f.tree, (n) => n.props.role === 'alert').length,
+    0,
+    'retry clears the previous failure while waiting',
+  );
+  assert.equal(
+    nodes(f.tree, (n) => n.type === 'button' && n.props.children === 'Creating workspace...')[0].props.disabled,
+    true,
+  );
+  release({ ok: true, workspaceId: 'synthetic-ranch', message: 'Saved.' });
+  await retry;
+  f.render();
+  assert.deepEqual(originals[1], originals[0], 'retry preserves exact submitted details and derived owner defaults');
+  assert.deepEqual(
+    f.calls.filter((c) => c[0] === 'navigate'),
+    [['navigate', '/billing?plan=Professional']],
+  );
+});

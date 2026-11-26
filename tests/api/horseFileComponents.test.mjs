@@ -36,8 +36,9 @@ test('horse Documents passes actual linked originals to the existing library eve
 });
 test('horse Documents upload uses the current horse and Upload stage', async () => {
   const f = await renderRoute('components/HorseDocuments');
-  const upload = nodes(f.tree, (n) => n.type === 'ActionButton')[0];
-  upload.props.onClick();
+  const dossier = nodes(f.tree, (n) => n.type === 'DocumentDossier')[0];
+  assert.equal(dossier.props.canUpload, true);
+  dossier.props.onUpload();
   assert.deepEqual(f.calls, [['navigate', '/documents?horse=horse-context&from=profile&upload=1']]);
 });
 test('gallery exposes all active photos and requires confirmation before recoverable removal', async () => {

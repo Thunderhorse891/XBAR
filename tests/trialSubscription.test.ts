@@ -91,7 +91,7 @@ test('trial action preserves eligible, terminal, role, native, paid and used-tri
       ...context,
       localOrMissingBillingRow: true,
     }),
-    true,
+    false,
   );
   assert.equal(canStartTrial(profile({ billingState: 'Past Due', subscriptionRecoverable: false }), context), true);
   assert.equal(canStartTrial(profile(), { ...context, nativeApp: true }), false);

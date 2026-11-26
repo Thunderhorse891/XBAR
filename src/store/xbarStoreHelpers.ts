@@ -31,6 +31,7 @@ import { createOwnershipRecord, normalizeOwnershipRecord } from '@/store/xbarSto
 import { getCapabilityDeniedMessage, hasRoleCapability } from '@/lib/permissions';
 import type {
   AuditEvent,
+  BreedingRecordDetails,
   BuyerRoomEvent,
   DocumentFact,
   DocumentRecord,
@@ -46,6 +47,7 @@ import type {
   SharedAccessSnapshot,
   SharedListingRecord,
   SubscriptionProfile,
+  TimelineEvent,
   WorkspaceAccessRole,
   WorkspaceInvitationRecord,
   WorkspaceMemberRecord,
@@ -71,7 +73,7 @@ import type { PersistedXbarState, XbarStore } from '@/store/xbarStoreTypes';
  * what `restorePersistedState` normalizes needs it incremented in the same
  * commit.
  */
-export const WORKSPACE_SCHEMA_VERSION = 9;
+export const WORKSPACE_SCHEMA_VERSION = 10;
 const legacyDemoHorseIds = new Set([
   'horse-wiggy',
   'horse-hancock',
@@ -2310,6 +2312,8 @@ export function createTimelineEvent(params: {
   category: 'Medical' | 'Breeding' | 'Ownership' | 'Sales' | 'Operations';
   status?: string;
   severity?: 'low' | 'medium' | 'high';
+  details?: BreedingRecordDetails;
+  completionState?: TimelineEvent['completionState'];
 }) {
   return {
     id: createId('event'),
@@ -2320,6 +2324,8 @@ export function createTimelineEvent(params: {
     category: params.category,
     status: params.status,
     severity: params.severity,
+    ...(params.details ? { details: params.details } : {}),
+    ...(params.completionState ? { completionState: params.completionState } : {}),
   } as const;
 }
 

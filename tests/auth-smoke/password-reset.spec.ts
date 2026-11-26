@@ -735,12 +735,21 @@ test('a grant spent by another tab mid-submission never shows this one a refusal
     await submit(first).click();
     await firstUpdateStarted;
 
-    await second.evaluate((id) => {
-      localStorage.setItem(`xbar-password-recovery-spent:user:${id}`, 'spent');
-      const channel = new BroadcastChannel('xbar-password-recovery');
-      channel.postMessage({ type: 'recovery-spent', userId: id });
-      channel.close();
-    }, USER_ID);
+    const submittingGrant = await heldGrantToken(first);
+    expect(submittingGrant).not.toBe('');
+    // Stage the actual completion protocol: durable revocation plus the exact
+    // consumed generation. A user-only legacy wake-up can arrive before another
+    // renderer sees its write, so it does not establish that this grant ended.
+    await second.evaluate(
+      ({ userId, grantToken, spentKey }) => {
+        localStorage.setItem(`${spentKey}:grant:${userId}:${grantToken}`, 'spent');
+        localStorage.setItem(`${spentKey}:user:${userId}`, JSON.stringify({ state: 'spent', grantToken, version: 1 }));
+        const channel = new BroadcastChannel('xbar-password-recovery');
+        channel.postMessage({ type: 'recovery-spent', userId, grantToken });
+        channel.close();
+      },
+      { userId: USER_ID, grantToken: submittingGrant, spentKey: RECOVERY_SPENT_KEY },
+    );
     await expect.poll(async () => heldGrant(first), { timeout: 15_000 }).toBe('');
     expect(secondUpdates).toBe(0);
 

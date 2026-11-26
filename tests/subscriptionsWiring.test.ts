@@ -8,8 +8,7 @@
  * logic and the rendered screen, which a React-less node runner cannot
  * execute but can hold to its contract:
  *
- * - which params reach startManagedCheckout (the annual toggle must actually
- *   reach the server, or an annual selection silently buys monthly);
+ * - which params reach startManagedCheckout, including the monthly cadence;
  * - the button enable/disable states, especially the "not configured"
  *   disabled state versus the enabled state;
  * - that beginCheckout refuses before any network call;
@@ -74,23 +73,8 @@ test('startManagedCheckout receives the live tier, workspace, token, and billing
     'the managed endpoint needs the access token; without it the server cannot authorize the workspace',
   );
 
-  // The annual toggle is state, not a constant: pin that the selected period
-  // is what is sent, so flipping to annual cannot silently buy monthly. It
-  // opens on the cadence already paid, and on monthly only when that is
-  // unknown (audit F14: an annual subscriber used to land on monthly prices).
-  assert.ok(
-    source.includes(
-      "const [chosenPeriod, setBillingPeriod] = useState<'monthly' | 'annual'>(subscription.billingPeriod ?? 'monthly');",
-    ),
-    'the billing period must be selectable state opening on the purchased cadence',
-  );
-  // What is sent is the chosen period whenever that period can be sold, and
-  // monthly only when it cannot -- never a cadence the server has not offered.
-  assert.ok(
-    source.includes("const billingPeriod: 'monthly' | 'annual' = annualAvailable ? chosenPeriod : 'monthly';"),
-    'checkout must send the chosen period when it is sellable',
-  );
-  assert.ok(!args.includes("billingPeriod: 'monthly'"), 'the period sent must be the selected one, not a constant');
+  assert.ok(source.includes("const billingPeriod = 'monthly' as const;"));
+  assert.ok(!source.includes('setBillingPeriod'), 'new annual checkout is disabled');
 });
 
 test('the primary action is disabled exactly when checkout is not ready or the plan is current', () => {
@@ -121,10 +105,10 @@ test('all three readiness call sites are fed the live billing state', () => {
   assert.equal(calls.length, 3, 'expected exactly three getCheckoutReadiness call sites');
 
   const requiredInputs = [
-    'billingEnabled,',
+    'billingEnabled: canSellTier(',
     'canManageBilling,',
     'hasManagedIdentity,',
-    'hasPaymentLink:',
+    'hasPaymentLink: false,',
     'checkoutInProgress:',
     'subscriptionRecoverable,',
     'subscriptionActive,',
@@ -151,8 +135,7 @@ test('beginCheckout refuses before any network call when not ready', () => {
   const managedCall = body.indexOf('startManagedCheckout({');
   assert.ok(managedCall > refusedBlock, 'the managed endpoint must only be called after the readiness gate');
 
-  const paymentLinkRoute = body.indexOf('checkoutRouteFor({ managedBillingEnabled: billingEnabled,');
-  assert.ok(paymentLinkRoute > refusedBlock, 'the hosted-link route must also sit behind the readiness gate');
+  assert.doesNotMatch(body, /checkoutRouteFor|followPaymentLink/);
 });
 
 test('a refused checkout tells the user the workspace was not changed', () => {
@@ -215,37 +198,9 @@ test('the pending hosted purchase notice renders with a working dismiss', () => 
   assert.ok(forgetBody.includes('setPendingPurchase(null)'), 'dismissing must clear the rendered notice immediately');
 });
 
-test('the payment-link fallback stays behind its allowlist', () => {
+test('legacy links cannot start purchases and unresolved payments still block managed checkout', () => {
   const body = beginCheckoutBody();
-  assert.ok(
-    body.includes('canUsePaymentLinkFallback(managed.code)'),
-    'only the no-managed-identity refusal may fall back to a payment link; a network error or server refusal must not',
-  );
-  assert.ok(
-    body.includes('getStripePaymentLink(tier, billingPeriod)'),
-    'the fallback link must honor the selected billing period — with no annual link configured there is no fallback',
-  );
-});
-
-test('the hosted-only route claims the purchase before leaving the page', () => {
-  assert.ok(
-    source.includes('await followPaymentLink(tier, hostedOnlyLink);'),
-    'the hosted-only primary route must go through followPaymentLink',
-  );
-  const followStart = source.indexOf('const followPaymentLink = async (');
-  assert.ok(followStart >= 0, 'followPaymentLink must exist');
-  const followBody = source.slice(followStart, source.indexOf('const openBillingPortal', followStart));
-  assert.ok(
-    followBody.includes('claimPendingHostedPurchase('),
-    'leaving for a hosted link must claim the pending purchase first, so the screen stops offering it',
-  );
-  assert.ok(
-    followBody.includes('window.location.assign(link);'),
-    'followPaymentLink is the single place that assigns to a payment link',
-  );
-  assert.equal(
-    (source.match(/window\.location\.assign\(link\)/g) || []).length,
-    1,
-    'there must be no second assign-to-link that could bypass the claim',
-  );
+  assert.doesNotMatch(source, /getStripePaymentLink|followPaymentLink|canUsePaymentLinkFallback/);
+  assert.match(body, /isPendingHostedPurchase\(readPendingHostedPurchase\(workspaceId\)/);
+  assert.ok(body.indexOf('isPendingHostedPurchase') < body.indexOf('startManagedCheckout'));
 });

@@ -1,4 +1,4 @@
-import { recordedOfferPrice } from './financialPrices.js';
+import { positiveRecordedPrice, recordedOfferPrice } from './financialPrices.js';
 import type { DocumentRecord, ExpenseReceipt, HorseRecord, OwnershipRecord, SalesLead } from '../types/xbar.js';
 import {
   assessRevenueAtRisk,
@@ -41,6 +41,10 @@ export interface RanchReportMoney {
   receiptSpend: number;
   /** Acquisitions plus the receipts tied to a horse. The rest is ranch overhead. */
   investedInHorses: number;
+  /** All dated receipts with no horse assignment, excluded from horse margins. */
+  unallocatedToDate: number;
+  /** Receipts pointing to a horse absent from this report; never silently allocated. */
+  unmatchedHorseSpend: number;
   investedThisMonth: number;
   /** Current-month receipts with no horse assignment. */
   unallocatedThisMonth: number;
@@ -116,6 +120,8 @@ export interface RanchReport {
   horseCount: number;
   listedCount: number;
   documentsToReview: number;
+  documentsAwaitingReview: number;
+  documentsProcessing: number;
   money: RanchReportMoney;
   readiness: RanchReportReadiness;
   spendHistory: { observedMonths: string[]; completeness: 'unconfirmed' };
@@ -344,6 +350,7 @@ export function buildRanchReport(input: RanchReportInput, now: Date = new Date()
   }
 
   const receiptSpend = sum(expenseReceipts.map((receipt) => receipt.amount));
+  const horseIds = new Set(horses.map((horse) => horse.id));
   const categories: CategorySpendRow[] = apportionCategoryShares(
     [...categoryTotals.entries()]
       .map(([category, bucket]) => ({ category, total: bucket.total, thisMonth: bucket.thisMonth }))
@@ -355,7 +362,7 @@ export function buildRanchReport(input: RanchReportInput, now: Date = new Date()
   // What the horses cost to buy. Real money the operation has put in, and
   // invisible until now: a horse bought for $10,000 with no receipts against it
   // reported $0 invested in the UI, the CSV and the banker-facing PDF alike.
-  const acquisitionCost = sum(horses.map((horse) => Math.max(0, horse.costBasis ?? 0)));
+  const acquisitionCost = sum(horses.map((horse) => positiveRecordedPrice(horse.costBasis)));
 
   const activeRows = horseRows.filter((horse) => horse.financialStatus !== 'sold');
   const scores = activeRows.map((horse) => horse.readinessScore);
@@ -438,12 +445,27 @@ export function buildRanchReport(input: RanchReportInput, now: Date = new Date()
     documentsToReview: documents.filter(
       (document) => document.state === 'Needs Review' || document.state === 'Queued' || document.state === 'Matched',
     ).length,
+    documentsAwaitingReview: documents.filter(
+      (document) => document.state === 'Needs Review' || document.state === 'Matched',
+    ).length,
+    documentsProcessing: documents.filter((document) => document.state === 'Queued').length,
     money: {
       investedToDate: receiptSpend + acquisitionCost,
       acquisitionCost,
       receiptSpend,
       investedInHorses:
-        acquisitionCost + sum(expenseReceipts.filter((receipt) => receipt.horseId).map((receipt) => receipt.amount)),
+        acquisitionCost +
+        sum(
+          expenseReceipts
+            .filter((receipt) => receipt.horseId && horseIds.has(receipt.horseId))
+            .map((receipt) => receipt.amount),
+        ),
+      unallocatedToDate: sum(expenseReceipts.filter((receipt) => !receipt.horseId).map((receipt) => receipt.amount)),
+      unmatchedHorseSpend: sum(
+        expenseReceipts
+          .filter((receipt) => receipt.horseId && !horseIds.has(receipt.horseId))
+          .map((receipt) => receipt.amount),
+      ),
       // Receipts only. A purchase price carries no date, so it cannot be
       // attributed to a month without inventing one — and a horse bought two
       // years ago would land in whatever month this report was run.

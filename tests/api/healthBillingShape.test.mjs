@@ -41,6 +41,7 @@ const READY = {
   SUPABASE_URL: 'https://example.supabase.co',
   SUPABASE_SERVICE_ROLE_KEY: 'service_role_key',
   STRIPE_SECRET_KEY: 'sk_live_51AbCdEf',
+  STRIPE_ACCOUNT_ID: 'acct_fixture',
   STRIPE_WEBHOOK_SECRET: 'whsec_AbCdEf123',
   MANAGED_BILLING_ENABLED: 'true',
   VITE_MANAGED_BILLING_ENABLED: 'true',
@@ -92,7 +93,7 @@ test('a fully and correctly configured deployment is healthy and says it is live
   const response = await health(READY);
   assert.equal(response.statusCode, 200, reasons(response));
   assert.equal(response.body.subsystems.stripeLiveKey, true);
-  assert.equal(response.body.subsystems.stripeAnnualPriceIds, true);
+  assert.equal(response.body.subsystems.stripeAnnualPriceIds, false);
   assert.equal(warnings(response), '');
 });
 
@@ -123,13 +124,14 @@ test('approved legacy prices are accepted; unreadable ones fail readiness', asyn
   assert.equal(good.statusCode, 200, reasons(good));
 
   for (const [value, reason] of [
-    ['price_0Pro2025=Gold:monthly', /unknown tier "Gold"/],
-    ['price_0Pro2025=Professional', /is not price_id=Tier:monthly\|annual/],
+    ['price_0Pro2025=Gold:monthly', /contains invalid or conflicting entries/],
+    ['price_0Pro2025=Professional', /contains invalid or conflicting entries/],
     ['price_1Pro=Professional:monthly', /also a current price/],
   ]) {
     const response = await health({ ...READY, STRIPE_LEGACY_PRICE_IDS: value });
     assert.equal(response.statusCode, 503, value);
     assert.match(reasons(response), reason);
+    assert.ok(!JSON.stringify(response.body).includes(value));
   }
 });
 
@@ -137,7 +139,7 @@ test('what still works but deserves saying is a warning, not an outage', async (
   const noAnnual = await health({ ...READY, STRIPE_PRICE_ID_ENTERPRISE_ANNUAL: undefined });
   assert.equal(noAnnual.statusCode, 200);
   assert.equal(noAnnual.body.subsystems.stripeAnnualPriceIds, false);
-  assert.match(warnings(noAnnual), /Managed annual checkout is unavailable/);
+  assert.doesNotMatch(warnings(noAnnual), /annual/);
 
   const noEmail = await health({ ...READY, RESEND_API_KEY: undefined });
   assert.match(warnings(noEmail), /No email provider is configured/);
@@ -146,16 +148,14 @@ test('what still works but deserves saying is a warning, not an outage', async (
   assert.match(warnings(defaultSender), /EMAIL_FROM_ADDRESS is not set/);
 });
 
-test('missing annual prices warn about unavailable managed checkout without saying it is offered', async () => {
+test('missing historical annual IDs do not gate monthly checkout', async () => {
   const values = { ...READY };
   for (const tier of ['STARTER', 'PROFESSIONAL', 'RANCH_OPS', 'ENTERPRISE'])
     delete values[`STRIPE_PRICE_ID_${tier}_ANNUAL`];
   const response = await health(values);
   assert.equal(response.statusCode, 200, 'monthly checkout stays configured');
   assert.equal(response.body.subsystems.stripeAnnualPriceIds, false);
-  assert.match(warnings(response), /STRIPE_PRICE_ID_\*_ANNUAL/);
   assert.doesNotMatch(warnings(response), /annual billing is offered/i);
-  assert.match(warnings(response), /Managed annual checkout is unavailable/);
 });
 
 test('Gmail readiness is opt-in and does not claim verified delivery', async () => {
@@ -198,11 +198,13 @@ test('preview test mode and production live mode retain healthy readiness', asyn
   }
 });
 
-test('health refuses a malformed optional account pin and accepts unset or valid pins', async () => {
-  for (const STRIPE_ACCOUNT_ID of [undefined, '', '   ', 'acct_1NF0M3HcLUCzzEB3']) {
-    const response = await health({ ...READY, VERCEL_ENV: 'production', STRIPE_ACCOUNT_ID });
-    assert.equal(response.statusCode, 200, reasons(response));
-  }
+test('hosted checkout requires a valid account pin and rejects live Stripe keys on preview', async () => {
+  const noPin = await health({ ...READY, VERCEL_ENV: 'production', STRIPE_ACCOUNT_ID: undefined });
+  assert.equal(noPin.statusCode, 503);
+  assert.match(reasons(noPin), /STRIPE_ACCOUNT_ID is required/);
+  const livePreview = await health({ ...READY, VERCEL_ENV: 'preview' });
+  assert.equal(livePreview.statusCode, 503);
+  assert.match(reasons(livePreview), /Stripe TEST key/);
   for (const STRIPE_ACCOUNT_ID of ['acct_', 'acct_bad value', 'not-an-account']) {
     const response = await health({ ...READY, VERCEL_ENV: 'production', STRIPE_ACCOUNT_ID });
     assert.equal(response.statusCode, 503);
@@ -210,4 +212,19 @@ test('health refuses a malformed optional account pin and accepts unset or valid
     assert.match(reasons(response), /STRIPE_ACCOUNT_ID is set but is not a Stripe account id/);
     assert.doesNotMatch(JSON.stringify(response.body), /acct_bad value|not-an-account/);
   }
+});
+
+test('new three-tier billing readiness does not require retired or annual sale prices', async () => {
+  const response = await health({
+    ...READY,
+    STRIPE_PRICE_ID_STARTER: '',
+    STRIPE_PRICE_ID_ENTERPRISE: '',
+    STRIPE_PRICE_ID_STARTER_ANNUAL: '',
+    STRIPE_PRICE_ID_PROFESSIONAL_ANNUAL: '',
+    STRIPE_PRICE_ID_RANCH_OPS_ANNUAL: '',
+    STRIPE_PRICE_ID_ENTERPRISE_ANNUAL: '',
+  });
+  assert.equal(response.statusCode, 200, reasons(response));
+  assert.equal(response.body.subsystems.stripePriceIds, true);
+  assert.equal(response.body.subsystems.newAnnualCheckout, false);
 });

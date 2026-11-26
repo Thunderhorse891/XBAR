@@ -3,6 +3,8 @@ import { getDocumentAccessUrl } from '@/lib/cloudWorkspace';
 import { isNavigableFileUrl } from '@/lib/navigableFileUrl';
 import { SavedPacketCompatibilityError } from '@/lib/savedPacketCompatibility';
 import type { StoredFileRef } from '@/lib/storedFiles';
+import { isNativeApp } from './nativePlatform.js';
+import { downloadStoredFile } from './downloadStoredFile.js';
 
 /*
  * Opening a stored file, wherever it is stored.
@@ -33,13 +35,24 @@ const OBJECT_URL_LIFETIME_MS = 60_000;
  * seller to look at something that is not there. The caller phrases its own
  * copy from this.
  */
-export type OpenStoredFileResult = { ok: true; delivery: 'tab' | 'download' } | { ok: false; message: string };
+export type OpenStoredFileResult =
+  { ok: true; delivery: 'tab' | 'download' | 'share-sheet' } | { ok: false; message: string };
 
 export async function openStoredFileInTab(
   record: StoredFileRef,
   isCurrent: () => boolean = () => true,
 ): Promise<OpenStoredFileResult> {
   if (!isCurrent()) return { ok: false, message: FILE_CONTEXT_CHANGED };
+  // WKWebView does not provide a browser tab/download handoff. Read the same
+  // canonical original with identity/size/time bounds, then use the native
+  // Filesystem/Share path. Cancellation and unavailable bytes remain failures.
+  if (isNativeApp()) {
+    const result = await downloadStoredFile(record, isCurrent);
+    if (!result.ok) return result;
+    return result.via === 'share-sheet'
+      ? { ok: true, delivery: 'share-sheet' }
+      : { ok: false, message: 'The native file handoff did not complete. Try again.' };
+  }
   // Opened synchronously, before any await: a `window.open` that happens after
   // one is no longer attributable to the click and is blocked by default.
   const previewWindow = typeof window !== 'undefined' ? window.open('', '_blank') : null;

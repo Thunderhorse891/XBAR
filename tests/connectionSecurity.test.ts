@@ -2,6 +2,7 @@ import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
 import * as path from 'node:path';
 import test from 'node:test';
+import { pathToFileURL } from 'node:url';
 
 const fromRoot = (filePath: string) => path.resolve(process.cwd(), filePath);
 const checkoutSource = await readFile(fromRoot('api/stripe/checkout.js'), 'utf8');
@@ -37,13 +38,13 @@ test('managed checkout is admin-only and validates return origins', () => {
   assert.doesNotMatch(checkoutSource, /const returnUrl = typeof body\.returnUrl/);
 });
 
-test('server subscription prices match advertised production tiers', () => {
+test('server subscription prices match advertised production tiers', async () => {
+  const { subscriptionPlans } = await import(pathToFileURL(fromRoot('api/_lib/subscription-plans.js')).href);
   assert.match(plansSource, /Starter:[\s\S]*monthlyRate: 12/);
-  assert.match(plansSource, /Professional:[\s\S]*monthlyRate: 29/);
-  assert.match(plansSource, /'Ranch Ops':[\s\S]*monthlyRate: 79/);
+  assert.equal(subscriptionPlans.Professional.monthlyRate, 19.99);
+  assert.equal(subscriptionPlans['Ranch Ops'].monthlyRate, 49.99);
   assert.match(plansSource, /Enterprise:[\s\S]*monthlyRate: 199/);
-  // Annual is 10x monthly (2 months free) and must be pinned too — an
-  // unadvertised annual price is a billing dispute waiting to happen.
+  // Historical annual rates remain recognizable; new annual checkout is disabled.
   assert.match(plansSource, /Starter:[\s\S]*annualRate: 120/);
   assert.match(plansSource, /Professional:[\s\S]*annualRate: 290/);
   assert.match(plansSource, /'Ranch Ops':[\s\S]*annualRate: 790/);
