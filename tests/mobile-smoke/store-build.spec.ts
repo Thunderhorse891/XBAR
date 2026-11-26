@@ -137,6 +137,24 @@ test('the native privacy policy remains findable before and after ranch setup', 
   await expect(privacy).toHaveAttribute('href', privacyUrl!);
 });
 
+for (const [width, height] of [
+  [390, 844],
+  [402, 874],
+]) {
+  test(`@auth phone entry shows the complete sign-in action before scrolling at ${width}px`, async ({ page }, info) => {
+    await page.setViewportSize({ width, height });
+    await page.emulateMedia({ reducedMotion: 'reduce' });
+    await page.goto('/#/login');
+    await expect(page.getByRole('heading', { name: 'Sign In', exact: true })).toBeVisible();
+    await page.evaluate(() => document.fonts.ready);
+    await page.screenshot({ path: info.outputPath(`native-entry-initial-${width}.png`) });
+    await expect(page.getByRole('link', { name: 'XBAR home', exact: true })).toBeInViewport({ ratio: 1 });
+    await expect(page.getByRole('textbox', { name: 'Email or User ID', exact: true })).toBeInViewport({ ratio: 1 });
+    await expect(page.getByLabel('Password', { exact: true })).toBeInViewport({ ratio: 1 });
+    await expect(page.getByRole('button', { name: 'Sign In', exact: true })).toBeInViewport({ ratio: 1 });
+  });
+}
+
 test('@auth the store build hides third-party sign-in, which cannot complete in a WebView', async ({ page }) => {
   await page.goto('/#/login');
 

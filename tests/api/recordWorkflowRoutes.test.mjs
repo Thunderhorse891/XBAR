@@ -197,7 +197,7 @@ async function nativeCodeLogin() {
       '@/hooks/useOwnerAccess': 'export const useOwnerAccess=()=>"denied";',
       '@/lib/platformConfig': 'export const isSupabaseConfigured=()=>true;',
       '@/lib/nativePlatform':
-        'export const canPresentThirdPartySignIn=()=>false;export const canPresentPurchaseFlow=()=>false;export const publicSiteHref=(p)=>p;',
+        'export const isNativeApp=()=>true;export const canPresentThirdPartySignIn=()=>false;export const canPresentPurchaseFlow=()=>false;export const publicSiteHref=(p)=>p;',
       '@/lib/runtimeEvents': 'export const trackRuntimeEvent=async()=>{};',
       '@/lib/authProviders': 'export const presentableOAuthProviders=()=>[];',
     },

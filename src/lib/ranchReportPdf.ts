@@ -634,7 +634,7 @@ export async function renderReportPdf(
       analysisY + 23 + i * 29,
       252,
       [green, amber, red][i],
-      `${band.count} horses`,
+      `${band.count} ${band.count === 1 ? 'horse' : 'horses'}`,
     ),
   );
   const spendRows = report.categories.slice(0, 3);

@@ -34,6 +34,10 @@ final class AppUITests: XCTestCase {
         XCTAssertFalse(emailCode.isEnabled)
         XCTAssertFalse(webView.buttons["Google"].exists)
         XCTAssertFalse(webView.buttons["Facebook"].exists)
+        // The retained native entry capture on f3e2e41 clipped this action
+        // below the initial phone viewport. Require it before keyboard scroll.
+        XCTAssertGreaterThanOrEqual(signIn.frame.height, 44, "Password sign-in must retain a full-size touch target")
+        XCTAssertLessThanOrEqual(signIn.frame.maxY, webView.frame.maxY, "The complete sign-in action must fit before scrolling")
         let entryScreenshot = XCTAttachment(screenshot: app.screenshot())
         entryScreenshot.name = "XBAR-native-entry-before-keyboard"
         entryScreenshot.lifetime = .keepAlways

@@ -11,7 +11,7 @@ import { useUiStore } from '@/store/useUiStore';
 import { useXbarStore } from '@/store/useXbarStore';
 import './cleanEntryExperience.css';
 import './loginHero.css';
-import { canPresentThirdPartySignIn, canPresentPurchaseFlow, publicSiteHref } from '@/lib/nativePlatform';
+import { canPresentThirdPartySignIn, canPresentPurchaseFlow, publicSiteHref, isNativeApp } from '@/lib/nativePlatform';
 import { presentableOAuthProviders } from '@/lib/authProviders';
 import { readBrowserStorage, removeBrowserStorage, writeBrowserStorage } from '@/lib/browserStorage';
 import { markCommandCenterEntry } from '@/lib/commandCenterEntry';
@@ -421,7 +421,10 @@ export default function Login() {
           : 'Create a sign-in for your XBAR workspace. Creating an account does not start a subscription.';
 
   return (
-    <main className="clean-entry-shell clean-entry-shell--brand-auth">
+    <main
+      className="clean-entry-shell clean-entry-shell--brand-auth"
+      data-native-entry={isNativeApp() ? 'true' : undefined}
+    >
       <section
         ref={entryPanel}
         className={`clean-login-layout${confirmationEmail ? ' clean-login-layout--confirmation' : ''}`}
