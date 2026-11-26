@@ -93,8 +93,27 @@ jobs:
         run: |
           # Bound any later guest-log query to this test attempt, excluding boot.
           date -u '+%Y-%m-%d %H:%M:%S+0000' > "$RUNNER_TEMP/xbar-xctest-start.txt"
-          xcodebuild -project ios/App/App.xcodeproj -scheme App -configuration Debug \
-            -destination "platform=iOS Simulator,id=$IOS_SIMULATOR_ID" -derivedDataPath ios/DerivedData \
+          # Run the exact bundles already compiled above. Project/scheme mode
+          # repeated Swift package resolution inside the seven-minute test step.
+          # Apple's test-without-building manifest path avoids that extra phase.
+          test_manifest=$(python3 - <<'PY'
+          from pathlib import Path
+          import hashlib, plistlib, sys
+          products = Path('ios/DerivedData/Build/Products')
+          manifests = list(products.glob('*.xctestrun'))
+          if len(manifests) != 1:
+              raise SystemExit(f'Expected one fresh compiled test manifest, found {len(manifests)}.')
+          manifest = manifests[0]
+          with (products / 'Debug-iphonesimulator/App.app/Info.plist').open('rb') as source:
+              app = plistlib.load(source)
+          if app.get('CFBundleIdentifier') != 'com.xbar.ranch':
+              raise SystemExit('The compiled simulator app has the wrong bundle identity.')
+          print(f'XBAR compiled test manifest SHA-256: {hashlib.sha256(manifest.read_bytes()).hexdigest()}', file=sys.stderr)
+          print(manifest)
+          PY
+          )
+          xcodebuild -xctestrun "$test_manifest" \
+            -destination "platform=iOS Simulator,id=$IOS_SIMULATOR_ID" \
             -parallel-testing-enabled NO -resultBundlePath ios/native-tests.xcresult \
             -test-timeouts-enabled YES -maximum-test-execution-time-allowance 180 \
             CODE_SIGN_IDENTITY=- test-without-building

@@ -1,5 +1,6 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
+import { decideWorkspaceSetupGate } from '../src/lib/workspaceSetupGate.js';
 import {
   bootstrapEventDisposition,
   createLatestWriteGate,
@@ -414,4 +415,26 @@ test('tokens carrying no generation are left alone', () => {
   const noGeneration = (session: { access_token?: string } | null) => (session?.access_token ? '' : '');
   const event = { access_token: 'opaque-old' };
   assert.equal(reconcilePublishedSession(held('opaque-new'), event, noGeneration)?.access_token, 'opaque-old');
+});
+
+test('a new identity must reconcile its ranch before a settled prior session can authorize setup', () => {
+  for (const previous of ['', 'another-account']) {
+    const published = {
+      autosaveReady: true,
+      autosaveUnlocked: true,
+      ...identityPublication(previous, 'returning-account'),
+    };
+    // Access metadata can return before CloudBootstrap's next React effect.
+    // It does not establish that this account's ranch records were loaded.
+    assert.equal(
+      decideWorkspaceSetupGate({
+        workspaceHydrated: true,
+        workspaceReady: false,
+        cloudStatus: 'signed-in',
+        cloudSettled: published.autosaveReady,
+      }),
+      'loading',
+    );
+    assert.equal(published.autosaveUnlocked, false, 'prior settlement cannot authorize this identity to autosave');
+  }
 });

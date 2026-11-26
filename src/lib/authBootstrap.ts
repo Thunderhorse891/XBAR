@@ -122,6 +122,8 @@ export type IdentityPublication = {
   workspaceRole?: 'Pending access';
   recoveryContext?: undefined;
   stagedStorageBytes?: 0;
+  autosaveReady?: false;
+  autosaveUnlocked?: false;
 };
 
 export function identityPublication(previousUserId: string, nextUserId: string): IdentityPublication {
@@ -133,6 +135,11 @@ export function identityPublication(previousUserId: string, nextUserId: string):
     workspaceRole: 'Pending access',
     recoveryContext: undefined,
     stagedStorageBytes: 0,
+    // Settlement describes the prior identity's records, not this one's.
+    // Clear it atomically before access metadata can make routes interactive.
+    // Same-account refreshes retain their active hydration and write state.
+    autosaveReady: false,
+    autosaveUnlocked: false,
   };
 }
 

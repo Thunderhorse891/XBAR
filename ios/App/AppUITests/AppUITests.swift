@@ -34,6 +34,10 @@ final class AppUITests: XCTestCase {
         XCTAssertFalse(emailCode.isEnabled)
         XCTAssertFalse(webView.buttons["Google"].exists)
         XCTAssertFalse(webView.buttons["Facebook"].exists)
+        let entryScreenshot = XCTAttachment(screenshot: app.screenshot())
+        entryScreenshot.name = "XBAR-native-entry-before-keyboard"
+        entryScreenshot.lifetime = .keepAlways
+        add(entryScreenshot)
         email.tap()
         XCTAssertTrue(app.keyboards.firstMatch.waitForExistence(timeout: 10), "The on-device keyboard must be ready before typing")
         email.typeText("native-smoke@example.invalid")
@@ -47,6 +51,9 @@ final class AppUITests: XCTestCase {
         waitForExpectations(timeout: 10)
         XCTAssertFalse(signIn.isEnabled, "Email alone must not enable password sign-in")
         password.tap()
+        // Run 45895470985 entered the full email, then focused an empty secure
+        // field with no keyboard in its failure tree. Verify this handoff too.
+        XCTAssertTrue(app.keyboards.firstMatch.waitForExistence(timeout: 10), "The secure-entry keyboard must be ready before typing")
         password.typeText("native-smoke-password")
         expectation(for: NSPredicate(format: "enabled == true"), evaluatedWith: signIn)
         waitForExpectations(timeout: 10)
