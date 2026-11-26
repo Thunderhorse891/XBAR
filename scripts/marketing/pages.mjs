@@ -242,7 +242,7 @@ const pricing = {
   <div>
     <p class="kicker">Pricing</p>
     <h1>Start Free. Grow with your operation.</h1>
-    <p class="lead">2 horses and 1 user. No card required. Review paid plans before upgrading.</p>
+    <p class="lead">2 horses and 1 user. No card required. Cloud storage is limited and shared across XBAR at launch.</p>
     <div class="hero-actions"><a class="btn btn--primary" href="${signup()}" rel="nofollow">Start free</a></div>
   </div>
 </section>

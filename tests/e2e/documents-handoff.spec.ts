@@ -197,7 +197,9 @@ for (const width of [390, 1440]) {
       await drawer.getByLabel(label, { exact: true }).fill(value);
     await drawer.getByRole('button', { name: 'Save changes', exact: true }).click();
     await expect(drawer).toBeHidden();
+    await settleDeviceWrite(page);
     await page.reload();
+    await expect(page.getByRole('button', { name: 'Edit horse fields', exact: true })).toBeVisible();
     const saved = await page.evaluate(async () => {
       const module = '/src/store/useXbarStore.ts';
       const horse = (await import(/* @vite-ignore */ module)).useXbarStore.getState().horses[0];
@@ -299,6 +301,12 @@ for (const width of [390, 1440]) {
     await settleDeviceWrite(page);
     await page.reload();
     await expect(page.getByRole('heading', { name: 'Sale Packets', exact: true })).toBeVisible();
+    const readinessRow = page.locator('.sale-packet-row').filter({
+      has: page.getByRole('button', { name: 'Build packet', exact: true }),
+    });
+    await expect(readinessRow).toContainText('4 reviewed buyer records');
+    await expect(readinessRow).toContainText('Coggins');
+    await expect(readinessRow).not.toContainText('Reach 85 to generate');
     const savedRow = page.locator('.sale-packet-row').filter({
       has: page.getByRole('button', { name: 'Download saved packet', exact: true }),
     });
@@ -326,7 +334,9 @@ for (const width of [390, 1440]) {
     await expect(page.getByText('Reconcile your capital', { exact: true })).toBeVisible();
     expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
     await page.screenshot({ path: testInfo.outputPath(`reports-${width}.png`), fullPage: true });
+    await settleDeviceWrite(page);
     await page.reload();
+    await expect(page.getByText('Reconcile your capital', { exact: true })).toBeVisible();
     expect(
       await page.evaluate(async () => {
         const module = '/src/store/useXbarStore.ts';
@@ -356,6 +366,12 @@ for (const width of [390, 1440]) {
     page.on('download', (file) => unexpectedDownloads.push(file.suggestedFilename()));
     await page.getByRole('button', { name: 'Download saved packet', exact: true }).click();
     await expect(page.getByText('Packet was not downloaded', { exact: true })).toBeVisible();
+    await expect(
+      page.getByText(
+        'This file is not available on this device. Check your saved copies or recover the original file.',
+        { exact: true },
+      ),
+    ).toBeVisible();
     await expect(page.getByRole('button', { name: 'Download saved packet', exact: true })).toBeEnabled();
     expect(unexpectedDownloads).toEqual([]);
     await page.screenshot({ path: testInfo.outputPath(`retrieval-failure-${width}.png`) });

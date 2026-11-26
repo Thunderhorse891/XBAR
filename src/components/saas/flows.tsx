@@ -466,7 +466,9 @@ export function GlobalCreateDrawer() {
       sire: f.sire ?? editHorse.bloodline.sire,
       dam: f.dam ?? editHorse.bloodline.dam,
     });
-    return finish(result, result.ok ? `/horses/${editHorse.id}` : undefined);
+    // Editing from Documents must retain its horse filter and packet workflow.
+    // Profile edits already start on the horse profile; both stay at their opener.
+    return finish(result);
   };
 
   const submitExpense = async () => {

@@ -38,12 +38,12 @@ for (const width of [1440, 390]) {
 
     await page.goto('/demo');
     await expect(page.getByText('No account is needed to view this tour.', { exact: false })).toBeVisible();
-    await page.getByRole('link', { name: 'View the sample sale packet', exact: true }).click();
+    await page.locator('.hero').getByRole('link', { name: 'Open the sample packet', exact: true }).click();
     await expect(page).toHaveURL(/\/samples\/sample-sale-packet\.html$/);
     await expect(page.getByText('Every name, number, and record below is fictional.', { exact: false })).toBeVisible();
     await page.goBack();
     await expect(page).toHaveURL(/\/demo$/);
-    await page.getByRole('link', { name: 'Create an account', exact: true }).click();
+    await page.locator('.cta').getByRole('link', { name: 'Start free', exact: true }).click();
     await expect(page).toHaveURL(/\/app\/login\?mode=signup$/);
     await expect(page.getByRole('heading', { name: 'Create Account', exact: true })).toBeVisible();
 

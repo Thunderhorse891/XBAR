@@ -80,8 +80,13 @@ test('the vault is consulted before cloud storage when opening a file', async ()
   );
   assert.match(
     resolver,
-    /saved on a different device or browser/,
+    /This file is not available on this device/,
     'a key with no bytes behind it must say so rather than showing a broken link',
+  );
+  assert.doesNotMatch(
+    resolver,
+    /was saved on a different device/,
+    'missing bytes do not establish where a file was saved',
   );
 });
 

@@ -2200,7 +2200,7 @@ export async function getDocumentAccessUrl(
     if (!document.storagePath) {
       return {
         ok: false,
-        message: 'This file was saved on a different device or browser, and is not stored on this one.',
+        message: 'This file is not available on this device. Check your saved copies or recover the original file.',
       } as const;
     }
   }
