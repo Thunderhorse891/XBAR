@@ -104,7 +104,7 @@ test('direct and legacy billing routes show plan status, not a web paywall or a 
     ).toBeVisible();
     const status = plan.getByRole('status');
     await expect(status).toBeVisible();
-    await expect(status).toHaveText('Starter');
+    await expect(status).toHaveText('Free');
     await expect(page.getByRole('button', { name: /checkout|trial|choose|manage subscription/i })).toHaveCount(0);
     await expect(page.getByRole('link', { name: /checkout|trial|choose|manage subscription/i })).toHaveCount(0);
     await expect(page.getByText(/Secure checkout|Checkout cancelled|Due at checkout|Card details/i)).toHaveCount(0);
