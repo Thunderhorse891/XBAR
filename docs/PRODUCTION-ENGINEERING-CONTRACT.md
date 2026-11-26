@@ -554,6 +554,26 @@ The objective is one correct XBAR.
 
 ---
 
+# 26. XBAR MILESTONE COMPLETION RULE
+
+This rule applies to the current milestone and all future XBAR milestones. It supplements, and does not replace, the existing review, data protection, approval, and release requirements.
+
+1. At the start of each milestone, identify the customer outcome and the evidence required to demonstrate completion. Continue with already-authorized work.
+2. Before reporting a milestone as ready for Erin's review, provide:
+   - A working preview link that identifies the exact build, including its commit SHA.
+   - Before/after screenshots for changed interfaces, including phone layouts.
+   - Actual downloadable output files when document generation or exports are affected.
+   - Evidence that the affected workflow succeeds through saving, reopening, reload, and relevant failure/retry behavior.
+   - A concise list of anything still incomplete or unverified.
+3. For the current Documents milestone, provide the actual sales packet and ranch report PDFs generated through the working application. Inspect every page and correct visible defects before presenting them.
+4. Clearly label test data, emulated devices, local-only results, and production verification. Match every claim to the evidence actually obtained.
+5. “Started,” “resumed,” “delegated,” and “tests passed” are progress updates, not evidence that the milestone is ready for review.
+6. Continue implementing, inspecting, correcting, and verifying while authorized work remains. If genuinely blocked, finish independent work first, then identify the exact blocker and the smallest action needed from Erin.
+7. Preserve existing approvals and release requirements. Present concrete, reviewable work before requesting a missing approval. Distinguish ready for review, approved, deployed, and verified in production.
+8. Carry the active milestone, completed work, remaining defects, evidence links, and next action into every handoff. Link to this canonical section instead of maintaining another policy copy.
+
+---
+
 # FINAL DEFINITION OF DONE
 
 A production change is done only when:
