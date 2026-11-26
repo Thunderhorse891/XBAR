@@ -85,6 +85,14 @@ account in the actual WKWebView before distribution. The shell extraction does n
    `com.xbar.ranch`, and set version/build number. Archive/upload only after
    privacy, signing, device, and release approvals.
 
+## Apple access and first setup
+
+Use the [existing-team or first-setup worksheet](apple-setup.md) before creating
+any identifier, app record, signing credential or tester group. Account state is
+unverified; failed sign-in handoffs are not evidence of missing membership.
+Owner identity, agreements and payments remain owner actions. The worksheet
+contains draft record fields and protected signing/upload prerequisites only.
+
 ## App Store Connect metadata (done in the browser, not code)
 
 - App name, subtitle, category (Business / Productivity), age rating.

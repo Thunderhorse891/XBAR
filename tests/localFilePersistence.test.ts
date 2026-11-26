@@ -451,7 +451,7 @@ test('the cloud packet never claims a tab the browser refused', async () => {
   const wizardCode = wizard.replace(/\/\*[\s\S]*?\*\//g, '').replace(/\/\/[^\n]*/g, '');
   assert.match(
     wizardCode,
-    /Watermarked PDF \$\{packetDelivery === 'tab' \? 'opened in a new tab' : 'is ready — use the download button below to open it'\}/,
+    /Watermarked PDF \$\{packetDelivery === 'share-sheet' \? 'shared from this app' : packetDelivery === 'tab' \? 'opened in a new tab' : 'is ready — use the download button below to open it'\}/,
     'the cloud summary must describe the delivery that actually happened',
   );
   assert.doesNotMatch(
