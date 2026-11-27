@@ -17,6 +17,51 @@ const { createEmptyWorkspaceState, restorePersistedState, selectPersistedState, 
 const { decideCloudReconciliation, hasMeaningfulWorkspace, serializeWorkspaceBackup } =
   await import('../../src/lib/cloudSyncPolicy.ts');
 const { mergeCloudSubscription, withCloudSubscription } = await import('../../src/lib/cloudSubscription.ts');
+
+for (const recordsOwner of ['account:user-owner', 'ws-owner']) {
+  test(`first setup reconciles canonical owner metadata only after confirmed namespace handoff: ${recordsOwner}`, async () => {
+    fixture({ completeProfile: true, count: 0 });
+    const remote = await loadWorkspaceBackupFromCloud();
+    assert.equal(remote.ok, true, remote.message);
+    const local = structuredClone(remote.backup);
+    local.workspace.workspaceMembers[0].id = 'derived-owner-before-cloud-creation';
+    local.workspace.workspaceMembers[0].email = 'workspace-admin@xbar.local';
+    const f = await cloudBootstrapFixture((setup) => {
+      setup.hydrateFirst = true;
+      Object.assign(setup, {
+        alignRelationalRecoveryMetadata,
+        serializeWorkspaceBackup,
+        decideCloudReconciliation,
+        hasMeaningfulWorkspace,
+        mergeCloudSubscription,
+        withCloudSubscription,
+        recordsOwner,
+      });
+      setup.cloud.session.user.id = 'user-owner';
+      setup.cloud.workspaceId = 'ws-owner';
+      setup.vaultOwner = 'ws-owner';
+      setup.backup = local;
+      setup.load = async () => remote;
+    });
+    f.startHydration();
+    await f.tick(0);
+    assert.equal(f.cloud.autosaveUnlocked, recordsOwner === 'ws-owner');
+    assert.equal(f.calls.length, 0, 'metadata alignment does not itself write ranch records');
+    if (recordsOwner === 'ws-owner') {
+      assert.deepEqual(f.backup.workspace.workspaceMembers, remote.backup.workspace.workspaceMembers);
+      f.dispose = f.startAutosave();
+      f.backup.workspace.horses.push({ id: 'first-synthetic-horse', name: 'Synthetic signup horse' });
+      f.change();
+      await f.tick(1600);
+      assert.equal(f.calls.length, 1, 'the first subsequent edit reaches actual autosave');
+      assert.equal(f.calls[0].backup.workspace.horses[0].id, 'first-synthetic-horse');
+      f.calls[0].resolve({ ok: true, message: 'Saved' });
+      await f.tick(0);
+    }
+    f.dispose();
+  });
+}
+
 const ids = {
   workspace_memberships: 'id',
   workspace_invitations: 'invitation_id',

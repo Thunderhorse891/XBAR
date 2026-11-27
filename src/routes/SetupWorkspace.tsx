@@ -4,6 +4,9 @@ import { XbarMark } from '@/components/BrandMark';
 import { billingPathForTier } from '@/lib/billingRoutes';
 import { applyWorkspaceProfileDefaults } from '@/lib/workspaceSetupDefaults';
 import { saveWorkspaceBackupToCloud } from '@/lib/cloudWorkspace';
+import { hasMeaningfulWorkspace, serializeWorkspaceBackup } from '@/lib/cloudSyncPolicy';
+import { referencedVaultKeys } from '@/lib/localFileVault';
+import { readRecordsOwner, rememberRecordsOwner } from '@/lib/recordsOwner';
 import { isStaticPreviewHost, isSupabaseConfigured } from '@/lib/platformConfig';
 import { useCloudStore } from '@/store/useCloudStore';
 import { useUiStore } from '@/store/useUiStore';
@@ -31,8 +34,11 @@ export default function SetupWorkspace() {
   const session = useCloudStore((state) => state.session);
   const signOut = useCloudStore((state) => state.signOut);
   const workspaceId = useCloudStore((state) => state.workspaceId);
+  const cloudWorkspaceReady = useCloudStore((state) => state.workspaceReady);
+  const cloudAutosaveReady = useCloudStore((state) => state.autosaveReady);
   const setLastSyncAt = useCloudStore((state) => state.setLastSyncAt);
   const setSyncState = useCloudStore((state) => state.setSyncState);
+  const setAutosaveReady = useCloudStore((state) => state.setAutosaveReady);
   const setWorkspaceAccessProfile = useCloudStore((state) => state.setWorkspaceAccessProfile);
   const pushToast = useUiStore((state) => state.pushToast);
   const [saving, setSaving] = useState(false);
@@ -79,6 +85,9 @@ export default function SetupWorkspace() {
     return '/';
   }, [selectedPlan, location.state]);
   const cloudWorkspaceRequired = supabaseReady && status === 'signed-in' && !workspaceId;
+  const cloudLoading = Boolean(
+    supabaseReady && session && (!cloudWorkspaceReady || (!cloudAutosaveReady && !cloudSetupBlocked)),
+  );
 
   const accessLabel = useMemo(() => {
     if (!supabaseReady) return 'Browser trial';
@@ -96,15 +105,55 @@ export default function SetupWorkspace() {
   const persistCloudWorkspace = async () => {
     if (!supabaseReady || !session?.user) return { ok: true, message: '' };
 
+    const userId = session.user.id;
+    const sourceWorkspaceId = useCloudStore.getState().workspaceId;
+    const backup = exportWorkspaceBackup();
+    const recordsOwner = readRecordsOwner();
+    const hasRecordHistory = Object.entries(backup.workspace).some(
+      ([key, value]) =>
+        Array.isArray(value) && key !== 'workspaceMembers' && key !== 'roleWorkspaces' && value.length > 0,
+    );
+    if (
+      recordsOwner !== (sourceWorkspaceId || `account:${userId}`) ||
+      (!sourceWorkspaceId &&
+        (hasRecordHistory ||
+          backup.workspace.workspaceMembers?.some((member) => member.source !== 'Owner') ||
+          backup.workspace.workspaceMembers?.length > 1)) ||
+      referencedVaultKeys(
+        backup.workspace.documents,
+        backup.workspace.expenseReceipts,
+        backup.workspace.salePacketBuilds,
+      ).length > 0
+    ) {
+      return {
+        ok: false,
+        message:
+          'Existing device records need an ownership review in Settings before cloud setup. No records were uploaded.',
+      };
+    }
     setSyncState('syncing', 'Creating cloud workspace...');
+    // A → B → A also retires this save. Same-account token refreshes do not.
+    let contextChanged = false;
+    const stopWatching = useCloudStore.subscribe((next) => {
+      if (next.session?.user.id !== userId || next.workspaceId !== sourceWorkspaceId) contextChanged = true;
+    });
     let saved: Awaited<ReturnType<typeof saveWorkspaceBackupToCloud>>;
     try {
-      saved = await saveWorkspaceBackupToCloud(exportWorkspaceBackup());
+      saved = await saveWorkspaceBackupToCloud(backup, {
+        expectedContext: { userId, workspaceId: sourceWorkspaceId },
+      });
     } catch (error) {
       saved = {
         ok: false,
         message: error instanceof Error ? error.message : 'Unable to create the cloud workspace.',
       };
+    } finally {
+      stopWatching();
+    }
+
+    const current = useCloudStore.getState();
+    if (contextChanged || current.session?.user.id !== userId || current.workspaceId !== sourceWorkspaceId) {
+      return { ok: false, message: 'Your account or ranch changed while saving setup. Reopen the intended workspace.' };
     }
 
     if (!saved.ok) {
@@ -112,48 +161,109 @@ export default function SetupWorkspace() {
       return saved;
     }
 
+    if (!saved.workspaceId || (sourceWorkspaceId && saved.workspaceId !== sourceWorkspaceId)) {
+      return { ok: false, message: 'The saved ranch could not be verified. Open Settings before adding records.' };
+    }
+
+    // A first cloud save moves these acknowledged records from the account's
+    // pre-workspace namespace. Bind them before publishing the new id so the
+    // normal same-ranch reconciliation can align server-owned owner metadata.
+    // This is not permission to adopt another ranch's records or local files.
+    if (
+      !sourceWorkspaceId &&
+      saved.workspaceId &&
+      readRecordsOwner() === `account:${userId}` &&
+      serializeWorkspaceBackup(backup) === serializeWorkspaceBackup(exportWorkspaceBackup()) &&
+      referencedVaultKeys(
+        backup.workspace.documents,
+        backup.workspace.expenseReceipts,
+        backup.workspace.salePacketBuilds,
+      ).length === 0
+    ) {
+      rememberRecordsOwner(saved.workspaceId);
+    }
+    if (readRecordsOwner() !== saved.workspaceId) {
+      return {
+        ok: false,
+        message:
+          'Cloud setup was acknowledged, but this device’s records could not be connected safely. Open Settings before adding records.',
+      };
+    }
+    setAutosaveReady(false, false);
     if (saved.workspaceId) setWorkspaceAccessProfile(saved.workspaceId, 'Admin');
     if (saved.updatedAt) setLastSyncAt(saved.updatedAt);
     setSyncState('idle', saved.message);
     return saved;
   };
 
+  const existingSetupBlock = () => {
+    const cloud = useCloudStore.getState();
+    if (!cloud.session) return '';
+    if (!cloud.workspaceReady || (!cloud.autosaveReady && !cloudSetupBlocked))
+      return 'Please wait for the initial ranch connection to finish, then retry setup.';
+    const owner = readRecordsOwner();
+    const expected = cloud.workspaceId || `account:${cloud.session.user.id}`;
+    if (owner !== expected && hasMeaningfulWorkspace(exportWorkspaceBackup()))
+      return 'This device already contains ranch work. Open Settings to review ownership before creating a cloud ranch.';
+    return '';
+  };
+
+  const finishSetup = async () => {
+    const startedUser = useCloudStore.getState().session?.user.id;
+    const cloudSaved = await persistCloudWorkspace();
+    if (!cloudSaved.ok) {
+      const message = `${cloudSaved.message} Setup is not connected for cloud saving. Existing work remains on this device.${selectedPlan ? ' Your checkout needs the cloud workspace first.' : ''}`;
+      setFormError(message);
+      if (useCloudStore.getState().session?.user.id === startedUser) setSyncState('error', message);
+      pushToast({ title: 'Cloud setup needs attention', message, tone: 'error' });
+      setCloudSetupBlocked(true);
+      setSaving(false);
+      return;
+    }
+    setFormError('');
+    pushToast({
+      title: 'Ranch setup saved',
+      message: 'Opening your ranch. Cloud saving will finish connecting before record entry.',
+      tone: 'success',
+    });
+    setSaving(false);
+    navigate(postSetupPath, { replace: true });
+  };
+
   const handleSubmit = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     if (signingOut || saving) return;
+    const blocked = existingSetupBlock();
+    if (blocked) {
+      setFormError(blocked);
+      setCloudSetupBlocked(true);
+      return;
+    }
     setSaving(true);
     setCloudSetupBlocked(false);
 
     const result = initializeWorkspace(applyWorkspaceProfileDefaults(form));
-    pushToast({
-      title: result.ok ? 'Ranch created' : 'Setup blocked',
-      message: result.message,
-      tone: result.ok ? 'success' : 'error',
-    });
-
     if (!result.ok) {
+      pushToast({ title: 'Setup blocked', message: result.message, tone: 'error' });
       setFormError(result.message);
       setSaving(false);
       return;
     }
 
-    const cloudSaved = await persistCloudWorkspace();
-    if (!cloudSaved.ok) {
-      const message = `${cloudSaved.message} Your ranch was created on this device, but checkout needs the cloud workspace first.`;
-      setFormError(message);
-      pushToast({ title: 'Cloud workspace not saved', message, tone: 'error' });
-      setCloudSetupBlocked(true);
-      setSaving(false);
-      return;
-    }
-
-    setFormError('');
-    setSaving(false);
-    navigate(postSetupPath, { replace: true });
+    if (supabaseReady && session?.user) setAutosaveReady(false, false);
+    await finishSetup();
   };
 
-  const handleQuickStart = () => {
+  const handleQuickStart = async () => {
     if (signingOut || saving) return;
+    const blocked = existingSetupBlock();
+    if (blocked) {
+      setFormError(blocked);
+      setCloudSetupBlocked(true);
+      return;
+    }
+    setSaving(true);
+    setCloudSetupBlocked(false);
     const businessName = form.businessName.trim() || 'My Ranch LLC';
     const ranchName = form.ranchName.trim() || 'Main Ranch';
     /*
@@ -175,14 +285,13 @@ export default function SetupWorkspace() {
       }),
     );
 
-    pushToast({
-      title: result.ok ? 'Ranch ready' : 'Setup blocked',
-      message: result.ok ? 'Opening your ranch.' : result.message,
-      tone: result.ok ? 'success' : 'error',
-    });
-
     if (result.ok) {
-      navigate(postSetupPath, { replace: true });
+      if (supabaseReady && session?.user) setAutosaveReady(false, false);
+      await finishSetup();
+    } else {
+      pushToast({ title: 'Setup blocked', message: result.message, tone: 'error' });
+      setFormError(result.message);
+      setSaving(false);
     }
   };
 
@@ -333,14 +442,14 @@ export default function SetupWorkspace() {
             {formError ? <div className="clean-form-error">{formError}</div> : null}
 
             <div className="clean-action-stack">
-              <button className="clean-primary-button" type="submit" disabled={saving || signingOut}>
-                {saving ? 'Creating workspace...' : 'Create workspace'}
+              <button className="clean-primary-button" type="submit" disabled={saving || signingOut || cloudLoading}>
+                {saving ? 'Creating workspace...' : cloudLoading ? 'Connecting ranch...' : 'Create workspace'}
               </button>
               {canQuickStart ? (
                 <button
                   className="clean-secondary-button"
                   type="button"
-                  disabled={saving || signingOut}
+                  disabled={saving || signingOut || cloudLoading}
                   onClick={handleQuickStart}
                 >
                   Use preview defaults

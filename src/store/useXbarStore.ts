@@ -1,4 +1,5 @@
 import { hasMeaningfulWorkspace } from '@/lib/cloudSyncPolicy';
+import { workspaceWriteBlockReason } from '@/lib/workspaceWriteGate';
 import { stableStringify } from '@/lib/relationalDiff';
 import { changeHorsePhoto } from '@/lib/horsePhotoGallery';
 import { reviewMedia } from '@/lib/mediaApproval';
@@ -232,6 +233,10 @@ let documentIntakeQueue: Promise<unknown> = Promise.resolve();
 function readIntakeIdentity(): IntakeIdentity {
   const cloud = useCloudStore.getState();
   return { userId: cloud.session?.user?.id ?? '', workspaceId: cloud.workspaceId ?? '' };
+}
+
+function recordWriteBlockReason() {
+  return workspaceWriteBlockReason(useCloudStore.getState(), readRecordsOwner());
 }
 
 function sharedListingContextError(
@@ -1038,6 +1043,8 @@ export const useXbarStore = create<XbarStore>()(
         return { ok: true, message: `${member.email} removed from the workspace.`, id: memberId };
       },
       addHorse: (input) => {
+        const syncBlocked = recordWriteBlockReason();
+        if (syncBlocked) return { ok: false, message: syncBlocked };
         const deniedMessage = requireRoleCapability(get().currentRole, 'createHorse');
         if (deniedMessage) {
           return { ok: false, message: deniedMessage };
@@ -1062,6 +1069,8 @@ export const useXbarStore = create<XbarStore>()(
       },
       createDocumentIntake: async (intakeInput) =>
         serializeDocumentIntake(async () => {
+          const syncBlocked = recordWriteBlockReason();
+          if (syncBlocked) return { ok: false, message: syncBlocked };
           const { files, horseId, source, uploadedBy, label, createHorseFromBatch } = intakeInput;
           // Creating horse profiles from a batch creates horses: it needs
           // createHorse, not just the right to upload a paper.
@@ -1220,6 +1229,8 @@ export const useXbarStore = create<XbarStore>()(
             let documents: DocumentRecord[] = await Promise.all(
               fileList.map(async (file) => {
                 let uploadedAsset: Awaited<ReturnType<typeof uploadDocumentAssetToCloud>> = null;
+                const syncBlocked = recordWriteBlockReason();
+                if (syncBlocked) throw new Error(syncBlocked);
                 if (cloudUploadsAllowed) {
                   try {
                     uploadedAsset = await uploadDocumentAssetToCloud({
@@ -1438,6 +1449,8 @@ export const useXbarStore = create<XbarStore>()(
              * outcomes by a wide margin -- the alternative puts one customer's
              * records inside another customer's ranch.
              */
+            const syncBlocked = recordWriteBlockReason();
+            if (syncBlocked) return { ok: false, message: syncBlocked };
             if (intakeIdentityChanged(intakeIdentity, readIntakeIdentity())) {
               return {
                 ok: false,
@@ -1493,7 +1506,10 @@ export const useXbarStore = create<XbarStore>()(
             };
           } catch (error) {
             console.error('Document upload failed', error);
-            return { ok: false, message: 'Document upload failed. Check the selected files and try again.' };
+            return {
+              ok: false,
+              message: recordWriteBlockReason() ?? 'Document upload failed. Check the selected files and try again.',
+            };
           } finally {
             // Released on every path, including the throw above: leaving the
             // counter raised would make the vault unsweepable for the session.
@@ -1883,6 +1899,8 @@ export const useXbarStore = create<XbarStore>()(
         };
       },
       uploadHorseMedia: async ({ horseId, files, kind, makePrimary }) => {
+        const syncBlocked = recordWriteBlockReason();
+        if (syncBlocked) return { ok: false, message: syncBlocked };
         const deniedMessage = requireRoleCapability(get().currentRole, 'uploadMedia');
         if (deniedMessage) {
           return { ok: false, message: deniedMessage };
@@ -1960,6 +1978,8 @@ export const useXbarStore = create<XbarStore>()(
           // The same account and ranch must still be here to receive them; if
           // not, the stored files stay orphaned in the ranch they were written
           // for rather than being attached to a horse in another one.
+          const syncBlocked = recordWriteBlockReason();
+          if (syncBlocked) return { ok: false, message: syncBlocked };
           if (photoBatchIdentityChanged(uploadTarget, readIntakeIdentity())) {
             return {
               ok: false,

@@ -15,6 +15,7 @@ import ErrorBoundary from './components/ErrorBoundary';
 import { RequireCloudAuth } from './components/RequireCloudAuth';
 import { RequireSharedListings } from './components/RequireSubscriptionFeature';
 import { RequireWorkspaceSetup } from './components/RequireWorkspaceSetup';
+import { RequireWorkspaceWrites } from './components/RequireWorkspaceWrites';
 import { SubscriptionEnforcement } from './components/SubscriptionEnforcement';
 import { InteractionShell } from './components/InteractionSystem';
 import { OwnerTestModeBar } from './components/OwnerTestModeBar';
@@ -295,7 +296,9 @@ export default function App() {
               path="/"
               element={
                 <RequireCloudAuth>
-                  <MainLayout />
+                  <RequireWorkspaceWrites>
+                    <MainLayout />
+                  </RequireWorkspaceWrites>
                 </RequireCloudAuth>
               }
             >
