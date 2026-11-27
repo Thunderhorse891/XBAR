@@ -69,7 +69,31 @@ export function brandEmailHtml(html, text) {
   );
 }
 
-export async function sendEmail({ to, subject, html, text, fromName, fromEmail, replyTo }) {
+export const EMAIL_UNAVAILABLE_MESSAGE = 'Email service is currently unavailable. Please contact support.';
+
+export async function sendEmail(input) {
+  try {
+    const result = await sendEmailInternal(input);
+    if (result.ok) return result;
+    console.warn('xbar_email_unavailable', {
+      reason: result.skipped
+        ? 'not_sent'
+        : result.retryable
+          ? 'rate_limited'
+          : result.rejected
+            ? 'rejected'
+            : 'unconfirmed',
+    });
+    return { ...result, message: EMAIL_UNAVAILABLE_MESSAGE };
+  } catch {
+    // Transport failures are ambiguous: preserve the absence of rejected /
+    // retryable so lifecycle deduplication does not send a second message.
+    console.warn('xbar_email_unavailable', { reason: 'transport_unconfirmed' });
+    return { ok: false, message: EMAIL_UNAVAILABLE_MESSAGE };
+  }
+}
+
+async function sendEmailInternal({ to, subject, html, text, fromName, fromEmail, replyTo }) {
   const defaultFrom = process.env.EMAIL_FROM_ADDRESS || 'XBAR <no-reply@xbar.app>';
   const from = buildFrom(defaultFrom, fromName, fromEmail);
   const replyToAddress = String(replyTo || '').trim();
@@ -99,11 +123,11 @@ export async function sendEmail({ to, subject, html, text, fromName, fromEmail, 
       }),
     });
     if (!response.ok) {
-      const detail = await response.text().catch(() => '');
+      console.warn('xbar_email_provider_rejected', { provider: 'resend', status: response.status });
       return {
         ok: false,
         ...retryableRejection(response),
-        message: `Resend send failed (${response.status}): ${detail.slice(0, 200)}`,
+        message: EMAIL_UNAVAILABLE_MESSAGE,
       };
     }
     return { ok: true, provider: 'resend' };
@@ -134,11 +158,11 @@ export async function sendEmail({ to, subject, html, text, fromName, fromEmail, 
       }),
     });
     if (!response.ok) {
-      const detail = await response.text().catch(() => '');
+      console.warn('xbar_email_provider_rejected', { provider: 'sendgrid', status: response.status });
       return {
         ok: false,
         ...retryableRejection(response),
-        message: `SendGrid send failed (${response.status}): ${detail.slice(0, 200)}`,
+        message: EMAIL_UNAVAILABLE_MESSAGE,
       };
     }
     return { ok: true, provider: 'sendgrid' };

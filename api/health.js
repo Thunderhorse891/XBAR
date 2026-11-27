@@ -37,7 +37,9 @@ function envValue(name) {
   return process.env[name]?.trim() || '';
 }
 
-export default function handler(req, res) {
+// Internal diagnostic collector for server tooling. Never serialize this
+// directly to an HTTP client; the public handler below projects safe copy.
+export function inspectHealth(req, res) {
   if (req.method !== 'GET' && req.method !== 'HEAD') {
     return sendJson(res, 405, { ok: false, message: 'Method not allowed.' });
   }
@@ -237,8 +239,58 @@ export default function handler(req, res) {
     subsystems,
     checks: {
       billingReady: ok,
+      manualPlanConfirmationRequired: subsystems.paymentLinks && !managedBillingTouched,
     },
     ...(reasons.length ? { reasons } : {}),
     ...(warnings.length ? { warnings } : {}),
+  });
+}
+
+export default function handler(req, res) {
+  return inspectHealth(req, {
+    set statusCode(value) {
+      res.statusCode = value;
+    },
+    setHeader: (...args) => res.setHeader(...args),
+    end(payload) {
+      const body = JSON.parse(payload);
+      if (!body.subsystems) return res.end(payload);
+      const { reasons = [], warnings = [], ...publicStatus } = body;
+      // No raw provider errors, environment names or configured values in
+      // logs. These codes identify the operator action without logging keys.
+      if (reasons.length || warnings.length)
+        console.warn('xbar_service_readiness', {
+          billingReady: body.checks.billingReady,
+          emailConfigured: body.subsystems.email,
+          diagnosticCount: reasons.length + warnings.length,
+        });
+      return res.end(
+        JSON.stringify({
+          ...publicStatus,
+          ...(reasons.length ? { reasons: ['Purchases are currently unavailable. Please contact support.'] } : {}),
+          ...(warnings.length
+            ? {
+                warnings: [
+                  ...(body.checks.manualPlanConfirmationRequired
+                    ? [
+                        'Payment links require manual plan confirmation after payment. Contact support if access has not updated.',
+                      ]
+                    : []),
+                  ...(!body.subsystems.email
+                    ? ['Email service is currently unavailable. Please contact support.']
+                    : []),
+                  ...(body.subsystems.email
+                    ? ['Email delivery needs verification. Please contact support before relying on delivery.']
+                    : []),
+                  ...(!body.subsystems.stripeAnnualPriceIds &&
+                  (body.subsystems.managedBilling || body.subsystems.clientManagedBilling)
+                    ? ['Annual billing is currently unavailable. Choose an available monthly plan.']
+                    : []),
+                ],
+              }
+            : {}),
+        }),
+      );
+    },
   });
 }

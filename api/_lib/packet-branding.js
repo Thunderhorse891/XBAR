@@ -1,12 +1,13 @@
 /* One browser/server contract for buyer-facing ranch identity. Logos are small,
  * self-contained raster files, never URLs: packet generation cannot fetch them. */
 import { isQuickStartSentinel } from './workspace-identity.js';
+import { PublicOperationError } from './public-operation-error.js';
 
 export const MAX_PACKET_LOGO_BYTES = 256 * 1024;
 export const MAX_PACKET_LOGO_DIMENSION = 2048;
 const LOGO_ERROR = 'Choose a valid PNG or JPEG logo under 256 KB and no larger than 2048 × 2048 pixels.';
 function logoError() {
-  throw new Error(LOGO_ERROR);
+  throw new PublicOperationError(LOGO_ERROR);
 }
 function dimensions(width, height) {
   if (
@@ -177,7 +178,7 @@ function text(value, limit, label) {
     value.length > limit ||
     Array.from(value).some((character) => character.charCodeAt(0) < 32 || character.charCodeAt(0) === 127)
   )
-    throw new Error(`${label} must be plain text, at most ${limit} characters.`);
+    throw new PublicOperationError(`${label} must be plain text, at most ${limit} characters.`);
   return value.trim();
 }
 export function normalizePacketWebsite(value) {
@@ -187,7 +188,7 @@ export function normalizePacketWebsite(value) {
   try {
     url = new URL(/^[a-z][a-z0-9+.-]*:/i.test(raw) ? raw : `https://${raw}`);
   } catch {
-    throw new Error('Website must be a valid http or https address.');
+    throw new PublicOperationError('Website must be a valid http or https address.');
   }
   if (
     !['https:', 'http:'].includes(url.protocol) ||
@@ -196,7 +197,7 @@ export function normalizePacketWebsite(value) {
     url.password ||
     /\s/.test(raw)
   )
-    throw new Error('Website must be a valid http or https address without credentials.');
+    throw new PublicOperationError('Website must be a valid http or https address without credentials.');
   return url.href;
 }
 export function validatePacketProfile(profile) {

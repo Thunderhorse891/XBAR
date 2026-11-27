@@ -18,7 +18,14 @@ export async function ownerRequest<T>(action: string, token: string, signal: Abo
   });
   const body = await response.json();
   if (!response.ok || body.ok !== true) {
-    throw new OwnerRequestError(response.status, body.message || 'The owner service is unavailable.');
+    throw new OwnerRequestError(
+      response.status,
+      response.status === 401
+        ? 'Your session could not be verified. Sign in again.'
+        : response.status === 403
+          ? 'Owner access could not be verified. Sign in again.'
+          : 'This section could not load. Refresh to try again or contact support.',
+    );
   }
   return body as T;
 }
@@ -74,7 +81,7 @@ export type OwnerReadinessData = {
     warnings?: string[];
     reasons?: string[];
     subsystems: { email: boolean; remindersCron: boolean };
-    checks: { billingReady: boolean };
+    checks: { billingReady: boolean; manualPlanConfirmationRequired?: boolean };
   };
 };
 
