@@ -284,6 +284,17 @@ test('the ungated tour distinguishes example screens from account signup', async
   );
 });
 
+test('support has a public page with the existing contact and safe record-recovery instructions', async () => {
+  const { marketingPages } = (await load('scripts/marketing/pages.mjs')) as { marketingPages: MarketingPage[] };
+  const support = marketingPages.find((page) => page.path === '/support');
+  assert.ok(support, 'a mailto link alone is not a public support page');
+  assert.match(support.body, /href="mailto:xbarje@gmail.com"/);
+  assert.match(support.body, /Never send passwords or sign-in codes/);
+  assert.match(support.body, /Do not clear app or browser storage/);
+  assert.match(support.body, /href="\/privacy"/);
+  assert.match(support.body, /href="\/terms"/);
+});
+
 test('every public page exposes the approved support contact in navigation and footer', async () => {
   const { marketingPages } = (await load('scripts/marketing/pages.mjs')) as { marketingPages: MarketingPage[] };
   const { renderPage, SUPPORT_EMAIL } = await load('scripts/marketing/render.mjs');
