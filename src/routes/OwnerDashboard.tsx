@@ -1,6 +1,13 @@
 import { useEffect, useState } from 'react';
 import { Link, Navigate } from 'react-router-dom';
-import { ArrowUpRight, CreditCard, LogOut, RefreshCw, ShieldCheck, Users } from 'lucide-react';
+import { ArrowUpRight, CreditCard, LogOut, RefreshCw, ShieldCheck, Users, UserRound } from 'lucide-react';
+import {
+  DropdownMenu,
+  DropdownMenuTrigger,
+  DropdownMenuContent,
+  DropdownMenuItem,
+} from '@/components/ui/dropdown-menu';
+import { serviceCheckTime } from '@/lib/serviceCheckTime';
 import { XbarMark } from '@/components/BrandMark';
 import {
   priceLabel,
@@ -141,6 +148,7 @@ export default function OwnerDashboard() {
   const denied = refused || Boolean(token && deniedToken === token);
   const data = current?.data;
   const readiness = operations?.data;
+  const checkedAt = serviceCheckTime(readiness?.fetchedAt);
   const accounts = directory?.data;
   if (!webDashboard) return <Navigate to="/" replace />;
   if (!session && ['signed-out', 'unavailable'].includes(cloudStatus))
@@ -156,24 +164,34 @@ export default function OwnerDashboard() {
   return (
     <div className="owner-shell">
       <header className="owner-topbar">
-        <Link to="/owner" aria-label="XBAR owner dashboard">
-          <XbarMark width={100} height={57} />
+        <Link className="owner-brand" to="/owner" aria-label="XBAR owner dashboard">
+          <XbarMark width={72} height={41} />
         </Link>
         <span>
           <ShieldCheck size={16} aria-hidden="true" /> Owner access
         </span>
         <Link to="/">My ranch</Link>
-        <button
-          type="button"
-          onClick={() => {
-            void signOut().then((r) => {
-              if (!r.ok) setSignOutError(r.message || 'Sign out failed. Try again.');
-            });
-          }}
-        >
-          <LogOut size={16} aria-hidden="true" />
-          Sign out
-        </button>
+        <DropdownMenu>
+          <DropdownMenuTrigger asChild>
+            <button type="button" aria-label="Account menu">
+              <UserRound size={20} aria-hidden="true" />
+            </button>
+          </DropdownMenuTrigger>
+          <DropdownMenuContent align="end" className="owner-account-menu">
+            <DropdownMenuItem
+              onSelect={() => {
+                setSignOutError('');
+                void signOut()
+                  .then((r) => {
+                    if (!r.ok) setSignOutError('Sign out failed. Try again from the account menu.');
+                  })
+                  .catch(() => setSignOutError('Sign out failed. Try again from the account menu.'));
+              }}
+            >
+              <LogOut size={16} aria-hidden="true" /> Sign out
+            </DropdownMenuItem>
+          </DropdownMenuContent>
+        </DropdownMenu>
       </header>
       <main className="owner-main">
         <div className="owner-title">
@@ -183,7 +201,7 @@ export default function OwnerDashboard() {
             <p>Customers, subscriptions, and the services that keep them running.</p>
           </div>
           <button
-            className="xs-btn xs-btn--primary"
+            className="xs-btn owner-refresh"
             type="button"
             onClick={refresh}
             disabled={denied || (!current && !operations && !directory)}
@@ -216,15 +234,33 @@ export default function OwnerDashboard() {
                 <div>
                   <p className="owner-eyebrow">LAUNCH & OPERATIONS</p>
                   <h2 id="owner-readiness-title">What needs your attention</h2>
-                  <p>
-                    Checked {new Date(readiness.fetchedAt).toLocaleString()}. Configuration checks do not verify inbox
-                    delivery, recovery, or a complete purchase.
+                  <p className="owner-checked">
+                    {checkedAt ? (
+                      <>
+                        Checked <time dateTime={checkedAt.iso}>{checkedAt.label}</time>.
+                      </>
+                    ) : (
+                      'Check time unavailable.'
+                    )}{' '}
+                    Configuration checks do not verify inbox delivery, recovery, or a complete purchase.
                   </p>
                 </div>
                 <ul>
-                  {[...(readiness.readiness.reasons || []), ...(readiness.readiness.warnings || [])].map((message) => (
-                    <li key={message}>{message}</li>
-                  ))}
+                  {!readiness.readiness.checks.billingReady && (
+                    <li>Purchases are currently unavailable. Please contact support.</li>
+                  )}
+                  {readiness.readiness.checks.manualPlanConfirmationRequired && (
+                    <li>
+                      Payment links require manual plan confirmation after payment. Contact support if access has not
+                      updated.
+                    </li>
+                  )}
+                  {!readiness.readiness.subsystems.email && (
+                    <li>Email service is currently unavailable. Please contact support.</li>
+                  )}
+                  {Boolean(readiness.readiness.warnings?.length) && readiness.readiness.subsystems.email && (
+                    <li>Email delivery needs verification. Please contact support before relying on delivery.</li>
+                  )}
                   {!readiness.readiness.subsystems.remindersCron && <li>Reminder scheduling is not configured.</li>}
                   <li>
                     Before inviting paying customers, verify a complete purchase, correct workspace access, email

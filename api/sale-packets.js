@@ -10,8 +10,9 @@ import {
 } from './_lib/entitlements.js';
 import { loadHorseContext } from './_lib/horse-context.js';
 import { createSectionedPdf, assemblePacketPdf } from './_lib/pdf.js';
-import { sendEmail } from './_lib/email.js';
+import { sendEmail, EMAIL_UNAVAILABLE_MESSAGE } from './_lib/email.js';
 import { recordAuditEvent } from './_lib/audit.js';
+import { PublicOperationError } from './_lib/public-operation-error.js';
 import { buildServerSaleCredential, ownershipReviewSummary } from './_lib/sale-credential.js';
 import { enforceRateLimit } from './_lib/rate-limit.js';
 import { applyCors } from './_lib/cors.js';
@@ -441,7 +442,7 @@ export default async function handler(req, res) {
       includedDocumentIds: includedDocs.map((doc) => doc.document_id),
       unavailableDocuments: unavailable,
       emailed: Boolean(emailResult.ok),
-      emailMessage: emailResult.message || '',
+      emailMessage: !emailResult.ok && buyerEmail ? EMAIL_UNAVAILABLE_MESSAGE : '',
       verifyUrl,
       seal: {
         version: seal.version,
@@ -453,7 +454,14 @@ export default async function handler(req, res) {
       },
     });
   } catch (error) {
-    return sendJson(res, 500, { ok: false, message: `Sale packet assembly failed: ${error.message}` });
+    console.warn('xbar_sale_packet_unavailable', { reason: 'assembly_or_receipt_failed' });
+    return sendJson(res, 500, {
+      ok: false,
+      message:
+        error instanceof PublicOperationError
+          ? error.message
+          : 'The sale packet could not be prepared. Try again or contact support.',
+    });
   }
 }
 

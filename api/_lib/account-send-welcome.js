@@ -30,7 +30,10 @@ export default async function handler(req, res) {
 
   const supabase = getSupabaseAdmin();
   if (!supabase) {
-    return sendJson(res, 503, { ok: false, message: 'Supabase admin credentials are not configured.' });
+    return sendJson(res, 503, {
+      ok: false,
+      message: 'Email service is currently unavailable. Please contact support.',
+    });
   }
 
   const accessToken = req.headers.authorization?.replace(/^Bearer\s+/i, '').trim() || '';
@@ -40,7 +43,7 @@ export default async function handler(req, res) {
 
   const { data: userData, error: userError } = await supabase.auth.getUser(accessToken);
   if (userError || !userData?.user) {
-    return sendJson(res, 401, { ok: false, message: userError?.message || 'Unable to verify the signed-in user.' });
+    return sendJson(res, 401, { ok: false, message: 'Your session could not be verified. Sign in again.' });
   }
 
   try {
@@ -48,8 +51,15 @@ export default async function handler(req, res) {
     if (result.ok) {
       return sendJson(res, 200, result);
     }
-    return sendJson(res, 502, result);
-  } catch (error) {
-    return sendJson(res, 500, { ok: false, message: error instanceof Error ? error.message : 'Welcome email failed.' });
+    return sendJson(res, 502, {
+      ...result,
+      message: 'Email service is currently unavailable. Please contact support.',
+    });
+  } catch {
+    console.warn('xbar_welcome_email_unavailable', { reason: 'send_or_receipt_unconfirmed' });
+    return sendJson(res, 500, {
+      ok: false,
+      message: 'Email service is currently unavailable. Please contact support.',
+    });
   }
 }

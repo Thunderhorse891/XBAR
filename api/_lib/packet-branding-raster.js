@@ -1,4 +1,5 @@
 import { validatePacketLogo } from './packet-branding.js';
+import { PublicOperationError } from './public-operation-error.js';
 
 // Web Streams API works in both the browser and the supported Node runtime.
 async function validatePngRaster(logo) {
@@ -95,6 +96,8 @@ export async function validatePacketLogoRaster(value) {
     }
     return customerLogo;
   } catch {
-    throw new Error('The packet logo could not be decoded. Replace it with a valid PNG or JPEG in Settings.');
+    throw new PublicOperationError(
+      'The packet logo could not be decoded. Replace it with a valid PNG or JPEG in Settings.',
+    );
   }
 }

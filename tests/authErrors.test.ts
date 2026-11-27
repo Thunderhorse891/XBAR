@@ -44,3 +44,13 @@ test('the offline message names the fix, not the symptom', () => {
   // It has to tell someone what to do; "network error" restates the failure.
   assert.match(OFFLINE_MESSAGE, /connection/i);
 });
+
+test('configuration and credential diagnostics do not reach the sign-in form', () => {
+  for (const raw of [
+    'SMTP authentication failed',
+    'Missing RESEND_API_KEY',
+    'SENDGRID_API_KEY invalid',
+    'sk_live_synthetic',
+  ])
+    assert.equal(describeAuthError(raw), 'The account service is currently unavailable. Please contact support.');
+});
