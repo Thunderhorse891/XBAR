@@ -1,0 +1,16 @@
+{
+  "schemaVersion": 1,
+  "approvedRevision": "original-blue-20261127-v2",
+  "approvedSourceSha256": "43b7b697184aaa4906f39df66698f2154b8a60b6606320557d1d011018334e98",
+  "web": {
+    "appleTouch": "/brand/icons/original-blue-20261127-v2/icon-180.png",
+    "favicon": "/brand/icons/original-blue-20261127-v2/icon-32.png",
+    "favicon16": "/brand/icons/original-blue-20261127-v2/icon-16.png",
+    "normal192": "/brand/icons/original-blue-20261127-v2/icon-192.png",
+    "normal512": "/brand/icons/original-blue-20261127-v2/icon-512.png",
+    "maskable512": "/brand/icons/original-blue-20261127-v2/icon-maskable-512.png",
+    "inAppLogo": "/brand/xbar-original-lockup-480.png"
+  },
+  "installIdentity": { "start_url": "/app", "id": "/app", "scope": "/" },
+  "native": { "appId": "com.xbar.ranch", "changed": false }
+}

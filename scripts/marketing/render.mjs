@@ -1,4 +1,5 @@
 import { signatureSvg } from './signature.mjs';
+import { iconUrls } from '../brand/icon-assets.mjs';
 
 // Shared HTML rendering for the static marketing site.
 // Every public page is complete server-generated HTML: view-source shows the
@@ -244,8 +245,9 @@ export function renderPage(
     <link rel="stylesheet" href="/brand/xbar-brand-tokens.css" />
     <link rel="stylesheet" href="/site.css" />
     <link rel="stylesheet" href="/brand/xbar-signature.css" />${isLanding ? '\n    <link rel="stylesheet" href="/landing.css" />' : ''}
-    <link rel="icon" type="image/png" href="/brand/xbar-original-icon-32.png" />
-    <link rel="apple-touch-icon" href="/brand/xbar-original-icon-180.png" />
+    <link rel="icon" type="image/png" sizes="32x32" href="${iconUrls().favicon}" />
+    <link rel="icon" type="image/png" sizes="16x16" href="${iconUrls().favicon16}" />
+    <link rel="apple-touch-icon" href="${iconUrls().appleTouch}" />
     <script type="application/ld+json">${JSON.stringify(baseJsonLd)}</script>
     <script defer src="/site.js"></script>
     <script type="module" src="${esc(signatureScript)}"></script>${isLanding ? `\n    <script type="module" src="${esc(landingScript)}"></script>` : ''}
