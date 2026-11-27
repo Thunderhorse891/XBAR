@@ -141,7 +141,12 @@ export default function Documents() {
       screen.active = false;
     };
   }, [searchParams]);
-  const [intakeOutcome, setIntakeOutcome] = useState<{ ok: boolean; message: string; warning?: boolean } | null>(null);
+  const [intakeOutcome, setIntakeOutcome] = useState<{
+    ok: boolean;
+    message: string;
+    warning?: boolean;
+    cloudSaved?: boolean;
+  } | null>(null);
   const requestedDocumentAction = requestedHorse
     ? buildHorseDocumentActions(
         requestedHorse,
@@ -554,7 +559,12 @@ export default function Documents() {
         }
         return;
       }
-      setIntakeOutcome({ ok: result.ok, message: result.message, warning: result.warning });
+      setIntakeOutcome({
+        ok: result.ok,
+        message: result.message,
+        warning: result.warning,
+        cloudSaved: result.cloudSaved,
+      });
       if (result.ok) {
         const createdHorseIds = result.createdHorseIds ?? [];
         setFiles([]);
@@ -681,7 +691,13 @@ export default function Documents() {
           className={`hc-upload-outcome${intakeOutcome.ok && !intakeOutcome.warning ? '' : ' hc-upload-outcome--error'}`}
           role={intakeOutcome.ok && !intakeOutcome.warning ? 'status' : 'alert'}
         >
-          <strong>{intakeOutcome.ok && !intakeOutcome.warning ? 'Intake finished' : 'Upload needs attention'}</strong>
+          <strong>
+            {intakeOutcome.ok && !intakeOutcome.warning
+              ? intakeOutcome.cloudSaved
+                ? 'Files saved to cloud'
+                : 'Intake finished'
+              : 'Upload needs attention'}
+          </strong>
           <span>{intakeOutcome.message}</span>
           {!intakeOutcome.ok ? (
             <span>
@@ -855,7 +871,9 @@ export default function Documents() {
             <div className="hc-upload-progress" role="status" aria-live="polite">
               {isSubmitting
                 ? intakeProgress
-                  ? `Reading ${intakeProgress.processed} of ${intakeProgress.total} files. Keep this screen open while XBAR reads and saves your intake.`
+                  ? intakeProgress.phase === 'Confirming cloud records'
+                    ? 'Files uploaded. Confirming the cloud records. Keep this screen open.'
+                    : `Reading ${intakeProgress.processed} of ${intakeProgress.total} files. Keep this screen open while XBAR reads and saves your intake.`
                   : 'Adding files and saving your intake. Keep this screen open.'
                 : files.length
                   ? `${files.length} file${files.length === 1 ? '' : 's'} selected. Ready to add.`

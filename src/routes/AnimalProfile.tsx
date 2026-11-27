@@ -153,9 +153,9 @@ export default function AnimalProfile() {
         makePrimary: true,
       });
       pushToast({
-        title: result.ok ? 'Photo added' : 'Upload failed',
+        title: result.ok ? (result.warning ? 'Photo upload needs attention' : 'Photo added') : 'Upload failed',
         message: result.message,
-        tone: result.ok ? 'success' : 'error',
+        tone: result.ok ? (result.warning ? 'warning' : 'success') : 'error',
       });
     } catch {
       pushToast({ title: 'Upload failed', message: 'The photo could not be uploaded. Try again.', tone: 'error' });

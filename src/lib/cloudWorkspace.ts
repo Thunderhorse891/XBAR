@@ -1998,7 +1998,7 @@ export async function uploadMediaAssetToCloud(params: { file: File; horseId: str
   if (!path) {
     return null;
   }
-  const { error } = await client.storage.from(supabaseConfig.mediaBucket).upload(path, params.file, {
+  const { data, error } = await client.storage.from(supabaseConfig.mediaBucket).upload(path, params.file, {
     upsert: false,
     contentType: params.file.type || undefined,
   });
@@ -2006,6 +2006,7 @@ export async function uploadMediaAssetToCloud(params: { file: File; horseId: str
   if (error) {
     throw error;
   }
+  if (data?.path !== path) throw new Error('Photo storage did not confirm the original file.');
 
   // The horse-media bucket is private, so there is deliberately no public URL
   // here. Callers persist `storagePath` and every render resolves a
@@ -2128,7 +2129,7 @@ export async function uploadDocumentAssetToCloud(params: {
     return null;
   }
 
-  const { error } = await client.storage.from(supabaseConfig.documentBucket).upload(path, params.file, {
+  const { data, error } = await client.storage.from(supabaseConfig.documentBucket).upload(path, params.file, {
     upsert: false,
     contentType: params.file.type || undefined,
   });
@@ -2136,6 +2137,7 @@ export async function uploadDocumentAssetToCloud(params: {
   if (error) {
     throw error;
   }
+  if (data?.path !== path) throw new Error('Document storage did not confirm the original file.');
 
   return {
     storagePath: path,
@@ -2174,6 +2176,92 @@ export async function loadWorkspaceStorageBytes(): Promise<number> {
     throw new Error('Cloud storage usage returned an invalid value.');
   }
   return bytes;
+}
+
+export type UploadedRecordReference = { id: string; storagePath: string };
+
+/** Read the exact references ordinary autosave must persist. Never performs a
+ * second write, adopts another ranch, or accepts a recovery snapshot as proof. */
+export async function confirmUploadedRecordReferences(params: {
+  identity: IntakeIdentity;
+  kind: 'documents' | 'photos';
+  records: UploadedRecordReference[];
+}): Promise<boolean> {
+  const { identity, kind, records } = params;
+  if (!identity.userId || !isWorkspaceStorageKey(identity.workspaceId) || !records.length) return false;
+  if (records.some((record) => !record.id || !record.storagePath.startsWith(`${identity.workspaceId.toLowerCase()}/`)))
+    return false;
+  const client = getSupabaseClient();
+  if (!client) return false;
+  const timeout = new AbortController();
+  let expire: (value: false) => void = () => {};
+  const expired = new Promise<false>((resolve) => {
+    expire = resolve;
+  });
+  const timer = setTimeout(() => {
+    timeout.abort();
+    expire(false);
+  }, 5000);
+  try {
+    const read = async () => {
+      const session = await getActiveSession();
+      if (session?.user.id !== identity.userId) return false;
+      const access = await loadWorkspaceAccessProfile(session, { forEntitlements: true });
+      if (access.lookupFailed || access.workspaceId !== identity.workspaceId) return false;
+      const table = kind === 'documents' ? 'documents' : 'horses';
+      const idColumn = kind === 'documents' ? 'document_id' : 'horse_id';
+      for (let start = 0; start < records.length; start += 50) {
+        const expected = records.slice(start, start + 50);
+        const { data, error } = await client
+          .from(table)
+          .select(`${idColumn}, payload`)
+          .eq('workspace_id', identity.workspaceId)
+          .in(idColumn, [...new Set(expected.map((record) => record.id))])
+          .abortSignal(timeout.signal);
+        if (error || !Array.isArray(data)) return false;
+        if (
+          !expected.every((record) =>
+            data.some((row) => {
+              const values: Record<string, unknown> = row;
+              if (values[idColumn] !== record.id || !isRecord(values.payload)) return false;
+              if (kind === 'documents') return values.payload.storagePath === record.storagePath;
+              return (
+                Array.isArray(values.payload.gallery) &&
+                values.payload.gallery.some(
+                  (asset: unknown) =>
+                    isRecord(asset) && asset.storagePath === record.storagePath && asset.status !== 'Archived',
+                )
+              );
+            }),
+          )
+        )
+          return false;
+      }
+      return (await getActiveSession())?.user.id === identity.userId;
+    };
+    return await Promise.race([read(), expired]);
+  } catch {
+    return false;
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
+/** Give ordinary autosave its debounce window, then distinguish verified rows
+ * from pending work. Retrying this read cannot re-upload or duplicate bytes. */
+export async function waitForUploadedRecordReferences(params: Parameters<typeof confirmUploadedRecordReferences>[0]) {
+  try {
+    for (let attempt = 0; attempt < 4; attempt++) {
+      if (attempt) await new Promise((resolve) => setTimeout(resolve, 1600));
+      if (await confirmUploadedRecordReferences(params)) return true;
+      if ((await getActiveSession())?.user.id !== params.identity.userId) return false;
+    }
+    return false;
+  } catch {
+    // The file/reference is already retained. A failed confirmation must not
+    // turn it into a failed intake that invites uploading the bytes twice.
+    return false;
+  }
 }
 
 /**

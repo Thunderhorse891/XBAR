@@ -24,6 +24,7 @@ const { createEmptyWorkspaceState, createHorseRecord } = await import('../../src
 const { useXbarStore } = await import('../../src/store/useXbarStore.ts');
 const { useCloudStore } = await import('../../src/store/useCloudStore.ts');
 const { rememberRecordsOwner } = await import('../../src/lib/recordsOwner.ts');
+const { confirmUploadedRecordReferences } = await import('../../src/lib/cloudWorkspace.ts');
 await new Promise((resolve) => setImmediate(resolve));
 const workspace = '11111111-1111-4111-8111-111111111111';
 const storage = new Map();
@@ -35,9 +36,15 @@ beforeEach(() => {
   storage.clear();
   Object.assign(supabaseConfig, { url: 'https://synthetic.invalid', anonKey: 'fixture', relationalSyncEnabled: true });
   setCloudSubscriptionClient({
-    auth: { getSession: async () => ({ data: { session: { user: { id: 'synthetic-user' } } }, error: null }) },
+    auth: {
+      getSession: async () => {
+        if (f.failAuthAfterMetadata && f.calls.some((call) => call.type === 'metadata-read'))
+          throw new Error('Synthetic auth read failed');
+        return { data: { session: { user: { id: f.sessionUser ?? 'synthetic-user' } } }, error: null };
+      },
+    },
     from(table) {
-      assert.equal(table, 'workspaces');
+      assert.ok(['workspaces', 'documents', 'horses'].includes(table));
       const query = {
         select() {
           return this;
@@ -45,8 +52,31 @@ beforeEach(() => {
         eq() {
           return this;
         },
+        in(_column, ids) {
+          this.ids = ids;
+          return this;
+        },
+        abortSignal() {
+          return this;
+        },
         async maybeSingle() {
-          return { data: { id: workspace }, error: null };
+          return { data: { id: f.serverWorkspace ?? workspace }, error: null };
+        },
+        then(resolve, reject) {
+          f.calls.push({ type: 'metadata-read', table, ids: this.ids });
+          if (f.hangMetadata) return new Promise(() => {});
+          const rows = f.pendingMetadata
+            ? []
+            : table === 'documents'
+              ? useXbarStore
+                  .getState()
+                  .documents.filter((d) => this.ids.includes(d.id))
+                  .map((d) => ({ document_id: d.id, payload: d }))
+              : useXbarStore
+                  .getState()
+                  .horses.filter((h) => this.ids.includes(h.id))
+                  .map((h) => ({ horse_id: h.id, payload: h }));
+          return Promise.resolve({ data: rows, error: null }).then(resolve, reject);
         },
       };
       return query;
@@ -60,7 +90,7 @@ beforeEach(() => {
         async upload(path, file) {
           f.calls.push({ type: 'storage', bucket, path, name: file.name });
           return {
-            data: f.failStorage ? null : { path },
+            data: f.failStorage || f.missingStorageAck ? null : { path },
             error: f.failStorage
               ? { statusCode: '403', message: 'Synthetic private Storage error', error: 'Unauthorized' }
               : null,
@@ -114,8 +144,12 @@ const photo = () =>
   });
 
 test('acknowledged same-ranch binding reaches both real Storage helpers and records their paths', async () => {
-  assert.equal((await intake()).ok, true);
-  assert.equal((await photo()).ok, true);
+  const documentResult = await intake();
+  const photoResult = await photo();
+  assert.equal(documentResult.ok, true);
+  assert.equal(photoResult.ok, true);
+  assert.equal(documentResult.cloudSaved, true);
+  assert.equal(photoResult.cloudSaved, true);
   const writes = f.calls.filter((x) => x.type === 'storage');
   assert.deepEqual(
     writes.map((x) => x.bucket),
@@ -171,6 +205,88 @@ test('intentional device-only intake remains a normal completion and identifies 
   assert.match(result.message, /1 file saved on this device only/i);
   assert.equal(useXbarStore.getState().documents[0].localFileKey, 'synthetic-local-file');
   assert.deepEqual(f.calls, []);
+});
+
+test('Storage without an acknowledgement cannot fabricate a usable original', async () => {
+  f.missingStorageAck = true;
+  const result = await intake();
+  assert.equal(result.cloudSaved, false);
+  assert.equal(result.warning, true);
+  assert.equal(useXbarStore.getState().documents[0].storagePath, undefined);
+  assert.equal((await photo()).ok, false);
+  assert.deepEqual(useXbarStore.getState().horses[0].gallery, []);
+});
+
+test('metadata failure keeps the same upload references pending; read retry never uploads a second copy', async () => {
+  f.pendingMetadata = true;
+  const result = await intake();
+  assert.equal(result.ok, true, 'retain the staged record for ordinary autosave retry');
+  assert.equal(result.cloudSaved, false);
+  assert.equal(result.warning, true);
+  assert.match(result.message, /cloud records are not confirmed/i);
+  const document = useXbarStore.getState().documents[0];
+  const stored = f.calls.filter((call) => call.type === 'storage');
+  assert.equal(stored.length, 1);
+  f.pendingMetadata = false;
+  assert.equal(
+    await confirmUploadedRecordReferences({
+      identity: { userId: 'synthetic-user', workspaceId: workspace },
+      kind: 'documents',
+      records: [{ id: document.id, storagePath: document.storagePath }],
+    }),
+    true,
+  );
+  assert.equal(useXbarStore.getState().documents.length, 1);
+  assert.equal(f.calls.filter((call) => call.type === 'storage').length, 1);
+  assert.equal(useXbarStore.getState().documents[0].storagePath, stored[0].path);
+});
+
+test('metadata confirmation refuses another account or workspace before reading any record', async () => {
+  const params = {
+    identity: { userId: 'synthetic-user', workspaceId: workspace },
+    kind: 'photos',
+    records: [{ id: 'horse-synthetic', storagePath: `${workspace}/horses/synthetic.png` }],
+  };
+  f.sessionUser = 'other-user';
+  assert.equal(await confirmUploadedRecordReferences(params), false);
+  f.sessionUser = 'synthetic-user';
+  f.serverWorkspace = '22222222-2222-4222-8222-222222222222';
+  assert.equal(await confirmUploadedRecordReferences(params), false);
+  assert.deepEqual(f.calls, []);
+});
+
+test('an uploaded photo without its relational reference is pending, never cloud-saved', async () => {
+  f.pendingMetadata = true;
+  const result = await photo();
+  assert.equal(result.ok, true);
+  assert.equal(result.cloudSaved, false);
+  assert.equal(result.warning, true);
+  assert.match(result.message, /horse record cloud save is not confirmed/i);
+  assert.equal(f.calls.filter((call) => call.type === 'storage').length, 1);
+  assert.equal(useXbarStore.getState().horses[0].gallery.length, 1);
+});
+
+test('confirmation auth failure cannot relabel an already retained upload as a failed intake', async () => {
+  f.failAuthAfterMetadata = true;
+  const result = await intake();
+  assert.equal(result.ok, true);
+  assert.equal(result.cloudSaved, false);
+  assert.equal(result.warning, true);
+  assert.equal(useXbarStore.getState().documents.length, 1);
+  assert.equal(f.calls.filter((call) => call.type === 'storage').length, 1);
+});
+
+test('a stalled metadata read has a bounded pending result', async (t) => {
+  t.mock.timers.enable({ apis: ['setTimeout'] });
+  f.hangMetadata = true;
+  const pending = confirmUploadedRecordReferences({
+    identity: { userId: 'synthetic-user', workspaceId: workspace },
+    kind: 'photos',
+    records: [{ id: 'horse-synthetic', storagePath: `${workspace}/horses/synthetic.png` }],
+  });
+  await new Promise((resolve) => setImmediate(resolve));
+  t.mock.timers.tick(5000);
+  assert.equal(await pending, false);
 });
 
 test('Documents renders a persistent alert and warning toast for device-only originals', async () => {

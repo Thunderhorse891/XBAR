@@ -42,8 +42,10 @@ import type {
 export type ActionResult = {
   ok: boolean;
   message: string;
-  /** The action retained records, but one or more original files did not reach cloud storage. */
+  /** Records were retained, but original files or their cloud references need attention. */
   warning?: boolean;
+  /** True only after original-file Storage acknowledgement and scoped relational readback. */
+  cloudSaved?: boolean;
   id?: string;
   createdHorseIds?: string[];
   duplicateCount?: number;
