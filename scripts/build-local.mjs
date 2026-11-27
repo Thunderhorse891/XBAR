@@ -6,6 +6,7 @@ const env = {
   VITE_ROUTER_MODE: 'browser',
   VITE_RUNTIME_MONITORING_ENABLED: 'false',
   VITE_STATIC_TARGET: 'web',
+  XBAR_LOCAL_COPILOT_QA: '1',
 };
 
 delete env.VITE_SUPABASE_URL;

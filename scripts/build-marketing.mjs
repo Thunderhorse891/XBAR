@@ -162,10 +162,15 @@ console.log(
   `[marketing] wrote ${pages.length + 1} pages, sample packet, site.css, and sitemap.xml (${pages.length} sitemap URLs)`,
 );
 
-// Isolated fictional public demo. Existing app sources and service gates stay unchanged.
-const { execFileSync } = await import('node:child_process');
-execFileSync(
-  process.execPath,
-  [path.join(path.dirname(fileURLToPath(import.meta.url)), 'build-copilot-preview.mjs'), 'dist/copilot-demo'],
-  { stdio: 'inherit' },
-);
+// Keep the unpromoted fictional demo in previews. A support release must not publish it.
+if (
+  process.env.VERCEL_ENV !== 'production' &&
+  (process.env.VERCEL_ENV === 'preview' || process.env.XBAR_LOCAL_COPILOT_QA === '1')
+) {
+  const { execFileSync } = await import('node:child_process');
+  execFileSync(
+    process.execPath,
+    [path.join(path.dirname(fileURLToPath(import.meta.url)), 'build-copilot-preview.mjs'), 'dist/copilot-demo'],
+    { stdio: 'inherit' },
+  );
+}
