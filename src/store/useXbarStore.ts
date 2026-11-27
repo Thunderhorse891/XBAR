@@ -1362,6 +1362,9 @@ export const useXbarStore = create<XbarStore>()(
             const localDocumentCount = documents.filter(
               (document) => !document.storagePath && !document.localFileKey,
             ).length;
+            const deviceOnlyFileCount = documents.filter(
+              (document) => !document.storagePath && Boolean(document.localFileKey),
+            ).length;
             const createdHorses = createdHorseBundles.map((bundle) => bundle.horse);
             const createdOwnershipRecords = createdHorseBundles.map((bundle) => bundle.ownershipRecord);
 
@@ -1497,7 +1500,8 @@ export const useXbarStore = create<XbarStore>()(
 
             return {
               ok: true,
-              message: `${documents.length} file${documents.length === 1 ? '' : 's'} entered the document queue.${batchConflicts.size ? ` ${batchConflicts.size} files need source review. No horse was created from those files.` : ''}${duplicateCount ? ` ${duplicateCount} duplicate warning${duplicateCount === 1 ? '' : 's'} need review: compare files, keep a copy deliberately, or discard the extra. No files were removed.` : ''}${uncheckedLegacy ? ` Exact-file checks could not cover ${uncheckedLegacy} older file${uncheckedLegacy === 1 ? '' : 's'} whose original was unavailable.` : ''}${createdHorses.length ? ` ${createdHorses.length} new horse record${createdHorses.length === 1 ? ' was' : 's were'} created from the upload batch.` : ''}${omittedHorseCount ? ` ${omittedHorseCount} additional horse candidate${omittedHorseCount === 1 ? ' was' : 's were'} left for review because the horse limit was reached.` : ''}${localDocumentCount ? ` ${localDocumentCount} kept as metadata only — this browser could not store the file on this device either.` : ''}${capacityUnverified ? ' Cloud storage could not be reached, so these are on this device only — upload them again once it returns to put them in the cloud.' : ''}`,
+              warning: deviceOnlyFileCount > 0 || localDocumentCount > 0,
+              message: `${documents.length} file${documents.length === 1 ? '' : 's'} entered the document queue.${deviceOnlyFileCount ? ` ${deviceOnlyFileCount} file${deviceOnlyFileCount === 1 ? ' saved' : 's saved'} on this device only. The original${deviceOnlyFileCount === 1 ? ' has' : 's have'} not reached cloud storage. Keep the original files and this browser profile. Review cloud status and storage access in Settings before uploading the originals again.` : ''}${batchConflicts.size ? ` ${batchConflicts.size} files need source review. No horse was created from those files.` : ''}${duplicateCount ? ` ${duplicateCount} duplicate warning${duplicateCount === 1 ? '' : 's'} need review: compare files, keep a copy deliberately, or discard the extra. No files were removed.` : ''}${uncheckedLegacy ? ` Exact-file checks could not cover ${uncheckedLegacy} older file${uncheckedLegacy === 1 ? '' : 's'} whose original was unavailable.` : ''}${createdHorses.length ? ` ${createdHorses.length} new horse record${createdHorses.length === 1 ? ' was' : 's were'} created from the upload batch.` : ''}${omittedHorseCount ? ` ${omittedHorseCount} additional horse candidate${omittedHorseCount === 1 ? ' was' : 's were'} left for review because the horse limit was reached.` : ''}${localDocumentCount ? ` ${localDocumentCount} kept as metadata only — this browser could not store the file on this device either.` : ''}${capacityUnverified ? ' Cloud storage could not be reached, so these are on this device only — upload them again once it returns to put them in the cloud.' : ''}`,
               id: batch.id,
               createdHorseIds: createdHorses.map((horse) => horse.id),
               duplicateCount,

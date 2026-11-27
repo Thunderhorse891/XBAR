@@ -42,6 +42,8 @@ import type {
 export type ActionResult = {
   ok: boolean;
   message: string;
+  /** The action retained records, but one or more original files did not reach cloud storage. */
+  warning?: boolean;
   id?: string;
   createdHorseIds?: string[];
   duplicateCount?: number;

@@ -128,7 +128,15 @@ export default function AnimalProfile() {
   async function onPhotoSelected(files: File[], ticket: PhotoSelectionTicket) {
     if (!files.length || photoUploadPending.current) return;
     const targetHorseId = photoSelection.consume(ticket);
-    if (!targetHorseId) return;
+    if (!targetHorseId) {
+      pushToast({
+        title: 'Photo not added',
+        message:
+          'The horse, ranch, or account changed while the file picker was open. Reopen Add Photo on the intended horse and select the file again.',
+        tone: 'warning',
+      });
+      return;
+    }
     photoUploadPending.current = true;
     setUploadingPhoto(true);
     try {

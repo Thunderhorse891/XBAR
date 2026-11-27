@@ -141,7 +141,7 @@ export default function Documents() {
       screen.active = false;
     };
   }, [searchParams]);
-  const [intakeOutcome, setIntakeOutcome] = useState<{ ok: boolean; message: string } | null>(null);
+  const [intakeOutcome, setIntakeOutcome] = useState<{ ok: boolean; message: string; warning?: boolean } | null>(null);
   const requestedDocumentAction = requestedHorse
     ? buildHorseDocumentActions(
         requestedHorse,
@@ -538,9 +538,13 @@ export default function Documents() {
         createHorseFromBatch,
       });
       pushToast({
-        title: result.ok ? 'Document intake updated' : 'Document upload blocked',
+        title: result.ok
+          ? result.warning
+            ? 'Original files need attention'
+            : 'Document intake updated'
+          : 'Document upload blocked',
         message: result.message,
-        tone: result.ok ? 'success' : 'error',
+        tone: result.ok ? (result.warning ? 'warning' : 'success') : 'error',
       });
       // A completed intake must not navigate over a newer screen or horse selection.
       if (!submissionScreen.active || intakeScreenRef.current !== submissionScreen) {
@@ -550,7 +554,7 @@ export default function Documents() {
         }
         return;
       }
-      setIntakeOutcome({ ok: result.ok, message: result.message });
+      setIntakeOutcome({ ok: result.ok, message: result.message, warning: result.warning });
       if (result.ok) {
         const createdHorseIds = result.createdHorseIds ?? [];
         setFiles([]);
@@ -674,10 +678,10 @@ export default function Documents() {
       ) : null}
       {intakeOutcome ? (
         <div
-          className={`hc-upload-outcome${intakeOutcome.ok ? '' : ' hc-upload-outcome--error'}`}
-          role={intakeOutcome.ok ? 'status' : 'alert'}
+          className={`hc-upload-outcome${intakeOutcome.ok && !intakeOutcome.warning ? '' : ' hc-upload-outcome--error'}`}
+          role={intakeOutcome.ok && !intakeOutcome.warning ? 'status' : 'alert'}
         >
-          <strong>{intakeOutcome.ok ? 'Intake finished' : 'Upload needs attention'}</strong>
+          <strong>{intakeOutcome.ok && !intakeOutcome.warning ? 'Intake finished' : 'Upload needs attention'}</strong>
           <span>{intakeOutcome.message}</span>
           {!intakeOutcome.ok ? (
             <span>

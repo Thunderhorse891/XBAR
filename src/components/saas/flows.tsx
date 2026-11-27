@@ -343,7 +343,7 @@ export function GlobalCreateDrawer() {
       }
     }
   };
-  const finish = async (result: { ok: boolean; message: string }, go?: string) => {
+  const finish = async (result: { ok: boolean; message: string; warning?: boolean }, go?: string) => {
     if (!current()) return;
     track(events.createSubmitted, { action, ok: result.ok });
     if (!result.ok) {
@@ -368,11 +368,11 @@ export function GlobalCreateDrawer() {
     const message = result.message.trim().replace(/\.$/, '');
     pushToast({
       id: 'quick-create-feedback',
-      title: persisted ? action : 'Device save not confirmed',
+      title: persisted ? (result.warning ? 'Original files need attention' : action) : 'Device save not confirmed',
       message: persisted
         ? `${message}. ${action === 'Upload Document' ? 'Queue state saved' : 'Saved'} on this device.${context.user ? ' Cloud sync runs separately; check Cloud status.' : ''}`
         : `${message}. This change may exist only in this session. Keep XBAR open and free up device storage before reloading.`,
-      tone: persisted ? (action === 'Upload Document' ? 'info' : 'success') : 'warning',
+      tone: persisted && !result.warning ? (action === 'Upload Document' ? 'info' : 'success') : 'warning',
       ...(persisted ? {} : { duration: Infinity }),
     });
     // The mutation already happened, even when durable storage failed. Do not
