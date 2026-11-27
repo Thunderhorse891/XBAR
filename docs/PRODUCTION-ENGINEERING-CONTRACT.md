@@ -574,6 +574,48 @@ This rule applies to the current milestone and all future XBAR milestones. It su
 
 ---
 
+# PREMIUM BAR — XBAR IS A PRODUCT, NOT A DASHBOARD
+
+"Premium" is not a vibe. It is a checklist, and it is verified with artifacts, not adjectives. A screen is premium only when every row below is satisfied for that screen.
+
+1. DESIGN SYSTEM, NOT AD-HOC STYLES
+   One type scale, one spacing scale, one set of color tokens. No raw hex values in components. Report any file that hardcodes a color or px spacing value.
+
+2. EVERY SCREEN HAS FIVE STATES
+   Loading, empty, error, offline, and partial-data. Not "the happy path works." The empty state teaches; the error state says what to do; the offline state tells the user their work is safe on this device. Screenshot all five for each key screen.
+
+3. FIRST RUN IS GUIDED, NOT BLANK
+   A new user never sees an empty dashboard with no instruction. Guided setup, sample data they can delete, or a single clear next action.
+
+4. DATA IS DENSE AND USABLE
+   Tables show real columns with sort and filter. No grids of empty cards. Bulk actions where a user would repeat themselves.
+
+5. MOBILE IS DESIGNED, NOT SHRUNK
+   Safe-area respected, thumb-reachable primary actions, no horizontal scroll, no hover-only affordances. Verify at 390px width, not desktop-resized.
+
+6. MOTION IS PURPOSEFUL AND FAST
+   Under 300ms, respects prefers-reduced-motion, never blocks input.
+
+7. COPY IS PRODUCT VOICE
+   No lorem, no "coming soon," no developer strings, no raw error codes shown to users. Every error tells the user what to do next.
+
+8. PERFORMANCE BUDGET
+   State current bundle size and LCP. Name the budget. Flag anything that regresses it.
+
+9. ACCESSIBILITY BASICS
+   Contrast, visible focus rings, labeled inputs, keyboard reachable. No exceptions for "internal" screens.
+
+10. FINISHED SURFACES
+    Favicon, OG image, real 404, /support, /privacy, /terms, transactional email templates. A missing surface is a finding, not a later task.
+
+REPORTING RULE
+For any screen claimed premium: paste the checklist rows with pass/fail and one screenshot per state at mobile and desktop. A claim without that is not a claim; it is a wish.
+
+ANTI-PATTERN
+Do not interpret "premium" as "add more visual effects." Premium is fewer broken states, faster loads, clearer copy, and nothing missing — not gradients.
+
+---
+
 # FINAL DEFINITION OF DONE
 
 A production change is done only when:
