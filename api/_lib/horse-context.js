@@ -4,6 +4,7 @@
 
 import { recordedDocumentPath } from './document-storage.js';
 import { reviewedDocument } from './document-review.js';
+import { PublicOperationError } from './public-operation-error.js';
 
 // Report dates are written calendar days, not upload instants. Accept the
 // stored ISO forms without allowing a timestamp's offset to move that day.
@@ -97,14 +98,17 @@ export async function loadHorseContext(supabase, workspaceId, horseId, { require
 
   // A failed authoritative read is not an empty evidence set. Refuse before
   // callers render HTML, seal a packet, or persist a generated document.
-  if (horseError) throw new Error('Horse record could not be loaded. Try again before generating the report.');
-  if (documentsError) throw new Error('Horse documents could not be loaded. Try again before generating the report.');
-  if (ownershipError) throw new Error('Ownership records could not be loaded. Try again before generating the report.');
+  if (horseError)
+    throw new PublicOperationError('Horse record could not be loaded. Try again before generating the report.');
+  if (documentsError)
+    throw new PublicOperationError('Horse documents could not be loaded. Try again before generating the report.');
+  if (ownershipError)
+    throw new PublicOperationError('Ownership records could not be loaded. Try again before generating the report.');
 
   // Packet branding must not silently disappear when its authoritative read
   // fails. Template callers retain their existing optional-profile behavior.
   if (requireProfile && profileError) {
-    throw new Error('Workspace profile could not be loaded. Try again before creating the sale packet.');
+    throw new PublicOperationError('Workspace profile could not be loaded. Try again before creating the sale packet.');
   }
 
   if (!horse) {

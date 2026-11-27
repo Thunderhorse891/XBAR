@@ -2,7 +2,9 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 import { Readable } from 'node:stream';
 
-import healthHandler from '../../api/health.js';
+// Pin detailed operator diagnostics through the internal server collector.
+// publicServiceDisclosure separately proves none reach the HTTP response.
+import { inspectHealth as healthHandler } from '../../api/health.js';
 
 /*
  * Audit F13: the health endpoint checked that billing values were PRESENT. A

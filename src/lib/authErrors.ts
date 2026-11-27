@@ -23,6 +23,13 @@ const TRANSPORT_FAILURE = /failed to fetch|load failed|network ?error|networkerr
 export const OFFLINE_MESSAGE = 'Could not reach XBAR. Check your internet connection and try again.';
 
 export function describeAuthError(message: string): string {
+  if (
+    /\bSMTP\b|RESEND_API_KEY|SENDGRID_API_KEY|\b(?:sk|rk)_(?:live|test)_|SUPABASE_SERVICE_ROLE_KEY|GMAIL_SMTP_|stack trace/i.test(
+      message,
+    )
+  ) {
+    return 'The account service is currently unavailable. Please contact support.';
+  }
   if (!message.trim()) {
     // An empty message renders as a styled but blank error panel, which reads
     // as a glitch rather than as a failure.

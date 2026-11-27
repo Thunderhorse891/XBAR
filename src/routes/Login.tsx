@@ -16,6 +16,7 @@ import { presentableOAuthProviders } from '@/lib/authProviders';
 import { readBrowserStorage, removeBrowserStorage, writeBrowserStorage } from '@/lib/browserStorage';
 import { markCommandCenterEntry } from '@/lib/commandCenterEntry';
 import { SUPPORT_CONTACT } from '@/lib/legalDocuments';
+import { describeAuthError } from '@/lib/authErrors';
 
 type AuthMode = 'signin' | 'signup';
 type BusyState = 'password' | 'google' | 'facebook' | 'apple' | 'reset' | 'code' | 'verify' | 'resend' | '';
@@ -186,7 +187,7 @@ export default function Login() {
     const authError = params.get('authError');
     if (!authError) return;
     setCallbackFailed(true);
-    setFormMessage({ tone: 'error', text: authError });
+    setFormMessage({ tone: 'error', text: describeAuthError(authError) });
     const next = new URLSearchParams(params);
     next.delete('authError');
     setParams(next, { replace: true });

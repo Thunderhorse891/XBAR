@@ -4,7 +4,9 @@ import { Readable } from 'node:stream';
 import * as path from 'node:path';
 import { pathToFileURL } from 'node:url';
 
-import healthHandler from '../../api/health.js';
+// The operator's internal diagnostic contract remains independently pinned.
+// publicServiceDisclosure exercises the HTTP-safe projection.
+import { inspectHealth as healthHandler } from '../../api/health.js';
 import telemetryHandler from '../../api/telemetry.js';
 import inviteHandler from '../../api/invite.js';
 import checkoutHandler from '../../api/stripe/checkout.js';
