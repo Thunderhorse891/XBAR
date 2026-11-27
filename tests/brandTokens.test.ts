@@ -2,6 +2,12 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
 import { createHash } from 'node:crypto';
+import { resolve } from 'node:path';
+import { pathToFileURL } from 'node:url';
+
+// Keep the production package unchanged while running the approved icon
+// regressions from the existing configured brand test entry point.
+await import(pathToFileURL(resolve('tests/helpers/approvedIconChecks.mjs')).href);
 
 /*
  * The brand layer, checked by measurement rather than by eye.
@@ -233,8 +239,8 @@ test('original metallic artwork is the only rendered XBAR logo, without a traced
   }
   assert.match(email, /xbar-original-lockup-480\.png/);
   assert.match(sample, /xbar-original-lockup-480\.png/);
-  assert.match(manifest, /xbar-original-icon-512\.png/);
-  const icon = await readFile('public/brand/xbar-original-icon-512.png');
+  assert.match(manifest, /brand\/icons\/original-blue-20261127-v2\/icon-512\.png/);
+  const icon = await readFile('public/brand/icons/original-blue-20261127-v2/icon-512.png');
   assert.equal(icon.readUInt32BE(16), 512);
   assert.equal(icon.readUInt32BE(20), 512);
 });
