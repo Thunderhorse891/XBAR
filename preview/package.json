@@ -1,7 +1,0 @@
-{
-  "name": "xbar-copilot-synthetic-preview",
-  "private": true,
-  "scripts": {
-    "build": "cd .. && node scripts/build-copilot-preview.mjs preview/dist"
-  }
-}

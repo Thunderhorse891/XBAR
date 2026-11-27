@@ -161,11 +161,3 @@ writeFileSync(
 console.log(
   `[marketing] wrote ${pages.length + 1} pages, sample packet, site.css, and sitemap.xml (${pages.length} sitemap URLs)`,
 );
-
-// Isolated fictional public demo. Existing app sources and service gates stay unchanged.
-const { execFileSync } = await import('node:child_process');
-execFileSync(
-  process.execPath,
-  [path.join(path.dirname(fileURLToPath(import.meta.url)), 'build-copilot-preview.mjs'), 'dist/copilot-demo'],
-  { stdio: 'inherit' },
-);
