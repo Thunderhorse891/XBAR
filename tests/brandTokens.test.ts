@@ -233,8 +233,8 @@ test('original metallic artwork is the only rendered XBAR logo, without a traced
   }
   assert.match(email, /xbar-original-lockup-480\.png/);
   assert.match(sample, /xbar-original-lockup-480\.png/);
-  assert.match(manifest, /xbar-original-icon-512\.png/);
-  const icon = await readFile('public/brand/xbar-original-icon-512.png');
+  assert.match(manifest, /brand\/icons\/original-blue-20261127-v2\/icon-512\.png/);
+  const icon = await readFile('public/brand/icons/original-blue-20261127-v2/icon-512.png');
   assert.equal(icon.readUInt32BE(16), 512);
   assert.equal(icon.readUInt32BE(20), 512);
 });

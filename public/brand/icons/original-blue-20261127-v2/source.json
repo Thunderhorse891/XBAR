@@ -1,0 +1,55 @@
+{
+  "approvedSourceSha256": "43b7b697184aaa4906f39df66698f2154b8a60b6606320557d1d011018334e98",
+  "revision": "original-blue-20261127-v2",
+  "derivation": "Opaque original source; Lanczos full-canvas resize. Maskable: full source 400x400 centered on opaque 512 canvas, no crop.",
+  "files": [
+    {
+      "file": "icon-1024.png",
+      "width": 1024,
+      "height": 1024,
+      "sha256": "43b7b697184aaa4906f39df66698f2154b8a60b6606320557d1d011018334e98"
+    },
+    {
+      "file": "icon-16.png",
+      "width": 16,
+      "height": 16,
+      "sha256": "14989dbc64894cb2844b40d5943dd7bdb1de8b9a2089a7edeb2df5bae9d51a03"
+    },
+    {
+      "file": "icon-180.png",
+      "width": 180,
+      "height": 180,
+      "sha256": "61a4678fba3178cf80b9eb1bcc646b6ea75e021adc1181dc4819034a20a299a4"
+    },
+    {
+      "file": "icon-192.png",
+      "width": 192,
+      "height": 192,
+      "sha256": "1599e1914a0c343edc0e5bc00908c5c2719bb777f589c25698c8c96add2e1af2"
+    },
+    {
+      "file": "icon-32.png",
+      "width": 32,
+      "height": 32,
+      "sha256": "c041bf08b745ace22071f707c381fcf982a49d0628d48bd371e7bc62d2bb992e"
+    },
+    {
+      "file": "icon-512.png",
+      "width": 512,
+      "height": 512,
+      "sha256": "49a2d0265133a02156ddccc5701f5e92c35a9efd7c73cd672871e6ec8dc2bfa4"
+    },
+    {
+      "file": "icon-64.png",
+      "width": 64,
+      "height": 64,
+      "sha256": "102513e4ef8a0d62168d1d432ac95fffecae35430a8bbf39016563f5f4d28b11"
+    },
+    {
+      "file": "icon-maskable-512.png",
+      "width": 512,
+      "height": 512,
+      "sha256": "819486528cd058663bed70748d98fecd5707b334d5f597765a9b05aad3e74289"
+    }
+  ]
+}
