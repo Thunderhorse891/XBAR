@@ -160,6 +160,19 @@ test('photo Storage refusal returns failure and never adds an unusable photo', a
   assert.equal(useXbarStore.getState().horses[0].gallery.length, 0);
 });
 
+test('intentional device-only intake remains a normal completion and identifies where originals are kept', async () => {
+  Object.assign(supabaseConfig, { url: '', anonKey: '' });
+  setCloudSubscriptionClient(null);
+  useCloudStore.setState({ status: 'signed-out', session: null, workspaceId: '' });
+  rememberRecordsOwner('local');
+  const result = await intake();
+  assert.equal(result.ok, true);
+  assert.equal(result.warning, false, 'intentional local work is not a failed cloud upload');
+  assert.match(result.message, /1 file saved on this device only/i);
+  assert.equal(useXbarStore.getState().documents[0].localFileKey, 'synthetic-local-file');
+  assert.deepEqual(f.calls, []);
+});
+
 test('Documents renders a persistent alert and warning toast for device-only originals', async () => {
   const { renderRoute, nodes } = await import('../helpers/recordWorkflowHarness.mjs');
   const route = await renderRoute('Documents', {
