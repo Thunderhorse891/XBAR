@@ -678,26 +678,26 @@ test('a validated recovery survives a reload', () => {
   assert.match(store, /RECOVERY_USER_KEY/, 'the stored grant must be a user id, never a token');
 });
 
-test('the signup confirmation surface never asserts an email that may not exist', () => {
+test('confirmation guidance never claims delivery or distinguishes an existing signup', () => {
   /*
    * Supabase hides whether an address was already registered, so the two
    * no-session outcomes are indistinguishable to the customer. Copy that says
-   * "Confirm your email" or "open the link to activate the account" asserts a
-   * confirmation is waiting -- false for an address that already had an
-   * account, and precisely the claim that stranded the owner in the first
-   * place. The store message was already neutral; the panel contradicted it.
+   * Instructions to check an inbox are not evidence of delivery. A coded
+   * password refusal can identify the confirmation step, while both hidden
+   * no-session signup outcomes must still use the same visible guidance.
    */
   for (const claim of [
-    'Confirm your email',
     'Confirm {confirmationEmail}',
     'activate the account',
-    'Check your email',
+    'Your confirmation email was delivered',
+    'We sent your confirmation email',
   ]) {
     assert.equal(login.includes(claim), false, `the signup surface asserts a confirmation exists: ${claim}`);
   }
-  assert.match(login, /Choose your next step/, 'the shared heading must not send every signup to an inbox');
+  assert.match(login, /confirmation\?\.source === 'signin'\s*\? 'Confirm your email'\s*:\s*'Check your email'/);
   assert.match(login, /Request confirmation email/, 'resend must describe a request, not claim prior delivery');
-  // It must still cover BOTH branches rather than going silent.
-  assert.match(login, /New to XBAR\?/, 'the new-account branch must be named');
-  assert.match(login, /No new confirmation email is sent\./, 'the existing-account branch must be named');
+  assert.match(login, /Already confirmed\?/, 'existing users retain a clear sign-in action');
+  const signin = body(store, /signInWithPassword: async[\s\S]*?\n {2}\},/, 'signInWithPassword');
+  assert.match(signin, /error\.code === 'email_not_confirmed'/, 'recovery requires the structured code');
+  assert.match(signin, /confirmationRequired: true/, 'the coded refusal reaches the recovery state');
 });

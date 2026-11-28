@@ -40,16 +40,32 @@ export default function Login() {
   const [showPassword, setShowPassword] = useState(false);
   const [busy, setBusy] = useState<BusyState>('');
   const [formMessage, setFormMessage] = useState<FormMessage | null>(null);
-  // Set only once a signup returns without a session, so the screen can stop
-  // being a form and start being instructions about an inbox.
-  const [confirmationEmail, setConfirmationEmail] = useState('');
+  const [confirmation, setConfirmation] = useState<{ email: string; source: 'signup' | 'signin' } | null>(null);
+  const confirmationEmail = confirmation?.email ?? '';
+  const [resendSeconds, setResendSeconds] = useState(0);
+  const resendAvailableAt = useRef(0);
+  const focusEmailOnReturn = useRef(false);
   const entryPanel = useRef<HTMLElement>(null);
   const entryHeading = useRef<HTMLHeadingElement>(null);
   useEffect(() => {
-    if (!confirmationEmail) return;
+    if (!confirmationEmail) {
+      if (focusEmailOnReturn.current) {
+        focusEmailOnReturn.current = false;
+        document.getElementById(emailId)?.focus();
+      }
+      return;
+    }
     entryHeading.current?.focus({ preventScroll: true });
     entryPanel.current?.scrollIntoView({ block: 'start' });
-  }, [confirmationEmail]);
+  }, [confirmationEmail, emailId]);
+  useEffect(() => {
+    if (resendSeconds <= 0) return;
+    const timer = window.setInterval(
+      () => setResendSeconds(Math.max(0, Math.ceil((resendAvailableAt.current - Date.now()) / 1000))),
+      1000,
+    );
+    return () => window.clearInterval(timer);
+  }, [resendSeconds]);
   const authMode: AuthMode = params.get('mode') === 'signup' ? 'signup' : 'signin';
   // Existing passwords belong to the account service, not today's signup policy.
   const minimumPasswordLength = authMode === 'signup' ? 8 : 1;
@@ -80,14 +96,15 @@ export default function Login() {
    * Also the way OUT of the confirmation state, in both directions: clearing
    * `confirmationEmail` is what puts the form back. Re-selecting the mode
    * already in effect is therefore meaningful rather than a no-op -- it is how
-   * "use a different address" returns to signup with the address still there
-   * to correct.
+   * reviewing the address returns to its form with the address and plan
+   * choice still there to correct, without another auth request.
    */
   const setMode = (mode: AuthMode) => {
     // A message about the previous mode is worse than no message: "Confirm
     // your email" left standing over a sign-in form reads as an instruction.
     setFormMessage(null);
-    setConfirmationEmail('');
+    focusEmailOnReturn.current = Boolean(confirmationEmail);
+    setConfirmation(null);
     /*
      * The MESSAGE goes; the hold does not.
      *
@@ -290,6 +307,15 @@ export default function Login() {
     }
     if (authMode === 'signin') {
       const result = await cloud.signInWithPassword(email, password);
+      if (result.confirmationRequired) {
+        setConfirmation({ email: email.trim(), source: 'signin' });
+        setPassword('');
+        setFormMessage(null);
+        // A failed attempt must never release a prior account's session hold.
+        setCallbackFailed(true);
+        setBusy('');
+        return;
+      }
       report(result.ok ? 'Welcome back' : 'We could not sign you in', result, 'session');
       setBusy('');
       return;
@@ -310,7 +336,7 @@ export default function Login() {
       result.ok
         ? result.outcome === 'signed-in'
           ? 'Account created'
-          : 'Choose your next step'
+          : 'Check your email'
         : 'We could not create that account',
       result,
       // Only the signed-in outcome created a session; the others still need a next step.
@@ -319,7 +345,7 @@ export default function Login() {
       !(result.ok && result.outcome !== 'signed-in'),
     );
     if (result.ok && result.outcome !== 'signed-in') {
-      setConfirmationEmail(email.trim());
+      setConfirmation({ email: email.trim(), source: 'signup' });
       // The confirmation panel supplies this initial message; later resend results remain visible.
       setFormMessage(null);
       // The credential does not belong on a screen that is now about an inbox.
@@ -331,10 +357,25 @@ export default function Login() {
     setBusy('');
   };
   const resendConfirmation = async () => {
+    if (Date.now() < resendAvailableAt.current || busy !== '') return;
+    resendAvailableAt.current = Date.now() + 60_000;
+    setResendSeconds(60);
     setBusy('resend');
-    const result = await cloud.resendSignUpConfirmation(confirmationEmail || email);
-    report(result.ok ? 'Confirmation email requested' : 'We could not send that again', result, 'notice');
-    setBusy('');
+    try {
+      const result = await cloud.resendSignUpConfirmation(confirmationEmail || email);
+      report(result.ok ? 'Confirmation email requested' : 'We could not send that again', result, 'notice');
+    } catch {
+      report(
+        'We could not send that again',
+        {
+          ok: false,
+          message: 'We could not request that email. Check your connection and try again.',
+        },
+        'notice',
+      );
+    } finally {
+      setBusy('');
+    }
   };
   const oauth = async (provider: 'google' | 'facebook' | 'apple') => {
     setBusy(provider);
@@ -458,9 +499,19 @@ export default function Login() {
           <div className="clean-auth-card__header">
             <p>{label}</p>
             <h1 ref={entryHeading} tabIndex={-1}>
-              {confirmationEmail ? 'Choose your next step' : title}
+              {confirmationEmail
+                ? confirmation?.source === 'signin'
+                  ? 'Confirm your email'
+                  : 'Check your email'
+                : title}
             </h1>
-            <span>{confirmationEmail ? 'Sign in to an existing account, or confirm a new one.' : description}</span>
+            <span>
+              {confirmationEmail
+                ? confirmation?.source === 'signin'
+                  ? 'Verify your address to finish signing in.'
+                  : 'Review the address below and open your confirmation link.'
+                : description}
+            </span>
           </div>
 
           {/*
@@ -505,19 +556,24 @@ export default function Login() {
               <div className="clean-confirmation__address">
                 <span>Email address</span>
                 <strong>{confirmationEmail}</strong>
-                <button type="button" disabled={busy !== ''} onClick={() => setMode('signup')}>
-                  Use a different address
+                <button
+                  type="button"
+                  disabled={busy !== ''}
+                  onClick={() => setMode(confirmation?.source === 'signin' ? 'signin' : 'signup')}
+                >
+                  Review email address
                 </button>
               </div>
               <p>
-                <strong>New to XBAR?</strong> Check your inbox and spam folder for a confirmation link. Open it to
-                continue if this is your first signup.
+                Open your confirmation link to continue. If it has not arrived, check your spam folder before requesting
+                another link.
               </p>
               <div className="clean-confirmation__existing">
-                <p>
-                  <strong>Already have an account?</strong> No new confirmation email is sent. Sign in with your
-                  existing details, or choose “Forgot password?” on the sign-in page.
-                </p>
+                {confirmation?.source === 'signup' && (
+                  <p>
+                    <strong>Already confirmed?</strong> Sign in with your existing details.
+                  </p>
+                )}
                 <button
                   className="clean-primary-button"
                   type="button"
@@ -528,10 +584,15 @@ export default function Login() {
                 </button>
               </div>
               <div className="clean-confirmation__resend">
-                <span>Still waiting for a new-account email?</span>
-                <button type="button" disabled={busy !== ''} onClick={() => void resendConfirmation()}>
+                <span>Need a new confirmation link?</span>
+                <button
+                  type="button"
+                  disabled={busy !== '' || resendSeconds > 0}
+                  onClick={() => void resendConfirmation()}
+                >
                   {busy === 'resend' ? 'Sending...' : 'Request confirmation email'}
                 </button>
+                {resendSeconds > 0 && <span aria-live="off">You can request another email in {resendSeconds}s.</span>}
               </div>
               {messagePanel}
             </div>

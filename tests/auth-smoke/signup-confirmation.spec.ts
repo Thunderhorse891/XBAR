@@ -35,11 +35,11 @@ test('after signup the screen offers next steps instead of claiming an email was
   await page.getByLabel('Password', { exact: true }).fill('a-brand-new-password');
   await page.getByRole('button', { name: 'Create Account' }).click();
 
-  await expect(page.getByRole('heading', { name: 'Choose your next step' })).toBeVisible();
+  await expect(page.getByRole('heading', { name: 'Check your email' })).toBeVisible();
   await expect(page.locator('.clean-confirmation__address strong')).toHaveText(RECOVERY_EMAIL);
   await expect(page.getByRole('heading', { name: 'Create Account', exact: true })).toHaveCount(0);
   await expect(page.locator('.clean-login-visual')).toBeHidden();
-  await expect(page.getByRole('heading', { name: 'Choose your next step' })).toBeFocused();
+  await expect(page.getByRole('heading', { name: 'Check your email' })).toBeFocused();
   for (const width of [390, 1440]) {
     await page.setViewportSize({ width, height: 900 });
     // Shared entry CSS can load after the login chunk. The focused second
@@ -52,7 +52,7 @@ test('after signup the screen offers next steps instead of claiming an email was
     }));
     expect(geometry.columns).toBe(1);
     expect(geometry.cardWidth).toBeCloseTo(geometry.availableWidth, 0);
-    await expect(page.getByRole('heading', { name: 'Choose your next step' })).toBeInViewport();
+    await expect(page.getByRole('heading', { name: 'Check your email' })).toBeInViewport();
     await expect(page.getByRole('button', { name: 'Go to sign in' })).toBeInViewport();
     await page.screenshot({ path: `test-results/confirmation-${width}.png`, fullPage: true });
   }
@@ -108,7 +108,9 @@ test('after signup the screen offers next steps instead of claiming an email was
    * telling the customer something.
    */
   await expect(
-    page.locator('.clean-auth-callout').getByText(/you can only request this after 51 seconds/),
+    page
+      .locator('.clean-auth-callout')
+      .getByText('Please wait before requesting another confirmation email.', { exact: true }),
   ).toBeVisible();
 
   // Still the confirmation state, not bounced back to a form by the failure.
@@ -129,7 +131,7 @@ test('the confirmation state hands back a way to correct the address', async ({ 
   await page.getByLabel('Email or User ID').fill('typo@xbar.test');
   await page.getByLabel('Password', { exact: true }).fill('a-brand-new-password');
   await page.getByRole('button', { name: 'Create Account' }).click();
-  await expect(page.getByRole('heading', { name: 'Choose your next step' })).toBeVisible({ timeout: 30_000 });
+  await expect(page.getByRole('heading', { name: 'Check your email' })).toBeVisible({ timeout: 30_000 });
 
   /*
    * A mistyped address is the likeliest reason the email never arrives, and
@@ -137,7 +139,7 @@ test('the confirmation state hands back a way to correct the address', async ({ 
    * start over. This has to actually return to signup rather than merely
    * exist.
    */
-  await page.getByRole('button', { name: 'Use a different address' }).click();
+  await page.getByRole('button', { name: 'Review email address' }).click();
 
   await expect(page.getByRole('button', { name: 'Create Account' })).toBeVisible();
   // Still on signup, and the address is there to be corrected rather than
@@ -158,10 +160,10 @@ test('the confirmation state hands back a way to correct the address', async ({ 
   // And the other way out still works.
   await page.getByLabel('Password', { exact: true }).fill('a-brand-new-password');
   await page.getByRole('button', { name: 'Create Account' }).click();
-  await expect(page.getByRole('heading', { name: 'Choose your next step' })).toBeVisible();
+  await expect(page.getByRole('heading', { name: 'Check your email' })).toBeVisible();
   await page.getByRole('button', { name: 'Go to sign in' }).click();
   await expect(page.getByRole('button', { name: 'Sign In', exact: true })).toBeVisible();
-  await expect(page.getByRole('heading', { name: 'Choose your next step' })).toHaveCount(0);
+  await expect(page.getByRole('heading', { name: 'Check your email' })).toHaveCount(0);
 });
 
 // Keep the same visible response for both no-session results. Learning whether
@@ -186,9 +188,9 @@ test('new and existing accounts receive identical next steps without losing sign
     await page.getByLabel('Password', { exact: true }).fill('a-brand-new-password');
     await page.getByRole('button', { name: 'Create Account' }).click();
 
-    await expect(page.getByRole('heading', { name: 'Choose your next step' })).toBeVisible();
-    await expect(page.getByText('Sign in to an existing account, or confirm a new one.')).toBeVisible();
-    await expect(page.getByRole('heading', { name: 'Check your email' })).toHaveCount(0);
+    await expect(page.getByRole('heading', { name: 'Check your email' })).toBeVisible();
+    await expect(page.getByText('Review the address below and open your confirmation link.')).toBeVisible();
+    await expect(page.getByRole('heading', { name: 'Confirm your email', exact: true })).toHaveCount(0);
     rendered.push(await page.locator('.clean-auth-card').innerText());
     await page.getByRole('button', { name: 'Go to sign in' }).click();
     await expect(page.getByLabel('Email or User ID')).toHaveValue(RECOVERY_EMAIL);
