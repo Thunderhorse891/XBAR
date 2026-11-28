@@ -42,6 +42,10 @@ type CloudActionResult = {
   uncertain?: boolean;
 };
 
+// Only password sign-in can select this recovery state. Keep other auth action
+// contracts unchanged, including password-update locking and uncertainty.
+type PasswordSignInResult = CloudActionResult & { confirmationRequired?: boolean };
+
 /*
  * What a signup actually did, which is not knowable from `error` alone.
  *
@@ -153,7 +157,7 @@ type CloudStore = {
    * about which copy won and would overwrite this a moment later anyway.
    */
   unlockAutosaveAfterManualSync: (context?: CloudRecoveryContext) => void;
-  signInWithPassword: (email: string, password: string) => Promise<CloudActionResult>;
+  signInWithPassword: (email: string, password: string) => Promise<PasswordSignInResult>;
   sendMagicLink: (email: string) => Promise<CloudActionResult>;
   /**
    * Email a one-time CODE, and verify it in place.
@@ -1650,6 +1654,13 @@ export const useCloudStore = create<CloudStore>((set, get) => ({
     });
 
     if (error) {
+      if (error.code === 'email_not_confirmed') {
+        return {
+          ok: false,
+          confirmationRequired: true,
+          message: 'Confirm your email before signing in. Request a new link or review the email address.',
+        };
+      }
       return { ok: false, message: describeAuthError(error.message) };
     }
 
@@ -1799,13 +1810,21 @@ export const useCloudStore = create<CloudStore>((set, get) => ({
       options: { emailRedirectTo: currentAuthRedirectUrl('signup') },
     });
 
-    if (error) {
-      return { ok: false, message: describeAuthError(error.message) };
+    if (error && error.code !== 'user_not_found') {
+      return {
+        ok: false,
+        message:
+          error.status === 429 || error.code === 'over_email_send_rate_limit'
+            ? 'Please wait before requesting another confirmation email.'
+            : 'We could not request that email. Check your connection and try again.',
+      };
     }
 
-    // Resend is subject to the same anti-enumeration silence as signup, so this
-    // says what was asked for rather than what was delivered.
-    return { ok: true, message: `Requested another confirmation email for ${trimmedEmail}.` };
+    // Same outcome for unknown addresses: never assert account existence or delivery.
+    return {
+      ok: true,
+      message: 'If confirmation is needed, a new link has been requested. Check your inbox and spam folder.',
+    };
   },
   requestWelcomeEmail: async () => {
     /*
