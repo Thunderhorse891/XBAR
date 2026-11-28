@@ -214,6 +214,11 @@ export function renderPage(
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <meta name="theme-color" content="#171b20" />
+    <meta name="mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-status-bar-style" content="black" />
+    <meta name="apple-mobile-web-app-title" content="XBAR" />
+    <link rel="manifest" href="/site.webmanifest" />
     <title>${esc(page.title)}</title>
     <meta name="description" content="${esc(page.description)}" />
     ${page.noindex ? '<meta name="robots" content="noindex, nofollow" />' : '<meta name="robots" content="index, follow, max-image-preview:large, max-snippet:-1" />'}
@@ -247,7 +252,7 @@ export function renderPage(
     <link rel="stylesheet" href="/brand/xbar-signature.css" />${isLanding ? '\n    <link rel="stylesheet" href="/landing.css" />' : ''}
     <link rel="icon" type="image/png" sizes="32x32" href="${iconUrls().favicon}" />
     <link rel="icon" type="image/png" sizes="16x16" href="${iconUrls().favicon16}" />
-    <link rel="apple-touch-icon" href="${iconUrls().appleTouch}" />
+    <link rel="apple-touch-icon" sizes="180x180" href="${iconUrls().appleTouch}" />
     <script type="application/ld+json">${JSON.stringify(baseJsonLd)}</script>
     <script defer src="/site.js"></script>
     <script type="module" src="${esc(signatureScript)}"></script>${isLanding ? `\n    <script type="module" src="${esc(landingScript)}"></script>` : ''}

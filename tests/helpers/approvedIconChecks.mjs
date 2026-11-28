@@ -31,6 +31,10 @@ test('app and all public heads use the revisioned Apple and browser icons', () =
     assert.ok(html.includes(`href="${urls.appleTouch}"`));
     assert.ok(html.includes(`href="${urls.favicon}"`));
     assert.ok(html.includes(`href="${urls.favicon16}"`));
+    assert.match(html, /rel="apple-touch-icon" sizes="180x180"/);
+    assert.match(html, /rel="manifest" href="\/site.webmanifest"/);
+    assert.match(html, /name="apple-mobile-web-app-capable" content="yes"/);
+    assert.match(html, /name="apple-mobile-web-app-title" content="XBAR"/);
   }
   const manifest = JSON.parse(readFileSync('public/site.webmanifest', 'utf8'));
   for (const [key, value] of Object.entries(iconAssets.installIdentity)) assert.equal(manifest[key], value);
@@ -40,4 +44,11 @@ test('app and all public heads use the revisioned Apple and browser icons', () =
   );
   assert.equal(manifest.display, 'standalone');
   assert.equal(iconAssets.native.changed, false);
+});
+
+test('Safari conventional root icons are byte-identical to the approved Apple icon', () => {
+  const approved = readFileSync(`public${iconUrls().appleTouch}`);
+  for (const path of ['public/apple-touch-icon.png', 'public/apple-touch-icon-precomposed.png']) {
+    assert.deepEqual(readFileSync(path), approved);
+  }
 });

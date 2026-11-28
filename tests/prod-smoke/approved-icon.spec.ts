@@ -17,8 +17,15 @@ for (const width of [390, 1440])
       expect(response.headers()['content-type']).toContain('text/html');
       results.push({ path: entry, status: response.status(), contentType: response.headers()['content-type'] });
       await expect(page.locator('head link[rel="apple-touch-icon"]')).toHaveAttribute('href', `${base}/icon-180.png`);
+      await expect(page.locator('head link[rel="apple-touch-icon"]')).toHaveAttribute('sizes', '180x180');
+      await expect(page.locator('head link[rel="manifest"]')).toHaveAttribute('href', '/site.webmanifest');
+      await expect(page.locator('head meta[name="apple-mobile-web-app-capable"]')).toHaveAttribute('content', 'yes');
+      await expect(page.locator('head meta[name="apple-mobile-web-app-title"]')).toHaveAttribute('content', 'XBAR');
       await expect(page.locator('head link[rel="icon"][sizes="32x32"]')).toHaveAttribute('href', `${base}/icon-32.png`);
       await expect(page.locator('head link[rel="icon"][sizes="16x16"]')).toHaveAttribute('href', `${base}/icon-16.png`);
+      if (entry === '/' || entry === '/app/login') {
+        await page.screenshot({ path: testInfo.outputPath(entry === '/' ? 'public-entry.png' : 'app-entry.png') });
+      }
     }
     const manifestResponse = await page.request.get('/site.webmanifest', { headers });
     expect(manifestResponse.status()).toBe(200);
@@ -26,6 +33,21 @@ for (const width of [390, 1440])
     expect(manifest.start_url).toBe('/app');
     expect(manifest.id).toBe('/app');
     expect(manifest.scope).toBe('/');
+    for (const path of ['/apple-touch-icon.png', '/apple-touch-icon-precomposed.png']) {
+      const response = await page.request.get(path, { headers });
+      expect(response.status()).toBe(200);
+      expect(response.headers()['content-type']).toContain('image/png');
+      const bytes = await response.body();
+      const sha256 = createHash('sha256').update(bytes).digest('hex');
+      expect(sha256).toBe(provenance.files.find((file: { file: string }) => file.file === 'icon-180.png').sha256);
+      results.push({
+        path,
+        status: response.status(),
+        sha256,
+        width: bytes.readUInt32BE(16),
+        height: bytes.readUInt32BE(20),
+      });
+    }
     for (const name of [
       'icon-16.png',
       'icon-32.png',
@@ -60,6 +82,8 @@ for (const width of [390, 1440])
         .update(await master.body())
         .digest('hex'),
     ).toBe('43b7b697184aaa4906f39df66698f2154b8a60b6606320557d1d011018334e98');
+    await page.goto('/apple-touch-icon.png');
+    await page.screenshot({ path: testInfo.outputPath('safari-root-icon.png') });
     await writeFile(
       testInfo.outputPath('icon-http-readback.json'),
       JSON.stringify(
